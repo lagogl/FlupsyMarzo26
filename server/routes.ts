@@ -7401,6 +7401,237 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return sendError(res, error, "Errore durante l'eliminazione dei dati lotti");
     }
   });
+
+  // Preview per cancellazione FLUPSY - mostra quanti dati verranno eliminati
+  app.get("/api/preview-flupsy-delete", async (req, res) => {
+    try {
+      const flupsyId = parseInt(req.query.flupsyId as string);
+      
+      if (!flupsyId || isNaN(flupsyId)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID FLUPSY non valido"
+        });
+      }
+      
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      
+      // Conta i cestelli del FLUPSY
+      const basketsResult = await db.execute(sql`
+        SELECT COUNT(*) as count FROM baskets WHERE flupsy_id = ${flupsyId}
+      `);
+      const basketsCount = parseInt(basketsResult.rows[0]?.count || '0');
+      
+      // Conta i cicli dei cestelli di questo FLUPSY
+      const cyclesResult = await db.execute(sql`
+        SELECT COUNT(DISTINCT c.id) as count 
+        FROM cycles c
+        JOIN baskets b ON b.id = c.basket_id
+        WHERE b.flupsy_id = ${flupsyId}
+      `);
+      const cyclesCount = parseInt(cyclesResult.rows[0]?.count || '0');
+      
+      // Conta le operazioni dei cestelli di questo FLUPSY
+      const operationsResult = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM operations o
+        JOIN baskets b ON b.id = o.basket_id
+        WHERE b.flupsy_id = ${flupsyId}
+      `);
+      const operationsCount = parseInt(operationsResult.rows[0]?.count || '0');
+      
+      // Conta le composizioni lotti misti dei cestelli di questo FLUPSY
+      const compositionsResult = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM basket_lot_composition blc
+        JOIN baskets b ON b.id = blc.basket_id
+        WHERE b.flupsy_id = ${flupsyId}
+      `);
+      const compositionsCount = parseInt(compositionsResult.rows[0]?.count || '0');
+      
+      // Conta le ceste di screening/selezione collegate a questo FLUPSY
+      const screeningDestResult = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM screening_destination_baskets
+        WHERE flupsy_id = ${flupsyId}
+      `);
+      const screeningDestCount = parseInt(screeningDestResult.rows[0]?.count || '0');
+      
+      const selectionDestResult = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM selection_destination_baskets
+        WHERE flupsy_id = ${flupsyId}
+      `);
+      const selectionDestCount = parseInt(selectionDestResult.rows[0]?.count || '0');
+      
+      res.json({
+        success: true,
+        preview: {
+          basketsCount,
+          cyclesCount,
+          operationsCount,
+          compositionsCount,
+          screeningDestCount,
+          selectionDestCount,
+          totalRecords: basketsCount + cyclesCount + operationsCount + compositionsCount + screeningDestCount + selectionDestCount
+        }
+      });
+    } catch (error) {
+      return sendError(res, error, "Errore durante il calcolo dell'anteprima");
+    }
+  });
+
+  // Cancellazione completa di un FLUPSY con tutti i dati correlati
+  app.post("/api/delete-flupsy", async (req, res) => {
+    try {
+      const { flupsyId, confirmationName } = req.body;
+      
+      if (!flupsyId || isNaN(parseInt(flupsyId))) {
+        return res.status(400).json({
+          success: false,
+          message: "ID FLUPSY non valido"
+        });
+      }
+      
+      // Verifica che il nome di conferma corrisponda al nome del FLUPSY
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const { eq } = await import("drizzle-orm");
+      
+      // Ottieni il FLUPSY dal database
+      const flupsyResult = await db.execute(sql`
+        SELECT name FROM flupsys WHERE id = ${flupsyId}
+      `);
+      
+      if (!flupsyResult.rows || flupsyResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "FLUPSY non trovato"
+        });
+      }
+      
+      const flupsyName = flupsyResult.rows[0].name;
+      
+      // Verifica conferma rigida: il nome deve corrispondere esattamente
+      if (confirmationName !== flupsyName) {
+        return res.status(401).json({
+          success: false,
+          message: "Nome di conferma non valido. Devi digitare esattamente il nome del FLUPSY per confermare l'eliminazione."
+        });
+      }
+      
+      // Importa funzione di broadcast WebSocket
+      const { broadcastMessage } = await import("./websocket");
+      
+      // Transazione atomica per eliminare tutti i dati del FLUPSY
+      await db.transaction(async (tx) => {
+        try {
+          const startMessage = `🗑️ INIZIO ELIMINAZIONE FLUPSY "${flupsyName}" (ID: ${flupsyId})`;
+          console.log(startMessage);
+          broadcastMessage("flupsy_delete_progress", { message: startMessage, step: "start" });
+          
+          // 1. Elimina tutte le operazioni dei cestelli di questo FLUPSY
+          const step1 = "📋 Eliminazione operazioni dei cestelli...";
+          console.log(step1);
+          broadcastMessage("flupsy_delete_progress", { message: step1, step: 1 });
+          await tx.execute(sql`
+            DELETE FROM operations 
+            WHERE basket_id IN (SELECT id FROM baskets WHERE flupsy_id = ${flupsyId})
+          `);
+          
+          // 2. Elimina i cicli dei cestelli di questo FLUPSY
+          const step2 = "🔄 Eliminazione cicli...";
+          console.log(step2);
+          broadcastMessage("flupsy_delete_progress", { message: step2, step: 2 });
+          await tx.execute(sql`
+            DELETE FROM cycles 
+            WHERE basket_id IN (SELECT id FROM baskets WHERE flupsy_id = ${flupsyId})
+          `);
+          
+          // 3. Elimina le composizioni lotti misti dei cestelli
+          const step3 = "🧬 Eliminazione composizioni lotti misti...";
+          console.log(step3);
+          broadcastMessage("flupsy_delete_progress", { message: step3, step: 3 });
+          await tx.execute(sql`
+            DELETE FROM basket_lot_composition 
+            WHERE basket_id IN (SELECT id FROM baskets WHERE flupsy_id = ${flupsyId})
+          `);
+          
+          // 4. Elimina le ceste di destinazione screening collegate a questo FLUPSY
+          const step4 = "🔍 Eliminazione ceste screening collegate...";
+          console.log(step4);
+          broadcastMessage("flupsy_delete_progress", { message: step4, step: 4 });
+          await tx.execute(sql`
+            DELETE FROM screening_destination_baskets 
+            WHERE flupsy_id = ${flupsyId}
+          `);
+          
+          // 5. Elimina le ceste di destinazione selezione collegate a questo FLUPSY
+          const step5 = "✅ Eliminazione ceste selezione collegate...";
+          console.log(step5);
+          broadcastMessage("flupsy_delete_progress", { message: step5, step: 5 });
+          await tx.execute(sql`
+            DELETE FROM selection_destination_baskets 
+            WHERE flupsy_id = ${flupsyId}
+          `);
+          
+          // 6. Elimina i cestelli del FLUPSY
+          const step6 = "🗑️ Eliminazione cestelli...";
+          console.log(step6);
+          broadcastMessage("flupsy_delete_progress", { message: step6, step: 6 });
+          await tx.execute(sql`
+            DELETE FROM baskets WHERE flupsy_id = ${flupsyId}
+          `);
+          
+          // 7. Elimina il FLUPSY stesso
+          const step7 = "🏭 Eliminazione FLUPSY...";
+          console.log(step7);
+          broadcastMessage("flupsy_delete_progress", { message: step7, step: 7 });
+          await tx.execute(sql`
+            DELETE FROM flupsys WHERE id = ${flupsyId}
+          `);
+          
+          const completeMessage = `✅ ELIMINAZIONE FLUPSY "${flupsyName}" COMPLETATA - Tutti i dati correlati sono stati cancellati`;
+          console.log(completeMessage);
+          broadcastMessage("flupsy_delete_progress", { message: completeMessage, step: "complete" });
+          
+          // Invalidazione cache dopo eliminazione FLUPSY
+          try {
+            if ((global as any).basketCache) {
+              (global as any).basketCache.clear();
+              console.log("🗑️ Cache cestelli invalidata dopo eliminazione FLUPSY");
+            }
+            
+            if ((global as any).operationsCache) {
+              (global as any).operationsCache.clear();
+              console.log("🗑️ Cache operazioni invalidata dopo eliminazione FLUPSY");
+            }
+            
+            // Notifica WebSocket per refresh client
+            broadcastMessage("cache_invalidated", { 
+              message: "Eliminazione FLUPSY completata - aggiornamento dati",
+              caches: ['flupsys', 'baskets', 'cycles', 'operations']
+            });
+          } catch (error) {
+            console.warn("Cache invalidation warning:", error.message);
+          }
+          
+          return true; // Successo - commit implicito
+        } catch (error) {
+          console.error("Errore durante l'eliminazione del FLUPSY:", error);
+          throw error; // Rollback implicito
+        }
+      });
+      
+      res.status(200).json({ 
+        success: true,
+        message: `Eliminazione FLUPSY "${flupsyName}" completata con successo. Tutti i dati correlati sono stati cancellati.`
+      });
+    } catch (error) {
+      return sendError(res, error, "Errore durante l'eliminazione del FLUPSY");
+    }
+  });
   
   // Serve static PDF files
   const express = await import('express');
