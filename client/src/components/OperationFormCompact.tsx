@@ -75,13 +75,12 @@ const operationSchema = z.object({
   totalWeight: z.number({
     required_error: "Il peso totale grammi è obbligatorio",
   }).min(1, "Il peso totale deve essere maggiore di 0"),
-  sampleWeight: z.number({
-    required_error: "I grammi sample sono obbligatori",
-  }).min(1, "I grammi sample devono essere maggiori di 0"),
+  // Campi opzionali di base, validati condizionalmente tramite superRefine
+  sampleWeight: z.number().nullable().optional(),
   deadCount: z.number({
     required_error: "Il numero animali morti è obbligatorio",
   }).min(0, "Il numero animali morti deve essere maggiore o uguale a 0"),
-  // Campi calcolati automaticamente
+  // Campi calcolati automaticamente o inseriti manualmente
   animalsPerKg: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
   // Campi specifici per l'operazione di misurazione
@@ -89,6 +88,51 @@ const operationSchema = z.object({
   totalSample: z.number().nullable().optional(),
   mortalityRate: z.number().nullable().optional(),
   manualCountAdjustment: z.boolean().default(false).optional(),
+}).superRefine((data, ctx) => {
+  // Validazione condizionale: se NON è attiva la modifica manuale,
+  // sampleWeight e liveAnimals diventano obbligatori per operazioni misura/prima-attivazione
+  if (!data.manualCountAdjustment) {
+    if ((data.type === 'misura' || data.type === 'prima-attivazione')) {
+      // Valida sampleWeight
+      if (data.sampleWeight === null || data.sampleWeight === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sampleWeight'],
+          message: 'I grammi sample sono obbligatori in modalità automatica',
+        });
+      } else if (data.sampleWeight < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sampleWeight'],
+          message: 'I grammi sample devono essere maggiori di 0',
+        });
+      }
+
+      // Valida liveAnimals
+      if (data.liveAnimals === null || data.liveAnimals === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['liveAnimals'],
+          message: 'Il numero animali vivi nel campione è obbligatorio in modalità automatica',
+        });
+      } else if (data.liveAnimals < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['liveAnimals'],
+          message: 'Il numero animali vivi nel campione deve essere maggiore di 0',
+        });
+      }
+    }
+  } else {
+    // In modalità manuale, valida che animalsPerKg sia stato impostato
+    if (data.animalsPerKg === null || data.animalsPerKg === undefined || data.animalsPerKg <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['animalsPerKg'],
+        message: 'Gli animali per kg devono essere specificati in modalità manuale',
+      });
+    }
+  }
 });
 
 // Tipo per le props del componente
