@@ -7,7 +7,7 @@
  */
 import { Request, Response } from "express";
 import { db } from "../db";
-import { eq, and, or, isNull, isNotNull, sql } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, sql, desc } from "drizzle-orm";
 import { 
   selections, 
   selectionSourceBaskets, 
@@ -1461,20 +1461,33 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       // Recupera info dettagliate dei cestelli origine
       const sourceBasketDetails = await Promise.all(
         sourceBaskets.map(async (source) => {
+          // Recupera il numero del cestello
           const basket = await db.select({
-            basketNumber: baskets.physicalNumber,
-            animalCount: sql<number>`${source.animalCount}`,
-            sizeCode: sizes.code
+            basketNumber: baskets.physicalNumber
           })
           .from(baskets)
-          .leftJoin(sizes, eq(sizes.id, source.sizeId))
           .where(eq(baskets.id, source.basketId))
           .limit(1);
+          
+          // Recupera il sizeId dall'ultima operazione del cestello PRIMA della vagliatura
+          const lastOperation = await db.select({
+            sizeId: operations.sizeId
+          })
+          .from(operations)
+          .where(eq(operations.basketId, source.basketId))
+          .orderBy(desc(operations.date))
+          .limit(1);
+          
+          // Recupera il codice della taglia
+          const sizeCode = lastOperation[0]?.sizeId ? await db.select()
+            .from(sizes)
+            .where(eq(sizes.id, lastOperation[0].sizeId))
+            .limit(1) : [];
           
           return {
             basketNumber: basket[0]?.basketNumber || 'N/A',
             animalCount: source.animalCount || 0,
-            sizeCode: basket[0]?.sizeCode || 'N/A'
+            sizeCode: sizeCode[0]?.code || 'N/A'
           };
         })
       );
