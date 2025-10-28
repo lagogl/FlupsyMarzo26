@@ -282,6 +282,13 @@ export default function OperationFormCompact({
       return false;
     }
 
+    // VALIDAZIONE OPZIONE A: Blocca submit se ci sono errori di validazione
+    // Controlla se ci sono errori sul campo animalsPerKg (valore fuori range)
+    if (form.formState.errors.animalsPerKg) {
+      console.log('⛔ SUBMIT BLOCCATO: Errore validazione animali/kg:', form.formState.errors.animalsPerKg.message);
+      return false;
+    }
+
     // Validazione specifica per tipo operazione
     switch (watchType) {
       case 'prima-attivazione':
@@ -332,7 +339,7 @@ export default function OperationFormCompact({
       default:
         return false;
     }
-  }, [watchFlupsyId, watchBasketId, watchType, watchDate, watchLotId, watchAnimalsPerKg, watchSampleWeight, watchLiveAnimals, watchTotalWeight, watchManualCountAdjustment, watchAnimalCount, isDateValid, form]);
+  }, [watchFlupsyId, watchBasketId, watchType, watchDate, watchLotId, watchAnimalsPerKg, watchSampleWeight, watchLiveAnimals, watchTotalWeight, watchManualCountAdjustment, watchAnimalCount, isDateValid, form, form.formState.errors.animalsPerKg]);
 
   // Query per ottenere dati da database
   const { data: flupsys } = useQuery({ 
@@ -678,9 +685,25 @@ export default function OperationFormCompact({
           if (selectedSize) {
             console.log(`Taglia trovata: ${selectedSize.code} (ID: ${selectedSize.id})`);
             form.setValue('sizeId', selectedSize.id);
+            
+            // Pulisci eventuali errori precedenti sul campo animalsPerKg
+            form.clearErrors('animalsPerKg');
           } else {
             console.log("Nessuna taglia corrispondente trovata per", watchAnimalsPerKg, "animali per kg");
-            form.setValue('sizeId', null); // Resetta il valore della taglia se non ne troviamo una corrispondente
+            form.setValue('sizeId', null);
+            
+            // VALIDAZIONE OPZIONE A: Calcola il range valido e mostra errore
+            // Solo in modalità manuale per operazioni misura/prima-attivazione
+            if (watchManualCountAdjustment && (watchType === 'misura' || watchType === 'prima-attivazione')) {
+              // Calcola range min/max dalle taglie disponibili
+              const minAnimalsPerKg = Math.min(...sizes.map((s: any) => s.minAnimalsPerKg || Infinity));
+              const maxAnimalsPerKg = Math.max(...sizes.map((s: any) => s.maxAnimalsPerKg || 0));
+              
+              form.setError('animalsPerKg', {
+                type: 'manual',
+                message: `Valore ${watchAnimalsPerKg.toLocaleString('it-IT')} animali/kg non valido. Inserisci un valore tra ${minAnimalsPerKg.toLocaleString('it-IT')} e ${maxAnimalsPerKg.toLocaleString('it-IT')} animali/kg`
+              });
+            }
           }
         }).catch(error => {
           console.error("Errore nel caricamento delle funzioni di utilità:", error);
@@ -689,7 +712,7 @@ export default function OperationFormCompact({
     } else {
       form.setValue('averageWeight', null);
     }
-  }, [watchAnimalsPerKg, sizes, form]);
+  }, [watchAnimalsPerKg, sizes, form, watchManualCountAdjustment, watchType]);
   
   // Calcola il numero di animali quando cambia il peso totale o animali per kg
   useEffect(() => {
