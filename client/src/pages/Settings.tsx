@@ -364,10 +364,43 @@ export default function Settings() {
       
       if (response.ok) {
         const data = await response.json();
-        toast({
-          title: "Eliminazione completata",
-          description: data.message || "FLUPSY e tutti i dati correlati sono stati eliminati correttamente.",
-        });
+        
+        // Esegui verifica integrità database automaticamente
+        console.log("🔍 Verifica integrità database post-cancellazione...");
+        const integrityResponse = await fetch('/api/verify-database-integrity');
+        
+        if (integrityResponse.ok) {
+          const integrityData = await integrityResponse.json();
+          
+          if (integrityData.status === 'healthy') {
+            toast({
+              title: "✅ Eliminazione completata con successo",
+              description: `${data.message}. Database verificato: nessun record orfano trovato.`,
+            });
+          } else if (integrityData.status === 'warning') {
+            toast({
+              title: "⚠️ Eliminazione completata con avvisi",
+              description: `${data.message}. Trovati ${integrityData.summary.totalOrphanRecords} record orfani (non critici). Verifica la console per dettagli.`,
+              variant: "default",
+            });
+            console.warn("⚠️ Problemi di integrità non critici:", integrityData.issues);
+          } else {
+            toast({
+              title: "❌ Eliminazione completata ma con errori critici",
+              description: `${data.message}. ATTENZIONE: Trovati ${integrityData.summary.totalOrphanRecords} record orfani critici! Verifica la console.`,
+              variant: "destructive",
+            });
+            console.error("❌ Problemi critici di integrità database:", integrityData.issues);
+          }
+          
+          // Log dettagliato per debugging
+          console.log("📊 Report integrità database completo:", integrityData);
+        } else {
+          toast({
+            title: "Eliminazione completata",
+            description: `${data.message}. Non è stato possibile verificare l'integrità del database.`,
+          });
+        }
         
         // Reset stati
         setSelectedFlupsyId(null);

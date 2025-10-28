@@ -7632,6 +7632,189 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return sendError(res, error, "Errore durante l'eliminazione del FLUPSY");
     }
   });
+
+  // Verifica integrità database - controlla record orfani e disallineamenti
+  app.get("/api/verify-database-integrity", async (req, res) => {
+    try {
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      
+      const issues: any[] = [];
+      
+      // 1. Controlla operazioni con basket_id inesistente
+      const orphanOperations = await db.execute(sql`
+        SELECT o.id, o.basket_id, o.date, o.type
+        FROM operations o
+        LEFT JOIN baskets b ON b.id = o.basket_id
+        WHERE b.id IS NULL
+      `);
+      if (orphanOperations.rows.length > 0) {
+        issues.push({
+          severity: 'critical',
+          type: 'orphan_operations',
+          count: orphanOperations.rows.length,
+          message: `${orphanOperations.rows.length} operazioni con basket_id inesistente`,
+          details: orphanOperations.rows.slice(0, 10) // Prime 10
+        });
+      }
+      
+      // 2. Controlla cicli con basket_id inesistente
+      const orphanCycles = await db.execute(sql`
+        SELECT c.id, c.basket_id, c.start_date
+        FROM cycles c
+        LEFT JOIN baskets b ON b.id = c.basket_id
+        WHERE b.id IS NULL
+      `);
+      if (orphanCycles.rows.length > 0) {
+        issues.push({
+          severity: 'critical',
+          type: 'orphan_cycles',
+          count: orphanCycles.rows.length,
+          message: `${orphanCycles.rows.length} cicli con basket_id inesistente`,
+          details: orphanCycles.rows.slice(0, 10)
+        });
+      }
+      
+      // 3. Controlla composizioni lotti misti con basket_id inesistente
+      const orphanCompositions = await db.execute(sql`
+        SELECT blc.id, blc.basket_id, blc.lot_id
+        FROM basket_lot_composition blc
+        LEFT JOIN baskets b ON b.id = blc.basket_id
+        WHERE b.id IS NULL
+      `);
+      if (orphanCompositions.rows.length > 0) {
+        issues.push({
+          severity: 'warning',
+          type: 'orphan_compositions',
+          count: orphanCompositions.rows.length,
+          message: `${orphanCompositions.rows.length} composizioni lotti misti con basket_id inesistente`,
+          details: orphanCompositions.rows.slice(0, 10)
+        });
+      }
+      
+      // 4. Controlla ceste screening con flupsy_id inesistente
+      const orphanScreeningBaskets = await db.execute(sql`
+        SELECT sdb.id, sdb.flupsy_id, sdb.basket_id
+        FROM screening_destination_baskets sdb
+        LEFT JOIN flupsys f ON f.id = sdb.flupsy_id
+        WHERE sdb.flupsy_id IS NOT NULL AND f.id IS NULL
+      `);
+      if (orphanScreeningBaskets.rows.length > 0) {
+        issues.push({
+          severity: 'warning',
+          type: 'orphan_screening_baskets',
+          count: orphanScreeningBaskets.rows.length,
+          message: `${orphanScreeningBaskets.rows.length} ceste screening con flupsy_id inesistente`,
+          details: orphanScreeningBaskets.rows.slice(0, 10)
+        });
+      }
+      
+      // 5. Controlla ceste selezione con flupsy_id inesistente
+      const orphanSelectionBaskets = await db.execute(sql`
+        SELECT sdb.id, sdb.flupsy_id, sdb.basket_id
+        FROM selection_destination_baskets sdb
+        LEFT JOIN flupsys f ON f.id = sdb.flupsy_id
+        WHERE sdb.flupsy_id IS NOT NULL AND f.id IS NULL
+      `);
+      if (orphanSelectionBaskets.rows.length > 0) {
+        issues.push({
+          severity: 'warning',
+          type: 'orphan_selection_baskets',
+          count: orphanSelectionBaskets.rows.length,
+          message: `${orphanSelectionBaskets.rows.length} ceste selezione con flupsy_id inesistente`,
+          details: orphanSelectionBaskets.rows.slice(0, 10)
+        });
+      }
+      
+      // 6. Controlla operazioni con cycle_id inesistente
+      const orphanOperationsCycles = await db.execute(sql`
+        SELECT o.id, o.cycle_id, o.basket_id, o.date
+        FROM operations o
+        LEFT JOIN cycles c ON c.id = o.cycle_id
+        WHERE o.cycle_id IS NOT NULL AND c.id IS NULL
+      `);
+      if (orphanOperationsCycles.rows.length > 0) {
+        issues.push({
+          severity: 'critical',
+          type: 'orphan_operations_cycles',
+          count: orphanOperationsCycles.rows.length,
+          message: `${orphanOperationsCycles.rows.length} operazioni con cycle_id inesistente`,
+          details: orphanOperationsCycles.rows.slice(0, 10)
+        });
+      }
+      
+      // 7. Controlla operazioni con lot_id inesistente
+      const orphanOperationsLots = await db.execute(sql`
+        SELECT o.id, o.lot_id, o.basket_id, o.date
+        FROM operations o
+        LEFT JOIN lots l ON l.id = o.lot_id
+        WHERE o.lot_id IS NOT NULL AND l.id IS NULL
+      `);
+      if (orphanOperationsLots.rows.length > 0) {
+        issues.push({
+          severity: 'critical',
+          type: 'orphan_operations_lots',
+          count: orphanOperationsLots.rows.length,
+          message: `${orphanOperationsLots.rows.length} operazioni con lot_id inesistente`,
+          details: orphanOperationsLots.rows.slice(0, 10)
+        });
+      }
+      
+      // 8. Controlla cestelli con flupsy_id inesistente
+      const orphanBaskets = await db.execute(sql`
+        SELECT b.id, b.flupsy_id, b.physical_number
+        FROM baskets b
+        LEFT JOIN flupsys f ON f.id = b.flupsy_id
+        WHERE f.id IS NULL
+      `);
+      if (orphanBaskets.rows.length > 0) {
+        issues.push({
+          severity: 'critical',
+          type: 'orphan_baskets',
+          count: orphanBaskets.rows.length,
+          message: `${orphanBaskets.rows.length} cestelli con flupsy_id inesistente`,
+          details: orphanBaskets.rows.slice(0, 10)
+        });
+      }
+      
+      // 9. Controlla cestelli con current_cycle_id inesistente
+      const basketsWithInvalidCycle = await db.execute(sql`
+        SELECT b.id, b.current_cycle_id, b.physical_number
+        FROM baskets b
+        LEFT JOIN cycles c ON c.id = b.current_cycle_id
+        WHERE b.current_cycle_id IS NOT NULL AND c.id IS NULL
+      `);
+      if (basketsWithInvalidCycle.rows.length > 0) {
+        issues.push({
+          severity: 'warning',
+          type: 'baskets_invalid_cycle',
+          count: basketsWithInvalidCycle.rows.length,
+          message: `${basketsWithInvalidCycle.rows.length} cestelli con current_cycle_id inesistente`,
+          details: basketsWithInvalidCycle.rows.slice(0, 10)
+        });
+      }
+      
+      // Calcola statistiche
+      const criticalIssues = issues.filter(i => i.severity === 'critical').length;
+      const warningIssues = issues.filter(i => i.severity === 'warning').length;
+      const totalOrphanRecords = issues.reduce((sum, i) => sum + i.count, 0);
+      
+      res.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        status: issues.length === 0 ? 'healthy' : (criticalIssues > 0 ? 'critical' : 'warning'),
+        summary: {
+          totalIssues: issues.length,
+          criticalIssues,
+          warningIssues,
+          totalOrphanRecords
+        },
+        issues
+      });
+    } catch (error) {
+      return sendError(res, error, "Errore durante la verifica dell'integrità del database");
+    }
+  });
   
   // Serve static PDF files
   const express = await import('express');
