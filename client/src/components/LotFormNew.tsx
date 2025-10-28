@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { lotSchema } from "@shared/schema";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 // Definire un'interfaccia per le dimensioni
 interface Size {
@@ -80,6 +81,10 @@ export default function LotFormNew({
   const [totalWeightGrams, setTotalWeightGrams] = useState<number | null>(null);
   const [calculatedTotalAnimals, setCalculatedTotalAnimals] = useState<number | null>(null);
   const [suggestedSizeId, setSuggestedSizeId] = useState<number | null>(null);
+  const [manualPiecesPerKg, setManualPiecesPerKg] = useState<number | null>(null);
+  
+  // Toggle per modalità manuale
+  const [isManualMode, setIsManualMode] = useState(false);
   
   // Funzioni di calcolo
   const calculatePiecesPerKg = (count: number, weightGrams: number): number => {
@@ -169,51 +174,72 @@ export default function LotFormNew({
   // Monitorare i cambiamenti nei campi e aggiornare i calcoli
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
-      // Se cambiano i valori del campione, aggiorna i pezzi per kg
-      if (name === "sampleWeight" || name === "sampleCount") {
-        const sampleWeight = form.getValues("sampleWeight");
-        const sampleCount = form.getValues("sampleCount");
-        
-        if (sampleWeight && sampleCount) {
-          // Calcola pezzi per kg
-          const piecesPerKg = calculatePiecesPerKg(sampleCount, sampleWeight);
-          form.setValue("weight", piecesPerKg);
+      // Modalità automatica
+      if (!isManualMode) {
+        // Se cambiano i valori del campione, aggiorna i pezzi per kg
+        if (name === "sampleWeight" || name === "sampleCount") {
+          const sampleWeight = form.getValues("sampleWeight");
+          const sampleCount = form.getValues("sampleCount");
           
-          // Determina la taglia in base ai pezzi per kg e aggiorna il campo
-          const autoSizeId = determineSizeId(piecesPerKg);
-          setSuggestedSizeId(autoSizeId);
-          if (autoSizeId) {
-            form.setValue("sizeId", autoSizeId);
-          }
-          
-          // Se è presente anche il peso totale, calcola gli animali totali
-          if (totalWeightGrams) {
-            const totalAnimals = calculateTotalAnimals(totalWeightGrams, piecesPerKg);
-            setCalculatedTotalAnimals(totalAnimals);
+          if (sampleWeight && sampleCount) {
+            // Calcola pezzi per kg
+            const piecesPerKg = calculatePiecesPerKg(sampleCount, sampleWeight);
+            form.setValue("weight", piecesPerKg);
             
-            // Aggiorna animalCount con il valore calcolato
-            setTimeout(() => {
-              form.setValue("animalCount", totalAnimals);
-            }, 50);
+            // Determina la taglia in base ai pezzi per kg e aggiorna il campo
+            const autoSizeId = determineSizeId(piecesPerKg);
+            setSuggestedSizeId(autoSizeId);
+            if (autoSizeId) {
+              form.setValue("sizeId", autoSizeId);
+            }
+            
+            // Se è presente anche il peso totale, calcola gli animali totali
+            if (totalWeightGrams) {
+              const totalAnimals = calculateTotalAnimals(totalWeightGrams, piecesPerKg);
+              setCalculatedTotalAnimals(totalAnimals);
+              
+              // Aggiorna animalCount con il valore calcolato
+              setTimeout(() => {
+                form.setValue("animalCount", totalAnimals);
+              }, 50);
+            }
           }
         }
-      }
-      
-      // Se viene aggiornato il peso per kg manualmente, aggiorna anche la taglia suggerita
-      if (name === "weight") {
-        const piecesPerKg = form.getValues("weight");
-        if (piecesPerKg) {
-          const autoSizeId = determineSizeId(piecesPerKg);
-          setSuggestedSizeId(autoSizeId);
-          if (autoSizeId) {
-            form.setValue("sizeId", autoSizeId);
+        
+        // Se viene aggiornato il peso per kg manualmente, aggiorna anche la taglia suggerita
+        if (name === "weight") {
+          const piecesPerKg = form.getValues("weight");
+          if (piecesPerKg) {
+            const autoSizeId = determineSizeId(piecesPerKg);
+            setSuggestedSizeId(autoSizeId);
+            if (autoSizeId) {
+              form.setValue("sizeId", autoSizeId);
+            }
           }
         }
       }
     });
     
     return () => subscription.unsubscribe();
-  }, [form, totalWeightGrams, sizes]);
+  }, [form, totalWeightGrams, sizes, isManualMode]);
+  
+  // Gestione calcoli modalità manuale
+  useEffect(() => {
+    if (isManualMode && manualPiecesPerKg && totalWeightGrams) {
+      // Calcola taglia automaticamente
+      const autoSizeId = determineSizeId(manualPiecesPerKg);
+      setSuggestedSizeId(autoSizeId);
+      if (autoSizeId) {
+        form.setValue("sizeId", autoSizeId);
+      }
+      
+      // Calcola numero totale animali
+      const totalAnimals = calculateTotalAnimals(totalWeightGrams, manualPiecesPerKg);
+      setCalculatedTotalAnimals(totalAnimals);
+      form.setValue("animalCount", totalAnimals);
+      form.setValue("weight", manualPiecesPerKg);
+    }
+  }, [isManualMode, manualPiecesPerKg, totalWeightGrams, sizes]);
   
   // Funzione per il submit che gestisce i calcoli finali
   const handleSubmit = (data: FormValues) => {
@@ -345,139 +371,221 @@ export default function LotFormNew({
             />
           </div>
 
+          {/* Toggle per modalità di calcolo */}
+          <div className="flex items-center space-x-3 pt-2 pb-1">
+            <Switch
+              id="manual-mode"
+              checked={isManualMode}
+              onCheckedChange={setIsManualMode}
+              data-testid="switch-manual-mode"
+            />
+            <Label htmlFor="manual-mode" className="text-sm font-medium cursor-pointer">
+              {isManualMode ? "Inserimento Manuale" : "Calcolo Automatico"}
+            </Label>
+          </div>
+
           {/* Sezione per i calcoli automatici - allineata secondo lo screenshot */}
           <div className="flex items-start">
-            <div className="w-1/3">
+            <div className="w-full">
               <div className="flex flex-col space-y-2 mb-3">
-                <div className="text-sm font-medium">Calcolo automatico</div>
+                <div className="text-sm font-medium">
+                  {isManualMode ? "Inserimento Manuale" : "Calcolo automatico"}
+                </div>
                 <div className="text-xs text-muted-foreground">
-                  Inserisci peso e pezzi campione per calcolare automaticamente i totali
+                  {isManualMode 
+                    ? "Inserisci pezzi per kg e peso totale per calcolare automaticamente taglia e numero animali"
+                    : "Inserisci peso e pezzi campione per calcolare automaticamente i totali"
+                  }
                 </div>
               </div>
             </div>
           </div>
           
-          {/* Campi di input per il calcolo - allineati orizzontalmente */}
-          <div className="flex space-x-4">
-            {/* Primo campo - Peso Campione */}
-            <div className="w-1/3">
-              <FormField
-                control={form.control}
-                name="sampleWeight"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-sm font-medium">Peso Campione (g)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.01"
-                        min="0"
-                        inputMode="decimal"
-                        placeholder="Peso campione"
-                        {...field}
-                        value={field.value === null ? '' : field.value}
-                        onChange={(e) => {
-                          // Gestisci il valore vuoto come null
-                          const rawValue = e.target.value;
-                          if (!rawValue) {
-                            field.onChange(null);
-                            return;
-                          }
-                          
-                          // Converte il valore in numero
-                          const numValue = parseFloat(rawValue);
-                          if (!isNaN(numValue) && numValue >= 0) {
-                            field.onChange(numValue);
-                          }
-                        }}
-                        className="text-sm h-9 bg-white w-full"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            
-            {/* Secondo campo - N° Animali Campione */}
-            <div className="w-1/3">
-              <FormField
-                control={form.control}
-                name="sampleCount"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-sm font-medium">N° Animali Campione</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="N° animali"
-                        {...field}
-                        value={field.value || ""}
-                        onChange={(e) => {
-                          // Gestisci il valore vuoto come null
-                          const rawValue = e.target.value;
-                          if (!rawValue) {
-                            field.onChange(null);
-                            return;
-                          }
-                          
-                          // Converte il valore in numero intero
-                          const numValue = parseInt(rawValue, 10);
-                          if (!isNaN(numValue) && numValue >= 0) {
-                            field.onChange(numValue);
-                          }
-                        }}
-                        className="text-sm h-9 bg-white w-full"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            
-            {/* Terzo campo - Peso Totale */}
-            <div className="w-1/3">
-              <FormItem className="space-y-1.5">
-                <FormLabel className="text-sm font-medium">Peso Totale (g)</FormLabel>
-                <FormControl>
-                  <Input 
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    inputMode="decimal"
-                    placeholder="Peso totale"
-                    value={totalWeightGrams || ""}
-                    onChange={(e) => {
-                      // Gestisci il valore vuoto come null
-                      const rawValue = e.target.value;
-                      if (!rawValue) {
-                        setTotalWeightGrams(null);
-                        return;
-                      }
-                      
-                      // Converte il valore in numero
-                      const numValue = parseFloat(rawValue);
-                      if (!isNaN(numValue) && numValue >= 0) {
-                        setTotalWeightGrams(numValue);
-                        
-                        // Se abbiamo già un valore per pezzi per kg, calcola il totale animali
-                        const piecesPerKg = form.getValues("weight");
-                        if (numValue && piecesPerKg) {
-                          const totalAnimals = calculateTotalAnimals(numValue, piecesPerKg);
-                          setCalculatedTotalAnimals(totalAnimals);
-                          form.setValue("animalCount", totalAnimals);
+          {/* Campi di input - cambiano in base alla modalità */}
+          {!isManualMode ? (
+            // MODALITÀ AUTOMATICA
+            <div className="flex space-x-4">
+              {/* Primo campo - Peso Campione */}
+              <div className="w-1/3">
+                <FormField
+                  control={form.control}
+                  name="sampleWeight"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1.5">
+                      <FormLabel className="text-sm font-medium">Peso Campione (g)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.01"
+                          min="0"
+                          inputMode="decimal"
+                          placeholder="Peso campione"
+                          data-testid="input-sample-weight"
+                          {...field}
+                          value={field.value === null ? '' : field.value}
+                          onChange={(e) => {
+                            const rawValue = e.target.value;
+                            if (!rawValue) {
+                              field.onChange(null);
+                              return;
+                            }
+                            
+                            const numValue = parseFloat(rawValue);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              field.onChange(numValue);
+                            }
+                          }}
+                          className="text-sm h-9 bg-white w-full"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              {/* Secondo campo - N° Animali Campione */}
+              <div className="w-1/3">
+                <FormField
+                  control={form.control}
+                  name="sampleCount"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1.5">
+                      <FormLabel className="text-sm font-medium">N° Animali Campione</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="N° animali"
+                          data-testid="input-sample-count"
+                          {...field}
+                          value={field.value || ""}
+                          onChange={(e) => {
+                            const rawValue = e.target.value;
+                            if (!rawValue) {
+                              field.onChange(null);
+                              return;
+                            }
+                            
+                            const numValue = parseInt(rawValue, 10);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              field.onChange(numValue);
+                            }
+                          }}
+                          className="text-sm h-9 bg-white w-full"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              {/* Terzo campo - Peso Totale */}
+              <div className="w-1/3">
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-sm font-medium">Peso Totale (g)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      placeholder="Peso totale"
+                      data-testid="input-total-weight"
+                      value={totalWeightGrams || ""}
+                      onChange={(e) => {
+                        const rawValue = e.target.value;
+                        if (!rawValue) {
+                          setTotalWeightGrams(null);
+                          return;
                         }
-                      }
-                    }}
-                    className="text-sm h-9 bg-white w-full"
-                  />
-                </FormControl>
-              </FormItem>
+                        
+                        const numValue = parseFloat(rawValue);
+                        if (!isNaN(numValue) && numValue >= 0) {
+                          setTotalWeightGrams(numValue);
+                          
+                          // Se abbiamo già un valore per pezzi per kg, calcola il totale animali
+                          const piecesPerKg = form.getValues("weight");
+                          if (numValue && piecesPerKg) {
+                            const totalAnimals = calculateTotalAnimals(numValue, piecesPerKg);
+                            setCalculatedTotalAnimals(totalAnimals);
+                            form.setValue("animalCount", totalAnimals);
+                          }
+                        }
+                      }}
+                      className="text-sm h-9 bg-white w-full"
+                    />
+                  </FormControl>
+                </FormItem>
+              </div>
             </div>
-          </div>
+          ) : (
+            // MODALITÀ MANUALE
+            <div className="flex space-x-4">
+              {/* Primo campo - Pezzi per Kg (editabile) */}
+              <div className="w-1/2">
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-sm font-medium">Pezzi per Kg</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="Es. 250000"
+                      data-testid="input-manual-pieces-per-kg"
+                      value={manualPiecesPerKg || ""}
+                      onChange={(e) => {
+                        const rawValue = e.target.value;
+                        if (!rawValue) {
+                          setManualPiecesPerKg(null);
+                          return;
+                        }
+                        
+                        const numValue = parseInt(rawValue, 10);
+                        if (!isNaN(numValue) && numValue >= 0) {
+                          setManualPiecesPerKg(numValue);
+                        }
+                      }}
+                      className="text-sm h-9 bg-white w-full"
+                    />
+                  </FormControl>
+                </FormItem>
+              </div>
+              
+              {/* Secondo campo - Peso Totale */}
+              <div className="w-1/2">
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-sm font-medium">Peso Totale (g)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      placeholder="Peso totale"
+                      data-testid="input-manual-total-weight"
+                      value={totalWeightGrams || ""}
+                      onChange={(e) => {
+                        const rawValue = e.target.value;
+                        if (!rawValue) {
+                          setTotalWeightGrams(null);
+                          return;
+                        }
+                        
+                        const numValue = parseFloat(rawValue);
+                        if (!isNaN(numValue) && numValue >= 0) {
+                          setTotalWeightGrams(numValue);
+                        }
+                      }}
+                      className="text-sm h-9 bg-white w-full"
+                    />
+                  </FormControl>
+                </FormItem>
+              </div>
+            </div>
+          )}
           
           {/* Riquadro verde per i campi calcolati */}
           <div className="bg-green-50 p-3 rounded-md border border-green-100 mb-4">
@@ -495,6 +603,7 @@ export default function LotFormNew({
                       <Input 
                         type="text" 
                         placeholder="Calcolata automaticamente"
+                        data-testid="display-calculated-size"
                         value={field.value !== null && field.value !== undefined 
                           ? (sizes.find(s => s.id === field.value)?.code || "") 
                           : ''}
@@ -506,28 +615,31 @@ export default function LotFormNew({
                 )}
               />
               
-              {/* Pezzi per kg calcolati */}
-              <FormField
-                control={form.control}
-                name="weight"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-green-800">Pezzi per Kg</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="text" 
-                        placeholder="Calcolato automaticamente"
-                        {...field}
-                        value={field.value !== null && field.value !== undefined 
-                          ? field.value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") 
-                          : ''}
-                        readOnly
-                        className="bg-white text-sm h-9 border-green-200"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+              {/* Pezzi per kg calcolati (solo in modalità automatica) */}
+              {!isManualMode && (
+                <FormField
+                  control={form.control}
+                  name="weight"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm text-green-800">Pezzi per Kg</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="text" 
+                          placeholder="Calcolato automaticamente"
+                          data-testid="display-calculated-pieces-per-kg"
+                          {...field}
+                          value={field.value !== null && field.value !== undefined 
+                            ? field.value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") 
+                            : ''}
+                          readOnly
+                          className="bg-white text-sm h-9 border-green-200"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              )}
               
               {/* Animali totali calcolati */}
               <FormItem>
@@ -536,6 +648,7 @@ export default function LotFormNew({
                   <Input 
                     type="text" 
                     placeholder="Calcolato automaticamente"
+                    data-testid="display-calculated-total-animals"
                     value={calculatedTotalAnimals !== null 
                       ? calculatedTotalAnimals.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") 
                       : ''}
@@ -557,6 +670,7 @@ export default function LotFormNew({
                 <FormControl>
                   <Textarea 
                     placeholder="Note opzionali" 
+                    data-testid="textarea-notes"
                     {...field} 
                     value={field.value || ""}
                     className="text-sm resize-none h-20" 
@@ -569,11 +683,13 @@ export default function LotFormNew({
           
           {/* Pulsanti di azione */}
           <div className="flex justify-end space-x-2 mt-4">
-            <Button variant="outline" type="button" onClick={() => form.reset()} size="sm">
-              Annulla
-            </Button>
-            <Button type="submit" disabled={isLoading} size="sm" className="bg-blue-950 text-white">
-              {isLoading ? "Salvataggio..." : isEditing ? "Conferma" : "Crea Lotto"}
+            <Button 
+              type="submit" 
+              disabled={isLoading}
+              data-testid="button-create-lot"
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isLoading ? "Creazione..." : "Crea Lotto"}
             </Button>
           </div>
         </div>
