@@ -605,13 +605,16 @@ export default function BasketSelection() {
   useEffect(() => {
     if (!basketInfos) return;
     
-    let filtered = [...basketInfos];
+    // FILTRO SEMPRE ATTIVO: mostra solo ceste con cicli attivi (non chiusi)
+    let filtered = basketInfos.filter(basket => 
+      basket.currentCycle !== null && basket.currentCycle.endDate === null
+    );
     
-    // Raccoglie tutti gli ID di taglie e FLUPSY disponibili
+    // Raccoglie tutti gli ID di taglie e FLUPSY disponibili (dalle ceste con cicli attivi)
     const sizeIdsWithBaskets = new Set<number>();
     const flupsyIdsWithBaskets = new Set<number>();
     
-    basketInfos.forEach(basket => {
+    filtered.forEach(basket => {
       if (basket.size) {
         sizeIdsWithBaskets.add(basket.size.id);
       }
@@ -1240,7 +1243,6 @@ export default function BasketSelection() {
                             ))}
                           </div>
                           <FormDescription>
-                            Seleziona le taglie di interesse (nessuna selezione = nessun risultato)
                             <span className="block mt-1">
                               <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>
                               <span className="text-xs">= ceste disponibili</span>
@@ -1292,9 +1294,6 @@ export default function BasketSelection() {
                               </Badge>
                             ))}
                           </div>
-                          <FormDescription>
-                            Seleziona i FLUPSY di interesse (nessuna selezione = nessun risultato)
-                          </FormDescription>
                         </FormItem>
                       )}
                     />
