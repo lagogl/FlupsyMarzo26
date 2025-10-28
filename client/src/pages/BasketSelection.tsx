@@ -635,15 +635,18 @@ export default function BasketSelection() {
     
     let filtered = [...basketInfos];
     
-    // Raccoglie tutti gli ID di taglie e FLUPSY disponibili (da tutte le ceste)
+    // Raccoglie tutti gli ID di taglie e FLUPSY disponibili SOLO dalle ceste con cicli attivi
     const sizeIdsWithBaskets = new Set<number>();
     const flupsyIdsWithBaskets = new Set<number>();
     
     basketInfos.forEach(basket => {
-      if (basket.size) {
-        sizeIdsWithBaskets.add(basket.size.id);
+      // Considera solo le ceste con cicli attivi
+      if (basket.currentCycle !== null && basket.currentCycle.endDate === null) {
+        if (basket.size) {
+          sizeIdsWithBaskets.add(basket.size.id);
+        }
+        flupsyIdsWithBaskets.add(basket.flupsyId);
       }
-      flupsyIdsWithBaskets.add(basket.flupsyId);
     });
     
     // Aggiorna gli stati per gli indicatori visivi
