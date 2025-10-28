@@ -4,6 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useState, useEffect } from "react";
 import { AlertCircle, DatabaseBackup, Save, Smartphone, Trash2, HelpCircle, RefreshCw, RotateCw, Mail } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -36,6 +43,15 @@ export default function Settings() {
   // Stati per configurazione email
   const [emailRecipients, setEmailRecipients] = useState<string>('');
   const [isSavingEmail, setIsSavingEmail] = useState(false);
+  
+  // Stati per cancellazione FLUPSY
+  const [selectedFlupsyId, setSelectedFlupsyId] = useState<number | null>(null);
+  const [flupsys, setFlupsys] = useState<any[]>([]);
+  const [flupsyPreview, setFlupsyPreview] = useState<any>(null);
+  const [confirmationName, setConfirmationName] = useState("");
+  const [isDeletingFlupsy, setIsDeletingFlupsy] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   // Check NFC support on component mount
   useEffect(() => {
@@ -286,6 +302,97 @@ export default function Settings() {
       });
     } finally {
       setIsSavingEmail(false);
+    }
+  };
+
+  // Carica lista FLUPSY
+  useEffect(() => {
+    const loadFlupsys = async () => {
+      try {
+        const response = await fetch('/api/flupsys');
+        if (response.ok) {
+          const data = await response.json();
+          setFlupsys(data);
+        }
+      } catch (error) {
+        console.error('Errore nel caricamento dei FLUPSY:', error);
+      }
+    };
+    
+    loadFlupsys();
+  }, []);
+
+  // Carica preview quando seleziono un FLUPSY
+  const loadFlupsyPreview = async (flupsyId: number) => {
+    try {
+      setIsLoadingPreview(true);
+      const response = await fetch(`/api/preview-flupsy-delete?flupsyId=${flupsyId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setFlupsyPreview(data.preview);
+      } else {
+        throw new Error('Errore nel caricamento dell\'anteprima');
+      }
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: error instanceof Error ? error.message : "Impossibile caricare l'anteprima",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  // Funzione per eliminare il FLUPSY
+  const deleteFlupsyData = async () => {
+    if (!selectedFlupsyId) return;
+    
+    try {
+      setIsDeletingFlupsy(true);
+      const response = await fetch('/api/delete-flupsy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          flupsyId: selectedFlupsyId,
+          confirmationName: confirmationName
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: "Eliminazione completata",
+          description: data.message || "FLUPSY e tutti i dati correlati sono stati eliminati correttamente.",
+        });
+        
+        // Reset stati
+        setSelectedFlupsyId(null);
+        setFlupsyPreview(null);
+        setConfirmationName("");
+        setShowDeleteDialog(false);
+        
+        // Ricarica lista FLUPSY
+        const flupsyResponse = await fetch('/api/flupsys');
+        if (flupsyResponse.ok) {
+          const flupsyData = await flupsyResponse.json();
+          setFlupsys(flupsyData);
+        }
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || 'Errore sconosciuto');
+      }
+    } catch (error) {
+      toast({
+        title: "Errore durante l'eliminazione",
+        description: error instanceof Error ? error.message : "Si è verificato un errore",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingFlupsy(false);
     }
   };
 
@@ -865,6 +972,150 @@ export default function Settings() {
                           disabled={isResettingLotSequence}
                         >
                           {isResettingLotSequence ? "Reset in corso..." : "Conferma Reset"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
+              
+              <div className="border border-red-200 bg-red-50 rounded-lg p-4 space-y-4">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-medium mb-1 text-red-800">Eliminazione FLUPSY Completa</h3>
+                    <p className="text-sm text-red-700">
+                      Elimina un FLUPSY specifico con TUTTI i suoi dati correlati: cestelli, cicli, operazioni, 
+                      composizioni lotti misti, riferimenti in screening/selezione. Usa questa funzione per eliminare 
+                      FLUPSY di test senza compromettere i dati reali degli altri FLUPSY.
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="flupsy-select">Seleziona FLUPSY da eliminare</Label>
+                    <Select
+                      value={selectedFlupsyId?.toString() || ""}
+                      onValueChange={(value) => {
+                        const id = parseInt(value);
+                        setSelectedFlupsyId(id);
+                        loadFlupsyPreview(id);
+                      }}
+                    >
+                      <SelectTrigger id="flupsy-select" className="w-full">
+                        <SelectValue placeholder="Scegli un FLUPSY..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {flupsys.map((flupsy) => (
+                          <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
+                            {flupsy.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {isLoadingPreview && (
+                    <Alert className="bg-blue-50 border-blue-200 text-blue-800">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Caricamento anteprima...</AlertTitle>
+                      <AlertDescription>
+                        Calcolo dei dati da eliminare in corso...
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  {flupsyPreview && !isLoadingPreview && (
+                    <Alert className="bg-orange-50 border-orange-300 text-orange-900">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Anteprima Eliminazione</AlertTitle>
+                      <AlertDescription>
+                        <div className="mt-2 space-y-1 font-mono text-xs">
+                          <div>📦 Cestelli: <strong>{flupsyPreview.basketsCount}</strong></div>
+                          <div>🔄 Cicli: <strong>{flupsyPreview.cyclesCount}</strong></div>
+                          <div>📋 Operazioni: <strong>{flupsyPreview.operationsCount}</strong></div>
+                          <div>🧬 Composizioni lotti misti: <strong>{flupsyPreview.compositionsCount}</strong></div>
+                          <div>🔍 Ceste screening: <strong>{flupsyPreview.screeningDestCount}</strong></div>
+                          <div>✅ Ceste selezione: <strong>{flupsyPreview.selectionDestCount}</strong></div>
+                          <div className="pt-2 border-t border-orange-300 mt-2">
+                            🗑️ Totale record da eliminare: <strong className="text-lg">{flupsyPreview.totalRecords}</strong>
+                          </div>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        variant="destructive" 
+                        disabled={!selectedFlupsyId || !flupsyPreview}
+                        className="w-full"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Elimina FLUPSY Selezionato
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle className="text-red-600">⚠️ Conferma Eliminazione FLUPSY</DialogTitle>
+                        <DialogDescription>
+                          Stai per eliminare il FLUPSY <strong>{flupsys.find(f => f.id === selectedFlupsyId)?.name}</strong> 
+                          {' '}e TUTTI i suoi dati correlati.
+                          
+                          <div className="my-4 p-3 bg-red-50 border border-red-200 rounded text-red-900 text-sm">
+                            <strong>Questa azione eliminerà:</strong>
+                            <ul className="list-disc list-inside mt-2 space-y-1">
+                              <li>{flupsyPreview?.basketsCount || 0} cestelli</li>
+                              <li>{flupsyPreview?.cyclesCount || 0} cicli</li>
+                              <li>{flupsyPreview?.operationsCount || 0} operazioni</li>
+                              <li>{flupsyPreview?.compositionsCount || 0} composizioni lotti misti</li>
+                              <li>{flupsyPreview?.screeningDestCount || 0} ceste screening</li>
+                              <li>{flupsyPreview?.selectionDestCount || 0} ceste selezione</li>
+                            </ul>
+                            <div className="font-bold mt-3 text-base">
+                              Totale: {flupsyPreview?.totalRecords || 0} record saranno eliminati permanentemente.
+                            </div>
+                          </div>
+                          
+                          <Alert className="bg-yellow-50 border-yellow-400 text-yellow-900 mb-4">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              Questa operazione <strong>NON PUÒ ESSERE ANNULLATA</strong>. 
+                              Per confermare, digita esattamente il nome del FLUPSY qui sotto.
+                            </AlertDescription>
+                          </Alert>
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      <div className="my-4 space-y-2">
+                        <Label htmlFor="confirmation-name">
+                          Digita "{flupsys.find(f => f.id === selectedFlupsyId)?.name}" per confermare
+                        </Label>
+                        <Input 
+                          id="confirmation-name" 
+                          type="text"
+                          placeholder={flupsys.find(f => f.id === selectedFlupsyId)?.name || ""}
+                          value={confirmationName}
+                          onChange={(e) => setConfirmationName(e.target.value)}
+                          className="font-mono"
+                        />
+                      </div>
+                      
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => {
+                          setConfirmationName("");
+                          setShowDeleteDialog(false);
+                        }}>
+                          Annulla
+                        </Button>
+                        <Button 
+                          variant="destructive" 
+                          onClick={deleteFlupsyData}
+                          disabled={
+                            isDeletingFlupsy || 
+                            confirmationName !== flupsys.find(f => f.id === selectedFlupsyId)?.name
+                          }
+                        >
+                          {isDeletingFlupsy ? "Eliminazione in corso..." : "Conferma Eliminazione Definitiva"}
                         </Button>
                       </DialogFooter>
                     </DialogContent>
