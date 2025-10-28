@@ -125,12 +125,15 @@ const operationSchema = z.object({
     }
   } else {
     // In modalità manuale, valida che animalsPerKg sia stato impostato
-    if (data.animalsPerKg === null || data.animalsPerKg === undefined || data.animalsPerKg <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['animalsPerKg'],
-        message: 'Gli animali per kg devono essere specificati in modalità manuale',
-      });
+    // MA SOLO per operazioni misura/prima-attivazione
+    if ((data.type === 'misura' || data.type === 'prima-attivazione')) {
+      if (data.animalsPerKg === null || data.animalsPerKg === undefined || data.animalsPerKg <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['animalsPerKg'],
+          message: 'Gli animali per kg devono essere specificati in modalità manuale',
+        });
+      }
     }
   }
 });
