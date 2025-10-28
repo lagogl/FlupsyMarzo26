@@ -1128,7 +1128,16 @@ export default function Settings() {
                           type="text"
                           placeholder={flupsys.find(f => f.id === selectedFlupsyId)?.name || ""}
                           value={confirmationName}
-                          onChange={(e) => setConfirmationName(e.target.value)}
+                          onChange={(e) => {
+                            const newValue = e.target.value;
+                            setConfirmationName(newValue);
+                            const expectedName = flupsys.find(f => f.id === selectedFlupsyId)?.name;
+                            console.log('🔍 Confronto nomi:', {
+                              digitato: `"${newValue.trim()}"`,
+                              atteso: `"${expectedName}"`,
+                              match: newValue.trim() === expectedName
+                            });
+                          }}
                           className="font-mono"
                         />
                       </div>
@@ -1145,7 +1154,7 @@ export default function Settings() {
                           onClick={deleteFlupsyData}
                           disabled={
                             isDeletingFlupsy || 
-                            confirmationName !== flupsys.find(f => f.id === selectedFlupsyId)?.name
+                            confirmationName.trim() !== flupsys.find(f => f.id === selectedFlupsyId)?.name
                           }
                         >
                           {isDeletingFlupsy ? "Eliminazione in corso..." : "Conferma Eliminazione Definitiva"}
