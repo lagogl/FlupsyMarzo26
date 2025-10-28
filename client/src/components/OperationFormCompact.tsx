@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFormState } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format } from "date-fns";
@@ -200,6 +200,9 @@ export default function OperationFormCompact({
     },
   });
 
+  // Usa useFormState per ottenere errori in modo reattivo
+  const { errors: formErrors } = useFormState({ control: form.control });
+
   // Ottieni valori del form per tracking e calcoli automatici
   const watchType = form.watch("type");
   const watchBasketId = form.watch("basketId");
@@ -284,8 +287,8 @@ export default function OperationFormCompact({
 
     // VALIDAZIONE OPZIONE A: Blocca submit se ci sono errori di validazione
     // Controlla se ci sono errori sul campo animalsPerKg (valore fuori range)
-    if (form.formState.errors.animalsPerKg) {
-      console.log('⛔ SUBMIT BLOCCATO: Errore validazione animali/kg:', form.formState.errors.animalsPerKg.message);
+    if (formErrors.animalsPerKg) {
+      console.log('⛔ SUBMIT BLOCCATO: Errore validazione animali/kg:', formErrors.animalsPerKg.message);
       return false;
     }
 
@@ -339,7 +342,7 @@ export default function OperationFormCompact({
       default:
         return false;
     }
-  }, [watchFlupsyId, watchBasketId, watchType, watchDate, watchLotId, watchAnimalsPerKg, watchSampleWeight, watchLiveAnimals, watchTotalWeight, watchManualCountAdjustment, watchAnimalCount, isDateValid, form, form.formState.errors.animalsPerKg]);
+  }, [watchFlupsyId, watchBasketId, watchType, watchDate, watchLotId, watchAnimalsPerKg, watchSampleWeight, watchLiveAnimals, watchTotalWeight, watchManualCountAdjustment, watchAnimalCount, isDateValid, form, formErrors.animalsPerKg]);
 
   // Query per ottenere dati da database
   const { data: flupsys } = useQuery({ 
