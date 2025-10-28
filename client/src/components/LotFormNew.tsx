@@ -259,8 +259,6 @@ export default function LotFormNew({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="mx-auto">
-        <h2 className="text-lg mb-6">Crea Nuovo Lotto</h2>
-        
         <div className="flex flex-col space-y-5">
           {/* Prima riga: allineata come nell'ultimo screenshot */}
           <div className="mb-6">
