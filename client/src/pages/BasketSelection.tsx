@@ -722,16 +722,14 @@ export default function BasketSelection() {
       });
     }
     
-    // Se non ci sono filtri attivi, non mostrare nulla
-    if (filterFunctions.length === 0) {
-      // Nessun filtro selezionato, lascia l'elenco vuoto
-      filtered = [];
-    } else {
+    // Applica i filtri aggiuntivi (se presenti) con logica OR
+    if (filterFunctions.length > 0) {
       // Applica i filtri con logica OR (basta che soddisfi almeno uno dei criteri)
       filtered = filtered.filter(basket => 
         filterFunctions.some(filterFn => filterFn(basket))
       );
     }
+    // Nota: se non ci sono filtri attivi, mostra tutte le ceste con cicli attivi (filtered)
     
     // Ordinamento
     if (sortColumn) {
@@ -804,6 +802,16 @@ export default function BasketSelection() {
   // Gestione esportazione dati
   const exportData = () => {
     const selectedData = filteredBaskets.filter(basket => selectedBaskets.has(basket.id));
+    
+    // Controlla se ci sono ceste selezionate
+    if (selectedData.length === 0) {
+      toast({
+        title: "Nessuna cesta selezionata",
+        description: "Seleziona almeno una cesta per esportare i dati.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Crea un array di oggetti con le proprietà che vogliamo esportare
     const exportData = selectedData.map(basket => ({
