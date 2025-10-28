@@ -245,15 +245,19 @@ export default function Baskets() {
         return {
           'Numero Cestello': `#${basket.physicalNumber}`,
           'FLUPSY': basket.flupsyName || `FLUPSY #${basket.flupsyId}`,
+          'Sito Produttivo': basket.sitoProduttivo || '-',
+          'Data Attivazione': basket.activationDate ? new Date(basket.activationDate).toLocaleDateString('it-IT') : '-',
+          'Data Ultima Operazione': basket.lastOperationDate ? new Date(basket.lastOperationDate).toLocaleDateString('it-IT') : '-',
+          'Peso Cesta (Kg)': basket.pesoCesta ? basket.pesoCesta.toFixed(2) : '-',
+          'Taglia': basket.calculatedSize || '-',
+          'pz / Kg': basket.animalsPerKg ? Math.round(basket.animalsPerKg).toLocaleString('it-IT') : '-',
+          'Numero Animali': basket.animalCount ? basket.animalCount.toLocaleString('it-IT') : 0,
+          'Mortalità %': basket.mortalityPercent !== null ? `${basket.mortalityPercent}%` : '-',
           'Posizione': basket.row && basket.position ? `${basket.row}-${basket.position}` : '-',
           'Lotto': basket.lotId ? `Lotto #${basket.lotId}` : '-',
           'Fornitore': lot?.supplier || '-',
           'Codice Ciclo': basket.cycleCode || '-',
-          'Taglia': basket.calculatedSize || '-',
-          'Numero Animali': basket.animalCount || 0,
-          'Data Attivazione': basket.activationDate || '-',
           'Ultima Operazione': basket.lastOperationType || '-',
-          'Data Ultima Operazione': basket.lastOperationDate || '-',
           'Stato': basket.state === 'active' ? 'Attivo' : basket.state === 'inactive' ? 'Inattivo' : basket.state || '-',
           'NFC': basket.nfcData || '-'
         };
@@ -267,15 +271,19 @@ export default function Baskets() {
       const colWidths = [
         { wch: 15 }, // Numero Cestello
         { wch: 25 }, // FLUPSY
+        { wch: 20 }, // Sito Produttivo
+        { wch: 15 }, // Data Attivazione
+        { wch: 18 }, // Data Ultima Operazione
+        { wch: 14 }, // Peso Cesta (Kg)
+        { wch: 12 }, // Taglia
+        { wch: 12 }, // pz / Kg
+        { wch: 15 }, // Numero Animali
+        { wch: 12 }, // Mortalità %
         { wch: 12 }, // Posizione
         { wch: 12 }, // Lotto
         { wch: 20 }, // Fornitore
         { wch: 15 }, // Codice Ciclo
-        { wch: 12 }, // Taglia
-        { wch: 15 }, // Numero Animali
-        { wch: 15 }, // Data Attivazione
         { wch: 18 }, // Ultima Operazione
-        { wch: 18 }, // Data Ultima Operazione
         { wch: 10 }, // Stato
         { wch: 20 }  // NFC
       ];
@@ -330,6 +338,10 @@ export default function Baskets() {
 
   // Funzione per calcolare i dati aggiuntivi basandosi sulle operazioni
   const calculateBasketData = (basket: any) => {
+    // Trova FLUPSY per sito produttivo
+    const flupsyUnit = (flupsys && Array.isArray(flupsys)) ? flupsys.find((f: any) => f.id === basket.flupsyId) : null;
+    const sitoProduttivo = flupsyUnit?.location || '-';
+
     if (!operations || !Array.isArray(operations)) {
       return {
         ...basket,
@@ -339,7 +351,11 @@ export default function Baskets() {
         lotId: null,
         lastOperationDate: null,
         lastOperationType: null,
-        cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null
+        cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null,
+        sitoProduttivo,
+        pesoCesta: null,
+        animalsPerKg: null,
+        mortalityPercent: null
       };
     }
 
@@ -364,7 +380,11 @@ export default function Baskets() {
         lotId: null,
         lastOperationDate: null,
         lastOperationType: null,
-        cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null
+        cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null,
+        sitoProduttivo,
+        pesoCesta: null,
+        animalsPerKg: null,
+        mortalityPercent: null
       };
     }
 
@@ -378,7 +398,11 @@ export default function Baskets() {
         lotId: null,
         lastOperationDate: null,
         lastOperationType: null,
-        cycleCode: null
+        cycleCode: null,
+        sitoProduttivo,
+        pesoCesta: null,
+        animalsPerKg: null,
+        mortalityPercent: null
       };
     }
 
@@ -401,6 +425,17 @@ export default function Baskets() {
     const firstOperation = basketOperations[basketOperations.length - 1];
     const activationDate = firstOperation?.date || null;
 
+    // Peso cesta: dall'ultima operazione con totalWeight
+    const operationWithWeight = basketOperations.find(op => op.totalWeight && op.totalWeight > 0);
+    const pesoCesta = operationWithWeight?.totalWeight || null;
+
+    // pz/Kg: dall'ultima operazione con animalsPerKg
+    const animalsPerKg = operationsWithAnimalsPerKg.length > 0 ? operationsWithAnimalsPerKg[0].animalsPerKg : null;
+
+    // Mortalità: dall'ultima operazione con mortality
+    const operationWithMortality = basketOperations.find(op => op.mortality !== null && op.mortality !== undefined);
+    const mortalityPercent = operationWithMortality?.mortality || null;
+
     return {
       ...basket,
       calculatedSize,
@@ -409,7 +444,11 @@ export default function Baskets() {
       lotId: latestOperation.lotId || null,
       lastOperationDate: latestOperation.date,
       lastOperationType: latestOperation.type,
-      cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null
+      cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null,
+      sitoProduttivo,
+      pesoCesta,
+      animalsPerKg,
+      mortalityPercent
     };
   };
 
@@ -763,59 +802,43 @@ export default function Baskets() {
                     )}
                   </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   FLUPSY
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  LOTTO
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  SITO<br/>PRODUTTIVO
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  CODICE<br/>CICLO ATTUALE
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  DATA<br/>ATTIVAZIONE
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  STATO
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  DATA ULT.<br/>OPERAZIONE
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  ULTIMA<br/>OPERAZIONE
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  PESO<br/>CESTA (Kg)
                 </th>
                 <th 
                   scope="col" 
-                  className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 ${sortConfig.key === 'size.code' ? 'text-blue-600' : 'text-gray-600'}`}
+                  className={`px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 ${sortConfig.key === 'size.code' ? 'text-blue-600' : 'text-gray-600'}`}
                   onClick={() => requestSort('size.code')}
                 >
                   <div className="flex items-center">
-                    <span>Taglia Attuale</span>
+                    <span>TAGLIA</span>
                     {preferredSize && (
                       <div 
-                        className="ml-2 h-3 w-3 rounded-full" 
+                        className="ml-1 h-3 w-3 rounded-full" 
                         style={{backgroundColor: getSizeColor(preferredSize)}}
                         title={`Ordinata in base alla taglia preferita: ${preferredSize}`}
                       ></div>
                     )}
-                    {sortConfig.key === 'size.code' ? (
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        className="h-4 w-4 ml-1" 
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
-                      >
-                        {sortConfig.direction === 'asc' ? (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
-                        ) : (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                        )}
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                      </svg>
-                    )}
                   </div>
+                </th>
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  pz / Kg
                 </th>
                 <th 
                   scope="col" 
-                  className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => requestSort('animalCount')}
                 >
                   <div className="flex items-center">
@@ -837,10 +860,10 @@ export default function Baskets() {
                     )}
                   </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  DATA<br/>ATTIVAZIONE
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  MORTALITÀ<br/>%
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   AZIONI
                 </th>
               </tr>
@@ -848,13 +871,13 @@ export default function Baskets() {
             <tbody className="bg-white">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                     Caricamento ceste...
                   </td>
                 </tr>
               ) : filteredBaskets.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                     Nessuna cesta trovata
                   </td>
                 </tr>
@@ -872,53 +895,29 @@ export default function Baskets() {
 
                     return (
                       <tr key={basket.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                        <td className="px-2 py-2 text-sm font-semibold text-gray-900">
                           #{basket.physicalNumber}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-700">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{basket.flupsyName || `FLUPSY #${basket.flupsyId}`}</span>
-                            {basket.row && basket.position && (
-                              <span className="text-xs text-gray-500">
-                                Pos: {basket.row}-{basket.position}
-                              </span>
-                            )}
-                          </div>
+                        <td className="px-2 py-2 text-sm text-gray-700">
+                          <span className="font-medium">{basket.flupsyName || `FLUPSY #${basket.flupsyId}`}</span>
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-700">
-                          {basket.lotId ? (
-                            <div className="flex flex-col">
-                              <span className="font-medium text-indigo-600">Lotto #{basket.lotId}</span>
-                              {(() => {
-                                const lot = lots.find(l => l.id === basket.lotId);
-                                return lot?.supplier ? (
-                                  <span className="text-xs text-gray-500">{lot.supplier}</span>
-                                ) : null;
-                              })()}
-                            </div>
+                        <td className="px-2 py-2 text-sm text-gray-600">
+                          {basket.sitoProduttivo || '-'}
+                        </td>
+                        <td className="px-2 py-2 text-xs text-gray-700">
+                          {basket.activationDate ? new Date(basket.activationDate).toLocaleDateString('it-IT') : '-'}
+                        </td>
+                        <td className="px-2 py-2 text-xs text-gray-700">
+                          {basket.lastOperationDate ? new Date(basket.lastOperationDate).toLocaleDateString('it-IT') : '-'}
+                        </td>
+                        <td className="px-2 py-2 text-sm text-gray-700">
+                          {basket.pesoCesta ? (
+                            <span className="font-medium">{basket.pesoCesta.toFixed(2)}</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-sm font-medium text-primary">
-                          {basket.cycleCode ? basket.cycleCode : '-'}
-                        </td>
-                        <td className="px-4 py-4">
-                          {statusBadge}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-700">
-                          {basket.lastOperationType ? (
-                            <div className="flex flex-col">
-                              <span className="font-medium capitalize">{basket.lastOperationType}</span>
-                              <span className="text-xs text-gray-500">
-                                {basket.lastOperationDate ? new Date(basket.lastOperationDate).toLocaleDateString('it-IT') : '-'}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
+                        <td className="px-2 py-2">
                           {basket.calculatedSize ? (
                             <Badge 
                               className={`text-xs ${basket.calculatedSize === preferredSize ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
@@ -935,62 +934,67 @@ export default function Baskets() {
                             <span className="text-gray-400 text-xs">N/D</span>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-700">
+                        <td className="px-2 py-2 text-sm text-gray-700">
+                          {basket.animalsPerKg ? (
+                            <span className="font-medium">{Math.round(basket.animalsPerKg).toLocaleString('it-IT')}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-sm text-gray-700">
                           {basket.calculatedAnimalCount ? (
                             <span className="font-medium">{basket.calculatedAnimalCount.toLocaleString('it-IT')}</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-700">
-                          {basket.activationDate ? (
-                            <div className="flex flex-col">
-                              <span className="font-medium">{new Date(basket.activationDate).toLocaleDateString('it-IT')}</span>
-                              <span className="text-xs text-gray-500">
-                                {Math.floor((new Date().getTime() - new Date(basket.activationDate).getTime()) / (1000 * 60 * 60 * 24))} giorni fa
-                              </span>
-                            </div>
+                        <td className="px-2 py-2 text-sm text-gray-700">
+                          {basket.mortalityPercent !== null && basket.mortalityPercent !== undefined ? (
+                            <span className="font-medium">{basket.mortalityPercent}%</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
+                        <td className="px-2 py-2 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-1">
                             <Button 
                               variant="ghost" 
                               size="icon"
+                              className="h-8 w-8"
                               onClick={() => {
                                 setSelectedBasket(basket);
                                 setIsViewDialogOpen(true);
                               }}
                             >
-                              <Eye className="h-5 w-5 text-primary" />
+                              <Eye className="h-4 w-4 text-primary" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-8 w-8"
                               onClick={() => {
                                 setSelectedBasket(basket);
                                 setIsEditDialogOpen(true);
                               }}
                             >
-                              <Pencil className="h-5 w-5 text-gray-600" />
+                              <Pencil className="h-4 w-4 text-gray-600" />
                             </Button>
                             {basket.state === 'available' ? (
                               <Button 
                                 variant="ghost" 
                                 size="icon"
+                                className="h-8 w-8"
                                 onClick={() => {
                                   setSelectedBasket(basket);
                                   setIsDeleteDialogOpen(true);
                                 }}
                               >
-                                <Trash2 className="h-5 w-5 text-destructive" />
+                                <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             ) : (
                               <div className="relative group">
-                                <Button variant="ghost" size="icon" disabled>
-                                  <Trash2 className="h-5 w-5 text-muted-foreground" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
+                                  <Trash2 className="h-4 w-4 text-muted-foreground" />
                                 </Button>
                                 <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 hidden group-hover:block bg-black text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10">
                                   Non puoi eliminare una cesta con un ciclo attivo
