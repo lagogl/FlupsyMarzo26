@@ -1491,23 +1491,23 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             sizeCode: sizeInfo[0]?.code || 'N/A',
             quantity: dest.animalCount || 0,
             averageWeight: dest.animalsPerKg ? (1000 / dest.animalsPerKg) : null,
-            destination: dest.destinationType === 'sale' ? 'sale' : 
-                        dest.destinationType === 'basket' ? 'basket' : 'discard',
-            targetBasketNumber: dest.destinationType === 'basket' ? dest.position : null
+            destination: dest.destinationType === 'sold' ? 'sale' : 
+                        dest.destinationType === 'placed' ? 'basket' : 'discard',
+            targetBasketNumber: dest.destinationType === 'placed' ? dest.position : null
           };
         })
       );
       
       const totalSold = destinationBaskets
-        .filter(d => d.destinationType === 'sale')
+        .filter(d => d.destinationType === 'sold')
         .reduce((sum, d) => sum + (d.animalCount || 0), 0);
       
       const totalRepositioned = destinationBaskets
-        .filter(d => d.destinationType === 'basket')
+        .filter(d => d.destinationType === 'placed')
         .reduce((sum, d) => sum + (d.animalCount || 0), 0);
       
       const totalDiscarded = destinationBaskets
-        .filter(d => d.destinationType === 'discard')
+        .filter(d => d.destinationType !== 'sold' && d.destinationType !== 'placed')
         .reduce((sum, d) => sum + (d.animalCount || 0), 0);
       
       await sendScreeningConfirmationEmail({
