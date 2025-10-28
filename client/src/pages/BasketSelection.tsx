@@ -421,8 +421,6 @@ export default function BasketSelection() {
       id: 'physicalNumber',
       header: 'Numero',
       cell: (basket) => <span>{basket.physicalNumber}</span>,
-      sortable: true,
-      sortFn: (a, b) => a.physicalNumber - b.physicalNumber,
     },
     {
       id: 'flupsy',
@@ -449,8 +447,6 @@ export default function BasketSelection() {
           </span>
         </div>
       ),
-      sortable: true,
-      sortFn: (a, b) => a.flupsy.name.localeCompare(b.flupsy.name),
     },
     {
       id: 'size',
@@ -477,13 +473,6 @@ export default function BasketSelection() {
           </Badge>
         );
       },
-      sortable: true,
-      sortFn: (a, b) => {
-        if (!a.size && !b.size) return 0;
-        if (!a.size) return 1;
-        if (!b.size) return -1;
-        return a.size.sizeMm - b.size.sizeMm;
-      },
     },
     {
       id: 'animalCount',
@@ -503,12 +492,6 @@ export default function BasketSelection() {
         if (!basket.lastOperation?.animalsPerKg) return <span className="text-muted-foreground">-</span>;
         return <span>{Math.round(basket.lastOperation.animalsPerKg).toLocaleString('it-IT')}</span>;
       },
-      sortable: true,
-      sortFn: (a, b) => {
-        const aAnimalsPerKg = a.lastOperation?.animalsPerKg || 0;
-        const bAnimalsPerKg = b.lastOperation?.animalsPerKg || 0;
-        return aAnimalsPerKg - bAnimalsPerKg;
-      },
     },
     {
       id: 'totalWeight',
@@ -516,12 +499,6 @@ export default function BasketSelection() {
       cell: (basket) => {
         if (!basket.lastOperation?.totalWeight) return <span className="text-muted-foreground">-</span>;
         return <span>{basket.lastOperation.totalWeight.toFixed(2)} Kg</span>;
-      },
-      sortable: true,
-      sortFn: (a, b) => {
-        const aTotalWeight = a.lastOperation?.totalWeight || 0;
-        const bTotalWeight = b.lastOperation?.totalWeight || 0;
-        return aTotalWeight - bTotalWeight;
       },
     },
     {
@@ -531,12 +508,6 @@ export default function BasketSelection() {
         if (!basket.lastOperation?.averageWeight) return <span className="text-muted-foreground">-</span>;
         return <span>{basket.lastOperation.averageWeight.toFixed(2)} g</span>;
       },
-      sortable: true,
-      sortFn: (a, b) => {
-        const aWeight = a.lastOperation?.averageWeight || 0;
-        const bWeight = b.lastOperation?.averageWeight || 0;
-        return aWeight - bWeight;
-      },
     },
     {
       id: 'cycleDuration',
@@ -544,12 +515,6 @@ export default function BasketSelection() {
       cell: (basket) => {
         if (!basket.cycleDuration) return <span className="text-muted-foreground">-</span>;
         return <span>{basket.cycleDuration} giorni</span>;
-      },
-      sortable: true,
-      sortFn: (a, b) => {
-        const aDuration = a.cycleDuration || 0;
-        const bDuration = b.cycleDuration || 0;
-        return aDuration - bDuration;
       },
     },
     {
@@ -567,13 +532,6 @@ export default function BasketSelection() {
             </span>
           </div>
         );
-      },
-      sortable: true,
-      sortFn: (a, b) => {
-        if (!a.lastOperation && !b.lastOperation) return 0;
-        if (!a.lastOperation) return 1;
-        if (!b.lastOperation) return -1;
-        return new Date(b.lastOperation.date).getTime() - new Date(a.lastOperation.date).getTime();
       },
     },
     {
@@ -595,12 +553,6 @@ export default function BasketSelection() {
           </span>
         );
       },
-      sortable: true,
-      sortFn: (a, b) => {
-        const aRate = a.growthRate ?? -9999;
-        const bRate = b.growthRate ?? -9999;
-        return bRate - aRate;
-      },
     },
     {
       id: 'mortality',
@@ -619,12 +571,6 @@ export default function BasketSelection() {
             {basket.mortalityRate.mortalityPercent.toFixed(1)}%
           </span>
         );
-      },
-      sortable: true,
-      sortFn: (a, b) => {
-        const aRate = a.mortalityRate?.mortalityPercent ?? -1;
-        const bRate = b.mortalityRate?.mortalityPercent ?? -1;
-        return aRate - bRate;
       },
     },
   ];
@@ -1435,9 +1381,9 @@ export default function BasketSelection() {
           <div className="rounded-md border overflow-hidden">
             <ScrollArea className="h-[600px]">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40px]">
+                <TableHeader className="sticky top-0 z-10">
+                  <TableRow className="bg-slate-100 hover:bg-slate-100 border-b-2 border-slate-300">
+                    <TableHead className="w-[40px] bg-slate-100 font-bold text-slate-700 border-r border-slate-300">
                       <Checkbox 
                         checked={selectedBaskets.size === filteredBaskets.length && filteredBaskets.length > 0}
                         onCheckedChange={toggleSelectAll}
@@ -1446,13 +1392,13 @@ export default function BasketSelection() {
                     {columns.slice(1).map(column => (
                       <TableHead 
                         key={column.id}
-                        className={column.sortable ? 'cursor-pointer' : ''}
+                        className={`bg-slate-100 font-bold text-slate-700 border-r border-slate-300 ${column.sortable ? 'cursor-pointer hover:bg-slate-200' : ''}`}
                         onClick={column.sortable ? () => handleSort(column.id) : undefined}
                       >
-                        <div className="flex items-center">
-                          {column.header}
+                        <div className="flex items-center justify-between">
+                          <span>{column.header}</span>
                           {column.sortable && (
-                            <ArrowUpDown className="ml-2 h-4 w-4" />
+                            <ArrowUpDown className={`ml-2 h-4 w-4 ${sortColumn === column.id ? 'text-blue-600' : 'text-slate-400'}`} />
                           )}
                         </div>
                       </TableHead>
@@ -1479,32 +1425,32 @@ export default function BasketSelection() {
                   ) : (
                     <>
                       {/* Riga di totale come prima riga */}
-                      <TableRow className="font-medium bg-muted/30">
-                        <TableCell>
+                      <TableRow className="font-bold bg-slate-200 hover:bg-slate-200 border-b-2 border-slate-400">
+                        <TableCell className="border-r border-slate-300">
                           <div className="flex items-center">
                             <Info className="h-4 w-4 mr-2" />
                           </div>
                         </TableCell>
-                        <TableCell>Totale</TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell className="font-bold text-primary">
+                        <TableCell className="border-r border-slate-300">Totale</TableCell>
+                        <TableCell className="border-r border-slate-300">-</TableCell>
+                        <TableCell className="border-r border-slate-300">-</TableCell>
+                        <TableCell className="font-bold text-blue-700 border-r border-slate-300">
                           {totalAnimals.toLocaleString('it-IT')}
                         </TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell>-</TableCell>
+                        <TableCell className="border-r border-slate-300">-</TableCell>
+                        <TableCell className="border-r border-slate-300">-</TableCell>
+                        <TableCell className="border-r border-slate-300">-</TableCell>
+                        <TableCell className="border-r border-slate-300">-</TableCell>
                       </TableRow>
                       
                       {/* Righe per ogni cesta */}
                       {filteredBaskets.map(basket => (
                         <TableRow 
                           key={basket.id}
-                          className={selectedBaskets.has(basket.id) ? 'bg-muted/50' : ''}
+                          className={`border-b border-slate-200 hover:bg-slate-50 ${selectedBaskets.has(basket.id) ? 'bg-blue-50 hover:bg-blue-100' : ''}`}
                         >
                           {columns.map(column => (
-                            <TableCell key={`${basket.id}-${column.id}`}>
+                            <TableCell key={`${basket.id}-${column.id}`} className="border-r border-slate-200">
                               {column.cell(basket)}
                             </TableCell>
                           ))}
