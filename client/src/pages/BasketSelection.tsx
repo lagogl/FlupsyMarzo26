@@ -497,6 +497,34 @@ export default function BasketSelection() {
       sortFn: (a, b) => a.animalCount - b.animalCount,
     },
     {
+      id: 'animalsPerKg',
+      header: 'pz / Kg',
+      cell: (basket) => {
+        if (!basket.lastOperation?.animalsPerKg) return <span className="text-muted-foreground">-</span>;
+        return <span>{Math.round(basket.lastOperation.animalsPerKg).toLocaleString('it-IT')}</span>;
+      },
+      sortable: true,
+      sortFn: (a, b) => {
+        const aAnimalsPerKg = a.lastOperation?.animalsPerKg || 0;
+        const bAnimalsPerKg = b.lastOperation?.animalsPerKg || 0;
+        return aAnimalsPerKg - bAnimalsPerKg;
+      },
+    },
+    {
+      id: 'totalWeight',
+      header: 'Peso cesta',
+      cell: (basket) => {
+        if (!basket.lastOperation?.totalWeight) return <span className="text-muted-foreground">-</span>;
+        return <span>{basket.lastOperation.totalWeight.toFixed(2)} Kg</span>;
+      },
+      sortable: true,
+      sortFn: (a, b) => {
+        const aTotalWeight = a.lastOperation?.totalWeight || 0;
+        const bTotalWeight = b.lastOperation?.totalWeight || 0;
+        return aTotalWeight - bTotalWeight;
+      },
+    },
+    {
       id: 'averageWeight',
       header: 'Peso medio',
       cell: (basket) => {
@@ -784,6 +812,8 @@ export default function BasketSelection() {
       'Posizione': `${basket.row}-${basket.position}`,
       'Taglia': basket.size?.code || 'N/D',
       'Animali': basket.animalCount,
+      'pz / Kg': basket.lastOperation?.animalsPerKg ? Math.round(basket.lastOperation.animalsPerKg).toLocaleString('it-IT') : 'N/D',
+      'Peso cesta (Kg)': basket.lastOperation?.totalWeight?.toFixed(2) || 'N/D',
       'Peso medio (g)': basket.lastOperation?.averageWeight?.toFixed(2) || 'N/D',
       'Età ciclo (giorni)': basket.cycleDuration || 'N/D',
       'Ultima operazione': basket.lastOperation ? format(new Date(basket.lastOperation.date), 'dd/MM/yyyy') : 'N/D',
