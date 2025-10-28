@@ -633,16 +633,13 @@ export default function BasketSelection() {
   useEffect(() => {
     if (!basketInfos) return;
     
-    // FILTRO SEMPRE ATTIVO: mostra solo ceste con cicli attivi (non chiusi)
-    let filtered = basketInfos.filter(basket => 
-      basket.currentCycle !== null && basket.currentCycle.endDate === null
-    );
+    let filtered = [...basketInfos];
     
-    // Raccoglie tutti gli ID di taglie e FLUPSY disponibili (dalle ceste con cicli attivi)
+    // Raccoglie tutti gli ID di taglie e FLUPSY disponibili (da tutte le ceste)
     const sizeIdsWithBaskets = new Set<number>();
     const flupsyIdsWithBaskets = new Set<number>();
     
-    filtered.forEach(basket => {
+    basketInfos.forEach(basket => {
       if (basket.size) {
         sizeIdsWithBaskets.add(basket.size.id);
       }
@@ -722,14 +719,21 @@ export default function BasketSelection() {
       });
     }
     
-    // Applica i filtri aggiuntivi (se presenti) con logica OR
-    if (filterFunctions.length > 0) {
+    // Se non ci sono filtri attivi, non mostrare nulla
+    if (filterFunctions.length === 0) {
+      // Nessun filtro selezionato, lascia l'elenco vuoto
+      filtered = [];
+    } else {
       // Applica i filtri con logica OR (basta che soddisfi almeno uno dei criteri)
       filtered = filtered.filter(basket => 
         filterFunctions.some(filterFn => filterFn(basket))
       );
     }
-    // Nota: se non ci sono filtri attivi, mostra tutte le ceste con cicli attivi (filtered)
+    
+    // FILTRO SEMPRE ATTIVO (applicato DOPO i filtri di taglia/FLUPSY): mostra solo ceste con cicli attivi (non chiusi)
+    filtered = filtered.filter(basket => 
+      basket.currentCycle !== null && basket.currentCycle.endDate === null
+    );
     
     // Ordinamento
     if (sortColumn) {
