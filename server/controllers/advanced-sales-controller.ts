@@ -50,12 +50,17 @@ async function getNextAvailableDDTNumber(companyId?: number | null): Promise<num
     
     try {
       if (companyId) {
-        // Ottieni gli ultimi DDT da FIC per questa azienda (tipo delivery_note - singolare!)
-        const ficResponse = await apiRequest('GET', `/issued_documents?type=delivery_note&sort=-number&per_page=1`);
+        // Ottieni gli ultimi DDT da FIC per questa azienda
+        // IMPORTANTE: l'API non supporta sort=-number, quindi recuperiamo 100 DDT e ordiniamo client-side
+        const ficResponse = await apiRequest('GET', `/issued_documents?type=delivery_note&per_page=100`);
         
         if (ficResponse.data?.data && ficResponse.data.data.length > 0) {
-          numeroFIC = ficResponse.data.data[0].number || 0;
-          console.log(`📋 Ultimo DDT su Fatture in Cloud per azienda ${companyId}: ${numeroFIC}`);
+          // Ordina per numero decrescente lato client
+          const ddtOrdinati = ficResponse.data.data.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+          numeroFIC = ddtOrdinati[0].number || 0;
+          console.log(`📋 Ultimo DDT su Fatture in Cloud per azienda ${companyId}: ${numeroFIC} (trovati ${ficResponse.data.data.length} DDT totali)`);
+        } else {
+          console.log(`📋 Nessun DDT trovato su Fatture in Cloud per azienda ${companyId}`);
         }
       } else {
         console.log('⚠️ Company ID non specificato, uso solo numero locale');
