@@ -1121,17 +1121,17 @@ export default function Settings() {
                       
                       <div className="my-4 space-y-2">
                         <Label htmlFor="confirmation-name">
-                          Digita "{flupsys.find(f => f.id === selectedFlupsyId)?.name}" per confermare
+                          Digita "{flupsys.find(f => f.id === selectedFlupsyId)?.name?.trim()}" per confermare
                         </Label>
                         <Input 
                           id="confirmation-name" 
                           type="text"
-                          placeholder={flupsys.find(f => f.id === selectedFlupsyId)?.name || ""}
+                          placeholder={flupsys.find(f => f.id === selectedFlupsyId)?.name?.trim() || ""}
                           value={confirmationName}
                           onChange={(e) => {
                             const newValue = e.target.value;
                             setConfirmationName(newValue);
-                            const expectedName = flupsys.find(f => f.id === selectedFlupsyId)?.name;
+                            const expectedName = flupsys.find(f => f.id === selectedFlupsyId)?.name?.trim();
                             console.log('🔍 Confronto nomi:', {
                               digitato: `"${newValue.trim()}"`,
                               atteso: `"${expectedName}"`,
@@ -1154,7 +1154,7 @@ export default function Settings() {
                           onClick={deleteFlupsyData}
                           disabled={
                             isDeletingFlupsy || 
-                            confirmationName.trim() !== flupsys.find(f => f.id === selectedFlupsyId)?.name
+                            confirmationName.trim() !== flupsys.find(f => f.id === selectedFlupsyId)?.name?.trim()
                           }
                         >
                           {isDeletingFlupsy ? "Eliminazione in corso..." : "Conferma Eliminazione Definitiva"}
