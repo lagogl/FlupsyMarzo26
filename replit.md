@@ -3,6 +3,9 @@
 ## Overview
 The FLUPSY Management System is a web application designed to optimize aquaculture operations, specifically for FLUPSY (Floating Upwelling System) installations. It provides real-time tracking of baskets, cycles, operations, and inventory for shellfish cultivation. Key capabilities include advanced growth forecasting, mortality tracking, and integration with external systems to enhance operational efficiency and provide intelligent insights for sustainable aquaculture practices.
 
+## Recent Changes
+- **2025-10-29**: Fixed DDT number retrieval from Fatture in Cloud API - now correctly filters by current year and sorts by date (most recent first), then by number (highest first) to retrieve accurate next DDT number for multi-company setup
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
