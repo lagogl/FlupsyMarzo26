@@ -1356,4 +1356,119 @@ router.get('/companies/local', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint per recuperare il prossimo numero DDT disponibile per tutte le aziende
+router.get('/next-ddt-numbers', async (req: Request, res: Response) => {
+  try {
+    console.log('🔍 Recupero prossimo numero DDT disponibile per tutte le aziende...');
+    
+    await refreshTokenIfNeeded();
+    
+    // Lista delle aziende da controllare
+    const companies = [
+      { id: 1052922, name: 'Delta Futuro società agricola srl' },
+      { id: 1017299, name: 'SOCIETA\' AGRICOLA ECOTAPES SRL' }
+    ];
+    
+    const results = [];
+    
+    for (const company of companies) {
+      console.log(`\n📋 Controllo DDT per ${company.name} (ID: ${company.id})...`);
+      
+      try {
+        // Costruisci URL con company ID specifico - recupera tutti i DDT e ordiniamo manualmente
+        const url = `${FATTURE_IN_CLOUD_API_BASE}/c/${company.id}/issued_documents?type=delivery_note&per_page=100`;
+        
+        const accessToken = await getConfigValue('fatture_in_cloud_access_token');
+        if (!accessToken) {
+          throw new Error('Token di accesso mancante');
+        }
+        
+        const response = await axios({
+          method: 'GET',
+          url,
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        let ddtList = response.data.data || [];
+        
+        // Ordina manualmente per numero decrescente
+        ddtList = ddtList.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+        
+        let nextNumber = 1;
+        let lastDdtInfo = null;
+        
+        if (ddtList.length > 0) {
+          const lastDdt = ddtList[0];
+          const lastNumber = lastDdt.number || 0;
+          nextNumber = lastNumber + 1;
+          
+          lastDdtInfo = {
+            number: lastDdt.number,
+            numeration: lastDdt.numeration,
+            date: lastDdt.date,
+            entity: lastDdt.entity?.name
+          };
+          
+          console.log(`✅ ${company.name}: Ultimo DDT n. ${lastNumber}, Prossimo: ${nextNumber}`);
+        } else {
+          console.log(`✅ ${company.name}: Nessun DDT trovato, Prossimo: 1`);
+        }
+        
+        results.push({
+          companyId: company.id,
+          companyName: company.name,
+          success: true,
+          nextNumber,
+          lastDdt: lastDdtInfo
+        });
+        
+      } catch (error: any) {
+        console.error(`❌ Errore per ${company.name}:`, error.message);
+        results.push({
+          companyId: company.id,
+          companyName: company.name,
+          success: false,
+          error: error.response?.data?.error?.message || error.message
+        });
+      }
+    }
+    
+    // Prepara risposta formattata per il log
+    console.log('\n📊 RIEPILOGO NUMERI DDT DISPONIBILI:');
+    console.log('═'.repeat(80));
+    results.forEach(result => {
+      if (result.success) {
+        console.log(`\n🏢 ${result.companyName}`);
+        console.log(`   Company ID: ${result.companyId}`);
+        console.log(`   📄 Prossimo numero DDT: ${result.nextNumber}`);
+        if (result.lastDdt) {
+          console.log(`   Ultimo DDT: n. ${result.lastDdt.number} del ${result.lastDdt.date}`);
+          console.log(`   Cliente: ${result.lastDdt.entity || 'N/A'}`);
+        } else {
+          console.log(`   (Nessun DDT esistente)`);
+        }
+      } else {
+        console.log(`\n🏢 ${result.companyName}`);
+        console.log(`   ❌ Errore: ${result.error}`);
+      }
+    });
+    console.log('\n' + '═'.repeat(80));
+    
+    res.json({
+      success: true,
+      companies: results
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Errore generale nel recupero numeri DDT:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || "Errore nel recupero numeri DDT"
+    });
+  }
+});
+
 export default router;
