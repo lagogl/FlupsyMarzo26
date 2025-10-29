@@ -1375,8 +1375,12 @@ router.get('/next-ddt-numbers', async (req: Request, res: Response) => {
       console.log(`\n📋 Controllo DDT per ${company.name} (ID: ${company.id})...`);
       
       try {
-        // Costruisci URL con company ID specifico - recupera tutti i DDT e ordiniamo manualmente
-        const url = `${FATTURE_IN_CLOUD_API_BASE}/c/${company.id}/issued_documents?type=delivery_note&per_page=100`;
+        // Ottieni anno corrente per filtrare DDT (la numerazione riparte ogni anno)
+        const currentYear = new Date().getFullYear();
+        
+        // Costruisci URL con company ID specifico - FILTRATO PER ANNO CORRENTE
+        // CRITICO: il parametro year è necessario perché FIC riavvia la numerazione ogni anno
+        const url = `${FATTURE_IN_CLOUD_API_BASE}/c/${company.id}/issued_documents?type=delivery_note&year=${currentYear}&per_page=100`;
         
         const accessToken = await getConfigValue('fatture_in_cloud_access_token');
         if (!accessToken) {
@@ -1467,6 +1471,122 @@ router.get('/next-ddt-numbers', async (req: Request, res: Response) => {
     res.status(500).json({ 
       success: false,
       error: error.message || "Errore nel recupero numeri DDT"
+    });
+  }
+});
+
+// Endpoint diagnostico per analizzare TUTTE le serie di numerazione DDT
+router.get('/ddt-numeration-analysis', async (req: Request, res: Response) => {
+  try {
+    console.log('🔍 ANALISI SERIE DI NUMERAZIONE DDT...');
+    
+    await refreshTokenIfNeeded();
+    
+    const companies = [
+      { id: 1052922, name: 'Delta Futuro società agricola srl' },
+      { id: 1017299, name: 'SOCIETA\' AGRICOLA ECOTAPES SRL' }
+    ];
+    
+    const results = [];
+    
+    for (const company of companies) {
+      console.log(`\n📋 Analisi serie DDT per ${company.name}...`);
+      
+      try {
+        const currentYear = new Date().getFullYear();
+        const url = `${FATTURE_IN_CLOUD_API_BASE}/c/${company.id}/issued_documents?type=delivery_note&year=${currentYear}&per_page=200`;
+        
+        const accessToken = await getConfigValue('fatture_in_cloud_access_token');
+        if (!accessToken) {
+          throw new Error('Token di accesso mancante');
+        }
+        
+        const response = await axios({
+          method: 'GET',
+          url,
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const ddtList = response.data.data || [];
+        
+        // Raggruppa DDT per serie di numerazione
+        const serieMap = new Map<string, any[]>();
+        ddtList.forEach((ddt: any) => {
+          const serie = ddt.numeration || '(serie vuota/default)';
+          if (!serieMap.has(serie)) {
+            serieMap.set(serie, []);
+          }
+          serieMap.get(serie)!.push(ddt);
+        });
+        
+        // Analizza ogni serie
+        const serieAnalysis = Array.from(serieMap.entries()).map(([serie, ddts]) => {
+          // Ordina per numero decrescente
+          const sortedDdts = ddts.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+          const lastDdt = sortedDdts[0];
+          
+          return {
+            numeration: serie,
+            count: ddts.length,
+            lastNumber: lastDdt.number,
+            nextNumber: (lastDdt.number || 0) + 1,
+            lastDate: lastDdt.date,
+            lastEntity: lastDdt.entity?.name || 'N/A',
+            samples: sortedDdts.slice(0, 3).map((d: any) => ({
+              number: d.number,
+              date: d.date,
+              entity: d.entity?.name || 'N/A'
+            }))
+          };
+        });
+        
+        // Ordina per numero più alto
+        serieAnalysis.sort((a, b) => b.lastNumber - a.lastNumber);
+        
+        console.log(`\n🏢 ${company.name} - Trovate ${serieAnalysis.length} serie di numerazione:`);
+        serieAnalysis.forEach((s, idx) => {
+          console.log(`\n   ${idx + 1}. Serie "${s.numeration}"`);
+          console.log(`      📊 ${s.count} DDT in questa serie`);
+          console.log(`      📄 Ultimo numero: ${s.lastNumber} (prossimo: ${s.nextNumber})`);
+          console.log(`      📅 Data: ${s.lastDate}`);
+          console.log(`      👤 Cliente: ${s.lastEntity}`);
+        });
+        
+        results.push({
+          companyId: company.id,
+          companyName: company.name,
+          success: true,
+          totalDdts: ddtList.length,
+          numerationSeries: serieAnalysis
+        });
+        
+      } catch (error: any) {
+        console.error(`❌ Errore per ${company.name}:`, error.message);
+        results.push({
+          companyId: company.id,
+          companyName: company.name,
+          success: false,
+          error: error.response?.data?.error?.message || error.message
+        });
+      }
+    }
+    
+    console.log('\n' + '═'.repeat(80));
+    
+    res.json({
+      success: true,
+      year: new Date().getFullYear(),
+      companies: results
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Errore nell\'analisi serie DDT:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || "Errore nell'analisi serie DDT"
     });
   }
 });

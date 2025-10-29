@@ -50,17 +50,21 @@ async function getNextAvailableDDTNumber(companyId?: number | null): Promise<num
     
     try {
       if (companyId) {
-        // Ottieni gli ultimi DDT da FIC per questa azienda
+        // Ottieni anno corrente per filtrare DDT (la numerazione riparte ogni anno)
+        const currentYear = new Date().getFullYear();
+        
+        // Ottieni gli ultimi DDT da FIC per questa azienda FILTRATI PER ANNO CORRENTE
         // IMPORTANTE: l'API non supporta sort=-number, quindi recuperiamo 100 DDT e ordiniamo client-side
-        const ficResponse = await apiRequest('GET', `/issued_documents?type=delivery_note&per_page=100`);
+        // Il parametro year è CRITICO perché FIC riavvia la numerazione ogni anno
+        const ficResponse = await apiRequest('GET', `/issued_documents?type=delivery_note&year=${currentYear}&per_page=100`);
         
         if (ficResponse.data?.data && ficResponse.data.data.length > 0) {
           // Ordina per numero decrescente lato client
           const ddtOrdinati = ficResponse.data.data.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
           numeroFIC = ddtOrdinati[0].number || 0;
-          console.log(`📋 Ultimo DDT su Fatture in Cloud per azienda ${companyId}: ${numeroFIC} (trovati ${ficResponse.data.data.length} DDT totali)`);
+          console.log(`📋 Ultimo DDT su Fatture in Cloud per azienda ${companyId} (anno ${currentYear}): ${numeroFIC} (trovati ${ficResponse.data.data.length} DDT totali)`);
         } else {
-          console.log(`📋 Nessun DDT trovato su Fatture in Cloud per azienda ${companyId}`);
+          console.log(`📋 Nessun DDT trovato su Fatture in Cloud per azienda ${companyId} (anno ${currentYear})`);
         }
       } else {
         console.log('⚠️ Company ID non specificato, uso solo numero locale');
