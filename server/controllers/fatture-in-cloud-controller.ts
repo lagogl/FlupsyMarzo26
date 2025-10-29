@@ -1398,8 +1398,15 @@ router.get('/next-ddt-numbers', async (req: Request, res: Response) => {
         
         let ddtList = response.data.data || [];
         
-        // Ordina manualmente per numero decrescente
-        ddtList = ddtList.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+        // Ordina manualmente per DATA decrescente (più recente prima), poi per NUMERO decrescente
+        ddtList = ddtList.sort((a: any, b: any) => {
+          const dateA = new Date(a.date || '1900-01-01');
+          const dateB = new Date(b.date || '1900-01-01');
+          const diffDate = dateB.getTime() - dateA.getTime();
+          if (diffDate !== 0) return diffDate;
+          // Se stessa data, ordina per numero decrescente
+          return (b.number || 0) - (a.number || 0);
+        });
         
         let nextNumber = 1;
         let lastDdtInfo = null;
@@ -1524,8 +1531,15 @@ router.get('/ddt-numeration-analysis', async (req: Request, res: Response) => {
         
         // Analizza ogni serie
         const serieAnalysis = Array.from(serieMap.entries()).map(([serie, ddts]) => {
-          // Ordina per numero decrescente
-          const sortedDdts = ddts.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+          // Ordina per DATA decrescente (più recente prima), poi per NUMERO decrescente
+          const sortedDdts = ddts.sort((a: any, b: any) => {
+            const dateA = new Date(a.date || '1900-01-01');
+            const dateB = new Date(b.date || '1900-01-01');
+            const diffDate = dateB.getTime() - dateA.getTime();
+            if (diffDate !== 0) return diffDate;
+            // Se stessa data, ordina per numero decrescente
+            return (b.number || 0) - (a.number || 0);
+          });
           const lastDdt = sortedDdts[0];
           
           return {

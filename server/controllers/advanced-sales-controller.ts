@@ -59,10 +59,18 @@ async function getNextAvailableDDTNumber(companyId?: number | null): Promise<num
         const ficResponse = await apiRequest('GET', `/issued_documents?type=delivery_note&year=${currentYear}&per_page=100`);
         
         if (ficResponse.data?.data && ficResponse.data.data.length > 0) {
-          // Ordina per numero decrescente lato client
-          const ddtOrdinati = ficResponse.data.data.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+          // Ordina per DATA decrescente (più recente prima), poi per NUMERO decrescente
+          const ddtOrdinati = ficResponse.data.data.sort((a: any, b: any) => {
+            const dateA = new Date(a.date || '1900-01-01');
+            const dateB = new Date(b.date || '1900-01-01');
+            const diffDate = dateB.getTime() - dateA.getTime();
+            if (diffDate !== 0) return diffDate;
+            // Se stessa data, ordina per numero decrescente
+            return (b.number || 0) - (a.number || 0);
+          });
           numeroFIC = ddtOrdinati[0].number || 0;
-          console.log(`📋 Ultimo DDT su Fatture in Cloud per azienda ${companyId} (anno ${currentYear}): ${numeroFIC} (trovati ${ficResponse.data.data.length} DDT totali)`);
+          const ultimaData = ddtOrdinati[0].date;
+          console.log(`📋 Ultimo DDT su Fatture in Cloud per azienda ${companyId} (anno ${currentYear}): #${numeroFIC} del ${ultimaData} (trovati ${ficResponse.data.data.length} DDT totali)`);
         } else {
           console.log(`📋 Nessun DDT trovato su Fatture in Cloud per azienda ${companyId} (anno ${currentYear})`);
         }

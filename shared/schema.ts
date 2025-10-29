@@ -1018,6 +1018,7 @@ export const fattureInCloudConfig = pgTable("fatture_in_cloud_config", {
   emailOggettoTemplate: text("email_oggetto_template"),
   emailCorpoTemplate: text("email_corpo_template"),
   attivo: boolean("attivo").default(true),
+  ddtNumerationSerie: text("ddt_numeration_serie").default(""), // Serie di numerazione DDT (es. "/ddt", "/A" o vuoto "")
   
   ragioneSociale: text("ragione_sociale"),
   indirizzo: text("indirizzo"),
