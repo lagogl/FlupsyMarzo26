@@ -189,7 +189,7 @@ const FattureInCloudConfig: React.FC = () => {
         description: "Configurazione salvata con successo"
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Errore",
         description: error.message,
@@ -211,7 +211,7 @@ const FattureInCloudConfig: React.FC = () => {
         window.location.href = data.url;
       }
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Errore OAuth2",
         description: error.message,
@@ -240,7 +240,7 @@ const FattureInCloudConfig: React.FC = () => {
         description: data.message
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       setIsSyncing(false);
       setSyncProgress(0);
       setSyncMessage('');
@@ -272,7 +272,7 @@ const FattureInCloudConfig: React.FC = () => {
         description: data.message
       });
     },
-    onError: (error: any) {
+    onError: (error) => {
       setIsSyncing(false);
       setSyncProgress(0);
       setSyncMessage('');
@@ -298,7 +298,7 @@ const FattureInCloudConfig: React.FC = () => {
         variant: data.success ? "default" : "destructive"
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Test connessione fallito",
         description: error.message,
@@ -337,7 +337,7 @@ const FattureInCloudConfig: React.FC = () => {
         description: `L'azienda selezionata è stata impostata correttamente`
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Errore aggiornamento azienda",
         description: error.message,
@@ -416,7 +416,7 @@ const FattureInCloudConfig: React.FC = () => {
         description: "I dati fiscali dell'azienda sono stati salvati con successo"
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Errore",
         description: error.message,
