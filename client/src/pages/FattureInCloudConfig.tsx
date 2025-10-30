@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useWebSocketMessage } from '@/lib/websocket';
 import { 
@@ -27,7 +28,8 @@ import {
   FileCheck,
   Save,
   Loader2,
-  ShoppingCart
+  ShoppingCart,
+  Eye
 } from 'lucide-react';
 
 interface ConfigurationType {
@@ -62,7 +64,21 @@ interface OrderType {
   stato: string;
   totale: string;
   valuta: string;
+  note?: string;
   fattureInCloudId?: number;
+}
+
+interface OrderItemType {
+  id: number;
+  ordineId: number;
+  codice: string;
+  nome: string;
+  descrizione: string;
+  quantita: string;
+  unitaMisura: string;
+  prezzoUnitario: string;
+  sconto: string;
+  totale: string;
 }
 
 const FattureInCloudConfig: React.FC = () => {
@@ -81,6 +97,10 @@ const FattureInCloudConfig: React.FC = () => {
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncMessage, setSyncMessage] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Stati per la visualizzazione dettagli ordine
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   
   // Hook per ascoltare messaggi WebSocket di progresso sincronizzazione
   useWebSocketMessage<any>('fic_sync_progress', (data) => {
@@ -169,6 +189,18 @@ const FattureInCloudConfig: React.FC = () => {
       if (!response.ok) throw new Error('Errore nel caricamento ordini');
       return response.json();
     }
+  });
+
+  // Query per recuperare i dettagli di un ordine specifico
+  const orderDetailsQuery = useQuery({
+    queryKey: ['/api/fatture-in-cloud/orders', selectedOrderId],
+    queryFn: async () => {
+      if (!selectedOrderId) return null;
+      const response = await fetch(`/api/fatture-in-cloud/orders/${selectedOrderId}`);
+      if (!response.ok) throw new Error('Errore nel caricamento dettagli ordine');
+      return response.json();
+    },
+    enabled: !!selectedOrderId
   });
 
   // Mutation per salvare configurazione
@@ -1134,6 +1166,7 @@ const FattureInCloudConfig: React.FC = () => {
                             <th className="p-3 text-left text-sm font-semibold">Stato</th>
                             <th className="p-3 text-right text-sm font-semibold">Totale</th>
                             <th className="p-3 text-center text-sm font-semibold">Sincronizzato</th>
+                            <th className="p-3 text-center text-sm font-semibold">Azioni</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1157,6 +1190,20 @@ const FattureInCloudConfig: React.FC = () => {
                                 ) : (
                                   <span className="text-gray-400 text-xs">-</span>
                                 )}
+                              </td>
+                              <td className="p-3 text-center">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedOrderId(ordine.id);
+                                    setIsOrderDialogOpen(true);
+                                  }}
+                                  data-testid={`button-view-order-${ordine.id}`}
+                                >
+                                  <Eye className="w-4 h-4 mr-1" />
+                                  Dettagli
+                                </Button>
                               </td>
                             </tr>
                           ))}
@@ -1222,6 +1269,148 @@ const FattureInCloudConfig: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Dialogo dettagli ordine */}
+      <Dialog open={isOrderDialogOpen} onOpenChange={setIsOrderDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Dettagli Ordine</DialogTitle>
+          </DialogHeader>
+          
+          {orderDetailsQuery.isLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              Caricamento dettagli...
+            </div>
+          ) : orderDetailsQuery.error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="w-4 h-4" />
+              <AlertDescription>
+                Errore nel caricamento dettagli: {(orderDetailsQuery.error as Error).message}
+              </AlertDescription>
+            </Alert>
+          ) : orderDetailsQuery.data?.order ? (
+            <div className="space-y-6">
+              {/* Informazioni generali ordine */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Informazioni Generali</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-gray-500">Numero Ordine</Label>
+                      <p className="font-semibold">{orderDetailsQuery.data.order.numero || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Data</Label>
+                      <p className="font-semibold">
+                        {new Date(orderDetailsQuery.data.order.data).toLocaleDateString('it-IT')}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Cliente</Label>
+                      <p className="font-semibold">{orderDetailsQuery.data.order.clienteNome}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Stato</Label>
+                      <Badge variant="outline">{orderDetailsQuery.data.order.stato}</Badge>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Totale</Label>
+                      <p className="font-semibold text-lg">
+                        {parseFloat(orderDetailsQuery.data.order.totale).toFixed(2)} {orderDetailsQuery.data.order.valuta}
+                      </p>
+                    </div>
+                    {orderDetailsQuery.data.order.fattureInCloudId && (
+                      <div>
+                        <Label className="text-sm text-gray-500">ID Fatture in Cloud</Label>
+                        <Badge variant="outline">
+                          <CloudIcon className="w-3 h-3 mr-1" />
+                          #{orderDetailsQuery.data.order.fattureInCloudId}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                  {orderDetailsQuery.data.order.note && (
+                    <div className="mt-4">
+                      <Label className="text-sm text-gray-500">Note</Label>
+                      <p className="text-sm mt-1">{orderDetailsQuery.data.order.note}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Righe ordine */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Righe Ordine</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {orderDetailsQuery.data.items && orderDetailsQuery.data.items.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="border-b bg-gray-50">
+                            <th className="p-3 text-left text-sm font-semibold">Codice</th>
+                            <th className="p-3 text-left text-sm font-semibold">Prodotto</th>
+                            <th className="p-3 text-center text-sm font-semibold">Quantità</th>
+                            <th className="p-3 text-right text-sm font-semibold">Prezzo Unit.</th>
+                            <th className="p-3 text-right text-sm font-semibold">Sconto</th>
+                            <th className="p-3 text-right text-sm font-semibold">Totale</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderDetailsQuery.data.items.map((item: OrderItemType) => (
+                            <tr key={item.id} className="border-b hover:bg-gray-50">
+                              <td className="p-3 text-sm">{item.codice || '-'}</td>
+                              <td className="p-3 text-sm">
+                                <div>
+                                  <div className="font-medium">{item.nome}</div>
+                                  {item.descrizione && (
+                                    <div className="text-xs text-gray-500">{item.descrizione}</div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3 text-sm text-center">
+                                {parseFloat(item.quantita).toFixed(2)} {item.unitaMisura}
+                              </td>
+                              <td className="p-3 text-sm text-right">
+                                €{parseFloat(item.prezzoUnitario).toFixed(2)}
+                              </td>
+                              <td className="p-3 text-sm text-right">
+                                {parseFloat(item.sconto).toFixed(2)}%
+                              </td>
+                              <td className="p-3 text-sm text-right font-medium">
+                                €{parseFloat(item.totale).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 bg-gray-50">
+                            <td colSpan={5} className="p-3 text-right font-semibold">Totale Ordine:</td>
+                            <td className="p-3 text-right font-bold text-lg">
+                              €{parseFloat(orderDetailsQuery.data.order.totale).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <AlertCircle className="w-4 h-4" />
+                      <AlertDescription>
+                        Nessuna riga trovata per questo ordine.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
