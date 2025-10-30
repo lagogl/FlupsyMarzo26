@@ -619,10 +619,20 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         
         const ordineCompleto = dettagliOrdine.data.data;
         
+        console.log(`📦 Ordine ${ordineFIC.id} - Righe trovate:`, ordineCompleto?.items?.length || 0);
+        if (ordineCompleto?.items && ordineCompleto.items.length > 0) {
+          console.log(`📋 Prima riga esempio:`, JSON.stringify(ordineCompleto.items[0], null, 2));
+        } else {
+          console.log(`⚠️ Nessuna riga trovata per ordine ${ordineFIC.id}`);
+          console.log(`🔍 Struttura ordine completo:`, JSON.stringify(ordineCompleto, null, 2).substring(0, 500));
+        }
+        
         // Sincronizza le righe dell'ordine
         if (ordineCompleto && ordineCompleto.items && ordineCompleto.items.length > 0) {
           // Cancella le vecchie righe se esistono
           await db.delete(ordiniRighe).where(eq(ordiniRighe.ordineId, ordineId));
+          
+          console.log(`💾 Inserimento ${ordineCompleto.items.length} righe per ordine ${ordineId}`);
           
           // Inserisci le nuove righe
           for (const item of ordineCompleto.items) {
@@ -638,6 +648,8 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
               totale: item.net_cost?.toString() || '0'
             });
           }
+          
+          console.log(`✅ Inserite ${ordineCompleto.items.length} righe per ordine ${ordineId}`);
         }
       } catch (detailsError) {
         console.error(`⚠️ Errore recupero dettagli ordine ${ordineFIC.id}:`, detailsError);
