@@ -64,6 +64,7 @@ interface OrderType {
   stato: string;
   totale: string;
   valuta: string;
+  totaleAnimali?: number;
   note?: string;
   fattureInCloudId?: number;
 }
@@ -1164,7 +1165,7 @@ const FattureInCloudConfig: React.FC = () => {
                             <th className="p-3 text-left text-sm font-semibold">Data</th>
                             <th className="p-3 text-left text-sm font-semibold">Cliente</th>
                             <th className="p-3 text-left text-sm font-semibold">Stato</th>
-                            <th className="p-3 text-right text-sm font-semibold">Totale</th>
+                            <th className="p-3 text-right text-sm font-semibold">Tot. Animali</th>
                             <th className="p-3 text-center text-sm font-semibold">Sincronizzato</th>
                             <th className="p-3 text-center text-sm font-semibold">Azioni</th>
                           </tr>
@@ -1179,7 +1180,7 @@ const FattureInCloudConfig: React.FC = () => {
                                 <Badge variant="outline">{ordine.stato}</Badge>
                               </td>
                               <td className="p-3 text-sm text-right font-medium">
-                                {parseFloat(ordine.totale).toFixed(2)} {ordine.valuta}
+                                {ordine.totaleAnimali?.toLocaleString('it-IT') || '0'}
                               </td>
                               <td className="p-3 text-center">
                                 {ordine.fattureInCloudId ? (

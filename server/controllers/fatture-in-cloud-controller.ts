@@ -678,10 +678,25 @@ router.get('/orders', async (req: Request, res: Response) => {
   try {
     const ordiniLocali = await db.select().from(ordini).orderBy(desc(ordini.data));
     
+    // Calcola il totale animali per ogni ordine
+    const ordiniConTotali = await Promise.all(
+      ordiniLocali.map(async (ordine) => {
+        const righe = await db.select().from(ordiniRighe).where(eq(ordiniRighe.ordineId, ordine.id));
+        const totaleAnimali = righe.reduce((sum, riga) => {
+          return sum + parseFloat(riga.quantita.toString());
+        }, 0);
+        
+        return {
+          ...ordine,
+          totaleAnimali
+        };
+      })
+    );
+    
     res.json({
       success: true,
-      orders: ordiniLocali,
-      count: ordiniLocali.length
+      orders: ordiniConTotali,
+      count: ordiniConTotali.length
     });
   } catch (error: any) {
     console.error('Errore nel recupero ordini:', error);
