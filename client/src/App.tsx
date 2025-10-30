@@ -153,7 +153,7 @@ function Router() {
       <ProtectedRoute path="/advanced-sales" component={AdvancedSales}/>
       
       {/* Fatture in Cloud routes */}
-      <ProtectedRoute path="/fatture-in-cloud" component={FattureInCloudConfig} requiredRole="admin" />
+      <ProtectedRoute path="/fatture-in-cloud" component={FattureInCloudConfig} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />
