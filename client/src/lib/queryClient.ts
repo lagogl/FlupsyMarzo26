@@ -157,7 +157,7 @@ export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
+  async ({ queryKey, signal }) => {
     // Estrai l'URL base e gli eventuali parametri aggiuntivi
     const baseUrl = queryKey[0] as string;
     const params = queryKey.length > 1 && typeof queryKey[1] === 'object' ? queryKey[1] : {};
@@ -174,16 +174,31 @@ export const getQueryFn: <T>(options: {
     
     console.log(`Query request to: ${url}`);
     
-    const res = await fetch(url, {
-      credentials: "include",
-    });
+    // Crea un timeout controller
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 secondi timeout
+    
+    try {
+      const res = await fetch(url, {
+        credentials: "include",
+        signal: signal || controller.signal, // Usa il signal della query o il nostro timeout
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      clearTimeout(timeoutId);
+
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+
+      await throwIfResNotOk(res);
+      return await res.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('La richiesta ha impiegato troppo tempo. Riprova più tardi.');
+      }
+      throw error;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({
@@ -197,7 +212,8 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false, // Evita refetch su focus finestra
       staleTime: 30 * 1000, // 30 secondi - dati freschi per operazioni
       gcTime: 5 * 60 * 1000, // 5 minuti garbage collection
-      retry: false,
+      retry: 1, // Riprova una volta in caso di errore
+      retryDelay: 1000, // Aspetta 1 secondo prima di riprovare
     },
     mutations: {
       retry: false,

@@ -59,10 +59,14 @@ app.use(createSecureApiLogger());
 secureLogger.info('Logging middleware: Secure API logger initialized with PII protection');
 
 (async () => {
-  // Test di connessione database
+  // Test di connessione database con timeout
   console.log("\n===== TEST DI CONNESSIONE DATABASE =====");
   try {
-    await testDatabaseConnection();
+    // Timeout di 10 secondi per il test del database
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout connessione database (10s)')), 10000)
+    );
+    await Promise.race([testDatabaseConnection(), timeoutPromise]);
     console.log("✅ Connessione database principale verificata con successo");
   } catch (error) {
     console.error("❌ Errore connessione database principale:", error);
