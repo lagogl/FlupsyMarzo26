@@ -297,10 +297,8 @@ export default function Dashboard() {
     };
   }, [todayOperations]);
 
-  // Loading state
-  if (basketsLoading || cyclesLoading || operationsLoading || lotsLoading) {
-    return <div className="flex justify-center items-center h-full">Caricamento dashboard...</div>;
-  }
+  // Loading state - mostra il contenuto con skeleton invece di bloccare tutto
+  const isLoadingData = basketsLoading || cyclesLoading || operationsLoading || lotsLoading;
 
   // Formatta il tempo trascorso dall'ultimo aggiornamento
   const formatLastUpdate = () => {
@@ -323,7 +321,13 @@ export default function Dashboard() {
         <PageHeader title="Dashboard" />
         
         <div className="flex items-center gap-2">
-          {needsRefresh && (
+          {isLoadingData && (
+            <div className="flex items-center text-blue-600 bg-blue-50 px-3 py-1 rounded-md mr-2">
+              <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+              <span className="text-sm">Caricamento dati...</span>
+            </div>
+          )}
+          {needsRefresh && !isLoadingData && (
             <div className="flex items-center text-amber-600 bg-amber-50 px-3 py-1 rounded-md mr-2">
               <AlertCircle className="w-4 h-4 mr-1" />
               <span className="text-sm">Dati non aggiornati</span>
@@ -337,7 +341,7 @@ export default function Dashboard() {
           <Button
             size="sm"
             onClick={refreshData}
-            disabled={isRefreshing}
+            disabled={isRefreshing || isLoadingData}
             variant="outline"
             className="flex items-center gap-2"
           >
