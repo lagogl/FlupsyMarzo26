@@ -6,14 +6,18 @@ import {
   configurazione, 
   clienti, 
   ddt, 
-  ddtRighe, 
+  ddtRighe,
+  ordini,
+  ordiniRighe,
   externalDeliveriesSync,
   externalDeliveryDetailsSync,
   fattureInCloudConfig,
   insertConfigurazioneSchema,
   insertClientiSchema,
   insertDdtSchema,
-  insertDdtRigheSchema
+  insertDdtRigheSchema,
+  insertOrdiniSchema,
+  insertOrdiniRigheSchema
 } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import PDFDocument from 'pdfkit';
@@ -493,6 +497,217 @@ router.get('/clients', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Errore nel recupero clienti:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ===== ENDPOINTS ORDINI =====
+
+// Sincronizzazione ordini da Fatture in Cloud
+router.post('/orders/sync', async (req: Request, res: Response) => {
+  try {
+    await refreshTokenIfNeeded();
+    
+    const { broadcastMessage } = await import("../websocket");
+    
+    // Recupera tutti gli ordini gestendo la paginazione
+    let allOrdini: any[] = [];
+    let currentPage = 1;
+    let hasMorePages = true;
+    const perPage = 100;
+    
+    console.log('🔄 Inizio sincronizzazione ordini con paginazione...');
+    broadcastMessage("fic_sync_progress", { 
+      message: "Recupero ordini da Fatture in Cloud...", 
+      step: "fetch", 
+      progress: 0 
+    });
+    
+    while (hasMorePages) {
+      const response = await withRetry(() => 
+        apiRequest('GET', `/issued_documents?type=order&page=${currentPage}&per_page=${perPage}`)
+      );
+      
+      const pageData = response.data.data || [];
+      allOrdini = allOrdini.concat(pageData);
+      
+      const meta = response.data;
+      const lastPage = meta.last_page ?? ((meta.current_page && meta.total) ? Math.ceil(meta.total / perPage) : 1);
+      const total = meta.total ?? 0;
+      
+      console.log(`📄 Pagina ${currentPage}/${lastPage} - Recuperati ${pageData.length} ordini (Totale finora: ${allOrdini.length}${total ? `/${total}` : ''})`);
+      
+      broadcastMessage("fic_sync_progress", { 
+        message: `Recupero pagina ${currentPage}/${lastPage} - ${allOrdini.length} ordini finora...`, 
+        step: "fetch", 
+        progress: Math.round((currentPage / lastPage) * 30)
+      });
+      
+      hasMorePages = currentPage < lastPage && pageData.length === perPage;
+      currentPage++;
+      
+      if (currentPage > 1000) {
+        console.warn('⚠️ Raggiunto limite di sicurezza (1000 pagine) - interruzione sincronizzazione');
+        break;
+      }
+    }
+    
+    console.log(`✅ Recuperati ${allOrdini.length} ordini totali da Fatture in Cloud`);
+    broadcastMessage("fic_sync_progress", { 
+      message: `Recuperati ${allOrdini.length} ordini. Inizio sincronizzazione...`, 
+      step: "sync", 
+      progress: 30 
+    });
+    
+    let ordiniAggiornati = 0;
+    let ordiniCreati = 0;
+    
+    for (let i = 0; i < allOrdini.length; i++) {
+      const ordineFIC = allOrdini[i];
+      
+      // Cerca ordine esistente per fattureInCloudId
+      let ordineEsistente = null;
+      
+      if (ordineFIC.id) {
+        const ordiniConId = await db.select().from(ordini).where(eq(ordini.fattureInCloudId, ordineFIC.id));
+        if (ordiniConId.length > 0) {
+          ordineEsistente = ordiniConId[0];
+        }
+      }
+      
+      // Recupera cliente locale
+      let clienteLocale = null;
+      if (ordineFIC.entity?.id) {
+        const clientiTrovati = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, ordineFIC.entity.id));
+        if (clientiTrovati.length > 0) {
+          clienteLocale = clientiTrovati[0];
+        }
+      }
+      
+      const datiOrdine = {
+        numero: ordineFIC.number || null,
+        data: ordineFIC.date || new Date().toISOString().split('T')[0],
+        clienteId: clienteLocale?.id || 0,
+        clienteNome: ordineFIC.entity?.name || 'Cliente non trovato',
+        stato: ordineFIC.status || 'N/A',
+        totale: ordineFIC.amount_net?.toString() || '0',
+        valuta: ordineFIC.currency?.id || 'EUR',
+        note: ordineFIC.notes || null,
+        fattureInCloudId: ordineFIC.id,
+        companyId: ordineFIC.company_id || null
+      };
+      
+      let ordineId: number;
+      
+      if (ordineEsistente) {
+        await db.update(ordini)
+          .set({ ...datiOrdine, updatedAt: new Date() })
+          .where(eq(ordini.id, ordineEsistente.id));
+        ordineId = ordineEsistente.id;
+        ordiniAggiornati++;
+      } else {
+        const [nuovoOrdine] = await db.insert(ordini).values(datiOrdine).returning();
+        ordineId = nuovoOrdine.id;
+        ordiniCreati++;
+      }
+      
+      // Sincronizza le righe dell'ordine
+      if (ordineFIC.items && ordineFIC.items.length > 0) {
+        // Cancella le vecchie righe se l'ordine esiste
+        if (ordineEsistente) {
+          await db.delete(ordiniRighe).where(eq(ordiniRighe.ordineId, ordineId));
+        }
+        
+        // Inserisci le nuove righe
+        for (const item of ordineFIC.items) {
+          await db.insert(ordiniRighe).values({
+            ordineId: ordineId,
+            codice: item.product_id?.toString() || null,
+            nome: item.name || 'Prodotto senza nome',
+            descrizione: item.description || null,
+            quantita: item.qty?.toString() || '1',
+            unitaMisura: item.measure || 'NR',
+            prezzoUnitario: item.net_price?.toString() || '0',
+            sconto: item.discount?.toString() || '0',
+            totale: item.net_cost?.toString() || '0'
+          });
+        }
+      }
+      
+      // Notifica progresso ogni 5 ordini o all'ultimo
+      if ((i + 1) % 5 === 0 || i === allOrdini.length - 1) {
+        const syncProgress = 30 + Math.round(((i + 1) / allOrdini.length) * 70);
+        broadcastMessage("fic_sync_progress", { 
+          message: `Sincronizzazione: ${i + 1}/${allOrdini.length} ordini (${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati)`, 
+          step: "sync", 
+          progress: syncProgress,
+          current: i + 1,
+          total: allOrdini.length,
+          created: ordiniCreati,
+          updated: ordiniAggiornati
+        });
+      }
+    }
+    
+    // Notifica completamento
+    broadcastMessage("fic_sync_progress", { 
+      message: `✅ Sincronizzazione completata: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati`, 
+      step: "complete", 
+      progress: 100,
+      created: ordiniCreati,
+      updated: ordiniAggiornati,
+      total: allOrdini.length
+    });
+    
+    res.json({
+      success: true,
+      message: `Sincronizzazione completata: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati`,
+      stats: { creati: ordiniCreati, aggiornati: ordiniAggiornati, totale: allOrdini.length }
+    });
+  } catch (error: any) {
+    console.error('Errore nella sincronizzazione ordini:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: `Errore nella sincronizzazione: ${error.message}` 
+    });
+  }
+});
+
+// Ottenere lista ordini locali
+router.get('/orders', async (req: Request, res: Response) => {
+  try {
+    const ordiniLocali = await db.select().from(ordini).orderBy(desc(ordini.data));
+    
+    res.json({
+      success: true,
+      orders: ordiniLocali,
+      count: ordiniLocali.length
+    });
+  } catch (error: any) {
+    console.error('Errore nel recupero ordini:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Ottenere dettagli ordine con righe
+router.get('/orders/:id', async (req: Request, res: Response) => {
+  try {
+    const ordineId = parseInt(req.params.id);
+    
+    const [ordine] = await db.select().from(ordini).where(eq(ordini.id, ordineId));
+    if (!ordine) {
+      return res.status(404).json({ success: false, message: 'Ordine non trovato' });
+    }
+    
+    const righe = await db.select().from(ordiniRighe).where(eq(ordiniRighe.ordineId, ordineId));
+    
+    res.json({
+      success: true,
+      order: ordine,
+      items: righe
+    });
+  } catch (error: any) {
+    console.error('Errore nel recupero dettaglio ordine:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

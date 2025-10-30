@@ -26,7 +26,8 @@ import {
   RefreshCw,
   FileCheck,
   Save,
-  Loader2
+  Loader2,
+  ShoppingCart
 } from 'lucide-react';
 
 interface ConfigurationType {
@@ -50,6 +51,17 @@ interface DdtType {
   totaleColli: number;
   pesoTotale: string;
   ddtStato: 'nessuno' | 'locale' | 'inviato';
+  fattureInCloudId?: number;
+}
+
+interface OrderType {
+  id: number;
+  numero: number;
+  data: string;
+  clienteNome: string;
+  stato: string;
+  totale: string;
+  valuta: string;
   fattureInCloudId?: number;
 }
 
@@ -149,6 +161,16 @@ const FattureInCloudConfig: React.FC = () => {
     }
   });
 
+  // Query per recuperare gli ordini
+  const ordersQuery = useQuery({
+    queryKey: ['/api/fatture-in-cloud/orders'],
+    queryFn: async () => {
+      const response = await fetch('/api/fatture-in-cloud/orders');
+      if (!response.ok) throw new Error('Errore nel caricamento ordini');
+      return response.json();
+    }
+  });
+
   // Mutation per salvare configurazione
   const saveConfigMutation = useMutation({
     mutationFn: async (data: { chiave: string; valore: string; descrizione?: string }) => {
@@ -224,6 +246,38 @@ const FattureInCloudConfig: React.FC = () => {
       setSyncMessage('');
       toast({
         title: "Errore sincronizzazione",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Mutation per sincronizzare gli ordini
+  const syncOrdersMutation = useMutation({
+    mutationFn: async () => {
+      setIsSyncing(true);
+      setSyncProgress(0);
+      setSyncMessage('Avvio sincronizzazione ordini...');
+      
+      const response = await fetch('/api/fatture-in-cloud/orders/sync', {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Errore nella sincronizzazione ordini');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/fatture-in-cloud/orders'] });
+      toast({
+        title: "Sincronizzazione ordini completata",
+        description: data.message
+      });
+    },
+    onError: (error: any) {
+      setIsSyncing(false);
+      setSyncProgress(0);
+      setSyncMessage('');
+      toast({
+        title: "Errore sincronizzazione ordini",
         description: error.message,
         variant: "destructive"
       });
@@ -584,7 +638,7 @@ const FattureInCloudConfig: React.FC = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="configurazione">
             <Key className="w-4 h-4 mr-2" />
             Configurazione
@@ -592,6 +646,10 @@ const FattureInCloudConfig: React.FC = () => {
           <TabsTrigger value="clienti">
             <Users className="w-4 h-4 mr-2" />
             Clienti
+          </TabsTrigger>
+          <TabsTrigger value="ordini">
+            <ShoppingCart className="w-4 h-4 mr-2" />
+            Ordini
           </TabsTrigger>
           <TabsTrigger value="ddt">
             <FileText className="w-4 h-4 mr-2" />
@@ -1000,6 +1058,112 @@ const FattureInCloudConfig: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ordini" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Gestione Ordini</span>
+                <Button
+                  onClick={() => syncOrdersMutation.mutate()}
+                  disabled={isSyncing || !isAuthenticated()}
+                  data-testid="button-sync-orders"
+                >
+                  {isSyncing ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                  )}
+                  Sincronizza Ordini da FIC
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            
+            {/* Barra di progresso sincronizzazione */}
+            {isSyncing && (
+              <div className="px-6 pb-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">{syncMessage}</span>
+                    <span className="font-medium">{syncProgress}%</span>
+                  </div>
+                  <Progress value={syncProgress} className="h-2" />
+                </div>
+              </div>
+            )}
+            
+            <CardContent>
+              {ordersQuery.isLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+                  Caricamento ordini...
+                </div>
+              ) : ordersQuery.error ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertDescription>
+                    Errore nel caricamento ordini: {(ordersQuery.error as Error).message}
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-sm text-gray-600">
+                    Totale ordini: {ordersQuery.data?.count || 0}
+                  </div>
+                  
+                  {ordersQuery.data?.count === 0 ? (
+                    <Alert>
+                      <ShoppingCart className="w-4 h-4" />
+                      <AlertDescription>
+                        Nessun ordine trovato. Clicca su "Sincronizza Ordini da FIC" per importare gli ordini da Fatture in Cloud.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="border-b bg-gray-50">
+                            <th className="p-3 text-left text-sm font-semibold">Numero</th>
+                            <th className="p-3 text-left text-sm font-semibold">Data</th>
+                            <th className="p-3 text-left text-sm font-semibold">Cliente</th>
+                            <th className="p-3 text-left text-sm font-semibold">Stato</th>
+                            <th className="p-3 text-right text-sm font-semibold">Totale</th>
+                            <th className="p-3 text-center text-sm font-semibold">Sincronizzato</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ordersQuery.data?.orders?.map((ordine: OrderType) => (
+                            <tr key={ordine.id} className="border-b hover:bg-gray-50" data-testid={`row-order-${ordine.id}`}>
+                              <td className="p-3 text-sm">{ordine.numero || 'N/A'}</td>
+                              <td className="p-3 text-sm">{new Date(ordine.data).toLocaleDateString('it-IT')}</td>
+                              <td className="p-3 text-sm">{ordine.clienteNome}</td>
+                              <td className="p-3 text-sm">
+                                <Badge variant="outline">{ordine.stato}</Badge>
+                              </td>
+                              <td className="p-3 text-sm text-right font-medium">
+                                {parseFloat(ordine.totale).toFixed(2)} {ordine.valuta}
+                              </td>
+                              <td className="p-3 text-center">
+                                {ordine.fattureInCloudId ? (
+                                  <Badge variant="outline">
+                                    <CloudIcon className="w-3 h-3 mr-1" />
+                                    FIC #{ordine.fattureInCloudId}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

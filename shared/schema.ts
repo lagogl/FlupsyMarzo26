@@ -1111,6 +1111,38 @@ export const ddtRighe = pgTable("ddt_righe", {
   createdAt: timestamp("created_at").notNull().defaultNow()
 });
 
+// Tabella ordini da Fatture in Cloud
+export const ordini = pgTable("ordini", {
+  id: serial("id").primaryKey(),
+  numero: integer("numero"),
+  data: date("data").notNull(),
+  clienteId: integer("cliente_id").notNull(),
+  clienteNome: text("cliente_nome"),
+  stato: text("stato"),
+  totale: decimal("totale", { precision: 10, scale: 2 }).default("0"),
+  valuta: text("valuta").default("EUR"),
+  note: text("note"),
+  fattureInCloudId: integer("fatture_in_cloud_id").unique(),
+  companyId: integer("company_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at")
+});
+
+// Righe dettaglio ordini
+export const ordiniRighe = pgTable("ordini_righe", {
+  id: serial("id").primaryKey(),
+  ordineId: integer("ordine_id").notNull(),
+  codice: text("codice"),
+  nome: text("nome").notNull(),
+  descrizione: text("descrizione"),
+  quantita: decimal("quantita", { precision: 10, scale: 2 }).notNull(),
+  unitaMisura: text("unita_misura").default("NR"),
+  prezzoUnitario: decimal("prezzo_unitario", { precision: 10, scale: 2 }).notNull().default("0"),
+  sconto: decimal("sconto", { precision: 10, scale: 2 }).default("0"),
+  totale: decimal("totale", { precision: 10, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+});
+
 // Schema di inserimento per la configurazione
 export const insertConfigurazioneSchema = createInsertSchema(configurazione)
   .omit({ id: true, createdAt: true, updatedAt: true });
@@ -1131,6 +1163,14 @@ export const insertDdtSchema = createInsertSchema(ddt)
 export const insertDdtRigheSchema = createInsertSchema(ddtRighe)
   .omit({ id: true, createdAt: true });
 
+// Schema di inserimento per ordini
+export const insertOrdiniSchema = createInsertSchema(ordini)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+
+// Schema di inserimento per righe ordini
+export const insertOrdiniRigheSchema = createInsertSchema(ordiniRighe)
+  .omit({ id: true, createdAt: true });
+
 // Tipi per Fatture in Cloud
 export type Configurazione = typeof configurazione.$inferSelect;
 export type InsertConfigurazione = z.infer<typeof insertConfigurazioneSchema>;
@@ -1146,6 +1186,12 @@ export type InsertDdt = z.infer<typeof insertDdtSchema>;
 
 export type DdtRiga = typeof ddtRighe.$inferSelect;
 export type InsertDdtRiga = z.infer<typeof insertDdtRigheSchema>;
+
+export type Ordine = typeof ordini.$inferSelect;
+export type InsertOrdine = z.infer<typeof insertOrdiniSchema>;
+
+export type OrdineRiga = typeof ordiniRighe.$inferSelect;
+export type InsertOrdineRiga = z.infer<typeof insertOrdiniRigheSchema>;
 
 // ========== AI GROWTH VARIABILITY ANALYSIS ==========
 
