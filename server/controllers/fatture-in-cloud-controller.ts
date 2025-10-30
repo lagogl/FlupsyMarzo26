@@ -611,27 +611,37 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         ordiniCreati++;
       }
       
-      // Sincronizza le righe dell'ordine
-      if (ordineFIC.items && ordineFIC.items.length > 0) {
-        // Cancella le vecchie righe se l'ordine esiste
-        if (ordineEsistente) {
-          await db.delete(ordiniRighe).where(eq(ordiniRighe.ordineId, ordineId));
-        }
+      // Recupera i dettagli completi dell'ordine con le righe
+      try {
+        const dettagliOrdine = await withRetry(() => 
+          apiRequest('GET', `/issued_documents/${ordineFIC.id}`)
+        );
         
-        // Inserisci le nuove righe
-        for (const item of ordineFIC.items) {
-          await db.insert(ordiniRighe).values({
-            ordineId: ordineId,
-            codice: item.product_id?.toString() || null,
-            nome: item.name || 'Prodotto senza nome',
-            descrizione: item.description || null,
-            quantita: item.qty?.toString() || '1',
-            unitaMisura: item.measure || 'NR',
-            prezzoUnitario: item.net_price?.toString() || '0',
-            sconto: item.discount?.toString() || '0',
-            totale: item.net_cost?.toString() || '0'
-          });
+        const ordineCompleto = dettagliOrdine.data.data;
+        
+        // Sincronizza le righe dell'ordine
+        if (ordineCompleto && ordineCompleto.items && ordineCompleto.items.length > 0) {
+          // Cancella le vecchie righe se esistono
+          await db.delete(ordiniRighe).where(eq(ordiniRighe.ordineId, ordineId));
+          
+          // Inserisci le nuove righe
+          for (const item of ordineCompleto.items) {
+            await db.insert(ordiniRighe).values({
+              ordineId: ordineId,
+              codice: item.product_id?.toString() || null,
+              nome: item.name || 'Prodotto senza nome',
+              descrizione: item.description || null,
+              quantita: item.qty?.toString() || '1',
+              unitaMisura: item.measure || 'NR',
+              prezzoUnitario: item.net_price?.toString() || '0',
+              sconto: item.discount?.toString() || '0',
+              totale: item.net_cost?.toString() || '0'
+            });
+          }
         }
+      } catch (detailsError) {
+        console.error(`⚠️ Errore recupero dettagli ordine ${ordineFIC.id}:`, detailsError);
+        // Continua con il prossimo ordine anche se questo fallisce
       }
       
       // Notifica progresso ogni 5 ordini o all'ultimo
