@@ -612,9 +612,10 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
       }
       
       // Recupera i dettagli completi dell'ordine con le righe
+      // L'API Fatture in Cloud richiede il parametro fieldset=detailed per includere le righe
       try {
         const dettagliOrdine = await withRetry(() => 
-          apiRequest('GET', `/issued_documents/${ordineFIC.id}`)
+          apiRequest('GET', `/issued_documents/${ordineFIC.id}?fieldset=detailed`)
         );
         
         const ordineCompleto = dettagliOrdine.data.data;
