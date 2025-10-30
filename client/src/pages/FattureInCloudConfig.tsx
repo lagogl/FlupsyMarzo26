@@ -1145,8 +1145,13 @@ const FattureInCloudConfig: React.FC = () => {
                 </Alert>
               ) : (
                 <div className="space-y-4">
-                  <div className="text-sm text-gray-600">
-                    Totale ordini: {ordersQuery.data?.count || 0}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">
+                      Totale ordini: {ordersQuery.data?.count || 0}
+                    </span>
+                    <span className="font-semibold text-lg">
+                      Totale Animali: {ordersQuery.data?.orders?.reduce((sum: number, ordine: OrderType) => sum + (ordine.totaleAnimali || 0), 0).toLocaleString('it-IT')}
+                    </span>
                   </div>
                   
                   {ordersQuery.data?.count === 0 ? (
