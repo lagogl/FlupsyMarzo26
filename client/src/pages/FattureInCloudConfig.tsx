@@ -1318,9 +1318,9 @@ const FattureInCloudConfig: React.FC = () => {
                       <Badge variant="outline">{orderDetailsQuery.data.order.stato}</Badge>
                     </div>
                     <div>
-                      <Label className="text-sm text-gray-500">Totale</Label>
+                      <Label className="text-sm text-gray-500">Totale Animali</Label>
                       <p className="font-semibold text-lg">
-                        {parseFloat(orderDetailsQuery.data.order.totale).toFixed(2)} {orderDetailsQuery.data.order.valuta}
+                        {(orderDetailsQuery.data.order.totaleAnimali || 0).toLocaleString('it-IT')}
                       </p>
                     </div>
                     {orderDetailsQuery.data.order.fattureInCloudId && (
@@ -1358,7 +1358,6 @@ const FattureInCloudConfig: React.FC = () => {
                             <th className="p-3 text-center text-sm font-semibold">Quantità</th>
                             <th className="p-3 text-right text-sm font-semibold">Prezzo Unit.</th>
                             <th className="p-3 text-right text-sm font-semibold">Sconto</th>
-                            <th className="p-3 text-right text-sm font-semibold">Totale</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1374,7 +1373,7 @@ const FattureInCloudConfig: React.FC = () => {
                                 </div>
                               </td>
                               <td className="p-3 text-sm text-center">
-                                {parseFloat(item.quantita).toFixed(2)} {item.unitaMisura}
+                                {parseFloat(item.quantita).toLocaleString('it-IT')} {item.unitaMisura}
                               </td>
                               <td className="p-3 text-sm text-right">
                                 €{parseFloat(item.prezzoUnitario).toFixed(2)}
@@ -1382,17 +1381,14 @@ const FattureInCloudConfig: React.FC = () => {
                               <td className="p-3 text-sm text-right">
                                 {parseFloat(item.sconto).toFixed(2)}%
                               </td>
-                              <td className="p-3 text-sm text-right font-medium">
-                                €{parseFloat(item.totale).toFixed(2)}
-                              </td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
                           <tr className="border-t-2 bg-gray-50">
-                            <td colSpan={5} className="p-3 text-right font-semibold">Totale Ordine:</td>
+                            <td colSpan={4} className="p-3 text-right font-semibold">Totale Animali:</td>
                             <td className="p-3 text-right font-bold text-lg">
-                              €{parseFloat(orderDetailsQuery.data.order.totale).toFixed(2)}
+                              {(orderDetailsQuery.data.order.totaleAnimali || 0).toLocaleString('it-IT')}
                             </td>
                           </tr>
                         </tfoot>
