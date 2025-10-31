@@ -56,6 +56,7 @@ import { registerIntegrationsRoutes } from "./modules/integrations/integrations.
 import { validateBasketRow, validateBasketPosition } from "./utils/validation";
 import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-controller";
 import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
+import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import { getBasketLotComposition } from "./services/basket-lot-composition.service";
 
 // Importazione del router per le API esterne
@@ -257,6 +258,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log("💼 Registrazione route Fatture in Cloud...");
   app.use('/api/fatture-in-cloud', fattureInCloudRouter);
   console.log("✅ Route Fatture in Cloud registrate con successo");
+  
+  // Registra route per ordini condivisi (database esterno)
+  app.use('/api/ordini-condivisi', ordiniCondivisiRouter);
+  console.log("✅ Modulo ORDINI CONDIVISI registrato su /api/ordini-condivisi*");
   
   // === Autenticazione routes ===
   // 🔄 MIGRATO AL MODULO: server/modules/system/auth
