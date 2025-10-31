@@ -350,7 +350,7 @@ export default function OrdiniCondivisi() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead className="bg-muted/50 sticky top-0">
+                <thead className="bg-muted sticky top-0">
                   <tr className="border-b">
                     <th className="w-8 p-2 text-left border-r"></th>
                     <th className="w-8 p-2 text-left border-r"></th>
