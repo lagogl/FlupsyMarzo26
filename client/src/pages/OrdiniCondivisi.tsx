@@ -16,7 +16,10 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle2,
-  Clock
+  Clock,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -58,6 +61,9 @@ interface EditableRow extends OrdineCondiviso {
   editedQuantita: string;
 }
 
+type SortField = 'data' | 'dataConsegna' | 'cliente' | 'quantita' | 'taglia' | 'stato' | 'sync';
+type SortDirection = 'asc' | 'desc' | null;
+
 export default function OrdiniCondivisi() {
   const { toast } = useToast();
   const [ricercaCliente, setRicercaCliente] = useState('');
@@ -65,6 +71,8 @@ export default function OrdiniCondivisi() {
   const [selezionati, setSelezionati] = useState<Set<number>>(new Set());
   const [righeEspanse, setRigheEspanse] = useState<Set<number>>(new Set());
   const [ordiniEditabili, setOrdiniEditabili] = useState<EditableRow[]>([]);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
   // Query ordini
   const { data: ordiniResponse, isLoading: loadingOrdini } = useQuery<{ success: boolean; ordini: OrdineCondiviso[]; count: number }>({
@@ -92,16 +100,52 @@ export default function OrdiniCondivisi() {
     setOrdiniEditabili(editabili);
   }, [ordini]);
 
-  // Filtra ordini
-  const ordiniFiltrati = ordiniEditabili.filter((ord) => {
-    if (ricercaCliente && !ord.clienteNome?.toLowerCase().includes(ricercaCliente.toLowerCase())) {
-      return false;
-    }
-    if (filtroStato !== 'tutti' && ord.statoCalcolato !== filtroStato) {
-      return false;
-    }
-    return true;
-  });
+  // Filtra e ordina
+  const ordiniFiltrati = ordiniEditabili
+    .filter((ord) => {
+      if (ricercaCliente && !ord.clienteNome?.toLowerCase().includes(ricercaCliente.toLowerCase())) {
+        return false;
+      }
+      if (filtroStato !== 'tutti' && ord.statoCalcolato !== filtroStato) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (!sortField || !sortDirection) return 0;
+      
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'data':
+          comparison = new Date(a.data).getTime() - new Date(b.data).getTime();
+          break;
+        case 'dataConsegna':
+          const dateA = a.dataInizioConsegna ? new Date(a.dataInizioConsegna).getTime() : 0;
+          const dateB = b.dataInizioConsegna ? new Date(b.dataInizioConsegna).getTime() : 0;
+          comparison = dateA - dateB;
+          break;
+        case 'cliente':
+          comparison = (a.clienteNome || '').localeCompare(b.clienteNome || '');
+          break;
+        case 'quantita':
+          comparison = (a.quantitaTotale || 0) - (b.quantitaTotale || 0);
+          break;
+        case 'taglia':
+          comparison = (a.tagliaRichiesta || '').localeCompare(b.tagliaRichiesta || '');
+          break;
+        case 'stato':
+          comparison = a.statoCalcolato.localeCompare(b.statoCalcolato);
+          break;
+        case 'sync':
+          const syncA = a.fattureInCloudId ? 2 : a.syncStatus === 'errore' ? 0 : 1;
+          const syncB = b.fattureInCloudId ? 2 : b.syncStatus === 'errore' ? 0 : 1;
+          comparison = syncA - syncB;
+          break;
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
 
   // Statistiche
   const stats = {
@@ -269,6 +313,31 @@ export default function OrdiniCondivisi() {
     return consegne.filter(c => c.ordineId === ordineId);
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Cicla: asc -> desc -> null
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        setSortDirection(null);
+        setSortField(null);
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 ml-1 opacity-30" />;
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="w-3 h-3 ml-1 text-primary" />;
+    }
+    return <ArrowDown className="w-3 h-3 ml-1 text-primary" />;
+  };
+
   if (loadingOrdini) {
     return (
       <div className="container mx-auto p-6 max-w-7xl">
@@ -354,13 +423,69 @@ export default function OrdiniCondivisi() {
                   <tr className="border-b">
                     <th className="w-8 p-2 text-left border-r"></th>
                     <th className="w-8 p-2 text-left border-r"></th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Data Ordine</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Data Consegna</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Cliente</th>
-                    <th className="p-2 text-right text-xs font-medium text-muted-foreground border-r">Quantità</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Taglia</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Stato</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Sync FIC</th>
+                    <th 
+                      className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('data')}
+                    >
+                      <div className="flex items-center">
+                        Data Ordine
+                        <SortIcon field="data" />
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('dataConsegna')}
+                    >
+                      <div className="flex items-center">
+                        Data Consegna
+                        <SortIcon field="dataConsegna" />
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('cliente')}
+                    >
+                      <div className="flex items-center">
+                        Cliente
+                        <SortIcon field="cliente" />
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 text-right text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('quantita')}
+                    >
+                      <div className="flex items-center justify-end">
+                        Quantità
+                        <SortIcon field="quantita" />
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('taglia')}
+                    >
+                      <div className="flex items-center">
+                        Taglia
+                        <SortIcon field="taglia" />
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('stato')}
+                    >
+                      <div className="flex items-center">
+                        Stato
+                        <SortIcon field="stato" />
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('sync')}
+                    >
+                      <div className="flex items-center">
+                        Sync FIC
+                        <SortIcon field="sync" />
+                      </div>
+                    </th>
                     <th className="p-2 text-right text-xs font-medium text-muted-foreground">Azioni</th>
                   </tr>
                 </thead>
