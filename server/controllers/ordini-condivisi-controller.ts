@@ -75,14 +75,15 @@ router.get('/', async (req: Request, res: Response) => {
       clienteId: o.cliente_id,
       clienteNome: o.cliente_nome,
       stato: o.stato,
-      quantitaTotale: o.quantita_totale,
+      quantitaTotale: o.quantita_totale || 0,
       tagliaRichiesta: o.taglia_richiesta,
-      quantitaConsegnata: o.quantita_consegnata,
-      quantitaResidua: o.quantita_residua,
+      quantitaConsegnata: o.quantita_consegnata || 0,
+      quantitaResidua: o.quantita_residua || 0,
       statoCalcolato: o.stato_calcolato,
-      totale: o.totale,
-      valuta: o.valuta,
-      note: o.note
+      dataInizioConsegna: o.data_inizio_consegna,
+      dataFineConsegna: o.data_fine_consegna,
+      syncStatus: o.sync_status,
+      fattureInCloudId: o.fatture_in_cloud_id
     }));
     
     res.json({
@@ -132,11 +133,30 @@ router.get('/consegne/', async (req: Request, res: Response) => {
       conditions.push(lte(consegneCondivise.dataConsegna, new Date(dataFine as string)));
     }
     
-    const consegne = await dbEsterno
+    const consegneRaw = await dbEsterno
       .select()
       .from(consegneCondivise)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(consegneCondivise.dataConsegna));
+    
+    // Arricchisci con dati ordine e cliente
+    const consegne = await Promise.all(consegneRaw.map(async (c) => {
+      const [ordine] = await queryEsterno(
+        'SELECT fatture_in_cloud_numero as numero, cliente_nome FROM ordini_con_residuo WHERE id = $1',
+        [c.ordineId]
+      );
+      
+      return {
+        id: c.id,
+        ordineId: c.ordineId,
+        dataConsegna: c.dataConsegna,
+        quantita: c.quantitaConsegnata,
+        note: c.note,
+        appOrigine: c.appOrigine,
+        ordineNumero: ordine?.numero || null,
+        clienteNome: ordine?.cliente_nome || null
+      };
+    }));
     
     res.json({
       success: true,

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -23,13 +24,24 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Package, PackageCheck, PackageOpen, TruckIcon, Calendar, AlertCircle } from 'lucide-react';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { 
+  RefreshCw, 
+  Download, 
+  Filter, 
+  ChevronRight, 
+  ChevronDown,
+  Calendar,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Database,
+  CheckCircle2
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { format } from 'date-fns';
@@ -46,9 +58,10 @@ interface OrdineCondiviso {
   quantitaConsegnata: number;
   quantitaResidua: number;
   statoCalcolato: string;
-  totale: string;
-  valuta: string;
-  note: string | null;
+  dataInizioConsegna: string | null;
+  dataFineConsegna: string | null;
+  syncStatus: string;
+  fattureInCloudId: number | null;
 }
 
 interface Consegna {
@@ -58,13 +71,14 @@ interface Consegna {
   quantita: number;
   note: string | null;
   appOrigine: string;
-  ordineNumero: string | null;
-  clienteNome: string;
 }
 
 export default function OrdiniCondivisi() {
   const { toast } = useToast();
+  const [ricercaCliente, setRicercaCliente] = useState('');
   const [filtroStato, setFiltroStato] = useState<string>('tutti');
+  const [selezionati, setSelezionati] = useState<Set<number>>(new Set());
+  const [righeEspanse, setRigheEspanse] = useState<Set<number>>(new Set());
   const [dialogConsegnaAperto, setDialogConsegnaAperto] = useState(false);
   const [ordineSelezionato, setOrdineSelezionato] = useState<OrdineCondiviso | null>(null);
   
@@ -75,28 +89,18 @@ export default function OrdiniCondivisi() {
 
   // Query ordini
   const { data: ordiniResponse, isLoading: loadingOrdini } = useQuery<{ success: boolean; ordini: OrdineCondiviso[]; count: number }>({
-    queryKey: ['/api/ordini-condivisi', filtroStato],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (filtroStato !== 'tutti') {
-        params.append('stato', filtroStato);
-      }
-      const url = `/api/ordini-condivisi${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Errore nel caricamento ordini');
-      return response.json();
-    },
+    queryKey: ['/api/ordini-condivisi'],
     enabled: true
   });
 
-  // Query consegne
+  // Query consegne per ordine
   const { data: consegneResponse } = useQuery<{ success: boolean; consegne: Consegna[]; count: number }>({
     queryKey: ['/api/ordini-condivisi/consegne'],
     enabled: true
   });
-  
-  const ordini = ordiniResponse?.ordini;
-  const consegne = consegneResponse?.consegne;
+
+  const ordini = ordiniResponse?.ordini || [];
+  const consegne = consegneResponse?.consegne || [];
 
   // Mutation crea consegna
   const creazioneMutation = useMutation({
@@ -120,6 +124,48 @@ export default function OrdiniCondivisi() {
       });
     },
   });
+
+  // Filtra ordini
+  const ordiniFiltrati = ordini.filter((ord) => {
+    // Filtro ricerca cliente
+    if (ricercaCliente && !ord.clienteNome?.toLowerCase().includes(ricercaCliente.toLowerCase())) {
+      return false;
+    }
+    // Filtro stato
+    if (filtroStato !== 'tutti' && ord.statoCalcolato !== filtroStato) {
+      return false;
+    }
+    return true;
+  });
+
+  // Calcola statistiche
+  const stats = {
+    tutti: ordini.length,
+    aperti: ordini.filter(o => o.statoCalcolato === 'Aperto').length,
+    parziali: ordini.filter(o => o.statoCalcolato === 'Parziale').length,
+    completati: ordini.filter(o => o.statoCalcolato === 'Completato').length,
+    annullati: 0
+  };
+
+  const toggleSelezione = (id: number) => {
+    const nuoviSelezionati = new Set(selezionati);
+    if (nuoviSelezionati.has(id)) {
+      nuoviSelezionati.delete(id);
+    } else {
+      nuoviSelezionati.add(id);
+    }
+    setSelezionati(nuoviSelezionati);
+  };
+
+  const toggleEspansione = (id: number) => {
+    const nuoveEspanse = new Set(righeEspanse);
+    if (nuoveEspanse.has(id)) {
+      nuoveEspanse.delete(id);
+    } else {
+      nuoveEspanse.add(id);
+    }
+    setRigheEspanse(nuoveEspanse);
+  };
 
   const apriDialogConsegna = (ordine: OrdineCondiviso) => {
     setOrdineSelezionato(ordine);
@@ -166,36 +212,82 @@ export default function OrdiniCondivisi() {
     });
   };
 
-  const ordiniFiltrati = ordini?.filter((ord) => {
-    if (filtroStato === 'tutti') return true;
-    return ord.statoCalcolato === filtroStato;
-  }) || [];
-
   const getStatoBadge = (stato: string) => {
     switch (stato) {
-      case 'Aperto':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-          <PackageOpen className="w-3 h-3 mr-1" />
-          Aperto
-        </Badge>;
-      case 'Parziale':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
-          <Package className="w-3 h-3 mr-1" />
-          Parziale
-        </Badge>;
       case 'Completato':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-          <PackageCheck className="w-3 h-3 mr-1" />
-          Completato
-        </Badge>;
+        return (
+          <Badge className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700">
+            Completato
+          </Badge>
+        );
+      case 'Aperto':
+        return (
+          <Badge className="bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-800">
+            Aperto
+          </Badge>
+        );
+      case 'Parziale':
+        return (
+          <Badge className="bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-800">
+            In Lavorazione<br/>(Parziale)
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{stato}</Badge>;
     }
   };
 
+  const getSyncBadge = (ordine: OrdineCondiviso) => {
+    if (ordine.syncStatus === 'errore') {
+      return (
+        <div className="flex items-center gap-1">
+          <Badge variant="destructive" className="flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" />
+            Errore
+          </Badge>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
+            <RefreshCw className="w-3 h-3" />
+          </Button>
+        </div>
+      );
+    }
+    if (ordine.fattureInCloudId) {
+      return (
+        <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+          <CheckCircle2 className="w-4 h-4" />
+          <span className="text-xs">Sincronizzato</span>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-1 text-muted-foreground">
+        <Database className="w-4 h-4" />
+        <span className="text-xs">Locale</span>
+      </div>
+    );
+  };
+
+  const formatDataConsegna = (inizio: string | null, fine: string | null) => {
+    if (!inizio) return '-';
+    const dataInizio = format(new Date(inizio), 'dd/MM', { locale: it });
+    if (!fine) return dataInizio;
+    
+    const inizioDate = new Date(inizio);
+    const fineDate = new Date(fine);
+    
+    if (inizioDate.getFullYear() === fineDate.getFullYear()) {
+      return `${dataInizio} - ${format(fineDate, 'dd/MM/yyyy', { locale: it })}`;
+    }
+    return `${format(inizioDate, 'dd/MM/yyyy', { locale: it })} - ${format(fineDate, 'dd/MM/yyyy', { locale: it })}`;
+  };
+
+  const getConsegnePerOrdine = (ordineId: number) => {
+    return consegne.filter(c => c.ordineId === ordineId);
+  };
+
   if (loadingOrdini) {
     return (
-      <div className="container mx-auto p-4 max-w-7xl">
+      <div className="container mx-auto p-6 max-w-7xl">
         <div className="flex items-center justify-center h-64">
           <p className="text-muted-foreground">Caricamento ordini condivisi...</p>
         </div>
@@ -204,183 +296,255 @@ export default function OrdiniCondivisi() {
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-7xl space-y-6">
+    <div className="container mx-auto p-6 max-w-7xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Ordini Condivisi</h1>
-          <p className="text-muted-foreground mt-1">
-            Gestisci consegne parziali sincronizzate tra applicazioni
-          </p>
+        <h1 className="text-3xl font-bold">Gestione Ordini</h1>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" data-testid="button-sync-fic">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Sincronizza con FIC
+          </Button>
+          <Button variant="outline" size="sm" data-testid="button-esporta">
+            <Download className="w-4 h-4 mr-2" />
+            Esporta
+          </Button>
         </div>
       </div>
 
-      {/* Warning se database non disponibile */}
-      {!ordini && (
-        <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-900/20">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-orange-900 dark:text-orange-100">
-                  Database esterno non configurato
-                </h3>
-                <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                  Configura la variabile DATABASE_URL_ESTERNO nei Secrets per attivare il modulo ordini condivisi.
-                  Consulta il file ORDINI-CONDIVISI-SETUP.md per le istruzioni.
-                </p>
-              </div>
-            </div>
+      {/* Statistiche */}
+      <div className="grid grid-cols-5 gap-4">
+        <Card 
+          className="cursor-pointer hover:bg-accent transition-colors"
+          onClick={() => setFiltroStato('tutti')}
+        >
+          <CardContent className="p-6">
+            <div className="text-sm text-muted-foreground mb-1">Tutti</div>
+            <div className="text-3xl font-bold">{stats.tutti}</div>
           </CardContent>
         </Card>
-      )}
+        <Card 
+          className="cursor-pointer hover:bg-accent transition-colors"
+          onClick={() => setFiltroStato('Aperto')}
+        >
+          <CardContent className="p-6">
+            <div className="text-sm text-muted-foreground mb-1">Aperti</div>
+            <div className="text-3xl font-bold">{stats.aperti}</div>
+          </CardContent>
+        </Card>
+        <Card 
+          className="cursor-pointer hover:bg-accent transition-colors"
+          onClick={() => setFiltroStato('Parziale')}
+        >
+          <CardContent className="p-6">
+            <div className="text-sm text-muted-foreground mb-1">In Lavorazione</div>
+            <div className="text-3xl font-bold">{stats.parziali}</div>
+          </CardContent>
+        </Card>
+        <Card 
+          className="cursor-pointer hover:bg-accent transition-colors"
+          onClick={() => setFiltroStato('Completato')}
+        >
+          <CardContent className="p-6">
+            <div className="text-sm text-muted-foreground mb-1">Completati</div>
+            <div className="text-3xl font-bold">{stats.completati}</div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-accent transition-colors opacity-50">
+          <CardContent className="p-6">
+            <div className="text-sm text-muted-foreground mb-1">Annullati</div>
+            <div className="text-3xl font-bold">{stats.annullati}</div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Filtri */}
+      {/* Ricerca e filtri */}
+      <div className="flex items-center gap-3">
+        <Input
+          placeholder="Cerca cliente..."
+          value={ricercaCliente}
+          onChange={(e) => setRicercaCliente(e.target.value)}
+          className="max-w-xs"
+          data-testid="input-ricerca-cliente"
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" data-testid="button-filtri">
+              <Filter className="w-4 h-4 mr-2" />
+              Filtri
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => setFiltroStato('tutti')}>
+              Tutti gli ordini
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFiltroStato('Aperto')}>
+              Solo Aperti
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFiltroStato('Parziale')}>
+              Solo In Lavorazione
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFiltroStato('Completato')}>
+              Solo Completati
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Lista ordini */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filtri</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3">
-            <Label htmlFor="filtro-stato">Stato ordine:</Label>
-            <Select value={filtroStato} onValueChange={setFiltroStato}>
-              <SelectTrigger className="w-48" data-testid="select-stato-ordini">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="tutti">Tutti</SelectItem>
-                <SelectItem value="Aperto">Aperto</SelectItem>
-                <SelectItem value="Parziale">Parziale</SelectItem>
-                <SelectItem value="Completato">Completato</SelectItem>
-              </SelectContent>
-            </Select>
+        <CardContent className="p-0">
+          <div className="p-6 border-b">
+            <h2 className="text-xl font-semibold">Lista Ordini</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {ordiniFiltrati.length} ordini trovati
+            </p>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Tabella ordini */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ordini ({ordiniFiltrati.length})</CardTitle>
-          <CardDescription>
-            Ordini sincronizzati da Fatture in Cloud con calcolo residuo automatico
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
           {ordiniFiltrati.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-12 text-muted-foreground">
               Nessun ordine trovato
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Numero</TableHead>
-                  <TableHead>Data</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-12"></TableHead>
+                  <TableHead>Data Ordine</TableHead>
+                  <TableHead>Data Consegna</TableHead>
                   <TableHead>Cliente</TableHead>
+                  <TableHead className="text-right">Quantità</TableHead>
                   <TableHead>Taglia</TableHead>
-                  <TableHead className="text-right">Totale</TableHead>
-                  <TableHead className="text-right">Consegnato</TableHead>
-                  <TableHead className="text-right">Residuo</TableHead>
                   <TableHead>Stato</TableHead>
+                  <TableHead>Sync FIC</TableHead>
                   <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {ordiniFiltrati.map((ordine) => (
-                  <TableRow key={ordine.id} data-testid={`row-ordine-${ordine.id}`}>
-                    <TableCell className="font-mono">{ordine.numero || `#${ordine.id}`}</TableCell>
-                    <TableCell>
-                      {format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it })}
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate" title={ordine.clienteNome}>
-                      {ordine.clienteNome}
-                    </TableCell>
-                    <TableCell>{ordine.tagliaRichiesta || '-'}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {ordine.quantitaTotale.toLocaleString('it-IT')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {ordine.quantitaConsegnata.toLocaleString('it-IT')}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {ordine.quantitaResidua.toLocaleString('it-IT')}
-                    </TableCell>
-                    <TableCell>{getStatoBadge(ordine.statoCalcolato)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => apriDialogConsegna(ordine)}
-                        disabled={ordine.quantitaResidua === 0}
-                        data-testid={`button-consegna-${ordine.id}`}
+                {ordiniFiltrati.map((ordine) => {
+                  const espanso = righeEspanse.has(ordine.id);
+                  const consegneOrdine = getConsegnePerOrdine(ordine.id);
+                  const hasDettagli = consegneOrdine.length > 0;
+
+                  return (
+                    <>
+                      <TableRow 
+                        key={ordine.id} 
+                        className={espanso ? 'border-b-0' : ''}
+                        data-testid={`row-ordine-${ordine.id}`}
                       >
-                        <TruckIcon className="w-4 h-4 mr-1" />
-                        Consegna
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        <TableCell>
+                          {hasDettagli && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() => toggleEspansione(ordine.id)}
+                              data-testid={`button-espandi-${ordine.id}`}
+                            >
+                              {espanso ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </Button>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Checkbox
+                            checked={selezionati.has(ordine.id)}
+                            onCheckedChange={() => toggleSelezione(ordine.id)}
+                            data-testid={`checkbox-ordine-${ordine.id}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it })}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            {ordine.dataInizioConsegna && <Calendar className="w-3 h-3" />}
+                            {formatDataConsegna(ordine.dataInizioConsegna, ordine.dataFineConsegna)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate" title={ordine.clienteNome}>
+                          {ordine.clienteNome || '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {ordine.quantitaTotale ? ordine.quantitaTotale.toLocaleString('it-IT') : '0'}
+                        </TableCell>
+                        <TableCell>{ordine.tagliaRichiesta || '-'}</TableCell>
+                        <TableCell>{getStatoBadge(ordine.statoCalcolato)}</TableCell>
+                        <TableCell>{getSyncBadge(ordine)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              onClick={() => apriDialogConsegna(ordine)}
+                              data-testid={`button-edit-${ordine.id}`}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              data-testid={`button-delete-${ordine.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      
+                      {/* Riga espansa con dettagli consegne */}
+                      {espanso && hasDettagli && (
+                        <TableRow key={`${ordine.id}-dettagli`} className="bg-muted/30">
+                          <TableCell colSpan={10} className="py-4">
+                            <div className="text-center text-sm text-muted-foreground mb-3">
+                              Dettagli consegne per ordine {ordine.numero || `#${ordine.id}`}
+                            </div>
+                            <div className="space-y-2 max-w-4xl mx-auto">
+                              {consegneOrdine.map((consegna) => (
+                                <div
+                                  key={consegna.id}
+                                  className="flex items-center justify-between bg-background p-3 rounded-md border"
+                                >
+                                  <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                                      <span className="font-medium">
+                                        {format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it })}
+                                      </span>
+                                    </div>
+                                    <div className="text-sm">
+                                      Quantità: <span className="font-semibold">{consegna.quantita.toLocaleString('it-IT')}</span>
+                                    </div>
+                                    <Badge variant={consegna.appOrigine === 'delta_futuro' ? 'default' : 'secondary'}>
+                                      {consegna.appOrigine === 'delta_futuro' ? 'Delta Futuro' : 'App Esterna'}
+                                    </Badge>
+                                  </div>
+                                  {consegna.note && (
+                                    <div className="text-sm text-muted-foreground max-w-xs truncate">
+                                      {consegna.note}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
-
-      {/* Storico consegne */}
-      {consegne && consegne.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Storico Consegne</CardTitle>
-            <CardDescription>
-              Ultime consegne registrate da entrambe le applicazioni
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Ordine</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="text-right">Quantità</TableHead>
-                  <TableHead>Origine</TableHead>
-                  <TableHead>Note</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {consegne.slice(0, 20).map((consegna) => (
-                  <TableRow key={consegna.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        {format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it })}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono">
-                      {consegna.ordineNumero || `#${consegna.ordineId}`}
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate" title={consegna.clienteNome}>
-                      {consegna.clienteNome}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {consegna.quantita.toLocaleString('it-IT')}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={consegna.appOrigine === 'delta_futuro' ? 'default' : 'secondary'}>
-                        {consegna.appOrigine === 'delta_futuro' ? 'Delta Futuro' : 'App Esterna'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate" title={consegna.note || ''}>
-                      {consegna.note || '-'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Dialog consegna */}
       <Dialog open={dialogConsegnaAperto} onOpenChange={setDialogConsegnaAperto}>
