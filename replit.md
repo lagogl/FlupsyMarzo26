@@ -4,6 +4,7 @@
 The FLUPSY Management System is a web application designed to optimize aquaculture operations, specifically for FLUPSY (Floating Upwelling System) installations. It provides real-time tracking of baskets, cycles, operations, and inventory for shellfish cultivation. Key capabilities include advanced growth forecasting, mortality tracking, and integration with external systems to enhance operational efficiency and provide intelligent insights for sustainable aquaculture practices.
 
 ## Recent Changes
+- **2025-10-31**: Implemented Shared Orders Module - Direct database connection to external app for order and delivery management without intermediate database. Dual-write strategy: orders sync from Fatture in Cloud to both local DB (backward compatibility) and external app DB (primary source). Automatic residual calculation via SQL view, UI for shared deliveries management.
 - **2025-10-29**: Fixed DDT number retrieval from Fatture in Cloud API - now correctly filters by current year and sorts by date (most recent first), then by number (highest first) to retrieve accurate next DDT number for multi-company setup
 
 ## User Preferences
@@ -45,6 +46,7 @@ Preferred communication style: Simple, everyday language.
 - **Mixed-Lot Basket Tracking System**: Automatic metadata enrichment for operations on mixed-lot baskets via dual PostgreSQL triggers, ensuring derived field calculation (average_weight, animals_per_kg), metadata enrichment, and immutability protection.
 - **FlupsyComparison Dashboard**: Interactive comparison module with dual-mode analysis ("Data Futura" for time-based projections, "Taglia Target" for size-based goals), visual totalizers, and comprehensive Excel report exports.
 - **Selective FLUPSY Deletion System**: Safe removal of test FLUPSY installations without impacting production data, featuring a preview module, transactional cascade delete, rigid confirmation protocol, automatic integrity verification, and cache invalidation.
+- **Shared Orders Module**: Direct database connection to external application for collaborative order management. Features dual-write strategy (local + external DB), automatic residual quantity calculation via SQL view, state-based filtering, delivery tracking with app origin attribution, and UI for managing partial deliveries across multiple applications.
 - **Query Optimization Pattern**: Utilizes simple separate queries, application-side data aggregation with `reduce()`, and `Promise.all()` for parallel enrichment in Drizzle ORM.
 
 ### System Design Choices

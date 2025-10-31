@@ -1,100 +1,149 @@
-# 📦 SETUP MODULO ORDINI CONDIVISI
+# 📦 SETUP MODULO ORDINI CONDIVISI - ARCHITETTURA SEMPLIFICATA
 
-Questo documento spiega come configurare il sistema di ordini condivisi tra Delta Futuro e l'app esterna.
-
----
-
-## 🎯 OBIETTIVO
-
-Sincronizzare ordini da Fatture in Cloud verso un database condiviso e gestire consegne parziali provenienti da due applicazioni diverse (Delta Futuro + app esterna).
+Questo documento spiega come configurare il sistema di ordini condivisi tra **Delta Futuro** e **App Esterna**.
 
 ---
 
-## ✅ TASK 1: PREPARAZIONE DATABASE ESTERNO
+## 🏗️ ARCHITETTURA
 
-### 1.1 Accedi al database Neon esterno
-
-⚠️ **IMPORTANTE**: Le credenziali del database esterno devono essere fornite dall'amministratore del sistema separatamente per motivi di sicurezza.
-
-Usa un client PostgreSQL (pgAdmin, DBeaver, o psql) con le credenziali ricevute dall'amministratore:
+### Soluzione Implementata: Database Condiviso Diretto
 
 ```
-Host: <FORNITO_DALL_AMMINISTRATORE>
-Database: <FORNITO_DALL_AMMINISTRATORE>
-Username: <FORNITO_DALL_AMMINISTRATORE>
-Password: <FORNITO_DALL_AMMINISTRATORE>
-Port: 5432
-SSL Mode: require
+┌─────────────────────┐
+│  App Delta Futuro   │
+│  (questa app)       │
+│                     │
+│  DATABASE_URL       │──→ Database locale Replit (FLUPSY, cestelli, operazioni)
+│  DATABASE_URL_      │
+│  ESTERNO           ─┼──┐
+└─────────────────────┘  │
+                         │
+                         │  Connessione condivisa
+                         │  (solo tabelle ordini)
+                         ▼
+              ┌──────────────────────┐
+              │  Database App        │
+              │  Esterna             │
+              │  (PostgreSQL)        │
+              │                      │
+              │  • ordini            │
+              │  • ordini_dettagli   │
+              │  • consegne_condivise│
+              └──────────────────────┘
+                         ▲
+                         │
+┌─────────────────────┐  │
+│  App Esterna        │  │
+│                     │  │
+│  DATABASE_URL      ─┼──┘
+└─────────────────────┘
 ```
 
-**Formato stringa di connessione:**
+### ✅ Vantaggi
+
+- **Nessun database intermedio** (massima semplicità)
+- **Un solo database** per gli ordini
+- **Entrambe le app** leggono/scrivono sullo stesso database
+- **Calcolo residuo automatico** via SQL view
+
+---
+
+## 📋 ISTRUZIONI PER APP ESTERNA
+
+L'altro sviluppatore deve:
+
+### 1️⃣ Eseguire lo Script SQL
+
+Eseguire il file `sql/setup-database-esterno.sql` sul **proprio database locale Replit** per creare:
+- Tabelle `ordini`, `ordini_dettagli`, `consegne_condivise`
+- Vista `ordini_con_residuo` (calcolo automatico residui)
+- Indici per performance
+
+### 2️⃣ Ottenere la Connection String
+
+1. Aprire la sezione **Secrets** in Replit
+2. Copiare il valore di `DATABASE_URL`
+3. Inviarla a te (sviluppatore Delta Futuro)
+
+**Formato connection string:**
 ```
-postgresql://<USERNAME>:<PASSWORD>@<HOST>/<DATABASE>?sslmode=require
-```
-
-### 1.2 Esegui lo script SQL di setup
-
-1. Apri il file `sql/setup-database-esterno.sql`
-2. Copia tutto il contenuto
-3. Eseguilo sul database Neon
-
-**Cosa fa lo script:**
-- ✅ Aggiunge colonne `data_inizio_consegna`, `data_fine_consegna` a `ordini`
-- ✅ Aggiunge colonne `quantita_totale`, `taglia_richiesta` a `ordini`
-- ✅ Aggiunge colonne per sincronizzazione FIC
-- ✅ Modifica/crea tabella `ordini_dettagli` (righe ordini)
-- ✅ Crea tabella `consegne_condivise` (consegne parziali)
-- ✅ Crea vista `ordini_con_residuo` (calcolo automatico residuo)
-- ✅ Aggiunge indici per performance
-
-### 1.3 Verifica esecuzione
-
-Alla fine dello script vedrai un messaggio del tipo:
-
-```
-✅ Setup completato!
-totale_ordini | totale_dettagli | totale_consegne
-     10       |       15        |       0
+postgresql://username:password@host.region.neon.tech:5432/database?sslmode=require
 ```
 
 ---
 
-## ✅ TASK 2: CONFIGURAZIONE CREDENZIALE
+## 📋 ISTRUZIONI PER DELTA FUTURO (QUESTA APP)
 
-### 2.1 Aggiungi la variabile d'ambiente
+### 1️⃣ Configurare il Secret
 
-⚠️ **ATTENZIONE**: Non inserire MAI credenziali di database nei file del repository!
-
-1. Apri la sezione **Secrets** in Replit
-2. Aggiungi un nuovo secret:
+1. Ricevi la **connection string** dall'app esterna
+2. Apri la sezione **Secrets** in Replit
+3. Aggiorna il secret esistente:
    - **Key**: `DATABASE_URL_ESTERNO`
-   - **Value**: La stringa di connessione completa fornita dall'amministratore
-   
-**Formato esempio (NON usare questi valori reali):**
-```
-postgresql://<USERNAME>:<PASSWORD>@<HOST>/<DATABASE>?sslmode=require
-```
+   - **Value**: Connection string ricevuta dall'app esterna
 
-### 2.2 Verifica configurazione
+### 2️⃣ Riavvia l'App
 
-Il modulo ordini condivisi è già attivo. Controlla i log del server:
-
+Il modulo si attiverà automaticamente. Verifica nei log:
 ```
 ✅ Modulo ORDINI CONDIVISI registrato su /api/ordini-condivisi*
 ```
 
+### 3️⃣ Test Connessione
+
+Vai su `/ordini-condivisi` - dovresti vedere la pagina senza errori.
+
 ---
 
-## ✅ TASK 3: MODIFICA SINCRONIZZAZIONE FIC
+## 🔄 FLUSSO OPERATIVO
 
-### 3.1 Prossimo step
+### Sincronizzazione Ordini da Fatture in Cloud
 
-Modificare il controller Fatture in Cloud (`server/controllers/fatture-in-cloud-controller.ts`) per sincronizzare ordini verso il database esterno invece che locale.
+**Delta Futuro:**
+1. Sincronizza ordini da FIC
+2. Gli ordini vengono scritti:
+   - ✅ Database locale (`DATABASE_URL`) per backward compatibility
+   - ✅ Database app esterna (`DATABASE_URL_ESTERNO`) come fonte primaria
 
-**Cosa verrà modificato:**
-- Endpoint `/api/fatture-in-cloud/orders/sync` scriverà su DB esterno
-- Gli ordini saranno visibili sia in Delta Futuro che nell'app esterna
-- Calcolo residuo automatico in real-time
+**App Esterna:**
+1. Legge ordini dal proprio database (`DATABASE_URL`)
+2. Vede automaticamente tutti gli ordini sincronizzati da Delta Futuro
+
+### Gestione Consegne
+
+**Scenario: Ordine da 100.000 animali**
+
+1. **Ordine creato da FIC** (Delta Futuro)
+   ```
+   ordini.quantita_totale = 100000
+   ordini.stato = "Aperto"
+   ```
+
+2. **Prima consegna** (Delta Futuro - 30.000)
+   ```
+   POST /api/ordini-condivisi/consegne
+   { ordineId: 1, quantita: 30000 }
+   
+   → consegne_condivise: +1 record (app_origine: "delta_futuro")
+   → Vista: residuo = 70000, stato = "Parziale"
+   ```
+
+3. **Seconda consegna** (App Esterna - 40.000)
+   ```
+   App Esterna inserisce consegna direttamente nel DB
+   
+   → consegne_condivise: +1 record (app_origine: "app_esterna")
+   → Vista: residuo = 30000, stato = "Parziale"
+   ```
+
+4. **Ultima consegna** (Delta Futuro - 30.000)
+   ```
+   POST /api/ordini-condivisi/consegne
+   { ordineId: 1, quantita: 30000 }
+   
+   → Vista: residuo = 0, stato = "Completato"
+   → ordini.stato aggiornato a "Completato"
+   ```
 
 ---
 
@@ -102,162 +151,164 @@ Modificare il controller Fatture in Cloud (`server/controllers/fatture-in-cloud-
 
 ### Ordini
 
-```
-GET    /api/ordini-condivisi
-       Recupera tutti gli ordini con residuo calcolato
-       Query params: ?stato=Aperto&clienteId=123
+```http
+GET /api/ordini-condivisi
+Recupera ordini con residuo calcolato
+Query params: ?stato=Aperto&dataInizio=2025-11-01
 
-GET    /api/ordini-condivisi/:id
-       Dettaglio ordine con righe e consegne
+GET /api/ordini-condivisi/:id
+Dettaglio ordine con righe e consegne
 
-PATCH  /api/ordini-condivisi/:id/delivery-range
-       Aggiorna range consegna
-       Body: { dataInizioConsegna, dataFineConsegna }
+PATCH /api/ordini-condivisi/:id/delivery-range
+Aggiorna range consegna
+Body: { dataInizioConsegna, dataFineConsegna }
 ```
 
 ### Consegne
 
-```
-GET    /api/ordini-condivisi/consegne
-       Lista consegne (opzionalmente filtrate)
-       Query params: ?ordineId=123&appOrigine=delta_futuro
+```http
+GET /api/ordini-condivisi/consegne
+Lista consegne (opzionalmente filtrate)
+Query params: ?ordineId=123&appOrigine=delta_futuro
 
-POST   /api/ordini-condivisi/consegne
-       Crea nuova consegna parziale
-       Body: {
-         ordineId: 1,
-         dataConsegna: "2025-11-05",
-         quantita: 30000,
-         note: "Prima consegna"
-       }
+POST /api/ordini-condivisi/consegne
+Crea consegna parziale
+Body: {
+  ordineId: 1,
+  dataConsegna: "2025-11-05",
+  quantita: 30000,
+  note: "Prima consegna"
+}
 
 DELETE /api/ordini-condivisi/consegne/:id
-       Elimina consegna
+Elimina consegna
 ```
 
 ---
 
-## 🔄 FLUSSO OPERATIVO
+## 🎨 INTERFACCIA UI
 
-### Scenario: Ordine da 100.000 animali
+### Pagina Ordini Condivisi (`/ordini-condivisi`)
 
-1. **Sincronizzazione FIC** (Delta Futuro)
-   ```
-   Ordine #100 creato in FIC
-   ↓
-   Sync FIC → scrive su DB esterno
-   ↓
-   ordini.quantita_totale = 100000
-   ordini.stato = "Aperto"
-   ```
-
-2. **Prima consegna** (Delta Futuro - 30.000 animali)
-   ```
-   POST /api/ordini-condivisi/consegne
-   { ordineId: 100, quantita: 30000, ... }
-   ↓
-   consegne_condivise: +1 record (app_origine: "delta_futuro")
-   ↓
-   Vista ordini_con_residuo:
-   - quantita_consegnata = 30000
-   - quantita_residua = 70000
-   - stato_calcolato = "Parziale"
-   ```
-
-3. **Seconda consegna** (App Esterna - 20.000 animali)
-   ```
-   App Esterna → POST /api/consegne (su DB esterno)
-   ↓
-   consegne_condivise: +1 record (app_origine: "app_esterna")
-   ↓
-   Vista ordini_con_residuo:
-   - quantita_consegnata = 50000
-   - quantita_residua = 50000
-   - stato_calcolato = "Parziale"
-   ```
-
-4. **Consegna finale** (Delta Futuro - 50.000 animali)
-   ```
-   POST /api/ordini-condivisi/consegne
-   { ordineId: 100, quantita: 50000, ... }
-   ↓
-   Vista ordini_con_residuo:
-   - quantita_consegnata = 100000
-   - quantita_residua = 0
-   - stato_calcolato = "Completato"
-   ↓
-   ordini.stato aggiornato a "Completato"
-   ```
+Funzionalità:
+- ✅ Visualizza tutti gli ordini con residuo
+- ✅ Filtro per stato (Aperto, Parziale, Completato)
+- ✅ Tabella consegne con app di origine
+- ✅ Creazione consegne parziali
+- ✅ Eliminazione consegne
+- ✅ Validazione quantità (non supera il residuo)
+- ✅ Aggiornamento automatico stato ordine
 
 ---
 
 ## 🧪 TEST API
 
-### Test 1: Recupera ordini
-
+### Test 1: Verifica connessione
 ```bash
-curl http://localhost:5000/api/ordini-condivisi
+curl https://YOUR_REPLIT_URL/api/ordini-condivisi
+```
+
+Risposta attesa:
+```json
+{
+  "success": true,
+  "ordini": [],
+  "count": 0
+}
 ```
 
 ### Test 2: Crea consegna
-
 ```bash
-curl -X POST http://localhost:5000/api/ordini-condivisi/consegne \
+curl -X POST https://YOUR_REPLIT_URL/api/ordini-condivisi/consegne \
   -H "Content-Type: application/json" \
   -d '{
     "ordineId": 1,
     "dataConsegna": "2025-11-05",
     "quantita": 30000,
-    "note": "Test consegna"
+    "note": "Test consegna Delta Futuro"
   }'
 ```
 
 ### Test 3: Verifica residuo
-
 ```bash
-curl http://localhost:5000/api/ordini-condivisi/1
+curl https://YOUR_REPLIT_URL/api/ordini-condivisi/1
 ```
 
 ---
 
 ## ⚠️ TROUBLESHOOTING
 
-### Errore: "Database esterno non configurato"
+### ❌ "Database esterno non configurato"
+
+**Causa:** Secret `DATABASE_URL_ESTERNO` non impostato
 
 **Soluzione:**
-Verifica che `DATABASE_URL_ESTERNO` sia configurato nei Secrets.
+1. Verifica che il secret esista in Replit Secrets
+2. Riavvia l'applicazione
 
-### Errore: "Quantità superiore al residuo disponibile"
+### ❌ "Quantità superiore al residuo disponibile"
+
+**Causa:** Tentativo di consegnare più del residuo
 
 **Soluzione:**
-Controlla il residuo disponibile prima di creare la consegna:
+Controlla il residuo disponibile:
 ```bash
-curl http://localhost:5000/api/ordini-condivisi/ORDINE_ID
+GET /api/ordini-condivisi/:ordineId
 ```
 
-### Errore: tabella "consegne_condivise" non esiste
+### ❌ "Relation 'ordini' does not exist"
+
+**Causa:** Script SQL non eseguito sul database app esterna
 
 **Soluzione:**
-Esegui lo script SQL `sql/setup-database-esterno.sql` sul database Neon esterno.
+L'altro sviluppatore deve eseguire `sql/setup-database-esterno.sql`
 
 ---
 
-## 📝 PROSSIMI PASSI
+## 🔒 SICUREZZA
 
-1. ✅ Setup database esterno (esegui script SQL)
-2. ⏳ Modifica controller FIC per sync su DB esterno
-3. ⏳ Crea UI per gestire consegne condivise
-4. ⏳ Test end-to-end con app esterna
+### Best Practices
+
+✅ **MAI hardcodare credenziali** nel codice
+✅ **Usa sempre Secrets** per connection strings
+✅ **Condividi credenziali** solo via canali sicuri (non email/chat)
+✅ **Ruota credenziali** se sospetti esposizione
+
+### Gestione Credenziali
+
+- Connection string contiene password → Trattala come segreto
+- Non committarla mai su Git
+- Non inviarla su canali non sicuri
+- Usa Replit Secrets per storage sicuro
+
+---
+
+## 📝 CHECKLIST SETUP
+
+### App Esterna
+- [ ] Eseguito `sql/setup-database-esterno.sql` sul database locale
+- [ ] Copiato valore di `DATABASE_URL` dai Secrets
+- [ ] Inviato connection string a Delta Futuro in modo sicuro
+
+### Delta Futuro (questa app)
+- [x] Ricevuto connection string dall'app esterna
+- [x] Configurato secret `DATABASE_URL_ESTERNO`
+- [x] Verificato attivazione modulo nei log
+- [ ] Testato pagina `/ordini-condivisi`
+- [ ] Sincronizzato ordini da FIC
+- [ ] Creato consegna di test
 
 ---
 
 ## 🆘 SUPPORTO
 
-Per domande o problemi:
-1. Controlla i log del server: visualizza tab "Console"
-2. Verifica connessione DB esterno
-3. Testa API con curl/Postman
+In caso di problemi:
+
+1. **Controlla i log del server** (tab Console in Replit)
+2. **Verifica connessione database** esterno
+3. **Testa API** con curl/Postman
+4. **Controlla Secrets** - `DATABASE_URL_ESTERNO` configurato?
 
 ---
 
-**Ultima modifica:** 31 Ottobre 2025
+**Ultima modifica:** 31 Ottobre 2025 - Architettura semplificata (database condiviso diretto)
