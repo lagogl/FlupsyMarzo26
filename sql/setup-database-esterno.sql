@@ -93,10 +93,10 @@ DROP VIEW IF EXISTS ordini_con_residuo;
 CREATE VIEW ordini_con_residuo AS
 SELECT 
   o.id,
-  o.numero,
+  COALESCE(o.fatture_in_cloud_numero, o.numero::text, '') as numero,
   o.data,
   o.cliente_id,
-  o.cliente_nome,
+  COALESCE(c.denominazione, o.cliente_nome, '') as cliente_nome,
   o.stato,
   o.quantita_totale,
   o.taglia_richiesta,
@@ -104,18 +104,19 @@ SELECT
   o.data_fine_consegna,
   o.fatture_in_cloud_id,
   o.sync_status,
-  COALESCE(SUM(c.quantita_consegnata), 0)::INTEGER as quantita_consegnata,
-  (COALESCE(o.quantita_totale, 0) - COALESCE(SUM(c.quantita_consegnata), 0))::INTEGER as quantita_residua,
+  COALESCE(SUM(cc.quantita_consegnata), 0)::INTEGER as quantita_consegnata,
+  (COALESCE(o.quantita_totale, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER as quantita_residua,
   CASE 
-    WHEN COALESCE(SUM(c.quantita_consegnata), 0) = 0 THEN 'Aperto'
-    WHEN COALESCE(SUM(c.quantita_consegnata), 0) >= COALESCE(o.quantita_totale, 0) THEN 'Completato'
+    WHEN COALESCE(SUM(cc.quantita_consegnata), 0) = 0 THEN 'Aperto'
+    WHEN COALESCE(SUM(cc.quantita_consegnata), 0) >= COALESCE(o.quantita_totale, 0) THEN 'Completato'
     ELSE 'Parziale'
   END as stato_calcolato
 FROM ordini o
-LEFT JOIN consegne_condivise c ON c.ordine_id = o.id
+LEFT JOIN clienti c ON c.id = o.cliente_id
+LEFT JOIN consegne_condivise cc ON cc.ordine_id = o.id
 GROUP BY 
-  o.id, o.numero, o.data, o.cliente_id, o.cliente_nome, 
-  o.stato, o.quantita_totale, o.taglia_richiesta,
+  o.id, o.fatture_in_cloud_numero, o.numero, o.data, o.cliente_id, 
+  c.denominazione, o.cliente_nome, o.stato, o.quantita_totale, o.taglia_richiesta,
   o.data_inizio_consegna, o.data_fine_consegna,
   o.fatture_in_cloud_id, o.sync_status;
 
