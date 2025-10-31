@@ -65,7 +65,25 @@ router.get('/', async (req: Request, res: Response) => {
     
     query += ` ORDER BY data DESC`;
     
-    const ordini = await queryEsterno(query, params);
+    const ordiniRaw = await queryEsterno(query, params);
+    
+    // Trasforma snake_case in camelCase
+    const ordini = ordiniRaw.map((o: any) => ({
+      id: o.id,
+      numero: o.numero,
+      data: o.data,
+      clienteId: o.cliente_id,
+      clienteNome: o.cliente_nome,
+      stato: o.stato,
+      quantitaTotale: o.quantita_totale,
+      tagliaRichiesta: o.taglia_richiesta,
+      quantitaConsegnata: o.quantita_consegnata,
+      quantitaResidua: o.quantita_residua,
+      statoCalcolato: o.stato_calcolato,
+      totale: o.totale,
+      valuta: o.valuta,
+      note: o.note
+    }));
     
     res.json({
       success: true,
@@ -80,6 +98,183 @@ router.get('/', async (req: Request, res: Response) => {
     });
   }
 });
+
+// ===== ENDPOINTS CONSEGNE CONDIVISE =====
+// NOTA: Queste route devono essere PRIMA di /:id per evitare conflitti di routing
+
+/**
+ * GET /api/ordini-condivisi/consegne
+ * Recupera tutte le consegne (opzionalmente filtrate per ordine)
+ */
+router.get('/consegne/', async (req: Request, res: Response) => {
+  try {
+    const { ordineId, appOrigine, dataInizio, dataFine } = req.query;
+    
+    if (!dbEsterno) {
+      return res.status(503).json({ error: 'Database esterno non disponibile' });
+    }
+    
+    let conditions = [];
+    
+    if (ordineId) {
+      conditions.push(eq(consegneCondivise.ordineId, parseInt(ordineId as string)));
+    }
+    
+    if (appOrigine) {
+      conditions.push(eq(consegneCondivise.appOrigine, appOrigine as string));
+    }
+    
+    if (dataInizio) {
+      conditions.push(gte(consegneCondivise.dataConsegna, new Date(dataInizio as string)));
+    }
+    
+    if (dataFine) {
+      conditions.push(lte(consegneCondivise.dataConsegna, new Date(dataFine as string)));
+    }
+    
+    const consegne = await dbEsterno
+      .select()
+      .from(consegneCondivise)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(consegneCondivise.dataConsegna));
+    
+    res.json({
+      success: true,
+      consegne,
+      count: consegne.length
+    });
+  } catch (error: any) {
+    console.error('Errore recupero consegne:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/ordini-condivisi/consegne
+ * Crea una nuova consegna parziale
+ */
+router.post('/consegne/', async (req: Request, res: Response) => {
+  try {
+    const { ordineId, dataConsegna, quantita, note } = req.body;
+    
+    // Validazione
+    if (!ordineId || !dataConsegna || !quantita) {
+      return res.status(400).json({
+        success: false,
+        error: 'ordineId, dataConsegna e quantita sono obbligatori'
+      });
+    }
+    
+    if (quantita <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'La quantità deve essere maggiore di zero'
+      });
+    }
+    
+    if (!dbEsterno) {
+      return res.status(503).json({ error: 'Database esterno non disponibile' });
+    }
+    
+    // Verifica residuo disponibile
+    const [ordine] = await queryEsterno(
+      'SELECT quantita_residua FROM ordini_con_residuo WHERE id = $1',
+      [ordineId]
+    );
+    
+    if (!ordine) {
+      return res.status(404).json({
+        success: false,
+        error: 'Ordine non trovato'
+      });
+    }
+    
+    if (quantita > ordine.quantita_residua) {
+      return res.status(400).json({
+        success: false,
+        error: `Quantità superiore al residuo disponibile (${ordine.quantita_residua} animali)`
+      });
+    }
+    
+    // Inserisci consegna
+    const [nuovaConsegna] = await dbEsterno
+      .insert(consegneCondivise)
+      .values({
+        ordineId,
+        dataConsegna: new Date(dataConsegna),
+        quantitaConsegnata: quantita,
+        appOrigine: 'delta_futuro',
+        note: note || null
+      })
+      .returning();
+    
+    // Aggiorna stato ordine
+    await aggiornaStatoOrdine(ordineId);
+    
+    res.json({
+      success: true,
+      consegna: nuovaConsegna,
+      message: 'Consegna registrata con successo'
+    });
+  } catch (error: any) {
+    console.error('Errore creazione consegna:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/ordini-condivisi/consegne/:id
+ * Elimina una consegna
+ */
+router.delete('/consegne/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    if (!dbEsterno) {
+      return res.status(503).json({ error: 'Database esterno non disponibile' });
+    }
+    
+    // Recupera ordineId prima di eliminare
+    const [consegna] = await dbEsterno
+      .select()
+      .from(consegneCondivise)
+      .where(eq(consegneCondivise.id, parseInt(id)));
+    
+    if (!consegna) {
+      return res.status(404).json({
+        success: false,
+        error: 'Consegna non trovata'
+      });
+    }
+    
+    // Elimina
+    await dbEsterno
+      .delete(consegneCondivise)
+      .where(eq(consegneCondivise.id, parseInt(id)));
+    
+    // Ricalcola stato ordine
+    await aggiornaStatoOrdine(consegna.ordineId);
+    
+    res.json({
+      success: true,
+      message: 'Consegna eliminata'
+    });
+  } catch (error: any) {
+    console.error('Errore eliminazione consegna:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ===== ENDPOINTS ORDINI (dopo consegne per evitare conflitti routing) =====
 
 /**
  * GET /api/ordini-condivisi/:id
@@ -173,180 +368,6 @@ router.patch('/:id/delivery-range', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Errore aggiornamento range consegna:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ===== ENDPOINTS CONSEGNE CONDIVISE =====
-
-/**
- * GET /api/consegne-condivise
- * Recupera tutte le consegne (opzionalmente filtrate per ordine)
- */
-router.get('/consegne/', async (req: Request, res: Response) => {
-  try {
-    const { ordineId, appOrigine, dataInizio, dataFine } = req.query;
-    
-    if (!dbEsterno) {
-      return res.status(503).json({ error: 'Database esterno non disponibile' });
-    }
-    
-    let conditions = [];
-    
-    if (ordineId) {
-      conditions.push(eq(consegneCondivise.ordineId, parseInt(ordineId as string)));
-    }
-    
-    if (appOrigine) {
-      conditions.push(eq(consegneCondivise.appOrigine, appOrigine as string));
-    }
-    
-    if (dataInizio) {
-      conditions.push(gte(consegneCondivise.dataConsegna, new Date(dataInizio as string)));
-    }
-    
-    if (dataFine) {
-      conditions.push(lte(consegneCondivise.dataConsegna, new Date(dataFine as string)));
-    }
-    
-    const consegne = await dbEsterno
-      .select()
-      .from(consegneCondivise)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(consegneCondivise.dataConsegna));
-    
-    res.json({
-      success: true,
-      consegne,
-      count: consegne.length
-    });
-  } catch (error: any) {
-    console.error('Errore recupero consegne:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-/**
- * POST /api/consegne-condivise
- * Crea una nuova consegna parziale
- */
-router.post('/consegne/', async (req: Request, res: Response) => {
-  try {
-    const { ordineId, dataConsegna, quantita, note } = req.body;
-    
-    // Validazione
-    if (!ordineId || !dataConsegna || !quantita) {
-      return res.status(400).json({
-        success: false,
-        error: 'ordineId, dataConsegna e quantita sono obbligatori'
-      });
-    }
-    
-    if (quantita <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'La quantità deve essere maggiore di zero'
-      });
-    }
-    
-    if (!dbEsterno) {
-      return res.status(503).json({ error: 'Database esterno non disponibile' });
-    }
-    
-    // Verifica residuo disponibile
-    const [ordine] = await queryEsterno(
-      'SELECT quantita_residua FROM ordini_con_residuo WHERE id = $1',
-      [ordineId]
-    );
-    
-    if (!ordine) {
-      return res.status(404).json({
-        success: false,
-        error: 'Ordine non trovato'
-      });
-    }
-    
-    if (quantita > ordine.quantita_residua) {
-      return res.status(400).json({
-        success: false,
-        error: `Quantità superiore al residuo disponibile (${ordine.quantita_residua} animali)`
-      });
-    }
-    
-    // Inserisci consegna
-    const [nuovaConsegna] = await dbEsterno
-      .insert(consegneCondivise)
-      .values({
-        ordineId,
-        dataConsegna: new Date(dataConsegna),
-        quantitaConsegnata: quantita,
-        appOrigine: 'delta_futuro',
-        note: note || null
-      })
-      .returning();
-    
-    // Aggiorna stato ordine
-    await aggiornaStatoOrdine(ordineId);
-    
-    res.json({
-      success: true,
-      consegna: nuovaConsegna,
-      message: 'Consegna registrata con successo'
-    });
-  } catch (error: any) {
-    console.error('Errore creazione consegna:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-/**
- * DELETE /api/consegne-condivise/:id
- * Elimina una consegna
- */
-router.delete('/consegne/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    if (!dbEsterno) {
-      return res.status(503).json({ error: 'Database esterno non disponibile' });
-    }
-    
-    // Recupera ordineId prima di eliminare
-    const [consegna] = await dbEsterno
-      .select()
-      .from(consegneCondivise)
-      .where(eq(consegneCondivise.id, parseInt(id)));
-    
-    if (!consegna) {
-      return res.status(404).json({
-        success: false,
-        error: 'Consegna non trovata'
-      });
-    }
-    
-    // Elimina
-    await dbEsterno
-      .delete(consegneCondivise)
-      .where(eq(consegneCondivise.id, parseInt(id)));
-    
-    // Ricalcola stato ordine
-    await aggiornaStatoOrdine(consegna.ordineId);
-    
-    res.json({
-      success: true,
-      message: 'Consegna eliminata'
-    });
-  } catch (error: any) {
-    console.error('Errore eliminazione consegna:', error);
     res.status(500).json({
       success: false,
       error: error.message

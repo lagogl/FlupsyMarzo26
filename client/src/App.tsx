@@ -49,6 +49,8 @@ import AmministrazioneUtilita from "@/pages/AmministrazioneUtilita";
 // Importazione modulo vendite avanzate
 import AdvancedSales from "@/pages/AdvancedSales";
 import FattureInCloudConfig from "@/pages/FattureInCloudConfig";
+// Importazione modulo ordini condivisi
+import OrdiniCondivisi from "@/pages/OrdiniCondivisi";
 // Importazione AI Dashboard
 import AIDashboard from "@/pages/AIDashboard";
 import AIReportGenerator from "@/pages/AIReportGenerator";
@@ -154,6 +156,9 @@ function Router() {
       
       {/* Fatture in Cloud routes */}
       <ProtectedRoute path="/fatture-in-cloud" component={FattureInCloudConfig} />
+      
+      {/* Ordini Condivisi routes */}
+      <ProtectedRoute path="/ordini-condivisi" component={OrdiniCondivisi} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

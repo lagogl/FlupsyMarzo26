@@ -14,20 +14,22 @@ Sincronizzare ordini da Fatture in Cloud verso un database condiviso e gestire c
 
 ### 1.1 Accedi al database Neon esterno
 
-Usa un client PostgreSQL (pgAdmin, DBeaver, o psql) con questa connessione:
+⚠️ **IMPORTANTE**: Le credenziali del database esterno devono essere fornite dall'amministratore del sistema separatamente per motivi di sicurezza.
+
+Usa un client PostgreSQL (pgAdmin, DBeaver, o psql) con le credenziali ricevute dall'amministratore:
 
 ```
-Host: ep-snowy-firefly-a4pq2urr.us-east-1.aws.neon.tech
-Database: neondb
-Username: neondb_owner
-Password: npg_Kh6xVrekoFn7
+Host: <FORNITO_DALL_AMMINISTRATORE>
+Database: <FORNITO_DALL_AMMINISTRATORE>
+Username: <FORNITO_DALL_AMMINISTRATORE>
+Password: <FORNITO_DALL_AMMINISTRATORE>
 Port: 5432
 SSL Mode: require
 ```
 
-**Oppure usa la stringa completa:**
+**Formato stringa di connessione:**
 ```
-postgresql://neondb_owner:npg_Kh6xVrekoFn7@ep-snowy-firefly-a4pq2urr.us-east-1.aws.neon.tech/neondb?sslmode=require
+postgresql://<USERNAME>:<PASSWORD>@<HOST>/<DATABASE>?sslmode=require
 ```
 
 ### 1.2 Esegui lo script SQL di setup
@@ -59,12 +61,18 @@ totale_ordini | totale_dettagli | totale_consegne
 
 ## ✅ TASK 2: CONFIGURAZIONE CREDENZIALE
 
-### 2.1 Variabile già configurata
+### 2.1 Aggiungi la variabile d'ambiente
 
-La variabile `DATABASE_URL_ESTERNO` è **già configurata** nei Secrets con il valore:
+⚠️ **ATTENZIONE**: Non inserire MAI credenziali di database nei file del repository!
 
+1. Apri la sezione **Secrets** in Replit
+2. Aggiungi un nuovo secret:
+   - **Key**: `DATABASE_URL_ESTERNO`
+   - **Value**: La stringa di connessione completa fornita dall'amministratore
+   
+**Formato esempio (NON usare questi valori reali):**
 ```
-postgresql://neondb_owner:npg_Kh6xVrekoFn7@ep-snowy-firefly-a4pq2urr.us-east-1.aws.neon.tech/neondb?sslmode=require
+postgresql://<USERNAME>:<PASSWORD>@<HOST>/<DATABASE>?sslmode=require
 ```
 
 ### 2.2 Verifica configurazione

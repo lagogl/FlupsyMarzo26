@@ -162,7 +162,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
       icon: <Package className="h-5 w-5" />,
       color: 'text-emerald-600',
       items: [
-        { icon: <Package className="h-5 w-5 mr-2 text-emerald-600" />, label: translations.menuItems.salesManagement, path: "/advanced-sales" }
+        { icon: <Package className="h-5 w-5 mr-2 text-emerald-600" />, label: translations.menuItems.salesManagement, path: "/advanced-sales" },
+        { icon: <CloudIcon className="h-5 w-5 mr-2 text-emerald-600" />, label: "Fatture in Cloud", path: "/fatture-in-cloud" },
+        { icon: <Globe className="h-5 w-5 mr-2 text-emerald-600" />, label: "Ordini Condivisi", path: "/ordini-condivisi" }
       ]
     },
     {
