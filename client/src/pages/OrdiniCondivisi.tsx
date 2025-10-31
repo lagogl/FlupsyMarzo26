@@ -685,38 +685,38 @@ export default function OrdiniCondivisi() {
                         
                         {/* Riga espansa con righe ordine */}
                         {espanso && hasDettagli && (
-                          <tr className="bg-muted/10 border-b">
+                          <tr className="bg-blue-50/50 dark:bg-blue-950/20 border-b">
                             <td colSpan={10} className="p-0">
-                              <div className="bg-muted/30 px-4 py-2 border-t border-b">
-                                <h4 className="text-sm font-semibold">Righe Ordine</h4>
+                              <div className="bg-blue-100/60 dark:bg-blue-900/30 px-4 py-2 border-t border-b border-blue-200 dark:border-blue-800">
+                                <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Righe Ordine</h4>
                               </div>
                               <table className="w-full text-xs">
-                                <thead className="bg-muted/20">
+                                <thead className="bg-blue-100/40 dark:bg-blue-900/20">
                                   <tr>
-                                    <th className="p-2 text-left border-r w-12">Riga</th>
-                                    <th className="p-2 text-left border-r">Codice Prodotto</th>
-                                    <th className="p-2 text-left border-r">Taglia</th>
-                                    <th className="p-2 text-right border-r">Quantità</th>
-                                    <th className="p-2 text-right border-r">Prezzo Unitario</th>
-                                    <th className="p-2 text-right border-r">Importo</th>
+                                    <th className="p-2 text-left border-r border-blue-200 dark:border-blue-800 w-12">Riga</th>
+                                    <th className="p-2 text-left border-r border-blue-200 dark:border-blue-800">Codice Prodotto</th>
+                                    <th className="p-2 text-left border-r border-blue-200 dark:border-blue-800">Taglia</th>
+                                    <th className="p-2 text-right border-r border-blue-200 dark:border-blue-800">Quantità</th>
+                                    <th className="p-2 text-right border-r border-blue-200 dark:border-blue-800">Prezzo Unitario</th>
+                                    <th className="p-2 text-right border-r border-blue-200 dark:border-blue-800">Importo</th>
                                     <th className="p-2 text-left">Descrizione</th>
                                   </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="bg-blue-50/30 dark:bg-blue-950/10">
                                   {righeOrdine.map((riga) => (
-                                    <tr key={riga.id} className="border-b hover:bg-muted/20">
-                                      <td className="p-2 text-center border-r font-medium">{riga.rigaNumero}</td>
-                                      <td className="p-2 border-r font-mono text-xs">{riga.codiceProdotto || '-'}</td>
-                                      <td className="p-2 border-r">
+                                    <tr key={riga.id} className="border-b border-blue-200/50 dark:border-blue-800/50 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors">
+                                      <td className="p-2 text-center border-r border-blue-200/50 dark:border-blue-800/50 font-medium">{riga.rigaNumero}</td>
+                                      <td className="p-2 border-r border-blue-200/50 dark:border-blue-800/50 font-mono text-xs">{riga.codiceProdotto || '-'}</td>
+                                      <td className="p-2 border-r border-blue-200/50 dark:border-blue-800/50">
                                         <Badge variant="outline" className="text-xs">{riga.taglia}</Badge>
                                       </td>
-                                      <td className="p-2 text-right border-r font-semibold">
+                                      <td className="p-2 text-right border-r border-blue-200/50 dark:border-blue-800/50 font-semibold">
                                         {riga.quantita.toLocaleString('it-IT')}
                                       </td>
-                                      <td className="p-2 text-right border-r">
+                                      <td className="p-2 text-right border-r border-blue-200/50 dark:border-blue-800/50">
                                         € {riga.prezzoUnitario.toFixed(4)}
                                       </td>
-                                      <td className="p-2 text-right border-r font-medium">
+                                      <td className="p-2 text-right border-r border-blue-200/50 dark:border-blue-800/50 font-medium">
                                         {riga.importoRiga > 0 ? `€ ${riga.importoRiga.toLocaleString('it-IT', { minimumFractionDigits: 2 })}` : '-'}
                                       </td>
                                       <td className="p-2 text-xs text-muted-foreground max-w-xs truncate">
