@@ -1,0 +1,274 @@
+Ottima decisione! È molto più sensato adeguare il database esterno alla tua gestione già funzionante piuttosto che riscrivere tutto. Ti preparo:
+
+SQL per modificare le tabelle del database esterno
+Documentazione completa di come funzionano gli ordini qui
+Fammi prima leggere la struttura attuale:
+
+
+Show 2 more
+
+Decided on order logic documentation
+Perfetto! Ora ti preparo la documentazione completa. Lasciami leggere anche la logica di gestione:
+
+
+Searched for "How are orders managed? What are the business rules for order states, delivery periods, and order details?"
+
+Decided on documentation structure
+Perfetto! Ti preparo la documentazione completa con gli script SQL per modificare il database esterno.
+
+📋 DOCUMENTAZIONE COMPLETA - SISTEMA GESTIONE ORDINI DELTA FUTURO
+🔧 PARTE 1: MODIFICHE AL DATABASE ESTERNO
+SQL per adeguare le tabelle ordini e ordini_righe
+-- ============================================
+-- MODIFICA TABELLA: ordini
+-- ============================================
+-- 1. Aggiungi colonne per range di consegna (CRITICHE per WeekRangePicker)
+ALTER TABLE ordini 
+  ADD COLUMN IF NOT EXISTS data_consegna DATE,
+  ADD COLUMN IF NOT EXISTS data_inizio_consegna DATE,
+  ADD COLUMN IF NOT EXISTS data_fine_consegna DATE;
+-- 2. Aggiungi colonne per gestione quantità e taglia a livello ordine
+ALTER TABLE ordini
+  ADD COLUMN IF NOT EXISTS quantita INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS taglia_richiesta TEXT NOT NULL DEFAULT '';
+-- 3. Aggiungi colonne per sincronizzazione Fatture in Cloud
+ALTER TABLE ordini
+  ADD COLUMN IF NOT EXISTS sync_status VARCHAR(20) DEFAULT 'locale',
+  ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS sync_error TEXT,
+  ADD COLUMN IF NOT EXISTS url_documento TEXT;
+-- 4. Modifica stato per supportare i valori Delta Futuro
+-- Stati supportati: "Aperto", "In Lavorazione", "Parziale", "Completato", "Annullato"
+COMMENT ON COLUMN ordini.stato IS 'Stati: Aperto | In Lavorazione | Parziale | Completato | Annullato';
+-- 5. Aggiungi vincolo unique su fatture_in_cloud_id (se non esiste già)
+ALTER TABLE ordini
+  ADD CONSTRAINT ordini_fatture_in_cloud_id_unique 
+  UNIQUE (fatture_in_cloud_id);
+-- ============================================
+-- MODIFICA TABELLA: ordini_righe
+-- ============================================
+-- 1. Rinomina tabella (se necessario)
+ALTER TABLE ordini_righe RENAME TO ordini_dettagli;
+-- 2. Aggiungi colonne mancanti
+ALTER TABLE ordini_dettagli
+  ADD COLUMN IF NOT EXISTS riga_numero INTEGER NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS taglia VARCHAR(50) NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS fic_item_id INTEGER;
+-- 3. Rinomina/aggiungi colonne per compatibilità
+ALTER TABLE ordini_dettagli
+  RENAME COLUMN codice TO codice_prodotto;
+  
+ALTER TABLE ordini_dettagli
+  RENAME COLUMN nome TO descrizione;
+-- Se le colonne "nome" e "codice" non esistono, usa questi:
+-- ALTER TABLE ordini_dettagli ADD COLUMN codice_prodotto VARCHAR(100);
+-- ALTER TABLE ordini_dettagli ADD COLUMN descrizione TEXT;
+-- 4. Modifica prezzo_unitario per supportare 4 decimali
+ALTER TABLE ordini_dettagli
+  ALTER COLUMN prezzo_unitario TYPE DECIMAL(10,4);
+-- 5. Rinomina "totale" in "importo_riga" (se necessario)
+ALTER TABLE ordini_dettagli
+  RENAME COLUMN totale TO importo_riga;
+-- 6. Aggiungi CASCADE delete (IMPORTANTE per eliminazione ordini)
+ALTER TABLE ordini_dettagli
+  DROP CONSTRAINT IF EXISTS ordini_dettagli_ordine_id_fkey,
+  ADD CONSTRAINT ordini_dettagli_ordine_id_fkey 
+    FOREIGN KEY (ordine_id) 
+    REFERENCES ordini(id) 
+    ON DELETE CASCADE;
+-- ============================================
+-- MIGRAZIONE DATI ESISTENTI (se necessario)
+-- ============================================
+-- Copia i dati esistenti dalle righe alla tabella ordini (quantità e taglia)
+UPDATE ordini o
+SET 
+  quantita = COALESCE((
+    SELECT SUM(CAST(r.quantita AS INTEGER))
+    FROM ordini_dettagli r
+    WHERE r.ordine_id = o.id
+  ), 0),
+  taglia_richiesta = COALESCE((
+    SELECT r.taglia
+    FROM ordini_dettagli r
+    WHERE r.ordine_id = o.id
+    LIMIT 1
+  ), '')
+WHERE o.quantita = 0 OR o.taglia_richiesta = '';
+-- Imposta sync_status di default per ordini esistenti
+UPDATE ordini
+SET sync_status = 'locale'
+WHERE sync_status IS NULL;
+-- ============================================
+-- INDICI PER PERFORMANCE
+-- ============================================
+-- Indici utili per query veloci
+CREATE INDEX IF NOT EXISTS idx_ordini_cliente_id ON ordini(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_ordini_stato ON ordini(stato);
+CREATE INDEX IF NOT EXISTS idx_ordini_data_inizio_consegna ON ordini(data_inizio_consegna);
+CREATE INDEX IF NOT EXISTS idx_ordini_dettagli_ordine_id ON ordini_dettagli(ordine_id);
+CREATE INDEX IF NOT EXISTS idx_ordini_dettagli_taglia ON ordini_dettagli(taglia);
+
+📖 PARTE 2: DOCUMENTAZIONE GESTIONE ORDINI DELTA FUTURO
+🗂️ Struttura Tabelle
+Tabella: ordini
+Colonna	Tipo	Descrizione
+id	SERIAL PRIMARY KEY	ID univoco auto-incrementale
+data	DATE NOT NULL	Data ordine
+data_consegna	DATE	Data consegna singola (deprecato, mantenuto per compatibilità)
+data_inizio_consegna	DATE	Inizio periodo consegna (usato con WeekRangePicker)
+data_fine_consegna	DATE	Fine periodo consegna (usato con WeekRangePicker)
+cliente_id	INTEGER NOT NULL	FK → clienti.id
+quantita	INTEGER NOT NULL	Totale animali ordinati (somma delle righe)
+taglia_richiesta	TEXT NOT NULL	Taglia principale (es: TP-3000, TP-9000)
+stato	TEXT NOT NULL	Aperto | In Lavorazione | Parziale | Completato | Annullato
+fatture_in_cloud_id	INTEGER UNIQUE	ID ordine in Fatture in Cloud
+fatture_in_cloud_numero	VARCHAR(50)	Numero documento FIC
+sync_status	VARCHAR(20)	locale | in_sync | sincronizzato | errore
+last_sync_at	TIMESTAMP	Ultima sincronizzazione FIC
+sync_error	TEXT	Messaggio errore sincronizzazione
+url_documento	TEXT	URL documento PDF da FIC
+Tabella: ordini_dettagli (righe ordine)
+Colonna	Tipo	Descrizione
+id	SERIAL PRIMARY KEY	ID univoco
+ordine_id	INTEGER NOT NULL	FK → ordini.id (CASCADE DELETE)
+riga_numero	INTEGER NOT NULL	Numero riga nel documento (ordinamento)
+codice_prodotto	VARCHAR(100)	Codice prodotto da FIC
+taglia	VARCHAR(50) NOT NULL	Taglia normalizzata (TP-3000, TP-9000, ecc.)
+quantita	INTEGER NOT NULL	Numero animali di questa riga
+prezzo_unitario	DECIMAL(10,4)	Prezzo per animale
+descrizione	TEXT	Descrizione dettagliata prodotto
+importo_riga	DECIMAL(10,2)	Totale riga (quantita × prezzo_unitario)
+fic_item_id	INTEGER	ID riga in Fatture in Cloud
+⚙️ Logica Business - Stati Ordine
+Stati supportati:
+Aperto: Ordine creato ma nessuna consegna effettuata
+In Lavorazione / Parziale: Consegne parziali in corso (vengono visualizzati come "In Lavorazione")
+Completato: Ordine completamente evaso
+Annullato: Ordine annullato
+Cambio automatico stato:
+Quando si crea una consegna → stato passa da "Aperto" a "Parziale"
+Quando consegne totali = quantità ordinata → stato diventa "Completato"
+Lo stato viene calcolato automaticamente dal sistema
+📅 Gestione Periodi di Consegna (WeekRangePicker)
+Come funziona:
+Campi utilizzati: data_inizio_consegna + data_fine_consegna
+UI: Componente WeekRangePicker (o MonthRangePicker) con drag & drop
+Disponibilità:
+✅ Abilitato per ordini con stato "Aperto" o "In Lavorazione"
+❌ Disabilitato per ordini "Completato" (solo visualizzazione)
+Funzionalità WeekRangePicker:
+Banda interattiva trascinabile per spostare il periodo
+Ridimensionamento banda (trascinare bordo destro) per estendere/ridurre settimane
+Pulsanti rapidi: "Questa settimana", "Prossime 2 settimane", "Prossimo mese"
+Indicatore "Oggi" sulla timeline
+Salvataggio automatico con feedback toast
+🔒 Protezione Eliminazione Ordini
+Multi-layer protection:
+Frontend: Pulsante delete nascosto se:
+
+isLoadingConsegne = true (evita race condition)
+Esistono consegne associate (consegne.some(c => c.ordine_id === ordineId))
+Backend: Endpoint DELETE /api/ordini/:id verifica:
+
+const consegne = await storage.getConsegne();
+const hasConsegne = consegne.some(c => c.ordine_id === ordineId);
+if (hasConsegne) {
+  return res.status(409).json({ 
+    message: "Impossibile eliminare: esistono consegne associate" 
+  });
+}
+
+Messaggio all'utente: "Cambia lo stato dell'ordine invece di eliminarlo"
+
+📦 Gestione Righe Dettaglio (Espandibili)
+Come funziona:
+Click sull'icona chevron accanto all'ordine → espande le righe
+Viene caricato il componente OrderDetailsPanel
+Query API: GET /api/ordini/:id/dettagli
+Visualizzazione tabella con:
+Numero riga
+Codice prodotto
+Taglia
+Quantità
+Prezzo unitario (4 decimali)
+Importo totale riga
+Descrizione
+🔄 Sincronizzazione Fatture in Cloud
+Processo:
+Ordine importato da FIC → crea record in ordini + righe in ordini_dettagli
+Ogni riga FIC diventa un record separato in ordini_dettagli
+Campi tracciati:
+fatture_in_cloud_id: ID documento FIC
+sync_status: stato sincronizzazione
+last_sync_at: timestamp ultimo sync
+fic_item_id: ID riga in FIC (per tracciabilità)
+Importante:
+⚠️ Eliminazione SOLO locale: DELETE /api/ordini/:id elimina SOLO dal database locale, MAI da Fatture in Cloud
+Ordini vengono gestiti esclusivamente tramite sincronizzazione FIC
+Non è possibile creare ordini manualmente (solo import da FIC)
+🎯 Query di Esempio
+-- Ordini con dettagli completi
+SELECT 
+  o.id,
+  o.numero,
+  o.data,
+  o.cliente_nome,
+  o.stato,
+  o.data_inizio_consegna,
+  o.data_fine_consegna,
+  od.riga_numero,
+  od.taglia,
+  od.quantita,
+  od.prezzo_unitario,
+  od.importo_riga
+FROM ordini o
+LEFT JOIN ordini_dettagli od ON od.ordine_id = o.id
+ORDER BY o.data DESC, od.riga_numero ASC;
+-- Totale animali per ordine (somma righe)
+SELECT 
+  o.id,
+  o.numero,
+  SUM(od.quantita) as totale_animali
+FROM ordini o
+LEFT JOIN ordini_dettagli od ON od.ordine_id = o.id
+GROUP BY o.id, o.numero;
+-- Ordini con consegne in un range di date
+SELECT DISTINCT o.*
+FROM ordini o
+WHERE o.data_inizio_consegna >= '2025-01-01'
+  AND o.data_fine_consegna <= '2025-12-31';
+
+✅ Checklist Adeguamento Database Esterno
+ Eseguire script SQL di modifica tabelle
+ Verificare CASCADE DELETE su ordini_dettagli
+ Migrare dati esistenti (quantità e taglie da righe a ordini)
+ Creare indici per performance
+ Testare query con range di consegna
+ Verificare compatibilità stati ordine
+ Assicurarsi che sync_status sia valorizzato per tutti gli ordini esistenti
+Hai tutto quello che ti serve! Gli script SQL sono pronti per essere eseguiti sul database esterno. Fammi sapere se hai bisogno di chiarimenti o modifiche! 🚀
+
+just now
+Improve database schema to better support delivery ranges and order management
+
+Rollback here
+
+Changes
+
+Preview
+2 minutes of work
+
+Scroll to latest
+Vibing.
+
+Stop
+
+Make, test, iterate…
+
+Build
+
+Build
+
+
+
+
