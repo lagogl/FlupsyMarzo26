@@ -352,20 +352,20 @@ export default function OrdiniCondivisi() {
               <table className="w-full border-collapse">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr className="border-b">
-                    <th className="w-8 p-2 text-left"></th>
-                    <th className="w-8 p-2 text-left"></th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Data Ordine</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Data Consegna</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Cliente</th>
-                    <th className="p-2 text-right text-xs font-medium text-muted-foreground">Quantità</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Taglia</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Stato</th>
-                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Sync FIC</th>
+                    <th className="w-8 p-2 text-left border-r"></th>
+                    <th className="w-8 p-2 text-left border-r"></th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Data Ordine</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Data Consegna</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Cliente</th>
+                    <th className="p-2 text-right text-xs font-medium text-muted-foreground border-r">Quantità</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Taglia</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Stato</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground border-r">Sync FIC</th>
                     <th className="p-2 text-right text-xs font-medium text-muted-foreground">Azioni</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ordiniFiltrati.map((ordine) => {
+                  {ordiniFiltrati.map((ordine, idx) => {
                     const espanso = righeEspanse.has(ordine.id);
                     const consegneOrdine = getConsegnePerOrdine(ordine.id);
                     const hasDettagli = consegneOrdine.length > 0;
@@ -374,11 +374,13 @@ export default function OrdiniCondivisi() {
                       <>
                         <tr 
                           key={ordine.id}
-                          className={`border-b hover:bg-muted/30 transition-colors ${espanso ? 'bg-muted/20' : ''}`}
+                          className={`border-b hover:bg-muted/30 transition-colors ${
+                            espanso ? 'bg-muted/20' : idx % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/10'
+                          }`}
                           data-testid={`row-ordine-${ordine.id}`}
                         >
                           {/* Chevron espansione */}
-                          <td className="p-2">
+                          <td className="p-2 border-r">
                             {hasDettagli && (
                               <Button
                                 size="sm"
@@ -392,7 +394,7 @@ export default function OrdiniCondivisi() {
                           </td>
                           
                           {/* Checkbox */}
-                          <td className="p-2">
+                          <td className="p-2 border-r">
                             <Checkbox
                               checked={selezionati.has(ordine.id)}
                               onCheckedChange={() => toggleSelezione(ordine.id)}
@@ -401,12 +403,12 @@ export default function OrdiniCondivisi() {
                           </td>
                           
                           {/* Data Ordine */}
-                          <td className="p-2 text-sm">
+                          <td className="p-2 text-sm border-r">
                             {format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it })}
                           </td>
                           
                           {/* Data Consegna */}
-                          <td className="p-2 text-xs text-muted-foreground">
+                          <td className="p-2 text-xs text-muted-foreground border-r">
                             {ordine.dataInizioConsegna && (
                               <div className="flex items-center gap-1">
                                 <Calendar className="w-3 h-3" />
@@ -417,27 +419,27 @@ export default function OrdiniCondivisi() {
                           </td>
                           
                           {/* Cliente */}
-                          <td className="p-2 text-sm max-w-[200px] truncate" title={ordine.clienteNome}>
+                          <td className="p-2 text-sm max-w-[200px] truncate border-r" title={ordine.clienteNome}>
                             {ordine.clienteNome || '-'}
                           </td>
                           
                           {/* Quantità */}
-                          <td className="p-2 text-sm text-right font-medium">
+                          <td className="p-2 text-sm text-right font-medium border-r">
                             {ordine.quantitaTotale ? ordine.quantitaTotale.toLocaleString('it-IT') : '0'}
                           </td>
                           
                           {/* Taglia */}
-                          <td className="p-2 text-sm">
+                          <td className="p-2 text-sm border-r">
                             {ordine.tagliaRichiesta || '-'}
                           </td>
                           
                           {/* Stato */}
-                          <td className="p-2">
+                          <td className="p-2 border-r">
                             {getStatoBadge(ordine.statoCalcolato)}
                           </td>
                           
                           {/* Sync FIC */}
-                          <td className="p-2">
+                          <td className="p-2 border-r">
                             {getSyncIcon(ordine)}
                           </td>
                           
