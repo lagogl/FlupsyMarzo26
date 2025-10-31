@@ -1,12 +1,26 @@
 -- ============================================
 -- SETUP DATABASE ESTERNO - ORDINI CONDIVISI
 -- ============================================
--- Esegui questo script sul database Neon esterno per prepararlo
+-- Esegui questo script sul database dell'app esterna per prepararlo
 -- alla gestione ordini condivisi tra Delta Futuro e app esterna
 
 -- ============================================
--- 1. MODIFICA TABELLA ORDINI
+-- 1. CREA O MODIFICA TABELLA ORDINI
 -- ============================================
+
+-- Crea tabella ordini se non esiste
+CREATE TABLE IF NOT EXISTS ordini (
+  id SERIAL PRIMARY KEY,
+  numero VARCHAR(50) NOT NULL,
+  data DATE NOT NULL,
+  cliente_id INTEGER,
+  cliente_nome TEXT NOT NULL,
+  stato VARCHAR(50) NOT NULL DEFAULT 'Aperto',
+  note TEXT,
+  totale DECIMAL(10,2) DEFAULT 0,
+  fatture_in_cloud_id INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
 
 -- Aggiungi colonne per range di consegna (se non esistono)
 ALTER TABLE ordini 
@@ -47,7 +61,7 @@ END $$;
 COMMENT ON COLUMN ordini.stato IS 'Stati: Aperto | In Lavorazione | Parziale | Completato | Annullato';
 
 -- ============================================
--- 2. MODIFICA TABELLA ORDINI_DETTAGLI
+-- 2. CREA O MODIFICA TABELLA ORDINI_DETTAGLI
 -- ============================================
 
 -- Rinomina ordini_righe in ordini_dettagli (se necessario)
@@ -152,7 +166,10 @@ COMMENT ON COLUMN consegne_condivise.app_origine IS 'Origine: delta_futuro | app
 -- 4. CREA VISTA ORDINI CON RESIDUO
 -- ============================================
 
-CREATE OR REPLACE VIEW ordini_con_residuo AS
+-- Drop vista se esiste (per ricrearla)
+DROP VIEW IF EXISTS ordini_con_residuo;
+
+CREATE VIEW ordini_con_residuo AS
 SELECT 
   o.id,
   o.numero,
@@ -234,20 +251,13 @@ CREATE INDEX IF NOT EXISTS idx_consegne_app_origine ON consegne_condivise(app_or
 -- 7. VERIFICA FINALE
 -- ============================================
 
--- Mostra struttura tabelle
-\d ordini
-\d ordini_dettagli
-\d consegne_condivise
-
--- Mostra vista
-SELECT * FROM ordini_con_residuo LIMIT 5;
-
--- ============================================
--- SCRIPT COMPLETATO ✅
--- ============================================
-
+-- Conta record nelle tabelle
 SELECT 
   '✅ Setup completato!' as messaggio,
   (SELECT COUNT(*) FROM ordini) as totale_ordini,
   (SELECT COUNT(*) FROM ordini_dettagli) as totale_dettagli,
   (SELECT COUNT(*) FROM consegne_condivise) as totale_consegne;
+
+-- Mostra esempio vista (se ci sono ordini)
+SELECT 'Preview ordini_con_residuo:' as info;
+SELECT * FROM ordini_con_residuo LIMIT 5;
