@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -589,9 +589,8 @@ export default function OrdiniCondivisi() {
                     const hasDettagli = righeOrdine.length > 0;
 
                     return (
-                      <>
-                        <tr 
-                          key={ordine.id}
+                      <Fragment key={ordine.id}>
+                        <tr
                           className={`border-b hover:bg-muted/30 transition-colors ${
                             espanso ? 'bg-muted/20' : idx % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/10'
                           }`}
@@ -785,7 +784,7 @@ export default function OrdiniCondivisi() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

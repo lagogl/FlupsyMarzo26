@@ -71,11 +71,16 @@ router.get('/', async (req: Request, res: Response) => {
     const ordiniIds = ordiniRaw.map((o: any) => o.id);
     let righeDettaglio: any[] = [];
     
-    if (ordiniIds.length > 0 && dbEsterno) {
-      righeDettaglio = await dbEsterno
-        .select()
-        .from(ordiniDettagli)
-        .where(sql`${ordiniDettagli.ordineId} IN (${sql.join(ordiniIds.map((id: number) => sql`${id}`), sql`, `)})`);
+    if (ordiniIds.length > 0) {
+      const idsPlaceholders = ordiniIds.map((_, i) => `$${i + 1}`).join(', ');
+      const righeQuery = `
+        SELECT id, ordine_id, riga_numero, codice_prodotto, taglia, descrizione,
+               quantita, prezzo_unitario, importo_riga
+        FROM ordini_dettagli
+        WHERE ordine_id IN (${idsPlaceholders})
+        ORDER BY ordine_id, riga_numero
+      `;
+      righeDettaglio = await queryEsterno(righeQuery, ordiniIds);
     }
     
     // Trasforma snake_case in camelCase e aggiungi righe
@@ -96,16 +101,16 @@ router.get('/', async (req: Request, res: Response) => {
       syncStatus: o.sync_status,
       fattureInCloudId: o.fatture_in_cloud_id,
       righe: righeDettaglio
-        .filter((r: any) => r.ordineId === o.id)
+        .filter((r: any) => r.ordine_id === o.id)
         .map((r: any) => ({
           id: r.id,
-          rigaNumero: r.rigaNumero,
-          codiceProdotto: r.codiceProdotto,
+          rigaNumero: r.riga_numero,
+          codiceProdotto: r.codice_prodotto,
           taglia: r.taglia,
           descrizione: r.descrizione,
           quantita: parseInt(r.quantita?.toString() || '0'),
-          prezzoUnitario: parseFloat(r.prezzoUnitario?.toString() || '0'),
-          importoRiga: parseFloat(r.importoRiga?.toString() || '0')
+          prezzoUnitario: parseFloat(r.prezzo_unitario?.toString() || '0'),
+          importoRiga: parseFloat(r.importo_riga?.toString() || '0')
         }))
     }));
     
