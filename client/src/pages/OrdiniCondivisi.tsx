@@ -1,34 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { 
   RefreshCw, 
   Download, 
@@ -39,13 +15,14 @@ import {
   Pencil,
   Trash2,
   AlertTriangle,
-  Database,
-  CheckCircle2
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import '../styles/spreadsheet.css';
 
 interface OrdineCondiviso {
   id: number;
@@ -71,6 +48,14 @@ interface Consegna {
   quantita: number;
   note: string | null;
   appOrigine: string;
+  ordineNumero: string | null;
+  clienteNome: string;
+}
+
+interface EditableRow extends OrdineCondiviso {
+  isEditing: boolean;
+  editedDataConsegna: string | null;
+  editedQuantita: string;
 }
 
 export default function OrdiniCondivisi() {
@@ -79,13 +64,7 @@ export default function OrdiniCondivisi() {
   const [filtroStato, setFiltroStato] = useState<string>('tutti');
   const [selezionati, setSelezionati] = useState<Set<number>>(new Set());
   const [righeEspanse, setRigheEspanse] = useState<Set<number>>(new Set());
-  const [dialogConsegnaAperto, setDialogConsegnaAperto] = useState(false);
-  const [ordineSelezionato, setOrdineSelezionato] = useState<OrdineCondiviso | null>(null);
-  
-  // Form consegna
-  const [dataConsegna, setDataConsegna] = useState(new Date().toISOString().split('T')[0]);
-  const [quantitaConsegna, setQuantitaConsegna] = useState('');
-  const [noteConsegna, setNoteConsegna] = useState('');
+  const [ordiniEditabili, setOrdiniEditabili] = useState<EditableRow[]>([]);
 
   // Query ordini
   const { data: ordiniResponse, isLoading: loadingOrdini } = useQuery<{ success: boolean; ordini: OrdineCondiviso[]; count: number }>({
@@ -93,7 +72,7 @@ export default function OrdiniCondivisi() {
     enabled: true
   });
 
-  // Query consegne per ordine
+  // Query consegne
   const { data: consegneResponse } = useQuery<{ success: boolean; consegne: Consegna[]; count: number }>({
     queryKey: ['/api/ordini-condivisi/consegne'],
     enabled: true
@@ -102,43 +81,29 @@ export default function OrdiniCondivisi() {
   const ordini = ordiniResponse?.ordini || [];
   const consegne = consegneResponse?.consegne || [];
 
-  // Mutation crea consegna
-  const creazioneMutation = useMutation({
-    mutationFn: async (dati: any) => {
-      return apiRequest('/api/ordini-condivisi/consegne', 'POST', dati);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi/consegne'] });
-      toast({
-        title: '✅ Consegna registrata',
-        description: 'La consegna è stata registrata con successo',
-      });
-      chiudiDialogConsegna();
-    },
-    onError: (error: any) => {
-      toast({
-        title: '❌ Errore',
-        description: error.message || 'Impossibile registrare la consegna',
-        variant: 'destructive',
-      });
-    },
-  });
+  // Inizializza ordini editabili
+  useEffect(() => {
+    const editabili = ordini.map(o => ({
+      ...o,
+      isEditing: false,
+      editedDataConsegna: null,
+      editedQuantita: ''
+    }));
+    setOrdiniEditabili(editabili);
+  }, [ordini]);
 
   // Filtra ordini
-  const ordiniFiltrati = ordini.filter((ord) => {
-    // Filtro ricerca cliente
+  const ordiniFiltrati = ordiniEditabili.filter((ord) => {
     if (ricercaCliente && !ord.clienteNome?.toLowerCase().includes(ricercaCliente.toLowerCase())) {
       return false;
     }
-    // Filtro stato
     if (filtroStato !== 'tutti' && ord.statoCalcolato !== filtroStato) {
       return false;
     }
     return true;
   });
 
-  // Calcola statistiche
+  // Statistiche
   const stats = {
     tutti: ordini.length,
     aperti: ordini.filter(o => o.statoCalcolato === 'Aperto').length,
@@ -148,44 +113,69 @@ export default function OrdiniCondivisi() {
   };
 
   const toggleSelezione = (id: number) => {
-    const nuoviSelezionati = new Set(selezionati);
-    if (nuoviSelezionati.has(id)) {
-      nuoviSelezionati.delete(id);
-    } else {
-      nuoviSelezionati.add(id);
-    }
-    setSelezionati(nuoviSelezionati);
+    const nuovi = new Set(selezionati);
+    nuovi.has(id) ? nuovi.delete(id) : nuovi.add(id);
+    setSelezionati(nuovi);
   };
 
   const toggleEspansione = (id: number) => {
-    const nuoveEspanse = new Set(righeEspanse);
-    if (nuoveEspanse.has(id)) {
-      nuoveEspanse.delete(id);
-    } else {
-      nuoveEspanse.add(id);
-    }
-    setRigheEspanse(nuoveEspanse);
+    const nuove = new Set(righeEspanse);
+    nuove.has(id) ? nuove.delete(id) : nuove.add(id);
+    setRigheEspanse(nuove);
   };
 
-  const apriDialogConsegna = (ordine: OrdineCondiviso) => {
-    setOrdineSelezionato(ordine);
-    setDataConsegna(new Date().toISOString().split('T')[0]);
-    setQuantitaConsegna('');
-    setNoteConsegna('');
-    setDialogConsegnaAperto(true);
+  const startEdit = (id: number) => {
+    setOrdiniEditabili(prev => prev.map(o => 
+      o.id === id ? { ...o, isEditing: true, editedDataConsegna: null, editedQuantita: '' } : o
+    ));
   };
 
-  const chiudiDialogConsegna = () => {
-    setDialogConsegnaAperto(false);
-    setOrdineSelezionato(null);
-    setQuantitaConsegna('');
-    setNoteConsegna('');
+  const cancelEdit = (id: number) => {
+    setOrdiniEditabili(prev => prev.map(o => 
+      o.id === id ? { ...o, isEditing: false, editedDataConsegna: null, editedQuantita: '' } : o
+    ));
   };
 
-  const salvaConsegna = () => {
-    if (!ordineSelezionato) return;
-    
-    const quantita = parseInt(quantitaConsegna);
+  const updateField = (id: number, field: 'editedDataConsegna' | 'editedQuantita', value: string) => {
+    setOrdiniEditabili(prev => prev.map(o => 
+      o.id === id ? { ...o, [field]: value } : o
+    ));
+  };
+
+  // Mutation salva consegna
+  const salvaMutation = useMutation({
+    mutationFn: async ({ ordineId, dataConsegna, quantita }: { ordineId: number; dataConsegna: string; quantita: number }) => {
+      return apiRequest('/api/ordini-condivisi/consegne', 'POST', {
+        ordineId,
+        dataConsegna,
+        quantita,
+        note: null
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi/consegne'] });
+      toast({
+        title: '✅ Consegna salvata',
+        description: 'La consegna è stata registrata con successo',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: '❌ Errore',
+        description: error.message || 'Impossibile salvare la consegna',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const saveEdit = async (id: number) => {
+    const ordine = ordiniEditabili.find(o => o.id === id);
+    if (!ordine) return;
+
+    const data = ordine.editedDataConsegna || new Date().toISOString().split('T')[0];
+    const quantita = parseInt(ordine.editedQuantita);
+
     if (isNaN(quantita) || quantita <= 0) {
       toast({
         title: '❌ Errore',
@@ -195,57 +185,51 @@ export default function OrdiniCondivisi() {
       return;
     }
 
-    if (quantita > ordineSelezionato.quantitaResidua) {
+    if (quantita > ordine.quantitaResidua) {
       toast({
         title: '❌ Errore',
-        description: `La quantità supera il residuo disponibile (${ordineSelezionato.quantitaResidua.toLocaleString('it-IT')} animali)`,
+        description: `La quantità supera il residuo (${ordine.quantitaResidua.toLocaleString('it-IT')})`,
         variant: 'destructive',
       });
       return;
     }
 
-    creazioneMutation.mutate({
-      ordineId: ordineSelezionato.id,
-      dataConsegna,
-      quantita,
-      note: noteConsegna || null,
-    });
+    await salvaMutation.mutateAsync({ ordineId: id, dataConsegna: data, quantita });
+    cancelEdit(id);
   };
 
   const getStatoBadge = (stato: string) => {
     switch (stato) {
       case 'Completato':
         return (
-          <Badge className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700">
+          <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-0.5">
             Completato
           </Badge>
         );
       case 'Aperto':
         return (
-          <Badge className="bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-800">
+          <Badge className="bg-gray-800 text-white hover:bg-gray-900 text-xs px-2 py-0.5">
             Aperto
           </Badge>
         );
       case 'Parziale':
         return (
-          <Badge className="bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-800">
-            In Lavorazione<br/>(Parziale)
+          <Badge className="bg-gray-800 text-white hover:bg-gray-900 text-xs px-2 py-0.5">
+            In Lavorazione
           </Badge>
         );
       default:
-        return <Badge variant="outline">{stato}</Badge>;
+        return <Badge variant="outline" className="text-xs">{stato}</Badge>;
     }
   };
 
-  const getSyncBadge = (ordine: OrdineCondiviso) => {
+  const getSyncIcon = (ordine: OrdineCondiviso) => {
     if (ordine.syncStatus === 'errore') {
       return (
-        <div className="flex items-center gap-1">
-          <Badge variant="destructive" className="flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
-            Errore
-          </Badge>
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
+        <div className="flex items-center gap-1.5 text-red-600">
+          <AlertTriangle className="w-4 h-4" />
+          <span className="text-xs">Errore</span>
+          <Button size="sm" variant="ghost" className="h-5 w-5 p-0 hover:bg-red-100">
             <RefreshCw className="w-3 h-3" />
           </Button>
         </div>
@@ -253,15 +237,15 @@ export default function OrdiniCondivisi() {
     }
     if (ordine.fattureInCloudId) {
       return (
-        <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+        <div className="flex items-center gap-1.5 text-green-600">
           <CheckCircle2 className="w-4 h-4" />
-          <span className="text-xs">Sincronizzato</span>
+          <span className="text-xs font-medium">Sincronizzato</span>
         </div>
       );
     }
     return (
-      <div className="flex items-center gap-1 text-muted-foreground">
-        <Database className="w-4 h-4" />
+      <div className="flex items-center gap-1.5 text-gray-500">
+        <Clock className="w-4 h-4" />
         <span className="text-xs">Locale</span>
       </div>
     );
@@ -296,11 +280,11 @@ export default function OrdiniCondivisi() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl space-y-6">
+    <div className="container mx-auto p-6 max-w-7xl space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Gestione Ordini</h1>
-        <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold">Gestione Ordini</h1>
+        <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" data-testid="button-sync-fic">
             <RefreshCw className="w-4 h-4 mr-2" />
             Sincronizza con FIC
@@ -313,49 +297,25 @@ export default function OrdiniCondivisi() {
       </div>
 
       {/* Statistiche */}
-      <div className="grid grid-cols-5 gap-4">
-        <Card 
-          className="cursor-pointer hover:bg-accent transition-colors"
-          onClick={() => setFiltroStato('tutti')}
-        >
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-1">Tutti</div>
-            <div className="text-3xl font-bold">{stats.tutti}</div>
-          </CardContent>
-        </Card>
-        <Card 
-          className="cursor-pointer hover:bg-accent transition-colors"
-          onClick={() => setFiltroStato('Aperto')}
-        >
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-1">Aperti</div>
-            <div className="text-3xl font-bold">{stats.aperti}</div>
-          </CardContent>
-        </Card>
-        <Card 
-          className="cursor-pointer hover:bg-accent transition-colors"
-          onClick={() => setFiltroStato('Parziale')}
-        >
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-1">In Lavorazione</div>
-            <div className="text-3xl font-bold">{stats.parziali}</div>
-          </CardContent>
-        </Card>
-        <Card 
-          className="cursor-pointer hover:bg-accent transition-colors"
-          onClick={() => setFiltroStato('Completato')}
-        >
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-1">Completati</div>
-            <div className="text-3xl font-bold">{stats.completati}</div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:bg-accent transition-colors opacity-50">
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-1">Annullati</div>
-            <div className="text-3xl font-bold">{stats.annullati}</div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-5 gap-3">
+        {[
+          { label: 'Tutti', value: stats.tutti, stato: 'tutti' },
+          { label: 'Aperti', value: stats.aperti, stato: 'Aperto' },
+          { label: 'In Lavorazione', value: stats.parziali, stato: 'Parziale' },
+          { label: 'Completati', value: stats.completati, stato: 'Completato' },
+          { label: 'Annullati', value: stats.annullati, stato: 'annullati' }
+        ].map((stat, idx) => (
+          <Card 
+            key={idx}
+            className={`cursor-pointer transition-colors ${filtroStato === stat.stato ? 'border-primary' : 'hover:bg-accent'}`}
+            onClick={() => setFiltroStato(stat.stato)}
+          >
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
+              <div className="text-2xl font-bold">{stat.value}</div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Ricerca e filtri */}
@@ -364,272 +324,249 @@ export default function OrdiniCondivisi() {
           placeholder="Cerca cliente..."
           value={ricercaCliente}
           onChange={(e) => setRicercaCliente(e.target.value)}
-          className="max-w-xs"
+          className="max-w-xs h-9 text-sm"
           data-testid="input-ricerca-cliente"
         />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" data-testid="button-filtri">
-              <Filter className="w-4 h-4 mr-2" />
-              Filtri
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => setFiltroStato('tutti')}>
-              Tutti gli ordini
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFiltroStato('Aperto')}>
-              Solo Aperti
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFiltroStato('Parziale')}>
-              Solo In Lavorazione
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFiltroStato('Completato')}>
-              Solo Completati
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button variant="outline" size="sm" className="h-9">
+          <Filter className="w-4 h-4 mr-2" />
+          Filtri
+        </Button>
       </div>
 
-      {/* Lista ordini */}
-      <Card>
+      {/* Tabella Excel-like */}
+      <Card className="border-0 shadow-md">
         <CardContent className="p-0">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-semibold">Lista Ordini</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+          <div className="p-4 border-b bg-muted/30">
+            <h2 className="text-base font-semibold">Lista Ordini</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {ordiniFiltrati.length} ordini trovati
             </p>
           </div>
 
           {ordiniFiltrati.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="text-center py-12 text-sm text-muted-foreground">
               Nessun ordine trovato
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead>Data Ordine</TableHead>
-                  <TableHead>Data Consegna</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="text-right">Quantità</TableHead>
-                  <TableHead>Taglia</TableHead>
-                  <TableHead>Stato</TableHead>
-                  <TableHead>Sync FIC</TableHead>
-                  <TableHead className="text-right">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ordiniFiltrati.map((ordine) => {
-                  const espanso = righeEspanse.has(ordine.id);
-                  const consegneOrdine = getConsegnePerOrdine(ordine.id);
-                  const hasDettagli = consegneOrdine.length > 0;
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr className="border-b">
+                    <th className="w-8 p-2 text-left"></th>
+                    <th className="w-8 p-2 text-left"></th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Data Ordine</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Data Consegna</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Cliente</th>
+                    <th className="p-2 text-right text-xs font-medium text-muted-foreground">Quantità</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Taglia</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Stato</th>
+                    <th className="p-2 text-left text-xs font-medium text-muted-foreground">Sync FIC</th>
+                    <th className="p-2 text-right text-xs font-medium text-muted-foreground">Azioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordiniFiltrati.map((ordine) => {
+                    const espanso = righeEspanse.has(ordine.id);
+                    const consegneOrdine = getConsegnePerOrdine(ordine.id);
+                    const hasDettagli = consegneOrdine.length > 0;
 
-                  return (
-                    <>
-                      <TableRow 
-                        key={ordine.id} 
-                        className={espanso ? 'border-b-0' : ''}
-                        data-testid={`row-ordine-${ordine.id}`}
-                      >
-                        <TableCell>
-                          {hasDettagli && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0"
-                              onClick={() => toggleEspansione(ordine.id)}
-                              data-testid={`button-espandi-${ordine.id}`}
-                            >
-                              {espanso ? (
-                                <ChevronDown className="w-4 h-4" />
-                              ) : (
-                                <ChevronRight className="w-4 h-4" />
-                              )}
-                            </Button>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Checkbox
-                            checked={selezionati.has(ordine.id)}
-                            onCheckedChange={() => toggleSelezione(ordine.id)}
-                            data-testid={`checkbox-ordine-${ordine.id}`}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it })}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            {ordine.dataInizioConsegna && <Calendar className="w-3 h-3" />}
-                            {formatDataConsegna(ordine.dataInizioConsegna, ordine.dataFineConsegna)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-[200px] truncate" title={ordine.clienteNome}>
-                          {ordine.clienteNome || '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {ordine.quantitaTotale ? ordine.quantitaTotale.toLocaleString('it-IT') : '0'}
-                        </TableCell>
-                        <TableCell>{ordine.tagliaRichiesta || '-'}</TableCell>
-                        <TableCell>{getStatoBadge(ordine.statoCalcolato)}</TableCell>
-                        <TableCell>{getSyncBadge(ordine)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() => apriDialogConsegna(ordine)}
-                              data-testid={`button-edit-${ordine.id}`}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                              data-testid={`button-delete-${ordine.id}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      
-                      {/* Riga espansa con dettagli consegne */}
-                      {espanso && hasDettagli && (
-                        <TableRow key={`${ordine.id}-dettagli`} className="bg-muted/30">
-                          <TableCell colSpan={10} className="py-4">
-                            <div className="text-center text-sm text-muted-foreground mb-3">
-                              Dettagli consegne per ordine {ordine.numero || `#${ordine.id}`}
+                    return (
+                      <>
+                        <tr 
+                          key={ordine.id}
+                          className={`border-b hover:bg-muted/30 transition-colors ${espanso ? 'bg-muted/20' : ''}`}
+                          data-testid={`row-ordine-${ordine.id}`}
+                        >
+                          {/* Chevron espansione */}
+                          <td className="p-2">
+                            {hasDettagli && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                onClick={() => toggleEspansione(ordine.id)}
+                              >
+                                {espanso ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                              </Button>
+                            )}
+                          </td>
+                          
+                          {/* Checkbox */}
+                          <td className="p-2">
+                            <Checkbox
+                              checked={selezionati.has(ordine.id)}
+                              onCheckedChange={() => toggleSelezione(ordine.id)}
+                              className="h-4 w-4"
+                            />
+                          </td>
+                          
+                          {/* Data Ordine */}
+                          <td className="p-2 text-sm">
+                            {format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it })}
+                          </td>
+                          
+                          {/* Data Consegna */}
+                          <td className="p-2 text-xs text-muted-foreground">
+                            {ordine.dataInizioConsegna && (
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {formatDataConsegna(ordine.dataInizioConsegna, ordine.dataFineConsegna)}
+                              </div>
+                            )}
+                            {!ordine.dataInizioConsegna && '-'}
+                          </td>
+                          
+                          {/* Cliente */}
+                          <td className="p-2 text-sm max-w-[200px] truncate" title={ordine.clienteNome}>
+                            {ordine.clienteNome || '-'}
+                          </td>
+                          
+                          {/* Quantità */}
+                          <td className="p-2 text-sm text-right font-medium">
+                            {ordine.quantitaTotale ? ordine.quantitaTotale.toLocaleString('it-IT') : '0'}
+                          </td>
+                          
+                          {/* Taglia */}
+                          <td className="p-2 text-sm">
+                            {ordine.tagliaRichiesta || '-'}
+                          </td>
+                          
+                          {/* Stato */}
+                          <td className="p-2">
+                            {getStatoBadge(ordine.statoCalcolato)}
+                          </td>
+                          
+                          {/* Sync FIC */}
+                          <td className="p-2">
+                            {getSyncIcon(ordine)}
+                          </td>
+                          
+                          {/* Azioni */}
+                          <td className="p-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 hover:bg-muted"
+                                onClick={() => startEdit(ordine.id)}
+                                data-testid={`button-edit-${ordine.id}`}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                data-testid={`button-delete-${ordine.id}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
                             </div>
-                            <div className="space-y-2 max-w-4xl mx-auto">
-                              {consegneOrdine.map((consegna) => (
-                                <div
-                                  key={consegna.id}
-                                  className="flex items-center justify-between bg-background p-3 rounded-md border"
-                                >
-                                  <div className="flex items-center gap-4">
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                                      <span className="font-medium">
-                                        {format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it })}
-                                      </span>
+                          </td>
+                        </tr>
+                        
+                        {/* Riga espansa dettagli */}
+                        {espanso && hasDettagli && (
+                          <tr className="bg-muted/20 border-b">
+                            <td colSpan={10} className="p-4">
+                              <div className="text-xs text-muted-foreground mb-3 text-center">
+                                Nessun dettaglio disponibile per questo ordine
+                              </div>
+                              <div className="space-y-2 max-w-4xl mx-auto">
+                                {consegneOrdine.map((cons) => (
+                                  <div
+                                    key={cons.id}
+                                    className="flex items-center justify-between bg-background p-3 rounded border text-sm"
+                                  >
+                                    <div className="flex items-center gap-4">
+                                      <div className="flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                                        <span className="font-medium">
+                                          {format(new Date(cons.dataConsegna), 'dd/MM/yyyy', { locale: it })}
+                                        </span>
+                                      </div>
+                                      <div className="text-sm">
+                                        Quantità: <span className="font-semibold">{cons.quantita.toLocaleString('it-IT')}</span>
+                                      </div>
+                                      <Badge variant={cons.appOrigine === 'delta_futuro' ? 'default' : 'secondary'} className="text-xs">
+                                        {cons.appOrigine === 'delta_futuro' ? 'Delta Futuro' : 'App Esterna'}
+                                      </Badge>
                                     </div>
-                                    <div className="text-sm">
-                                      Quantità: <span className="font-semibold">{consegna.quantita.toLocaleString('it-IT')}</span>
-                                    </div>
-                                    <Badge variant={consegna.appOrigine === 'delta_futuro' ? 'default' : 'secondary'}>
-                                      {consegna.appOrigine === 'delta_futuro' ? 'Delta Futuro' : 'App Esterna'}
-                                    </Badge>
+                                    {cons.note && (
+                                      <div className="text-xs text-muted-foreground max-w-xs truncate">
+                                        {cons.note}
+                                      </div>
+                                    )}
                                   </div>
-                                  {consegna.note && (
-                                    <div className="text-sm text-muted-foreground max-w-xs truncate">
-                                      {consegna.note}
-                                    </div>
-                                  )}
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Riga di modifica inline */}
+                        {ordine.isEditing && (
+                          <tr className="bg-blue-50 dark:bg-blue-950/20 border-b border-blue-200">
+                            <td colSpan={10} className="p-3">
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs font-medium text-muted-foreground min-w-[100px]">
+                                    Data Consegna:
+                                  </label>
+                                  <Input
+                                    type="date"
+                                    value={ordine.editedDataConsegna || new Date().toISOString().split('T')[0]}
+                                    onChange={(e) => updateField(ordine.id, 'editedDataConsegna', e.target.value)}
+                                    className="h-8 w-40 text-sm"
+                                  />
                                 </div>
-                              ))}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs font-medium text-muted-foreground min-w-[80px]">
+                                    Quantità:
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    placeholder="Es: 30000"
+                                    value={ordine.editedQuantita}
+                                    onChange={(e) => updateField(ordine.id, 'editedQuantita', e.target.value)}
+                                    className="h-8 w-32 text-sm"
+                                    max={ordine.quantitaResidua}
+                                  />
+                                  <span className="text-xs text-muted-foreground">
+                                    / {ordine.quantitaResidua.toLocaleString('it-IT')} disponibili
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 ml-auto">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => cancelEdit(ordine.id)}
+                                    className="h-8 text-xs"
+                                  >
+                                    Annulla
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => saveEdit(ordine.id)}
+                                    disabled={salvaMutation.isPending}
+                                    className="h-8 text-xs"
+                                  >
+                                    {salvaMutation.isPending ? 'Salvataggio...' : 'Salva Consegna'}
+                                  </Button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Dialog consegna */}
-      <Dialog open={dialogConsegnaAperto} onOpenChange={setDialogConsegnaAperto}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Registra Consegna Parziale</DialogTitle>
-            <DialogDescription>
-              Ordine {ordineSelezionato?.numero || `#${ordineSelezionato?.id}`} - Cliente: {ordineSelezionato?.clienteNome}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Info ordine */}
-            <div className="bg-muted p-3 rounded-md space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Taglia richiesta:</span>
-                <span className="font-medium">{ordineSelezionato?.tagliaRichiesta || '-'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Quantità totale:</span>
-                <span className="font-medium">{ordineSelezionato?.quantitaTotale.toLocaleString('it-IT')} animali</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Già consegnato:</span>
-                <span className="font-medium">{ordineSelezionato?.quantitaConsegnata.toLocaleString('it-IT')} animali</span>
-              </div>
-              <div className="flex justify-between text-sm font-semibold">
-                <span>Residuo disponibile:</span>
-                <span className="text-primary">{ordineSelezionato?.quantitaResidua.toLocaleString('it-IT')} animali</span>
-              </div>
-            </div>
-
-            {/* Form */}
-            <div className="space-y-2">
-              <Label htmlFor="data-consegna">Data consegna</Label>
-              <Input
-                id="data-consegna"
-                type="date"
-                value={dataConsegna}
-                onChange={(e) => setDataConsegna(e.target.value)}
-                data-testid="input-data-consegna"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="quantita-consegna">Quantità consegnata (animali)</Label>
-              <Input
-                id="quantita-consegna"
-                type="number"
-                min="1"
-                max={ordineSelezionato?.quantitaResidua || 0}
-                value={quantitaConsegna}
-                onChange={(e) => setQuantitaConsegna(e.target.value)}
-                placeholder="Es: 30000"
-                data-testid="input-quantita-consegna"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="note-consegna">Note (opzionale)</Label>
-              <Textarea
-                id="note-consegna"
-                value={noteConsegna}
-                onChange={(e) => setNoteConsegna(e.target.value)}
-                placeholder="Es: Prima consegna di tre"
-                rows={3}
-                data-testid="textarea-note-consegna"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={chiudiDialogConsegna} data-testid="button-annulla-consegna">
-              Annulla
-            </Button>
-            <Button 
-              onClick={salvaConsegna} 
-              disabled={creazioneMutation.isPending}
-              data-testid="button-salva-consegna"
-            >
-              {creazioneMutation.isPending ? 'Salvataggio...' : 'Salva Consegna'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
