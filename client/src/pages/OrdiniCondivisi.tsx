@@ -36,6 +36,17 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import '../styles/spreadsheet.css';
 
+interface RigaOrdine {
+  id: number;
+  rigaNumero: number;
+  codiceProdotto: string | null;
+  taglia: string;
+  descrizione: string | null;
+  quantita: number;
+  prezzoUnitario: number;
+  importoRiga: number;
+}
+
 interface OrdineCondiviso {
   id: number;
   numero: string | null;
@@ -51,6 +62,7 @@ interface OrdineCondiviso {
   dataFineConsegna: string | null;
   syncStatus: string;
   fattureInCloudId: number | null;
+  righe?: RigaOrdine[];
 }
 
 interface Consegna {
@@ -335,6 +347,11 @@ export default function OrdiniCondivisi() {
     return consegne.filter(c => c.ordineId === ordineId);
   };
 
+  const getRigheOrdine = (ordineId: number) => {
+    const ordine = ordiniEditabili.find(o => o.id === ordineId);
+    return ordine?.righe || [];
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       // Cicla: asc -> desc -> null
@@ -568,7 +585,8 @@ export default function OrdiniCondivisi() {
                   {ordiniFiltrati.map((ordine, idx) => {
                     const espanso = righeEspanse.has(ordine.id);
                     const consegneOrdine = getConsegnePerOrdine(ordine.id);
-                    const hasDettagli = consegneOrdine.length > 0;
+                    const righeOrdine = getRigheOrdine(ordine.id);
+                    const hasDettagli = righeOrdine.length > 0;
 
                     return (
                       <>
@@ -666,41 +684,49 @@ export default function OrdiniCondivisi() {
                           </td>
                         </tr>
                         
-                        {/* Riga espansa dettagli */}
+                        {/* Riga espansa con righe ordine */}
                         {espanso && hasDettagli && (
-                          <tr className="bg-muted/20 border-b">
-                            <td colSpan={10} className="p-4">
-                              <div className="text-xs text-muted-foreground mb-3 text-center">
-                                Nessun dettaglio disponibile per questo ordine
+                          <tr className="bg-muted/10 border-b">
+                            <td colSpan={10} className="p-0">
+                              <div className="bg-muted/30 px-4 py-2 border-t border-b">
+                                <h4 className="text-sm font-semibold">Righe Ordine</h4>
                               </div>
-                              <div className="space-y-2 max-w-4xl mx-auto">
-                                {consegneOrdine.map((cons) => (
-                                  <div
-                                    key={cons.id}
-                                    className="flex items-center justify-between bg-background p-3 rounded border text-sm"
-                                  >
-                                    <div className="flex items-center gap-4">
-                                      <div className="flex items-center gap-2">
-                                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                                        <span className="font-medium">
-                                          {format(new Date(cons.dataConsegna), 'dd/MM/yyyy', { locale: it })}
-                                        </span>
-                                      </div>
-                                      <div className="text-sm">
-                                        Quantità: <span className="font-semibold">{cons.quantita.toLocaleString('it-IT')}</span>
-                                      </div>
-                                      <Badge variant={cons.appOrigine === 'delta_futuro' ? 'default' : 'secondary'} className="text-xs">
-                                        {cons.appOrigine === 'delta_futuro' ? 'Delta Futuro' : 'App Esterna'}
-                                      </Badge>
-                                    </div>
-                                    {cons.note && (
-                                      <div className="text-xs text-muted-foreground max-w-xs truncate">
-                                        {cons.note}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/20">
+                                  <tr>
+                                    <th className="p-2 text-left border-r w-12">Riga</th>
+                                    <th className="p-2 text-left border-r">Codice Prodotto</th>
+                                    <th className="p-2 text-left border-r">Taglia</th>
+                                    <th className="p-2 text-right border-r">Quantità</th>
+                                    <th className="p-2 text-right border-r">Prezzo Unitario</th>
+                                    <th className="p-2 text-right border-r">Importo</th>
+                                    <th className="p-2 text-left">Descrizione</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {righeOrdine.map((riga) => (
+                                    <tr key={riga.id} className="border-b hover:bg-muted/20">
+                                      <td className="p-2 text-center border-r font-medium">{riga.rigaNumero}</td>
+                                      <td className="p-2 border-r font-mono text-xs">{riga.codiceProdotto || '-'}</td>
+                                      <td className="p-2 border-r">
+                                        <Badge variant="outline" className="text-xs">{riga.taglia}</Badge>
+                                      </td>
+                                      <td className="p-2 text-right border-r font-semibold">
+                                        {riga.quantita.toLocaleString('it-IT')}
+                                      </td>
+                                      <td className="p-2 text-right border-r">
+                                        € {riga.prezzoUnitario.toFixed(4)}
+                                      </td>
+                                      <td className="p-2 text-right border-r font-medium">
+                                        {riga.importoRiga > 0 ? `€ ${riga.importoRiga.toLocaleString('it-IT', { minimumFractionDigits: 2 })}` : '-'}
+                                      </td>
+                                      <td className="p-2 text-xs text-muted-foreground max-w-xs truncate">
+                                        {riga.descrizione || '-'}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </td>
                           </tr>
                         )}

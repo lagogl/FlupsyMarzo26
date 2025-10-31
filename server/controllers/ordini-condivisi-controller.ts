@@ -67,7 +67,18 @@ router.get('/', async (req: Request, res: Response) => {
     
     const ordiniRaw = await queryEsterno(query, params);
     
-    // Trasforma snake_case in camelCase
+    // Recupera righe dettaglio per tutti gli ordini
+    const ordiniIds = ordiniRaw.map((o: any) => o.id);
+    let righeDettaglio: any[] = [];
+    
+    if (ordiniIds.length > 0 && dbEsterno) {
+      righeDettaglio = await dbEsterno
+        .select()
+        .from(ordiniDettagli)
+        .where(sql`${ordiniDettagli.ordineId} IN (${sql.join(ordiniIds.map((id: number) => sql`${id}`), sql`, `)})`);
+    }
+    
+    // Trasforma snake_case in camelCase e aggiungi righe
     const ordini = ordiniRaw.map((o: any) => ({
       id: o.id,
       numero: o.numero,
@@ -83,7 +94,19 @@ router.get('/', async (req: Request, res: Response) => {
       dataInizioConsegna: o.data_inizio_consegna,
       dataFineConsegna: o.data_fine_consegna,
       syncStatus: o.sync_status,
-      fattureInCloudId: o.fatture_in_cloud_id
+      fattureInCloudId: o.fatture_in_cloud_id,
+      righe: righeDettaglio
+        .filter((r: any) => r.ordineId === o.id)
+        .map((r: any) => ({
+          id: r.id,
+          rigaNumero: r.rigaNumero,
+          codiceProdotto: r.codiceProdotto,
+          taglia: r.taglia,
+          descrizione: r.descrizione,
+          quantita: parseInt(r.quantita?.toString() || '0'),
+          prezzoUnitario: parseFloat(r.prezzoUnitario?.toString() || '0'),
+          importoRiga: parseFloat(r.importoRiga?.toString() || '0')
+        }))
     }));
     
     res.json({
