@@ -5,6 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
 import { 
   RefreshCw, 
   Download, 
@@ -19,7 +27,8 @@ import {
   Clock,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -89,15 +98,20 @@ export default function OrdiniCondivisi() {
   const ordini = ordiniResponse?.ordini || [];
   const consegne = consegneResponse?.consegne || [];
 
-  // Inizializza ordini editabili
+  // Inizializza ordini editabili solo quando cambiano gli ID
   useEffect(() => {
-    const editabili = ordini.map(o => ({
-      ...o,
-      isEditing: false,
-      editedDataConsegna: null,
-      editedQuantita: ''
-    }));
-    setOrdiniEditabili(editabili);
+    const nuoviIds = ordini.map(o => o.id).join(',');
+    const vecchiIds = ordiniEditabili.map(o => o.id).join(',');
+    
+    if (nuoviIds !== vecchiIds) {
+      const editabili = ordini.map(o => ({
+        ...o,
+        isEditing: false,
+        editedDataConsegna: null,
+        editedQuantita: ''
+      }));
+      setOrdiniEditabili(editabili);
+    }
   }, [ordini]);
 
   // Filtra e ordina
@@ -147,8 +161,8 @@ export default function OrdiniCondivisi() {
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
-  // Statistiche
-  const stats = {
+  // Statistiche basate su TUTTI gli ordini (non filtrati)
+  const statsGlobali = {
     tutti: ordini.length,
     aperti: ordini.filter(o => o.statoCalcolato === 'Aperto').length,
     parziali: ordini.filter(o => o.statoCalcolato === 'Parziale').length,
@@ -376,14 +390,14 @@ export default function OrdiniCondivisi() {
       {/* Statistiche */}
       <div className="grid grid-cols-5 gap-3">
         {[
-          { label: 'Tutti', value: stats.tutti, stato: 'tutti' },
-          { label: 'Aperti', value: stats.aperti, stato: 'Aperto' },
-          { label: 'In Lavorazione', value: stats.parziali, stato: 'Parziale' },
-          { label: 'Completati', value: stats.completati, stato: 'Completato' },
-          { label: 'Annullati', value: stats.annullati, stato: 'annullati' }
-        ].map((stat, idx) => (
+          { label: 'Tutti', value: statsGlobali.tutti, stato: 'tutti' },
+          { label: 'Aperti', value: statsGlobali.aperti, stato: 'Aperto' },
+          { label: 'In Lavorazione', value: statsGlobali.parziali, stato: 'Parziale' },
+          { label: 'Completati', value: statsGlobali.completati, stato: 'Completato' },
+          { label: 'Annullati', value: statsGlobali.annullati, stato: 'annullati' }
+        ].map((stat) => (
           <Card 
-            key={idx}
+            key={stat.stato}
             className={`cursor-pointer transition-colors ${filtroStato === stat.stato ? 'border-primary' : 'hover:bg-accent'}`}
             onClick={() => setFiltroStato(stat.stato)}
           >
@@ -404,10 +418,57 @@ export default function OrdiniCondivisi() {
           className="max-w-xs h-9 text-sm"
           data-testid="input-ricerca-cliente"
         />
-        <Button variant="outline" size="sm" className="h-9">
-          <Filter className="w-4 h-4 mr-2" />
-          Filtri
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9">
+              <Filter className="w-4 h-4 mr-2" />
+              Filtri
+              {(filtroStato !== 'tutti' || ricercaCliente) && (
+                <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
+                  {[filtroStato !== 'tutti' ? 1 : 0, ricercaCliente ? 1 : 0].reduce((a, b) => a + b, 0)}
+                </Badge>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>Stato ordine</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setFiltroStato('tutti')}>
+              <div className="flex items-center justify-between w-full">
+                <span>Tutti gli ordini</span>
+                {filtroStato === 'tutti' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFiltroStato('Aperto')}>
+              <div className="flex items-center justify-between w-full">
+                <span>Solo Aperti</span>
+                {filtroStato === 'Aperto' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFiltroStato('Parziale')}>
+              <div className="flex items-center justify-between w-full">
+                <span>Solo In Lavorazione</span>
+                {filtroStato === 'Parziale' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFiltroStato('Completato')}>
+              <div className="flex items-center justify-between w-full">
+                <span>Solo Completati</span>
+                {filtroStato === 'Completato' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              onClick={() => {
+                setFiltroStato('tutti');
+                setRicercaCliente('');
+              }}
+              className="text-destructive"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Rimuovi tutti i filtri
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Tabella Excel-like */}
