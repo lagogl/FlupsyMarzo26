@@ -162,6 +162,14 @@ export default function OrdiniCondivisi() {
     setSelezionati(nuovi);
   };
 
+  const toggleSelezioneTutti = () => {
+    if (selezionati.size === ordiniFiltrati.length) {
+      setSelezionati(new Set());
+    } else {
+      setSelezionati(new Set(ordiniFiltrati.map(o => o.id)));
+    }
+  };
+
   const toggleEspansione = (id: number) => {
     const nuove = new Set(righeEspanse);
     nuove.has(id) ? nuove.delete(id) : nuove.add(id);
@@ -421,8 +429,14 @@ export default function OrdiniCondivisi() {
               <table className="w-full border-collapse">
                 <thead className="bg-muted sticky top-0">
                   <tr className="border-b">
-                    <th className="w-8 p-2 text-left border-r"></th>
-                    <th className="w-8 p-2 text-left border-r"></th>
+                    <th className="w-12 p-2 text-left border-r">
+                      <Checkbox
+                        checked={ordiniFiltrati.length > 0 && selezionati.size === ordiniFiltrati.length}
+                        onCheckedChange={toggleSelezioneTutti}
+                        className="h-4 w-4"
+                        data-testid="checkbox-select-all"
+                      />
+                    </th>
                     <th 
                       className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
                       onClick={() => handleSort('data')}
@@ -504,27 +518,26 @@ export default function OrdiniCondivisi() {
                           }`}
                           data-testid={`row-ordine-${ordine.id}`}
                         >
-                          {/* Chevron espansione */}
+                          {/* Checkbox + Chevron espansione */}
                           <td className="p-2 border-r">
-                            {hasDettagli && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 w-6 p-0"
-                                onClick={() => toggleEspansione(ordine.id)}
-                              >
-                                {espanso ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                              </Button>
-                            )}
-                          </td>
-                          
-                          {/* Checkbox */}
-                          <td className="p-2 border-r">
-                            <Checkbox
-                              checked={selezionati.has(ordine.id)}
-                              onCheckedChange={() => toggleSelezione(ordine.id)}
-                              className="h-4 w-4"
-                            />
+                            <div className="flex items-center gap-1">
+                              {hasDettagli && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0"
+                                  onClick={() => toggleEspansione(ordine.id)}
+                                >
+                                  {espanso ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                </Button>
+                              )}
+                              <Checkbox
+                                checked={selezionati.has(ordine.id)}
+                                onCheckedChange={() => toggleSelezione(ordine.id)}
+                                className="h-4 w-4"
+                                data-testid={`checkbox-ordine-${ordine.id}`}
+                              />
+                            </div>
                           </td>
                           
                           {/* Data Ordine */}
