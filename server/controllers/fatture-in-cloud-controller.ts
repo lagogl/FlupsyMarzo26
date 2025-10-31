@@ -9,17 +9,13 @@ import {
   clienti, 
   ddt, 
   ddtRighe,
-  ordini,
-  ordiniRighe,
   externalDeliveriesSync,
   externalDeliveryDetailsSync,
   fattureInCloudConfig,
   insertConfigurazioneSchema,
   insertClientiSchema,
   insertDdtSchema,
-  insertDdtRigheSchema,
-  insertOrdiniSchema,
-  insertOrdiniRigheSchema
+  insertDdtRigheSchema
 } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import PDFDocument from 'pdfkit';
@@ -563,7 +559,12 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
     
     let ordiniAggiornati = 0;
     let ordiniCreati = 0;
-    const dbEsternoDisponibile = isDbEsternoAvailable();
+    let ordiniFalliti: Array<{ id: number; error: string }> = [];
+    
+    // Verifica che il DB esterno sia disponibile
+    if (!isDbEsternoAvailable() || !dbEsterno) {
+      throw new Error('Database esterno non disponibile - impossibile sincronizzare ordini');
+    }
     
     for (let i = 0; i < allOrdini.length; i++) {
       const ordineFIC = allOrdini[i];
@@ -577,88 +578,77 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         }
       }
       
-      // === SYNC DB ESTERNO (priorità) ===
+      // === SYNC DB ESTERNO (unica destinazione) ===
       let ordineIdEsterno: number | null = null;
       
-      if (dbEsternoDisponibile && dbEsterno) {
-        try {
-          // Cerca ordine esistente su DB esterno
-          const ordiniEsterni = await dbEsterno
-            .select()
-            .from(ordiniCondivisi)
-            .where(eq(ordiniCondivisi.fattureInCloudId, ordineFIC.id));
-          
-          const ordineEsternoEsistente = ordiniEsterni.length > 0 ? ordiniEsterni[0] : null;
-          
-          // Prepara dati base ordine (senza quantità, verrà calcolata dopo)
-          const datiOrdineEsterno = {
-            numero: ordineFIC.number || null,
-            data: ordineFIC.date || new Date().toISOString().split('T')[0],
-            clienteId: clienteLocale?.id || 0,
-            clienteNome: ordineFIC.entity?.name || 'Cliente non trovato',
-            stato: ordineFIC.status || 'Aperto',
-            totale: ordineFIC.amount_net?.toString() || '0',
-            valuta: ordineFIC.currency?.id || 'EUR',
-            note: ordineFIC.notes || null,
-            fattureInCloudId: ordineFIC.id,
-            fattureInCloudNumero: ordineFIC.number?.toString() || null,
-            companyId: ordineFIC.company_id || null,
-            syncStatus: 'sincronizzato' as const,
-            lastSyncAt: new Date(),
-            // quantitaTotale e tagliaRichiesta verranno aggiornati dopo aver inserito le righe
-            quantitaTotale: 0,
-            tagliaRichiesta: ''
-          };
-          
-          if (ordineEsternoEsistente) {
-            await dbEsterno
-              .update(ordiniCondivisi)
-              .set({ ...datiOrdineEsterno, updatedAt: new Date() })
-              .where(eq(ordiniCondivisi.id, ordineEsternoEsistente.id));
-            ordineIdEsterno = ordineEsternoEsistente.id;
-            ordiniAggiornati++;
-          } else {
-            const [nuovoOrdineEsterno] = await dbEsterno
-              .insert(ordiniCondivisi)
-              .values(datiOrdineEsterno)
-              .returning();
-            ordineIdEsterno = nuovoOrdineEsterno.id;
-            ordiniCreati++;
-          }
-          
-          console.log(`✅ Ordine ${ordineFIC.id} sincronizzato su DB esterno (ID: ${ordineIdEsterno})`);
-        } catch (errorEsterno: any) {
-          console.error(`⚠️ Errore sync DB esterno per ordine ${ordineFIC.id}:`, errorEsterno.message);
+      try {
+        // Verifica nuovamente disponibilità DB esterno ad ogni iterazione
+        if (!isDbEsternoAvailable() || !dbEsterno) {
+          throw new Error('Database esterno non più disponibile durante la sincronizzazione');
         }
-      }
-      
-      // === SYNC DB LOCALE (retrocompatibilità) ===
-      let ordineIdLocale: number;
-      
-      const ordiniLocali = await db.select().from(ordini).where(eq(ordini.fattureInCloudId, ordineFIC.id));
-      const ordineLocaleEsistente = ordiniLocali.length > 0 ? ordiniLocali[0] : null;
-      
-      const datiOrdineLocale = {
-        numero: ordineFIC.number || null,
-        data: ordineFIC.date || new Date().toISOString().split('T')[0],
-        clienteId: clienteLocale?.id || 0,
-        clienteNome: ordineFIC.entity?.name || 'Cliente non trovato',
-        stato: ordineFIC.status || 'N/A',
-        totale: ordineFIC.amount_net?.toString() || '0',
-        valuta: ordineFIC.currency?.id || 'EUR',
-        note: ordineFIC.notes || null,
-        fattureInCloudId: ordineFIC.id,
-        companyId: ordineFIC.company_id || null
-      };
-      
-      if (ordineLocaleEsistente) {
-        await db.update(ordini)
-          .set({ ...datiOrdineLocale, updatedAt: new Date() })
-          .where(eq(ordini.id, ordineLocaleEsistente.id));
-        ordineIdLocale = ordineLocaleEsistente.id;
-      } else {
-        const [nuovoOrdineLocale] = await db.insert(ordini).values(datiOrdineLocale).returning();
-        ordineIdLocale = nuovoOrdineLocale.id;
+        
+        // Cerca ordine esistente su DB esterno
+        const ordiniEsterni = await dbEsterno
+          .select()
+          .from(ordiniCondivisi)
+          .where(eq(ordiniCondivisi.fattureInCloudId, ordineFIC.id));
+        
+        const ordineEsternoEsistente = ordiniEsterni.length > 0 ? ordiniEsterni[0] : null;
+        
+        // Prepara dati base ordine (senza quantità, verrà calcolata dopo)
+        // Usa stato intermedio 'in_sync' - sarà 'sincronizzato' solo dopo righe complete
+        const datiOrdineEsterno = {
+          numero: ordineFIC.number || null,
+          data: ordineFIC.date || new Date().toISOString().split('T')[0],
+          clienteId: clienteLocale?.id || 0,
+          clienteNome: ordineFIC.entity?.name || 'Cliente non trovato',
+          stato: ordineFIC.status || 'Aperto',
+          totale: ordineFIC.amount_net?.toString() || '0',
+          valuta: ordineFIC.currency?.id || 'EUR',
+          note: ordineFIC.notes || null,
+          fattureInCloudId: ordineFIC.id,
+          fattureInCloudNumero: ordineFIC.number?.toString() || null,
+          companyId: ordineFIC.company_id || null,
+          syncStatus: 'in_sync' as const, // Stato intermedio
+          lastSyncAt: new Date(),
+          // quantitaTotale e tagliaRichiesta verranno aggiornati dopo aver inserito le righe
+          quantitaTotale: 0,
+          tagliaRichiesta: ''
+        };
+        
+        if (ordineEsternoEsistente) {
+          await dbEsterno
+            .update(ordiniCondivisi)
+            .set({ ...datiOrdineEsterno, updatedAt: new Date() })
+            .where(eq(ordiniCondivisi.id, ordineEsternoEsistente.id));
+          ordineIdEsterno = ordineEsternoEsistente.id;
+          ordiniAggiornati++;
+        } else {
+          const [nuovoOrdineEsterno] = await dbEsterno
+            .insert(ordiniCondivisi)
+            .values(datiOrdineEsterno)
+            .returning();
+          ordineIdEsterno = nuovoOrdineEsterno.id;
+          ordiniCreati++;
+        }
+        
+        console.log(`✅ Ordine ${ordineFIC.id} sincronizzato su DB esterno (ID: ${ordineIdEsterno})`);
+      } catch (errorEsterno: any) {
+        const isConnectionError = errorEsterno.message?.includes('non più disponibile') ||
+                                 errorEsterno.code === '57P01' ||
+                                 errorEsterno.code === 'ECONNRESET';
+        
+        console.error(`⚠️ Errore sync DB esterno per ordine ${ordineFIC.id}:`, errorEsterno.message);
+        ordiniFalliti.push({ id: ordineFIC.id, error: errorEsterno.message });
+        
+        // Se è un errore di connessione, interrompi completamente la sincronizzazione
+        if (isConnectionError) {
+          console.error('🛑 Errore di connessione critico - interruzione sincronizzazione');
+          throw new Error(`Sincronizzazione interrotta: ${errorEsterno.message}. Sincronizzati ${ordiniCreati + ordiniAggiornati} di ${allOrdini.length} ordini.`);
+        }
+        
+        // Per altri errori, continua ma traccia il fallimento
+        continue;
       }
       
       // Recupera i dettagli completi dell'ordine con le righe
@@ -677,76 +667,107 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
           let quantitaTotale = 0;
           let tagliaRichiesta = '';
           
-          // === SYNC RIGHE DB ESTERNO ===
-          if (dbEsternoDisponibile && dbEsterno && ordineIdEsterno) {
-            try {
-              // Cancella vecchie righe DB esterno
-              await dbEsterno.delete(ordiniDettagli).where(eq(ordiniDettagli.ordineId, ordineIdEsterno));
+          // === SYNC RIGHE DB ESTERNO (unica destinazione) ===
+          try {
+            // Verifica nuovamente disponibilità DB esterno prima di manipolare le righe
+            if (!isDbEsternoAvailable() || !dbEsterno) {
+              throw new Error('Database esterno non più disponibile durante sync righe');
+            }
+            
+            // Cancella vecchie righe DB esterno
+            await dbEsterno.delete(ordiniDettagli).where(eq(ordiniDettagli.ordineId, ordineIdEsterno));
+            
+            // Inserisci nuove righe
+            for (let idx = 0; idx < ordineCompleto.items_list.length; idx++) {
+              const item = ordineCompleto.items_list[idx];
+              const quantita = parseFloat(item.qty?.toString() || '0');
+              quantitaTotale += quantita;
               
-              // Inserisci nuove righe
-              for (let idx = 0; idx < ordineCompleto.items_list.length; idx++) {
-                const item = ordineCompleto.items_list[idx];
-                const quantita = parseFloat(item.qty?.toString() || '0');
-                quantitaTotale += quantita;
-                
-                // Prima taglia trovata diventa taglia_richiesta
-                if (idx === 0 && item.name) {
-                  tagliaRichiesta = item.name;
-                }
-                
-                await dbEsterno.insert(ordiniDettagli).values({
-                  ordineId: ordineIdEsterno,
-                  rigaNumero: idx + 1,
-                  codiceProdotto: item.product_id?.toString() || null,
-                  taglia: item.name || '',
-                  descrizione: item.description || null,
-                  quantita: item.qty?.toString() || '0',
-                  unitaMisura: item.measure || 'NR',
-                  prezzoUnitario: item.net_price?.toString() || '0',
-                  sconto: item.discount?.toString() || '0',
-                  importoRiga: item.net_cost?.toString() || '0',
-                  ficItemId: item.id || null
-                });
+              // Prima taglia trovata diventa taglia_richiesta
+              if (idx === 0 && item.name) {
+                tagliaRichiesta = item.name;
               }
               
-              // Aggiorna quantitaTotale e tagliaRichiesta su ordine
+              await dbEsterno.insert(ordiniDettagli).values({
+                ordineId: ordineIdEsterno,
+                rigaNumero: idx + 1,
+                codiceProdotto: item.product_id?.toString() || null,
+                taglia: item.name || '',
+                descrizione: item.description || null,
+                quantita: item.qty?.toString() || '0',
+                unitaMisura: item.measure || 'NR',
+                prezzoUnitario: item.net_price?.toString() || '0',
+                sconto: item.discount?.toString() || '0',
+                importoRiga: item.net_cost?.toString() || '0',
+                ficItemId: item.id || null
+              });
+            }
+            
+            // Aggiorna quantitaTotale, tagliaRichiesta e marca come 'sincronizzato' (completato con successo)
+            await dbEsterno
+              .update(ordiniCondivisi)
+              .set({
+                quantitaTotale: Math.round(quantitaTotale),
+                tagliaRichiesta,
+                syncStatus: 'sincronizzato' as const, // Ora è completamente sincronizzato
+                updatedAt: new Date()
+              })
+              .where(eq(ordiniCondivisi.id, ordineIdEsterno));
+            
+            console.log(`✅ Inserite ${ordineCompleto.items_list.length} righe su DB esterno (totale: ${quantitaTotale.toLocaleString('it-IT')} animali)`);
+          } catch (errorRigheEsterno: any) {
+            const isConnectionError = errorRigheEsterno.message?.includes('non più disponibile') ||
+                                     errorRigheEsterno.code === '57P01' ||
+                                     errorRigheEsterno.code === 'ECONNRESET';
+            
+            console.error(`⚠️ Errore sync righe DB esterno per ordine ${ordineFIC.id}:`, errorRigheEsterno.message);
+            
+            // Marca l'ordine come errore e traccia il fallimento
+            try {
               await dbEsterno
                 .update(ordiniCondivisi)
-                .set({
-                  quantitaTotale: Math.round(quantitaTotale),
-                  tagliaRichiesta,
-                  updatedAt: new Date()
-                })
+                .set({ syncStatus: 'errore', updatedAt: new Date() })
                 .where(eq(ordiniCondivisi.id, ordineIdEsterno));
-              
-              console.log(`✅ Inserite ${ordineCompleto.items_list.length} righe su DB esterno (totale: ${quantitaTotale.toLocaleString('it-IT')} animali)`);
-            } catch (errorRigheEsterno: any) {
-              console.error(`⚠️ Errore sync righe DB esterno:`, errorRigheEsterno.message);
+            } catch (e) {
+              console.error('Impossibile marcare ordine come errore:', e);
+            }
+            
+            // Aggiungi a ordiniFalliti se non già presente
+            if (!ordiniFalliti.find(o => o.id === ordineFIC.id)) {
+              ordiniFalliti.push({ id: ordineFIC.id, error: `Errore righe: ${errorRigheEsterno.message}` });
+            }
+            
+            // Se è un errore di connessione critico, interrompi la sincronizzazione
+            if (isConnectionError) {
+              console.error('🛑 Errore di connessione critico durante sync righe - interruzione sincronizzazione');
+              throw new Error(`Sincronizzazione interrotta durante sync righe: ${errorRigheEsterno.message}. Sincronizzati ${ordiniCreati + ordiniAggiornati} di ${allOrdini.length} ordini.`);
             }
           }
-          
-          // === SYNC RIGHE DB LOCALE ===
-          await db.delete(ordiniRighe).where(eq(ordiniRighe.ordineId, ordineIdLocale));
-          
-          for (const item of ordineCompleto.items_list) {
-            await db.insert(ordiniRighe).values({
-              ordineId: ordineIdLocale,
-              codice: item.product_id?.toString() || null,
-              nome: item.name || 'Prodotto senza nome',
-              descrizione: item.description || null,
-              quantita: item.qty?.toString() || '1',
-              unitaMisura: item.measure || 'NR',
-              prezzoUnitario: item.net_price?.toString() || '0',
-              sconto: item.discount?.toString() || '0',
-              totale: item.net_cost?.toString() || '0'
-            });
-          }
-          
-          console.log(`✅ Inserite ${ordineCompleto.items_list.length} righe su DB locale`);
         }
-      } catch (detailsError) {
-        console.error(`⚠️ Errore recupero dettagli ordine ${ordineFIC.id}:`, detailsError);
-        // Continua con il prossimo ordine anche se questo fallisce
+      } catch (detailsError: any) {
+        console.error(`⚠️ Errore recupero dettagli ordine ${ordineFIC.id}:`, detailsError.message || detailsError);
+        
+        // Marca l'ordine come errore poiché non siamo riusciti a sincronizzare le righe
+        try {
+          await dbEsterno
+            .update(ordiniCondivisi)
+            .set({ 
+              syncStatus: 'errore',
+              quantitaTotale: 0, // Reset per evitare dati inconsistenti
+              tagliaRichiesta: '',
+              updatedAt: new Date() 
+            })
+            .where(eq(ordiniCondivisi.id, ordineIdEsterno));
+        } catch (e) {
+          console.error('Impossibile marcare ordine come errore:', e);
+        }
+        
+        // Aggiungi a ordiniFalliti se non già presente
+        if (!ordiniFalliti.find(o => o.id === ordineFIC.id)) {
+          ordiniFalliti.push({ id: ordineFIC.id, error: `Errore recupero dettagli: ${detailsError.message || 'Unknown'}` });
+        }
+        
+        // Continua con il prossimo ordine
       }
       
       // Notifica progresso ogni 5 ordini o all'ultimo
@@ -765,19 +786,30 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
     }
     
     // Notifica completamento
+    const messaggioFinale = ordiniFalliti.length > 0
+      ? `⚠️ Sincronizzazione completata con avvisi: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati, ${ordiniFalliti.length} falliti`
+      : `✅ Sincronizzazione completata: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati`;
+    
     broadcastMessage("fic_sync_progress", { 
-      message: `✅ Sincronizzazione completata: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati`, 
+      message: messaggioFinale, 
       step: "complete", 
       progress: 100,
       created: ordiniCreati,
       updated: ordiniAggiornati,
+      failed: ordiniFalliti.length,
       total: allOrdini.length
     });
     
     res.json({
-      success: true,
-      message: `Sincronizzazione completata: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati`,
-      stats: { creati: ordiniCreati, aggiornati: ordiniAggiornati, totale: allOrdini.length }
+      success: ordiniFalliti.length === 0,
+      message: messaggioFinale,
+      stats: { 
+        creati: ordiniCreati, 
+        aggiornati: ordiniAggiornati, 
+        falliti: ordiniFalliti.length,
+        totale: allOrdini.length 
+      },
+      ...(ordiniFalliti.length > 0 && { errors: ordiniFalliti })
     });
   } catch (error: any) {
     console.error('Errore nella sincronizzazione ordini:', error);
@@ -788,30 +820,42 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
   }
 });
 
-// Ottenere lista ordini locali
+// Ottenere lista ordini dal database esterno
 router.get('/orders', async (req: Request, res: Response) => {
   try {
-    const ordiniLocali = await db.select().from(ordini).orderBy(desc(ordini.data));
+    // Verifica che il DB esterno sia disponibile
+    if (!isDbEsternoAvailable() || !dbEsterno) {
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Database esterno non disponibile' 
+      });
+    }
     
-    // Calcola il totale animali per ogni ordine
-    const ordiniConTotali = await Promise.all(
-      ordiniLocali.map(async (ordine) => {
-        const righe = await db.select().from(ordiniRighe).where(eq(ordiniRighe.ordineId, ordine.id));
-        const totaleAnimali = righe.reduce((sum, riga) => {
-          return sum + parseFloat(riga.quantita.toString());
-        }, 0);
-        
-        return {
-          ...ordine,
-          totaleAnimali
-        };
-      })
-    );
+    const ordiniEsterni = await dbEsterno
+      .select()
+      .from(ordiniCondivisi)
+      .orderBy(desc(ordiniCondivisi.data));
+    
+    // Trasforma i dati per compatibilità con il frontend
+    const ordiniFormattati = ordiniEsterni.map(ordine => ({
+      id: ordine.id,
+      numero: ordine.numero,
+      data: ordine.data,
+      clienteId: ordine.clienteId,
+      clienteNome: ordine.clienteNome,
+      stato: ordine.stato,
+      totale: ordine.totale,
+      valuta: ordine.valuta,
+      note: ordine.note,
+      fattureInCloudId: ordine.fattureInCloudId,
+      companyId: ordine.companyId,
+      totaleAnimali: ordine.quantitaTotale || 0 // Usa quantitaTotale già calcolato
+    }));
     
     res.json({
       success: true,
-      orders: ordiniConTotali,
-      count: ordiniConTotali.length
+      orders: ordiniFormattati,
+      count: ordiniFormattati.length
     });
   } catch (error: any) {
     console.error('Errore nel recupero ordini:', error);
@@ -819,22 +863,64 @@ router.get('/orders', async (req: Request, res: Response) => {
   }
 });
 
-// Ottenere dettagli ordine con righe
+// Ottenere dettagli ordine con righe dal database esterno
 router.get('/orders/:id', async (req: Request, res: Response) => {
   try {
     const ordineId = parseInt(req.params.id);
     
-    const [ordine] = await db.select().from(ordini).where(eq(ordini.id, ordineId));
+    // Verifica che il DB esterno sia disponibile
+    if (!isDbEsternoAvailable() || !dbEsterno) {
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Database esterno non disponibile' 
+      });
+    }
+    
+    const [ordine] = await dbEsterno
+      .select()
+      .from(ordiniCondivisi)
+      .where(eq(ordiniCondivisi.id, ordineId));
+      
     if (!ordine) {
       return res.status(404).json({ success: false, message: 'Ordine non trovato' });
     }
     
-    const righe = await db.select().from(ordiniRighe).where(eq(ordiniRighe.ordineId, ordineId));
+    const righe = await dbEsterno
+      .select()
+      .from(ordiniDettagli)
+      .where(eq(ordiniDettagli.ordineId, ordineId))
+      .orderBy(ordiniDettagli.rigaNumero);
+    
+    // Trasforma i dati per compatibilità con il frontend
+    const righeFormattate = righe.map(riga => ({
+      id: riga.id,
+      ordineId: riga.ordineId,
+      codice: riga.codiceProdotto,
+      nome: riga.taglia, // Il frontend usa 'nome' per mostrare la taglia
+      descrizione: riga.descrizione,
+      quantita: riga.quantita,
+      unitaMisura: riga.unitaMisura,
+      prezzoUnitario: riga.prezzoUnitario,
+      sconto: riga.sconto,
+      totale: riga.importoRiga
+    }));
     
     res.json({
       success: true,
-      order: ordine,
-      items: righe
+      order: {
+        id: ordine.id,
+        numero: ordine.numero,
+        data: ordine.data,
+        clienteId: ordine.clienteId,
+        clienteNome: ordine.clienteNome,
+        stato: ordine.stato,
+        totale: ordine.totale,
+        valuta: ordine.valuta,
+        note: ordine.note,
+        fattureInCloudId: ordine.fattureInCloudId,
+        companyId: ordine.companyId
+      },
+      items: righeFormattate
     });
   } catch (error: any) {
     console.error('Errore nel recupero dettaglio ordine:', error);
