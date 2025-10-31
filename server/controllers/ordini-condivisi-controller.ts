@@ -90,7 +90,8 @@ router.get('/', async (req: Request, res: Response) => {
       data: o.data,
       clienteId: o.cliente_id,
       clienteNome: o.cliente_nome,
-      stato: o.stato,
+      stato: o.stato_calcolato || o.stato, // Usa stato calcolato dinamicamente
+      statoOriginale: o.stato, // Mantieni anche lo stato originale per riferimento
       quantitaTotale: o.quantita_totale || 0,
       tagliaRichiesta: o.taglia_richiesta,
       quantitaConsegnata: o.quantita_consegnata || 0,
