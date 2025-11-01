@@ -208,9 +208,10 @@ router.get('/consegne/', async (req: Request, res: Response) => {
         id: c.id,
         ordineId: c.ordineId,
         dataConsegna: c.dataConsegna,
-        quantita: c.quantitaConsegnata,
+        quantitaConsegnata: c.quantitaConsegnata,
         note: c.note,
         appOrigine: c.appOrigine,
+        createdAt: c.createdAt,
         ordineNumero: ordine?.numero || null,
         clienteNome: ordine?.cliente_nome || null
       };
