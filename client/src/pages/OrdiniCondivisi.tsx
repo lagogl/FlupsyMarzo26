@@ -763,7 +763,7 @@ export default function OrdiniCondivisi() {
                                   <div className="flex items-center gap-3 text-xs">
                                     <div className="flex items-center gap-1.5">
                                       <Badge className="bg-blue-600 text-white text-xs px-2 py-0.5">
-                                        Delta Futuro
+                                        da SandNursery
                                       </Badge>
                                       <span className="text-green-900 dark:text-green-100 font-medium">
                                         {consegneOrdine.filter(c => c.appOrigine === 'delta_futuro').length}
@@ -771,7 +771,7 @@ export default function OrdiniCondivisi() {
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       <Badge className="bg-orange-600 text-white text-xs px-2 py-0.5">
-                                        App Esterna
+                                        da Flupsy
                                       </Badge>
                                       <span className="text-green-900 dark:text-green-100 font-medium">
                                         {consegneOrdine.filter(c => c.appOrigine === 'app_esterna').length}
@@ -802,11 +802,11 @@ export default function OrdiniCondivisi() {
                                       <td className="p-2 border-r border-green-200/50 dark:border-green-800/50">
                                         {consegna.appOrigine === 'delta_futuro' ? (
                                           <Badge className="bg-blue-600 text-white hover:bg-blue-700 text-xs px-2 py-0.5">
-                                            Delta Futuro
+                                            da SandNursery
                                           </Badge>
                                         ) : (
                                           <Badge className="bg-orange-600 text-white hover:bg-orange-700 text-xs px-2 py-0.5">
-                                            App Esterna
+                                            da Flupsy
                                           </Badge>
                                         )}
                                       </td>
