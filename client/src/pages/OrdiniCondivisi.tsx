@@ -394,14 +394,14 @@ export default function OrdiniCondivisi() {
     }
     if (ordine.fattureInCloudId) {
       return (
-        <div className="flex items-center gap-1.5 text-green-600">
-          <CheckCircle2 className="w-4 h-4" />
-          <span className="text-xs font-medium">Sincronizzato</span>
+        <div className="flex items-center gap-1.5">
+          <CheckCircle2 className="w-4 h-4 text-green-600" />
+          <span className="text-xs font-medium text-blue-600">Sincronizzato</span>
           {ordine.urlDocumento && (
             <Button 
               size="sm" 
               variant="ghost" 
-              className="h-6 px-1.5 hover:bg-green-100 flex items-center gap-1"
+              className="h-6 px-1.5 hover:bg-blue-100 flex items-center gap-1 text-green-600"
               onClick={(e) => {
                 e.stopPropagation();
                 window.open(ordine.urlDocumento!, '_blank', 'noopener,noreferrer');
