@@ -97,6 +97,8 @@ export default function OrdiniCondivisi() {
   const [ordiniEditabili, setOrdiniEditabili] = useState<EditableRow[]>([]);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [mostraBreakdown, setMostraBreakdown] = useState(true);
+  const [mostraFiltri, setMostraFiltri] = useState(true);
 
   // Query ordini
   const { data: ordiniResponse, isLoading: loadingOrdini } = useQuery<{ success: boolean; ordini: OrdineCondiviso[]; count: number }>({
@@ -473,30 +475,53 @@ export default function OrdiniCondivisi() {
       {/* Breakdown per Taglia */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="text-sm font-semibold mb-3">Breakdown per Taglia</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {taglie.map(taglia => (
-              <div key={taglia} className="border rounded-lg p-3 bg-muted/30">
-                <div className="text-xs font-medium text-muted-foreground mb-2">{taglia}</div>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-blue-700">Ordinato:</span>
-                    <span className="font-semibold">{statsTaglia[taglia].ordinato.toLocaleString('it-IT')}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-green-700">Consegnato:</span>
-                    <span className="font-semibold">{statsTaglia[taglia].consegnato.toLocaleString('it-IT')}</span>
-                  </div>
-                  <div className="flex justify-between text-xs pt-1 border-t">
-                    <span className="text-muted-foreground">Residuo:</span>
-                    <span className="font-semibold text-orange-600">
-                      {(statsTaglia[taglia].ordinato - statsTaglia[taglia].consegnato).toLocaleString('it-IT')}
-                    </span>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Breakdown per Taglia</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setMostraBreakdown(!mostraBreakdown)}
+              className="h-7 px-2"
+              data-testid="button-toggle-breakdown"
+            >
+              {mostraBreakdown ? (
+                <>
+                  <ChevronUp className="w-4 h-4 mr-1" />
+                  Nascondi
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4 mr-1" />
+                  Mostra
+                </>
+              )}
+            </Button>
+          </div>
+          {mostraBreakdown && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {taglie.map(taglia => (
+                <div key={taglia} className="border rounded-lg p-3 bg-muted/30">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{taglia}</div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-blue-700">Ordinato:</span>
+                      <span className="font-semibold">{statsTaglia[taglia].ordinato.toLocaleString('it-IT')}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-green-700">Consegnato:</span>
+                      <span className="font-semibold">{statsTaglia[taglia].consegnato.toLocaleString('it-IT')}</span>
+                    </div>
+                    <div className="flex justify-between text-xs pt-1 border-t">
+                      <span className="text-muted-foreground">Residuo:</span>
+                      <span className="font-semibold text-orange-600">
+                        {(statsTaglia[taglia].ordinato - statsTaglia[taglia].consegnato).toLocaleString('it-IT')}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -523,66 +548,94 @@ export default function OrdiniCondivisi() {
       </div>
 
       {/* Ricerca e filtri */}
-      <div className="flex items-center gap-3">
-        <Input
-          placeholder="Cerca cliente..."
-          value={ricercaCliente}
-          onChange={(e) => setRicercaCliente(e.target.value)}
-          className="max-w-xs h-9 text-sm"
-          data-testid="input-ricerca-cliente"
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
-              <Filter className="w-4 h-4 mr-2" />
-              Filtri
-              {(filtroStato !== 'tutti' || ricercaCliente) && (
-                <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
-                  {[filtroStato !== 'tutti' ? 1 : 0, ricercaCliente ? 1 : 0].reduce((a, b) => a + b, 0)}
-                </Badge>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Ricerca e Filtri</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setMostraFiltri(!mostraFiltri)}
+              className="h-7 px-2"
+              data-testid="button-toggle-filtri"
+            >
+              {mostraFiltri ? (
+                <>
+                  <ChevronUp className="w-4 h-4 mr-1" />
+                  Nascondi
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4 mr-1" />
+                  Mostra
+                </>
               )}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Stato ordine</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => setFiltroStato('tutti')}>
-              <div className="flex items-center justify-between w-full">
-                <span>Tutti gli ordini</span>
-                {filtroStato === 'tutti' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFiltroStato('Aperto')}>
-              <div className="flex items-center justify-between w-full">
-                <span>Solo Aperti</span>
-                {filtroStato === 'Aperto' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFiltroStato('Parziale')}>
-              <div className="flex items-center justify-between w-full">
-                <span>Solo In Lavorazione</span>
-                {filtroStato === 'Parziale' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFiltroStato('Completato')}>
-              <div className="flex items-center justify-between w-full">
-                <span>Solo Completati</span>
-                {filtroStato === 'Completato' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              onClick={() => {
-                setFiltroStato('tutti');
-                setRicercaCliente('');
-              }}
-              className="text-destructive"
-            >
-              <X className="w-4 h-4 mr-2" />
-              Rimuovi tutti i filtri
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+          </div>
+          {mostraFiltri && (
+            <div className="flex items-center gap-3">
+              <Input
+                placeholder="Cerca cliente..."
+                value={ricercaCliente}
+                onChange={(e) => setRicercaCliente(e.target.value)}
+                className="max-w-xs h-9 text-sm"
+                data-testid="input-ricerca-cliente"
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9">
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filtri
+                    {(filtroStato !== 'tutti' || ricercaCliente) && (
+                      <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
+                        {[filtroStato !== 'tutti' ? 1 : 0, ricercaCliente ? 1 : 0].reduce((a, b) => a + b, 0)}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel>Stato ordine</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setFiltroStato('tutti')}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>Tutti gli ordini</span>
+                      {filtroStato === 'tutti' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFiltroStato('Aperto')}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>Solo Aperti</span>
+                      {filtroStato === 'Aperto' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFiltroStato('Parziale')}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>Solo In Lavorazione</span>
+                      {filtroStato === 'Parziale' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFiltroStato('Completato')}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>Solo Completati</span>
+                      {filtroStato === 'Completato' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      setFiltroStato('tutti');
+                      setRicercaCliente('');
+                    }}
+                    className="text-destructive"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Rimuovi tutti i filtri
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Tabella Excel-like */}
       <Card className="border-0 shadow-md">
