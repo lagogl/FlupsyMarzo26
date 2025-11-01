@@ -200,7 +200,7 @@ router.get('/consegne/', async (req: Request, res: Response) => {
     // Arricchisci con dati ordine e cliente
     const consegne = await Promise.all(consegneRaw.map(async (c) => {
       const [ordine] = await queryEsterno(
-        'SELECT fatture_in_cloud_numero as numero, cliente_nome FROM ordini_con_residuo WHERE id = $1',
+        'SELECT numero, cliente_nome FROM ordini WHERE id = $1',
         [c.ordineId]
       );
       
