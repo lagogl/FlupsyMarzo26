@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import '../styles/spreadsheet.css';
@@ -348,8 +348,9 @@ export default function OrdiniCondivisi() {
     
     // Auto-salva quando entrambe le date sono selezionate
     if (range.from && range.to && datePickerOrdineId) {
-      const dataInizio = range.from.toISOString().split('T')[0];
-      const dataFine = range.to.toISOString().split('T')[0];
+      // Usa format per evitare problemi di timezone
+      const dataInizio = format(range.from, 'yyyy-MM-dd');
+      const dataFine = format(range.to, 'yyyy-MM-dd');
       await salvaDateConsegnaMutation.mutateAsync({ ordineId: datePickerOrdineId, dataInizio, dataFine });
     }
   };
@@ -475,11 +476,12 @@ export default function OrdiniCondivisi() {
 
   const formatDataConsegna = (inizio: string | null, fine: string | null) => {
     if (!inizio) return '-';
-    const dataInizio = format(new Date(inizio), 'dd/MM', { locale: it });
+    // Usa parseISO per parsare correttamente le date senza problemi di timezone
+    const inizioDate = parseISO(inizio);
+    const dataInizio = format(inizioDate, 'dd/MM', { locale: it });
     if (!fine) return dataInizio;
     
-    const inizioDate = new Date(inizio);
-    const fineDate = new Date(fine);
+    const fineDate = parseISO(fine);
     
     if (inizioDate.getFullYear() === fineDate.getFullYear()) {
       return `${dataInizio} - ${format(fineDate, 'dd/MM/yyyy', { locale: it })}`;
