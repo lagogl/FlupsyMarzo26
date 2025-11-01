@@ -612,7 +612,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
           stato: statoNormalizzato,
           totale: ordineFIC.amount_net?.toString() || '0',
           valuta: ordineFIC.currency?.id || 'EUR',
-          note: ordineFIC.notes || null,
+          note: ordineFIC.subject || ordineFIC.notes || null, // Usa OGGETTO (subject) come priorità
           fattureInCloudId: ordineFIC.id,
           fattureInCloudNumero: ordineFIC.number?.toString() || null,
           companyId: ordineFIC.company_id || null,

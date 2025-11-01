@@ -48,6 +48,7 @@ router.get('/', async (req: Request, res: Response) => {
         o.fatture_in_cloud_numero,
         o.sync_status,
         o.url_documento,
+        o.note,
         COALESCE(SUM(cc.quantita_consegnata), 0)::INTEGER as quantita_consegnata,
         (COALESCE(o.quantita, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER as quantita_residua
       FROM ordini o
@@ -86,7 +87,7 @@ router.get('/', async (req: Request, res: Response) => {
       GROUP BY 
         o.id, o.numero, o.data, o.cliente_id, c.denominazione, o.cliente_nome,
         o.stato, o.quantita, o.taglia_richiesta, o.data_inizio_consegna, 
-        o.data_fine_consegna, o.fatture_in_cloud_id, o.fatture_in_cloud_numero, o.sync_status, o.url_documento
+        o.data_fine_consegna, o.fatture_in_cloud_id, o.fatture_in_cloud_numero, o.sync_status, o.url_documento, o.note
       ORDER BY o.data DESC
     `;
     
@@ -130,6 +131,7 @@ router.get('/', async (req: Request, res: Response) => {
         data: o.data,
         clienteId: o.cliente_id,
         clienteNome: o.cliente_nome,
+        note: o.note,
         stato: o.stato, // Gestito automaticamente dal trigger PostgreSQL
         quantitaTotale: parseInt(o.quantita_totale?.toString() || '0'),
         tagliaRichiesta: o.taglia_richiesta || '',

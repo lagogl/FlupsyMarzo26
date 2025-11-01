@@ -59,6 +59,7 @@ interface OrdineCondiviso {
   numero: string | null;
   data: string;
   clienteNome: string;
+  note: string | null;
   stato: string;
   quantitaTotale: number;
   tagliaRichiesta: string;
@@ -1029,9 +1030,18 @@ export default function OrdiniCondivisi() {
                             </Popover>
                           </td>
                           
-                          {/* Cliente */}
-                          <td className="p-2 text-sm max-w-[200px] truncate border-r" title={ordine.clienteNome}>
-                            {ordine.clienteNome || '-'}
+                          {/* Cliente + Note (Oggetto) */}
+                          <td className="p-2 border-r group">
+                            <div className="flex flex-col gap-0.5">
+                              <div className="text-sm font-medium">
+                                {ordine.clienteNome || '-'}
+                              </div>
+                              {ordine.note && (
+                                <div className="text-xs text-muted-foreground italic max-w-[200px] truncate group-hover:whitespace-normal group-hover:max-w-none transition-all duration-200">
+                                  {ordine.note}
+                                </div>
+                              )}
+                            </div>
                           </td>
                           
                           {/* Quantità */}
