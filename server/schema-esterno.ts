@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, date, text, decimal, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, date, text, decimal, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -35,6 +35,7 @@ export const ordiniCondivisi = pgTable("ordini", {
   totale: decimal("totale", { precision: 10, scale: 2 }).default("0"),
   valuta: text("valuta").default("EUR"),
   note: text("note"),
+  cancellato: boolean("cancellato").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
 });

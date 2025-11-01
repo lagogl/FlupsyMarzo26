@@ -17,7 +17,7 @@ import {
   insertDdtSchema,
   insertDdtRigheSchema
 } from '@shared/schema';
-import { eq, desc, sql, sum } from 'drizzle-orm';
+import { eq, desc, sql, sum, and, notInArray } from 'drizzle-orm';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -560,6 +560,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
     let ordiniAggiornati = 0;
     let ordiniCreati = 0;
     let ordiniFalliti: Array<{ id: number; error: string }> = [];
+    const idsFICTrovati: number[] = []; // Per tracciare ordini ancora esistenti in FIC
     
     // Verifica che il DB esterno sia disponibile
     if (!isDbEsternoAvailable() || !dbEsterno) {
@@ -568,6 +569,9 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
     
     for (let i = 0; i < allOrdini.length; i++) {
       const ordineFIC = allOrdini[i];
+      
+      // Traccia ID FIC trovato (per soft delete)
+      idsFICTrovati.push(ordineFIC.id);
       
       // Recupera cliente locale (per clienteId)
       let clienteLocale = null;
@@ -618,6 +622,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
           companyId: ordineFIC.company_id || null,
           syncStatus: 'in_sync' as const, // Stato intermedio
           lastSyncAt: new Date(),
+          cancellato: false, // Marca come attivo (soft delete)
           // quantitaTotale e tagliaRichiesta verranno aggiornati dopo aver inserito le righe
           quantitaTotale: 0,
           tagliaRichiesta: ''
@@ -834,10 +839,47 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
       }
     }
     
+    // === SOFT DELETE: Marca ordini cancellati in FIC ===
+    let ordiniCancellati = 0;
+    try {
+      if (idsFICTrovati.length > 0) {
+        console.log('🔍 Identifico ordini cancellati da Fatture in Cloud...');
+        
+        // Trova ordini nel DB che non sono più in FIC
+        const ordiniDaCancellare = await dbEsterno
+          .select()
+          .from(ordiniCondivisi)
+          .where(
+            and(
+              notInArray(ordiniCondivisi.fattureInCloudId, idsFICTrovati),
+              eq(ordiniCondivisi.cancellato, false)
+            )
+          );
+        
+        if (ordiniDaCancellare.length > 0) {
+          // Marca come cancellati
+          await dbEsterno
+            .update(ordiniCondivisi)
+            .set({ cancellato: true, updatedAt: new Date() })
+            .where(
+              and(
+                notInArray(ordiniCondivisi.fattureInCloudId, idsFICTrovati),
+                eq(ordiniCondivisi.cancellato, false)
+              )
+            );
+          
+          ordiniCancellati = ordiniDaCancellare.length;
+          console.log(`🗑️ Marcati ${ordiniCancellati} ordini come cancellati (soft delete)`);
+        }
+      }
+    } catch (errorSoftDelete: any) {
+      console.error('⚠️ Errore durante soft delete:', errorSoftDelete.message);
+    }
+    
     // Notifica completamento
     const messaggioFinale = ordiniFalliti.length > 0
-      ? `⚠️ Sincronizzazione completata con avvisi: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati, ${ordiniFalliti.length} falliti`
-      : `✅ Sincronizzazione completata: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati`;
+      ? `⚠️ Sincronizzazione completata con avvisi: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati, ${ordiniFalliti.length} falliti${ordiniCancellati > 0 ? `, ${ordiniCancellati} cancellati` : ''}`
+      : `✅ Sincronizzazione completata: ${ordiniCreati} nuovi, ${ordiniAggiornati} aggiornati${ordiniCancellati > 0 ? `, ${ordiniCancellati} cancellati` : ''}`;
     
     broadcastMessage("fic_sync_progress", { 
       message: messaggioFinale, 
@@ -846,6 +888,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
       created: ordiniCreati,
       updated: ordiniAggiornati,
       failed: ordiniFalliti.length,
+      deleted: ordiniCancellati,
       total: allOrdini.length
     });
     
@@ -856,6 +899,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         creati: ordiniCreati, 
         aggiornati: ordiniAggiornati, 
         falliti: ordiniFalliti.length,
+        cancellati: ordiniCancellati,
         totale: allOrdini.length 
       },
       ...(ordiniFalliti.length > 0 && { errors: ordiniFalliti })
