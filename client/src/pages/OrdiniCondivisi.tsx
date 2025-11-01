@@ -37,6 +37,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
 import '../styles/spreadsheet.css';
 
 interface RigaOrdine {
@@ -447,6 +448,65 @@ export default function OrdiniCondivisi() {
     return <ArrowDown className="w-3 h-3 ml-1 text-primary" />;
   };
 
+  const esportaOrdini = () => {
+    if (ordiniFiltrati.length === 0) {
+      toast({
+        title: '⚠️ Nessun ordine da esportare',
+        description: 'Non ci sono ordini da esportare con i filtri selezionati',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const datiEsportazione = ordiniFiltrati.flatMap(ordine => {
+      const consegneOrdine = getConsegnePerOrdine(ordine.id);
+      const righeOrdine = getRigheOrdine(ordine.id);
+      
+      const rigaBase = {
+        'Numero Ordine': ordine.numero || '',
+        'Cliente': ordine.cliente || '',
+        'Data Ordine': ordine.dataOrdine ? format(new Date(ordine.dataOrdine), 'dd/MM/yyyy', { locale: it }) : '',
+        'Stato': ordine.stato || '',
+        'Quantità Totale': ordine.quantitaTotale || 0,
+      };
+
+      const righe = righeOrdine.map(riga => ({
+        ...rigaBase,
+        'Tipo Riga': 'Prodotto',
+        'Taglia': riga.taglia || '',
+        'Descrizione': riga.descrizione || '',
+        'Quantità': riga.quantita || 0,
+        'Prezzo Unitario': riga.prezzoUnitario || 0,
+        'Importo': riga.importoRiga || 0,
+      }));
+
+      const consegneRighe = consegneOrdine.map(consegna => ({
+        ...rigaBase,
+        'Tipo Riga': 'Consegna',
+        'Data Consegna': consegna.dataConsegna ? format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it }) : '',
+        'Quantità Consegnata': consegna.quantitaConsegnata || 0,
+        'App Origine': consegna.appOrigine === 'delta_futuro' ? 'SandNursery' : 'Flupsy',
+        'Note': consegna.note || '',
+      }));
+
+      return [...righe, ...consegneRighe];
+    });
+
+    const ws = XLSX.utils.json_to_sheet(datiEsportazione);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ordini Filtrati');
+
+    const dataOggi = format(new Date(), 'dd-MM-yyyy');
+    const nomeFile = `ordini_${filtroStato !== 'tutti' ? filtroStato.toLowerCase() + '_' : ''}${dataOggi}.xlsx`;
+    
+    XLSX.writeFile(wb, nomeFile);
+
+    toast({
+      title: '✅ Esportazione completata',
+      description: `${ordiniFiltrati.length} ordini esportati in ${nomeFile}`,
+    });
+  };
+
   if (loadingOrdini) {
     return (
       <div className="container mx-auto p-6 max-w-7xl">
@@ -526,7 +586,7 @@ export default function OrdiniCondivisi() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Sincronizza con FIC
           </Button>
-          <Button variant="outline" size="sm" data-testid="button-esporta">
+          <Button variant="outline" size="sm" onClick={esportaOrdini} data-testid="button-esporta">
             <Download className="w-4 h-4 mr-2" />
             Esporta
           </Button>
