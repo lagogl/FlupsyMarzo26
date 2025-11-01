@@ -47,6 +47,7 @@ router.get('/', async (req: Request, res: Response) => {
         o.fatture_in_cloud_id,
         o.fatture_in_cloud_numero,
         o.sync_status,
+        o.url_documento,
         COALESCE(SUM(cc.quantita_consegnata), 0)::INTEGER as quantita_consegnata,
         (COALESCE(o.quantita, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER as quantita_residua
       FROM ordini o
@@ -85,7 +86,7 @@ router.get('/', async (req: Request, res: Response) => {
       GROUP BY 
         o.id, o.numero, o.data, o.cliente_id, c.denominazione, o.cliente_nome,
         o.stato, o.quantita, o.taglia_richiesta, o.data_inizio_consegna, 
-        o.data_fine_consegna, o.fatture_in_cloud_id, o.fatture_in_cloud_numero, o.sync_status
+        o.data_fine_consegna, o.fatture_in_cloud_id, o.fatture_in_cloud_numero, o.sync_status, o.url_documento
       ORDER BY o.data DESC
     `;
     
@@ -138,6 +139,7 @@ router.get('/', async (req: Request, res: Response) => {
         dataFineConsegna: o.data_fine_consegna,
         syncStatus: o.sync_status,
         fattureInCloudId: o.fatture_in_cloud_id,
+        urlDocumento: o.url_documento,
         righe: righeOrdine
       };
     });

@@ -31,7 +31,8 @@ import {
   ArrowDown,
   X,
   ChevronsDown,
-  ChevronsUp
+  ChevronsUp,
+  ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -66,6 +67,7 @@ interface OrdineCondiviso {
   dataFineConsegna: string | null;
   syncStatus: string;
   fattureInCloudId: number | null;
+  urlDocumento: string | null;
   righe?: RigaOrdine[];
 }
 
@@ -340,7 +342,7 @@ export default function OrdiniCondivisi() {
     cancelEdit(id);
   };
 
-  const getStatoBadge = (stato: string) => {
+  const getStatoBadge = (stato: string, ordine?: OrdineCondiviso) => {
     switch (stato) {
       case 'Aperto':
         return (
@@ -350,10 +352,16 @@ export default function OrdiniCondivisi() {
         );
       case 'Parziale':
       case 'In Lavorazione':
+        const percentuale = ordine ? Math.round((ordine.quantitaConsegnata / ordine.quantitaTotale) * 100) : 0;
         return (
-          <Badge className="bg-zinc-600 text-white hover:bg-zinc-700 text-xs px-2 py-1 rounded-md font-medium">
-            In Lavorazione
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge className="bg-zinc-600 text-white hover:bg-zinc-700 text-xs px-2 py-1 rounded-md font-medium">
+              In Lavorazione
+            </Badge>
+            {ordine && (
+              <span className="text-xs font-medium text-zinc-700">{percentuale}%</span>
+            )}
+          </div>
         );
       case 'Completato':
         return (
@@ -389,6 +397,20 @@ export default function OrdiniCondivisi() {
         <div className="flex items-center gap-1.5 text-green-600">
           <CheckCircle2 className="w-4 h-4" />
           <span className="text-xs font-medium">Sincronizzato</span>
+          {ordine.urlDocumento && (
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="h-5 w-5 p-0 hover:bg-green-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(ordine.urlDocumento!, '_blank', 'noopener,noreferrer');
+              }}
+              data-testid={`link-fic-${ordine.id}`}
+            >
+              <ExternalLink className="w-3 h-3" />
+            </Button>
+          )}
         </div>
       );
     }
@@ -927,7 +949,7 @@ export default function OrdiniCondivisi() {
                           
                           {/* Stato */}
                           <td className="p-2 border-r">
-                            {getStatoBadge(ordine.stato)}
+                            {getStatoBadge(ordine.stato, ordine)}
                           </td>
                           
                           {/* Sync FIC */}
