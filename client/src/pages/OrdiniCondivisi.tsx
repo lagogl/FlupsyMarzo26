@@ -222,7 +222,11 @@ export default function OrdiniCondivisi() {
     return acc;
   }, {});
   
-  const taglie = Object.keys(statsTaglia).sort();
+  const taglie = Object.keys(statsTaglia).sort((a, b) => {
+    const numA = parseInt(a.split('-')[1]);
+    const numB = parseInt(b.split('-')[1]);
+    return numB - numA;
+  });
 
   const toggleSelezione = (id: number) => {
     const nuovi = new Set(selezionati);
