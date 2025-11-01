@@ -1,0 +1,68 @@
+L'app esterna vede esattamente la stessa situazione perché:
+
+🔄 Come Funziona la Condivisione
+┌─────────────────┐         ┌─────────────────┐
+│  Delta Futuro   │         │   App Esterna   │
+└────────┬────────┘         └────────┬────────┘
+         │                           │
+         │  Stesso DATABASE_URL      │
+         └───────────┬────────────────┘
+                     │
+              ┌──────▼──────┐
+              │  PostgreSQL │  ← Trigger vive qui!
+              │  (condiviso)│
+              └─────────────┘
+                     │
+         ┌───────────┼───────────┐
+         │           │           │
+    ┌────▼───┐  ┌───▼────┐  ┌───▼────────┐
+    │ordini  │  │consegne│  │consegne_   │
+    │        │  │        │  │condivise   │
+    └────────┘  └────────┘  └────────────┘
+
+✅ Cosa Vede l'App Esterna
+Quando l'app esterna fa:
+
+SELECT id, numero, cliente_nome, quantita, stato 
+FROM ordini 
+WHERE id = 37;
+
+Vede:
+
+id | numero | cliente_nome | quantita | stato
+37 | ...    | CO.PE.GO.   | 24576    | Completato  ✅
+
+🔄 Scenario Completo
+1️⃣ App Esterna inserisce consegna
+-- App Esterna esegue:
+INSERT INTO consegne_condivise (
+  ordine_id, 
+  data_consegna, 
+  quantita_consegnata, 
+  app_origine
+) VALUES (46, '2025-11-05', 50000, 'app_esterna');
+
+2️⃣ Trigger PostgreSQL si attiva automaticamente
+Il database calcola e aggiorna lo stato:
+
+Totale consegnato: 1.106.741 + 50.000 = 1.156.741
+Ordinato: 1.500.000
+Percentuale: 77.1%
+Nuovo stato: "In Lavorazione"
+3️⃣ Entrambe le app vedono il nuovo stato
+Delta Futuro legge:
+
+SELECT stato FROM ordini WHERE id = 46;
+→ 'In Lavorazione'  ✅
+
+App Esterna legge:
+
+SELECT stato FROM ordini WHERE id = 46;
+→ 'In Lavorazione'  ✅
+
+🎯 Vantaggi
+✅ Nessuna sincronizzazione manuale necessaria
+✅ Coerenza garantita - entrambe le app vedono lo stesso valore
+✅ Zero logica nell'app esterna - basta leggere il campo stato
+✅ Tempo reale - l'aggiornamento è immediato dopo ogni consegna
+L'app esterna vede tutto correttamente perché il trigger è nel database condiviso, non nel codice di Delta Futuro! 🚀
