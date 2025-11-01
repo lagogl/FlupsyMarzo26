@@ -185,6 +185,27 @@ export default function OrdiniCondivisi() {
     annullati: 0
   };
 
+  // Calcolo totali animali
+  const totaleOrdinato = ordini.reduce((sum, o) => sum + (o.quantitaTotale || 0), 0);
+  const totaleConsegnato = consegne.reduce((sum, c) => sum + c.quantitaConsegnata, 0);
+  
+  // Calcolo per taglia
+  const statsTaglia = ordini.reduce((acc: Record<string, { ordinato: number; consegnato: number }>, ordine) => {
+    const taglia = ordine.tagliaRichiesta || 'N/D';
+    if (!acc[taglia]) {
+      acc[taglia] = { ordinato: 0, consegnato: 0 };
+    }
+    acc[taglia].ordinato += ordine.quantitaTotale || 0;
+    
+    // Aggiungi consegne per questo ordine
+    const consegneOrdine = consegne.filter(c => c.ordineId === ordine.id);
+    acc[taglia].consegnato += consegneOrdine.reduce((sum, c) => sum + c.quantitaConsegnata, 0);
+    
+    return acc;
+  }, {});
+  
+  const taglie = Object.keys(statsTaglia).sort();
+
   const toggleSelezione = (id: number) => {
     const nuovi = new Set(selezionati);
     nuovi.has(id) ? nuovi.delete(id) : nuovi.add(id);
@@ -431,7 +452,55 @@ export default function OrdiniCondivisi() {
         </div>
       </div>
 
-      {/* Statistiche */}
+      {/* Totali Animali */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardContent className="p-4">
+            <div className="text-xs text-blue-700 mb-1 font-medium">Totale Ordinato</div>
+            <div className="text-2xl font-bold text-blue-900">{totaleOrdinato.toLocaleString('it-IT')}</div>
+            <div className="text-xs text-muted-foreground mt-1">animali</div>
+          </CardContent>
+        </Card>
+        <Card className="border-green-200 bg-green-50/50">
+          <CardContent className="p-4">
+            <div className="text-xs text-green-700 mb-1 font-medium">Totale Consegnato</div>
+            <div className="text-2xl font-bold text-green-900">{totaleConsegnato.toLocaleString('it-IT')}</div>
+            <div className="text-xs text-muted-foreground mt-1">animali ({((totaleConsegnato / totaleOrdinato) * 100).toFixed(1)}%)</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Breakdown per Taglia */}
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="text-sm font-semibold mb-3">Breakdown per Taglia</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {taglie.map(taglia => (
+              <div key={taglia} className="border rounded-lg p-3 bg-muted/30">
+                <div className="text-xs font-medium text-muted-foreground mb-2">{taglia}</div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-blue-700">Ordinato:</span>
+                    <span className="font-semibold">{statsTaglia[taglia].ordinato.toLocaleString('it-IT')}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-green-700">Consegnato:</span>
+                    <span className="font-semibold">{statsTaglia[taglia].consegnato.toLocaleString('it-IT')}</span>
+                  </div>
+                  <div className="flex justify-between text-xs pt-1 border-t">
+                    <span className="text-muted-foreground">Residuo:</span>
+                    <span className="font-semibold text-orange-600">
+                      {(statsTaglia[taglia].ordinato - statsTaglia[taglia].consegnato).toLocaleString('it-IT')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Statistiche Ordini */}
       <div className="grid grid-cols-5 gap-3">
         {[
           { label: 'Tutti', value: statsGlobali.tutti, stato: 'tutti' },
