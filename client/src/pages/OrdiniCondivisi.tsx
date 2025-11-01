@@ -651,7 +651,7 @@ export default function OrdiniCondivisi() {
                           
                           {/* Stato */}
                           <td className="p-2 border-r">
-                            {getStatoBadge(ordine.statoCalcolato)}
+                            {getStatoBadge(ordine.stato)}
                           </td>
                           
                           {/* Sync FIC */}
