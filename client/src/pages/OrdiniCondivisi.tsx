@@ -325,8 +325,8 @@ export default function OrdiniCondivisi() {
         dataFineConsegna: dataFine
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi'] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ['/api/ordini-condivisi'] });
       toast({
         title: '✅ Date salvate',
         description: 'Le date di consegna sono state aggiornate',
