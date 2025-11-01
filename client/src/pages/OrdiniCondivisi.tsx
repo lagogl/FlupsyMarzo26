@@ -474,19 +474,41 @@ export default function OrdiniCondivisi() {
       {/* Totali Animali */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="border-blue-200 bg-blue-50/50">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs text-blue-700 mb-1 font-medium">Totale Ordinato</div>
-            <div className="text-2xl font-bold text-blue-900">{totaleOrdinato.toLocaleString('it-IT')}</div>
-            <div className="text-xs text-muted-foreground mt-1">animali</div>
+            <div className="text-xl font-bold text-blue-900">{totaleOrdinato.toLocaleString('it-IT')}</div>
+            <div className="text-xs text-muted-foreground">animali</div>
           </CardContent>
         </Card>
         <Card className="border-green-200 bg-green-50/50">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs text-green-700 mb-1 font-medium">Totale Consegnato</div>
-            <div className="text-2xl font-bold text-green-900">{totaleConsegnato.toLocaleString('it-IT')}</div>
-            <div className="text-xs text-muted-foreground mt-1">animali ({((totaleConsegnato / totaleOrdinato) * 100).toFixed(1)}%)</div>
+            <div className="text-xl font-bold text-green-900">{totaleConsegnato.toLocaleString('it-IT')}</div>
+            <div className="text-xs text-muted-foreground">animali ({((totaleConsegnato / totaleOrdinato) * 100).toFixed(1)}%)</div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Statistiche Ordini */}
+      <div className="grid grid-cols-5 gap-3">
+        {[
+          { label: 'Tutti', value: statsGlobali.tutti, stato: 'tutti' },
+          { label: 'Aperti', value: statsGlobali.aperti, stato: 'Aperto' },
+          { label: 'In Lavorazione', value: statsGlobali.parziali, stato: 'Parziale' },
+          { label: 'Completati', value: statsGlobali.completati, stato: 'Completato' },
+          { label: 'Annullati', value: statsGlobali.annullati, stato: 'annullati' }
+        ].map((stat) => (
+          <Card 
+            key={stat.stato}
+            className={`cursor-pointer transition-colors ${filtroStato === stat.stato ? 'border-primary' : 'hover:bg-accent'}`}
+            onClick={() => setFiltroStato(stat.stato)}
+          >
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
+              <div className="text-2xl font-bold">{stat.value}</div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Breakdown per Taglia */}
@@ -568,28 +590,6 @@ export default function OrdiniCondivisi() {
           )}
         </CardContent>
       </Card>
-
-      {/* Statistiche Ordini */}
-      <div className="grid grid-cols-5 gap-3">
-        {[
-          { label: 'Tutti', value: statsGlobali.tutti, stato: 'tutti' },
-          { label: 'Aperti', value: statsGlobali.aperti, stato: 'Aperto' },
-          { label: 'In Lavorazione', value: statsGlobali.parziali, stato: 'Parziale' },
-          { label: 'Completati', value: statsGlobali.completati, stato: 'Completato' },
-          { label: 'Annullati', value: statsGlobali.annullati, stato: 'annullati' }
-        ].map((stat) => (
-          <Card 
-            key={stat.stato}
-            className={`cursor-pointer transition-colors ${filtroStato === stat.stato ? 'border-primary' : 'hover:bg-accent'}`}
-            onClick={() => setFiltroStato(stat.stato)}
-          >
-            <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
-              <div className="text-2xl font-bold">{stat.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
       {/* Ricerca e filtri */}
       <Card>
