@@ -677,22 +677,60 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
             // Cancella vecchie righe DB esterno
             await dbEsterno.delete(ordiniDettagli).where(eq(ordiniDettagli.ordineId, ordineIdEsterno));
             
+            // Funzione helper per estrarre la taglia dal prodotto FIC
+            const estraiTaglia = (item: any): string => {
+              // 1. Cerca nel product_id (es. "VONGOLE-TP-5000" → "TP-5000")
+              if (item.product_id) {
+                const matchProductId = item.product_id.toString().match(/TP-\d+/i);
+                if (matchProductId) return matchProductId[0].toUpperCase();
+              }
+              
+              // 2. Cerca pattern "screen" + numero (es. "screen3000" → "TP-3000")
+              const text = (item.name || '') + ' ' + (item.description || '');
+              const matchScreen = text.match(/screen(\d+)/i);
+              if (matchScreen) {
+                const numero = matchScreen[1];
+                return `TP-${numero}`;
+              }
+              
+              // 3. Cerca pattern "Taglia" + numero + "mm" (es. "Taglia13mm" → "TP-3000")
+              const matchTaglia = text.match(/Taglia(\d+)mm/i);
+              if (matchTaglia) {
+                const mm = parseInt(matchTaglia[1]);
+                // Converti mm in numero screen approssimato
+                if (mm <= 13) return 'TP-3000';
+                if (mm <= 16) return 'TP-5000';
+                if (mm <= 20) return 'TP-7000';
+                if (mm <= 25) return 'TP-9000';
+                return 'TP-10000';
+              }
+              
+              // 4. Cerca direttamente pattern TP-XXXX
+              const matchTP = text.match(/TP-\d+/i);
+              if (matchTP) return matchTP[0].toUpperCase();
+              
+              // 5. Fallback: usa item.name troncato
+              return (item.name || '').substring(0, 20);
+            };
+            
             // Inserisci nuove righe
             for (let idx = 0; idx < ordineCompleto.items_list.length; idx++) {
               const item = ordineCompleto.items_list[idx];
               const quantita = parseFloat(item.qty?.toString() || '0');
               quantitaTotale += quantita;
               
+              const taglia = estraiTaglia(item);
+              
               // Prima taglia trovata diventa taglia_richiesta
-              if (idx === 0 && item.name) {
-                tagliaRichiesta = item.name;
+              if (idx === 0) {
+                tagliaRichiesta = taglia;
               }
               
               await dbEsterno.insert(ordiniDettagli).values({
                 ordineId: ordineIdEsterno,
                 rigaNumero: idx + 1,
                 codiceProdotto: item.product_id?.toString() || null,
-                taglia: item.name || '',
+                taglia: taglia,
                 descrizione: item.description || null,
                 quantita: item.qty?.toString() || '0',
                 unitaMisura: item.measure || 'NR',
