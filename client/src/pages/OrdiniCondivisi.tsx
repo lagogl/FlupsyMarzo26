@@ -1018,6 +1018,10 @@ export default function OrdiniCondivisi() {
                                   numberOfMonths={2}
                                   disabled={(date) => date < new Date(ordine.data) || salvaDateConsegnaMutation.isPending}
                                   className="rounded-md"
+                                  classNames={{
+                                    day_selected: "bg-green-500 text-white hover:bg-green-600 focus:bg-green-600",
+                                    day_range_middle: "aria-selected:bg-green-100 aria-selected:text-green-900",
+                                  }}
                                 />
                               </PopoverContent>
                             </Popover>
