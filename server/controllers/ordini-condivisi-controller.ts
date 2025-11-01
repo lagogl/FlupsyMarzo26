@@ -31,9 +31,27 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { stato, clienteId, dataInizio, dataFine } = req.query;
     
-    // Usa la vista ordini_con_residuo per calcolo automatico
+    // Query diretta su tabella ordini con join per cliente e calcolo residuo
     let query = `
-      SELECT * FROM ordini_con_residuo
+      SELECT 
+        o.id,
+        o.numero,
+        o.data,
+        o.cliente_id,
+        COALESCE(c.denominazione, o.cliente_nome) as cliente_nome,
+        o.stato,
+        o.quantita as quantita_totale,
+        o.taglia_richiesta,
+        o.data_inizio_consegna,
+        o.data_fine_consegna,
+        o.fatture_in_cloud_id,
+        o.fatture_in_cloud_numero,
+        o.sync_status,
+        COALESCE(SUM(cc.quantita_consegnata), 0)::INTEGER as quantita_consegnata,
+        (COALESCE(o.quantita, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER as quantita_residua
+      FROM ordini o
+      LEFT JOIN clienti c ON c.id = o.cliente_id
+      LEFT JOIN consegne_condivise cc ON cc.ordine_id = o.id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -63,7 +81,13 @@ router.get('/', async (req: Request, res: Response) => {
       paramIndex++;
     }
     
-    query += ` ORDER BY data DESC`;
+    query += ` 
+      GROUP BY 
+        o.id, o.numero, o.data, o.cliente_id, c.denominazione, o.cliente_nome,
+        o.stato, o.quantita, o.taglia_richiesta, o.data_inizio_consegna, 
+        o.data_fine_consegna, o.fatture_in_cloud_id, o.fatture_in_cloud_numero, o.sync_status
+      ORDER BY o.data DESC
+    `;
     
     const ordiniRaw = await queryEsterno(query, params);
     
@@ -99,22 +123,19 @@ router.get('/', async (req: Request, res: Response) => {
           importoRiga: parseFloat(r.importo_riga?.toString() || '0')
         }));
       
-      // Calcola quantità totale sommando le righe dettaglio
-      const quantitaTotaleCalcolata = righeOrdine.reduce((sum, riga) => sum + riga.quantita, 0);
-      
       return {
         id: o.id,
-        numero: o.numero,
+        numero: o.fatture_in_cloud_numero || o.numero || '',
         data: o.data,
         clienteId: o.cliente_id,
         clienteNome: o.cliente_nome,
-        stato: o.stato || o.stato_calcolato, // Usa stato ORIGINALE della tabella (non quello calcolato)
-        statoOriginale: o.stato, // Mantieni anche lo stato originale per riferimento
-        quantitaTotale: quantitaTotaleCalcolata || o.quantita_totale || 0, // Usa quantità calcolata dalle righe
-        tagliaRichiesta: o.taglia_richiesta,
-        quantitaConsegnata: o.quantita_consegnata || 0,
-        quantitaResidua: (quantitaTotaleCalcolata || o.quantita_totale || 0) - (o.quantita_consegnata || 0),
-        statoCalcolato: o.stato_calcolato, // Informazione aggiuntiva per la logica
+        stato: o.stato, // Usa stato ORIGINALE dalla tabella ordini
+        statoOriginale: o.stato,
+        quantitaTotale: parseInt(o.quantita_totale?.toString() || '0'), // Quantità dalla tabella ordini
+        tagliaRichiesta: o.taglia_richiesta || '',
+        quantitaConsegnata: parseInt(o.quantita_consegnata?.toString() || '0'),
+        quantitaResidua: parseInt(o.quantita_residua?.toString() || '0'),
+        statoCalcolato: o.quantita_residua === 0 ? 'Completato' : (o.quantita_residua < o.quantita_totale ? 'Parziale' : 'Aperto'),
         dataInizioConsegna: o.data_inizio_consegna,
         dataFineConsegna: o.data_fine_consegna,
         syncStatus: o.sync_status,
