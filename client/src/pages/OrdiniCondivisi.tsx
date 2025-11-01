@@ -123,20 +123,15 @@ export default function OrdiniCondivisi() {
   const ordini = ordiniResponse?.ordini || [];
   const consegne = consegneResponse?.consegne || [];
 
-  // Inizializza ordini editabili solo quando cambiano gli ID
+  // Inizializza ordini editabili quando cambiano gli ordini
   useEffect(() => {
-    const nuoviIds = ordini.map(o => o.id).join(',');
-    const vecchiIds = ordiniEditabili.map(o => o.id).join(',');
-    
-    if (nuoviIds !== vecchiIds) {
-      const editabili = ordini.map(o => ({
-        ...o,
-        isEditing: false,
-        editedDataConsegna: null,
-        editedQuantita: ''
-      }));
-      setOrdiniEditabili(editabili);
-    }
+    const editabili = ordini.map(o => ({
+      ...o,
+      isEditing: ordiniEditabili.find(e => e.id === o.id)?.isEditing || false,
+      editedDataConsegna: ordiniEditabili.find(e => e.id === o.id)?.editedDataConsegna || null,
+      editedQuantita: ordiniEditabili.find(e => e.id === o.id)?.editedQuantita || ''
+    }));
+    setOrdiniEditabili(editabili);
   }, [ordini]);
 
   // Mappa colori per taglie (dal più chiaro al più scuro)
@@ -343,7 +338,7 @@ export default function OrdiniCondivisi() {
     },
   });
 
-  const handleDateRangeSelect = (range: { from: Date | undefined; to: Date | undefined } | undefined) => {
+  const handleDateRangeSelect = async (range: { from: Date | undefined; to: Date | undefined } | undefined) => {
     if (!range) {
       setSelectedDateRange({ from: undefined, to: undefined });
       return;
@@ -355,7 +350,7 @@ export default function OrdiniCondivisi() {
     if (range.from && range.to && datePickerOrdineId) {
       const dataInizio = range.from.toISOString().split('T')[0];
       const dataFine = range.to.toISOString().split('T')[0];
-      salvaDateConsegnaMutation.mutate({ ordineId: datePickerOrdineId, dataInizio, dataFine });
+      await salvaDateConsegnaMutation.mutateAsync({ ordineId: datePickerOrdineId, dataInizio, dataFine });
     }
   };
 
@@ -1012,7 +1007,7 @@ export default function OrdiniCondivisi() {
                                 <div className="p-3 border-b bg-muted/50">
                                   <p className="text-sm font-medium">Periodo di consegna</p>
                                   <p className="text-xs text-muted-foreground">
-                                    Seleziona data inizio e data fine
+                                    {salvaDateConsegnaMutation.isPending ? 'Salvataggio in corso...' : 'Seleziona data inizio e data fine'}
                                   </p>
                                 </div>
                                 <CalendarComponent
@@ -1020,7 +1015,7 @@ export default function OrdiniCondivisi() {
                                   selected={selectedDateRange}
                                   onSelect={handleDateRangeSelect}
                                   numberOfMonths={2}
-                                  disabled={(date) => date < new Date(ordine.data)}
+                                  disabled={(date) => date < new Date(ordine.data) || salvaDateConsegnaMutation.isPending}
                                   className="rounded-md"
                                 />
                               </PopoverContent>
