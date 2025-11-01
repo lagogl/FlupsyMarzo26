@@ -668,10 +668,11 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         const ordineCompleto = dettagliOrdine.data.data;
         
         console.log(`📦 Ordine ${ordineFIC.id} - Righe trovate:`, ordineCompleto?.items_list?.length || 0);
-        console.log(`📝 DEBUG OGGETTO - Campi disponibili:`, {
+        console.log(`📝 DEBUG OGGETTO - Tutti i campi dell'ordine:`, Object.keys(ordineCompleto || {}).filter(k => !['items_list', 'payments_list'].includes(k)));
+        console.log(`📝 DEBUG OGGETTO - Valori chiave:`, {
           subject: ordineCompleto?.subject,
-          oggetto: ordineCompleto?.oggetto,
-          object: ordineCompleto?.object,
+          h_description: ordineCompleto?.h_description,
+          notes: ordineCompleto?.notes,
           e_invoice_subject: ordineCompleto?.e_invoice?.subject
         });
         
