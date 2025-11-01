@@ -99,7 +99,6 @@ export default function OrdiniCondivisi() {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [mostraBreakdown, setMostraBreakdown] = useState(true);
-  const [mostraFiltri, setMostraFiltri] = useState(true);
   const [filtroTaglia, setFiltroTaglia] = useState<string | null>(null);
 
   // Query ordini
@@ -457,9 +456,68 @@ export default function OrdiniCondivisi() {
   return (
     <div className="container mx-auto p-6 max-w-7xl space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Gestione Ordini</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1 justify-end">
+          <Input
+            placeholder="Cerca cliente..."
+            value={ricercaCliente}
+            onChange={(e) => setRicercaCliente(e.target.value)}
+            className="max-w-xs h-9 text-sm"
+            data-testid="input-ricerca-cliente"
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                <Filter className="w-4 h-4 mr-2" />
+                Filtri
+                {(filtroStato !== 'tutti' || ricercaCliente || filtroTaglia) && (
+                  <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
+                    {[filtroStato !== 'tutti' ? 1 : 0, ricercaCliente ? 1 : 0, filtroTaglia ? 1 : 0].reduce((a, b) => a + b, 0)}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Stato ordine</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setFiltroStato('tutti')}>
+                <div className="flex items-center justify-between w-full">
+                  <span>Tutti gli ordini</span>
+                  {filtroStato === 'tutti' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFiltroStato('Aperto')}>
+                <div className="flex items-center justify-between w-full">
+                  <span>Solo Aperti</span>
+                  {filtroStato === 'Aperto' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFiltroStato('Parziale')}>
+                <div className="flex items-center justify-between w-full">
+                  <span>Solo In Lavorazione</span>
+                  {filtroStato === 'Parziale' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFiltroStato('Completato')}>
+                <div className="flex items-center justify-between w-full">
+                  <span>Solo Completati</span>
+                  {filtroStato === 'Completato' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => {
+                  setFiltroStato('tutti');
+                  setRicercaCliente('');
+                  setFiltroTaglia(null);
+                }}
+                className="text-destructive"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Rimuovi tutti i filtri
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" data-testid="button-sync-fic">
             <RefreshCw className="w-4 h-4 mr-2" />
             Sincronizza con FIC
@@ -586,96 +644,6 @@ export default function OrdiniCondivisi() {
                   </div>
                 );
               })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Ricerca e filtri */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">Ricerca e Filtri</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setMostraFiltri(!mostraFiltri)}
-              className="h-7 px-2"
-              data-testid="button-toggle-filtri"
-            >
-              {mostraFiltri ? (
-                <>
-                  <ChevronUp className="w-4 h-4 mr-1" />
-                  Nascondi
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-4 h-4 mr-1" />
-                  Mostra
-                </>
-              )}
-            </Button>
-          </div>
-          {mostraFiltri && (
-            <div className="flex items-center gap-3">
-              <Input
-                placeholder="Cerca cliente..."
-                value={ricercaCliente}
-                onChange={(e) => setRicercaCliente(e.target.value)}
-                className="max-w-xs h-9 text-sm"
-                data-testid="input-ricerca-cliente"
-              />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9">
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filtri
-                    {(filtroStato !== 'tutti' || ricercaCliente) && (
-                      <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
-                        {[filtroStato !== 'tutti' ? 1 : 0, ricercaCliente ? 1 : 0].reduce((a, b) => a + b, 0)}
-                      </Badge>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel>Stato ordine</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setFiltroStato('tutti')}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>Tutti gli ordini</span>
-                      {filtroStato === 'tutti' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setFiltroStato('Aperto')}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>Solo Aperti</span>
-                      {filtroStato === 'Aperto' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setFiltroStato('Parziale')}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>Solo In Lavorazione</span>
-                      {filtroStato === 'Parziale' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setFiltroStato('Completato')}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>Solo Completati</span>
-                      {filtroStato === 'Completato' && <CheckCircle2 className="w-4 h-4 text-primary" />}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => {
-                      setFiltroStato('tutti');
-                      setRicercaCliente('');
-                    }}
-                    className="text-destructive"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Rimuovi tutti i filtri
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           )}
         </CardContent>
