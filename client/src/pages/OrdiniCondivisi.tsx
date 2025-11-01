@@ -100,6 +100,7 @@ export default function OrdiniCondivisi() {
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [mostraBreakdown, setMostraBreakdown] = useState(true);
   const [mostraFiltri, setMostraFiltri] = useState(true);
+  const [filtroTaglia, setFiltroTaglia] = useState<string | null>(null);
 
   // Query ordini
   const { data: ordiniResponse, isLoading: loadingOrdini } = useQuery<{ success: boolean; ordini: OrdineCondiviso[]; count: number }>({
@@ -132,6 +133,18 @@ export default function OrdiniCondivisi() {
     }
   }, [ordini]);
 
+  // Mappa colori per taglie (dal più chiaro al più scuro)
+  const getTagliaColor = (taglia: string): { bg: string; border: string; text: string } => {
+    const colors: Record<string, { bg: string; border: string; text: string }> = {
+      'TP-3000': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' },
+      'TP-5000': { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-900' },
+      'TP-7000': { bg: 'bg-blue-200', border: 'border-blue-400', text: 'text-blue-900' },
+      'TP-9000': { bg: 'bg-blue-300', border: 'border-blue-500', text: 'text-blue-950' },
+      'TP-10000': { bg: 'bg-blue-400', border: 'border-blue-600', text: 'text-blue-950' },
+    };
+    return colors[taglia] || { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-900' };
+  };
+
   // Filtra e ordina
   const ordiniFiltrati = ordiniEditabili
     .filter((ord) => {
@@ -139,6 +152,9 @@ export default function OrdiniCondivisi() {
         return false;
       }
       if (filtroStato !== 'tutti' && ord.stato !== filtroStato) {
+        return false;
+      }
+      if (filtroTaglia && ord.tagliaRichiesta !== filtroTaglia) {
         return false;
       }
       return true;
@@ -477,7 +493,21 @@ export default function OrdiniCondivisi() {
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">Breakdown per Taglia</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold">Breakdown per Taglia</h3>
+              {filtroTaglia && (
+                <Badge variant="secondary" className="text-xs">
+                  Filtro: {filtroTaglia}
+                  <X 
+                    className="w-3 h-3 ml-1 cursor-pointer hover:text-destructive" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFiltroTaglia(null);
+                    }}
+                  />
+                </Badge>
+              )}
+            </div>
             <Button
               variant="ghost"
               size="sm"
@@ -499,28 +529,41 @@ export default function OrdiniCondivisi() {
             </Button>
           </div>
           {mostraBreakdown && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {taglie.map(taglia => (
-                <div key={taglia} className="border rounded-lg p-3 bg-muted/30">
-                  <div className="text-xs font-medium text-muted-foreground mb-2">{taglia}</div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-blue-700">Ordinato:</span>
-                      <span className="font-semibold">{statsTaglia[taglia].ordinato.toLocaleString('it-IT')}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-green-700">Consegnato:</span>
-                      <span className="font-semibold">{statsTaglia[taglia].consegnato.toLocaleString('it-IT')}</span>
-                    </div>
-                    <div className="flex justify-between text-xs pt-1 border-t">
-                      <span className="text-muted-foreground">Residuo:</span>
-                      <span className="font-semibold text-orange-600">
-                        {(statsTaglia[taglia].ordinato - statsTaglia[taglia].consegnato).toLocaleString('it-IT')}
-                      </span>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {taglie.map(taglia => {
+                const colors = getTagliaColor(taglia);
+                const isSelected = filtroTaglia === taglia;
+                return (
+                  <div 
+                    key={taglia} 
+                    className={`
+                      border-2 rounded-lg p-3 cursor-pointer transition-all
+                      ${colors.bg} ${colors.border} ${colors.text}
+                      ${isSelected ? 'ring-2 ring-primary shadow-lg scale-105' : 'hover:shadow-md hover:scale-102'}
+                    `}
+                    onClick={() => setFiltroTaglia(isSelected ? null : taglia)}
+                    data-testid={`filter-taglia-${taglia}`}
+                  >
+                    <div className="text-base font-bold mb-2">{taglia}</div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium">Ordinato:</span>
+                        <span className="font-semibold">{statsTaglia[taglia].ordinato.toLocaleString('it-IT')}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium">Consegnato:</span>
+                        <span className="font-semibold">{statsTaglia[taglia].consegnato.toLocaleString('it-IT')}</span>
+                      </div>
+                      <div className="flex justify-between text-xs pt-1 border-t border-current/30">
+                        <span className="font-medium">Residuo:</span>
+                        <span className="font-bold">
+                          {(statsTaglia[taglia].ordinato - statsTaglia[taglia].consegnato).toLocaleString('it-IT')}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
