@@ -595,6 +595,13 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         
         const ordineEsternoEsistente = ordiniEsterni.length > 0 ? ordiniEsterni[0] : null;
         
+        // Normalizza lo stato da Fatture in Cloud
+        let statoNormalizzato = ordineFIC.status || 'Aperto';
+        // Mappa "Da Evadere" e "Evadere" → "Aperto"
+        if (statoNormalizzato === 'Da Evadere' || statoNormalizzato === 'Evadere') {
+          statoNormalizzato = 'Aperto';
+        }
+        
         // Prepara dati base ordine (senza quantità, verrà calcolata dopo)
         // Usa stato intermedio 'in_sync' - sarà 'sincronizzato' solo dopo righe complete
         const datiOrdineEsterno = {
@@ -602,7 +609,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
           data: ordineFIC.date || new Date().toISOString().split('T')[0],
           clienteId: clienteLocale?.id || 0,
           clienteNome: ordineFIC.entity?.name || 'Cliente non trovato',
-          stato: ordineFIC.status || 'Aperto',
+          stato: statoNormalizzato,
           totale: ordineFIC.amount_net?.toString() || '0',
           valuta: ordineFIC.currency?.id || 'EUR',
           note: ordineFIC.notes || null,
