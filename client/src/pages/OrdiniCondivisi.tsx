@@ -19,6 +19,7 @@ import {
   Filter, 
   ChevronRight, 
   ChevronDown,
+  ChevronUp,
   Calendar,
   Pencil,
   Trash2,
