@@ -1,0 +1,86 @@
+Tabella consegne_condivise - Guida Completa
+La tabella consegne_condivise è una tabella di sincronizzazione nel database condiviso che permette la comunicazione bidirezionale tra Delta Futuro e l'app esterna.
+
+🗂️ Contenuto della Tabella
+consegne_condivise (
+  id                    SERIAL PRIMARY KEY,
+  ordine_id            INTEGER NOT NULL,      -- Riferimento all'ordine
+  data_consegna        DATE NOT NULL,         -- Data della consegna
+  quantita_consegnata  INTEGER NOT NULL,      -- Animali consegnati
+  app_origine          TEXT,                  -- Chi ha creato la consegna
+  note                 TEXT,                  -- Note sulla consegna
+  created_at           TIMESTAMP              -- Data di creazione
+)
+
+👥 Chi Può Usarla
+Entrambe le applicazioni possono leggere e scrivere in questa tabella:
+
+Applicazione	Permessi	Utilizzo
+Delta Futuro	✅ Lettura<br>✅ Scrittura	- Visualizza tutte le consegne<br>- Inserisce consegne create da Delta Futuro<br>- Trigger aggiorna automaticamente gli stati degli ordini
+App Esterna	✅ Lettura<br>✅ Scrittura	- Visualizza tutte le consegne<br>- Inserisce consegne create dall'app esterna<br>- Trigger aggiorna automaticamente gli stati degli ordini
+🔄 Flusso di Utilizzo
+Scenario 1: App Esterna inserisce consegna
+-- App Esterna esegue:
+INSERT INTO consegne_condivise (
+  ordine_id, 
+  data_consegna, 
+  quantita_consegnata, 
+  app_origine,
+  note
+) VALUES (
+  52,                    -- Ordine del 15/09/2025
+  '2025-10-28',         -- Data consegna
+  300000,               -- 300.000 animali
+  'app_esterna',        -- Origine
+  'Consegna di test App Esterna'
+);
+
+Risultato automatico:
+
+✅ Trigger PostgreSQL calcola il nuovo stato dell'ordine
+✅ Delta Futuro vede immediatamente la consegna
+✅ Lo stato dell'ordine viene aggiornato automaticamente
+Scenario 2: Delta Futuro inserisce consegna
+-- Delta Futuro esegue (tramite API):
+INSERT INTO consegne_condivise (
+  ordine_id, 
+  data_consegna, 
+  quantita_consegnata, 
+  app_origine,
+  note
+) VALUES (
+  52,                    
+  '2025-11-01',         
+  500000,               -- 500.000 animali
+  'delta_futuro',       -- Origine
+  'Consegna di test da Delta Futuro'
+);
+
+Risultato automatico:
+
+✅ Trigger PostgreSQL calcola il nuovo stato dell'ordine
+✅ App Esterna vede immediatamente la consegna
+✅ Lo stato dell'ordine viene aggiornato automaticamente
+🎯 Differenza tra consegne e consegne_condivise
+Caratteristica	consegne	consegne_condivise
+Visibilità	Solo Delta Futuro	Entrambe le app
+Utilizzo	Consegne da misurazioni Delta Futuro	Consegne da QUALSIASI app
+Campo misurazione_id	✅ Obbligatorio	❌ Non esiste
+Sincronizzazione	Locale	Condivisa
+Trigger aggiorna stato	✅ Sì	✅ Sì
+📝 Esempio Pratico (Ordine 15/09/2025)
+Tabella consegne (solo Delta Futuro):
+
+198.593 animali (da misurazione interna)
+Tabella consegne_condivise (entrambe le app):
+
+300.000 animali (da App Esterna)
+500.000 animali (da Delta Futuro)
+TOTALE visualizzato in ENTRAMBE le app: 998.593 animali ✅
+
+🔐 Sicurezza e Integrità
+✅ Foreign Key: L'ordine_id deve esistere nella tabella ordini
+✅ Trigger Automatici: Aggiornano lo stato dell'ordine in tempo reale
+✅ Tracciabilità: Il campo app_origine identifica chi ha creato la consegna
+✅ Coerenza: Entrambe le app vedono lo stesso valore di stato
+Questa architettura garantisce perfetto allineamento tra le due applicazioni senza necessità di sincronizzazione manuale!

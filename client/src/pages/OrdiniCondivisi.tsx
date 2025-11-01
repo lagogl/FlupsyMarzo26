@@ -69,9 +69,10 @@ interface Consegna {
   id: number;
   ordineId: number;
   dataConsegna: string;
-  quantita: number;
+  quantitaConsegnata: number;
   note: string | null;
   appOrigine: string;
+  createdAt?: string;
   ordineNumero: string | null;
   clienteNome: string;
 }
@@ -742,15 +743,36 @@ export default function OrdiniCondivisi() {
                           <tr className="bg-green-50/50 dark:bg-green-950/20 border-b">
                             <td colSpan={10} className="p-0">
                               <div className="bg-green-100/60 dark:bg-green-900/30 px-4 py-2 border-t border-b border-green-200 dark:border-green-800">
-                                <h4 className="text-sm font-semibold text-green-900 dark:text-green-100">
-                                  Consegne ({consegneOrdine.length})
-                                </h4>
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-sm font-semibold text-green-900 dark:text-green-100">
+                                    Consegne ({consegneOrdine.length})
+                                  </h4>
+                                  <div className="flex items-center gap-3 text-xs">
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge className="bg-blue-600 text-white text-xs px-2 py-0.5">
+                                        Delta Futuro
+                                      </Badge>
+                                      <span className="text-green-900 dark:text-green-100 font-medium">
+                                        {consegneOrdine.filter(c => c.appOrigine === 'delta_futuro').length}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge className="bg-orange-600 text-white text-xs px-2 py-0.5">
+                                        App Esterna
+                                      </Badge>
+                                      <span className="text-green-900 dark:text-green-100 font-medium">
+                                        {consegneOrdine.filter(c => c.appOrigine === 'app_esterna').length}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                               <table className="w-full text-xs">
                                 <thead className="bg-green-100/40 dark:bg-green-900/20">
                                   <tr>
                                     <th className="p-2 text-left border-r border-green-200 dark:border-green-800">Data Consegna</th>
                                     <th className="p-2 text-right border-r border-green-200 dark:border-green-800">Quantità Consegnata</th>
+                                    <th className="p-2 text-left border-r border-green-200 dark:border-green-800">Origine</th>
                                     <th className="p-2 text-left border-r border-green-200 dark:border-green-800">Note</th>
                                     <th className="p-2 text-left">Data Creazione</th>
                                   </tr>
@@ -763,6 +785,17 @@ export default function OrdiniCondivisi() {
                                       </td>
                                       <td className="p-2 text-right border-r border-green-200/50 dark:border-green-800/50 font-semibold">
                                         {consegna.quantitaConsegnata.toLocaleString('it-IT')}
+                                      </td>
+                                      <td className="p-2 border-r border-green-200/50 dark:border-green-800/50">
+                                        {consegna.appOrigine === 'delta_futuro' ? (
+                                          <Badge className="bg-blue-600 text-white hover:bg-blue-700 text-xs px-2 py-0.5">
+                                            Delta Futuro
+                                          </Badge>
+                                        ) : (
+                                          <Badge className="bg-orange-600 text-white hover:bg-orange-700 text-xs px-2 py-0.5">
+                                            App Esterna
+                                          </Badge>
+                                        )}
                                       </td>
                                       <td className="p-2 border-r border-green-200/50 dark:border-green-800/50 text-xs text-muted-foreground max-w-xs truncate">
                                         {consegna.note || '-'}
@@ -779,7 +812,7 @@ export default function OrdiniCondivisi() {
                                     <td className="p-2 text-right border-r border-green-200 dark:border-green-800 text-green-700 dark:text-green-300">
                                       {consegneOrdine.reduce((sum, c) => sum + c.quantitaConsegnata, 0).toLocaleString('it-IT')}
                                     </td>
-                                    <td colSpan={2} className="p-2"></td>
+                                    <td colSpan={3} className="p-2"></td>
                                   </tr>
                                 </tbody>
                               </table>
