@@ -129,13 +129,11 @@ router.get('/', async (req: Request, res: Response) => {
         data: o.data,
         clienteId: o.cliente_id,
         clienteNome: o.cliente_nome,
-        stato: o.stato, // Usa stato ORIGINALE dalla tabella ordini
-        statoOriginale: o.stato,
-        quantitaTotale: parseInt(o.quantita_totale?.toString() || '0'), // Quantità dalla tabella ordini
+        stato: o.stato, // Gestito automaticamente dal trigger PostgreSQL
+        quantitaTotale: parseInt(o.quantita_totale?.toString() || '0'),
         tagliaRichiesta: o.taglia_richiesta || '',
         quantitaConsegnata: parseInt(o.quantita_consegnata?.toString() || '0'),
         quantitaResidua: parseInt(o.quantita_residua?.toString() || '0'),
-        statoCalcolato: o.quantita_residua === 0 ? 'Completato' : (o.quantita_residua < o.quantita_totale ? 'Parziale' : 'Aperto'),
         dataInizioConsegna: o.data_inizio_consegna,
         dataFineConsegna: o.data_fine_consegna,
         syncStatus: o.sync_status,

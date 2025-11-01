@@ -132,7 +132,7 @@ export default function OrdiniCondivisi() {
       if (ricercaCliente && !ord.clienteNome?.toLowerCase().includes(ricercaCliente.toLowerCase())) {
         return false;
       }
-      if (filtroStato !== 'tutti' && ord.statoCalcolato !== filtroStato) {
+      if (filtroStato !== 'tutti' && ord.stato !== filtroStato) {
         return false;
       }
       return true;
@@ -161,7 +161,7 @@ export default function OrdiniCondivisi() {
           comparison = (a.tagliaRichiesta || '').localeCompare(b.tagliaRichiesta || '');
           break;
         case 'stato':
-          comparison = a.statoCalcolato.localeCompare(b.statoCalcolato);
+          comparison = a.stato.localeCompare(b.stato);
           break;
         case 'sync':
           const syncA = a.fattureInCloudId ? 2 : a.syncStatus === 'errore' ? 0 : 1;
@@ -176,9 +176,9 @@ export default function OrdiniCondivisi() {
   // Statistiche basate su TUTTI gli ordini (non filtrati)
   const statsGlobali = {
     tutti: ordini.length,
-    aperti: ordini.filter(o => o.statoCalcolato === 'Aperto').length,
-    parziali: ordini.filter(o => o.statoCalcolato === 'Parziale').length,
-    completati: ordini.filter(o => o.statoCalcolato === 'Completato').length,
+    aperti: ordini.filter(o => o.stato === 'Aperto').length,
+    parziali: ordini.filter(o => o.stato === 'Parziale').length,
+    completati: ordini.filter(o => o.stato === 'Completato').length,
     annullati: 0
   };
 
@@ -651,7 +651,7 @@ export default function OrdiniCondivisi() {
                           
                           {/* Stato */}
                           <td className="p-2 border-r">
-                            {getStatoBadge(ordine.statoCalcolato)}
+                            {getStatoBadge(ordine.stato)}
                           </td>
                           
                           {/* Sync FIC */}

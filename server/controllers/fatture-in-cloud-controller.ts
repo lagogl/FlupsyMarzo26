@@ -836,34 +836,11 @@ router.get('/orders', async (req: Request, res: Response) => {
       .from(ordiniCondivisi)
       .orderBy(desc(ordiniCondivisi.data));
     
-    // Ottieni tutte le consegne per calcolare lo stato
-    const tutteConsegne = await dbEsterno
-      .select()
-      .from(consegneCondivise);
-    
-    // Aggrega consegne per ordine
-    const consegnePerOrdine = tutteConsegne.reduce((acc, consegna) => {
-      if (!acc[consegna.ordineId]) {
-        acc[consegna.ordineId] = 0;
-      }
-      acc[consegna.ordineId] += consegna.quantitaConsegnata;
-      return acc;
-    }, {} as Record<number, number>);
-    
     // Trasforma i dati per compatibilità con il frontend
+    // NOTA: Il campo 'stato' è gestito automaticamente dal trigger PostgreSQL
+    // basato sulle consegne in consegne_condivise
     const ordiniFormattati = ordiniEsterni.map(ordine => {
-      const quantitaConsegnata = consegnePerOrdine[ordine.id] || 0;
       const quantitaTotale = ordine.quantitaTotale || 0;
-      
-      // Calcola stato automatico basato sulle consegne
-      let statoCalcolato = 'Aperto';
-      if (quantitaConsegnata === 0) {
-        statoCalcolato = 'Aperto';
-      } else if (quantitaConsegnata >= quantitaTotale) {
-        statoCalcolato = 'Completato';
-      } else {
-        statoCalcolato = 'Parziale';
-      }
       
       return {
         id: ordine.id,
@@ -871,8 +848,7 @@ router.get('/orders', async (req: Request, res: Response) => {
         data: ordine.data,
         clienteId: ordine.clienteId,
         clienteNome: ordine.clienteNome,
-        stato: ordine.stato,
-        statoCalcolato: statoCalcolato,
+        stato: ordine.stato, // Gestito dal trigger PostgreSQL
         totale: ordine.totale,
         valuta: ordine.valuta,
         note: ordine.note,
