@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -103,6 +105,8 @@ export default function OrdiniCondivisi() {
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [mostraBreakdown, setMostraBreakdown] = useState(true);
   const [filtroTaglia, setFiltroTaglia] = useState<string | null>(null);
+  const [datePickerOrdineId, setDatePickerOrdineId] = useState<number | null>(null);
+  const [selectedDateRange, setSelectedDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
 
   // Query ordini
   const { data: ordiniResponse, isLoading: loadingOrdini } = useQuery<{ success: boolean; ordini: OrdineCondiviso[]; count: number }>({
@@ -312,6 +316,56 @@ export default function OrdiniCondivisi() {
       });
     },
   });
+
+  // Mutation salva date consegna
+  const salvaDateConsegnaMutation = useMutation({
+    mutationFn: async ({ ordineId, dataInizio, dataFine }: { ordineId: number; dataInizio: string; dataFine: string }) => {
+      return apiRequest(`/api/ordini-condivisi/${ordineId}/delivery-range`, 'PATCH', {
+        dataInizioConsegna: dataInizio,
+        dataFineConsegna: dataFine
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi'] });
+      toast({
+        title: '✅ Date salvate',
+        description: 'Le date di consegna sono state aggiornate',
+      });
+      setDatePickerOrdineId(null);
+      setSelectedDateRange({ from: undefined, to: undefined });
+    },
+    onError: (error: any) => {
+      toast({
+        title: '❌ Errore',
+        description: error.message || 'Impossibile salvare le date',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleDateRangeSelect = (range: { from: Date | undefined; to: Date | undefined } | undefined) => {
+    if (!range) {
+      setSelectedDateRange({ from: undefined, to: undefined });
+      return;
+    }
+    
+    setSelectedDateRange(range);
+    
+    // Auto-salva quando entrambe le date sono selezionate
+    if (range.from && range.to && datePickerOrdineId) {
+      const dataInizio = range.from.toISOString().split('T')[0];
+      const dataFine = range.to.toISOString().split('T')[0];
+      salvaDateConsegnaMutation.mutate({ ordineId: datePickerOrdineId, dataInizio, dataFine });
+    }
+  };
+
+  const openDatePicker = (ordineId: number, dataInizio: string | null, dataFine: string | null) => {
+    setDatePickerOrdineId(ordineId);
+    setSelectedDateRange({
+      from: dataInizio ? new Date(dataInizio) : undefined,
+      to: dataFine ? new Date(dataFine) : undefined
+    });
+  };
 
   const saveEdit = async (id: number) => {
     const ordine = ordiniEditabili.find(o => o.id === id);
@@ -923,14 +977,54 @@ export default function OrdiniCondivisi() {
                           </td>
                           
                           {/* Data Consegna */}
-                          <td className="p-2 text-xs text-muted-foreground border-r">
-                            {ordine.dataInizioConsegna && (
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {formatDataConsegna(ordine.dataInizioConsegna, ordine.dataFineConsegna)}
-                              </div>
-                            )}
-                            {!ordine.dataInizioConsegna && '-'}
+                          <td className="p-2 border-r">
+                            <Popover 
+                              open={datePickerOrdineId === ordine.id}
+                              onOpenChange={(open) => {
+                                if (open) {
+                                  openDatePicker(ordine.id, ordine.dataInizioConsegna, ordine.dataFineConsegna);
+                                } else {
+                                  setDatePickerOrdineId(null);
+                                  setSelectedDateRange({ from: undefined, to: undefined });
+                                }
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  className="h-auto p-1 hover:bg-blue-50 text-xs font-normal w-full justify-start"
+                                  data-testid={`button-date-${ordine.id}`}
+                                >
+                                  {ordine.dataInizioConsegna ? (
+                                    <div className="flex items-center gap-1 text-muted-foreground">
+                                      <Calendar className="w-3 h-3" />
+                                      {formatDataConsegna(ordine.dataInizioConsegna, ordine.dataFineConsegna)}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1 text-muted-foreground">
+                                      <Calendar className="w-3 h-3" />
+                                      <span>Imposta date</span>
+                                    </div>
+                                  )}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <div className="p-3 border-b bg-muted/50">
+                                  <p className="text-sm font-medium">Periodo di consegna</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Seleziona data inizio e data fine
+                                  </p>
+                                </div>
+                                <CalendarComponent
+                                  mode="range"
+                                  selected={selectedDateRange}
+                                  onSelect={handleDateRangeSelect}
+                                  numberOfMonths={2}
+                                  disabled={(date) => date < new Date(ordine.data)}
+                                  className="rounded-md"
+                                />
+                              </PopoverContent>
+                            </Popover>
                           </td>
                           
                           {/* Cliente */}
