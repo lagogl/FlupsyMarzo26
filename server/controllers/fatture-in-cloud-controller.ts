@@ -671,9 +671,8 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         console.log(`📝 DEBUG OGGETTO - Tutti i campi dell'ordine:`, Object.keys(ordineCompleto || {}).filter(k => !['items_list', 'payments_list'].includes(k)));
         console.log(`📝 DEBUG OGGETTO - Valori chiave:`, {
           subject: ordineCompleto?.subject,
-          h_description: ordineCompleto?.h_description,
-          notes: ordineCompleto?.notes,
-          e_invoice_subject: ordineCompleto?.e_invoice?.subject
+          visible_subject: ordineCompleto?.visible_subject,
+          notes: ordineCompleto?.notes
         });
         
         // Sincronizza le righe dell'ordine
@@ -756,12 +755,15 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
             }
             
             // Aggiorna quantitaTotale, tagliaRichiesta, subject (OGGETTO) e marca come 'sincronizzato' (completato con successo)
+            // Usa subject o visible_subject come OGGETTO (con fallback a stringa vuota se nessuno dei due ha valore)
+            const oggetto = ordineCompleto.subject || ordineCompleto.visible_subject || null;
+            
             await dbEsterno
               .update(ordiniCondivisi)
               .set({
                 quantitaTotale: Math.round(quantitaTotale),
                 tagliaRichiesta,
-                note: ordineCompleto.subject || null, // Importa OGGETTO da FIC
+                note: oggetto ? oggetto : null, // Importa OGGETTO da FIC (subject o visible_subject)
                 syncStatus: 'sincronizzato' as const, // Ora è completamente sincronizzato
                 updatedAt: new Date()
               })
