@@ -485,7 +485,7 @@ export default function OrdiniCondivisi() {
         const percentuale = ordine ? Math.round((ordine.quantitaConsegnata / ordine.quantitaTotale) * 100) : 0;
         return (
           <div className="flex items-center gap-1.5">
-            <Badge className="bg-zinc-600 text-white hover:bg-zinc-700 text-xs px-2 py-1 rounded-md font-medium">
+            <Badge className="bg-zinc-600 text-white hover:bg-zinc-700 text-xs px-2 py-1 rounded-md font-medium whitespace-nowrap">
               In Lavorazione
             </Badge>
             {ordine && (
