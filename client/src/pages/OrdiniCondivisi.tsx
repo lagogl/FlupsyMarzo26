@@ -448,6 +448,27 @@ export default function OrdiniCondivisi() {
     return <ArrowDown className="w-3 h-3 ml-1 text-primary" />;
   };
 
+  const sincronizzaConFIC = useMutation({
+    mutationFn: async () => {
+      return apiRequest('/api/fatture-in-cloud/orders/sync', 'POST', {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi/consegne'] });
+      toast({
+        title: '✅ Sincronizzazione completata',
+        description: 'Gli ordini sono stati sincronizzati con Fatture in Cloud',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: '❌ Errore sincronizzazione',
+        description: error.message || 'Impossibile sincronizzare con Fatture in Cloud',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const esportaOrdini = () => {
     if (ordiniFiltrati.length === 0) {
       toast({
@@ -585,9 +606,15 @@ export default function OrdiniCondivisi() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" data-testid="button-sync-fic">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Sincronizza con FIC
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => sincronizzaConFIC.mutate()} 
+            disabled={sincronizzaConFIC.isPending}
+            data-testid="button-sync-fic"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${sincronizzaConFIC.isPending ? 'animate-spin' : ''}`} />
+            {sincronizzaConFIC.isPending ? 'Sincronizzazione...' : 'Sincronizza con FIC'}
           </Button>
           <Button variant="outline" size="sm" onClick={esportaOrdini} data-testid="button-esporta">
             <Download className="w-4 h-4 mr-2" />
