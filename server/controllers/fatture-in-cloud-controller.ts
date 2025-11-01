@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { Request, Response } from 'express';
 import { db } from '../db';
 import { dbEsterno, isDbEsternoAvailable } from '../db-esterno';
-import { ordiniCondivisi, ordiniDettagli } from '../schema-esterno';
+import { ordiniCondivisi, ordiniDettagli, consegneCondivise } from '../schema-esterno';
 import { 
   configurazione, 
   clienti, 
@@ -17,7 +17,7 @@ import {
   insertDdtSchema,
   insertDdtRigheSchema
 } from '@shared/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql, sum } from 'drizzle-orm';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -836,21 +836,51 @@ router.get('/orders', async (req: Request, res: Response) => {
       .from(ordiniCondivisi)
       .orderBy(desc(ordiniCondivisi.data));
     
+    // Ottieni tutte le consegne per calcolare lo stato
+    const tutteConsegne = await dbEsterno
+      .select()
+      .from(consegneCondivise);
+    
+    // Aggrega consegne per ordine
+    const consegnePerOrdine = tutteConsegne.reduce((acc, consegna) => {
+      if (!acc[consegna.ordineId]) {
+        acc[consegna.ordineId] = 0;
+      }
+      acc[consegna.ordineId] += consegna.quantitaConsegnata;
+      return acc;
+    }, {} as Record<number, number>);
+    
     // Trasforma i dati per compatibilità con il frontend
-    const ordiniFormattati = ordiniEsterni.map(ordine => ({
-      id: ordine.id,
-      numero: ordine.numero,
-      data: ordine.data,
-      clienteId: ordine.clienteId,
-      clienteNome: ordine.clienteNome,
-      stato: ordine.stato,
-      totale: ordine.totale,
-      valuta: ordine.valuta,
-      note: ordine.note,
-      fattureInCloudId: ordine.fattureInCloudId,
-      companyId: ordine.companyId,
-      totaleAnimali: ordine.quantitaTotale || 0 // Usa quantitaTotale già calcolato
-    }));
+    const ordiniFormattati = ordiniEsterni.map(ordine => {
+      const quantitaConsegnata = consegnePerOrdine[ordine.id] || 0;
+      const quantitaTotale = ordine.quantitaTotale || 0;
+      
+      // Calcola stato automatico basato sulle consegne
+      let statoCalcolato = 'Aperto';
+      if (quantitaConsegnata === 0) {
+        statoCalcolato = 'Aperto';
+      } else if (quantitaConsegnata >= quantitaTotale) {
+        statoCalcolato = 'Completato';
+      } else {
+        statoCalcolato = 'Parziale';
+      }
+      
+      return {
+        id: ordine.id,
+        numero: ordine.numero,
+        data: ordine.data,
+        clienteId: ordine.clienteId,
+        clienteNome: ordine.clienteNome,
+        stato: ordine.stato,
+        statoCalcolato: statoCalcolato,
+        totale: ordine.totale,
+        valuta: ordine.valuta,
+        note: ordine.note,
+        fattureInCloudId: ordine.fattureInCloudId,
+        companyId: ordine.companyId,
+        totaleAnimali: quantitaTotale
+      };
+    });
     
     res.json({
       success: true,
@@ -885,6 +915,26 @@ router.get('/orders/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Ordine non trovato' });
     }
     
+    // Ottieni consegne per questo ordine
+    const consegne = await dbEsterno
+      .select()
+      .from(consegneCondivise)
+      .where(eq(consegneCondivise.ordineId, ordineId));
+    
+    // Calcola quantità consegnata totale
+    const quantitaConsegnata = consegne.reduce((sum, c) => sum + c.quantitaConsegnata, 0);
+    const quantitaTotale = ordine.quantitaTotale || 0;
+    
+    // Calcola stato automatico
+    let statoCalcolato = 'Aperto';
+    if (quantitaConsegnata === 0) {
+      statoCalcolato = 'Aperto';
+    } else if (quantitaConsegnata >= quantitaTotale) {
+      statoCalcolato = 'Completato';
+    } else {
+      statoCalcolato = 'Parziale';
+    }
+    
     const righe = await dbEsterno
       .select()
       .from(ordiniDettagli)
@@ -914,11 +964,13 @@ router.get('/orders/:id', async (req: Request, res: Response) => {
         clienteId: ordine.clienteId,
         clienteNome: ordine.clienteNome,
         stato: ordine.stato,
+        statoCalcolato: statoCalcolato,
         totale: ordine.totale,
         valuta: ordine.valuta,
         note: ordine.note,
         fattureInCloudId: ordine.fattureInCloudId,
-        companyId: ordine.companyId
+        companyId: ordine.companyId,
+        totaleAnimali: quantitaTotale
       },
       items: righeFormattate
     });

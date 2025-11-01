@@ -1182,7 +1182,7 @@ const FattureInCloudConfig: React.FC = () => {
                               <td className="p-3 text-sm">{new Date(ordine.data).toLocaleDateString('it-IT')}</td>
                               <td className="p-3 text-sm">{ordine.clienteNome}</td>
                               <td className="p-3 text-sm">
-                                <Badge variant="outline">{ordine.stato}</Badge>
+                                <Badge variant="outline">{ordine.statoCalcolato}</Badge>
                               </td>
                               <td className="p-3 text-sm text-right font-medium">
                                 {ordine.totaleAnimali?.toLocaleString('it-IT') || '0'}
@@ -1320,7 +1320,7 @@ const FattureInCloudConfig: React.FC = () => {
                     </div>
                     <div>
                       <Label className="text-sm text-gray-500">Stato</Label>
-                      <Badge variant="outline">{orderDetailsQuery.data.order.stato}</Badge>
+                      <Badge variant="outline">{orderDetailsQuery.data.order.statoCalcolato}</Badge>
                     </div>
                     <div>
                       <Label className="text-sm text-gray-500">Totale Animali</Label>
