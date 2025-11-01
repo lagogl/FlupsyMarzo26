@@ -612,7 +612,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
           stato: statoNormalizzato,
           totale: ordineFIC.amount_net?.toString() || '0',
           valuta: ordineFIC.currency?.id || 'EUR',
-          note: ordineFIC.subject || ordineFIC.notes || null, // Usa OGGETTO (subject) come priorità
+          note: null, // Verrà popolato dopo aver recuperato i dettagli completi (fieldset=detailed)
           fattureInCloudId: ordineFIC.id,
           fattureInCloudNumero: ordineFIC.number?.toString() || null,
           companyId: ordineFIC.company_id || null,
@@ -748,12 +748,13 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
               });
             }
             
-            // Aggiorna quantitaTotale, tagliaRichiesta e marca come 'sincronizzato' (completato con successo)
+            // Aggiorna quantitaTotale, tagliaRichiesta, subject (OGGETTO) e marca come 'sincronizzato' (completato con successo)
             await dbEsterno
               .update(ordiniCondivisi)
               .set({
                 quantitaTotale: Math.round(quantitaTotale),
                 tagliaRichiesta,
+                note: ordineCompleto.subject || null, // Importa OGGETTO da FIC
                 syncStatus: 'sincronizzato' as const, // Ora è completamente sincronizzato
                 updatedAt: new Date()
               })
