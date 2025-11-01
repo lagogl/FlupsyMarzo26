@@ -32,7 +32,7 @@ import {
   X,
   ChevronsDown,
   ChevronsUp,
-  ExternalLink
+  FileText
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -401,14 +401,15 @@ export default function OrdiniCondivisi() {
             <Button 
               size="sm" 
               variant="ghost" 
-              className="h-5 w-5 p-0 hover:bg-green-100"
+              className="h-6 px-1.5 hover:bg-green-100 flex items-center gap-1"
               onClick={(e) => {
                 e.stopPropagation();
                 window.open(ordine.urlDocumento!, '_blank', 'noopener,noreferrer');
               }}
               data-testid={`link-fic-${ordine.id}`}
             >
-              <ExternalLink className="w-3 h-3" />
+              <FileText className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">#{ordine.numero}</span>
             </Button>
           )}
         </div>
