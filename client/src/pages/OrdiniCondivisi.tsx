@@ -679,14 +679,27 @@ export default function OrdiniCondivisi() {
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                                data-testid={`button-delete-${ordine.id}`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              {consegneOrdine.length === 0 ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                  data-testid={`button-delete-${ordine.id}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-muted-foreground/30 cursor-not-allowed"
+                                  disabled
+                                  title="Impossibile eliminare: ordine con consegne già effettuate"
+                                  data-testid={`button-delete-${ordine.id}-disabled`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
