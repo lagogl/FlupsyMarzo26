@@ -668,6 +668,12 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         const ordineCompleto = dettagliOrdine.data.data;
         
         console.log(`📦 Ordine ${ordineFIC.id} - Righe trovate:`, ordineCompleto?.items_list?.length || 0);
+        console.log(`📝 DEBUG OGGETTO - Campi disponibili:`, {
+          subject: ordineCompleto?.subject,
+          oggetto: ordineCompleto?.oggetto,
+          object: ordineCompleto?.object,
+          e_invoice_subject: ordineCompleto?.e_invoice?.subject
+        });
         
         // Sincronizza le righe dell'ordine
         if (ordineCompleto && ordineCompleto.items_list && ordineCompleto.items_list.length > 0) {
