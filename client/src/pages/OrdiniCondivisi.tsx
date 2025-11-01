@@ -225,7 +225,7 @@ export default function OrdiniCondivisi() {
   const taglie = Object.keys(statsTaglia).sort((a, b) => {
     const numA = parseInt(a.split('-')[1]);
     const numB = parseInt(b.split('-')[1]);
-    return numB - numA;
+    return numA - numB;
   });
 
   const toggleSelezione = (id: number) => {
