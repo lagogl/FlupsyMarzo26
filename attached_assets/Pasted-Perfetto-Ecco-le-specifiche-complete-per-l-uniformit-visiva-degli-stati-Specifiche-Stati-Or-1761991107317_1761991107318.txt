@@ -1,0 +1,54 @@
+Perfetto! Ecco le specifiche complete per l'uniformità visiva degli stati:
+
+🎨 Specifiche Stati Ordini - Delta Futuro
+Componente UI: Badge (etichetta arrotondata)
+Stati e Colorazioni
+Stato	Variant	Colore	Codice Esadecimale Approssimativo	Utilizzo
+Aperto	default	Blu	Background: #3b82f6 (blu primario)<br>Testo: bianco	Ordine creato, 0% consegnato
+In Lavorazione	secondary	Grigio	Background: #71717a (grigio neutro)<br>Testo: bianco	1-99% consegnato
+Completato	success	Verde	Background: #22c55e (verde successo)<br>Testo: bianco	≥100% consegnato
+Annullato	destructive	Rosso	Background: #ef4444 (rosso distruttivo)<br>Testo: bianco	Ordine annullato
+Codice Implementazione (TypeScript/React)
+<Badge variant={
+  ordine.stato === "Aperto" ? "default" :
+  ordine.stato === "In Lavorazione" ? "secondary" :
+  ordine.stato === "Completato" ? "success" :
+  "destructive"
+}>
+  {ordine.stato}
+</Badge>
+
+Classi CSS Tailwind Equivalenti
+// Aperto (default)
+className="bg-blue-600 text-white px-2 py-1 rounded-md text-xs font-medium"
+// In Lavorazione (secondary)  
+className="bg-zinc-600 text-white px-2 py-1 rounded-md text-xs font-medium"
+// Completato (success)
+className="bg-green-600 text-white px-2 py-1 rounded-md text-xs font-medium"
+// Annullato (destructive)
+className="bg-red-600 text-white px-2 py-1 rounded-md text-xs font-medium"
+
+Stile Badge
+Forma: Rettangolo con angoli arrotondati (border-radius: 6px)
+Padding: 4px orizzontale, 2px verticale
+Font: Testo in maiuscolo/minuscolo, peso medio (font-weight: 500)
+Dimensione testo: 12px (text-xs)
+Varianti Modalità Scura (Dark Mode)
+Se l'app esterna supporta la modalità scura:
+
+/* Aperto */
+.dark .badge-aperto { background: #2563eb; }
+/* In Lavorazione */
+.dark .badge-lavorazione { background: #52525b; }
+/* Completato */
+.dark .badge-completato { background: #16a34a; }
+/* Annullato */
+.dark .badge-annullato { background: #dc2626; }
+
+Esempio Visivo ASCII
+┌──────────────┐  ┌─────────────────────┐  ┌───────────────┐  ┌──────────────┐
+│   Aperto     │  │  In Lavorazione     │  │  Completato   │  │  Annullato   │
+│   (Blu)      │  │     (Grigio)        │  │   (Verde)     │  │   (Rosso)    │
+└──────────────┘  └─────────────────────┘  └───────────────┘  └──────────────┘
+
+Questa configurazione garantisce coerenza visiva tra Delta Futuro e l'app esterna! 🎯

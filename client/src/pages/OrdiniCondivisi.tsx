@@ -278,22 +278,29 @@ export default function OrdiniCondivisi() {
 
   const getStatoBadge = (stato: string) => {
     switch (stato) {
-      case 'Completato':
-        return (
-          <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-0.5">
-            Completato
-          </Badge>
-        );
       case 'Aperto':
         return (
-          <Badge className="bg-gray-800 text-white hover:bg-gray-900 text-xs px-2 py-0.5">
+          <Badge className="bg-blue-600 text-white hover:bg-blue-700 text-xs px-2 py-1 rounded-md font-medium">
             Aperto
           </Badge>
         );
       case 'Parziale':
+      case 'In Lavorazione':
         return (
-          <Badge className="bg-gray-800 text-white hover:bg-gray-900 text-xs px-2 py-0.5">
+          <Badge className="bg-zinc-600 text-white hover:bg-zinc-700 text-xs px-2 py-1 rounded-md font-medium">
             In Lavorazione
+          </Badge>
+        );
+      case 'Completato':
+        return (
+          <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1 rounded-md font-medium">
+            Completato
+          </Badge>
+        );
+      case 'Annullato':
+        return (
+          <Badge className="bg-red-600 text-white hover:bg-red-700 text-xs px-2 py-1 rounded-md font-medium">
+            Annullato
           </Badge>
         );
       default:

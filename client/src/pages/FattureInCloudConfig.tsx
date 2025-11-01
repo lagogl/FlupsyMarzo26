@@ -609,6 +609,38 @@ const FattureInCloudConfig: React.FC = () => {
     }
   };
 
+  const getOrderStatoBadge = (stato: string) => {
+    switch (stato) {
+      case 'Aperto':
+        return (
+          <Badge className="bg-blue-600 text-white hover:bg-blue-700 text-xs px-2 py-1 rounded-md font-medium">
+            Aperto
+          </Badge>
+        );
+      case 'Parziale':
+      case 'In Lavorazione':
+        return (
+          <Badge className="bg-zinc-600 text-white hover:bg-zinc-700 text-xs px-2 py-1 rounded-md font-medium">
+            In Lavorazione
+          </Badge>
+        );
+      case 'Completato':
+        return (
+          <Badge className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1 rounded-md font-medium">
+            Completato
+          </Badge>
+        );
+      case 'Annullato':
+        return (
+          <Badge className="bg-red-600 text-white hover:bg-red-700 text-xs px-2 py-1 rounded-md font-medium">
+            Annullato
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline" className="text-xs">{stato}</Badge>;
+    }
+  };
+
   if (configQuery.isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1182,7 +1214,7 @@ const FattureInCloudConfig: React.FC = () => {
                               <td className="p-3 text-sm">{new Date(ordine.data).toLocaleDateString('it-IT')}</td>
                               <td className="p-3 text-sm">{ordine.clienteNome}</td>
                               <td className="p-3 text-sm">
-                                <Badge variant="outline">{ordine.stato}</Badge>
+                                {getOrderStatoBadge(ordine.stato)}
                               </td>
                               <td className="p-3 text-sm text-right font-medium">
                                 {ordine.totaleAnimali?.toLocaleString('it-IT') || '0'}
@@ -1320,7 +1352,7 @@ const FattureInCloudConfig: React.FC = () => {
                     </div>
                     <div>
                       <Label className="text-sm text-gray-500">Stato</Label>
-                      <Badge variant="outline">{orderDetailsQuery.data.order.stato}</Badge>
+                      {getOrderStatoBadge(orderDetailsQuery.data.order.stato)}
                     </div>
                     <div>
                       <Label className="text-sm text-gray-500">Totale Animali</Label>
