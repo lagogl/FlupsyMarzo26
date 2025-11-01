@@ -69,3 +69,31 @@
     animation-delay: 0.3s;
   }
 }
+
+/* Stili personalizzati per il Date Range Picker */
+@layer components {
+  /* Giorni nel range selezionato - blu chiaro più visibile */
+  .rdp-day_range_middle {
+    @apply bg-blue-100 text-blue-900 !important;
+  }
+  
+  /* Primo giorno del range */
+  .rdp-day_range_start {
+    @apply bg-blue-500 text-white rounded-l-md !important;
+  }
+  
+  /* Ultimo giorno del range */
+  .rdp-day_range_end {
+    @apply bg-blue-500 text-white rounded-r-md !important;
+  }
+  
+  /* Giorni selezionati singoli */
+  .rdp-day_selected {
+    @apply bg-blue-500 text-white !important;
+  }
+  
+  /* Hover sui giorni */
+  .rdp-day:not(.rdp-day_disabled):hover {
+    @apply bg-blue-50 !important;
+  }
+}

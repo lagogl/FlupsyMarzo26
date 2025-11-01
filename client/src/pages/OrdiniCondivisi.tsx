@@ -356,9 +356,10 @@ export default function OrdiniCondivisi() {
 
   const openDatePicker = (ordineId: number, dataInizio: string | null, dataFine: string | null) => {
     setDatePickerOrdineId(ordineId);
+    // Resetta sempre il range quando si apre il picker
     setSelectedDateRange({
-      from: dataInizio ? new Date(dataInizio) : undefined,
-      to: dataFine ? new Date(dataFine) : undefined
+      from: undefined,
+      to: undefined
     });
   };
 
