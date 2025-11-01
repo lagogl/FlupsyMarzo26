@@ -189,7 +189,71 @@ COMMENT ON COLUMN ordini_dettagli.taglia IS 'Taglia prodotto (es: TP-2000, TP-30
 COMMENT ON COLUMN ordini_dettagli.fic_item_id IS 'ID riga in Fatture in Cloud';
 
 -- ============================================
--- 7. VERIFICA FINALE
+-- 7. TRIGGER AUTOMATICO PER AGGIORNAMENTO STATO
+-- ============================================
+
+-- Crea funzione per aggiornare automaticamente lo stato dell'ordine
+CREATE OR REPLACE FUNCTION aggiorna_stato_ordine()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_ordine_id INTEGER;
+  v_totale_consegnato INTEGER;
+  v_quantita_totale INTEGER;
+  v_nuovo_stato VARCHAR(50);
+BEGIN
+  -- Determina l'ID dell'ordine (funziona sia per INSERT/UPDATE che per DELETE)
+  IF TG_OP = 'DELETE' THEN
+    v_ordine_id := OLD.ordine_id;
+  ELSE
+    v_ordine_id := NEW.ordine_id;
+  END IF;
+  
+  -- Calcola totale consegnato per questo ordine
+  SELECT COALESCE(SUM(quantita_consegnata), 0)
+  INTO v_totale_consegnato
+  FROM consegne_condivise
+  WHERE ordine_id = v_ordine_id;
+  
+  -- Ottieni quantità totale ordinata
+  SELECT quantita_totale
+  INTO v_quantita_totale
+  FROM ordini
+  WHERE id = v_ordine_id;
+  
+  -- Calcola nuovo stato basandosi sulle consegne effettive
+  IF v_totale_consegnato = 0 THEN
+    v_nuovo_stato := 'Aperto';
+  ELSIF v_totale_consegnato >= v_quantita_totale THEN
+    v_nuovo_stato := 'Completato';
+  ELSE
+    v_nuovo_stato := 'Parziale';
+  END IF;
+  
+  -- Aggiorna lo stato dell'ordine
+  UPDATE ordini
+  SET stato = v_nuovo_stato,
+      updated_at = NOW()
+  WHERE id = v_ordine_id;
+  
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  ELSE
+    RETURN NEW;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Crea trigger su INSERT/UPDATE/DELETE di consegne
+DROP TRIGGER IF EXISTS trigger_aggiorna_stato_ordine ON consegne_condivise;
+CREATE TRIGGER trigger_aggiorna_stato_ordine
+AFTER INSERT OR UPDATE OR DELETE ON consegne_condivise
+FOR EACH ROW
+EXECUTE FUNCTION aggiorna_stato_ordine();
+
+SELECT '✅ Trigger automatico creato! Lo stato degli ordini si aggiornerà automaticamente.' as messaggio;
+
+-- ============================================
+-- 8. VERIFICA FINALE
 -- ============================================
 
 SELECT '✅ Setup completato con successo!' as messaggio;
