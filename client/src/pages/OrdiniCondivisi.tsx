@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -108,6 +109,20 @@ export default function OrdiniCondivisi() {
   const [filtroTaglia, setFiltroTaglia] = useState<string | null>(null);
   const [datePickerOrdineId, setDatePickerOrdineId] = useState<number | null>(null);
   const [selectedDateRange, setSelectedDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
+  
+  // Stato progresso sincronizzazione FIC
+  const [syncProgress, setSyncProgress] = useState<{
+    isActive: boolean;
+    message: string;
+    progress: number;
+    current?: number;
+    total?: number;
+    created?: number;
+    updated?: number;
+    failed?: number;
+  }>({ isActive: false, message: '', progress: 0 });
+  
+  const wsRef = useRef<WebSocket | null>(null);
 
   // Query ordini
   const { data: ordiniResponse, isLoading: loadingOrdini } = useQuery<{ success: boolean; ordini: OrdineCondiviso[]; count: number }>({
@@ -134,6 +149,69 @@ export default function OrdiniCondivisi() {
     }));
     setOrdiniEditabili(editabili);
   }, [ordini]);
+
+  // WebSocket per monitorare il progresso della sincronizzazione FIC
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    const connectWebSocket = () => {
+      const ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('🔗 WebSocket connesso per progresso sincronizzazione');
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          
+          if (message.type === 'fic_sync_progress') {
+            const data = message.data;
+            
+            setSyncProgress({
+              isActive: data.step !== 'complete',
+              message: data.message || '',
+              progress: data.progress || 0,
+              current: data.current,
+              total: data.total,
+              created: data.created,
+              updated: data.updated,
+              failed: data.failed
+            });
+            
+            // Nascondi il progresso dopo 3 secondi se completato
+            if (data.step === 'complete') {
+              setTimeout(() => {
+                setSyncProgress({ isActive: false, message: '', progress: 0 });
+              }, 3000);
+            }
+          }
+        } catch (error) {
+          console.error('Errore parsing messaggio WebSocket:', error);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('Errore WebSocket:', error);
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket chiuso, riconnessione in 3s...');
+        setTimeout(connectWebSocket, 3000);
+      };
+      
+      wsRef.current = ws;
+    };
+    
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
 
   // Mappa colori per taglie (dal più chiaro al più scuro)
   const getTagliaColor = (taglia: string): { bg: string; border: string; text: string } => {
@@ -528,6 +606,14 @@ export default function OrdiniCondivisi() {
     mutationFn: async () => {
       return apiRequest('/api/fatture-in-cloud/orders/sync', 'POST', {});
     },
+    onMutate: () => {
+      // Attiva lo stato del progresso
+      setSyncProgress({
+        isActive: true,
+        message: 'Avvio sincronizzazione con Fatture in Cloud...',
+        progress: 0
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi'] });
       queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi/consegne'] });
@@ -537,6 +623,8 @@ export default function OrdiniCondivisi() {
       });
     },
     onError: (error: any) => {
+      // Nascondi il progresso in caso di errore
+      setSyncProgress({ isActive: false, message: '', progress: 0 });
       toast({
         title: '❌ Errore sincronizzazione',
         description: error.message || 'Impossibile sincronizzare con Fatture in Cloud',
@@ -698,6 +786,42 @@ export default function OrdiniCondivisi() {
           </Button>
         </div>
       </div>
+
+      {/* Indicatore Progresso Sincronizzazione */}
+      {syncProgress.isActive && (
+        <Card className="border-blue-200 bg-blue-50/80 shadow-sm">
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
+                  <span className="text-sm font-medium text-blue-900">{syncProgress.message}</span>
+                </div>
+                {syncProgress.current && syncProgress.total && (
+                  <span className="text-xs text-blue-700 font-mono">
+                    {syncProgress.current}/{syncProgress.total}
+                  </span>
+                )}
+              </div>
+              <Progress value={syncProgress.progress} className="h-2" />
+              <div className="flex items-center justify-between text-xs text-blue-700">
+                <span>{syncProgress.progress}%</span>
+                <div className="flex gap-3">
+                  {syncProgress.created !== undefined && syncProgress.created > 0 && (
+                    <span className="font-medium">✨ {syncProgress.created} nuovi</span>
+                  )}
+                  {syncProgress.updated !== undefined && syncProgress.updated > 0 && (
+                    <span className="font-medium">🔄 {syncProgress.updated} aggiornati</span>
+                  )}
+                  {syncProgress.failed !== undefined && syncProgress.failed > 0 && (
+                    <span className="font-medium text-amber-700">⚠️ {syncProgress.failed} falliti</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Totali Animali */}
       <div className="grid grid-cols-2 gap-3">
