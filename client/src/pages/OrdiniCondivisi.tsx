@@ -72,6 +72,7 @@ interface OrdineCondiviso {
   syncStatus: string;
   fattureInCloudId: number | null;
   urlDocumento: string | null;
+  cancellato: boolean;
   righe?: RigaOrdine[];
 }
 
@@ -100,6 +101,7 @@ export default function OrdiniCondivisi() {
   const { toast } = useToast();
   const [ricercaCliente, setRicercaCliente] = useState('');
   const [filtroStato, setFiltroStato] = useState<string>('tutti');
+  const [mostraCancellati, setMostraCancellati] = useState(false);
   const [selezionati, setSelezionati] = useState<Set<number>>(new Set());
   const [righeEspanse, setRigheEspanse] = useState<Set<number>>(new Set());
   const [ordiniEditabili, setOrdiniEditabili] = useState<EditableRow[]>([]);
@@ -237,6 +239,10 @@ export default function OrdiniCondivisi() {
       if (filtroTaglia && ord.tagliaRichiesta !== filtroTaglia) {
         return false;
       }
+      // Escludi ordini cancellati se non richiesto
+      if (!mostraCancellati && ord.cancellato) {
+        return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -276,28 +282,36 @@ export default function OrdiniCondivisi() {
     });
 
   // Statistiche basate su TUTTI gli ordini (non filtrati)
+  // Escludi ordini cancellati dalle statistiche principali
+  const ordiniAttivi = ordini.filter(o => !o.cancellato);
   const statsGlobali = {
-    tutti: ordini.length,
-    aperti: ordini.filter(o => o.stato === 'Aperto').length,
-    parziali: ordini.filter(o => o.stato === 'Parziale').length,
-    completati: ordini.filter(o => o.stato === 'Completato').length,
-    annullati: 0
+    tutti: ordiniAttivi.length,
+    aperti: ordiniAttivi.filter(o => o.stato === 'Aperto').length,
+    parziali: ordiniAttivi.filter(o => o.stato === 'Parziale').length,
+    completati: ordiniAttivi.filter(o => o.stato === 'Completato').length,
+    annullati: 0,
+    cancellati: ordini.filter(o => o.cancellato).length
   };
 
-  // Calcolo totali animali
-  const totaleOrdinato = ordini.reduce((sum, o) => sum + (o.quantitaTotale || 0), 0);
-  const totaleConsegnato = consegne.reduce((sum, c) => sum + c.quantitaConsegnata, 0);
+  // Calcolo totali animali (escludi ordini cancellati)
+  const totaleOrdinato = ordiniAttivi.reduce((sum, o) => sum + (o.quantitaTotale || 0), 0);
+  // Escludi consegne di ordini cancellati
+  const consegneOrdiniAttivi = consegne.filter(c => {
+    const ordine = ordini.find(o => o.id === c.ordineId);
+    return ordine && !ordine.cancellato;
+  });
+  const totaleConsegnato = consegneOrdiniAttivi.reduce((sum, c) => sum + c.quantitaConsegnata, 0);
   
-  // Calcolo per taglia
-  const statsTaglia = ordini.reduce((acc: Record<string, { ordinato: number; consegnato: number }>, ordine) => {
+  // Calcolo per taglia (escludi ordini cancellati)
+  const statsTaglia = ordiniAttivi.reduce((acc: Record<string, { ordinato: number; consegnato: number }>, ordine) => {
     const taglia = ordine.tagliaRichiesta || 'N/D';
     if (!acc[taglia]) {
       acc[taglia] = { ordinato: 0, consegnato: 0 };
     }
     acc[taglia].ordinato += ordine.quantitaTotale || 0;
     
-    // Aggiungi consegne per questo ordine
-    const consegneOrdine = consegne.filter(c => c.ordineId === ordine.id);
+    // Aggiungi consegne per questo ordine (solo ordini attivi)
+    const consegneOrdine = consegneOrdiniAttivi.filter(c => c.ordineId === ordine.id);
     acc[taglia].consegnato += consegneOrdine.reduce((sum, c) => sum + c.quantitaConsegnata, 0);
     
     return acc;
@@ -473,6 +487,15 @@ export default function OrdiniCondivisi() {
   };
 
   const getStatoBadge = (stato: string, ordine?: OrdineCondiviso) => {
+    // Priorità al badge "Cancellato" se l'ordine è stato eliminato da FIC
+    if (ordine?.cancellato) {
+      return (
+        <Badge className="bg-red-600 text-white hover:bg-red-700 text-xs px-2 py-1 rounded-md font-medium">
+          Cancellato
+        </Badge>
+      );
+    }
+    
     switch (stato) {
       case 'Aperto':
         return (
@@ -754,6 +777,13 @@ export default function OrdiniCondivisi() {
                 <div className="flex items-center justify-between w-full">
                   <span>Solo Completati</span>
                   {filtroStato === 'Completato' && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setMostraCancellati(!mostraCancellati)}>
+                <div className="flex items-center justify-between w-full">
+                  <span>Mostra Cancellati</span>
+                  {mostraCancellati && <CheckCircle2 className="w-4 h-4 text-primary" />}
                 </div>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
