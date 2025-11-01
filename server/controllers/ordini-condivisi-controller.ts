@@ -90,13 +90,13 @@ router.get('/', async (req: Request, res: Response) => {
       data: o.data,
       clienteId: o.cliente_id,
       clienteNome: o.cliente_nome,
-      stato: o.stato_calcolato || o.stato, // Usa stato calcolato dinamicamente
+      stato: o.stato || o.stato_calcolato, // Usa stato ORIGINALE della tabella (non quello calcolato)
       statoOriginale: o.stato, // Mantieni anche lo stato originale per riferimento
       quantitaTotale: o.quantita_totale || 0,
       tagliaRichiesta: o.taglia_richiesta,
       quantitaConsegnata: o.quantita_consegnata || 0,
       quantitaResidua: o.quantita_residua || 0,
-      statoCalcolato: o.stato_calcolato,
+      statoCalcolato: o.stato_calcolato, // Informazione aggiuntiva per la logica
       dataInizioConsegna: o.data_inizio_consegna,
       dataFineConsegna: o.data_fine_consegna,
       syncStatus: o.sync_status,
@@ -155,11 +155,11 @@ router.get('/consegne/', async (req: Request, res: Response) => {
     }
     
     if (dataInizio) {
-      conditions.push(gte(consegneCondivise.dataConsegna, new Date(dataInizio as string)));
+      conditions.push(gte(consegneCondivise.dataConsegna, dataInizio as string));
     }
     
     if (dataFine) {
-      conditions.push(lte(consegneCondivise.dataConsegna, new Date(dataFine as string)));
+      conditions.push(lte(consegneCondivise.dataConsegna, dataFine as string));
     }
     
     const consegneRaw = await dbEsterno
@@ -253,7 +253,7 @@ router.post('/consegne/', async (req: Request, res: Response) => {
       .insert(consegneCondivise)
       .values({
         ordineId,
-        dataConsegna: new Date(dataConsegna),
+        dataConsegna: new Date(dataConsegna).toISOString().split('T')[0],
         quantitaConsegnata: quantita,
         appOrigine: 'delta_futuro',
         note: note || null
@@ -405,9 +405,9 @@ router.patch('/:id/delivery-range', async (req: Request, res: Response) => {
     await dbEsterno
       .update(ordiniCondivisi)
       .set({
-        dataInizioConsegna: new Date(dataInizioConsegna),
-        dataFineConsegna: new Date(dataFineConsegna),
-        updatedAt: new Date()
+        dataInizioConsegna: new Date(dataInizioConsegna).toISOString().split('T')[0],
+        dataFineConsegna: new Date(dataFineConsegna).toISOString().split('T')[0],
+        updatedAt: sql`NOW()`
       })
       .where(eq(ordiniCondivisi.id, parseInt(id)));
     
