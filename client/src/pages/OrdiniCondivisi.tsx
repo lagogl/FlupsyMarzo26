@@ -464,20 +464,23 @@ export default function OrdiniCondivisi() {
       
       const rigaBase = {
         'Numero Ordine': ordine.numero || '',
-        'Cliente': ordine.cliente || '',
-        'Data Ordine': ordine.dataOrdine ? format(new Date(ordine.dataOrdine), 'dd/MM/yyyy', { locale: it }) : '',
+        'Cliente': ordine.clienteNome || '',
+        'Data Ordine': ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
         'Stato': ordine.stato || '',
-        'Quantità Totale': ordine.quantitaTotale || 0,
+        'Quantità Totale Ordine': ordine.quantitaTotale || 0,
+        'Taglia Ordine': ordine.tagliaRichiesta || '',
       };
 
       const righe = righeOrdine.map(riga => ({
         ...rigaBase,
-        'Tipo Riga': 'Prodotto',
+        'Tipo Riga': 'Dettaglio Prodotto',
+        'Riga N.': riga.rigaNumero || '',
+        'Codice Prodotto': riga.codiceProdotto || '',
         'Taglia': riga.taglia || '',
         'Descrizione': riga.descrizione || '',
         'Quantità': riga.quantita || 0,
-        'Prezzo Unitario': riga.prezzoUnitario || 0,
-        'Importo': riga.importoRiga || 0,
+        'Prezzo Unitario (€)': riga.prezzoUnitario || 0,
+        'Importo (€)': riga.importoRiga || 0,
       }));
 
       const consegneRighe = consegneOrdine.map(consegna => ({
@@ -486,7 +489,7 @@ export default function OrdiniCondivisi() {
         'Data Consegna': consegna.dataConsegna ? format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it }) : '',
         'Quantità Consegnata': consegna.quantitaConsegnata || 0,
         'App Origine': consegna.appOrigine === 'delta_futuro' ? 'SandNursery' : 'Flupsy',
-        'Note': consegna.note || '',
+        'Note Consegna': consegna.note || '',
       }));
 
       return [...righe, ...consegneRighe];
