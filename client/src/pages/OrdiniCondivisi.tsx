@@ -28,7 +28,9 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  X
+  X,
+  ChevronsDown,
+  ChevronsUp
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -201,6 +203,23 @@ export default function OrdiniCondivisi() {
     const nuove = new Set(righeEspanse);
     nuove.has(id) ? nuove.delete(id) : nuove.add(id);
     setRigheEspanse(nuove);
+  };
+
+  const espandiTutte = () => {
+    const tuttiIds = new Set(ordiniFiltrati.map(o => o.id));
+    setRigheEspanse(tuttiIds);
+  };
+
+  const comprimiTutte = () => {
+    setRigheEspanse(new Set());
+  };
+
+  const toggleTutte = () => {
+    if (righeEspanse.size === ordiniFiltrati.length) {
+      comprimiTutte();
+    } else {
+      espandiTutte();
+    }
   };
 
   const startEdit = (id: number) => {
@@ -499,11 +518,32 @@ export default function OrdiniCondivisi() {
       {/* Tabella Excel-like */}
       <Card className="border-0 shadow-md">
         <CardContent className="p-0">
-          <div className="p-4 border-b bg-muted/30">
-            <h2 className="text-base font-semibold">Lista Ordini</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {ordiniFiltrati.length} ordini trovati
-            </p>
+          <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold">Lista Ordini</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {ordiniFiltrati.length} ordini trovati
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toggleTutte}
+              className="h-8 gap-2"
+              data-testid="button-toggle-all-rows"
+            >
+              {righeEspanse.size === ordiniFiltrati.length ? (
+                <>
+                  <ChevronsUp className="w-4 h-4" />
+                  Comprimi Tutto
+                </>
+              ) : (
+                <>
+                  <ChevronsDown className="w-4 h-4" />
+                  Espandi Tutto
+                </>
+              )}
+            </Button>
           </div>
 
           {ordiniFiltrati.length === 0 ? (
