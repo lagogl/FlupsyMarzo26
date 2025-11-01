@@ -84,24 +84,9 @@ router.get('/', async (req: Request, res: Response) => {
     }
     
     // Trasforma snake_case in camelCase e aggiungi righe
-    const ordini = ordiniRaw.map((o: any) => ({
-      id: o.id,
-      numero: o.numero,
-      data: o.data,
-      clienteId: o.cliente_id,
-      clienteNome: o.cliente_nome,
-      stato: o.stato || o.stato_calcolato, // Usa stato ORIGINALE della tabella (non quello calcolato)
-      statoOriginale: o.stato, // Mantieni anche lo stato originale per riferimento
-      quantitaTotale: o.quantita_totale || 0,
-      tagliaRichiesta: o.taglia_richiesta,
-      quantitaConsegnata: o.quantita_consegnata || 0,
-      quantitaResidua: o.quantita_residua || 0,
-      statoCalcolato: o.stato_calcolato, // Informazione aggiuntiva per la logica
-      dataInizioConsegna: o.data_inizio_consegna,
-      dataFineConsegna: o.data_fine_consegna,
-      syncStatus: o.sync_status,
-      fattureInCloudId: o.fatture_in_cloud_id,
-      righe: righeDettaglio
+    const ordini = ordiniRaw.map((o: any) => {
+      // Mappa righe dettaglio per questo ordine
+      const righeOrdine = righeDettaglio
         .filter((r: any) => r.ordine_id === o.id)
         .map((r: any) => ({
           id: r.id,
@@ -112,8 +97,31 @@ router.get('/', async (req: Request, res: Response) => {
           quantita: parseInt(r.quantita?.toString() || '0'),
           prezzoUnitario: parseFloat(r.prezzo_unitario?.toString() || '0'),
           importoRiga: parseFloat(r.importo_riga?.toString() || '0')
-        }))
-    }));
+        }));
+      
+      // Calcola quantità totale sommando le righe dettaglio
+      const quantitaTotaleCalcolata = righeOrdine.reduce((sum, riga) => sum + riga.quantita, 0);
+      
+      return {
+        id: o.id,
+        numero: o.numero,
+        data: o.data,
+        clienteId: o.cliente_id,
+        clienteNome: o.cliente_nome,
+        stato: o.stato || o.stato_calcolato, // Usa stato ORIGINALE della tabella (non quello calcolato)
+        statoOriginale: o.stato, // Mantieni anche lo stato originale per riferimento
+        quantitaTotale: quantitaTotaleCalcolata || o.quantita_totale || 0, // Usa quantità calcolata dalle righe
+        tagliaRichiesta: o.taglia_richiesta,
+        quantitaConsegnata: o.quantita_consegnata || 0,
+        quantitaResidua: (quantitaTotaleCalcolata || o.quantita_totale || 0) - (o.quantita_consegnata || 0),
+        statoCalcolato: o.stato_calcolato, // Informazione aggiuntiva per la logica
+        dataInizioConsegna: o.data_inizio_consegna,
+        dataFineConsegna: o.data_fine_consegna,
+        syncStatus: o.sync_status,
+        fattureInCloudId: o.fatture_in_cloud_id,
+        righe: righeOrdine
+      };
+    });
     
     res.json({
       success: true,
