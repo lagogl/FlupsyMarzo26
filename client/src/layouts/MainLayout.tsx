@@ -133,8 +133,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <RefreshCw className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.productionCycles, path: "/cycles" },
         { icon: <Scale className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.sizeTable, path: "/sizes" },
         { icon: <Boxes className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockInventory, path: "/inventory" },
-        { icon: <CalendarDays className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockRangeCalculation, path: "/giacenze-range" },
-        { icon: <FileJson className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.export, path: "/export" }
+        { icon: <CalendarDays className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockRangeCalculation, path: "/giacenze-range" }
       ]
     },
     {

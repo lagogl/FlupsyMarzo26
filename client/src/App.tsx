@@ -32,7 +32,6 @@ import NFCTagManager from "@/pages/NFCTagManager";
 import NFCPrimaAttivazione from "@/pages/NFCPrimaAttivazione";
 import GrowJourney from "@/pages/GrowJourney";
 import BasketSelection from "@/pages/BasketSelection";
-import ExportPage from "@/pages/ExportPage";
 import DiarioDiBordo from "@/pages/DiarioDiBordo";
 import NotificationSettings from "@/pages/NotificationSettings";
 import NotificationManager from "@/pages/NotificationManager";
@@ -107,7 +106,6 @@ function Router() {
       <ProtectedRoute path="/mixed-lots-analytics" component={MixedLotsAnalytics}/>
       <ProtectedRoute path="/lot-ledger-statistics" component={LotLedgerStatistics}/>
       <ProtectedRoute path="/inventory" component={Inventory}/>
-      <ProtectedRoute path="/export" component={ExportPage}/>
       <ProtectedRoute path="/sizes" component={Sizes}/>
       <ProtectedRoute path="/sgr" component={Sgr}/>
       <ProtectedRoute path="/settings" component={Settings} requiredRole="admin" />
