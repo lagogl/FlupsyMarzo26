@@ -47,8 +47,41 @@ export default function NFCWriter({ basketId, basketNumber, onSuccess, onCancel 
     // CRITICAL: Log error nella console per debugging
     console.error(`❌ NFC ERROR [${context}]:`, details.message, details);
     
+    // Personalizza il messaggio di errore per casi comuni
+    let userMessage = details.message;
+    
+    // Errore I/O con codice 19 - Tag allontanato durante la scrittura
+    if (String(details.code) === '19' || 
+        details.message.includes('IO error') || 
+        details.message.includes('I/O error')) {
+      userMessage = '⚠️ TAG ALLONTANATO TROPPO PRESTO\n\n' +
+                   'Il tag NFC è stato rimosso dal lettore prima che la scrittura fosse completata.\n\n' +
+                   '✅ COSA FARE:\n' +
+                   '1. Mantieni il tag vicino al lettore\n' +
+                   '2. Non muovere il tag durante la scrittura\n' +
+                   '3. Attendi il messaggio di conferma\n' +
+                   '4. Riprova la programmazione';
+    }
+    // Tag protetto da scrittura
+    else if (details.message.includes('read-only') || 
+             details.message.includes('write-protected') ||
+             details.message.includes('protected')) {
+      userMessage = '🔒 TAG PROTETTO DA SCRITTURA\n\n' +
+                   'Questo tag NFC è protetto e non può essere modificato.\n\n' +
+                   '✅ COSA FARE:\n' +
+                   'Usa un tag NFC riscrivibile (es. NTAG213/215/216)';
+    }
+    // Tag pieno o incompatibile
+    else if (details.message.includes('not enough space') || 
+             details.message.includes('insufficient memory')) {
+      userMessage = '💾 SPAZIO INSUFFICIENTE\n\n' +
+                   'Il tag NFC non ha abbastanza memoria per i dati.\n\n' +
+                   '✅ COSA FARE:\n' +
+                   'Usa un tag NFC con maggiore capacità (es. NTAG216)';
+    }
+    
     // Mostra nell'UI
-    setError(details.message);
+    setError(userMessage);
     setErrorDetails(details);
     setIsScanning(false);
     

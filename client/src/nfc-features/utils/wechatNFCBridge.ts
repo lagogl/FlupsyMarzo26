@@ -21,7 +21,9 @@ interface NFCWriteData {
   basketId: number;
   physicalNumber: number;
   currentCycleId?: number | null;
+  cycleCode?: string | null;
   flupsyId: number;
+  row?: number | null;
   position?: number | null;
   
   // Metadati tecnici
