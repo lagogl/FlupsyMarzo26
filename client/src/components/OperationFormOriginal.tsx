@@ -365,15 +365,25 @@ export default function OperationForm({
       // Peso medio in grammi = 1000 / animali per kg
       const avgWeightInGrams = 1000 / watchAnimalsPerKg;
       
-      // Numero di animali = peso totale / peso medio di un animale
-      const calculatedAnimalCount = Math.round(watchTotalWeight / avgWeightInGrams);
+      // Numero totale di animali dal peso (vivi + morti)
+      const totalAnimalsFromWeight = Math.round(watchTotalWeight / avgWeightInGrams);
+      
+      // Stima gli animali morti basandosi sul rapporto morti/peso del campione
+      let deadAnimalsEstimated = 0;
+      if (watchSampleWeight && watchSampleWeight > 0 && deadCount > 0) {
+        // Rapporto: morti nel campione / peso campione * peso totale
+        deadAnimalsEstimated = Math.round((deadCount / watchSampleWeight) * watchTotalWeight);
+      }
+      
+      // Numero di animali VIVI = totale - morti stimati
+      const calculatedAnimalCount = totalAnimalsFromWeight - deadAnimalsEstimated;
       
       // Imposta il valore calcolato solo se non è attiva la modifica manuale
       if (!watchManualCountAdjustment) {
         form.setValue('animalCount', calculatedAnimalCount);
       }
     }
-  }, [watchTotalWeight, watchAnimalsPerKg, form, watchManualCountAdjustment]);
+  }, [watchTotalWeight, watchAnimalsPerKg, watchSampleWeight, deadCount, form, watchManualCountAdjustment]);
 
   // Calcola valori derivati per misurazione
   useEffect(() => {
