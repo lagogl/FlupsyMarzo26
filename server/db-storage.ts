@@ -1181,12 +1181,10 @@ export class DbStorage implements IStorage {
       const lotsData = await db.select().from(lots).orderBy(desc(lots.arrivalDate));
       const duration = Date.now() - startTime;
       
-      const sanitizedLots = lotsData.map(lot => ({
-        ...lot,
-        createdAt: lot.createdAt && typeof lot.createdAt === 'object' && !(lot.createdAt instanceof Date)
-          ? new Date(lot.arrivalDate)
-          : lot.createdAt
-      }));
+      const sanitizedLots = lotsData.map(lot => {
+        const { createdAt, ...lotWithoutCreatedAt } = lot;
+        return lotWithoutCreatedAt;
+      });
       
       // Salva in cache
       this.lotsCache.set(cacheKey, {
