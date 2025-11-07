@@ -1214,7 +1214,7 @@ export default function Operations() {
   
   // Function to get SGR data for a specific month
   const getSgrForMonth = (date: Date) => {
-    if (!sgrs || sgrs.length === 0) return null;
+    if (!sgrs || sgrs.length === 0 || !date || isNaN(date.getTime())) return null;
     
     const month = format(date, 'MMMM', { locale: it }).toLowerCase();
     return sgrs.find((sgr: any) => sgr.month.toLowerCase() === month);
@@ -1889,7 +1889,7 @@ export default function Operations() {
                                   <span>📍 {freePositions} libere</span>
                                 )}
                               </div>
-                              {lastOperationDate && (
+                              {lastOperationDate && !isNaN(lastOperationDate.getTime()) && (
                                 <span className="text-gray-400">
                                   {format(lastOperationDate, 'dd/MM', { locale: it })}
                                 </span>
@@ -3056,7 +3056,12 @@ export default function Operations() {
                                   Modifica
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
-                                  const nextDay = addDays(new Date(op.date), 1);
+                                  const opDate = new Date(op.date);
+                                  if (isNaN(opDate.getTime())) {
+                                    console.error('Data operazione non valida:', op.date);
+                                    return;
+                                  }
+                                  const nextDay = addDays(opDate, 1);
                                   const operationType = op.type === 'prima-attivazione' ? 'misura' : op.type;
                                   const duplicatedOp = {
                                     ...op,
@@ -3598,6 +3603,12 @@ export default function Operations() {
                                       
                                       const startDate = new Date(firstOp.date);
                                       const endDate = new Date(lastOp.date);
+                                      
+                                      // Verifica che le date siano valide
+                                      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                                        return null;
+                                      }
+                                      
                                       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
                                       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                                       
