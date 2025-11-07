@@ -1,0 +1,241 @@
+Stato iniziale operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 IDs operazioni: (16) [16, 12, 13, 14, 11, 15, 8, 9, 10, 5, 6, 7, 4, 3, 1, 2]
+injected.js:27 PESO operations count: 5
+injected.js:27 Mapping operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 Lotti disponibili: []
+injected.js:27 Cestello trovato per operazione 16: ID 71, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 12: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 13: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 14: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 11: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 15: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 8: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 9: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 10: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 5: ID 62, physicalNumber 2
+injected.js:27 Cestello trovato per operazione 6: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 7: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 4: ID 61, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 3: ID 23, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 1: ID 21, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 2: ID 22, physicalNumber 2
+injected.js:27 🔍 FILTER: Processing 16 operations
+injected.js:27 Operazione di esempio: {id: 16, date: '2025-11-07', type: 'prima-attivazione', basketId: 71, cycleId: 11, …}
+injected.js:27 🔍 FILTER: Filtered from 16 to 16 operations
+injected.js:27 🔍 FILTER: Returning 16 sorted operations
+injected.js:27 ⛔ OPERAZIONE BLOCCATA: Cestello senza ciclo attivo. Solo Prima Attivazione permessa.
+injected.js:27 Query request to: /api/operations
+injected.js:27 Query request to: /api/flupsys
+injected.js:27 Query request to: /api/sizes
+injected.js:27 Query request to: /api/sgr
+injected.js:27 Query request to: /api/lots/active
+injected.js:27 🔄 FORM: Apertura form - forzo refresh immediato cestelli
+injected.js:27 Query request to: /api/baskets?includeAll=true
+injected.js:27 🔧 RESET flupsyBaskets - nessun FLUPSY selezionato
+injected.js:27 🔍 Debug auto-set OperationFormCompact - ENTRY: {watchBasketId: null, baskets: 'Array with 90 items', currentType: 'misura', formValues: {…}}
+injected.js:27 🔍 Debug auto-set OperationFormCompact - DETAILS: {watchBasketId: null, selectedBasket: null, shouldAutoSet: null, currentType: 'misura', basketsLoaded: true}
+injected.js:27 Modalità automatica attivata - ricalcolo valori
+injected.js:27  Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ Dialog.tsx:540
+commitHookEffectListMount @ react-dom.development.js:23189
+commitPassiveMountOnFiber @ react-dom.development.js:24965
+commitPassiveMountEffects_complete @ react-dom.development.js:24930
+commitPassiveMountEffects_begin @ react-dom.development.js:24917
+commitPassiveMountEffects @ react-dom.development.js:24905
+flushPassiveEffectsImpl @ react-dom.development.js:27078
+flushPassiveEffects @ react-dom.development.js:27023
+commitRootImpl @ react-dom.development.js:26974
+commitRoot @ react-dom.development.js:26721
+performSyncWorkOnRoot @ react-dom.development.js:26156
+flushSyncCallbacks @ react-dom.development.js:12042
+(anonymous) @ react-dom.development.js:25690
+injected.js:27 Stato iniziale operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 IDs operazioni: (16) [16, 12, 13, 14, 11, 15, 8, 9, 10, 5, 6, 7, 4, 3, 1, 2]
+injected.js:27 PESO operations count: 5
+injected.js:27 Mapping operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 Lotti disponibili: []
+injected.js:27 Cestello trovato per operazione 16: ID 71, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 12: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 13: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 14: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 11: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 15: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 8: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 9: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 10: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 5: ID 62, physicalNumber 2
+injected.js:27 Cestello trovato per operazione 6: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 7: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 4: ID 61, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 3: ID 23, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 1: ID 21, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 2: ID 22, physicalNumber 2
+injected.js:27 🔍 FILTER: Processing 16 operations
+injected.js:27 Operazione di esempio: {id: 16, date: '2025-11-07', type: 'prima-attivazione', basketId: 71, cycleId: 11, …}
+injected.js:27 🔍 FILTER: Filtered from 16 to 16 operations
+injected.js:27 🔍 FILTER: Returning 16 sorted operations
+injected.js:27 ⛔ OPERAZIONE BLOCCATA: Cestello senza ciclo attivo. Solo Prima Attivazione permessa.
+injected.js:27 Stato iniziale operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 IDs operazioni: (16) [16, 12, 13, 14, 11, 15, 8, 9, 10, 5, 6, 7, 4, 3, 1, 2]
+injected.js:27 PESO operations count: 5
+injected.js:27 Mapping operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 Lotti disponibili: []
+injected.js:27 Cestello trovato per operazione 16: ID 71, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 12: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 13: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 14: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 11: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 15: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 8: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 9: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 10: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 5: ID 62, physicalNumber 2
+injected.js:27 Cestello trovato per operazione 6: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 7: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 4: ID 61, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 3: ID 23, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 1: ID 21, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 2: ID 22, physicalNumber 2
+injected.js:27 🔍 FILTER: Processing 16 operations
+injected.js:27 Operazione di esempio: {id: 16, date: '2025-11-07', type: 'prima-attivazione', basketId: 71, cycleId: 11, …}
+injected.js:27 🔍 FILTER: Filtered from 16 to 16 operations
+injected.js:27 🔍 FILTER: Returning 16 sorted operations
+injected.js:27 Stato iniziale operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 IDs operazioni: (16) [16, 12, 13, 14, 11, 15, 8, 9, 10, 5, 6, 7, 4, 3, 1, 2]
+injected.js:27 PESO operations count: 5
+injected.js:27 Mapping operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 Lotti disponibili: []
+injected.js:27 Cestello trovato per operazione 16: ID 71, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 12: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 13: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 14: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 11: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 15: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 8: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 9: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 10: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 5: ID 62, physicalNumber 2
+injected.js:27 Cestello trovato per operazione 6: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 7: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 4: ID 61, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 3: ID 23, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 1: ID 21, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 2: ID 22, physicalNumber 2
+injected.js:27 🔍 FILTER: Processing 16 operations
+injected.js:27 Operazione di esempio: {id: 16, date: '2025-11-07', type: 'prima-attivazione', basketId: 71, cycleId: 11, …}
+injected.js:27 🔍 FILTER: Filtered from 16 to 16 operations
+injected.js:27 🔍 FILTER: Returning 16 sorted operations
+injected.js:27 🚀 FILTER CHANGE DEBUG v2: {flupsyFilter: 'all', cycleStateFilter: 'all', basketsCount: 90, cyclesCount: 11, timestamp: '2025-11-07T15:58:15.401Z'}
+injected.js:27 Stato iniziale operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 IDs operazioni: (16) [16, 12, 13, 14, 11, 15, 8, 9, 10, 5, 6, 7, 4, 3, 1, 2]
+injected.js:27 PESO operations count: 5
+injected.js:27 Mapping operazioni: (16) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 Lotti disponibili: []
+injected.js:27 Cestello trovato per operazione 16: ID 71, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 12: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 13: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 14: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 11: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 15: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 8: ID 65, physicalNumber 5
+injected.js:27 Cestello trovato per operazione 9: ID 66, physicalNumber 6
+injected.js:27 Cestello trovato per operazione 10: ID 67, physicalNumber 7
+injected.js:27 Cestello trovato per operazione 5: ID 62, physicalNumber 2
+injected.js:27 Cestello trovato per operazione 6: ID 63, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 7: ID 64, physicalNumber 4
+injected.js:27 Cestello trovato per operazione 4: ID 61, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 3: ID 23, physicalNumber 3
+injected.js:27 Cestello trovato per operazione 1: ID 21, physicalNumber 1
+injected.js:27 Cestello trovato per operazione 2: ID 22, physicalNumber 2
+injected.js:27 🔍 FILTER: Processing 16 operations
+injected.js:27 Operazione di esempio: {id: 16, date: '2025-11-07', type: 'prima-attivazione', basketId: 71, cycleId: 11, …}
+injected.js:27 🔍 FILTER: Filtered from 16 to 16 operations
+injected.js:27 🔍 FILTER: Returning 16 sorted operations
+stallwart.build.js:1 stallwart: failed ping 1
+injected.js:27 ⛔ OPERAZIONE BLOCCATA: Cestello senza ciclo attivo. Solo Prima Attivazione permessa.
+injected.js:27 🔍 Filtro cestelli per FLUPSY ID: 1039
+injected.js:27 Cestelli filtrati per FLUPSY: (20) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+injected.js:27 TOTALE cestelli trovati: 20
+injected.js:27 🎯 STATI CESTELLI AGGIORNATI: {attivi: 0, disponibili: 20, totali: 20}
+injected.js:27 Esempio cestello #1: {id: 91, physicalNumber: 1, flupsyId: 1039, cycleCode: null, state: 'available', …}
+injected.js:27 - State: available
+injected.js:27 - CurrentCycleId: null
+injected.js:27 - CycleCode: null
+injected.js:27 Cestello #1 (1/20): {id: 91, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #2 (2/20): {id: 92, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #3 (3/20): {id: 93, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #4 (4/20): {id: 94, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #5 (5/20): {id: 95, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #6 (6/20): {id: 96, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #7 (7/20): {id: 97, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #8 (8/20): {id: 98, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #9 (9/20): {id: 99, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #10 (10/20): {id: 100, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #11 (11/20): {id: 101, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #12 (12/20): {id: 102, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #13 (13/20): {id: 103, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #14 (14/20): {id: 104, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #15 (15/20): {id: 105, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #16 (16/20): {id: 106, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #17 (17/20): {id: 107, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #18 (18/20): {id: 108, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #19 (19/20): {id: 109, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 Cestello #20 (20/20): {id: 110, state: 'available', currentCycleId: null, cycleCode: null}
+injected.js:27 🔧 SETTING flupsyBaskets to: 20 items
+injected.js:27 🔧 LOADING COMPLETED for flupsyBaskets
+stallwart.build.js:1 stallwart: failed ping 2
+stallwart.build.js:1 stallwart: failed ping 3
+injected.js:27 Cestello selezionato: {id: 91, physicalNumber: 1, flupsyId: 1039, cycleCode: null, state: 'available', …}
+injected.js:27 Cestello senza ciclo attivo
+injected.js:27 CESTELLO DISPONIBILE - Auto-impostazione Prima Attivazione
+injected.js:27 Tipo operazione impostato automaticamente a 'Prima Attivazione'
+injected.js:27 🔍 Cestello #1: {state: 'available', currentCycleId: null, hasActiveCycle: false, isReallyAvailable: true, isActiveWithCycle: null}
+injected.js:27 ✅ Cestello disponibile - mostro solo Prima Attivazione
+injected.js:27 Operazione selezionata: 
+injected.js:27 🔍 Debug auto-set OperationFormCompact - ENTRY: {watchBasketId: 91, baskets: 'Array with 90 items', currentType: 'prima-attivazione', formValues: {…}}
+injected.js:27 🔍 Debug auto-set OperationFormCompact - DETAILS: {watchBasketId: 91, selectedBasket: {…}, shouldAutoSet: true, currentType: 'prima-attivazione', basketsLoaded: true}
+injected.js:27 Modalità automatica attivata - ricalcolo valori
+injected.js:27 🔍 Debug auto-set OperationFormCompact - ENTRY: {watchBasketId: 91, baskets: 'Array with 90 items', currentType: '', formValues: {…}}
+injected.js:27 🔍 Debug auto-set OperationFormCompact - DETAILS: {watchBasketId: 91, selectedBasket: {…}, shouldAutoSet: true, currentType: '', basketsLoaded: true}
+injected.js:27 🚀 Cestello disponibile - impostando Prima Attivazione
+injected.js:27 Modalità automatica attivata - ricalcolo valori
+injected.js:27 🔍 Debug auto-set OperationFormCompact - ENTRY: {watchBasketId: 91, baskets: 'Array with 90 items', currentType: 'prima-attivazione', formValues: {…}}
+injected.js:27 🔍 Debug auto-set OperationFormCompact - DETAILS: {watchBasketId: 91, selectedBasket: {…}, shouldAutoSet: true, currentType: 'prima-attivazione', basketsLoaded: true}
+injected.js:27 Modalità automatica attivata - ricalcolo valori
+stallwart.build.js:1 stallwart: failed ping 4
+stallwart.build.js:1 stallwart: failed ping 5
+stallwart.build.js:1 stallwart: session stalled
+5injected.js:27 Modalità automatica attivata - ricalcolo valori
+injected.js:27 Cercando taglia per animali per kg: 15817
+injected.js:27 Taglia trovata: TP-3500 (ID: 18)
+injected.js:27 Modalità automatica attivata - ricalcolo valori
+injected.js:27 Cercando taglia per animali per kg: 158172
+injected.js:27 Taglia trovata: TP-1800 (ID: 13)
+2injected.js:27 Modalità automatica attivata - ricalcolo valori

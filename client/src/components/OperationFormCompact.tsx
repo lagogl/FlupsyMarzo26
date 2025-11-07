@@ -720,28 +720,40 @@ export default function OperationFormCompact({
   // Calcola il numero di animali quando cambia il peso totale o animali per kg
   useEffect(() => {
     if (watchTotalWeight && watchAnimalsPerKg && watchAnimalsPerKg > 0) {
-      // Peso medio in grammi = 1000 / animali per kg
-      const avgWeightInGrams = 1000 / watchAnimalsPerKg;
+      // Animali per kg sono calcolati dai VIVI del campione
+      // Totali proiettati = animalsPerKg × (peso totale in kg)
+      const totalAnimalsProjected = Math.round(watchAnimalsPerKg * (watchTotalWeight / 1000));
       
-      // Numero totale di animali dal peso (vivi + morti)
-      const totalAnimalsFromWeight = Math.round(watchTotalWeight / avgWeightInGrams);
-      
-      // Stima gli animali morti basandosi sul rapporto morti/peso del campione
-      let deadAnimalsEstimated = 0;
-      if (watchSampleWeight && watchSampleWeight > 0 && deadCount > 0) {
-        // Rapporto: morti nel campione / peso campione * peso totale
-        deadAnimalsEstimated = Math.round((deadCount / watchSampleWeight) * watchTotalWeight);
+      // Calcola % mortalità dal campione (vivi + morti)
+      let mortalityRate = 0;
+      if (watchLiveAnimals && deadCount > 0) {
+        const totalSample = watchLiveAnimals + deadCount;
+        mortalityRate = (deadCount / totalSample) * 100;
       }
       
-      // Numero di animali VIVI = totale - morti stimati
-      const calculatedAnimalCount = totalAnimalsFromWeight - deadAnimalsEstimated;
+      // Applica % mortalità ai totali proiettati
+      const deadAnimalsEstimated = Math.round(totalAnimalsProjected * (mortalityRate / 100));
+      
+      // Numero di animali VIVI finali = totali proiettati - morti stimati
+      const calculatedAnimalCount = totalAnimalsProjected - deadAnimalsEstimated;
+      
+      console.log('🧮 CALCOLO ANIMALI:', {
+        animalsPerKg: watchAnimalsPerKg,
+        totalWeight: watchTotalWeight,
+        totalProjected: totalAnimalsProjected,
+        liveInSample: watchLiveAnimals,
+        deadInSample: deadCount,
+        mortalityRate: mortalityRate.toFixed(2) + '%',
+        deadEstimated: deadAnimalsEstimated,
+        liveAnimals: calculatedAnimalCount
+      });
       
       // Imposta il valore calcolato solo se non è attiva la modifica manuale
       if (!watchManualCountAdjustment) {
         form.setValue('animalCount', calculatedAnimalCount);
       }
     }
-  }, [watchTotalWeight, watchAnimalsPerKg, watchSampleWeight, deadCount, form, watchManualCountAdjustment]);
+  }, [watchTotalWeight, watchAnimalsPerKg, watchLiveAnimals, deadCount, form, watchManualCountAdjustment]);
 
   // Gestisce il tipo "peso" - recupera il conteggio animali dall'ultima operazione
   useEffect(() => {
