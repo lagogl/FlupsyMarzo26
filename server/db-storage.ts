@@ -1181,14 +1181,21 @@ export class DbStorage implements IStorage {
       const lotsData = await db.select().from(lots).orderBy(desc(lots.arrivalDate));
       const duration = Date.now() - startTime;
       
+      const sanitizedLots = lotsData.map(lot => ({
+        ...lot,
+        createdAt: lot.createdAt && typeof lot.createdAt === 'object' && !(lot.createdAt instanceof Date)
+          ? new Date(lot.arrivalDate)
+          : lot.createdAt
+      }));
+      
       // Salva in cache
       this.lotsCache.set(cacheKey, {
-        data: lotsData,
+        data: sanitizedLots,
         timestamp: Date.now()
       });
       
-      console.log(`🚀 LOTTI: Cache SAVED (${lotsData.length} lotti) - query completata in ${duration}ms`);
-      return lotsData;
+      console.log(`🚀 LOTTI: Cache SAVED (${sanitizedLots.length} lotti) - query completata in ${duration}ms`);
+      return sanitizedLots;
     } catch (error) {
       console.error('Error in getLots:', error);
       throw error;
@@ -1269,8 +1276,15 @@ export class DbStorage implements IStorage {
         .limit(pageSize)
         .offset(offset);
       
+      const sanitizedLots = results.map(lot => ({
+        ...lot,
+        createdAt: lot.createdAt && typeof lot.createdAt === 'object' && !(lot.createdAt instanceof Date)
+          ? new Date(lot.arrivalDate)
+          : lot.createdAt
+      }));
+      
       return {
-        lots: results,
+        lots: sanitizedLots,
         totalCount
       };
     } catch (error) {
@@ -1280,12 +1294,26 @@ export class DbStorage implements IStorage {
   }
 
   async getActiveLots(): Promise<Lot[]> {
-    return await db.select().from(lots).where(eq(lots.state, 'active')).orderBy(desc(lots.arrivalDate));
+    const results = await db.select().from(lots).where(eq(lots.state, 'active')).orderBy(desc(lots.arrivalDate));
+    return results.map(lot => ({
+      ...lot,
+      createdAt: lot.createdAt && typeof lot.createdAt === 'object' && !(lot.createdAt instanceof Date)
+        ? new Date(lot.arrivalDate)
+        : lot.createdAt
+    }));
   }
 
   async getLot(id: number): Promise<Lot | undefined> {
     const results = await db.select().from(lots).where(eq(lots.id, id));
-    return results[0];
+    const lot = results[0];
+    if (!lot) return undefined;
+    
+    return {
+      ...lot,
+      createdAt: lot.createdAt && typeof lot.createdAt === 'object' && !(lot.createdAt instanceof Date)
+        ? new Date(lot.arrivalDate)
+        : lot.createdAt
+    };
   }
 
   async createLot(lot: InsertLot): Promise<Lot> {

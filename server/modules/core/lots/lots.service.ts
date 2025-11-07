@@ -25,7 +25,7 @@ export class LotsService {
     const sanitizedLots = allLots.map(lot => ({
       ...lot,
       createdAt: lot.createdAt && typeof lot.createdAt === 'object' && !(lot.createdAt instanceof Date)
-        ? null
+        ? new Date(lot.arrivalDate)
         : lot.createdAt
     }));
 
@@ -67,7 +67,7 @@ export class LotsService {
     const sanitizedLotsData = lotsData.map(lot => ({
       ...lot,
       createdAt: lot.createdAt && typeof lot.createdAt === 'object' && !(lot.createdAt instanceof Date)
-        ? null
+        ? new Date(lot.arrivalDate)
         : lot.createdAt
     }));
 
