@@ -116,6 +116,7 @@ export default function OperationFormCompact({
   const watchSampleWeight = form.watch('sampleWeight');
   const watchLiveAnimals = form.watch('liveAnimals');
   const watchTotalSample = form.watch('totalSample');
+  const watchTotalWeight = form.watch('totalWeight');
   const deadCount = form.watch('deadCount');
 
   // Logica cestello selezionato
@@ -171,6 +172,17 @@ export default function OperationFormCompact({
       }
     }
   }, [watchType, watchLiveAnimals, deadCount, watchSampleWeight, form]);
+
+  // Calcola numero totale animali nel cestello dal campione
+  useEffect(() => {
+    if ((watchType === 'misura' || watchType === 'prima-attivazione') && 
+        watchAnimalsPerKg && watchTotalWeight && 
+        watchAnimalsPerKg > 0 && watchTotalWeight > 0) {
+      // Formula corretta: animali totali = (animali per kg) * (peso totale in kg)
+      const animalCount = Math.round(watchAnimalsPerKg * (watchTotalWeight / 1000));
+      form.setValue('animalCount', animalCount);
+    }
+  }, [watchType, watchAnimalsPerKg, watchTotalWeight, form]);
 
   // Auto-selezione taglia per prima attivazione
   useEffect(() => {
