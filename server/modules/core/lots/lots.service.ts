@@ -21,19 +21,13 @@ export class LotsService {
 
     const allLots = await storage.getLots();
 
-    // Remove createdAt field to prevent "Invalid time value" errors
-    const sanitizedLots = allLots.map(lot => {
-      const { createdAt, ...lotWithoutCreatedAt } = lot;
-      return lotWithoutCreatedAt;
-    });
-
     if (!includeSizes) {
-      lotsCache.set(cacheKey, sanitizedLots);
-      return sanitizedLots;
+      lotsCache.set(cacheKey, allLots);
+      return allLots;
     }
 
     const lotsWithSizes = await Promise.all(
-      sanitizedLots.map(async (lot) => {
+      allLots.map(async (lot) => {
         const size = lot.sizeId ? await storage.getSize(lot.sizeId) : null;
         return { ...lot, size };
       })
@@ -61,13 +55,7 @@ export class LotsService {
 
     const sizesMap = new Map(allSizes.map(size => [size.id, size]));
 
-    // Remove createdAt field to prevent "Invalid time value" errors
-    const sanitizedLotsData = lotsData.map(lot => {
-      const { createdAt, ...lotWithoutCreatedAt } = lot;
-      return lotWithoutCreatedAt;
-    });
-
-    let lotsWithSizes = sanitizedLotsData.map(lot => ({
+    let lotsWithSizes = lotsData.map(lot => ({
       ...lot,
       size: lot.sizeId && sizesMap.has(lot.sizeId) 
         ? sizesMap.get(lot.sizeId) 

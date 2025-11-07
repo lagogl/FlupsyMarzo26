@@ -1178,22 +1178,38 @@ export class DbStorage implements IStorage {
     try {
       console.log('🔄 LOTTI: Cache MISS - query al database...');
       const startTime = Date.now();
-      const lotsData = await db.select().from(lots).orderBy(desc(lots.arrivalDate));
-      const duration = Date.now() - startTime;
       
-      const sanitizedLots = lotsData.map(lot => {
-        const { createdAt, ...lotWithoutCreatedAt } = lot;
-        return lotWithoutCreatedAt;
-      });
+      // Select esplicito senza createdAt per evitare problemi di serializzazione
+      const lotsData = await db.select({
+        id: lots.id,
+        arrivalDate: lots.arrivalDate,
+        supplier: lots.supplier,
+        supplierLotNumber: lots.supplierLotNumber,
+        quality: lots.quality,
+        animalCount: lots.animalCount,
+        weight: lots.weight,
+        sizeId: lots.sizeId,
+        notes: lots.notes,
+        state: lots.state,
+        active: lots.active,
+        externalId: lots.externalId,
+        description: lots.description,
+        origin: lots.origin,
+        totalMortality: lots.totalMortality,
+        lastMortalityDate: lots.lastMortalityDate,
+        mortalityNotes: lots.mortalityNotes,
+      }).from(lots).orderBy(desc(lots.arrivalDate));
+      
+      const duration = Date.now() - startTime;
       
       // Salva in cache
       this.lotsCache.set(cacheKey, {
-        data: sanitizedLots,
+        data: lotsData,
         timestamp: Date.now()
       });
       
-      console.log(`🚀 LOTTI: Cache SAVED (${sanitizedLots.length} lotti) - query completata in ${duration}ms`);
-      return sanitizedLots;
+      console.log(`🚀 LOTTI: Cache SAVED (${lotsData.length} lotti) - query completata in ${duration}ms`);
+      return lotsData as Lot[];
     } catch (error) {
       console.error('Error in getLots:', error);
       throw error;
