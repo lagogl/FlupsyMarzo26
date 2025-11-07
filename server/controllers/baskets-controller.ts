@@ -300,6 +300,12 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
     console.log(`🚀 CTE: Processando ${result.length} righe con ${totalItems} totali`);
     
     const enrichedBaskets = result.map((row: any) => {
+      // Normalizza timestamp ISO-8601 (sostituisci spazio con T)
+      const normalizeTimestamp = (timestamp: string | null): string | null => {
+        if (!timestamp) return null;
+        return typeof timestamp === 'string' ? timestamp.replace(' ', 'T') : timestamp;
+      };
+      
       // Costruisci oggetto cestello
       const basket = {
         id: row.id,
@@ -309,7 +315,7 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
         state: row.state,
         currentCycleId: row.current_cycle_id,
         nfcData: row.nfc_data,
-        nfcLastProgrammedAt: row.nfc_last_programmed_at,
+        nfcLastProgrammedAt: normalizeTimestamp(row.nfc_last_programmed_at),
         row: row.row,
         position: row.position,
         flupsyName: row.flupsy_name
