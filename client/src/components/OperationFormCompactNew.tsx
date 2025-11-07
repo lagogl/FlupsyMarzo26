@@ -188,6 +188,14 @@ export default function OperationFormCompact({
       const mortalityRate = watchMortalityRate || 0;
       const liveAnimals = totalProjected - (totalProjected * (mortalityRate / 100));
       
+      console.log('🧮 CALCOLO ANIMALI:', {
+        animalsPerKg: watchAnimalsPerKg,
+        totalWeight: watchTotalWeight,
+        totalProjected: totalProjected,
+        mortalityRate: mortalityRate,
+        liveAnimals: Math.round(liveAnimals)
+      });
+      
       form.setValue('animalCount', Math.round(liveAnimals));
     }
   }, [watchType, watchAnimalsPerKg, watchTotalWeight, watchMortalityRate, form]);
