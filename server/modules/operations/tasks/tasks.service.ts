@@ -17,10 +17,11 @@ import {
 
 export class TasksService {
   /**
-   * Get all tasks
+   * Get all tasks with assignments and baskets
    */
   async getAllTasks() {
-    return await db.select().from(selectionTasks)
+    // Get all tasks
+    const tasks = await db.select().from(selectionTasks)
       .orderBy(sql`
         CASE ${selectionTasks.priority}
           WHEN 'urgent' THEN 1
@@ -31,6 +32,63 @@ export class TasksService {
         ${selectionTasks.dueDate} ASC NULLS LAST,
         ${selectionTasks.createdAt} DESC
       `);
+
+    if (tasks.length === 0) return [];
+
+    const taskIds = tasks.map(t => t.id);
+
+    // Get all assignments for these tasks
+    const allAssignments = await db.select({
+      taskId: selectionTaskAssignments.taskId,
+      id: selectionTaskAssignments.id,
+      operatorId: selectionTaskAssignments.operatorId,
+      status: selectionTaskAssignments.status,
+      assignedAt: selectionTaskAssignments.assignedAt,
+      startedAt: selectionTaskAssignments.startedAt,
+      completedAt: selectionTaskAssignments.completedAt,
+      completionNotes: selectionTaskAssignments.completionNotes,
+      operatorFirstName: task_operators.firstName,
+      operatorLastName: task_operators.lastName,
+      operatorEmail: task_operators.email,
+    })
+    .from(selectionTaskAssignments)
+    .leftJoin(task_operators, eq(selectionTaskAssignments.operatorId, task_operators.id))
+    .where(inArray(selectionTaskAssignments.taskId, taskIds));
+
+    // Get all baskets for these tasks
+    const allBaskets = await db.select({
+      taskId: selectionTaskBaskets.taskId,
+      id: selectionTaskBaskets.id,
+      basketId: selectionTaskBaskets.basketId,
+      role: selectionTaskBaskets.role,
+      physicalNumber: baskets.physicalNumber,
+      flupsyId: baskets.flupsyId,
+    })
+    .from(selectionTaskBaskets)
+    .leftJoin(baskets, eq(selectionTaskBaskets.basketId, baskets.id))
+    .where(inArray(selectionTaskBaskets.taskId, taskIds));
+
+    // Group assignments and baskets by task ID
+    const assignmentsByTask = allAssignments.reduce((acc, assignment) => {
+      const { taskId, ...assignmentData } = assignment;
+      if (!acc[taskId]) acc[taskId] = [];
+      acc[taskId].push(assignmentData);
+      return acc;
+    }, {} as Record<number, any[]>);
+
+    const basketsByTask = allBaskets.reduce((acc, basket) => {
+      const { taskId, ...basketData } = basket;
+      if (!acc[taskId]) acc[taskId] = [];
+      acc[taskId].push(basketData);
+      return acc;
+    }, {} as Record<number, any[]>);
+
+    // Combine tasks with their assignments and baskets
+    return tasks.map(task => ({
+      ...task,
+      assignments: assignmentsByTask[task.id] || [],
+      baskets: basketsByTask[task.id] || []
+    }));
   }
 
   /**
