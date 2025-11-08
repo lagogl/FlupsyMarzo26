@@ -538,15 +538,12 @@ export default function TaskManagement() {
                           key={basket.id} 
                           className="p-3 border rounded-lg bg-card"
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <Badge variant="outline" className="capitalize">
-                              {basket.role === 'source' ? 'Origine' : 'Destinazione'}
-                            </Badge>
+                          <div className="flex items-center justify-between">
                             <span className="text-sm font-medium">
                               Cestello #{basket.physicalNumber}
                             </span>
                           </div>
-                          <p className="text-sm">
+                          <p className="text-sm mt-1">
                             <span className="font-medium">FLUPSY:</span> {basket.flupsyName || `ID ${basket.flupsyId}`}
                           </p>
                         </div>
