@@ -66,6 +66,8 @@ import LotLedgerStatistics from "@/pages/LotLedgerStatistics";
 import GrowthVariabilityAnalysis from "@/pages/GrowthVariabilityAnalysis";
 // Importazione Task Management (Gestione Attività)
 import TaskManagement from "@/pages/TaskManagement";
+// Importazione Operators (Gestione Operatori)
+import Operators from "@/pages/Operators";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
@@ -129,6 +131,7 @@ function Router() {
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
       <ProtectedRoute path="/task-management" component={TaskManagement}/>
+      <ProtectedRoute path="/operators" component={Operators}/>
       
       {/* Redirezione per pagine rimosse */}
       <Route path="/tp3000-forecast">

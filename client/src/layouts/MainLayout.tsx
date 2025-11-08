@@ -8,7 +8,7 @@ import {
   ChevronRight, LayoutDashboard, PieChart, BarChart, BarChart3, Filter,
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
-  ClipboardList
+  ClipboardList, Users
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -123,7 +123,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <GitCompare className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.flupsyComparison, path: "/flupsy-comparison" },
         { icon: <LineChart className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.growthPath, path: "/grow-journey" },
         { icon: <BarChart2 className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.advancedSelection, path: "/basket-selection" },
-        { icon: <ClipboardList className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.taskManagement || "Gestione Attività", path: "/task-management" }
+        { icon: <ClipboardList className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.taskManagement || "Gestione Attività", path: "/task-management" },
+        { icon: <Users className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.operators || "Gestione Operatori", path: "/operators" }
       ]
     },
     {
