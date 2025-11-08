@@ -329,7 +329,7 @@ export default function Dashboard() {
   return (
     <div>
       <div className="flex justify-between items-center gap-4 mb-6">
-        <PageHeader title="Dashboard" />
+        <h1 className="text-3xl font-bold tracking-tight flex-shrink-0">Dashboard</h1>
         
         {/* Info Ticker - Stile Aeroporto - In mezzo */}
         <div className="flex-1 min-w-0">
