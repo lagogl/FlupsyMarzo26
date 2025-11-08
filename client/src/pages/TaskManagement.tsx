@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { CheckCircle, Clock, AlertCircle, Users, Package, User, Inbox, Calendar, Hash } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { CheckCircle, Clock, AlertCircle, Users, Package, User, Inbox, Calendar, Hash, Trash2, CheckCheck } from "lucide-react";
 import { format } from "date-fns";
 
 const priorityColors = {
@@ -44,6 +45,8 @@ const statusLabels = {
 export default function TaskManagement() {
   const { toast } = useToast();
   const [selectedTask, setSelectedTask] = useState<number | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<number | null>(null);
+  const [taskToComplete, setTaskToComplete] = useState<number | null>(null);
 
   // Query operators
   const { data: operators } = useQuery({
@@ -54,6 +57,48 @@ export default function TaskManagement() {
   // Query tasks
   const { data: tasks, isLoading: loadingTasks } = useQuery({
     queryKey: ['/api/tasks'],
+  });
+
+  // Mutation per cancellare attività
+  const deleteMutation = useMutation({
+    mutationFn: (taskId: number) => 
+      apiRequest(`/api/tasks/${taskId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      toast({
+        title: "Attività eliminata",
+        description: "L'attività è stata eliminata con successo",
+      });
+      setTaskToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Errore",
+        description: error.message || "Errore durante l'eliminazione dell'attività",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation per forzare completamento
+  const completeMutation = useMutation({
+    mutationFn: (taskId: number) => 
+      apiRequest(`/api/tasks/${taskId}/complete`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      toast({
+        title: "Attività completata",
+        description: "L'attività è stata forzata come completata",
+      });
+      setTaskToComplete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Errore",
+        description: error.message || "Errore durante il completamento dell'attività",
+        variant: "destructive",
+      });
+    },
   });
 
   const getTasksBySelection = (selectionId: number) => {
@@ -303,14 +348,40 @@ export default function TaskManagement() {
 
                         {/* Azioni */}
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedTask(task.id)}
-                            data-testid={`button-view-task-${task.id}`}
-                          >
-                            Dettagli
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedTask(task.id)}
+                              data-testid={`button-view-task-${task.id}`}
+                            >
+                              Dettagli
+                            </Button>
+                            
+                            {/* Pulsante Forza Completamento (solo se non completata) */}
+                            {task.status !== 'completed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setTaskToComplete(task.id)}
+                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                data-testid={`button-complete-task-${task.id}`}
+                              >
+                                <CheckCheck className="h-4 w-4" />
+                              </Button>
+                            )}
+
+                            {/* Pulsante Elimina */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setTaskToDelete(task.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              data-testid={`button-delete-task-${task.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -531,6 +602,50 @@ export default function TaskManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Conferma Eliminazione */}
+      <AlertDialog open={!!taskToDelete} onOpenChange={() => setTaskToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sei sicuro di voler eliminare questa attività?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Questa azione non può essere annullata. L'attività #{taskToDelete} e tutti i suoi assegnamenti verranno eliminati permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-delete-task">Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => taskToDelete && deleteMutation.mutate(taskToDelete)}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="confirm-delete-task"
+            >
+              {deleteMutation.isPending ? "Eliminazione..." : "Elimina"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog Conferma Completamento */}
+      <AlertDialog open={!!taskToComplete} onOpenChange={() => setTaskToComplete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Forza completamento attività</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vuoi forzare il completamento dell'attività #{taskToComplete}? Questo segnerà l'attività come completata anche se non tutti gli operatori hanno completato la loro parte.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-complete-task">Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => taskToComplete && completeMutation.mutate(taskToComplete)}
+              className="bg-green-600 hover:bg-green-700"
+              data-testid="confirm-complete-task"
+            >
+              {completeMutation.isPending ? "Completamento..." : "Completa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
