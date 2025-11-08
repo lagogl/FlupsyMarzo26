@@ -62,10 +62,10 @@ export async function createDatabaseBackup(): Promise<BackupInfo> {
     const dbPort = dbUrl.port;
     const dbName = dbUrl.pathname.substring(1);
     
-    // Comando pg_dump
+    // Comando pg_dump con parametri SSL per Neon
     // Costruiamo le parti del comando solo se i valori sono presenti
     const commandParts = [
-      `PGPASSWORD="${dbPassword}" pg_dump`,
+      `PGSSLMODE=require PGPASSWORD="${dbPassword}" pg_dump`,
       `-h ${dbHost}`
     ];
     
@@ -92,7 +92,8 @@ export async function createDatabaseBackup(): Promise<BackupInfo> {
       `--schema=public`,
       `--no-publications`,
       `--no-subscriptions`,
-      `--no-sync`
+      `--no-sync`,
+      `--no-password`
     );
     
     const command = commandParts.join(' ');
@@ -138,10 +139,10 @@ export async function restoreDatabaseFromBackup(backupFilename: string): Promise
     const dbPort = dbUrl.port;
     const dbName = dbUrl.pathname.substring(1);
     
-    // Comando psql
+    // Comando psql con parametri SSL per Neon
     // Costruiamo le parti del comando solo se i valori sono presenti
     const commandParts = [
-      `PGPASSWORD="${dbPassword}" psql`,
+      `PGSSLMODE=require PGPASSWORD="${dbPassword}" psql`,
       `-h ${dbHost}`
     ];
     
@@ -154,7 +155,8 @@ export async function restoreDatabaseFromBackup(backupFilename: string): Promise
     commandParts.push(
       `-U ${dbUser}`,
       `-d ${dbName}`,
-      `-f "${backupPath}"`
+      `-f "${backupPath}"`,
+      `--no-password`
     );
     
     const command = commandParts.join(' ');
@@ -188,10 +190,10 @@ export async function restoreDatabaseFromUploadedFile(filePath: string): Promise
     const dbPort = dbUrl.port;
     const dbName = dbUrl.pathname.substring(1);
     
-    // Comando psql
+    // Comando psql con parametri SSL per Neon
     // Costruiamo le parti del comando solo se i valori sono presenti
     const commandParts = [
-      `PGPASSWORD="${dbPassword}" psql`,
+      `PGSSLMODE=require PGPASSWORD="${dbPassword}" psql`,
       `-h ${dbHost}`
     ];
     
@@ -204,7 +206,8 @@ export async function restoreDatabaseFromUploadedFile(filePath: string): Promise
     commandParts.push(
       `-U ${dbUser}`,
       `-d ${dbName}`,
-      `-f "${filePath}"`
+      `-f "${filePath}"`,
+      `--no-password`
     );
     
     const command = commandParts.join(' ');
@@ -324,10 +327,10 @@ export async function generateFullDatabaseDump(): Promise<string> {
     const dbPort = dbUrl.port;
     const dbName = dbUrl.pathname.substring(1);
     
-    // Comando pg_dump
+    // Comando pg_dump con parametri SSL per Neon
     // Costruiamo le parti del comando solo se i valori sono presenti
     const commandParts = [
-      `PGPASSWORD="${dbPassword}" pg_dump`,
+      `PGSSLMODE=require PGPASSWORD="${dbPassword}" pg_dump`,
       `-h ${dbHost}`
     ];
     
@@ -353,7 +356,8 @@ export async function generateFullDatabaseDump(): Promise<string> {
       `--no-comments`,
       `--schema=public`,
       `--no-publications`,
-      `--no-subscriptions`
+      `--no-subscriptions`,
+      `--no-password`
     );
     
     const command = commandParts.join(' ');
