@@ -1,17 +1,21 @@
 /**
  * Configurazione database esterno
- * Estrae le credenziali dall'URL PostgreSQL fornito dall'utente
+ * Estrae le credenziali dall'URL PostgreSQL dalla variabile d'ambiente
  */
 
 import { ExternalDatabaseConfig, SyncConfig } from './external-sync-service';
 
-// URL del database esterno fornito dall'utente
-const EXTERNAL_DB_URL = 'postgresql://neondb_owner:npg_Kh6xVrekoFn7@ep-snowy-firefly-a4pq2urr.us-east-1.aws.neon.tech/neondb?sslmode=require';
+// URL del database esterno dalla variabile d'ambiente
+const EXTERNAL_DB_URL = process.env.DATABASE_URL_ESTERNO || '';
 
 /**
  * Estrae le credenziali dall'URL PostgreSQL
  */
 function parsePostgresUrl(url: string): ExternalDatabaseConfig {
+  if (!url) {
+    throw new Error('DATABASE_URL_ESTERNO non configurato');
+  }
+  
   const parsed = new URL(url);
   
   return {
@@ -27,7 +31,9 @@ function parsePostgresUrl(url: string): ExternalDatabaseConfig {
 /**
  * Configurazione del database esterno
  */
-export const externalDbConfig: ExternalDatabaseConfig = parsePostgresUrl(EXTERNAL_DB_URL);
+export const externalDbConfig: ExternalDatabaseConfig = EXTERNAL_DB_URL 
+  ? parsePostgresUrl(EXTERNAL_DB_URL)
+  : {} as ExternalDatabaseConfig;
 
 /**
  * Configurazione di sincronizzazione predefinita
