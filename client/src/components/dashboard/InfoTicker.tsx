@@ -40,59 +40,50 @@ export default function InfoTicker({
   };
 
   const messages: string[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // Attività urgenti
-  const urgentTasks = tasks
-    .filter(t => t.priority === 'urgent' && t.status !== 'completed')
-    .slice(0, 3);
-  
-  urgentTasks.forEach(task => {
+  // Attività previste per oggi (scadenza oggi)
+  const todayTasks = tasks
+    .filter(t => {
+      if (!t.dueDate || t.status === 'completed' || t.status === 'cancelled') return false;
+      const dueDate = new Date(t.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate.getTime() === today.getTime();
+    });
+
+  todayTasks.forEach(task => {
+    const taskName = taskTypeLabels[task.taskType] || task.taskType;
+    const desc = task.description || 'Nessuna descrizione';
+    const operatori = task.assignments?.length || 0;
+    const icon = task.priority === 'urgent' ? '🚨' : '📋';
+    messages.push(`${icon} Oggi: ${taskName} - ${desc}${operatori > 0 ? ` (${operatori} operatori)` : ''}`);
+  });
+
+  // Attività urgenti (anche se non scadono oggi)
+  const urgentNotToday = tasks
+    .filter(t => {
+      if (t.status === 'completed' || t.status === 'cancelled') return false;
+      if (t.priority !== 'urgent') return false;
+      // Escludi quelle già mostrate come "oggi"
+      if (t.dueDate) {
+        const dueDate = new Date(t.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        if (dueDate.getTime() === today.getTime()) return false;
+      }
+      return true;
+    })
+    .slice(0, 2);
+
+  urgentNotToday.forEach(task => {
     const taskName = taskTypeLabels[task.taskType] || task.taskType;
     const desc = task.description || 'Nessuna descrizione';
     messages.push(`🚨 URGENTE: ${taskName} - ${desc}`);
   });
 
-  // Attività in scadenza
-  const dueSoonTasks = tasks
-    .filter(t => {
-      if (!t.dueDate || t.status === 'completed') return false;
-      const dueDate = new Date(t.dueDate);
-      const today = new Date();
-      const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 2;
-    })
-    .slice(0, 2);
-
-  dueSoonTasks.forEach(task => {
-    const taskName = taskTypeLabels[task.taskType] || task.taskType;
-    const dueDate = task.dueDate ? format(new Date(task.dueDate), 'dd MMM', { locale: it }) : '';
-    messages.push(`⏰ In scadenza ${dueDate}: ${taskName}`);
-  });
-
-  // Statistiche giornaliere
-  if (operationStats) {
-    if (operationStats.totalWeight > 0) {
-      messages.push(`📊 Peso lavorato oggi: ${(operationStats.totalWeight / 1000).toFixed(1)} kg`);
-    }
-    if (operationStats.totalAnimalsProcessed > 0) {
-      messages.push(`🐚 Animali processati: ${operationStats.totalAnimalsProcessed.toLocaleString('it-IT')}`);
-    }
-  }
-
-  // Operatori attivi
-  if (activeOperatorsCount > 0) {
-    messages.push(`👥 ${activeOperatorsCount} operatori attivi`);
-  }
-
-  // Attività completate oggi
-  const completedToday = tasks.filter(t => t.status === 'completed').length;
-  if (completedToday > 0) {
-    messages.push(`✅ ${completedToday} attività completate oggi`);
-  }
-
-  // Messaggio di default se non ci sono info
+  // Messaggio di default se non ci sono attività
   if (messages.length === 0) {
-    messages.push('✨ Sistema operativo • Tutto sotto controllo • Nessuna attività urgente');
+    messages.push('✨ Nessuna attività prevista per oggi • Sistema operativo');
   }
 
   // Duplica i messaggi per creare l'effetto loop infinito
