@@ -75,6 +75,7 @@ import { z } from 'zod';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
+import { AssignTaskDialog } from '@/components/AssignTaskDialog';
 
 // Interfacce per i tipi di dati
 interface Basket {
@@ -215,6 +216,7 @@ export default function BasketSelection() {
   const [selectedBaskets, setSelectedBaskets] = useState<Set<number>>(new Set());
   const [selectedSizes, setSelectedSizes] = useState<number[]>([]);
   const [showFilterPanel, setShowFilterPanel] = useState(true);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
   
   // Stati per i totali
   const [totalAnimals, setTotalAnimals] = useState(0);
@@ -1481,7 +1483,8 @@ export default function BasketSelection() {
             <Button 
               variant="outline"
               disabled={selectedBaskets.size === 0}
-              onClick={openActivityDialog}
+              onClick={() => setShowAssignDialog(true)}
+              data-testid="button-assign-task"
             >
               <ClipboardCheck className="mr-2 h-4 w-4" />
               Assegna attività
@@ -1520,6 +1523,19 @@ export default function BasketSelection() {
           </div>
         </CardFooter>
       </Card>
+
+      <AssignTaskDialog
+        open={showAssignDialog}
+        onOpenChange={setShowAssignDialog}
+        selectedBasketIds={Array.from(selectedBaskets)}
+        onSuccess={() => {
+          setSelectedBaskets(new Set());
+          toast({
+            title: "Attività creata",
+            description: "L'attività è stata assegnata con successo",
+          });
+        }}
+      />
     </div>
   );
 }
