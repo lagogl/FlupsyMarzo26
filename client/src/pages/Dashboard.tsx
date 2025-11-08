@@ -328,10 +328,19 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-3">
+      <div className="flex justify-between items-center gap-4 mb-6">
         <PageHeader title="Dashboard" />
         
-        <div className="flex items-center gap-2">
+        {/* Info Ticker - Stile Aeroporto - In mezzo */}
+        <div className="flex-1 min-w-0">
+          <InfoTicker 
+            tasks={tasks || []}
+            operationStats={operationStats}
+            activeOperatorsCount={operators?.length || 0}
+          />
+        </div>
+        
+        <div className="flex items-center gap-2 flex-shrink-0">
           {isLoadingData && (
             <div className="flex items-center text-blue-600 bg-blue-50 px-3 py-1 rounded-md mr-2">
               <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
@@ -361,16 +370,9 @@ export default function Dashboard() {
           </Button>
         </div>
       </div>
-
-      {/* Info Ticker - Stile Aeroporto */}
-      <InfoTicker 
-        tasks={tasks || []}
-        operationStats={operationStats}
-        activeOperatorsCount={operators?.length || 0}
-      />
       
       {/* Filtri per la dashboard */}
-      <div className="space-y-4 mt-6">
+      <div className="space-y-4">
         {/* Filtro per centro di produzione */}
         <FlupsyCenterFilter 
           onFilterChange={(center, flupsyIds) => {

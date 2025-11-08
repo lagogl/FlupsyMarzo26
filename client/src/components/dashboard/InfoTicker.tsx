@@ -91,7 +91,7 @@ export default function InfoTicker({
   const duplicatedContent = `${tickerContent}   •   ${tickerContent}   •   ${tickerContent}`;
 
   return (
-    <div className="bg-black text-white overflow-hidden py-3 border-y border-gray-800" data-testid="info-ticker">
+    <div className="bg-black text-white overflow-hidden py-2 rounded-md" data-testid="info-ticker">
       <div className="ticker-wrapper">
         <div className="ticker-content">
           <span className="ticker-text text-sm font-medium tracking-wide">
