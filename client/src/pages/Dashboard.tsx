@@ -10,6 +10,7 @@ import NewFlupsyVisualizer from '@/components/dashboard/NewFlupsyVisualizer';
 import FlupsyCenterFilter from '@/components/dashboard/FlupsyCenterFilter';
 import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
+import DashboardCarousel from '@/components/dashboard/DashboardCarousel';
 import { Basket, Cycle, Operation, Lot } from '@shared/schema';
 import { TooltipTrigger } from '@/components/ui/tooltip-trigger';
 import { useTooltip } from '@/contexts/TooltipContext';
@@ -70,6 +71,16 @@ export default function Dashboard() {
 
   const { data: lots, isLoading: lotsLoading, dataUpdatedAt: lotsUpdatedAt } = useQuery<Lot[]>({
     queryKey: ['/api/lots', { includeAll: true }],
+  });
+
+  // Query for tasks (for carousel)
+  const { data: tasks } = useQuery({
+    queryKey: ['/api/tasks'],
+  });
+
+  // Query for operators (for carousel)
+  const { data: operators } = useQuery({
+    queryKey: ['/api/operators', { active: true }],
   });
   
   // Funzione per aggiornare i dati
@@ -370,6 +381,13 @@ export default function Dashboard() {
           }}
         />
       </div>
+
+      {/* Dashboard Carousel - Insights */}
+      <DashboardCarousel 
+        tasks={tasks || []}
+        operationStats={operationStats}
+        activeOperatorsCount={operators?.length || 0}
+      />
       
       {/* Dashboard Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
