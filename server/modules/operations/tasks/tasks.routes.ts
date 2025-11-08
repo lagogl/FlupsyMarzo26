@@ -16,6 +16,7 @@ router.patch("/operators/:id/reactivate", (req, res) => operatorsController.reac
 // ========== TASKS ROUTES ==========
 // General tasks endpoints
 router.get("/tasks", (req, res) => tasksController.getAll(req, res));
+router.post("/tasks", (req, res) => tasksController.createFromBaskets(req, res)); // Nuovo: crea attività da basketIds
 router.get("/tasks/:id", (req, res) => tasksController.getById(req, res));
 router.patch("/tasks/:id", (req, res) => tasksController.update(req, res));
 router.delete("/tasks/:id", (req, res) => tasksController.delete(req, res));

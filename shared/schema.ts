@@ -243,15 +243,17 @@ export const task_operators = pgTable("task_operators", {
 });
 
 // ========== SELECTION TASKS (ATTIVITÀ SELEZIONE) ==========
-// Sistema di gestione attività per le selezioni avanzate
+// Sistema di gestione attività per le selezioni avanzate ceste
 export const selectionTasks = pgTable("selection_tasks", {
   id: serial("id").primaryKey(),
-  selectionId: integer("selection_id").notNull(), // Riferimento all'operazione di selezione
+  selectionId: integer("selection_id"), // Riferimento opzionale all'operazione di selezione (null per attività manuali)
   taskType: text("task_type").notNull(), // Tipo attività (es: 'pulizia', 'pesatura', 'vagliatura', 'trasferimento')
   description: text("description"), // Descrizione dettagliata
   priority: text("priority", { enum: ["low", "medium", "high", "urgent"] }).notNull().default("medium"),
   status: text("status", { enum: ["pending", "assigned", "in_progress", "completed", "cancelled"] }).notNull().default("pending"),
   dueDate: date("due_date"), // Scadenza attività
+  cadence: text("cadence"), // Cadenza ricorrente (es: 'daily', 'weekly', 'monthly', null per attività singola)
+  cadenceInterval: integer("cadence_interval").default(1), // Intervallo per cadenza (es: ogni 2 settimane = interval 2)
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
   completedAt: timestamp("completed_at"), // Data completamento

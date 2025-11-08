@@ -59,7 +59,58 @@ export class TasksController {
   }
 
   /**
-   * POST /api/selections/:selectionId/tasks
+   * POST /api/tasks
+   * Crea un'attività dalle ceste selezionate (uso principale da BasketSelection)
+   */
+  async createFromBaskets(req: Request, res: Response) {
+    try {
+      // Validate basketIds
+      if (!req.body.basketIds || !Array.isArray(req.body.basketIds) || req.body.basketIds.length === 0) {
+        return res.status(400).json({ error: "basketIds richiesto (array non vuoto)" });
+      }
+
+      // Validate task data (selectionId now optional)
+      const taskSchema = insertSelectionTaskSchema.omit({ selectionId: true }).extend({
+        selectionId: z.number().optional(),
+        cadence: z.string().optional(),
+        cadenceInterval: z.number().optional(),
+      });
+
+      const validation = taskSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: "Dati non validi", 
+          details: fromZodError(validation.error).toString() 
+        });
+      }
+
+      const task = await tasksService.createTask(validation.data);
+
+      // Add baskets
+      const basketsData = req.body.basketIds.map((basketId: number) => ({
+        taskId: task.id,
+        basketId,
+        role: req.body.basketRole || 'source'
+      }));
+      await tasksService.addBasketsToTask(task.id, basketsData);
+
+      // Assign operators if provided
+      if (req.body.operatorIds && Array.isArray(req.body.operatorIds)) {
+        await tasksService.assignOperators(task.id, req.body.operatorIds);
+      }
+
+      // Return full task details
+      const fullTask = await tasksService.getTaskById(task.id);
+      res.status(201).json(fullTask);
+    } catch (error) {
+      console.error("Errore nella creazione attività:", error);
+      res.status(500).json({ error: "Errore interno del server" });
+    }
+  }
+
+  /**
+   * POST /api/selections/:selectionId/tasks (DEPRECATED - usa POST /api/tasks)
    */
   async create(req: Request, res: Response) {
     try {
