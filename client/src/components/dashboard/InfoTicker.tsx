@@ -60,9 +60,9 @@ export default function InfoTicker({
     messages.push(`${icon} Oggi: ${taskName} - ${desc}${operatori > 0 ? ` (${operatori} operatori)` : ''}`);
   });
 
-  // Messaggio di default se non ci sono attività
+  // Se non ci sono attività, non mostrare nulla
   if (messages.length === 0) {
-    messages.push('✨ Nessuna attività prevista per oggi • Sistema operativo');
+    return null;
   }
 
   // Duplica i messaggi per creare l'effetto loop infinito
