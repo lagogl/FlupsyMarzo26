@@ -35,6 +35,7 @@ export interface MenuTranslations {
     flupsyComparison: string;
     growthPath: string;
     advancedSelection: string;
+    taskManagement: string;
     productionCycles: string;
     sizeTable: string;
     stockInventory: string;
@@ -98,6 +99,7 @@ export const translations: Record<'it' | 'en', MenuTranslations> = {
       flupsyComparison: "Confronto FLUPSY",
       growthPath: "Percorso di Crescita",
       advancedSelection: "Selezione Avanzata",
+      taskManagement: "Gestione Attività",
       productionCycles: "Cicli Produttivi",
       sizeTable: "Tabella Taglie",
       stockInventory: "Inventario Giacenze",
@@ -157,6 +159,7 @@ export const translations: Record<'it' | 'en', MenuTranslations> = {
       flupsyComparison: "FLUPSY Comparison",
       growthPath: "Growth Path",
       advancedSelection: "Advanced Selection",
+      taskManagement: "Task Management",
       productionCycles: "Production Cycles",
       sizeTable: "Size Table",
       stockInventory: "Stock Inventory",
