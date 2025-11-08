@@ -112,7 +112,7 @@ export default function InfoTicker({
 
         .ticker-content {
           display: flex;
-          animation: scroll-left 25s linear infinite;
+          animation: scroll-left 15s linear infinite;
           will-change: transform;
         }
 
