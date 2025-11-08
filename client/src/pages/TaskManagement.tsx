@@ -264,9 +264,6 @@ export default function TaskManagement() {
                               <div className="text-xs space-y-1">
                                 {baskets.slice(0, 3).map((b: any, i: number) => (
                                   <div key={b.id} className="flex items-center gap-1 flex-wrap">
-                                    <Badge variant="outline" className="text-xs">
-                                      {b.role === 'source' ? 'Orig' : 'Dest'}
-                                    </Badge>
                                     <span className="font-medium">#{b.physicalNumber}</span>
                                     {b.flupsyName && (
                                       <span className="text-muted-foreground">
