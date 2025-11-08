@@ -5,7 +5,7 @@ import {
   selectionTaskBaskets, 
   selectionTaskAssignments,
   baskets,
-  operators,
+  task_operators,
   selections,
   selectionSourceBaskets,
   sizes,
@@ -73,12 +73,12 @@ export class TasksService {
       startedAt: selectionTaskAssignments.startedAt,
       completedAt: selectionTaskAssignments.completedAt,
       completionNotes: selectionTaskAssignments.completionNotes,
-      operatorFirstName: operators.firstName,
-      operatorLastName: operators.lastName,
-      operatorEmail: operators.email,
+      operatorFirstName: task_operators.firstName,
+      operatorLastName: task_operators.lastName,
+      operatorEmail: task_operators.email,
     })
     .from(selectionTaskAssignments)
-    .leftJoin(operators, eq(selectionTaskAssignments.operatorId, operators.id))
+    .leftJoin(task_operators, eq(selectionTaskAssignments.operatorId, task_operators.id))
     .where(eq(selectionTaskAssignments.taskId, taskId));
 
     return {

@@ -8,10 +8,10 @@ Il modulo **Sistema Gestione Attività** permette di assegnare compiti specifici
 
 ## 🗄️ Struttura Database
 
-### Tabella `operators` (Operatori)
+### Tabella `task_operators` (Operatori per Attività)
 
 ```sql
-CREATE TABLE operators (
+CREATE TABLE task_operators (
   id SERIAL PRIMARY KEY,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,

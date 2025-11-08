@@ -228,7 +228,7 @@ export const selectionLotReferences = pgTable("selection_lot_references", {
 
 // ========== OPERATORS (OPERATORI) ==========
 // Tabella operatori - utilizzata sia dall'app desktop che dall'app esterna
-export const operators = pgTable("operators", {
+export const task_operators = pgTable("task_operators", {
   id: serial("id").primaryKey(),
   firstName: text("first_name").notNull(), // Nome
   lastName: text("last_name").notNull(), // Cognome
@@ -577,7 +577,7 @@ export const insertSelectionLotReferenceSchema = createInsertSchema(selectionLot
 });
 
 // ========== INSERT SCHEMAS: OPERATORS & TASKS ==========
-export const insertOperatorSchema = createInsertSchema(operators).omit({
+export const insertOperatorSchema = createInsertSchema(task_operators).omit({
   id: true,
   createdAt: true,
   updatedAt: true
@@ -680,7 +680,7 @@ export type SelectionLotReference = typeof selectionLotReferences.$inferSelect;
 export type InsertSelectionLotReference = z.infer<typeof insertSelectionLotReferenceSchema>;
 
 // ========== TYPES: OPERATORS & TASKS ==========
-export type Operator = typeof operators.$inferSelect;
+export type Operator = typeof task_operators.$inferSelect;
 export type InsertOperator = z.infer<typeof insertOperatorSchema>;
 
 export type SelectionTask = typeof selectionTasks.$inferSelect;

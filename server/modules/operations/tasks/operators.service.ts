@@ -1,6 +1,6 @@
 import { db } from "../../../db";
 import { eq, and } from "drizzle-orm";
-import { operators, type Operator, type InsertOperator } from "@shared/schema";
+import { task_operators, type Operator, type InsertOperator } from "@shared/schema";
 
 export class OperatorsService {
   /**
@@ -8,20 +8,20 @@ export class OperatorsService {
    */
   async getAllOperators(activeOnly = false) {
     if (activeOnly) {
-      return await db.select().from(operators)
-        .where(eq(operators.active, true))
-        .orderBy(operators.lastName, operators.firstName);
+      return await db.select().from(task_operators)
+        .where(eq(task_operators.active, true))
+        .orderBy(task_operators.lastName, task_operators.firstName);
     }
-    return await db.select().from(operators)
-      .orderBy(operators.lastName, operators.firstName);
+    return await db.select().from(task_operators)
+      .orderBy(task_operators.lastName, task_operators.firstName);
   }
 
   /**
    * Get operator by ID
    */
   async getOperatorById(id: number): Promise<Operator | undefined> {
-    const [operator] = await db.select().from(operators)
-      .where(eq(operators.id, id))
+    const [operator] = await db.select().from(task_operators)
+      .where(eq(task_operators.id, id))
       .limit(1);
     return operator;
   }
@@ -30,8 +30,8 @@ export class OperatorsService {
    * Get operator by external app user ID
    */
   async getOperatorByExternalAppUserId(externalAppUserId: string): Promise<Operator | undefined> {
-    const [operator] = await db.select().from(operators)
-      .where(eq(operators.externalAppUserId, externalAppUserId))
+    const [operator] = await db.select().from(task_operators)
+      .where(eq(task_operators.externalAppUserId, externalAppUserId))
       .limit(1);
     return operator;
   }
@@ -40,7 +40,7 @@ export class OperatorsService {
    * Create a new operator
    */
   async createOperator(data: InsertOperator): Promise<Operator> {
-    const [operator] = await db.insert(operators)
+    const [operator] = await db.insert(task_operators)
       .values(data)
       .returning();
     return operator;
@@ -50,9 +50,9 @@ export class OperatorsService {
    * Update an operator
    */
   async updateOperator(id: number, data: Partial<InsertOperator>): Promise<Operator | undefined> {
-    const [operator] = await db.update(operators)
+    const [operator] = await db.update(task_operators)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(operators.id, id))
+      .where(eq(task_operators.id, id))
       .returning();
     return operator;
   }
@@ -75,8 +75,8 @@ export class OperatorsService {
    * Delete operator (hard delete)
    */
   async deleteOperator(id: number): Promise<boolean> {
-    const result = await db.delete(operators)
-      .where(eq(operators.id, id))
+    const result = await db.delete(task_operators)
+      .where(eq(task_operators.id, id))
       .returning();
     return result.length > 0;
   }
