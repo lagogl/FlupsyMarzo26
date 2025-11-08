@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -103,7 +104,7 @@ export default function TaskManagement() {
                       <TableCell className="max-w-xs truncate">
                         {task.description || "-"}
                       </TableCell>
-                      <TableCell>#{task.selectionId}</TableCell>
+                      <TableCell>{task.selectionId ? `#${task.selectionId}` : "—"}</TableCell>
                       <TableCell>
                         <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
                           {priorityLabels[task.priority as keyof typeof priorityLabels]}
