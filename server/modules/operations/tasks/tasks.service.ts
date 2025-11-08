@@ -5,6 +5,7 @@ import {
   selectionTaskBaskets, 
   selectionTaskAssignments,
   baskets,
+  flupsys,
   task_operators,
   selections,
   selectionSourceBaskets,
@@ -63,9 +64,11 @@ export class TasksService {
       role: selectionTaskBaskets.role,
       physicalNumber: baskets.physicalNumber,
       flupsyId: baskets.flupsyId,
+      flupsyName: flupsys.name,
     })
     .from(selectionTaskBaskets)
     .leftJoin(baskets, eq(selectionTaskBaskets.basketId, baskets.id))
+    .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
     .where(inArray(selectionTaskBaskets.taskId, taskIds));
 
     // Group assignments and baskets by task ID
@@ -117,9 +120,11 @@ export class TasksService {
       role: selectionTaskBaskets.role,
       physicalNumber: baskets.physicalNumber,
       flupsyId: baskets.flupsyId,
+      flupsyName: flupsys.name,
     })
     .from(selectionTaskBaskets)
     .leftJoin(baskets, eq(selectionTaskBaskets.basketId, baskets.id))
+    .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
     .where(eq(selectionTaskBaskets.taskId, taskId));
 
     // Get assignments with operator details

@@ -261,17 +261,22 @@ export default function TaskManagement() {
                                   {baskets.length} {baskets.length === 1 ? 'cestello' : 'cestelli'}
                                 </span>
                               </div>
-                              <div className="text-xs text-muted-foreground">
+                              <div className="text-xs space-y-1">
                                 {baskets.slice(0, 3).map((b: any, i: number) => (
-                                  <div key={b.id} className="flex items-center gap-1">
+                                  <div key={b.id} className="flex items-center gap-1 flex-wrap">
                                     <Badge variant="outline" className="text-xs">
                                       {b.role === 'source' ? 'Orig' : 'Dest'}
                                     </Badge>
-                                    <span>#{b.physicalNumber}</span>
+                                    <span className="font-medium">#{b.physicalNumber}</span>
+                                    {b.flupsyName && (
+                                      <span className="text-muted-foreground">
+                                        - {b.flupsyName}
+                                      </span>
+                                    )}
                                   </div>
                                 ))}
                                 {baskets.length > 3 && (
-                                  <span className="italic">+{baskets.length - 3} altri</span>
+                                  <span className="italic text-muted-foreground">+{baskets.length - 3} altri</span>
                                 )}
                               </div>
                             </div>
@@ -540,12 +545,12 @@ export default function TaskManagement() {
                             <Badge variant="outline" className="capitalize">
                               {basket.role === 'source' ? 'Origine' : 'Destinazione'}
                             </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              #{basket.physicalNumber}
+                            <span className="text-sm font-medium">
+                              Cestello #{basket.physicalNumber}
                             </span>
                           </div>
                           <p className="text-sm">
-                            <span className="font-medium">FLUPSY:</span> {basket.flupsyId}
+                            <span className="font-medium">FLUPSY:</span> {basket.flupsyName || `ID ${basket.flupsyId}`}
                           </p>
                         </div>
                       ))}
