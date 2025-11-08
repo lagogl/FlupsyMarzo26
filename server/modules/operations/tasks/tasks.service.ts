@@ -154,6 +154,11 @@ export class TasksService {
    * Assign operators to a task
    */
   async assignOperators(taskId: number, operatorIds: number[]) {
+    // Return empty array if no operators provided
+    if (!operatorIds || operatorIds.length === 0) {
+      return [];
+    }
+
     const assignments = operatorIds.map(operatorId => ({
       taskId,
       operatorId,
