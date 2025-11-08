@@ -40,8 +40,17 @@ export class OperatorsService {
    * Create a new operator
    */
   async createOperator(data: InsertOperator): Promise<Operator> {
+    // Convert empty strings to null for unique fields
+    const cleanedData = {
+      ...data,
+      email: data.email?.trim() || null,
+      phone: data.phone?.trim() || null,
+      role: data.role?.trim() || null,
+      notes: data.notes?.trim() || null,
+    };
+    
     const [operator] = await db.insert(task_operators)
-      .values(data)
+      .values(cleanedData)
       .returning();
     return operator;
   }
@@ -50,8 +59,23 @@ export class OperatorsService {
    * Update an operator
    */
   async updateOperator(id: number, data: Partial<InsertOperator>): Promise<Operator | undefined> {
+    // Convert empty strings to null for unique fields
+    const cleanedData: any = { ...data, updatedAt: new Date() };
+    if (data.email !== undefined) {
+      cleanedData.email = data.email?.trim() || null;
+    }
+    if (data.phone !== undefined) {
+      cleanedData.phone = data.phone?.trim() || null;
+    }
+    if (data.role !== undefined) {
+      cleanedData.role = data.role?.trim() || null;
+    }
+    if (data.notes !== undefined) {
+      cleanedData.notes = data.notes?.trim() || null;
+    }
+    
     const [operator] = await db.update(task_operators)
-      .set({ ...data, updatedAt: new Date() })
+      .set(cleanedData)
       .where(eq(task_operators.id, id))
       .returning();
     return operator;
