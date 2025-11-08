@@ -95,63 +95,236 @@ export default function TaskManagement() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Descrizione</TableHead>
-                  <TableHead>Selezione</TableHead>
-                  <TableHead>Priorità</TableHead>
-                  <TableHead>Stato</TableHead>
-                  <TableHead>Scadenza</TableHead>
-                  <TableHead>Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">ID</TableHead>
+                    <TableHead className="w-32">Tipo</TableHead>
+                    <TableHead className="min-w-[200px]">Descrizione</TableHead>
+                    <TableHead className="min-w-[250px]">Operatori Assegnati</TableHead>
+                    <TableHead className="w-32">Cestelli</TableHead>
+                    <TableHead className="w-24">Priorità</TableHead>
+                    <TableHead className="min-w-[140px]">Stato</TableHead>
+                    <TableHead className="w-32">Scadenza</TableHead>
+                    <TableHead className="w-32">Ricorrenza</TableHead>
+                    <TableHead className="w-24">Azioni</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {tasks && tasks.length > 0 ? (
-                  tasks.map((task: any) => (
-                    <TableRow key={task.id} data-testid={`task-row-${task.id}`}>
-                      <TableCell className="font-mono">{task.id}</TableCell>
-                      <TableCell className="capitalize">{task.taskType}</TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {task.description || "-"}
-                      </TableCell>
-                      <TableCell>{task.selectionId ? `#${task.selectionId}` : "—"}</TableCell>
-                      <TableCell>
-                        <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
-                          {priorityLabels[task.priority as keyof typeof priorityLabels]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[task.status as keyof typeof statusColors]}>
-                          {statusLabels[task.status as keyof typeof statusLabels]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedTask(task.id)}
-                          data-testid={`button-view-task-${task.id}`}
-                        >
-                          Dettagli
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  tasks.map((task: any) => {
+                    const isCompleted = task.status === 'completed';
+                    const assignedOperators = task.assignments || [];
+                    const completedCount = assignedOperators.filter((a: any) => a.status === 'completed').length;
+                    const baskets = task.baskets || [];
+                    
+                    return (
+                      <TableRow 
+                        key={task.id} 
+                        data-testid={`task-row-${task.id}`}
+                        className={isCompleted ? 'bg-green-50 dark:bg-green-950/20' : ''}
+                      >
+                        {/* ID */}
+                        <TableCell className="font-mono">
+                          <div className="flex items-center gap-2">
+                            {task.id}
+                            {isCompleted && (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Tipo */}
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium">
+                              {taskTypeLabels[task.taskType] || task.taskType}
+                            </span>
+                            {task.createdAt && (
+                              <span className="text-xs text-muted-foreground">
+                                Creata: {format(new Date(task.createdAt), 'dd/MM/yy')}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Descrizione */}
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-sm">
+                              {task.description || <span className="text-muted-foreground">Nessuna descrizione</span>}
+                            </span>
+                            {task.notes && (
+                              <span className="text-xs text-muted-foreground italic">
+                                Note: {task.notes.length > 50 ? task.notes.substring(0, 50) + '...' : task.notes}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Operatori Assegnati */}
+                        <TableCell>
+                          {assignedOperators.length > 0 ? (
+                            <div className="flex flex-col gap-2">
+                              {assignedOperators.map((a: any) => (
+                                <div key={a.id} className="flex items-center gap-2 p-2 bg-muted rounded border">
+                                  <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                      {a.operatorFirstName} {a.operatorLastName}
+                                    </p>
+                                    {a.operatorEmail && (
+                                      <p className="text-xs text-muted-foreground truncate">
+                                        {a.operatorEmail}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge 
+                                        variant="outline" 
+                                        className={`text-xs ${a.status === 'completed' ? 'bg-green-100 text-green-800 border-green-300' : ''}`}
+                                      >
+                                        {statusLabels[a.status as keyof typeof statusLabels]}
+                                      </Badge>
+                                      {a.completedAt && (
+                                        <span className="text-xs text-green-600">
+                                          ✓ {format(new Date(a.completedAt), 'dd/MM HH:mm')}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                              {completedCount > 0 && (
+                                <div className="text-xs text-green-600 font-semibold mt-1">
+                                  Progresso: {completedCount}/{assignedOperators.length} completati
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground italic">Nessun operatore assegnato</span>
+                          )}
+                        </TableCell>
+
+                        {/* Cestelli */}
+                        <TableCell>
+                          {baskets.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <Inbox className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm font-medium">
+                                  {baskets.length} {baskets.length === 1 ? 'cestello' : 'cestelli'}
+                                </span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {baskets.slice(0, 3).map((b: any, i: number) => (
+                                  <div key={b.id} className="flex items-center gap-1">
+                                    <Badge variant="outline" className="text-xs">
+                                      {b.role === 'source' ? 'Orig' : 'Dest'}
+                                    </Badge>
+                                    <span>#{b.physicalNumber}</span>
+                                  </div>
+                                ))}
+                                {baskets.length > 3 && (
+                                  <span className="italic">+{baskets.length - 3} altri</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        {/* Priorità */}
+                        <TableCell>
+                          <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
+                            {priorityLabels[task.priority as keyof typeof priorityLabels]}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Stato */}
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge className={statusColors[task.status as keyof typeof statusColors]}>
+                              {statusLabels[task.status as keyof typeof statusLabels]}
+                            </Badge>
+                            {task.completedAt && (
+                              <span className="text-xs text-green-600 font-medium">
+                                ✓ {format(new Date(task.completedAt), 'dd/MM/yy HH:mm')}
+                              </span>
+                            )}
+                            {task.updatedAt && !task.completedAt && (
+                              <span className="text-xs text-muted-foreground">
+                                Agg: {format(new Date(task.updatedAt), 'dd/MM/yy')}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Scadenza */}
+                        <TableCell>
+                          {task.dueDate ? (
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                <span className="text-sm font-medium">
+                                  {format(new Date(task.dueDate), 'dd/MM/yyyy')}
+                                </span>
+                              </div>
+                              {new Date(task.dueDate) < new Date() && task.status !== 'completed' && (
+                                <Badge variant="destructive" className="text-xs">Scaduta</Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        {/* Ricorrenza */}
+                        <TableCell>
+                          {task.cadence ? (
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline" className="text-xs">
+                                {task.cadence === 'daily' && 'Giornaliera'}
+                                {task.cadence === 'weekly' && 'Settimanale'}
+                                {task.cadence === 'monthly' && 'Mensile'}
+                                {task.cadence === 'once' && 'Una volta'}
+                              </Badge>
+                              {task.cadenceInterval > 1 && (
+                                <span className="text-xs text-muted-foreground">
+                                  Ogni {task.cadenceInterval}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        {/* Azioni */}
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedTask(task.id)}
+                            data-testid={`button-view-task-${task.id}`}
+                          >
+                            Dettagli
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground">
                       Nessuna attività trovata. Le attività vengono create dalla pagina Selezione Avanzata.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       )}
