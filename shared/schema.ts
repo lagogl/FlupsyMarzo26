@@ -226,6 +226,60 @@ export const selectionLotReferences = pgTable("selection_lot_references", {
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di creazione
 });
 
+// ========== OPERATORS (OPERATORI) ==========
+// Tabella operatori - utilizzata sia dall'app desktop che dall'app esterna
+export const operators = pgTable("operators", {
+  id: serial("id").primaryKey(),
+  firstName: text("first_name").notNull(), // Nome
+  lastName: text("last_name").notNull(), // Cognome
+  email: text("email").unique(), // Email (opzionale, per notifiche)
+  phone: text("phone"), // Telefono (opzionale)
+  role: text("role"), // Ruolo (es: 'operatore', 'supervisore', 'tecnico')
+  active: boolean("active").notNull().default(true), // Operatore attivo/disattivo
+  externalAppUserId: text("external_app_user_id"), // ID utente nell'app esterna (per sincronizzazione)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+  notes: text("notes"), // Note aggiuntive
+});
+
+// ========== SELECTION TASKS (ATTIVITÀ SELEZIONE) ==========
+// Sistema di gestione attività per le selezioni avanzate
+export const selectionTasks = pgTable("selection_tasks", {
+  id: serial("id").primaryKey(),
+  selectionId: integer("selection_id").notNull(), // Riferimento all'operazione di selezione
+  taskType: text("task_type").notNull(), // Tipo attività (es: 'pulizia', 'pesatura', 'vagliatura', 'trasferimento')
+  description: text("description"), // Descrizione dettagliata
+  priority: text("priority", { enum: ["low", "medium", "high", "urgent"] }).notNull().default("medium"),
+  status: text("status", { enum: ["pending", "assigned", "in_progress", "completed", "cancelled"] }).notNull().default("pending"),
+  dueDate: date("due_date"), // Scadenza attività
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+  completedAt: timestamp("completed_at"), // Data completamento
+  notes: text("notes"), // Note aggiuntive
+});
+
+// Selection Task Baskets (Ceste assegnate all'attività)
+export const selectionTaskBaskets = pgTable("selection_task_baskets", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull(), // Riferimento all'attività
+  basketId: integer("basket_id").notNull(), // Riferimento alla cesta
+  role: text("role", { enum: ["source", "destination"] }), // Ruolo cesta nell'attività
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Selection Task Assignments (Assegnazioni attività a operatori)
+export const selectionTaskAssignments = pgTable("selection_task_assignments", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull(), // Riferimento all'attività
+  operatorId: integer("operator_id").notNull(), // Riferimento all'operatore
+  status: text("status", { enum: ["assigned", "accepted", "in_progress", "completed"] }).notNull().default("assigned"),
+  assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+  startedAt: timestamp("started_at"), // Quando l'operatore ha iniziato
+  completedAt: timestamp("completed_at"), // Quando l'operatore ha completato
+  completionNotes: text("completion_notes"), // Note dell'operatore al completamento
+  externalAppSyncedAt: timestamp("external_app_synced_at"), // Timestamp sincronizzazione con app esterna
+});
+
 // ========== BASKET LOT COMPOSITION ==========
 // Tabella per tracciare la composizione dei lotti nei cestelli
 export const basketLotComposition = pgTable("basket_lot_composition", {
@@ -522,6 +576,33 @@ export const insertSelectionLotReferenceSchema = createInsertSchema(selectionLot
   createdAt: true
 });
 
+// ========== INSERT SCHEMAS: OPERATORS & TASKS ==========
+export const insertOperatorSchema = createInsertSchema(operators).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertSelectionTaskSchema = createInsertSchema(selectionTasks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true
+});
+
+export const insertSelectionTaskBasketSchema = createInsertSchema(selectionTaskBaskets).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertSelectionTaskAssignmentSchema = createInsertSchema(selectionTaskAssignments).omit({
+  id: true,
+  assignedAt: true,
+  startedAt: true,
+  completedAt: true,
+  externalAppSyncedAt: true
+});
+
 export const insertBasketLotCompositionSchema = createInsertSchema(basketLotComposition).omit({
   id: true,
   createdAt: true
@@ -597,6 +678,19 @@ export type InsertSelectionBasketHistory = z.infer<typeof insertSelectionBasketH
 
 export type SelectionLotReference = typeof selectionLotReferences.$inferSelect;
 export type InsertSelectionLotReference = z.infer<typeof insertSelectionLotReferenceSchema>;
+
+// ========== TYPES: OPERATORS & TASKS ==========
+export type Operator = typeof operators.$inferSelect;
+export type InsertOperator = z.infer<typeof insertOperatorSchema>;
+
+export type SelectionTask = typeof selectionTasks.$inferSelect;
+export type InsertSelectionTask = z.infer<typeof insertSelectionTaskSchema>;
+
+export type SelectionTaskBasket = typeof selectionTaskBaskets.$inferSelect;
+export type InsertSelectionTaskBasket = z.infer<typeof insertSelectionTaskBasketSchema>;
+
+export type SelectionTaskAssignment = typeof selectionTaskAssignments.$inferSelect;
+export type InsertSelectionTaskAssignment = z.infer<typeof insertSelectionTaskAssignmentSchema>;
 
 export type BasketLotComposition = typeof basketLotComposition.$inferSelect;
 export type InsertBasketLotComposition = z.infer<typeof insertBasketLotCompositionSchema>;

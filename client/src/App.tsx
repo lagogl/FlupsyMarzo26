@@ -64,6 +64,8 @@ import MixedLotsAnalytics from "@/pages/MixedLotsAnalytics";
 import LotLedgerStatistics from "@/pages/LotLedgerStatistics";
 // Importazione AI Growth Variability Analysis
 import GrowthVariabilityAnalysis from "@/pages/GrowthVariabilityAnalysis";
+// Importazione Task Management (Gestione Attività)
+import TaskManagement from "@/pages/TaskManagement";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
@@ -126,6 +128,7 @@ function Router() {
       <ProtectedRoute path="/ai-report-generator" component={AIReportGenerator}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
+      <ProtectedRoute path="/task-management" component={TaskManagement}/>
       
       {/* Redirezione per pagine rimosse */}
       <Route path="/tp3000-forecast">

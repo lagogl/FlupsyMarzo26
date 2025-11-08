@@ -177,6 +177,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', selectionsModule.selectionsRoutes);
   console.log('✅ Modulo SELECTIONS registrato su /api/selections* e /api/flupsy/available-positions');
 
+  // Registra il modulo TASKS (Gestione attività per selezioni)
+  const tasksModule = await import('./modules/operations/tasks');
+  app.use('/api', tasksModule.tasksRoutes);
+  console.log('✅ Modulo TASKS registrato su /api/tasks*, /api/operators*, /api/selections/:id/tasks');
+
   // Registra il modulo AUTH
   const authModule = await import('./modules/system/auth');
   app.use('/api', authModule.authRoutes);
