@@ -10,7 +10,7 @@ import NewFlupsyVisualizer from '@/components/dashboard/NewFlupsyVisualizer';
 import FlupsyCenterFilter from '@/components/dashboard/FlupsyCenterFilter';
 import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
-import DashboardCarousel from '@/components/dashboard/DashboardCarousel';
+import InfoTicker from '@/components/dashboard/InfoTicker';
 import { Basket, Cycle, Operation, Lot } from '@shared/schema';
 import { TooltipTrigger } from '@/components/ui/tooltip-trigger';
 import { useTooltip } from '@/contexts/TooltipContext';
@@ -73,13 +73,13 @@ export default function Dashboard() {
     queryKey: ['/api/lots', { includeAll: true }],
   });
 
-  // Query for tasks (for carousel)
-  const { data: tasks } = useQuery({
+  // Query for tasks (for ticker)
+  const { data: tasks } = useQuery<any[]>({
     queryKey: ['/api/tasks'],
   });
 
-  // Query for operators (for carousel)
-  const { data: operators } = useQuery({
+  // Query for operators (for ticker)
+  const { data: operators } = useQuery<any[]>({
     queryKey: ['/api/operators', { active: true }],
   });
   
@@ -328,7 +328,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-3">
         <PageHeader title="Dashboard" />
         
         <div className="flex items-center gap-2">
@@ -361,9 +361,16 @@ export default function Dashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Info Ticker - Stile Aeroporto */}
+      <InfoTicker 
+        tasks={tasks || []}
+        operationStats={operationStats}
+        activeOperatorsCount={operators?.length || 0}
+      />
       
       {/* Filtri per la dashboard */}
-      <div className="space-y-4">
+      <div className="space-y-4 mt-6">
         {/* Filtro per centro di produzione */}
         <FlupsyCenterFilter 
           onFilterChange={(center, flupsyIds) => {
@@ -381,13 +388,6 @@ export default function Dashboard() {
           }}
         />
       </div>
-
-      {/* Dashboard Carousel - Insights */}
-      <DashboardCarousel 
-        tasks={tasks || []}
-        operationStats={operationStats}
-        activeOperatorsCount={operators?.length || 0}
-      />
       
       {/* Dashboard Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
