@@ -10,9 +10,14 @@ interface Task {
   priority: string;
   status: string;
   dueDate: string | null;
+  notes: string | null;
   assignments?: Array<{
     operatorFirstName: string;
     operatorLastName: string;
+  }>;
+  baskets?: Array<{
+    physicalNumber: number;
+    flupsyName: string;
   }>;
 }
 
@@ -55,9 +60,30 @@ export default function InfoTicker({
   todayTasks.forEach(task => {
     const taskName = taskTypeLabels[task.taskType] || task.taskType;
     const desc = task.description || 'Nessuna descrizione';
-    const operatori = task.assignments?.length || 0;
     const icon = task.priority === 'urgent' ? '🚨' : '📋';
-    messages.push(`${icon} Oggi: ${taskName} - ${desc}${operatori > 0 ? ` (${operatori} operatori)` : ''}`);
+    
+    // Informazioni ceste e FLUPSY
+    let basketInfo = '';
+    if (task.baskets && task.baskets.length > 0) {
+      const basketsList = task.baskets.map(b => `#${b.physicalNumber}`).join(', ');
+      const flupsyName = task.baskets[0]?.flupsyName || '';
+      basketInfo = ` | Ceste: ${basketsList}${flupsyName ? ` - ${flupsyName}` : ''}`;
+    }
+    
+    // Informazioni operatori
+    let operatorInfo = '';
+    if (task.assignments && task.assignments.length > 0) {
+      const operatorNames = task.assignments.map(a => `${a.operatorFirstName} ${a.operatorLastName}`).join(', ');
+      operatorInfo = ` | Op: ${operatorNames}`;
+    }
+    
+    // Note
+    let notesInfo = '';
+    if (task.notes && task.notes.trim()) {
+      notesInfo = ` | Note: ${task.notes}`;
+    }
+    
+    messages.push(`${icon} ${taskName} - ${desc}${basketInfo}${operatorInfo}${notesInfo}`);
   });
 
   // Se non ci sono attività, non mostrare nulla
