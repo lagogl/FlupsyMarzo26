@@ -43,7 +43,7 @@ export default function InfoTicker({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Attività previste per oggi (scadenza oggi)
+  // Attività previste per oggi (scadenza oggi) - SOLO non completate
   const todayTasks = tasks
     .filter(t => {
       if (!t.dueDate || t.status === 'completed' || t.status === 'cancelled') return false;
@@ -58,27 +58,6 @@ export default function InfoTicker({
     const operatori = task.assignments?.length || 0;
     const icon = task.priority === 'urgent' ? '🚨' : '📋';
     messages.push(`${icon} Oggi: ${taskName} - ${desc}${operatori > 0 ? ` (${operatori} operatori)` : ''}`);
-  });
-
-  // Attività urgenti (anche se non scadono oggi)
-  const urgentNotToday = tasks
-    .filter(t => {
-      if (t.status === 'completed' || t.status === 'cancelled') return false;
-      if (t.priority !== 'urgent') return false;
-      // Escludi quelle già mostrate come "oggi"
-      if (t.dueDate) {
-        const dueDate = new Date(t.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        if (dueDate.getTime() === today.getTime()) return false;
-      }
-      return true;
-    })
-    .slice(0, 2);
-
-  urgentNotToday.forEach(task => {
-    const taskName = taskTypeLabels[task.taskType] || task.taskType;
-    const desc = task.description || 'Nessuna descrizione';
-    messages.push(`🚨 URGENTE: ${taskName} - ${desc}`);
   });
 
   // Messaggio di default se non ci sono attività
