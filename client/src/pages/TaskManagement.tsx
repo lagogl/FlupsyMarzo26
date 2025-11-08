@@ -64,9 +64,10 @@ export default function TaskManagement() {
   const [selectedSelectionId, setSelectedSelectionId] = useState<number | null>(null);
 
   // Query selections
-  const { data: selections, isLoading: loadingSelections } = useQuery({
+  const { data: selectionsResponse, isLoading: loadingSelections } = useQuery({
     queryKey: ['/api/selections'],
   });
+  const selections = selectionsResponse?.selections || [];
 
   // Query operators
   const { data: operators } = useQuery({
