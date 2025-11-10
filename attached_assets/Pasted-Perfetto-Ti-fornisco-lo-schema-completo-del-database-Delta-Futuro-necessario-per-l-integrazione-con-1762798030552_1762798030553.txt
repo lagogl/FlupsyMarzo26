@@ -1,0 +1,155 @@
+Perfetto! Ti fornisco lo schema completo del database Delta Futuro necessario per l'integrazione con FLUPSY. 📋
+
+🗄️ Schema Database Delta Futuro
+Tabella: selection_task_assignments
+Questa è la tabella principale per le attività assegnate agli operatori:
+
+CREATE TABLE selection_task_assignments (
+  -- Identificatori
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL,
+  operator_id INTEGER NOT NULL,
+  
+  -- Gestione stato
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  -- Valori possibili: 'pending', 'in_progress', 'completed', 'cancelled'
+  
+  -- 🆕 TRACCIAMENTO PRESA IN CARICO (nuovi campi)
+  started_by INTEGER,           -- Operatore che ha iniziato l'attività
+  started_at TIMESTAMP,         -- Quando è stata presa in carico
+  
+  -- 🆕 TRACCIAMENTO COMPLETAMENTO (nuovi campi)
+  completed_by INTEGER,         -- Operatore che ha completato
+  completed_at TIMESTAMP,       -- Quando è stata completata
+  
+  -- Informazioni aggiuntive
+  notes TEXT,                   -- Note dell'operatore
+  results JSONB,                -- Risultati in formato JSON
+  
+  -- Metadati
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  -- Vincoli di integrità referenziale
+  FOREIGN KEY (operator_id) REFERENCES operators(id) ON DELETE CASCADE,
+  FOREIGN KEY (started_by) REFERENCES operators(id) ON DELETE SET NULL,
+  FOREIGN KEY (completed_by) REFERENCES operators(id) ON DELETE SET NULL
+);
+-- Indici per performance
+CREATE INDEX idx_selection_tasks_operator ON selection_task_assignments(operator_id);
+CREATE INDEX idx_selection_tasks_status ON selection_task_assignments(status);
+CREATE INDEX idx_selection_tasks_started_at ON selection_task_assignments(started_at);
+CREATE INDEX idx_selection_tasks_completed_at ON selection_task_assignments(completed_at);
+CREATE INDEX idx_selection_tasks_operator_status ON selection_task_assignments(operator_id, status);
+
+Tabella: operators
+Tabella degli operatori (deve già esistere):
+
+CREATE TABLE operators (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+Tabella: tasks (opzionale)
+Dettagli delle attività (se non esiste già):
+
+CREATE TABLE tasks (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  type VARCHAR(50) NOT NULL,        -- Es: 'selection'
+  basket_code VARCHAR(50),           -- Codice cestello
+  basket_current_size VARCHAR(20),   -- Taglia corrente
+  basket_animals_count INTEGER,      -- Numero animali
+  due_date DATE,                     -- Scadenza attività
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+📊 Query di Esempio per Analisi Tempi
+Con questo schema, potrai fare analisi come:
+
+1. Tempo medio di esecuzione per operatore
+SELECT 
+  o.name AS operatore,
+  COUNT(*) AS attivita_completate,
+  AVG(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60) AS minuti_medi,
+  MIN(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60) AS minuti_min,
+  MAX(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60) AS minuti_max
+FROM selection_task_assignments sta
+JOIN operators o ON o.id = sta.completed_by
+WHERE sta.status = 'completed'
+  AND sta.started_at IS NOT NULL
+  AND sta.completed_at IS NOT NULL
+GROUP BY o.id, o.name
+ORDER BY minuti_medi;
+
+2. Attività completate oggi con durata
+SELECT 
+  sta.id,
+  t.title,
+  o1.name AS iniziata_da,
+  o2.name AS completata_da,
+  sta.started_at,
+  sta.completed_at,
+  EXTRACT(EPOCH FROM (sta.completed_at - sta.started_at)) / 60 AS durata_minuti
+FROM selection_task_assignments sta
+JOIN operators o1 ON o1.id = sta.started_by
+JOIN operators o2 ON o2.id = sta.completed_by
+LEFT JOIN tasks t ON t.id = sta.task_id
+WHERE DATE(sta.completed_at) = CURRENT_DATE
+  AND sta.status = 'completed'
+ORDER BY sta.completed_at DESC;
+
+3. Attività in corso (non completate)
+SELECT 
+  sta.id,
+  t.title,
+  o.name AS operatore,
+  sta.started_at,
+  EXTRACT(EPOCH FROM (NOW() - sta.started_at)) / 60 AS minuti_trascorsi
+FROM selection_task_assignments sta
+JOIN operators o ON o.id = sta.started_by
+LEFT JOIN tasks t ON t.id = sta.task_id
+WHERE sta.status = 'in_progress'
+ORDER BY sta.started_at;
+
+🔧 Endpoint API Delta Futuro
+Assicurati che gli endpoint salvino i nuovi campi:
+
+PATCH /api/tasks/:taskId/status
+// Quando ricevi questa chiamata dall'app:
+const { operatorId, status, startedAt, notes } = req.body;
+// Aggiorna la tabella:
+UPDATE selection_task_assignments
+SET 
+  status = $2,
+  started_by = $3,      // ← Nuovo
+  started_at = $4,      // ← Nuovo
+  notes = $5,
+  updated_at = NOW()
+WHERE id = $1;
+
+PATCH /api/tasks/:taskId/complete
+// Quando ricevi questa chiamata dall'app:
+const { operatorId, completedAt, notes, results } = req.body;
+// Aggiorna la tabella:
+UPDATE selection_task_assignments
+SET 
+  status = 'completed',
+  completed_by = $2,    // ← Nuovo
+  completed_at = $3,    // ← Nuovo
+  notes = $4,
+  results = $5,
+  updated_at = NOW()
+WHERE id = $1;
+
+✅ Checklist Implementazione
+ Aggiungere campi started_by, started_at, completed_by alla tabella selection_task_assignments
+ Creare indici per performance sulle query di analisi
+ Modificare endpoint PATCH /api/tasks/:taskId/status per salvare started_by e started_at
+ Modificare endpoint PATCH /api/tasks/:taskId/complete per salvare completed_by
+ Testare con dati reali dall'app FLUPSY
+ Creare dashboard/report per analisi tempi esecuzione
