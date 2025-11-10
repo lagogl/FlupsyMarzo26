@@ -227,6 +227,8 @@ export class TasksController {
 
   /**
    * PATCH /api/tasks/:taskId/assignments/:assignmentId
+   * Per app esterna: aggiorna stato assegnazione con tracciamento operatore
+   * Body: { status, operatorId?, completionNotes? }
    */
   async updateAssignment(req: Request, res: Response) {
     try {
@@ -235,7 +237,7 @@ export class TasksController {
         return res.status(400).json({ error: "ID assegnazione non valido" });
       }
 
-      const { status, completionNotes } = req.body;
+      const { status, completionNotes, operatorId } = req.body;
       if (!status) {
         return res.status(400).json({ error: "Campo status richiesto" });
       }
@@ -245,10 +247,18 @@ export class TasksController {
         return res.status(400).json({ error: "Status non valido" });
       }
 
+      // Validazione operatorId per status critici
+      if ((status === 'in_progress' || status === 'completed') && !operatorId) {
+        return res.status(400).json({ 
+          error: `Campo operatorId richiesto quando status è '${status}'` 
+        });
+      }
+
       const assignment = await tasksService.updateAssignmentStatus(
         assignmentId, 
         status,
-        completionNotes
+        completionNotes,
+        operatorId
       );
 
       res.json(assignment);
