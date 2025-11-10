@@ -239,19 +239,28 @@ export class TasksService {
   async updateAssignmentStatus(
     assignmentId: number, 
     status: 'assigned' | 'accepted' | 'in_progress' | 'completed',
-    completionNotes?: string
+    completionNotes?: string,
+    operatorId?: number
   ) {
     const updateData: any = { 
       status,
       externalAppSyncedAt: new Date() 
     };
 
-    if (status === 'in_progress' && !updateData.startedAt) {
+    // Quando si inizia un'attività, salva chi la inizia
+    if (status === 'in_progress') {
       updateData.startedAt = new Date();
+      if (operatorId) {
+        updateData.startedBy = operatorId;
+      }
     }
 
+    // Quando si completa un'attività, salva chi la completa
     if (status === 'completed') {
       updateData.completedAt = new Date();
+      if (operatorId) {
+        updateData.completedBy = operatorId;
+      }
       if (completionNotes) {
         updateData.completionNotes = completionNotes;
       }
