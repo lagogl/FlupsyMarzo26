@@ -1,247 +1,337 @@
-# 📋 Guida Integrazione Sistema Attività - App Esterna
+# 📋 Integrazione App Esterna - Sistema Gestione Attività (Tasks)
 
-## Panoramica
-
-Il modulo **Sistema Gestione Attività** permette di assegnare compiti specifici agli operatori per le selezioni avanzate di ceste. L'app Delta Futuro crea e assegna le attività, mentre l'app esterna permette agli operatori di visualizzarle, accettarle e completarle.
+**Versione:** 2.0  
+**Data:** 10 Novembre 2025  
+**Target:** Sviluppatori App Mobile FLUPSY
 
 ---
 
-## 🗄️ Struttura Database
+## 📖 Indice
 
-### Tabella `task_operators` (Operatori per Attività)
+1. [Panoramica](#panoramica)
+2. [Architettura Database](#architettura-database)
+3. [Connessione Database](#connessione-database)
+4. [Schema Tabelle](#schema-tabelle)
+5. [Flussi di Lavoro](#flussi-di-lavoro)
+6. [Query SQL Esempio](#query-sql-esempio)
+7. [Casi d'Uso Comuni](#casi-duso-comuni)
+8. [Validazioni e Regole](#validazioni-e-regole)
+9. [Performance e Indici](#performance-e-indici)
+10. [Troubleshooting](#troubleshooting)
 
-```sql
-CREATE TABLE task_operators (
-  id SERIAL PRIMARY KEY,
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
-  email TEXT UNIQUE,
-  phone TEXT,
-  role TEXT,
-  active BOOLEAN NOT NULL DEFAULT true,
-  external_app_user_id TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP,
-  notes TEXT
-);
+---
+
+## 🎯 Panoramica
+
+Il sistema di gestione attività di Delta Futuro permette all'app mobile FLUPSY di:
+
+- ✅ **Leggere** le attività assegnate agli operatori
+- ✅ **Aggiornare** lo stato delle attività (presa in carico, in progress, completate)
+- ✅ **Tracciare** chi ha iniziato e chi ha completato ogni attività
+- ✅ **Registrare** note e risultati delle operazioni
+- ✅ **Visualizzare** dettagli ceste, FLUPSY e informazioni correlate
+
+### Database Condiviso
+
+L'app esterna accede **direttamente** al database PostgreSQL di Delta Futuro tramite:
+
+```
+DATABASE_URL=postgresql://user:password@host:port/database?sslmode=require
 ```
 
-**Campi chiave:**
-- `id`: ID univoco operatore
-- `external_app_user_id`: ID utente nell'app esterna (per sincronizzazione)
-- `active`: Se `false`, l'operatore è disattivato
+⚠️ **IMPORTANTE**: La connessione richiede SSL (`sslmode=require`) per sicurezza.
 
 ---
 
-### Tabella `selection_tasks` (Attività)
+## 🗄️ Architettura Database
+
+### Tabelle Coinvolte
+
+```
+selection_tasks (Attività principale)
+    ↓
+selection_task_assignments (Assegnazioni operatori)
+    ↓
+selection_task_baskets (Ceste coinvolte)
+    ↓
+task_operators (Anagrafica operatori)
+    ↓
+baskets (Dettagli ceste)
+    ↓
+flupsys (Dettagli FLUPSY)
+```
+
+---
+
+## 🔌 Connessione Database
+
+### Configurazione PostgreSQL (Node.js)
+
+```javascript
+import pkg from 'pg';
+const { Pool } = pkg;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: true
+  },
+  max: 20, // Numero massimo di connessioni
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+// Test connessione
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('Errore connessione database:', err);
+  } else {
+    console.log('✅ Database connesso:', res.rows[0].now);
+  }
+});
+```
+
+### Configurazione React Native (con pg-native)
+
+```javascript
+import { Pool } from 'react-native-postgres';
+
+const pool = new Pool({
+  host: 'your-host.neon.tech',
+  port: 5432,
+  database: 'your-database',
+  user: 'your-user',
+  password: 'your-password',
+  ssl: true,
+  max: 10,
+});
+```
+
+---
+
+## 📊 Schema Tabelle
+
+### 1️⃣ `selection_tasks` - Attività Principale
 
 ```sql
 CREATE TABLE selection_tasks (
   id SERIAL PRIMARY KEY,
-  selection_id INTEGER NOT NULL,
-  task_type TEXT NOT NULL,
-  description TEXT,
-  priority TEXT NOT NULL DEFAULT 'medium',
-  status TEXT NOT NULL DEFAULT 'pending',
-  due_date DATE,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  selection_id INTEGER,              -- Riferimento opzionale a selezione (null per task manuali)
+  task_type VARCHAR(50) NOT NULL,    -- Tipo: 'pesatura', 'vagliatura', 'pulizia', 'selezione', 'trasferimento'
+  description TEXT,                  -- Descrizione dell'attività
+  priority VARCHAR(20) NOT NULL DEFAULT 'medium',  -- 'low', 'medium', 'high', 'urgent'
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',   -- 'pending', 'assigned', 'in_progress', 'completed', 'cancelled'
+  due_date DATE,                     -- Scadenza attività
+  cadence VARCHAR(20),               -- Ricorrenza: 'daily', 'weekly', 'monthly', null
+  cadence_interval INTEGER DEFAULT 1,  -- Intervallo (es: ogni 2 settimane = 2)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP,
-  completed_at TIMESTAMP,
-  notes TEXT
+  completed_at TIMESTAMP,            -- Data completamento task generale
+  notes TEXT                         -- Note aggiuntive
 );
 ```
 
-**Stati attività (`status`):**
-- `pending`: Attività creata ma non assegnata
-- `assigned`: Assegnata a operatori
-- `in_progress`: In esecuzione
-- `completed`: Completata
-- `cancelled`: Annullata
-
-**Priorità (`priority`):**
-- `low`: Bassa
-- `medium`: Media (default)
-- `high`: Alta
-- `urgent`: Urgente
+**Campi Chiave:**
+- `task_type`: Tipo di attività da svolgere
+- `priority`: Urgenza dell'attività
+- `status`: Stato globale del task
+- `due_date`: Scadenza (usare per filtrare task odierni)
 
 ---
 
-### Tabella `selection_task_baskets` (Ceste dell'Attività)
-
-```sql
-CREATE TABLE selection_task_baskets (
-  id SERIAL PRIMARY KEY,
-  task_id INTEGER NOT NULL,
-  basket_id INTEGER NOT NULL,
-  role TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-```
-
-**Ruoli cesta (`role`):**
-- `source`: Cesta di origine
-- `destination`: Cesta di destinazione
-
----
-
-### Tabella `selection_task_assignments` (Assegnazioni Operatori)
+### 2️⃣ `selection_task_assignments` - Assegnazioni Operatori
 
 ```sql
 CREATE TABLE selection_task_assignments (
   id SERIAL PRIMARY KEY,
-  task_id INTEGER NOT NULL,
-  operator_id INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'assigned',
-  assigned_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  started_at TIMESTAMP,
-  completed_at TIMESTAMP,
-  completion_notes TEXT,
-  external_app_synced_at TIMESTAMP
+  task_id INTEGER NOT NULL,          -- Riferimento a selection_tasks.id
+  operator_id INTEGER NOT NULL,      -- ID operatore assegnato (da task_operators)
+  
+  -- Stato assegnazione
+  status VARCHAR(20) NOT NULL DEFAULT 'assigned',  -- 'assigned', 'accepted', 'in_progress', 'completed'
+  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  -- 🆕 TRACCIAMENTO PRESA IN CARICO
+  started_by INTEGER,                -- ID operatore che ha iniziato (può essere diverso da operator_id)
+  started_at TIMESTAMP,              -- Quando è stata presa in carico
+  
+  -- 🆕 TRACCIAMENTO COMPLETAMENTO
+  completed_by INTEGER,              -- ID operatore che ha completato
+  completed_at TIMESTAMP,            -- Quando è stata completata
+  
+  -- Informazioni aggiuntive
+  completion_notes TEXT,             -- Note dell'operatore al completamento
+  external_app_synced_at TIMESTAMP,  -- Timestamp sincronizzazione
+  
+  FOREIGN KEY (task_id) REFERENCES selection_tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (operator_id) REFERENCES task_operators(id) ON DELETE CASCADE,
+  FOREIGN KEY (started_by) REFERENCES task_operators(id) ON DELETE SET NULL,
+  FOREIGN KEY (completed_by) REFERENCES task_operators(id) ON DELETE SET NULL
+);
+
+-- Indici per performance
+CREATE INDEX idx_assignments_operator ON selection_task_assignments(operator_id);
+CREATE INDEX idx_assignments_status ON selection_task_assignments(status);
+CREATE INDEX idx_assignments_started_by ON selection_task_assignments(started_by);
+CREATE INDEX idx_assignments_completed_by ON selection_task_assignments(completed_by);
+CREATE INDEX idx_assignments_operator_status ON selection_task_assignments(operator_id, status);
+```
+
+**Campi Critici:**
+- `operator_id`: Chi è stato **assegnato**
+- `started_by`: Chi ha **realmente iniziato**
+- `completed_by`: Chi ha **completato**
+- `status`: Stato specifico dell'assegnazione
+
+---
+
+### 3️⃣ `selection_task_baskets` - Ceste Coinvolte
+
+```sql
+CREATE TABLE selection_task_baskets (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL,          -- Riferimento a selection_tasks.id
+  basket_id INTEGER NOT NULL,        -- Riferimento a baskets.id
+  role VARCHAR(20),                  -- 'source' o 'destination' (SOLO per vagliatura con mappa)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  FOREIGN KEY (task_id) REFERENCES selection_tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (basket_id) REFERENCES baskets.id) ON DELETE CASCADE
 );
 ```
 
-**Stati assegnazione (`status`):**
-- `assigned`: Assegnata
-- `accepted`: Accettata dall'operatore
-- `in_progress`: In esecuzione
-- `completed`: Completata
-
----
-
-## 🔌 API Endpoints per App Esterna
-
-### Base URL
-```
-https://your-domain.replit.app/api
-```
-
----
-
-### 1. **Ottenere Attività per Operatore**
-
-```http
-GET /api/operators/:operatorId/tasks?status=assigned,in_progress
-```
-
-**Parametri Query:**
-- `status`: (opzionale) Filtra per stati separati da virgola
-
-**Esempio Response:**
-```json
-[
-  {
-    "taskId": 12,
-    "taskType": "pulizia",
-    "description": "Pulizia ceste dopo vagliatura",
-    "priority": "high",
-    "taskStatus": "assigned",
-    "dueDate": "2025-11-10",
-    "selectionId": 45,
-    "selectionNumber": 3,
-    "selectionDate": "2025-11-08",
-    "assignmentId": 89,
-    "assignmentStatus": "assigned",
-    "assignedAt": "2025-11-08T10:00:00Z",
-    "startedAt": null,
-    "completedAt": null
-  }
-]
-```
-
----
-
-### 2. **Ottenere Ceste di un'Attività**
-
-```http
-GET /api/tasks/:taskId/baskets
-```
-
-**Esempio Response:**
-```json
-[
-  {
-    "id": 45,
-    "basketId": 78,
-    "role": "source",
-    "physicalNumber": 15,
-    "flupsyId": 2,
-    "animalCount": 15000,
-    "totalWeight": 8500,
-    "animalsPerKg": 1765,
-    "sizeId": 5,
-    "sizeName": "TP-1500"
-  }
-]
-```
-
 **Note:**
-- `totalWeight`: Espresso in **GRAMMI**
-- Convertire in kg dividendo per 1000
+- Il campo `role` è significativo **SOLO** per operazioni di "vagliatura con mappa"
+- Per altri tipi di task, il `role` può essere ignorato o essere NULL
 
 ---
 
-### 3. **Aggiornare Stato Assegnazione**
+### 4️⃣ `task_operators` - Anagrafica Operatori
 
-```http
-PATCH /api/tasks/:taskId/assignments/:assignmentId
+```sql
+CREATE TABLE task_operators (
+  id SERIAL PRIMARY KEY,
+  first_name VARCHAR(100) NOT NULL,
+  last_name VARCHAR(100) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  active BOOLEAN DEFAULT true,
+  external_app_user_id INTEGER,      -- Riferimento all'utente nell'app esterna
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
-
-**Request Body:**
-```json
-{
-  "status": "in_progress"
-}
-```
-
-**Possibili transizioni di stato:**
-1. `assigned` → `accepted`
-2. `accepted` → `in_progress`
-3. `in_progress` → `completed`
 
 ---
 
-### 4. **Completare un'Attività**
+### 5️⃣ `baskets` - Dettagli Ceste
 
-```http
-PATCH /api/tasks/:taskId/assignments/:assignmentId
+```sql
+CREATE TABLE baskets (
+  id SERIAL PRIMARY KEY,
+  physical_number INTEGER NOT NULL,  -- Numero fisico della cesta
+  flupsy_id INTEGER NOT NULL,        -- Riferimento al FLUPSY
+  status VARCHAR(20),                -- Stato cesta
+  -- ... altri campi ...
+  
+  FOREIGN KEY (flupsy_id) REFERENCES flupsys(id)
+);
 ```
-
-**Request Body:**
-```json
-{
-  "status": "completed",
-  "completionNotes": "Operazione completata con successo"
-}
-```
-
-**Effetti:**
-- Imposta `completedAt` timestamp
-- Salva note di completamento
-- Se tutte le assegnazioni sono completate, l'attività viene marcata come `completed`
 
 ---
 
-## 📊 Query SQL di Esempio
+### 6️⃣ `flupsys` - Dettagli FLUPSY
 
-### Query 1: Attività Pendenti per Operatore
+```sql
+CREATE TABLE flupsys (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,        -- Nome FLUPSY (es: "FLUPSY 2")
+  -- ... altri campi ...
+);
+```
+
+---
+
+## 🔄 Flussi di Lavoro
+
+### Flusso 1: Operatore Visualizza Attività Assegnate
+
+```
+1. App esterna richiede task per operatore X
+2. Query: SELECT tasks WHERE operator_id = X AND status != 'completed'
+3. Mostra lista attività con dettagli ceste e FLUPSY
+```
+
+### Flusso 2: Operatore Prende in Carico Attività
+
+```
+1. Operatore tap su "Inizia Attività"
+2. App esterna UPDATE:
+   - status = 'in_progress'
+   - started_by = operator_id
+   - started_at = NOW()
+   - external_app_synced_at = NOW()
+3. Delta Futuro riceve aggiornamento in tempo reale
+```
+
+### Flusso 3: Operatore Completa Attività
+
+```
+1. Operatore tap su "Completa"
+2. App esterna UPDATE:
+   - status = 'completed'
+   - completed_by = operator_id
+   - completed_at = NOW()
+   - completion_notes = "Note operatore"
+   - external_app_synced_at = NOW()
+3. Attività sparisce dal ticker di Delta Futuro
+```
+
+---
+
+## 💻 Query SQL Esempio
+
+### 1. Recuperare Attività Assegnate a un Operatore (Oggi)
 
 ```sql
 SELECT 
-  st.id as task_id,
+  st.id AS task_id,
   st.task_type,
   st.description,
   st.priority,
   st.due_date,
-  s.selection_number,
-  s.date as selection_date,
-  sta.id as assignment_id,
-  sta.status as assignment_status,
-  sta.assigned_at
+  st.notes AS task_notes,
+  sta.id AS assignment_id,
+  sta.status AS assignment_status,
+  sta.assigned_at,
+  sta.started_at,
+  sta.completed_at,
+  -- Dettagli operatore
+  op.first_name,
+  op.last_name,
+  op.email,
+  -- Ceste coinvolte (come JSON array)
+  COALESCE(
+    json_agg(
+      DISTINCT jsonb_build_object(
+        'basket_id', b.id,
+        'physical_number', b.physical_number,
+        'flupsy_id', f.id,
+        'flupsy_name', f.name
+      )
+    ) FILTER (WHERE b.id IS NOT NULL),
+    '[]'
+  ) AS baskets
 FROM selection_tasks st
-JOIN selections s ON s.id = st.selection_id
-JOIN selection_task_assignments sta ON sta.task_id = st.id
-WHERE sta.operator_id = $1 
-  AND sta.status IN ('assigned', 'accepted', 'in_progress')
+INNER JOIN selection_task_assignments sta ON sta.task_id = st.id
+INNER JOIN task_operators op ON op.id = sta.operator_id
+LEFT JOIN selection_task_baskets stb ON stb.task_id = st.id
+LEFT JOIN baskets b ON b.id = stb.basket_id
+LEFT JOIN flupsys f ON f.id = b.flupsy_id
+WHERE 
+  sta.operator_id = $1                -- ID operatore
+  AND sta.status != 'completed'       -- Solo non completate
+  AND st.due_date = CURRENT_DATE      -- Solo oggi
+GROUP BY 
+  st.id, sta.id, op.id
 ORDER BY 
   CASE st.priority
     WHEN 'urgent' THEN 1
@@ -252,206 +342,328 @@ ORDER BY
   st.due_date ASC NULLS LAST;
 ```
 
----
+**Parametri:**
+- `$1`: ID operatore (INTEGER)
 
-### Query 2: Dettagli Ceste per Attività
-
-```sql
-SELECT 
-  stb.id,
-  stb.basket_id,
-  stb.role,
-  b.physical_number,
-  b.flupsy_id,
-  ssb.animal_count,
-  ssb.total_weight,
-  ssb.animals_per_kg,
-  sz.name as size_name
-FROM selection_task_baskets stb
-LEFT JOIN baskets b ON b.id = stb.basket_id
-LEFT JOIN selection_source_baskets ssb ON ssb.basket_id = b.id
-LEFT JOIN sizes sz ON sz.id = ssb.size_id
-WHERE stb.task_id = $1;
+**Ritorna:**
+```json
+[
+  {
+    "task_id": 42,
+    "task_type": "pesatura",
+    "description": "Pesatura settimanale",
+    "priority": "high",
+    "due_date": "2025-11-10",
+    "task_notes": "Controllare temperatura acqua",
+    "assignment_id": 123,
+    "assignment_status": "assigned",
+    "assigned_at": "2025-11-10T08:00:00Z",
+    "started_at": null,
+    "completed_at": null,
+    "first_name": "Mario",
+    "last_name": "Rossi",
+    "email": "mario.rossi@example.com",
+    "baskets": [
+      {
+        "basket_id": 15,
+        "physical_number": 6,
+        "flupsy_id": 2,
+        "flupsy_name": "FLUPSY 2"
+      }
+    ]
+  }
+]
 ```
 
 ---
 
-### Query 3: Storico Completamenti Operatore
+### 2. Prendere in Carico un'Attività
 
 ```sql
+UPDATE selection_task_assignments
+SET 
+  status = 'in_progress',
+  started_by = $1,                    -- ID operatore che inizia
+  started_at = NOW(),
+  external_app_synced_at = NOW()
+WHERE 
+  id = $2                             -- ID assignment
+  AND status IN ('assigned', 'accepted')  -- Solo se non già in progress
+RETURNING 
+  id, 
+  task_id, 
+  status, 
+  started_by, 
+  started_at;
+```
+
+**Parametri:**
+- `$1`: ID operatore che inizia (INTEGER)
+- `$2`: ID assignment (INTEGER)
+
+---
+
+### 3. Completare un'Attività
+
+```sql
+UPDATE selection_task_assignments
+SET 
+  status = 'completed',
+  completed_by = $1,                  -- ID operatore che completa
+  completed_at = NOW(),
+  completion_notes = $2,              -- Note opzionali
+  external_app_synced_at = NOW()
+WHERE 
+  id = $3                             -- ID assignment
+  AND status = 'in_progress'          -- Solo se è in progress
+RETURNING 
+  id, 
+  task_id, 
+  status, 
+  completed_by, 
+  completed_at, 
+  completion_notes;
+```
+
+**Parametri:**
+- `$1`: ID operatore che completa (INTEGER)
+- `$2`: Note di completamento (TEXT, può essere NULL)
+- `$3`: ID assignment (INTEGER)
+
+---
+
+### 4. Statistiche Operatore (Performance)
+
+```sql
+-- Tempo medio di esecuzione per operatore
 SELECT 
-  st.task_type,
-  st.description,
-  sta.completed_at,
-  sta.completion_notes,
-  s.selection_number
+  op.first_name || ' ' || op.last_name AS operatore,
+  COUNT(*) AS task_completati,
+  AVG(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60)::INTEGER AS minuti_medi,
+  MIN(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60)::INTEGER AS minuti_min,
+  MAX(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60)::INTEGER AS minuti_max
 FROM selection_task_assignments sta
-JOIN selection_tasks st ON st.id = sta.task_id
-LEFT JOIN selections s ON s.id = st.selection_id
-WHERE sta.operator_id = $1 
-  AND sta.status = 'completed'
-ORDER BY sta.completed_at DESC
-LIMIT 50;
+JOIN task_operators op ON op.id = sta.completed_by
+WHERE 
+  sta.status = 'completed'
+  AND sta.started_at IS NOT NULL
+  AND sta.completed_at IS NOT NULL
+  AND DATE(sta.completed_at) >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY op.id, op.first_name, op.last_name
+ORDER BY minuti_medi;
 ```
 
 ---
 
-## 🔄 Flusso di Lavoro Completo
+## 🎯 Casi d'Uso Comuni
 
-### Sequenza Tipica
+### Caso 1: Lista Attività del Giorno per Operatore
 
-1. **App Delta Futuro**:
-   - Crea selezione avanzata ceste
-   - Crea attività per la selezione
-   - Assegna ceste all'attività
-   - Assegna operatori all'attività
+```javascript
+const operatorId = 5;
+const today = new Date().toISOString().split('T')[0];
 
-2. **App Esterna** (operatore):
-   - Recupera attività pendenti (`GET /api/operators/:id/tasks`)
-   - Visualizza dettagli ceste (`GET /api/tasks/:id/baskets`)
-   - Accetta attività (`PATCH` status → `accepted`)
-   - Inizia lavoro (`PATCH` status → `in_progress`)
-   - Completa attività (`PATCH` status → `completed` + note)
+const query = `
+  SELECT 
+    st.id,
+    st.task_type,
+    st.description,
+    st.priority,
+    sta.status,
+    json_agg(
+      jsonb_build_object(
+        'physical_number', b.physical_number,
+        'flupsy_name', f.name
+      )
+    ) AS baskets
+  FROM selection_tasks st
+  JOIN selection_task_assignments sta ON sta.task_id = st.id
+  LEFT JOIN selection_task_baskets stb ON stb.task_id = st.id
+  LEFT JOIN baskets b ON b.id = stb.basket_id
+  LEFT JOIN flupsys f ON f.id = b.flupsy_id
+  WHERE 
+    sta.operator_id = $1
+    AND sta.status != 'completed'
+    AND st.due_date = $2
+  GROUP BY st.id, sta.id
+  ORDER BY 
+    CASE st.priority
+      WHEN 'urgent' THEN 1
+      WHEN 'high' THEN 2
+      WHEN 'medium' THEN 3
+      WHEN 'low' THEN 4
+    END;
+`;
 
-3. **Automatismi**:
-   - Quando tutte le assegnazioni sono `completed`, l'attività diventa `completed`
-   - Il campo `external_app_synced_at` traccia l'ultima sincronizzazione
+const result = await pool.query(query, [operatorId, today]);
+console.log('Task oggi:', result.rows);
+```
 
 ---
 
-## 📱 Esempio Integrazione App Mobile
+### Caso 2: Iniziare un'Attività
 
-```typescript
-// API Client
-const API_BASE_URL = 'https://your-domain.replit.app/api';
+```javascript
+const operatorId = 5;
+const assignmentId = 123;
 
-interface Task {
-  taskId: number;
-  taskType: string;
-  description: string;
-  priority: string;
-  dueDate: string;
-  assignmentId: number;
-  assignmentStatus: string;
-}
+const query = `
+  UPDATE selection_task_assignments
+  SET 
+    status = 'in_progress',
+    started_by = $1,
+    started_at = NOW(),
+    external_app_synced_at = NOW()
+  WHERE 
+    id = $2
+    AND status IN ('assigned', 'accepted')
+  RETURNING *;
+`;
 
-// 1. Ottieni attività per operatore
-async function getOperatorTasks(operatorId: number): Promise<Task[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/operators/${operatorId}/tasks?status=assigned,in_progress`
-  );
-  return await response.json();
-}
+const result = await pool.query(query, [operatorId, assignmentId]);
+console.log('Attività presa in carico:', result.rows[0]);
+```
 
-// 2. Accetta attività
-async function acceptTask(taskId: number, assignmentId: number) {
-  const response = await fetch(
-    `${API_BASE_URL}/tasks/${taskId}/assignments/${assignmentId}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'accepted' })
+---
+
+### Caso 3: Completare un'Attività con Note
+
+```javascript
+const operatorId = 5;
+const assignmentId = 123;
+const notes = 'Pesatura completata. Peso totale: 15.2kg. Temperatura acqua: 18°C';
+
+const query = `
+  UPDATE selection_task_assignments
+  SET 
+    status = 'completed',
+    completed_by = $1,
+    completed_at = NOW(),
+    completion_notes = $2,
+    external_app_synced_at = NOW()
+  WHERE 
+    id = $3
+    AND status = 'in_progress'
+  RETURNING *;
+`;
+
+const result = await pool.query(query, [operatorId, notes, assignmentId]);
+console.log('Attività completata:', result.rows[0]);
+```
+
+---
+
+## ✅ Validazioni e Regole
+
+### 1. Transizioni di Stato Valide
+
+```
+assigned → accepted → in_progress → completed
+   ↓          ↓           ↓
+cancelled  cancelled  cancelled
+```
+
+**Regole:**
+- ❌ NON si può passare da 'completed' a 'in_progress'
+- ❌ NON si può completare senza aver iniziato
+- ✅ Si può cancellare in qualsiasi momento
+
+### 2. Validazione Campi
+
+```javascript
+function validateTaskUpdate(status, startedBy, completedBy, startedAt, completedAt) {
+  if (status === 'in_progress') {
+    if (!startedBy || !startedAt) {
+      throw new Error('started_by e started_at obbligatori per in_progress');
     }
-  );
-  return await response.json();
-}
-
-// 3. Inizia attività
-async function startTask(taskId: number, assignmentId: number) {
-  const response = await fetch(
-    `${API_BASE_URL}/tasks/${taskId}/assignments/${assignmentId}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'in_progress' })
-    }
-  );
-  return await response.json();
-}
-
-// 4. Completa attività
-async function completeTask(
-  taskId: number, 
-  assignmentId: number, 
-  notes: string
-) {
-  const response = await fetch(
-    `${API_BASE_URL}/tasks/${taskId}/assignments/${assignmentId}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        status: 'completed',
-        completionNotes: notes
-      })
-    }
-  );
-  return await response.json();
-}
-
-// 5. Ottieni ceste attività
-async function getTaskBaskets(taskId: number) {
-  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/baskets`);
-  const baskets = await response.json();
+  }
   
-  // Converti peso da grammi a kg
-  return baskets.map(b => ({
-    ...b,
-    totalWeightKg: b.totalWeight / 1000
-  }));
+  if (status === 'completed') {
+    if (!completedBy || !completedAt) {
+      throw new Error('completed_by e completed_at obbligatori per completed');
+    }
+    if (!startedBy || !startedAt) {
+      throw new Error('Task deve essere iniziato prima di essere completato');
+    }
+  }
+  
+  return true;
 }
 ```
 
 ---
 
-## ⚠️ Note Importanti
+## ⚡ Performance e Indici
 
-1. **Peso in Grammi**: Il campo `total_weight` è sempre in GRAMMI. Dividere per 1000 per ottenere KG.
+### Indici Esistenti
 
-2. **Immutabilità Snapshot**: I dati in `selection_source_baskets` sono snapshot immutabili al momento della selezione.
+```sql
+CREATE INDEX idx_assignments_operator ON selection_task_assignments(operator_id);
+CREATE INDEX idx_assignments_status ON selection_task_assignments(status);
+CREATE INDEX idx_assignments_started_by ON selection_task_assignments(started_by);
+CREATE INDEX idx_assignments_completed_by ON selection_task_assignments(completed_by);
+CREATE INDEX idx_assignments_operator_status ON selection_task_assignments(operator_id, status);
+CREATE INDEX idx_assignments_started_at ON selection_task_assignments(started_at);
+CREATE INDEX idx_assignments_completed_at ON selection_task_assignments(completed_at);
+```
 
-3. **Sincronizzazione**: Il campo `external_app_synced_at` viene aggiornato automaticamente ad ogni modifica da app esterna.
+### Best Practices
 
-4. **Stati Validi**: Rispettare le transizioni di stato valide per evitare errori.
+1. **Usare Prepared Statements**
+   ```javascript
+   // ✅ BUONO
+   pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+   
+   // ❌ CATTIVO - SQL injection risk
+   pool.query(`SELECT * FROM tasks WHERE id = ${taskId}`);
+   ```
 
-5. **Operatori Attivi**: Filtrare solo operatori con `active = true`.
+2. **Connection Pooling**
+   ```javascript
+   // ✅ BUONO
+   const pool = new Pool({ max: 20 });
+   
+   // ❌ CATTIVO
+   const client = new Client();
+   await client.connect();
+   ```
 
 ---
 
-## 🐛 Debugging
+## 🔧 Troubleshooting
 
-### Test Connessione Database
+### Problema: Connessione Rifiutata
 
-```sql
--- Verifica operatori
-SELECT * FROM operators WHERE active = true;
-
--- Verifica attività pendenti
-SELECT * FROM selection_tasks WHERE status IN ('pending', 'assigned', 'in_progress');
-
--- Verifica assegnazioni
-SELECT * FROM selection_task_assignments WHERE status != 'completed';
+```
+Error: connect ECONNREFUSED
 ```
 
-### Log Attività Operatore
+**Soluzione:**
+- Verifica `DATABASE_URL`
+- Controlla firewall e whitelist IP
+- Assicurati di usare `ssl: true`
+
+---
+
+### Problema: Query Lente
 
 ```sql
-SELECT 
-  o.first_name,
-  o.last_name,
-  COUNT(CASE WHEN sta.status = 'completed' THEN 1 END) as completed_tasks,
-  COUNT(CASE WHEN sta.status = 'in_progress' THEN 1 END) as in_progress_tasks
-FROM operators o
-LEFT JOIN selection_task_assignments sta ON sta.operator_id = o.id
-WHERE o.active = true
-GROUP BY o.id, o.first_name, o.last_name;
+-- Analizza query
+EXPLAIN ANALYZE 
+SELECT * FROM selection_tasks 
+WHERE due_date = CURRENT_DATE;
 ```
 
 ---
 
-## 📞 Supporto
+## 📝 Changelog
 
-Per domande o problemi contattare il team Delta Futuro.
+### Versione 2.0 (10 Nov 2025)
+- ✅ Aggiunti campi `started_by` e `completed_by`
+- ✅ Indici per performance analytics
+- ✅ Query esempio complete
+- ✅ Accesso diretto database (non API)
 
-**Versione Documentazione**: 1.0.0  
-**Data**: 08 Novembre 2025
+---
+
+**Fine Documentazione** 🎉
