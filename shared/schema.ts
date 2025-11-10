@@ -273,10 +273,12 @@ export const selectionTaskBaskets = pgTable("selection_task_baskets", {
 export const selectionTaskAssignments = pgTable("selection_task_assignments", {
   id: serial("id").primaryKey(),
   taskId: integer("task_id").notNull(), // Riferimento all'attività
-  operatorId: integer("operator_id").notNull(), // Riferimento all'operatore
+  operatorId: integer("operator_id").notNull(), // Riferimento all'operatore assegnato
   status: text("status", { enum: ["assigned", "accepted", "in_progress", "completed"] }).notNull().default("assigned"),
   assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+  startedBy: integer("started_by"), // ID operatore che ha realmente iniziato l'attività
   startedAt: timestamp("started_at"), // Quando l'operatore ha iniziato
+  completedBy: integer("completed_by"), // ID operatore che ha completato l'attività
   completedAt: timestamp("completed_at"), // Quando l'operatore ha completato
   completionNotes: text("completion_notes"), // Note dell'operatore al completamento
   externalAppSyncedAt: timestamp("external_app_synced_at"), // Timestamp sincronizzazione con app esterna
