@@ -1,6 +1,6 @@
 # 📡 API REST - Integrazione App Esterna FLUPSY
 
-**Versione:** 2.1  
+**Versione:** 2.2  
 **Data:** 11 Novembre 2025  
 **Target:** Sviluppatori App Mobile FLUPSY
 
@@ -356,22 +356,53 @@ interface TaskBasket {
 
 ---
 
-## ⚠️ IMPORTANTE: Filtraggio Task Completati dal Responsabile
+## ⚠️ IMPORTANTE: Gestione Task Completati e Cancellati
 
-### Problema
+### 1. Task Completati dal Responsabile
+
+#### Problema
 Il responsabile può **completare manualmente** un task dal modulo "Gestione Attività" di Delta Futuro anche se gli operatori non hanno ancora completato i loro assignment.
 
 In questo caso:
 - `task.status` diventa `'completed'` ✅
 - Ma `assignment.status` rimane `'assigned'` o `'in_progress'` ❌
 
-### Soluzione: Filtro Lato Client
+#### Soluzione Backend
+**✅ AUTOMATICO - Nessuna modifica necessaria all'app mobile**
 
-**L'app mobile DEVE filtrare i task dove `taskStatus === 'completed'`**, anche se `assignmentStatus !== 'completed'`.
+Il backend filtra automaticamente i task completati dall'endpoint `/api/operators/:operatorId/tasks`.
 
-### ✅ Codice da Implementare
+I task completati dal responsabile **spariscono automaticamente** dalla lista dell'operatore.
 
-Quando ricevi i task dall'endpoint `/api/operators/:operatorId/tasks`, **filtra così**:
+---
+
+### 2. Task Cancellati dal Responsabile
+
+#### Problema
+Il responsabile può **cancellare** un task dal modulo "Gestione Attività" di Delta Futuro.
+
+Quando un task viene cancellato:
+- `task.status` diventa `'cancelled'` 
+- Il task viene marcato come soft-deleted (non eliminato fisicamente)
+- I campi `cancelledBy` e `cancelledAt` vengono popolati per tracciabilità
+
+#### Soluzione Backend
+**✅ AUTOMATICO - Nessuna modifica necessaria all'app mobile**
+
+Il backend filtra automaticamente i task cancellati dall'endpoint `/api/operators/:operatorId/tasks`.
+
+I task cancellati **spariscono automaticamente** dalla lista dell'operatore.
+
+---
+
+### 📱 Cosa Deve Fare lo Sviluppatore Mobile
+
+#### ✅ Nessun Filtro Necessario
+L'endpoint `/api/operators/:operatorId/tasks` restituisce **SOLO** i task attivi:
+- ✅ Mostra: task con status `'pending'`, `'assigned'`, `'in_progress'`
+- ❌ Nasconde: task con status `'completed'` o `'cancelled'`
+
+Usa i task così come arrivano dall'API:
 
 ```javascript
 async function getActiveTasks(operatorId) {
@@ -379,65 +410,73 @@ async function getActiveTasks(operatorId) {
     `${API_BASE_URL}/operators/${operatorId}/tasks?status=assigned,in_progress`
   );
   
-  const allTasks = await response.json();
+  const tasks = await response.json();
   
-  // FILTRO OBBLIGATORIO: Nascondi task completati dal responsabile
-  const activeTasks = allTasks.filter(task => task.taskStatus !== 'completed');
-  
-  return activeTasks;
+  // I task sono già filtrati dal backend - usali direttamente
+  return tasks;
 }
 ```
 
-### 📱 React Native - Esempio Completo
+#### ⚠️ Gestione Errori 404
+Un operatore potrebbe tentare di completare un task che è stato cancellato nel frattempo.
 
-```jsx
-import { useQuery } from '@tanstack/react-query';
-
-function TaskListScreen({ operatorId }) {
-  const { data: tasks, isLoading } = useQuery({
-    queryKey: ['operator-tasks', operatorId],
-    queryFn: async () => {
-      const response = await fetch(
-        `${API_BASE}/operators/${operatorId}/tasks?status=assigned,in_progress`
-      );
-      const allTasks = await response.json();
-      
-      // Filtra task completati dal responsabile
-      return allTasks.filter(task => task.taskStatus !== 'completed');
-    }
-  });
-
-  if (isLoading) return <LoadingSpinner />;
-
-  return (
-    <FlatList
-      data={tasks}
-      keyExtractor={item => item.taskId.toString()}
-      renderItem={({ item }) => <TaskCard task={item} />}
-    />
-  );
-}
-```
-
-### 🎯 Regola d'Oro
+**Implementa gestione errori** per questo scenario:
 
 ```javascript
-// ✅ CORRETTO: Mostra solo task non completati
-const visibleTasks = tasks.filter(t => t.taskStatus !== 'completed');
-
-// ❌ SBAGLIATO: Non filtrare solo per assignmentStatus
-const wrongTasks = tasks.filter(t => t.assignmentStatus !== 'completed');
+async function completeTask(taskId, assignmentId, operatorId, notes) {
+  try {
+    const response = await fetch(
+      `${API_BASE}/tasks/${taskId}/assignments/${assignmentId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'completed',
+          operatorId: operatorId,
+          completionNotes: notes
+        })
+      }
+    );
+    
+    if (response.status === 404) {
+      // Task cancellato dal responsabile nel frattempo
+      Alert.alert(
+        'Attività Non Disponibile',
+        'Questa attività è stata cancellata dal responsabile.'
+      );
+      // Aggiorna la lista per rimuovere il task cancellato
+      await refreshTaskList();
+      return null;
+    }
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Errore durante completamento');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Errore completamento task:', error);
+    throw error;
+  }
+}
 ```
 
-### Perché Non Lo Fa Il Backend?
+### 🎯 Riepilogo per Sviluppatore
 
-Per preservare la **tracciabilità**:
-- `task.status = 'completed'` → "Il lavoro non è più richiesto"
-- `assignment.status = 'assigned'` → "L'operatore non ha completato personalmente"
+| Scenario | Comportamento Backend | Azione App Mobile |
+|----------|----------------------|-------------------|
+| **Task completato dal manager** | Escluso automaticamente dall'API | ✅ Nessuna - sparisce automaticamente |
+| **Task cancellato dal manager** | Escluso automaticamente dall'API | ✅ Nessuna - sparisce automaticamente |
+| **Tentativo di completare task cancellato** | Restituisce 404 Not Found | ⚠️ Gestisci errore 404 e mostra messaggio |
 
-Questo permette analytics future come:
-- "Quanti task vengono forzati dal manager?"
-- "Tempi medi di completamento per operatore"
+### Perché Soft Delete?
+
+Il sistema usa **soft delete** (status='cancelled') invece di eliminare fisicamente i task per:
+- ✅ **Tracciabilità**: Sapere chi ha cancellato cosa e quando
+- ✅ **Analytics**: Calcolare metriche sui task cancellati
+- ✅ **Audit**: Storico completo delle attività
+- ✅ **Recovery**: Possibilità futura di "ripristinare" task cancellati
 
 ---
 
@@ -784,11 +823,17 @@ Per domande o problemi con l'integrazione API:
 
 ## 📝 Changelog
 
-### Versione 2.1 (11 Nov 2025)
-- ✅ **IMPORTANTE**: Aggiunta sezione "Filtraggio Task Completati dal Responsabile"
-- ✅ Istruzioni obbligatorie per filtrare `taskStatus !== 'completed'` lato client
-- ✅ Esempi codice JavaScript e React Native per implementare il filtro
-- ✅ Spiegazione della logica di separazione task.status vs assignment.status
+### Versione 2.2 (11 Nov 2025)
+- ✅ **IMPORTANTE**: Implementato soft delete per task cancellati
+- ✅ Backend filtra automaticamente task completati E cancellati dall'endpoint operatori
+- ✅ Nessun filtro lato client necessario - tutto gestito dal backend
+- ✅ Aggiunta sezione "Gestione Errori 404" per task cancellati durante il completamento
+- ✅ Tabella riepilogo comportamenti per sviluppatori
+- ✅ Aggiunti campi `cancelledBy` e `cancelledAt` per tracciabilità
+
+### Versione 2.1 (11 Nov 2025) - DEPRECATED
+- ⚠️ Versione obsoleta - richiedeva filtro lato client
+- ✅ Aggiunta sezione "Filtraggio Task Completati dal Responsabile"
 
 ### Versione 2.0 (10 Nov 2025)
 - ✅ API REST complete per app esterna

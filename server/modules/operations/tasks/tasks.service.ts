@@ -1,5 +1,5 @@
 import { db } from "../../../db";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, ne, and, inArray, sql } from "drizzle-orm";
 import { 
   selectionTasks, 
   selectionTaskBaskets, 
@@ -19,10 +19,12 @@ import {
 export class TasksService {
   /**
    * Get all tasks with assignments and baskets
+   * Esclude i task cancellati di default
    */
   async getAllTasks() {
-    // Get all tasks
+    // Get all tasks (escludi cancellati)
     const tasks = await db.select().from(selectionTasks)
+      .where(ne(selectionTasks.status, 'cancelled'))
       .orderBy(sql`
         CASE ${selectionTasks.priority}
           WHEN 'urgent' THEN 1
@@ -173,25 +175,22 @@ export class TasksService {
   }
 
   /**
-   * Delete a task and all related data
+   * Cancel a task (soft delete)
+   * Nota: Non elimina fisicamente il task ma lo marca come cancellato
+   * per preservare la tracciabilità e permettere analytics
    */
-  async deleteTask(taskId: number): Promise<boolean> {
-    return await db.transaction(async (tx) => {
-      // Delete assignments
-      await tx.delete(selectionTaskAssignments)
-        .where(eq(selectionTaskAssignments.taskId, taskId));
-      
-      // Delete task baskets
-      await tx.delete(selectionTaskBaskets)
-        .where(eq(selectionTaskBaskets.taskId, taskId));
-      
-      // Delete task
-      const result = await tx.delete(selectionTasks)
-        .where(eq(selectionTasks.id, taskId))
-        .returning();
-      
-      return result.length > 0;
-    });
+  async deleteTask(taskId: number, cancelledBy?: number): Promise<boolean> {
+    const [result] = await db.update(selectionTasks)
+      .set({ 
+        status: 'cancelled',
+        cancelledBy: cancelledBy || null,
+        cancelledAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(selectionTasks.id, taskId))
+      .returning();
+    
+    return !!result;
   }
 
   /**
@@ -316,6 +315,7 @@ export class TasksService {
 
   /**
    * Get tasks assigned to an operator (for external app)
+   * Esclude automaticamente i task cancellati e completati
    */
   async getTasksForOperator(operatorId: number, statusFilter?: string[]) {
     let query = db.select({
@@ -337,12 +337,20 @@ export class TasksService {
     .from(selectionTaskAssignments)
     .innerJoin(selectionTasks, eq(selectionTaskAssignments.taskId, selectionTasks.id))
     .leftJoin(selections, eq(selectionTasks.selectionId, selections.id))
-    .where(eq(selectionTaskAssignments.operatorId, operatorId));
+    .where(
+      and(
+        eq(selectionTaskAssignments.operatorId, operatorId),
+        ne(selectionTasks.status, 'cancelled'),
+        ne(selectionTasks.status, 'completed')
+      )
+    );
 
     if (statusFilter && statusFilter.length > 0) {
       query = query.where(
         and(
           eq(selectionTaskAssignments.operatorId, operatorId),
+          ne(selectionTasks.status, 'cancelled'),
+          ne(selectionTasks.status, 'completed'),
           inArray(selectionTaskAssignments.status, statusFilter as any)
         )
       );
