@@ -1,7 +1,7 @@
 # 📡 API REST - Integrazione App Esterna FLUPSY
 
-**Versione:** 2.0  
-**Data:** 10 Novembre 2025  
+**Versione:** 2.1  
+**Data:** 11 Novembre 2025  
 **Target:** Sviluppatori App Mobile FLUPSY
 
 ---
@@ -356,6 +356,91 @@ interface TaskBasket {
 
 ---
 
+## ⚠️ IMPORTANTE: Filtraggio Task Completati dal Responsabile
+
+### Problema
+Il responsabile può **completare manualmente** un task dal modulo "Gestione Attività" di Delta Futuro anche se gli operatori non hanno ancora completato i loro assignment.
+
+In questo caso:
+- `task.status` diventa `'completed'` ✅
+- Ma `assignment.status` rimane `'assigned'` o `'in_progress'` ❌
+
+### Soluzione: Filtro Lato Client
+
+**L'app mobile DEVE filtrare i task dove `taskStatus === 'completed'`**, anche se `assignmentStatus !== 'completed'`.
+
+### ✅ Codice da Implementare
+
+Quando ricevi i task dall'endpoint `/api/operators/:operatorId/tasks`, **filtra così**:
+
+```javascript
+async function getActiveTasks(operatorId) {
+  const response = await fetch(
+    `${API_BASE_URL}/operators/${operatorId}/tasks?status=assigned,in_progress`
+  );
+  
+  const allTasks = await response.json();
+  
+  // FILTRO OBBLIGATORIO: Nascondi task completati dal responsabile
+  const activeTasks = allTasks.filter(task => task.taskStatus !== 'completed');
+  
+  return activeTasks;
+}
+```
+
+### 📱 React Native - Esempio Completo
+
+```jsx
+import { useQuery } from '@tanstack/react-query';
+
+function TaskListScreen({ operatorId }) {
+  const { data: tasks, isLoading } = useQuery({
+    queryKey: ['operator-tasks', operatorId],
+    queryFn: async () => {
+      const response = await fetch(
+        `${API_BASE}/operators/${operatorId}/tasks?status=assigned,in_progress`
+      );
+      const allTasks = await response.json();
+      
+      // Filtra task completati dal responsabile
+      return allTasks.filter(task => task.taskStatus !== 'completed');
+    }
+  });
+
+  if (isLoading) return <LoadingSpinner />;
+
+  return (
+    <FlatList
+      data={tasks}
+      keyExtractor={item => item.taskId.toString()}
+      renderItem={({ item }) => <TaskCard task={item} />}
+    />
+  );
+}
+```
+
+### 🎯 Regola d'Oro
+
+```javascript
+// ✅ CORRETTO: Mostra solo task non completati
+const visibleTasks = tasks.filter(t => t.taskStatus !== 'completed');
+
+// ❌ SBAGLIATO: Non filtrare solo per assignmentStatus
+const wrongTasks = tasks.filter(t => t.assignmentStatus !== 'completed');
+```
+
+### Perché Non Lo Fa Il Backend?
+
+Per preservare la **tracciabilità**:
+- `task.status = 'completed'` → "Il lavoro non è più richiesto"
+- `assignment.status = 'assigned'` → "L'operatore non ha completato personalmente"
+
+Questo permette analytics future come:
+- "Quanti task vengono forzati dal manager?"
+- "Tempi medi di completamento per operatore"
+
+---
+
 ## 💻 Esempi Codice
 
 ### JavaScript/TypeScript (Fetch API)
@@ -698,6 +783,12 @@ Per domande o problemi con l'integrazione API:
 ---
 
 ## 📝 Changelog
+
+### Versione 2.1 (11 Nov 2025)
+- ✅ **IMPORTANTE**: Aggiunta sezione "Filtraggio Task Completati dal Responsabile"
+- ✅ Istruzioni obbligatorie per filtrare `taskStatus !== 'completed'` lato client
+- ✅ Esempi codice JavaScript e React Native per implementare il filtro
+- ✅ Spiegazione della logica di separazione task.status vs assignment.status
 
 ### Versione 2.0 (10 Nov 2025)
 - ✅ API REST complete per app esterna
