@@ -257,6 +257,8 @@ export const selectionTasks = pgTable("selection_tasks", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
   completedAt: timestamp("completed_at"), // Data completamento
+  cancelledBy: integer("cancelled_by"), // ID utente che ha cancellato l'attività
+  cancelledAt: timestamp("cancelled_at"), // Data cancellazione
   notes: text("notes"), // Note aggiuntive
 });
 
