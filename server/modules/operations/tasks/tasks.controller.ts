@@ -96,13 +96,26 @@ export class TasksController {
       await tasksService.addBasketsToTask(task.id, basketsData);
 
       // Assign operators if provided
+      let assignments = [];
       if (req.body.operatorIds && Array.isArray(req.body.operatorIds)) {
-        await tasksService.assignOperators(task.id, req.body.operatorIds);
+        assignments = await tasksService.assignOperators(task.id, req.body.operatorIds);
       }
 
-      // Return full task details
-      const fullTask = await tasksService.getTaskById(task.id);
-      res.status(201).json(fullTask);
+      // Build response without additional query (avoid connection timeout)
+      const response = {
+        ...task,
+        baskets: basketsData.map(b => ({ 
+          id: null, 
+          basketId: b.basketId, 
+          role: b.role,
+          physicalNumber: null,
+          flupsyId: null,
+          flupsyName: null
+        })),
+        assignments: assignments
+      };
+      
+      res.status(201).json(response);
     } catch (error) {
       console.error("Errore nella creazione attività:", error);
       res.status(500).json({ error: "Errore interno del server" });
