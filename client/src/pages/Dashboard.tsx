@@ -18,8 +18,10 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, AlertCircle } from 'lucide-react';
 import { useFilterPersistence } from '@/hooks/useFilterPersistence';
 import PageHeader from '@/components/PageHeader';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { isFirstTimeUser, registerTooltip, showTooltip } = useTooltip();
   const queryClient = useQueryClient();
   
@@ -329,7 +331,9 @@ export default function Dashboard() {
   return (
     <div>
       <div className="flex justify-between items-center gap-4 mb-6">
-        <h1 className="text-3xl font-bold tracking-tight flex-shrink-0">Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight flex-shrink-0">
+          Dashboard {user?.username && <span className="text-gray-500">- {user.username}</span>}
+        </h1>
         
         {/* Info Ticker - Stile Aeroporto - In mezzo */}
         <div className="flex-1 min-w-0">
