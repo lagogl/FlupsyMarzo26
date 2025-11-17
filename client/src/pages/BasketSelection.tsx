@@ -308,6 +308,22 @@ export default function BasketSelection() {
     console.log('✅ BASKET SELECTION: Dati aggiornati in real-time');
   });
   
+  // ✅ SOLUZIONE PERMANENTE: WebSocket listener per aggiornamenti gruppi
+  useWebSocketMessage('baskets:update', async (data: any) => {
+    console.log('🏷️ BASKET SELECTION: Assegnazione gruppo rilevata, aggiorno cache', data);
+    // Invalida cache baskets (contiene groupId aggiornato)
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/baskets?includeAll=true'],
+      type: 'all'
+    });
+    // Invalida cache gruppi (contiene basketCount aggiornato)
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/basket-groups'],
+      type: 'all'
+    });
+    console.log('✅ BASKET SELECTION: Cache gruppi aggiornata automaticamente');
+  });
+  
   // Form per gestire i filtri
   const form = useForm<z.infer<typeof filterSchema>>({
     resolver: zodResolver(filterSchema),

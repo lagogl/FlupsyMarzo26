@@ -4539,6 +4539,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.assignBasketsToGroup(basketIds, groupId);
+      
+      // ✅ SOLUZIONE PERMANENTE: Invalida cache e notifica frontend
+      // Importa moduli cache e WebSocket
+      const { BasketsCache } = await import('./baskets-cache-service');
+      const { broadcastMessage } = await import("./websocket");
+      
+      // Invalida cache backend dei baskets
+      BasketsCache.clear();
+      console.log(`✅ Cache baskets invalidata dopo assegnazione gruppo ${groupId} a ${basketIds.length} ceste`);
+      
+      // Notifica frontend via WebSocket per invalidare cache React Query
+      broadcastMessage('baskets:update', {
+        basketIds,
+        groupId,
+        message: `${basketIds.length} ceste assegnate al gruppo ${groupId || 'rimosso'}`
+      });
+      console.log(`📡 WebSocket broadcast inviato: baskets:update per ${basketIds.length} ceste`);
+      
       res.json({ message: "Baskets assigned successfully" });
     } catch (error) {
       console.error("Error assigning baskets to group:", error);
