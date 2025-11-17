@@ -332,7 +332,7 @@ export const operations = pgTable("operations", {
   type: text("type", { enum: operationTypes }).notNull(),
   basketId: integer("basket_id").notNull(), // reference to the basket
   cycleId: integer("cycle_id").notNull(), // reference to the cycle
-  sizeId: integer("size_id").references(() => sizes.id, { onDelete: 'restrict' }), // PROTECTED: Foreign key con restrict
+  sizeId: integer("size_id").notNull().references(() => sizes.id, { onDelete: 'restrict' }), // TASSATIVO: La taglia è OBBLIGATORIA in OGNI operazione
   sgrId: integer("sgr_id"), // reference to the SGR
   lotId: integer("lot_id"), // reference to the lot
   animalCount: integer("animal_count"),

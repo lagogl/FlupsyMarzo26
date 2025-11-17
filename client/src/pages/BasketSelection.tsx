@@ -372,16 +372,13 @@ export default function BasketSelection() {
       // Ultima operazione
       const lastOperation = sortedOperations.length > 0 ? sortedOperations[0] : null;
       
-      // Trova la taglia più recente tra TUTTE le operazioni (non solo l'ultima)
-      // Questo è importante perché l'ultima operazione potrebbe non avere una taglia
-      const operationWithSize = sortedOperations.find(op => op.sizeId !== null);
-      const size = operationWithSize?.sizeId ? 
-        sizes.find(s => s.id === operationWithSize.sizeId) || null : null;
+      // Taglia dall'ultima operazione (SEMPRE presente - campo obbligatorio nel database)
+      const size = lastOperation?.sizeId ? 
+        sizes.find(s => s.id === lastOperation.sizeId) || null : null;
       
-      // Trova il lotto più recente tra TUTTE le operazioni
-      const operationWithLot = sortedOperations.find(op => op.lotId !== null);
-      const lot = operationWithLot?.lotId ?
-        lots.find(l => l.id === operationWithLot.lotId) || null : null;
+      // Lotto dall'ultima operazione (può essere null)
+      const lot = lastOperation?.lotId ?
+        lots.find(l => l.id === lastOperation.lotId) || null : null;
       
       // Calcola la durata del ciclo in giorni
       let cycleDuration = null;
@@ -650,9 +647,12 @@ export default function BasketSelection() {
     setAvailableGroupIds(groupIdsWithBaskets);
   }, [basketInfos]); // Dipende solo dai dati delle ceste
   
-  // Ordinamento e filtro delle ceste
-  useEffect(() => {
-    if (!basketInfos) return;
+  // Trigger per forzare il ricalcolo dei filtri quando l'utente clicca "Applica"
+  const [filterTrigger, setFilterTrigger] = useState(0);
+  
+  // Ordinamento e filtro delle ceste - usa useMemo invece di useEffect per evitare loop
+  const { filteredBaskets: computedBaskets, totalAnimals: computedTotal, totalBySize: computedBySize } = useMemo(() => {
+    if (!basketInfos) return { filteredBaskets: [], totalAnimals: 0, totalBySize: {} };
     
     let filtered = [...basketInfos];
     
@@ -760,11 +760,8 @@ export default function BasketSelection() {
       }
     }
     
-    setFilteredBaskets(filtered);
-    
     // Calcola il totale degli animali
     const total = filtered.reduce((sum, basket) => sum + basket.animalCount, 0);
-    setTotalAnimals(total);
     
     // Calcola il totale per taglia
     const totalBySize: Record<number, number> = {};
@@ -774,9 +771,20 @@ export default function BasketSelection() {
         totalBySize[sizeId] = (totalBySize[sizeId] || 0) + basket.animalCount;
       }
     });
-    setTotalBySize(totalBySize);
     
-  }, [basketInfos, sortColumn, sortDirection, form.formState.submitCount]);
+    return { 
+      filteredBaskets: filtered, 
+      totalAnimals: total, 
+      totalBySize 
+    };
+  }, [basketInfos, sortColumn, sortDirection, filterTrigger]);
+  
+  // Sincronizza gli stati locali con i valori computati
+  useEffect(() => {
+    setFilteredBaskets(computedBaskets);
+    setTotalAnimals(computedTotal);
+    setTotalBySize(computedBySize);
+  }, [computedBaskets, computedTotal, computedBySize]);
   
   // Gestisci aggiornamento dei filtri
   const onSubmitFilters = (data: z.infer<typeof filterSchema>) => {
@@ -785,10 +793,13 @@ export default function BasketSelection() {
       setSelectedSizes(data.sizes);
     }
     
+    // Forza il ricalcolo dei filtri
+    setFilterTrigger(prev => prev + 1);
+    
     // Notifica l'utente
     toast({
       title: "Filtri applicati",
-      description: `Trovate ${filteredBaskets.length} ceste che corrispondono ai criteri selezionati.`,
+      description: `Filtri aggiornati con successo.`,
     });
   };
   
