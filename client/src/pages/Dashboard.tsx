@@ -63,9 +63,11 @@ export default function Dashboard() {
     queryKey: ['/api/baskets', { includeAll: true }],
   });
 
-  const { data: cycles, isLoading: cyclesLoading, dataUpdatedAt: cyclesUpdatedAt } = useQuery<Cycle[]>({
+  const { data: cyclesData, isLoading: cyclesLoading, dataUpdatedAt: cyclesUpdatedAt } = useQuery({
     queryKey: ['/api/cycles', { includeAll: true }],
   });
+  
+  const cycles = cyclesData?.cycles || [];
 
   const { data: operations, isLoading: operationsLoading, dataUpdatedAt: operationsUpdatedAt } = useQuery<Operation[]>({
     queryKey: ['/api/operations', { includeAll: true }],
