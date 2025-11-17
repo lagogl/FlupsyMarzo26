@@ -4556,6 +4556,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TEST endpoint to verify code loading
+  app.get("/api/test-code-reload", (req, res) => {
+    res.json({ message: "Code reloaded successfully!", timestamp: new Date().toISOString() });
+  });
+
   app.patch("/api/basket-groups/assign", async (req, res) => {
     try {
       console.log('🔍 ASSIGN - Full body:', JSON.stringify(req.body, null, 2));
