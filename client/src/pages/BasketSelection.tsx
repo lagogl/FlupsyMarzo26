@@ -227,9 +227,6 @@ export default function BasketSelection() {
   const [filterTrigger, setFilterTrigger] = useState(0);
   
   // Stati per indicatori visivi dei filtri
-  const [availableSizeIds, setAvailableSizeIds] = useState<Set<number>>(new Set());
-  const [availableFlupsyIds, setAvailableFlupsyIds] = useState<Set<number>>(new Set());
-  const [availableGroupIds, setAvailableGroupIds] = useState<Set<number>>(new Set());
   
   // Queries per caricare i dati - CARICA TUTTI I DATI (includeAll=true)
   const { data: baskets, isLoading: basketsLoading } = useQuery<Basket[]>({
@@ -317,14 +314,6 @@ export default function BasketSelection() {
       });
     }
   });
-  
-  // Verifica se ci sono ceste selezionate con groupId
-  const hasSelectedBasketsInGroup = useMemo(() => {
-    if (!basketInfos || selectedBaskets.size === 0) return false;
-    return basketInfos.some(basket => 
-      selectedBaskets.has(basket.id) && basket.groupId !== null
-    );
-  }, [basketInfos, selectedBaskets]);
   
   // WebSocket listener per aggiornamenti real-time
   useWebSocketMessage('operation_created', async () => {
@@ -508,6 +497,14 @@ export default function BasketSelection() {
     });
   }, [baskets, operations, cycles, sizes, flupsys, lots, activeCycles, mortalityRates]);
   
+  // Verifica se ci sono ceste selezionate con groupId
+  const hasSelectedBasketsInGroup = useMemo(() => {
+    if (!basketInfos || selectedBaskets.size === 0) return false;
+    return basketInfos.some(basket => 
+      selectedBaskets.has(basket.id) && basket.groupId !== null
+    );
+  }, [basketInfos, selectedBaskets]);
+  
   // Definizione delle colonne
   const columns: Column[] = [
     {
@@ -687,9 +684,13 @@ export default function BasketSelection() {
     },
   ];
   
-  // Calcola gli indicatori visivi (pallini verdi) - SEPARATO per evitare loop
-  useEffect(() => {
-    if (!basketInfos) return;
+  // Calcola gli indicatori visivi (pallini verdi) - usa useMemo per evitare loop infiniti
+  const availabilityIndicators = useMemo(() => {
+    if (!basketInfos) return {
+      sizeIds: new Set<number>(),
+      flupsyIds: new Set<number>(),
+      groupIds: new Set<number>()
+    };
     
     const sizeIdsWithBaskets = new Set<number>();
     const flupsyIdsWithBaskets = new Set<number>();
@@ -708,10 +709,12 @@ export default function BasketSelection() {
       }
     });
     
-    setAvailableSizeIds(sizeIdsWithBaskets);
-    setAvailableFlupsyIds(flupsyIdsWithBaskets);
-    setAvailableGroupIds(groupIdsWithBaskets);
-  }, [basketInfos]); // Dipende solo dai dati delle ceste
+    return {
+      sizeIds: sizeIdsWithBaskets,
+      flupsyIds: flupsyIdsWithBaskets,
+      groupIds: groupIdsWithBaskets
+    };
+  }, [basketInfos]);
   
   // Ordinamento e filtro delle ceste - usa useMemo invece di useEffect per evitare loop
   const { filteredBaskets, totalAnimals, totalBySize } = useMemo(() => {
@@ -1341,7 +1344,7 @@ export default function BasketSelection() {
                                   textShadow: field.value?.includes(size.id) ? '0px 0px 2px rgba(0,0,0,0.8)' : 'none',
                                   borderColor: size.colorHex,
                                   cursor: 'pointer',
-                                  opacity: availableSizeIds.has(size.id) ? 1 : 0.5,
+                                  opacity: availabilityIndicators.sizeIds.has(size.id) ? 1 : 0.5,
                                   position: 'relative',
                                   overflow: 'visible'
                                 }}
@@ -1356,7 +1359,7 @@ export default function BasketSelection() {
                                   setTimeout(() => form.handleSubmit(onSubmitFilters)(), 0);
                                 }}
                               >
-                                {availableSizeIds.has(size.id) && (
+                                {availabilityIndicators.sizeIds.has(size.id) && (
                                   <span 
                                     className="w-2 h-2 rounded-full bg-green-500 absolute -top-1 -right-1"
                                     style={{ boxShadow: '0 0 0 1px white' }}
@@ -1396,7 +1399,7 @@ export default function BasketSelection() {
                                   borderColor: group.color || '#3b82f6',
                                   borderWidth: '2px',
                                   cursor: 'pointer',
-                                  opacity: availableGroupIds.has(group.id) ? 1 : 0.5,
+                                  opacity: availabilityIndicators.groupIds.has(group.id) ? 1 : 0.5,
                                   position: 'relative',
                                   overflow: 'visible'
                                 }}
@@ -1423,7 +1426,7 @@ export default function BasketSelection() {
                                 }}
                                 data-testid={`filter-group-${group.id}`}
                               >
-                                {availableGroupIds.has(group.id) && (
+                                {availabilityIndicators.groupIds.has(group.id) && (
                                   <span 
                                     className="w-2 h-2 rounded-full bg-green-500 absolute -top-1 -right-1"
                                     style={{ boxShadow: '0 0 0 1px white' }}
@@ -1459,7 +1462,7 @@ export default function BasketSelection() {
                                 variant={field.value?.includes(flupsy.id) ? "default" : "outline"}
                                 style={{
                                   cursor: 'pointer',
-                                  opacity: availableFlupsyIds.has(flupsy.id) ? 1 : 0.5,
+                                  opacity: availabilityIndicators.flupsyIds.has(flupsy.id) ? 1 : 0.5,
                                   position: 'relative',
                                   overflow: 'visible'
                                 }}
@@ -1474,7 +1477,7 @@ export default function BasketSelection() {
                                   setTimeout(() => form.handleSubmit(onSubmitFilters)(), 0);
                                 }}
                               >
-                                {availableFlupsyIds.has(flupsy.id) && (
+                                {availabilityIndicators.flupsyIds.has(flupsy.id) && (
                                   <span 
                                     className="w-2 h-2 rounded-full bg-green-500 absolute -top-1 -right-1"
                                     style={{ boxShadow: '0 0 0 1px white' }}
