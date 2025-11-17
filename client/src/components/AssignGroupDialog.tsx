@@ -67,6 +67,10 @@ export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuc
     const groupId = selectedGroupId === 'none' ? null : parseInt(selectedGroupId);
     assignMutation.mutate(groupId);
   };
+  
+  const handleRemoveFromGroup = () => {
+    assignMutation.mutate(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,29 +121,46 @@ export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuc
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex justify-between">
           <Button 
-            variant="outline" 
-            onClick={() => onOpenChange(false)}
+            variant="destructive" 
+            onClick={handleRemoveFromGroup}
             disabled={assignMutation.isPending}
-            data-testid="button-cancel"
-          >
-            Annulla
-          </Button>
-          <Button 
-            onClick={handleAssign}
-            disabled={!selectedGroupId || assignMutation.isPending}
-            data-testid="button-confirm-assign"
+            data-testid="button-remove-from-group"
           >
             {assignMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Assegnando...
+                Rimuovendo...
               </>
             ) : (
-              'Assegna'
+              'Rimuovi da gruppo'
             )}
           </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              disabled={assignMutation.isPending}
+              data-testid="button-cancel"
+            >
+              Annulla
+            </Button>
+            <Button 
+              onClick={handleAssign}
+              disabled={!selectedGroupId || assignMutation.isPending}
+              data-testid="button-confirm-assign"
+            >
+              {assignMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Assegnando...
+                </>
+              ) : (
+                'Assegna'
+              )}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

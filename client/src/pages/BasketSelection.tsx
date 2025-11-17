@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { differenceInDays, format } from 'date-fns';
-import { Brush, FolderOpen } from 'lucide-react';
+import { Brush, FolderOpen, FolderX } from 'lucide-react';
 import { getSizeColor } from '@/lib/getSizeColor';
 import type { BasketGroup } from '@shared/schema';
 
@@ -67,8 +67,8 @@ import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
 import { useWebSocketMessage } from '@/lib/websocket';
-import { useQuery } from '@tanstack/react-query';
-import { queryClient } from '@/lib/queryClient';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryClient, apiRequest } from '@/lib/queryClient';
 import { ArrowUpDown, Fan, Filter, Download, Trash, Info, Activity, Check, Share2, ClipboardCheck, LucideIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -288,6 +288,43 @@ export default function BasketSelection() {
     staleTime: 0,
     refetchOnMount: 'always',
   });
+  
+  // Mutation per rimuovere ceste dal gruppo
+  const removeFromGroupMutation = useMutation({
+    mutationFn: async (basketIds: number[]) => {
+      return await apiRequest('/api/basket-groups/assign', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          basketIds,
+          groupId: null
+        })
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/basket-groups'] });
+      setSelectedBaskets(new Set());
+      toast({
+        title: "Rimozione completata",
+        description: `${selectedBaskets.size} ceste rimosse dal gruppo`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Errore",
+        description: error.message || "Impossibile rimuovere le ceste dal gruppo",
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Verifica se ci sono ceste selezionate con groupId
+  const hasSelectedBasketsInGroup = useMemo(() => {
+    if (!basketInfos || selectedBaskets.size === 0) return false;
+    return basketInfos.some(basket => 
+      selectedBaskets.has(basket.id) && basket.groupId !== null
+    );
+  }, [basketInfos, selectedBaskets]);
   
   // WebSocket listener per aggiornamenti real-time
   useWebSocketMessage('operation_created', async () => {
@@ -1658,6 +1695,16 @@ export default function BasketSelection() {
             >
               <FolderOpen className="mr-2 h-4 w-4" />
               Assegna Gruppo
+            </Button>
+            
+            <Button 
+              variant="outline"
+              disabled={!hasSelectedBasketsInGroup || removeFromGroupMutation.isPending}
+              onClick={() => removeFromGroupMutation.mutate(Array.from(selectedBaskets))}
+              data-testid="button-remove-from-group"
+            >
+              <FolderX className="mr-2 h-4 w-4" />
+              Rimuovi da gruppo
             </Button>
             
             <Button 
