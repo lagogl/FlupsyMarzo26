@@ -1346,6 +1346,14 @@ export default function BasketSelection() {
                                   const newGroups = currentGroups.includes(group.id)
                                     ? [] // Deseleziona se già selezionato
                                     : [group.id]; // Seleziona solo questo gruppo (sostituisce gli altri)
+                                  
+                                  // OPZIONE B: Gruppo dominante - reset automatico di taglie e FLUPSY
+                                  // quando selezioni un gruppo, vedi TUTTE le ceste del gruppo
+                                  if (newGroups.length > 0) {
+                                    form.setValue('sizes', []);
+                                    form.setValue('flupsys', []);
+                                  }
+                                  
                                   field.onChange(newGroups);
                                   
                                   // Applica i filtri immediatamente
