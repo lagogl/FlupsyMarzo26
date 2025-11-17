@@ -1289,6 +1289,7 @@ export default function BasketSelection() {
                                   color: field.value?.includes(group.id) ? '#ffffff' : 'inherit',
                                   fontWeight: field.value?.includes(group.id) ? 'bold' : 'normal',
                                   borderColor: group.color || '#3b82f6',
+                                  borderWidth: '2px',
                                   cursor: 'pointer',
                                   opacity: availableGroupIds.has(group.id) ? 1 : 0.5,
                                   position: 'relative',
