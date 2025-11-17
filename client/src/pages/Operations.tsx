@@ -1947,9 +1947,11 @@ export default function Operations() {
                     // Recupera l'ultima operazione per questo ciclo per ottenere la taglia attuale
                     const cycleOperations = operations?.filter((op: any) => op.cycleId === cycle.id) || [];
                     const lastOperation = cycleOperations.length > 0 
-                      ? cycleOperations.sort((a: any, b: any) => 
-                          new Date(b.date).getTime() - new Date(a.date).getTime()
-                        )[0] 
+                      ? cycleOperations.sort((a: any, b: any) => {
+                          const dateA = isValidDate(a.date) ? new Date(a.date).getTime() : 0;
+                          const dateB = isValidDate(b.date) ? new Date(b.date).getTime() : 0;
+                          return dateB - dateA;
+                        })[0] 
                       : null;
                     
                     // Recupera informazioni sulla taglia (campo name dalla tabella sizes)
@@ -1965,7 +1967,7 @@ export default function Operations() {
                     
                     // Calcola statistiche del ciclo
                     const operationsCount = cycleOperations.length;
-                    const cycleDuration = cycle.startDate 
+                    const cycleDuration = isValidDate(cycle.startDate)
                       ? differenceInDays(new Date(), new Date(cycle.startDate))
                       : 0;
                     
@@ -2837,6 +2839,10 @@ export default function Operations() {
                                     size="icon"
                                     onClick={() => {
                                       // Duplica l'operazione
+                                      if (!isValidDate(op.date)) {
+                                        console.error('Data operazione non valida:', op.date);
+                                        return;
+                                      }
                                       const nextDay = addDays(new Date(op.date), 1);
                                       
                                       // Se l'operazione era "prima-attivazione", cambiala in "misura"
@@ -3914,6 +3920,10 @@ export default function Operations() {
                                             size="icon"
                                             onClick={() => {
                                               // Duplica l'operazione
+                                              if (!isValidDate(op.date)) {
+                                                console.error('Data operazione non valida:', op.date);
+                                                return;
+                                              }
                                               const nextDay = addDays(new Date(op.date), 1);
                                               const operationType = op.type === 'prima-attivazione' ? 'misura' : op.type;
                                               
