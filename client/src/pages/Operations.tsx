@@ -1474,6 +1474,8 @@ export default function Operations() {
   const filteredCycleIds = useMemo(() => {
     if (!cycles || !baskets) return [];
     
+    console.log('🔍 CYCLES FILTER: Processing', cycles.length, 'cycles with', operations?.length || 0, 'operations');
+    
     // First, apply FLUPSY filter to get valid cycles
     let validCycles = cycles;
     
@@ -1501,15 +1503,19 @@ export default function Operations() {
         
         // Find operations for this cycle
         const cycleOps = operations?.filter((op: any) => op.cycleId === cycle.id) || [];
-        if (cycleOps.length === 0) return false;
+        
+        // REMOVED: Non escludiamo più i cicli senza operazioni per evitare problemi di sincronizzazione
+        // I cicli appena creati potrebbero non avere ancora le operazioni caricate nella cache
         
         // Check if any operation matches the type filter
+        // Se non ci sono operazioni e il filtro è "all", mostra il ciclo
         const matchesType = filters.typeFilter === 'all' || 
-          cycleOps.some((op: any) => op.type === filters.typeFilter);
+          (cycleOps.length > 0 && cycleOps.some((op: any) => op.type === filters.typeFilter)) ||
+          cycleOps.length === 0; // Mostra cicli senza operazioni se possono essere in sync ritardo
         
         // Check if any operation matches the date filter
         const matchesDate = filters.dateFilter === '' || 
-          cycleOps.some((op: any) => safeFormatDate(op.date, 'yyyy-MM-dd') === filters.dateFilter);
+          (cycleOps.length > 0 && cycleOps.some((op: any) => safeFormatDate(op.date, 'yyyy-MM-dd') === filters.dateFilter));
         
         // Check if the cycle matches the cycle filter
         const matchesCycle = filters.cycleFilter === 'all' || 
@@ -1518,7 +1524,9 @@ export default function Operations() {
         // Check if any operation matches the search term
         const matchesSearch = filters.searchTerm === '' || 
           `${cycle.id}`.includes(filters.searchTerm) || 
-          cycleOps.some((op: any) => `${op.basketId}`.includes(filters.searchTerm));
+          (cycleOps.length > 0 && cycleOps.some((op: any) => `${op.basketId}`.includes(filters.searchTerm)));
+        
+        console.log(`Cycle ${cycle.id}: ops=${cycleOps.length}, type=${matchesType}, date=${matchesDate}, cycle=${matchesCycle}, search=${matchesSearch}`);
         
         return matchesType && matchesDate && matchesCycle && matchesSearch;
       })
