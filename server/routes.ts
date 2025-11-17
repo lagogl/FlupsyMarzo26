@@ -4558,23 +4558,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/basket-groups/assign", async (req, res) => {
     try {
-      console.log('🔍 ASSIGN GROUP - Request body:', JSON.stringify(req.body, null, 2));
       const { basketIds, groupId: rawGroupId } = req.body;
-      console.log('🔍 ASSIGN GROUP - Extracted:', { basketIds, rawGroupId, typeOf: typeof rawGroupId });
       
       if (!Array.isArray(basketIds)) {
         return res.status(400).json({ message: "basketIds must be an array" });
       }
 
-      // Convert groupId to number if it's a string, or null if it's null/undefined
-      let groupId: number | null = null;
-      if (rawGroupId !== null && rawGroupId !== undefined) {
-        const parsed = typeof rawGroupId === 'string' ? parseInt(rawGroupId) : rawGroupId;
-        console.log('🔍 ASSIGN GROUP - Parsed groupId:', { rawGroupId, parsed, isNaN: isNaN(parsed) });
-        if (isNaN(parsed)) {
-          return res.status(400).json({ message: "Invalid basket group ID" });
-        }
-        groupId = parsed;
+      // Convert groupId to number (handles both string and number inputs from JSON)
+      const groupId = rawGroupId === null || rawGroupId === undefined 
+        ? null 
+        : Number(rawGroupId);
+
+      // Validate groupId is a valid integer or null
+      if (groupId !== null && (!Number.isInteger(groupId) || groupId <= 0)) {
+        return res.status(400).json({ message: "Invalid basket group ID" });
       }
 
       if (groupId !== null) {
