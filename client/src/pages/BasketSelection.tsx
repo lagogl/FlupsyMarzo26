@@ -217,7 +217,6 @@ export default function BasketSelection() {
   const { toast } = useToast();
   
   // Stati per gestire i dati e i filtri
-  const [filteredBaskets, setFilteredBaskets] = useState<BasketInfo[]>([]);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedBaskets, setSelectedBaskets] = useState<Set<number>>(new Set());
@@ -225,10 +224,7 @@ export default function BasketSelection() {
   const [showFilterPanel, setShowFilterPanel] = useState(true);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showAssignGroupDialog, setShowAssignGroupDialog] = useState(false);
-  
-  // Stati per i totali
-  const [totalAnimals, setTotalAnimals] = useState(0);
-  const [totalBySize, setTotalBySize] = useState<Record<number, number>>({});
+  const [filterTrigger, setFilterTrigger] = useState(0);
   
   // Stati per indicatori visivi dei filtri
   const [availableSizeIds, setAvailableSizeIds] = useState<Set<number>>(new Set());
@@ -647,11 +643,8 @@ export default function BasketSelection() {
     setAvailableGroupIds(groupIdsWithBaskets);
   }, [basketInfos]); // Dipende solo dai dati delle ceste
   
-  // Trigger per forzare il ricalcolo dei filtri quando l'utente clicca "Applica"
-  const [filterTrigger, setFilterTrigger] = useState(0);
-  
   // Ordinamento e filtro delle ceste - usa useMemo invece di useEffect per evitare loop
-  const { filteredBaskets: computedBaskets, totalAnimals: computedTotal, totalBySize: computedBySize } = useMemo(() => {
+  const { filteredBaskets, totalAnimals, totalBySize } = useMemo(() => {
     if (!basketInfos) return { filteredBaskets: [], totalAnimals: 0, totalBySize: {} };
     
     let filtered = [...basketInfos];
@@ -778,13 +771,6 @@ export default function BasketSelection() {
       totalBySize 
     };
   }, [basketInfos, sortColumn, sortDirection, filterTrigger]);
-  
-  // Sincronizza gli stati locali con i valori computati
-  useEffect(() => {
-    setFilteredBaskets(computedBaskets);
-    setTotalAnimals(computedTotal);
-    setTotalBySize(computedBySize);
-  }, [computedBaskets, computedTotal, computedBySize]);
   
   // Gestisci aggiornamento dei filtri
   const onSubmitFilters = (data: z.infer<typeof filterSchema>) => {
