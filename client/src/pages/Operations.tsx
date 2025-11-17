@@ -1678,7 +1678,7 @@ export default function Operations() {
                   }),
                   queryClient.refetchQueries({ 
                     queryKey: ['/api/cycles'],
-                    type: 'active'
+                    type: 'all' // Forza refetch di TUTTE le query cicli (con tutti i parametri)
                   }),
                   queryClient.refetchQueries({ 
                     queryKey: ['/api/baskets'],
