@@ -300,6 +300,18 @@ export const basketLotComposition = pgTable("basket_lot_composition", {
   notes: text("notes") // Note aggiuntive
 });
 
+// Sizes (Taglie) - DEVE essere definita PRIMA di operations per il foreign key
+export const sizes = pgTable("sizes", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(), // e.g., T0, T1, M1, M2, M3
+  name: text("name").notNull(),
+  sizeMm: real("size_mm"), // size in millimeters
+  minAnimalsPerKg: integer("min_animals_per_kg"), 
+  maxAnimalsPerKg: integer("max_animals_per_kg"),
+  notes: text("notes"),
+  color: text("color"), // colore HEX per visualizzazione grafica
+});
+
 // Operations (Operazioni)
 export const operations = pgTable("operations", {
   id: serial("id").primaryKey(),
@@ -307,7 +319,7 @@ export const operations = pgTable("operations", {
   type: text("type", { enum: operationTypes }).notNull(),
   basketId: integer("basket_id").notNull(), // reference to the basket
   cycleId: integer("cycle_id").notNull(), // reference to the cycle
-  sizeId: integer("size_id"), // reference to the size
+  sizeId: integer("size_id").references(() => sizes.id, { onDelete: 'restrict' }), // PROTECTED: Foreign key con restrict
   sgrId: integer("sgr_id"), // reference to the SGR
   lotId: integer("lot_id"), // reference to the lot
   animalCount: integer("animal_count"),
@@ -335,18 +347,6 @@ export const cycles = pgTable("cycles", {
 }, (table) => ({
   stateIdx: index("cycles_state_idx").on(table.state),
 }));
-
-// Sizes (Taglie)
-export const sizes = pgTable("sizes", {
-  id: serial("id").primaryKey(),
-  code: text("code").notNull().unique(), // e.g., T0, T1, M1, M2, M3
-  name: text("name").notNull(),
-  sizeMm: real("size_mm"), // size in millimeters
-  minAnimalsPerKg: integer("min_animals_per_kg"), 
-  maxAnimalsPerKg: integer("max_animals_per_kg"),
-  notes: text("notes"),
-  color: text("color"), // colore HEX per visualizzazione grafica
-});
 
 // SGR (Indici di Crescita)
 export const sgr = pgTable("sgr", {
