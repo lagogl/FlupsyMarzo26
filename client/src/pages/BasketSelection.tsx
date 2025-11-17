@@ -235,44 +235,62 @@ export default function BasketSelection() {
   const [availableFlupsyIds, setAvailableFlupsyIds] = useState<Set<number>>(new Set());
   const [availableGroupIds, setAvailableGroupIds] = useState<Set<number>>(new Set());
   
-  // Queries per caricare i dati
+  // Queries per caricare i dati - SEMPRE FRESCHI (no cache)
   const { data: baskets, isLoading: basketsLoading } = useQuery<Basket[]>({
     queryKey: ['/api/baskets'],
+    staleTime: 0, // Dati sempre considerati obsoleti
+    refetchOnMount: 'always', // Ricarica sempre quando la pagina viene montata
   });
   
   const { data: operations, isLoading: operationsLoading } = useQuery<Operation[]>({
     queryKey: ['/api/operations'],
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   const { data: cyclesData, isLoading: cyclesLoading } = useQuery({
     queryKey: ['/api/cycles'],
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   const cycles = (cyclesData as any)?.cycles || [];
   
   const { data: sizes, isLoading: sizesLoading } = useQuery<Size[]>({
     queryKey: ['/api/sizes'],
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   const { data: flupsys, isLoading: flupsysLoading } = useQuery<Flupsy[]>({
     queryKey: ['/api/flupsys'],
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   const { data: lots, isLoading: lotsLoading } = useQuery<Lot[]>({
     queryKey: ['/api/lots'],
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   const { data: activeCycles, isLoading: activeCyclesLoading } = useQuery<Cycle[]>({
     queryKey: ['/api/cycles/active'],
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   const { data: mortalityRates, isLoading: mortalityLoading } = useQuery<MortalityRate[]>({
     queryKey: ['/api/mortality-rates'],
     enabled: !!activeCycles,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   const { data: basketGroups, isLoading: groupsLoading } = useQuery<(BasketGroup & { basketCount: number })[]>({
     queryKey: ['/api/basket-groups'],
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   
   // WebSocket listener per aggiornamenti real-time
