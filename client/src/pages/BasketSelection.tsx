@@ -520,16 +520,34 @@ export default function BasketSelection() {
     {
       id: 'physicalNumber',
       header: 'Numero',
-      cell: (basket) => (
-        <div className="flex flex-col">
-          <span className="font-medium">#{basket.physicalNumber}</span>
-          {basket.currentCycle && (
-            <span className="text-xs text-muted-foreground truncate" style={{ maxWidth: '120px' }}>
-              {basket.cycleCode}
-            </span>
-          )}
-        </div>
-      ),
+      cell: (basket) => {
+        // Trova il gruppo se assegnato
+        const group = basket.groupId ? basketGroups?.find(g => g.id === basket.groupId) : null;
+        
+        return (
+          <div className="flex items-center gap-2">
+            {/* Indicatore gruppo colorato */}
+            <div 
+              className="w-4 h-4 rounded border flex-shrink-0"
+              style={{ 
+                backgroundColor: group?.color || 'transparent',
+                borderColor: group ? group.color : '#d1d5db',
+                borderWidth: '2px'
+              }}
+              title={group ? `Gruppo: ${group.name}` : 'Nessun gruppo'}
+            />
+            
+            <div className="flex flex-col">
+              <span className="font-medium">#{basket.physicalNumber}</span>
+              {basket.currentCycle && (
+                <span className="text-xs text-muted-foreground truncate" style={{ maxWidth: '120px' }}>
+                  {basket.cycleCode}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      },
     },
     {
       id: 'flupsy',

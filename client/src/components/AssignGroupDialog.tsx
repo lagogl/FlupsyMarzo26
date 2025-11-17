@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -6,7 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import type { BasketGroup } from '@shared/schema';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+interface Basket {
+  id: number;
+  physicalNumber: number;
+  groupId: number | null;
+}
 
 interface AssignGroupDialogProps {
   open: boolean;
@@ -23,6 +30,34 @@ export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuc
     queryKey: ['/api/basket-groups'],
     enabled: open
   });
+
+  // Carica i dati dei baskets selezionati per verificare se hanno già gruppi
+  const { data: baskets } = useQuery<Basket[]>({
+    queryKey: ['/api/baskets?includeAll=true'],
+    enabled: open
+  });
+
+  // Controlla quali ceste selezionate hanno già un gruppo
+  const basketsWithGroups = useMemo(() => {
+    if (!baskets) return [];
+    return baskets.filter(b => 
+      selectedBasketIds.includes(b.id) && b.groupId !== null
+    );
+  }, [baskets, selectedBasketIds]);
+
+  // Mappa groupId -> nome gruppo per il warning
+  const basketsGroupInfo = useMemo(() => {
+    if (!basketsWithGroups.length || !groups) return [];
+    
+    return basketsWithGroups.map(basket => {
+      const group = groups.find(g => g.id === basket.groupId);
+      return {
+        basketNumber: basket.physicalNumber,
+        groupName: group?.name || 'Sconosciuto',
+        groupColor: group?.color
+      };
+    });
+  }, [basketsWithGroups, groups]);
 
   const assignMutation = useMutation({
     mutationFn: async (groupId: number | null) => {
@@ -81,6 +116,35 @@ export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuc
             Assegna {selectedBasketIds.length} ceste selezionate a un gruppo
           </DialogDescription>
         </DialogHeader>
+
+        {/* Warning per ceste già assegnate a gruppi */}
+        {basketsGroupInfo.length > 0 && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="font-semibold mb-2">
+                Attenzione: {basketsGroupInfo.length} {basketsGroupInfo.length === 1 ? 'cesta è già assegnata' : 'ceste sono già assegnate'} ad un gruppo
+              </div>
+              <div className="text-sm space-y-1">
+                {basketsGroupInfo.map((info, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded border"
+                      style={{ 
+                        backgroundColor: info.groupColor || 'gray',
+                        borderColor: info.groupColor || 'gray'
+                      }}
+                    />
+                    <span>Cesta #{info.basketNumber} → {info.groupName}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-sm font-medium">
+                Assegnando ad un nuovo gruppo, verranno automaticamente rimosse dai gruppi attuali.
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="py-4">
           {groupsLoading ? (
