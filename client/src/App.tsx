@@ -7,6 +7,7 @@ import MainLayout from "@/layouts/MainLayout";
 import Dashboard from "@/pages/Dashboard";
 import Baskets from "@/pages/Baskets";
 import BasketDetail from "@/pages/BasketDetail";
+import BasketGroups from "@/pages/BasketGroups";
 import Operations from "@/pages/Operations";
 import OperationDetail from "@/pages/OperationDetail";
 import EditOperation from "@/pages/EditOperation";
@@ -96,6 +97,7 @@ function Router() {
       <ProtectedRoute path="/flupsy-comparison" component={FlupsyComparison}/>
       <ProtectedRoute path="/flupsy-comparison-enhanced" component={FlupsyComparisonEnhanced}/>
       <ProtectedRoute path="/baskets" component={Baskets}/>
+      <ProtectedRoute path="/basket-groups" component={BasketGroups}/>
       <ProtectedRoute path="/baskets/:id" component={BasketDetail}/>
       <ProtectedRoute path="/operations" component={Operations}/>
       <ProtectedRoute path="/operations/new" component={Operations}/>

@@ -8,7 +8,7 @@ import {
   ChevronRight, LayoutDashboard, PieChart, BarChart, BarChart3, Filter,
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
-  ClipboardList, Users
+  ClipboardList, Users, FolderOpen
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -106,6 +106,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <Home className="h-6 w-6 mr-2 text-black font-bold" />, label: translations.menuItems.dashboard, path: "/" },
         { icon: <Package2 className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.lotManagement, path: "/lots" },
         { icon: <Package className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.basketManagement, path: "/baskets" },
+        { icon: <FolderOpen className="h-5 w-5 mr-2 text-blue-600" />, label: "Gruppi Ceste", path: "/basket-groups" },
         { icon: <FileText className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.operations, path: "/operations" },
         { icon: <Table className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.spreadsheetOperations, path: "/spreadsheet-operations" },
         { icon: <LayoutGrid className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.screeningWithMap, path: "/vagliatura-con-mappa" },
