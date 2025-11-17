@@ -621,13 +621,10 @@ export default function BasketSelection() {
     },
   ];
   
-  // Ordinamento e filtro delle ceste
+  // Calcola gli indicatori visivi (pallini verdi) - SEPARATO per evitare loop
   useEffect(() => {
     if (!basketInfos) return;
     
-    let filtered = [...basketInfos];
-    
-    // Raccoglie tutti gli ID di taglie, FLUPSY e gruppi disponibili SOLO dalle ceste con cicli attivi
     const sizeIdsWithBaskets = new Set<number>();
     const flupsyIdsWithBaskets = new Set<number>();
     const groupIdsWithBaskets = new Set<number>();
@@ -645,10 +642,16 @@ export default function BasketSelection() {
       }
     });
     
-    // Aggiorna gli stati per gli indicatori visivi
     setAvailableSizeIds(sizeIdsWithBaskets);
     setAvailableFlupsyIds(flupsyIdsWithBaskets);
     setAvailableGroupIds(groupIdsWithBaskets);
+  }, [basketInfos]); // Dipende solo dai dati delle ceste
+  
+  // Ordinamento e filtro delle ceste
+  useEffect(() => {
+    if (!basketInfos) return;
+    
+    let filtered = [...basketInfos];
     
     // Applica i filtri
     const formValues = form.getValues();
