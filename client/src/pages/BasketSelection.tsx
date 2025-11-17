@@ -700,9 +700,10 @@ export default function BasketSelection() {
       // Nessun filtro selezionato, lascia l'elenco vuoto
       filtered = [];
     } else {
-      // Applica i filtri con logica OR (basta che soddisfi almeno uno dei criteri)
+      // Applica i filtri con logica AND progressiva (tutti i criteri devono essere soddisfatti)
+      // Filtro a imbuto: Taglie AND FLUPSY AND Gruppo
       filtered = filtered.filter(basket => 
-        filterFunctions.some(filterFn => filterFn(basket))
+        filterFunctions.every(filterFn => filterFn(basket))
       );
     }
     
@@ -1297,9 +1298,12 @@ export default function BasketSelection() {
                                 }}
                                 onClick={() => {
                                   const currentGroups = field.value || [];
+                                  // SELEZIONE SINGOLA: solo un gruppo alla volta
+                                  // Se clicco sul gruppo già selezionato → deseleziona
+                                  // Se clicco su un altro gruppo → seleziona solo quello
                                   const newGroups = currentGroups.includes(group.id)
-                                    ? currentGroups.filter(id => id !== group.id)
-                                    : [...currentGroups, group.id];
+                                    ? [] // Deseleziona se già selezionato
+                                    : [group.id]; // Seleziona solo questo gruppo (sostituisce gli altri)
                                   field.onChange(newGroups);
                                   
                                   // Applica i filtri immediatamente
