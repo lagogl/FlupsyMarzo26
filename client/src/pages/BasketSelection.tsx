@@ -495,7 +495,7 @@ export default function BasketSelection() {
         groupId: basket.groupId
       };
     });
-  }, [baskets, operations, cycles, sizes, flupsys, lots, activeCycles, mortalityRates]);
+  }, [baskets, operations, cycles, sizes, flupsys, lots, mortalityRates]);
   
   // Verifica se ci sono ceste selezionate con groupId
   const hasSelectedBasketsInGroup = useMemo(() => {
