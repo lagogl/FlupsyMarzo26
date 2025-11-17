@@ -21,7 +21,7 @@ const formSchema = insertBasketGroupSchema.extend({
   name: z.string().min(1, "Il nome del gruppo è obbligatorio"),
   purpose: z.string().optional(),
   color: z.string().optional(),
-  highlightOrder: z.number().optional()
+  highlightOrder: z.coerce.number().int().nonnegative().optional()
 });
 
 type FormData = z.infer<typeof formSchema>;
