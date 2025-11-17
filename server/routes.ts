@@ -4558,7 +4558,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/basket-groups/assign", async (req, res) => {
     try {
+      console.log('🔍 ASSIGN - Full body:', JSON.stringify(req.body, null, 2));
       const { basketIds, groupId: rawGroupId } = req.body;
+      console.log('🔍 ASSIGN - basketIds:', basketIds, 'rawGroupId:', rawGroupId, 'type:', typeof rawGroupId);
       
       if (!Array.isArray(basketIds)) {
         return res.status(400).json({ message: "basketIds must be an array" });
@@ -4568,9 +4570,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const groupId = rawGroupId === null || rawGroupId === undefined 
         ? null 
         : Number(rawGroupId);
+      
+      console.log('🔍 ASSIGN - Converted groupId:', groupId, 'isInteger:', Number.isInteger(groupId));
 
       // Validate groupId is a valid integer or null
       if (groupId !== null && (!Number.isInteger(groupId) || groupId <= 0)) {
+        console.log('🔍 ASSIGN - VALIDATION FAILED:', { groupId, isInteger: Number.isInteger(groupId), isPositive: groupId > 0 });
         return res.status(400).json({ message: "Invalid basket group ID" });
       }
 
