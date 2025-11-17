@@ -470,7 +470,16 @@ export default function BasketSelection() {
     {
       id: 'physicalNumber',
       header: 'Numero',
-      cell: (basket) => <span>{basket.physicalNumber}</span>,
+      cell: (basket) => (
+        <div className="flex flex-col">
+          <span className="font-medium">#{basket.physicalNumber}</span>
+          {basket.currentCycle && (
+            <span className="text-xs text-muted-foreground truncate" style={{ maxWidth: '120px' }}>
+              {basket.cycleCode}
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       id: 'flupsy',
