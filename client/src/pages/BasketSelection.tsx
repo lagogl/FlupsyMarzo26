@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { differenceInDays, format } from 'date-fns';
-import { Brush } from 'lucide-react';
+import { Brush, FolderOpen } from 'lucide-react';
 import { getSizeColor } from '@/lib/getSizeColor';
+import type { BasketGroup } from '@shared/schema';
 
 // Funzione per calcolare la luminosità di un colore
 const getLuminance = (hexColor: string): number => {
@@ -76,6 +77,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import { AssignTaskDialog } from '@/components/AssignTaskDialog';
+import { AssignGroupDialog } from '@/components/AssignGroupDialog';
 
 // Interfacce per i tipi di dati
 interface Basket {
@@ -87,6 +89,7 @@ interface Basket {
   state: string;
   currentCycleId: number | null;
   nfcData: string | null;
+  groupId: number | null;
 }
 
 interface Operation {
@@ -167,6 +170,7 @@ interface BasketInfo {
   operations: Operation[];
   animalCount: number;
   mortalityRate: MortalityRate | null;
+  groupId: number | null;
 }
 
 // Interfaccia per i filtri
@@ -195,6 +199,7 @@ const filterSchema = z.object({
   maxMortality: z.number().min(0).max(100).optional(),
   minGrowthRate: z.number().optional(),
   flupsys: z.array(z.number()).optional(),
+  groups: z.array(z.number()).optional(),
 });
 
 // Definizione delle colonne della tabella
@@ -217,6 +222,7 @@ export default function BasketSelection() {
   const [selectedSizes, setSelectedSizes] = useState<number[]>([]);
   const [showFilterPanel, setShowFilterPanel] = useState(true);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [showAssignGroupDialog, setShowAssignGroupDialog] = useState(false);
   
   // Stati per i totali
   const [totalAnimals, setTotalAnimals] = useState(0);
@@ -262,6 +268,10 @@ export default function BasketSelection() {
     enabled: !!activeCycles,
   });
   
+  const { data: basketGroups, isLoading: groupsLoading } = useQuery<(BasketGroup & { basketCount: number })[]>({
+    queryKey: ['/api/basket-groups'],
+  });
+  
   // Form per gestire i filtri
   const form = useForm<z.infer<typeof filterSchema>>({
     resolver: zodResolver(filterSchema),
@@ -276,6 +286,7 @@ export default function BasketSelection() {
       maxMortality: 100,
       minGrowthRate: 0,
       flupsys: [],
+      groups: [],
     },
   });
   
@@ -402,7 +413,8 @@ export default function BasketSelection() {
         cycleDuration,
         operations: sortedOperations,
         animalCount,
-        mortalityRate
+        mortalityRate,
+        groupId: basket.groupId
       };
     });
   }, [baskets, operations, cycles, sizes, flupsys, lots, activeCycles, mortalityRates]);
@@ -668,6 +680,13 @@ export default function BasketSelection() {
       filterFunctions.push((basket: BasketInfo) => {
         return formValues.flupsys ? formValues.flupsys.includes(basket.flupsyId) : false;
       });
+    }
+    
+    // Filtro per Gruppi
+    if (formValues.groups && formValues.groups.length > 0) {
+      filterFunctions.push((basket: BasketInfo) => 
+        basket.groupId !== null && formValues.groups ? formValues.groups.includes(basket.groupId) : false
+      );
     }
     
     // Se non ci sono filtri attivi, non mostrare nulla
@@ -1492,6 +1511,16 @@ export default function BasketSelection() {
             
             <Button 
               variant="outline"
+              disabled={selectedBaskets.size === 0}
+              onClick={() => setShowAssignGroupDialog(true)}
+              data-testid="button-assign-group"
+            >
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Assegna Gruppo
+            </Button>
+            
+            <Button 
+              variant="outline"
               disabled={selectedBaskets.size === 0 || Object.keys(basketActivities).length === 0}
               onClick={shareViaWhatsApp}
             >
@@ -1534,6 +1563,15 @@ export default function BasketSelection() {
             title: "Attività creata",
             description: "L'attività è stata assegnata con successo",
           });
+        }}
+      />
+      
+      <AssignGroupDialog
+        open={showAssignGroupDialog}
+        onOpenChange={setShowAssignGroupDialog}
+        selectedBasketIds={Array.from(selectedBaskets)}
+        onSuccess={() => {
+          setSelectedBaskets(new Set());
         }}
       />
     </div>
