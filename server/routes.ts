@@ -4560,12 +4560,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { basketIds, groupId } = req.body;
       
+      console.log('🔍 ASSIGN GROUP DEBUG:', { basketIds, groupId, typeOfGroupId: typeof groupId });
+      
       if (!Array.isArray(basketIds)) {
         return res.status(400).json({ message: "basketIds must be an array" });
       }
 
       if (groupId !== null && typeof groupId !== 'number') {
-        return res.status(400).json({ message: "groupId must be a number or null" });
+        console.log('❌ Invalid groupId type:', { groupId, type: typeof groupId, isNaN: isNaN(groupId) });
+        return res.status(400).json({ message: "Invalid basket group ID" });
       }
 
       if (groupId !== null) {
