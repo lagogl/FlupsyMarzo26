@@ -563,8 +563,8 @@ export function implementDirectOperationRoute(app: Express) {
             
             // Invalida cache cicli - CRITICO per visualizzare nuovi cicli
             try {
-              const { invalidateCache: invalidateCyclesCache } = await import("./controllers/cycles-controller-optimized");
-              invalidateCyclesCache();
+              const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
+              clearCyclesCache();
               console.log("✅ DIRECT-OPERATIONS: Cache cicli invalidata per mostrare nuovi cicli");
             } catch (error: any) {
               console.log("⚠️ DIRECT-OPERATIONS: Errore invalidazione cache cicli:", error?.message || error);
@@ -680,8 +680,8 @@ export function implementDirectOperationRoute(app: Express) {
             
             // Invalida cache cicli - CRITICO per visualizzare nuovi cicli
             try {
-              const { invalidateCache: invalidateCyclesCache } = await import("./controllers/cycles-controller-optimized");
-              invalidateCyclesCache();
+              const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
+              clearCyclesCache();
               console.log("✅ DIRECT-OPERATIONS: Cache cicli invalidata per mostrare nuovi cicli");
             } catch (error: any) {
               console.log("⚠️ DIRECT-OPERATIONS: Errore invalidazione cache cicli:", error?.message || error);
@@ -776,11 +776,11 @@ export function implementDirectOperationRoute(app: Express) {
           
           // Invalida cache cicli - CRITICO per visualizzare nuovi cicli
           try {
-            const { invalidateCache: invalidateCyclesCache } = await import("./controllers/cycles-controller");
-            invalidateCyclesCache();
+            const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
+            clearCyclesCache();
             console.log("✅ DIRECT-OPERATIONS: Cache cicli invalidata per mostrare nuovi cicli");
           } catch (error) {
-            console.log("⚠️ DIRECT-OPERATIONS: Errore invalidazione cache cicli:", error.message);
+            console.log("⚠️ DIRECT-OPERATIONS: Errore invalidazione cache cicli:", error?.message || error);
           }
           
           console.log("✅ DIRECT-OPERATIONS: Cache cestelli, operazioni, cicli e cache unificata invalidate");
