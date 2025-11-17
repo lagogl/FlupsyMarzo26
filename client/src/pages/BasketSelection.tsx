@@ -372,13 +372,16 @@ export default function BasketSelection() {
       // Ultima operazione
       const lastOperation = sortedOperations.length > 0 ? sortedOperations[0] : null;
       
-      // Trova la taglia
-      const size = lastOperation?.sizeId ? 
-        sizes.find(s => s.id === lastOperation.sizeId) || null : null;
+      // Trova la taglia più recente tra TUTTE le operazioni (non solo l'ultima)
+      // Questo è importante perché l'ultima operazione potrebbe non avere una taglia
+      const operationWithSize = sortedOperations.find(op => op.sizeId !== null);
+      const size = operationWithSize?.sizeId ? 
+        sizes.find(s => s.id === operationWithSize.sizeId) || null : null;
       
-      // Trova il lotto
-      const lot = lastOperation?.lotId ?
-        lots.find(l => l.id === lastOperation.lotId) || null : null;
+      // Trova il lotto più recente tra TUTTE le operazioni
+      const operationWithLot = sortedOperations.find(op => op.lotId !== null);
+      const lot = operationWithLot?.lotId ?
+        lots.find(l => l.id === operationWithLot.lotId) || null : null;
       
       // Calcola la durata del ciclo in giorni
       let cycleDuration = null;
