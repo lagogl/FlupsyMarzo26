@@ -509,14 +509,28 @@ export default function Operations() {
   };
 
   // WebSocket listeners per aggiornamenti real-time
-  useWebSocketMessage('operation_created', () => {
-    console.log('📋 OPERATIONS: Nuova operazione creata, aggiorno lista');
-    // Invalida tutte le query delle operazioni per forzare l'aggiornamento
-    queryClient.invalidateQueries({ queryKey: ['/api/operations'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/operations-optimized'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/operations-unified'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
+  useWebSocketMessage('operation_created', async () => {
+    console.log('📋 OPERATIONS: Nuova operazione creata, aggiorno lista in real-time');
+    // Forza refetch immediato di TUTTE le query per aggiornamento real-time
+    await Promise.all([
+      queryClient.refetchQueries({ 
+        queryKey: ['/api/operations'],
+        type: 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['/api/operations-unified'],
+        type: 'all'
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['/api/cycles'],
+        type: 'all' // Forza refetch di TUTTE le query cicli per mostrare nuovi cicli
+      }),
+      queryClient.refetchQueries({ 
+        queryKey: ['/api/baskets'],
+        type: 'all'
+      })
+    ]);
+    console.log('✅ OPERATIONS: Dati aggiornati in real-time');
   });
   
   useWebSocketMessage('basket_updated', () => {
