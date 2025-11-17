@@ -7,6 +7,17 @@ import { it } from 'date-fns/locale';
 import { formatNumberWithCommas } from '@/lib/utils';
 import { useWebSocketMessage } from '@/lib/websocket';
 
+// Helper per validare date - v2025.11.17
+const isValidDate = (value: any): boolean => {
+  if (!value) return false;
+  try {
+    const date = typeof value === 'string' ? new Date(value) : value;
+    return !isNaN(date.getTime());
+  } catch {
+    return false;
+  }
+};
+
 // Helper per formattare date in modo sicuro - v2025.10.05
 const safeFormatDate = (dateValue: string | Date | null | undefined, formatString: string = 'dd/MM/yyyy'): string => {
   if (!dateValue) return 'N/D';
@@ -1334,8 +1345,17 @@ export default function Operations() {
     
     console.log('🔍 FILTER: Processing', operations.length, 'operations');
     
+    // FILTRO PREVENTIVO: Rimuovi operazioni con date invalide
+    const validOperations = operations.filter((op: any) => {
+      if (!isValidDate(op.date)) {
+        console.warn('⚠️ Operazione con data invalida ignorata:', op.id, op.date);
+        return false;
+      }
+      return true;
+    });
+    
     // Arricchisci tutte le operazioni con i dati del cestello
-    const enrichedOperations = operations.map((op: any) => {
+    const enrichedOperations = validOperations.map((op: any) => {
       let enrichedOp = { ...op };
       
       // Arricchisci i dati del cestello se non presente ma c'è basketId
@@ -1384,6 +1404,9 @@ export default function Operations() {
 
       // Filtro per data
       if (filters.dateFilter && filters.dateFilter.trim() !== '') {
+        if (!isValidDate(filters.dateFilter) || !isValidDate(op.date)) {
+          return false;
+        }
         const filterDate = new Date(filters.dateFilter);
         const opDate = new Date(op.date);
         
