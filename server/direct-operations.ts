@@ -56,6 +56,15 @@ export function implementDirectOperationRoute(app: Express) {
         console.warn('⚠️ Errore nell\'invalidazione cache unificata:', error);
       }
       
+      // Invalida la cache dei cicli
+      try {
+        const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
+        clearCyclesCache();
+        console.log('🔄 Cache cicli invalidata');
+      } catch (error) {
+        console.warn('⚠️ Errore nell\'invalidazione cache cicli:', error);
+      }
+      
       // Invia notifica WebSocket per refresh delle interfacce
       if (typeof (global as any).broadcastUpdate === 'function') {
         (global as any).broadcastUpdate('cache_cleared', {

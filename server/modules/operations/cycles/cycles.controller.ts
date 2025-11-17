@@ -4,7 +4,7 @@
  */
 
 import { Request, Response } from 'express';
-import { cyclesService } from './cycles.service';
+import { cyclesService, clearCache } from './cycles.service';
 
 export class CyclesController {
   /**
@@ -169,3 +169,11 @@ export class CyclesController {
 }
 
 export const cyclesController = new CyclesController();
+
+/**
+ * Invalida la cache dei cicli
+ */
+export function clearCyclesCache(): void {
+  clearCache();
+  console.log('🗑️ Cache cicli invalidata tramite controller');
+}

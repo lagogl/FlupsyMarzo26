@@ -341,3 +341,10 @@ class CyclesService {
 
 export const cyclesService = new CyclesService();
 export { cacheService as cyclesCacheService };
+
+/**
+ * Funzione helper per invalidare la cache dei cicli
+ */
+export function clearCache(): void {
+  cacheService.clear();
+}
