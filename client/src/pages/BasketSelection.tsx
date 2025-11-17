@@ -231,21 +231,21 @@ export default function BasketSelection() {
   const [availableFlupsyIds, setAvailableFlupsyIds] = useState<Set<number>>(new Set());
   const [availableGroupIds, setAvailableGroupIds] = useState<Set<number>>(new Set());
   
-  // Queries per caricare i dati - SEMPRE FRESCHI (no cache)
+  // Queries per caricare i dati - CARICA TUTTI I DATI (includeAll=true)
   const { data: baskets, isLoading: basketsLoading } = useQuery<Basket[]>({
-    queryKey: ['/api/baskets'],
+    queryKey: ['/api/baskets?includeAll=true'],
     staleTime: 0, // Dati sempre considerati obsoleti
     refetchOnMount: 'always', // Ricarica sempre quando la pagina viene montata
   });
   
   const { data: operations, isLoading: operationsLoading } = useQuery<Operation[]>({
-    queryKey: ['/api/operations'],
+    queryKey: ['/api/operations?includeAll=true&pageSize=100'],
     staleTime: 0,
     refetchOnMount: 'always',
   });
   
   const { data: cyclesData, isLoading: cyclesLoading } = useQuery({
-    queryKey: ['/api/cycles'],
+    queryKey: ['/api/cycles?includeAll=true'],
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -292,12 +292,20 @@ export default function BasketSelection() {
   // WebSocket listener per aggiornamenti real-time
   useWebSocketMessage('operation_created', async () => {
     console.log('🔄 BASKET SELECTION: Nuova operazione creata, aggiorno dati');
-    // Forza refetch immediato dei cestelli per vedere nuovi cicli attivi
+    // Forza refetch immediato di tutti i dati
     await queryClient.refetchQueries({ 
-      queryKey: ['/api/baskets'],
+      queryKey: ['/api/baskets?includeAll=true'],
       type: 'all'
     });
-    console.log('✅ BASKET SELECTION: Dati cestelli aggiornati in real-time');
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/operations?includeAll=true&pageSize=100'],
+      type: 'all'
+    });
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/cycles?includeAll=true'],
+      type: 'all'
+    });
+    console.log('✅ BASKET SELECTION: Dati aggiornati in real-time');
   });
   
   // Form per gestire i filtri
