@@ -66,7 +66,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
+import { useWebSocketMessage } from '@/lib/websocket';
 import { useQuery } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import { ArrowUpDown, Fan, Filter, Download, Trash, Info, Activity, Check, Share2, ClipboardCheck, LucideIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -271,6 +273,17 @@ export default function BasketSelection() {
   
   const { data: basketGroups, isLoading: groupsLoading } = useQuery<(BasketGroup & { basketCount: number })[]>({
     queryKey: ['/api/basket-groups'],
+  });
+  
+  // WebSocket listener per aggiornamenti real-time
+  useWebSocketMessage('operation_created', async () => {
+    console.log('🔄 BASKET SELECTION: Nuova operazione creata, aggiorno dati');
+    // Forza refetch immediato dei cestelli per vedere nuovi cicli attivi
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/baskets'],
+      type: 'all'
+    });
+    console.log('✅ BASKET SELECTION: Dati cestelli aggiornati in real-time');
   });
   
   // Form per gestire i filtri
