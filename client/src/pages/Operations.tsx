@@ -250,7 +250,7 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
         animalsPerKg: derivedValues.animalsPerKg || operation.animalsPerKg,
         averageWeight: derivedValues.averageWeight || operation.averageWeight,
         mortalityRate: derivedValues.mortalityRate || operation.mortalityRate,
-        date: new Date(operation.date)
+        date: isValidDate(operation.date) ? new Date(operation.date) : new Date()
       }
     };
     
@@ -3510,9 +3510,9 @@ export default function Operations() {
                                 <div className="col-span-4">
                                   <span className="text-gray-500 block text-xs">Durata:</span>
                                   <div className="font-medium text-gray-700 flex items-center mt-1">
-                                    {cycle && cycle.startDate && (() => {
+                                    {cycle && isValidDate(cycle.startDate) && (() => {
                                       const startDate = new Date(cycle.startDate);
-                                      const endDate = cycle.endDate ? new Date(cycle.endDate) : new Date();
+                                      const endDate = (cycle.endDate && isValidDate(cycle.endDate)) ? new Date(cycle.endDate) : new Date();
                                       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
                                       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                                       
@@ -3856,9 +3856,9 @@ export default function Operations() {
                           const currWeight = op.averageWeight ? parseFloat(op.averageWeight) : null;
                           const weightChange = prevWeight && currWeight ? Math.round(currWeight - prevWeight) : null;
                           
-                          const prevDate = prevOp ? new Date(prevOp.date) : null;
-                          const currDate = new Date(op.date);
-                          const daysDiff = prevDate ? Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)) : null;
+                          const prevDate = (prevOp && isValidDate(prevOp.date)) ? new Date(prevOp.date) : null;
+                          const currDate = isValidDate(op.date) ? new Date(op.date) : null;
+                          const daysDiff = (prevDate && currDate) ? Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)) : null;
                           
                           // Calcola la crescita percentuale attuale
                           const actualGrowthPercent = prevWeight && currWeight && prevWeight > 0 ? 
