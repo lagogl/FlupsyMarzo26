@@ -4462,6 +4462,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   FINE BLOCCO DEPRECATO */
 
+  // === Basket Groups Endpoints ===
+  app.get("/api/basket-groups", async (req, res) => {
+    try {
+      const groups = await storage.getBasketGroups();
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching basket groups:", error);
+      res.status(500).json({ message: "Failed to fetch basket groups" });
+    }
+  });
+
+  app.get("/api/basket-groups/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid basket group ID" });
+      }
+
+      const group = await storage.getBasketGroup(id);
+      if (!group) {
+        return res.status(404).json({ message: "Basket group not found" });
+      }
+
+      res.json(group);
+    } catch (error) {
+      console.error("Error fetching basket group:", error);
+      res.status(500).json({ message: "Failed to fetch basket group" });
+    }
+  });
+
+  app.post("/api/basket-groups", async (req, res) => {
+    try {
+      const { insertBasketGroupSchema } = await import("@shared/schema");
+      const parsedData = insertBasketGroupSchema.safeParse(req.body);
+      
+      if (!parsedData.success) {
+        return res.status(400).json({ 
+          message: "Invalid basket group data", 
+          errors: parsedData.error.flatten() 
+        });
+      }
+
+      const newGroup = await storage.createBasketGroup(parsedData.data);
+      res.status(201).json(newGroup);
+    } catch (error) {
+      console.error("Error creating basket group:", error);
+      res.status(500).json({ message: "Failed to create basket group" });
+    }
+  });
+
+  app.patch("/api/basket-groups/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid basket group ID" });
+      }
+
+      const group = await storage.getBasketGroup(id);
+      if (!group) {
+        return res.status(404).json({ message: "Basket group not found" });
+      }
+
+      const updatedGroup = await storage.updateBasketGroup(id, req.body);
+      res.json(updatedGroup);
+    } catch (error) {
+      console.error("Error updating basket group:", error);
+      res.status(500).json({ message: "Failed to update basket group" });
+    }
+  });
+
+  app.delete("/api/basket-groups/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid basket group ID" });
+      }
+
+      const group = await storage.getBasketGroup(id);
+      if (!group) {
+        return res.status(404).json({ message: "Basket group not found" });
+      }
+
+      const success = await storage.deleteBasketGroup(id);
+      if (success) {
+        res.json({ message: "Basket group deleted successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to delete basket group" });
+      }
+    } catch (error) {
+      console.error("Error deleting basket group:", error);
+      res.status(500).json({ message: "Failed to delete basket group" });
+    }
+  });
+
+  app.patch("/api/basket-groups/assign", async (req, res) => {
+    try {
+      const { basketIds, groupId } = req.body;
+      
+      if (!Array.isArray(basketIds)) {
+        return res.status(400).json({ message: "basketIds must be an array" });
+      }
+
+      if (groupId !== null && typeof groupId !== 'number') {
+        return res.status(400).json({ message: "groupId must be a number or null" });
+      }
+
+      if (groupId !== null) {
+        const group = await storage.getBasketGroup(groupId);
+        if (!group) {
+          return res.status(404).json({ message: "Basket group not found" });
+        }
+      }
+
+      await storage.assignBasketsToGroup(basketIds, groupId);
+      res.json({ message: "Baskets assigned successfully" });
+    } catch (error) {
+      console.error("Error assigning baskets to group:", error);
+      res.status(500).json({ message: "Failed to assign baskets to group" });
+    }
+  });
+
   // === Growth Prediction Endpoints ===
   // === Growth Prediction Endpoints ===
   app.get("/api/cycles/:id/growth-prediction", async (req, res) => {

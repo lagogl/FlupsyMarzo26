@@ -45,6 +45,17 @@ export const flupsys = pgTable("flupsys", {
   productionCenter: text("production_center"), // centro di produzione (ad es. "Ca Pisani", "Goro", ecc.)
 });
 
+// Basket Groups (Gruppi Ceste)
+export const basketGroups = pgTable("basket_groups", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // nome del gruppo (es. "Pronti vendita")
+  purpose: text("purpose"), // scopo/descrizione del gruppo (es. "Ceste selezionate per vendita cliente X")
+  color: text("color"), // colore hex per evidenziare il gruppo (es. "#00FF00")
+  highlightOrder: integer("highlight_order").default(0), // ordine di evidenziazione
+  createdAt: timestamp("created_at").notNull().defaultNow(), // data creazione gruppo
+  updatedAt: timestamp("updated_at"), // data ultimo aggiornamento
+});
+
 // Baskets (Ceste)
 export const baskets = pgTable("baskets", {
   id: serial("id").primaryKey(),
@@ -57,8 +68,10 @@ export const baskets = pgTable("baskets", {
   nfcLastProgrammedAt: timestamp("nfc_last_programmed_at", { mode: 'string' }), // data e ora ultima programmazione tag NFC
   row: text("row").notNull(), // fila in cui si trova la cesta (DX o SX)
   position: integer("position").notNull(), // posizione numerica nella fila (1, 2, 3, ecc.)
+  groupId: integer("group_id"), // reference to basket group (optional - null if not in any group)
 }, (table) => ({
   flupsyIdIdx: index("baskets_flupsy_id_idx").on(table.flupsyId),
+  groupIdIdx: index("baskets_group_id_idx").on(table.groupId),
 }));
 
 // Operation Types (Tipologie operazioni)
@@ -460,6 +473,12 @@ export const insertFlupsySchema = createInsertSchema(flupsys).omit({
   id: true
 });
 
+export const insertBasketGroupSchema = createInsertSchema(basketGroups).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 export const insertBasketSchema = createInsertSchema(baskets).omit({ 
   id: true, 
   currentCycleId: true,
@@ -617,6 +636,9 @@ export const insertBasketLotCompositionSchema = createInsertSchema(basketLotComp
 // Types
 export type Flupsy = typeof flupsys.$inferSelect;
 export type InsertFlupsy = z.infer<typeof insertFlupsySchema>;
+
+export type BasketGroup = typeof basketGroups.$inferSelect;
+export type InsertBasketGroup = z.infer<typeof insertBasketGroupSchema>;
 
 export type Basket = typeof baskets.$inferSelect;
 export type InsertBasket = z.infer<typeof insertBasketSchema>;

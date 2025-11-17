@@ -1,5 +1,6 @@
 import { 
   Flupsy, InsertFlupsy,
+  BasketGroup, InsertBasketGroup,
   Basket, InsertBasket, 
   Operation, InsertOperation, 
   Cycle, InsertCycle, 
@@ -41,6 +42,14 @@ export interface IStorage {
   getFlupsyByName(name: string): Promise<Flupsy | undefined>;
   createFlupsy(flupsy: InsertFlupsy): Promise<Flupsy>;
   updateFlupsy(id: number, flupsy: Partial<Flupsy>): Promise<Flupsy | undefined>;
+  
+  // Basket Group methods
+  getBasketGroups(): Promise<(BasketGroup & { basketCount: number })[]>;
+  getBasketGroup(id: number): Promise<BasketGroup | undefined>;
+  createBasketGroup(group: InsertBasketGroup): Promise<BasketGroup>;
+  updateBasketGroup(id: number, group: Partial<BasketGroup>): Promise<BasketGroup | undefined>;
+  deleteBasketGroup(id: number): Promise<boolean>;
+  assignBasketsToGroup(basketIds: number[], groupId: number | null): Promise<void>;
   
   // Basket methods
   getBaskets(): Promise<Basket[]>;

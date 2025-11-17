@@ -3,6 +3,7 @@ import { db } from './db';
 import bcrypt from 'bcrypt';
 import { 
   Flupsy, InsertFlupsy, flupsys,
+  BasketGroup, InsertBasketGroup, basketGroups,
   Basket, Cycle, InsertBasket, InsertCycle, InsertLot, InsertOperation, 
   InsertSgr, InsertSize, Lot, Operation, Size, Sgr, baskets, cycles, lots,
   operations, sgr, sizes,
@@ -167,6 +168,65 @@ export class DbStorage implements IStorage {
       .where(eq(flupsys.id, id))
       .returning();
     return results[0];
+  }
+  
+  // BASKET GROUPS
+  async getBasketGroups(): Promise<(BasketGroup & { basketCount: number })[]> {
+    const groups = await db.select().from(basketGroups).orderBy(basketGroups.name);
+    
+    const groupsWithCounts = await Promise.all(
+      groups.map(async (group) => {
+        const [countResult] = await db
+          .select({ count: count() })
+          .from(baskets)
+          .where(eq(baskets.groupId, group.id));
+        
+        return {
+          ...group,
+          basketCount: countResult?.count || 0
+        };
+      })
+    );
+    
+    return groupsWithCounts;
+  }
+  
+  async getBasketGroup(id: number): Promise<BasketGroup | undefined> {
+    const results = await db.select().from(basketGroups).where(eq(basketGroups.id, id));
+    return results[0];
+  }
+  
+  async createBasketGroup(group: InsertBasketGroup): Promise<BasketGroup> {
+    const results = await db.insert(basketGroups).values(group).returning();
+    return results[0];
+  }
+  
+  async updateBasketGroup(id: number, groupUpdate: Partial<BasketGroup>): Promise<BasketGroup | undefined> {
+    const results = await db.update(basketGroups)
+      .set({ ...groupUpdate, updatedAt: new Date() })
+      .where(eq(basketGroups.id, id))
+      .returning();
+    return results[0];
+  }
+  
+  async deleteBasketGroup(id: number): Promise<boolean> {
+    await db.update(baskets)
+      .set({ groupId: null })
+      .where(eq(baskets.groupId, id));
+    
+    const results = await db.delete(basketGroups)
+      .where(eq(basketGroups.id, id))
+      .returning();
+    
+    return results.length > 0;
+  }
+  
+  async assignBasketsToGroup(basketIds: number[], groupId: number | null): Promise<void> {
+    if (basketIds.length === 0) return;
+    
+    await db.update(baskets)
+      .set({ groupId })
+      .where(inArray(baskets.id, basketIds));
   }
   
   async deleteFlupsy(id: number): Promise<{ success: boolean; message: string }> {
