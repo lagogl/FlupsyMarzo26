@@ -231,6 +231,7 @@ export default function BasketSelection() {
   // Stati per indicatori visivi dei filtri
   const [availableSizeIds, setAvailableSizeIds] = useState<Set<number>>(new Set());
   const [availableFlupsyIds, setAvailableFlupsyIds] = useState<Set<number>>(new Set());
+  const [availableGroupIds, setAvailableGroupIds] = useState<Set<number>>(new Set());
   
   // Queries per caricare i dati
   const { data: baskets, isLoading: basketsLoading } = useQuery<Basket[]>({
@@ -595,9 +596,10 @@ export default function BasketSelection() {
     
     let filtered = [...basketInfos];
     
-    // Raccoglie tutti gli ID di taglie e FLUPSY disponibili SOLO dalle ceste con cicli attivi
+    // Raccoglie tutti gli ID di taglie, FLUPSY e gruppi disponibili SOLO dalle ceste con cicli attivi
     const sizeIdsWithBaskets = new Set<number>();
     const flupsyIdsWithBaskets = new Set<number>();
+    const groupIdsWithBaskets = new Set<number>();
     
     basketInfos.forEach(basket => {
       // Considera solo le ceste con cicli attivi
@@ -606,12 +608,16 @@ export default function BasketSelection() {
           sizeIdsWithBaskets.add(basket.size.id);
         }
         flupsyIdsWithBaskets.add(basket.flupsyId);
+        if (basket.groupId !== null) {
+          groupIdsWithBaskets.add(basket.groupId);
+        }
       }
     });
     
     // Aggiorna gli stati per gli indicatori visivi
     setAvailableSizeIds(sizeIdsWithBaskets);
     setAvailableFlupsyIds(flupsyIdsWithBaskets);
+    setAvailableGroupIds(groupIdsWithBaskets);
     
     // Applica i filtri
     const formValues = form.getValues();
@@ -761,6 +767,7 @@ export default function BasketSelection() {
       maxMortality: 100,
       minGrowthRate: 0,
       flupsys: [],
+      groups: [],
     });
     setSelectedSizes([]);
     
@@ -1260,6 +1267,60 @@ export default function BasketSelection() {
                               <span className="text-xs">= ceste disponibili</span>
                             </span>
                           </FormDescription>
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="groups"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gruppi</FormLabel>
+                          <div className="flex flex-wrap gap-2">
+                            {basketGroups?.map(group => (
+                              <Badge
+                                key={group.id}
+                                variant={field.value?.includes(group.id) ? "default" : "outline"}
+                                style={{
+                                  backgroundColor: field.value?.includes(group.id) 
+                                    ? group.color || '#3b82f6'
+                                    : 'transparent',
+                                  color: field.value?.includes(group.id) ? '#ffffff' : 'inherit',
+                                  fontWeight: field.value?.includes(group.id) ? 'bold' : 'normal',
+                                  borderColor: group.color || '#3b82f6',
+                                  cursor: 'pointer',
+                                  opacity: availableGroupIds.has(group.id) ? 1 : 0.5,
+                                  position: 'relative',
+                                  overflow: 'visible'
+                                }}
+                                onClick={() => {
+                                  const currentGroups = field.value || [];
+                                  const newGroups = currentGroups.includes(group.id)
+                                    ? currentGroups.filter(id => id !== group.id)
+                                    : [...currentGroups, group.id];
+                                  field.onChange(newGroups);
+                                  
+                                  // Applica i filtri immediatamente
+                                  setTimeout(() => form.handleSubmit(onSubmitFilters)(), 0);
+                                }}
+                                data-testid={`filter-group-${group.id}`}
+                              >
+                                {availableGroupIds.has(group.id) && (
+                                  <span 
+                                    className="w-2 h-2 rounded-full bg-green-500 absolute -top-1 -right-1"
+                                    style={{ boxShadow: '0 0 0 1px white' }}
+                                  />
+                                )}
+                                {group.name}
+                              </Badge>
+                            ))}
+                          </div>
+                          {basketGroups && basketGroups.length === 0 && (
+                            <p className="text-sm text-muted-foreground">
+                              Nessun gruppo creato. <a href="/basket-groups" className="underline">Crea il primo gruppo</a>
+                            </p>
+                          )}
                         </FormItem>
                       )}
                     />
