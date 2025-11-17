@@ -85,9 +85,11 @@ export default function FlupsyVisualizerNew() {
   });
   
   // Fetch cycles
-  const { data: cycles } = useQuery<Cycle[]>({
+  const { data: cyclesData } = useQuery({
     queryKey: ['/api/cycles'],
   });
+  
+  const cycles = cyclesData?.cycles || [];
   
   // Fetch SGR data
   const { data: sgrData } = useQuery<any[]>({

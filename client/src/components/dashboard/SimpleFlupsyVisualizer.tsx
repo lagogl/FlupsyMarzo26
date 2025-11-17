@@ -50,10 +50,12 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
   });
 
   // Fetch cycles for tooltip data
-  const { data: cycles, isLoading: isLoadingCycles } = useQuery({
+  const { data: cyclesData, isLoading: isLoadingCycles } = useQuery({
     queryKey: ['/api/cycles', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
+  
+  const cycles = cyclesData?.cycles || [];
 
   // Fetch lots for tooltip data
   const { data: lots, isLoading: isLoadingLots } = useQuery({
