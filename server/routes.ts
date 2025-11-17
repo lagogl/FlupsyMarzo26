@@ -4512,6 +4512,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CRITICAL: This route MUST come BEFORE /:id or Express will match "assign" as an ID parameter
+  app.patch("/api/basket-groups/assign", async (req, res) => {
+    try {
+      const { basketIds, groupId: rawGroupId } = req.body;
+      
+      if (!Array.isArray(basketIds)) {
+        return res.status(400).json({ message: "basketIds must be an array" });
+      }
+
+      // Convert groupId to number (handles both string and number inputs from JSON)
+      const groupId = rawGroupId === null || rawGroupId === undefined 
+        ? null 
+        : Number(rawGroupId);
+
+      // Validate groupId is a valid integer or null
+      if (groupId !== null && (!Number.isInteger(groupId) || groupId <= 0)) {
+        return res.status(400).json({ message: "Invalid basket group ID" });
+      }
+
+      if (groupId !== null) {
+        const group = await storage.getBasketGroup(groupId);
+        if (!group) {
+          return res.status(404).json({ message: "Basket group not found" });
+        }
+      }
+
+      await storage.assignBasketsToGroup(basketIds, groupId);
+      res.json({ message: "Baskets assigned successfully" });
+    } catch (error) {
+      console.error("Error assigning baskets to group:", error);
+      res.status(500).json({ message: "Failed to assign baskets to group" });
+    }
+  });
+
   app.patch("/api/basket-groups/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -4553,49 +4587,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting basket group:", error);
       res.status(500).json({ message: "Failed to delete basket group" });
-    }
-  });
-
-  // TEST endpoint to verify code loading
-  app.get("/api/test-code-reload", (req, res) => {
-    res.json({ message: "Code reloaded successfully!", timestamp: new Date().toISOString() });
-  });
-
-  app.patch("/api/basket-groups/assign", async (req, res) => {
-    try {
-      console.log('🔍 ASSIGN - Full body:', JSON.stringify(req.body, null, 2));
-      const { basketIds, groupId: rawGroupId } = req.body;
-      console.log('🔍 ASSIGN - basketIds:', basketIds, 'rawGroupId:', rawGroupId, 'type:', typeof rawGroupId);
-      
-      if (!Array.isArray(basketIds)) {
-        return res.status(400).json({ message: "basketIds must be an array" });
-      }
-
-      // Convert groupId to number (handles both string and number inputs from JSON)
-      const groupId = rawGroupId === null || rawGroupId === undefined 
-        ? null 
-        : Number(rawGroupId);
-      
-      console.log('🔍 ASSIGN - Converted groupId:', groupId, 'isInteger:', Number.isInteger(groupId));
-
-      // Validate groupId is a valid integer or null
-      if (groupId !== null && (!Number.isInteger(groupId) || groupId <= 0)) {
-        console.log('🔍 ASSIGN - VALIDATION FAILED:', { groupId, isInteger: Number.isInteger(groupId), isPositive: groupId > 0 });
-        return res.status(400).json({ message: "Invalid basket group ID" });
-      }
-
-      if (groupId !== null) {
-        const group = await storage.getBasketGroup(groupId);
-        if (!group) {
-          return res.status(404).json({ message: "Basket group not found" });
-        }
-      }
-
-      await storage.assignBasketsToGroup(basketIds, groupId);
-      res.json({ message: "Baskets assigned successfully" });
-    } catch (error) {
-      console.error("Error assigning baskets to group:", error);
-      res.status(500).json({ message: "Failed to assign baskets to group" });
     }
   });
 
