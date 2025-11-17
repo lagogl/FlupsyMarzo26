@@ -625,13 +625,15 @@ export default function Operations() {
     enabled: operations.length > 0, // Solo se abbiamo operazioni
   });
 
-  const { data: cycles = [] } = useQuery({
+  const { data: cyclesData } = useQuery({
     queryKey: ['/api/cycles', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     enabled: operations.length > 0, // Solo se abbiamo operazioni
   });
+  
+  const cycles = cyclesData?.cycles || [];
 
   // Query non essenziali - caricate on-demand con real-time updates
   const { data: lots = [] } = useQuery({

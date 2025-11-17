@@ -372,17 +372,19 @@ export default function OperationFormCompact({
     staleTime: 60000, // Cache for 1 minute
   });
   
-  const { data: cycles, refetch: refetchCycles } = useQuery({ 
+  const { data: cyclesData, refetch: refetchCycles } = useQuery({ 
     queryKey: ['/api/cycles'],
     queryFn: async () => {
       // Usa cache ottimizzata per performance
       const response = await fetch('/api/cycles?includeAll=true');
       const data = await response.json();
-      return data;
+      return data?.cycles || [];
     },
     enabled: !isLoading,
     staleTime: 60000, // Cache for 1 minute per performance
   });
+  
+  const cycles = cyclesData || [];
   
   const { data: lots } = useQuery({ 
     queryKey: ['/api/lots/active'],

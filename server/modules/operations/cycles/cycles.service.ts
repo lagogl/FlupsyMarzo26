@@ -205,7 +205,17 @@ class CyclesService {
       let response;
       if (includeAll) {
         console.log(`Restituisco tutti i ${results.length} cicli (includeAll=true)`);
-        response = results;
+        response = {
+          cycles: results,
+          pagination: {
+            page: 1,
+            pageSize: results.length,
+            totalCount: results.length,
+            totalPages: 1,
+            hasNextPage: false,
+            hasPreviousPage: false
+          }
+        };
       } else {
         const totalPages = Math.ceil(totalCount / pageSize);
         response = {
