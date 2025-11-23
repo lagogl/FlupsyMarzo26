@@ -953,7 +953,7 @@ export default function OperationForm({
               <FormItem>
                 <FormLabel>FLUPSY</FormLabel>
                 {isDuplication ? (
-                  <div className="px-3 py-2 border rounded-md bg-gray-50 text-gray-600">
+                  <div className="px-2 py-1 border rounded-md bg-gray-50 text-gray-600 text-sm">
                     {(() => {
                       const flupsy = flupsys?.find((f: any) => f.id === field.value);
                       return flupsy ? `${flupsy.name} - ${flupsy.location || 'N/D'}` : `FLUPSY #${field.value}`;
@@ -1003,7 +1003,7 @@ export default function OperationForm({
               <FormItem>
                 <FormLabel>Cesta</FormLabel>
                 {isDuplication ? (
-                  <div className="px-3 py-2 border rounded-md bg-gray-50 text-gray-600">
+                  <div className="px-2 py-1 border rounded-md bg-gray-50 text-gray-600 text-sm">
                     {(() => {
                       const selectedBasket = baskets?.find((b: any) => b.id === field.value);
                       if (selectedBasket) {
@@ -1134,7 +1134,7 @@ export default function OperationForm({
             // Mostra avviso per operazioni di Prima Attivazione
             if (watchType === 'prima-attivazione') {
               return (
-                <div className="col-span-1 md:col-span-2 rounded-md border border-blue-100 bg-blue-50 p-3 text-sm text-blue-600">
+                <div className="col-span-1 md:col-span-2 rounded-md border border-blue-100 bg-blue-50 p-1 text-xs text-blue-600">
                   <div className="flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1320,8 +1320,8 @@ export default function OperationForm({
           />
 
           {/* Campi standardizzati per inserimento dati di misurazione - Layout compatto */}
-          <div className="border rounded-md p-2 mb-1 bg-blue-50 border-blue-100">
-            <h3 className="text-sm font-semibold mb-1 text-blue-700">Dati di misurazione standardizzati</h3>
+          <div className="border rounded-md p-1 mb-0 bg-blue-50 border-blue-100">
+            <h3 className="text-xs font-semibold mb-0 text-blue-700">Dati di misurazione standardizzati</h3>
             
             <div className="grid grid-cols-2 gap-2">
               {/* Prima colonna */}
@@ -1332,12 +1332,12 @@ export default function OperationForm({
                   name="sampleWeight"
                   render={({ field }) => (
                     <FormItem className="mb-0">
-                      <FormLabel className="text-xs">Grammi sample</FormLabel>
+                      <FormLabel className="text-xs leading-none">Grammi sample</FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
                           placeholder="Peso in grammi"
-                          className="h-8 text-sm"
+                          className="h-7 text-xs"
                           value={field.value === null || field.value === undefined ? '' : field.value}
                           onChange={(e) => {
                             const value = e.target.value;
@@ -1369,7 +1369,7 @@ export default function OperationForm({
                         <Input 
                           type="text" 
                           placeholder="Animali vivi"
-                          className="h-8 text-sm"
+                          className="h-7 text-xs"
                           value={field.value === null || field.value === undefined 
                             ? '' 
                             : field.value.toLocaleString('it-IT')}
@@ -1403,7 +1403,7 @@ export default function OperationForm({
                         <Input 
                           type="text" 
                           placeholder="Animali morti"
-                          className="h-8 text-sm"
+                          className="h-7 text-xs"
                           value={field.value === null || field.value === undefined 
                             ? '' 
                             : field.value.toLocaleString('it-IT')}
@@ -1678,9 +1678,9 @@ export default function OperationForm({
 
           {/* SGR viene determinato automaticamente, mostriamo solo le informazioni sulla crescita */}
           <div className="col-span-2 mb-1">
-            <h3 className="text-sm font-semibold mb-1">Informazioni SGR</h3>
+            <h3 className="text-xs font-semibold mb-0">Informazioni SGR</h3>
             {watchAnimalsPerKg && basketOperations && basketOperations.length > 0 ? (
-              <div className="p-2 rounded-md border bg-muted/20 text-sm">
+              <div className="p-1 rounded-md border bg-muted/20 text-xs">
                 {(() => {
                   // Ottieni il ciclo selezionato o corrente
                   const selectedBasket = baskets?.find(b => b.id === Number(watchBasketId));
@@ -1907,9 +1907,9 @@ export default function OperationForm({
 
           {/* BILANCIO ANIMALI - Mostra il bilancio solo per prima-attivazione con lotto selezionato */}
           {watchType === 'prima-attivazione' && watchLotId && animalBalance && (
-            <div className="border rounded-md p-2 bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 shadow-sm">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-blue-900">
+            <div className="border rounded-md p-1 bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 shadow-sm">
+              <div className="flex items-center justify-between mb-0">
+                <h3 className="text-xs font-semibold text-blue-900">
                   📊 Bilancio Animali - Lotto {animalBalance.supplierLotNumber || `#${animalBalance.lotId}`}
                 </h3>
                 {isLoadingBalance && (
@@ -1917,11 +1917,11 @@ export default function OperationForm({
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-3 gap-0.5">
                 {/* Totale animali */}
-                <div className="bg-white rounded-md p-2 border border-blue-100">
+                <div className="bg-white rounded-md p-1 border border-blue-100">
                   <div className="text-xs text-blue-600 font-medium">Totale Animali</div>
-                  <div className="text-2xl font-bold text-blue-900">
+                  <div className="text-base font-bold text-blue-900">
                     {animalBalance.totalAnimals?.toLocaleString('it-IT') || '0'}
                   </div>
                 </div>
