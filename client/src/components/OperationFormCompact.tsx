@@ -2323,9 +2323,10 @@ export default function OperationFormCompact({
                 </Button>
               </div>
           </div>
-
-          {/* COLONNA 3: Dati Peso/Misurazione e Note */}
-          <div className="col-span-1 space-y-1 overflow-y-auto pr-1 pb-2">
+        </div>
+        </div>
+        </div>
+      </form>
 
       {/* Confirmation dialog for mortality adjustment */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
