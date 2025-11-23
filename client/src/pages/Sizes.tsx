@@ -55,7 +55,7 @@ export default function Sizes() {
       setIsCreateDialogOpen(false);
       // Invalida la cache e ricarica subito i dati
       queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-      setTimeout(() => refetchSizes(), 100); // Forza il refetch
+      setTimeout(() => refetchSizes(), 500); // Attendi 500ms per assicurare che il server abbia invalidato la cache
     }
   });
 
@@ -75,7 +75,7 @@ export default function Sizes() {
       });
       // Invalida la cache e ricarica subito i dati
       queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-      setTimeout(() => refetchSizes(), 100); // Forza il refetch per assicurare l'aggiornamento immediato
+      setTimeout(() => refetchSizes(), 500); // Attendi 500ms per assicurare che il server abbia invalidato la cache
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || 'Errore durante l\'aggiornamento della taglia';
