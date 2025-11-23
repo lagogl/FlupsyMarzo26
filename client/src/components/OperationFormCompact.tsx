@@ -1037,16 +1037,16 @@ export default function OperationFormCompact({
   return (
     <Form {...form}>
       <form onSubmit={onSubmitForm}>
-        {/* Layout a 3 colonne senza scroll verticale */}
-        <div className="grid grid-cols-3 gap-1 h-[calc(90vh-180px)]">
-          {/* COLONNA 1: Dati Operazione e Posizionamento */}
-          <div className="col-span-1 space-y-1 overflow-y-auto pr-1 pb-2">
+        {/* Layout ottimizzato per evitare scrolling verticale */}
+        <div className="grid grid-cols-12 gap-4">
+          {/* COLONNA SINISTRA: Informazioni Generali e Identificazione */}
+          <div className="col-span-12 md:col-span-6 space-y-3">
             {/* Sezione Operazione */}
-            <div className="bg-slate-50 p-2 rounded-md border border-slate-200">
-              <h3 className="text-xs font-semibold mb-1.5 text-slate-700 flex items-center">
-                <ClipboardList className="h-4 w-4 mr-1" /> Operazione
+            <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+              <h3 className="text-sm font-semibold mb-3 text-slate-700 flex items-center">
+                <ClipboardList className="h-4 w-4 mr-1" /> Dati Operazione
               </h3>
-              <div className="grid grid-cols-1 gap-1">
+              <div className="grid grid-cols-2 gap-3">
                 {/* Tipo operazione */}
                 <FormField
                   control={form.control}
@@ -1703,14 +1703,11 @@ export default function OperationFormCompact({
             </div>
           </div>
 
-          {/* COLONNA 2: Riferimenti */}
-          <div className="col-span-1 space-y-1 overflow-y-auto pr-1 pb-2">
-            {/* Sezione Riferimenti - Spostata qui dalla colonna 1 */}
-            <div className="bg-green-50 p-2 rounded-md border border-green-200">
-              <h3 className="text-xs font-semibold mb-1.5 text-green-700 flex items-center">
-                <Link className="h-4 w-4 mr-1" /> Riferimenti
-              </h3>
-              <div className="grid grid-cols-1 gap-1">
+          {/* COLONNA DESTRA: Dati specifici per tipo di operazione */}
+          <div className="col-span-12 md:col-span-6 space-y-3">
+            {/* Sezione Peso */}
+            {watchType === 'peso' && (
+              <div className="bg-amber-50 p-4 rounded-md border border-amber-200">
                 <h3 className="text-sm font-semibold mb-3 text-amber-700 flex items-center">
                   <Scale className="h-4 w-4 mr-1" /> Dati Peso
                 </h3>
@@ -2322,9 +2319,8 @@ export default function OperationFormCompact({
                   )}
                 </Button>
               </div>
+            </div>
           </div>
-        </div>
-        </div>
         </div>
       </form>
 
