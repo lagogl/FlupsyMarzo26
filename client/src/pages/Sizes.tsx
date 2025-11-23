@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Plus, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { useWebSocketMessage } from '@/lib/websocket';
 import SizeForm from '@/components/SizeForm';
 
 export default function Sizes() {
@@ -42,6 +43,13 @@ export default function Sizes() {
   // Query sizes
   const { data: sizes, isLoading, refetch: refetchSizes } = useQuery({
     queryKey: ['/api/sizes'],
+  });
+
+  // Listen for WebSocket size updates
+  useWebSocketMessage('size_updated', () => {
+    // Invalida cache e ricarica i dati quando una taglia viene aggiornata
+    queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
+    setTimeout(() => refetchSizes(), 200);
   });
 
   // Create mutation
