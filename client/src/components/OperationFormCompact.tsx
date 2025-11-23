@@ -1037,10 +1037,10 @@ export default function OperationFormCompact({
   return (
     <Form {...form}>
       <form onSubmit={onSubmitForm}>
-        {/* Layout ottimizzato per evitare scrolling verticale */}
-        <div className="grid grid-cols-12 gap-4">
-          {/* COLONNA SINISTRA: Informazioni Generali e Identificazione */}
-          <div className="col-span-12 md:col-span-6 space-y-3">
+        {/* Layout a 3 colonne senza scroll verticale */}
+        <div className="grid grid-cols-3 gap-2 h-[calc(90vh-180px)]">
+          {/* COLONNA 1: Operazione e Posizionamento */}
+          <div className="col-span-1 space-y-2 overflow-y-auto pr-2 pb-2">
             {/* Sezione Operazione */}
             <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
               <h3 className="text-sm font-semibold mb-3 text-slate-700 flex items-center">
@@ -1506,7 +1506,10 @@ export default function OperationFormCompact({
                 )}
               </div>
             </div>
+          </div>
 
+          {/* COLONNA 2: Riferimenti (Lotti, SGR, Size) */}
+          <div className="col-span-1 space-y-2 overflow-y-auto pr-2 pb-2">
             {/* Sezione Riferimenti */}
             <div className="bg-green-50 p-4 rounded-md border border-green-200">
               <h3 className="text-sm font-semibold mb-3 text-green-700 flex items-center">
@@ -1703,8 +1706,8 @@ export default function OperationFormCompact({
             </div>
           </div>
 
-          {/* COLONNA DESTRA: Dati specifici per tipo di operazione */}
-          <div className="col-span-12 md:col-span-6 space-y-3">
+          {/* COLONNA 3: Dati Peso/Misurazione e Note */}
+          <div className="col-span-1 space-y-2 overflow-y-auto pr-2 pb-2">
             {/* Sezione Peso */}
             {watchType === 'peso' && (
               <div className="bg-amber-50 p-4 rounded-md border border-amber-200">
