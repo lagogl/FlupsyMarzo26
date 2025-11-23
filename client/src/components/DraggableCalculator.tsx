@@ -51,6 +51,16 @@ export default function DraggableCalculator({
   
   const calculatorRef = useRef<HTMLDivElement>(null);
   
+  // Helper per normalizzare input decimali: accetta sia virgola che punto
+  const handleDecimalInput = (value: string): number => {
+    // Sostituisce virgola con punto per normalizzare
+    const normalized = value.replace(',', '.');
+    // Converte a numero
+    const num = parseFloat(normalized);
+    // Ritorna il numero se valido, altrimenti 0
+    return isNaN(num) ? 0 : num;
+  };
+  
   // Query per ottenere le taglie
   const { data: sizes = [] } = useQuery({
     queryKey: ['/api/sizes'],
@@ -167,10 +177,12 @@ export default function DraggableCalculator({
               <div>
                 <Label className="text-xs text-green-700">Peso Campione (g)</Label>
                 <Input
-                  type="number"
-                  value={sampleWeight}
-                  onChange={(e) => setSampleWeight(Number(e.target.value))}
+                  type="text"
+                  inputMode="decimal"
+                  value={sampleWeight || ''}
+                  onChange={(e) => setSampleWeight(handleDecimalInput(e.target.value))}
                   className="h-7 text-xs"
+                  placeholder="0"
                 />
               </div>
               <div>
@@ -185,10 +197,12 @@ export default function DraggableCalculator({
               <div>
                 <Label className="text-xs text-orange-700">Peso Totale (kg)</Label>
                 <Input
-                  type="number"
-                  value={totalWeight}
-                  onChange={(e) => setTotalWeight(Number(e.target.value))}
+                  type="text"
+                  inputMode="decimal"
+                  value={totalWeight || ''}
+                  onChange={(e) => setTotalWeight(handleDecimalInput(e.target.value))}
                   className="h-7 text-xs"
+                  placeholder="0"
                 />
               </div>
               <div>
