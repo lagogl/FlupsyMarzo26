@@ -284,6 +284,28 @@ export class OperationsController {
       });
     }
   }
+
+  /**
+   * GET /api/operations/lot/:lotId/animal-balance
+   * Ottiene il bilancio degli animali per un lotto
+   */
+  async getLotAnimalBalance(req: Request, res: Response) {
+    try {
+      const lotId = parseInt(req.params.lotId);
+      if (isNaN(lotId)) {
+        return res.status(400).json({ message: "Invalid lot ID" });
+      }
+
+      const balance = await operationsService.getLotAnimalBalance(lotId);
+      res.json(balance);
+    } catch (error) {
+      console.error("Error getting lot animal balance:", error);
+      res.status(500).json({ 
+        message: "Failed to get lot animal balance",
+        error: (error as Error).message 
+      });
+    }
+  }
 }
 
 export const operationsController = new OperationsController();

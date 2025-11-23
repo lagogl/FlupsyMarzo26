@@ -416,9 +416,63 @@ class OperationsService {
 
   /**
    * Crea una nuova operazione
+   * Con validazione sul numero di animali per "prima-attivazione"
    */
   async createOperation(data: any) {
     console.log('🚀 CREATE OPERATION SERVICE - Ricevuto:', JSON.stringify(data, null, 2));
+    
+    // VALIDAZIONE: Controlla il numero di animali per "prima-attivazione"
+    if (data.type === 'prima-attivazione' && data.cycleId && data.animalCount) {
+      console.log(`🔍 VALIDAZIONE ANIMALI - Operazione prima-attivazione: ${data.animalCount} animali`);
+      
+      // Recupera il cycle per ottenere il lotId
+      const cycle = await db.select().from(cycles).where(eq(cycles.id, data.cycleId)).limit(1);
+      if (cycle.length === 0) {
+        throw new Error(`Ciclo non trovato: ${data.cycleId}`);
+      }
+      
+      const cycleData = cycle[0];
+      console.log(`✓ Ciclo trovato: ID ${cycleData.id}, lotId: ${cycleData.lotId}`);
+      
+      if (!cycleData.lotId) {
+        throw new Error(`Il ciclo non ha un lotto associato`);
+      }
+      
+      // Recupera il lotto
+      const lot = await db.select().from(lots).where(eq(lots.id, cycleData.lotId)).limit(1);
+      if (lot.length === 0) {
+        throw new Error(`Lotto non trovato: ${cycleData.lotId}`);
+      }
+      
+      const lotData = lot[0];
+      const totalAnimalsInLot = lotData.animalCount || 0;
+      console.log(`✓ Lotto trovato: ID ${lotData.id}, totale animali: ${totalAnimalsInLot}`);
+      
+      // Calcola animali già utilizzati in altre operazioni "prima-attivazione" dello stesso lotto
+      const existingOperations = await db
+        .select({ animalCount: operations.animalCount })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.type, 'prima-attivazione'),
+            eq(operations.lotId, lotData.id)
+          )
+        );
+      
+      const usedAnimals = existingOperations.reduce((sum, op) => sum + (op.animalCount || 0), 0);
+      const availableAnimals = totalAnimalsInLot - usedAnimals;
+      
+      console.log(`📊 BILANCIO ANIMALI LOTTO: Totale=${totalAnimalsInLot}, Usati=${usedAnimals}, Disponibili=${availableAnimals}`);
+      
+      // Valida
+      if (data.animalCount > availableAnimals) {
+        const message = `Non puoi usare ${data.animalCount} animali. Il lotto ha solo ${availableAnimals} animali disponibili (Totale: ${totalAnimalsInLot}, Già usati: ${usedAnimals})`;
+        console.error(`❌ ${message}`);
+        throw new Error(message);
+      }
+      
+      console.log(`✅ Validazione OK: ${data.animalCount} animali <= ${availableAnimals} disponibili`);
+    }
     
     // Arricchimento metadata e note per operazioni peso/misura su cestelli misti
     if ((data.type === 'peso' || data.type === 'misura') && data.basketId) {
@@ -508,6 +562,50 @@ class OperationsService {
     OperationsCache.clear();
     
     return deleted;
+  }
+
+  /**
+   * Ottiene il bilancio degli animali per un lotto
+   * Usato per mostrare all'operatore quanti animali ha il lotto, quanti ne sono già stati usati, e quanti ne restano
+   */
+  async getLotAnimalBalance(lotId: number) {
+    console.log(`📊 Calcolo bilancio animali per lotto ${lotId}`);
+    
+    // Recupera il lotto
+    const lot = await db.select().from(lots).where(eq(lots.id, lotId)).limit(1);
+    if (lot.length === 0) {
+      throw new Error(`Lotto non trovato: ${lotId}`);
+    }
+    
+    const lotData = lot[0];
+    const totalAnimals = lotData.animalCount || 0;
+    
+    // Calcola animali già utilizzati in operazioni "prima-attivazione"
+    const existingOperations = await db
+      .select({ animalCount: operations.animalCount })
+      .from(operations)
+      .where(
+        and(
+          eq(operations.type, 'prima-attivazione'),
+          eq(operations.lotId, lotId)
+        )
+      );
+    
+    const usedAnimals = existingOperations.reduce((sum, op) => sum + (op.animalCount || 0), 0);
+    const availableAnimals = totalAnimals - usedAnimals;
+    
+    const balance = {
+      lotId,
+      supplier: lotData.supplier,
+      supplierLotNumber: lotData.supplierLotNumber,
+      totalAnimals,
+      usedAnimals,
+      availableAnimals,
+      usagePercentage: totalAnimals > 0 ? (usedAnimals / totalAnimals * 100).toFixed(1) : 0
+    };
+    
+    console.log(`✓ Bilancio calcolato:`, balance);
+    return balance;
   }
 }
 

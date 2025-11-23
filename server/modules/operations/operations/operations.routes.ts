@@ -11,6 +11,7 @@ const router = Router();
 router.get('/date-range', (req, res) => operationsController.getOperationsByDateRange(req, res));
 router.get('/basket/:basketId', (req, res) => operationsController.getOperationsByBasket(req, res));
 router.get('/cycle/:cycleId', (req, res) => operationsController.getOperationsByCycle(req, res));
+router.get('/lot/:lotId/animal-balance', (req, res) => operationsController.getLotAnimalBalance(req, res));
 
 // Route ottimizzate
 router.get('-optimized', (req, res) => operationsController.getOperationsOptimized(req, res));

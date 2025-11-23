@@ -267,6 +267,7 @@ export default function OperationForm({
   const watchCycleId = form.watch('cycleId');
   const watchType = form.watch('type');
   const watchDate = form.watch('date');
+  const watchLotId = form.watch('lotId');
   // Monitoraggio dei nuovi campi standardizzati
   const watchSampleWeight = form.watch('sampleWeight');
   const watchLiveAnimals = form.watch('liveAnimals');
@@ -280,6 +281,16 @@ export default function OperationForm({
   const { data: basketOperations } = useQuery({
     queryKey: ['/api/operations', watchBasketId],
     enabled: !!watchBasketId,
+  });
+  
+  // Fetch animal balance for the selected lot (prima-attivazione only)
+  const { data: animalBalance, isLoading: isLoadingBalance } = useQuery({
+    queryKey: ['/api/operations/lot', watchLotId, 'animal-balance'],
+    queryFn: () => {
+      if (!watchLotId) return null;
+      return fetch(`/api/operations/lot/${watchLotId}/animal-balance`).then(res => res.json());
+    },
+    enabled: !!watchLotId && watchType === 'prima-attivazione',
   });
   
   // Fetch baskets for the selected FLUPSY 
@@ -1893,6 +1904,90 @@ export default function OperationForm({
               </FormItem>
             )}
           />
+
+          {/* BILANCIO ANIMALI - Mostra il bilancio solo per prima-attivazione con lotto selezionato */}
+          {watchType === 'prima-attivazione' && watchLotId && animalBalance && (
+            <div className="border rounded-md p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-blue-900">
+                  📊 Bilancio Animali - Lotto {animalBalance.supplierLotNumber || `#${animalBalance.lotId}`}
+                </h3>
+                {isLoadingBalance && (
+                  <span className="text-xs text-blue-500">Caricamento...</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                {/* Totale animali */}
+                <div className="bg-white rounded-md p-3 border border-blue-100">
+                  <div className="text-xs text-blue-600 font-medium mb-1">Totale Animali</div>
+                  <div className="text-2xl font-bold text-blue-900">
+                    {animalBalance.totalAnimals?.toLocaleString('it-IT') || '0'}
+                  </div>
+                </div>
+
+                {/* Animali già usati */}
+                <div className="bg-white rounded-md p-3 border border-orange-100">
+                  <div className="text-xs text-orange-600 font-medium mb-1">Già Utilizzati</div>
+                  <div className="text-2xl font-bold text-orange-900">
+                    {animalBalance.usedAnimals?.toLocaleString('it-IT') || '0'}
+                  </div>
+                  <div className="text-xs text-orange-500 mt-1">
+                    {animalBalance.usagePercentage}%
+                  </div>
+                </div>
+
+                {/* Animali disponibili */}
+                <div className={`rounded-md p-3 border ${
+                  animalBalance.availableAnimals > 0 
+                    ? 'bg-white border-green-100' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className={`text-xs font-medium mb-1 ${
+                    animalBalance.availableAnimals > 0 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    Disponibili
+                  </div>
+                  <div className={`text-2xl font-bold ${
+                    animalBalance.availableAnimals > 0 
+                      ? 'text-green-900' 
+                      : 'text-red-900'
+                  }`}>
+                    {animalBalance.availableAnimals?.toLocaleString('it-IT') || '0'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Avviso se non ci sono animali disponibili */}
+              {animalBalance.availableAnimals <= 0 && (
+                <div className="mt-3 p-2 bg-red-100 border border-red-300 rounded-md">
+                  <p className="text-xs text-red-700 font-medium">
+                    ⚠️ Attenzione: Non ci sono più animali disponibili in questo lotto!
+                  </p>
+                </div>
+              )}
+
+              {/* Avviso se gli animali inseriti superano i disponibili */}
+              {watchAnimalCount && animalBalance.availableAnimals >= 0 && watchAnimalCount > animalBalance.availableAnimals && (
+                <div className="mt-3 p-2 bg-red-100 border border-red-300 rounded-md">
+                  <p className="text-xs text-red-700 font-medium">
+                    ❌ Errore: Stai tentando di usare {watchAnimalCount.toLocaleString('it-IT')} animali, ma solo {animalBalance.availableAnimals.toLocaleString('it-IT')} sono disponibili.
+                  </p>
+                </div>
+              )}
+
+              {/* Suggerimento se gli animali inseriti sono OK */}
+              {watchAnimalCount && animalBalance.availableAnimals >= 0 && watchAnimalCount <= animalBalance.availableAnimals && (
+                <div className="mt-3 p-2 bg-green-100 border border-green-300 rounded-md">
+                  <p className="text-xs text-green-700 font-medium">
+                    ✅ OK: Usando {watchAnimalCount.toLocaleString('it-IT')} animali, ne rimarranno {(animalBalance.availableAnimals - watchAnimalCount).toLocaleString('it-IT')}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <FormField
