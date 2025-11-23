@@ -391,8 +391,15 @@ export default function OperationFormCompact({
     enabled: !isLoading,
   });
   
-
-
+  // Fetch animal balance for prima-attivazione
+  const { data: animalBalance, isLoading: isLoadingBalance } = useQuery({
+    queryKey: ['/api/operations/lot', watchLotId, 'animal-balance'],
+    queryFn: () => {
+      if (!watchLotId) return null;
+      return fetch(`/api/operations/lot/${watchLotId}/animal-balance`).then(res => res.json());
+    },
+    enabled: !!watchLotId && watchType === 'prima-attivazione',
+  });
 
   // WebSocket listeners identici a quelli della tabella operazioni che funzionano perfettamente
   useWebSocketMessage('operation_created', () => {
@@ -1547,6 +1554,33 @@ export default function OperationFormCompact({
                       );
                     }}
                   />
+                )}
+
+                {/* BILANCIO ANIMALI - Solo per prima-attivazione */}
+                {watchType === 'prima-attivazione' && watchLotId && animalBalance && (
+                  <div className="col-span-1 border rounded-md p-3 bg-blue-50 border-blue-200">
+                    <div className="text-xs font-semibold text-blue-900 mb-2">📊 Bilancio Animali</div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-white p-2 rounded border border-blue-100">
+                        <div className="text-xs text-blue-600">Totale</div>
+                        <div className="font-bold text-blue-900">{animalBalance.totalAnimals?.toLocaleString('it-IT') || '0'}</div>
+                      </div>
+                      <div className="bg-white p-2 rounded border border-orange-100">
+                        <div className="text-xs text-orange-600">Usati</div>
+                        <div className="font-bold text-orange-900">{animalBalance.usedAnimals?.toLocaleString('it-IT') || '0'}</div>
+                      </div>
+                      <div className={`p-2 rounded border ${animalBalance.availableAnimals > 0 ? 'bg-white border-green-100' : 'bg-red-100 border-red-300'}`}>
+                        <div className={`text-xs ${animalBalance.availableAnimals > 0 ? 'text-green-600' : 'text-red-600'}`}>Disp.</div>
+                        <div className={`font-bold ${animalBalance.availableAnimals > 0 ? 'text-green-900' : 'text-red-900'}`}>{animalBalance.availableAnimals?.toLocaleString('it-IT') || '0'}</div>
+                      </div>
+                    </div>
+                    {watchAnimalCount && animalBalance.availableAnimals >= 0 && watchAnimalCount > animalBalance.availableAnimals && (
+                      <div className="text-xs text-red-700 mt-2 font-semibold">❌ Errore: Animali insufficienti!</div>
+                    )}
+                    {watchAnimalCount && animalBalance.availableAnimals >= 0 && watchAnimalCount <= animalBalance.availableAnimals && (
+                      <div className="text-xs text-green-700 mt-2 font-semibold">✅ OK: {(animalBalance.availableAnimals - watchAnimalCount).toLocaleString('it-IT')} rimasti</div>
+                    )}
+                  </div>
                 )}
 
                 {/* SGR Rate (calcolato automaticamente per operazioni su cicli attivi) */}

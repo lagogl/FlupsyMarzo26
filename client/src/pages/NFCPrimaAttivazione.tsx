@@ -100,6 +100,19 @@ function NFCPrimaAttivazioneOriginal() {
   const { data: lots } = useQuery({ queryKey: ['/api/lots/active'] });
   const { data: sizes } = useQuery({ queryKey: ['/api/sizes'] });
 
+  // Watch lotId
+  const selectedLotId = form.watch("lotId");
+  
+  // Fetch animal balance for selected lot
+  const { data: animalBalance } = useQuery({
+    queryKey: ['/api/operations/lot', selectedLotId, 'animal-balance'],
+    queryFn: () => {
+      if (!selectedLotId) return null;
+      return fetch(`/api/operations/lot/${parseInt(selectedLotId)}/animal-balance`).then(res => res.json());
+    },
+    enabled: !!selectedLotId,
+  });
+
   // Filtra cestelli per FLUPSY selezionato
   const selectedFlupsyId = form.watch("flupsyId");
   const filteredBaskets = Array.isArray(baskets) ? baskets.filter((basket: any) => 
@@ -467,6 +480,22 @@ function NFCPrimaAttivazioneOriginal() {
                       </FormItem>
                     )}
                   />
+
+                  {/* BILANCIO ANIMALI */}
+                  {selectedLotId && animalBalance && (
+                    <Alert className="border-blue-300 bg-blue-50">
+                      <AlertTriangle className="h-4 w-4 text-blue-600" />
+                      <AlertDescription className="text-sm">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-semibold">Animali: {animalBalance.totalAnimals?.toLocaleString('it-IT')} totale</span>
+                          <span className="text-xs text-muted-foreground">{animalBalance.usagePercentage}% usato</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Disponibili: {animalBalance.availableAnimals?.toLocaleString('it-IT')}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   {/* Taglia */}
                   <FormField
