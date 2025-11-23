@@ -40,9 +40,11 @@ export default function Sizes() {
   };
   
   // Query sizes
-  const { data: sizes, isLoading } = useQuery({
+  const { data: sizes, isLoading, refetch: refetchSizes } = useQuery({
     queryKey: ['/api/sizes'],
   });
+
+  const queryClient = useQueryClient();
 
   // Create mutation
   const createSizeMutation = useMutation({
@@ -52,8 +54,10 @@ export default function Sizes() {
       body: newSize
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
       setIsCreateDialogOpen(false);
+      // Invalida la cache e ricarica subito i dati
+      queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
+      setTimeout(() => refetchSizes(), 100); // Forza il refetch
     }
   });
 
@@ -65,13 +69,15 @@ export default function Sizes() {
       body: size
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
       setEditingSize(null);
       setEditError('');
       toast({
         title: 'Taglia aggiornata',
         description: 'I dati della taglia sono stati salvati correttamente'
       });
+      // Invalida la cache e ricarica subito i dati
+      queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
+      setTimeout(() => refetchSizes(), 100); // Forza il refetch per assicurare l'aggiornamento immediato
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || 'Errore durante l\'aggiornamento della taglia';
