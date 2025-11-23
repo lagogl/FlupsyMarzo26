@@ -48,6 +48,7 @@ Preferred communication style: Simple, everyday language.
 - **Query Optimization Pattern**: Utilizes simple separate queries, application-side data aggregation with `reduce()`, and `Promise.all()` for parallel enrichment in Drizzle ORM.
 - **BasketSelection Data Loading**: Critical page that requires complete datasets - uses `includeAll=true` on all queries (/api/baskets, /api/operations, /api/cycles) to ensure availability indicators (green dots) display correctly for all FLUPSY and sizes with active cycles. Without complete data, paginated results exclude items beyond the first page, causing incorrect UI indicators.
 - **Database Constraints**: The `size_id` field in the `operations` table is mandatory (NOT NULL) - every operation MUST have an associated size, regardless of operation type.
+- **Animal Count Validation System**: Dual-layer validation (frontend + backend) prevents prima-attivazione operations from exceeding lot's available animal count. Frontend displays real-time balance (total, used, available) with visual alerts and disables submit button when limit exceeded. Backend (operations.service.ts lines 424-463) performs final validation, calculating used animals from existing prima-attivazione operations and rejecting oversubscription with detailed error message.
 
 ### System Design Choices
 - **Data Flow**: User input flows from React components to PostgreSQL via TanStack Query, Express API, and Drizzle ORM, with real-time updates via WebSocket.
