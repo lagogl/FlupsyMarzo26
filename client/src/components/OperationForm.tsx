@@ -944,7 +944,7 @@ export default function OperationForm({
   return (
     <Form {...form}>
       <form onSubmit={onSubmitForm} className="space-y-0">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5">
+        <div className="grid grid-cols-3 gap-0.5">
           {/* Step 1: Select FLUPSY */}
           <FormField
             control={form.control}
