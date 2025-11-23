@@ -943,8 +943,8 @@ export default function OperationForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={onSubmitForm} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+      <form onSubmit={onSubmitForm} className="space-y-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
           {/* Step 1: Select FLUPSY */}
           <FormField
             control={form.control}
@@ -1320,10 +1320,10 @@ export default function OperationForm({
           />
 
           {/* Campi standardizzati per inserimento dati di misurazione - Layout compatto */}
-          <div className="border rounded-md p-3 mb-3 bg-blue-50 border-blue-100">
-            <h3 className="text-sm font-semibold mb-2 text-blue-700">Dati di misurazione standardizzati</h3>
+          <div className="border rounded-md p-2 mb-1 bg-blue-50 border-blue-100">
+            <h3 className="text-sm font-semibold mb-1 text-blue-700">Dati di misurazione standardizzati</h3>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               {/* Prima colonna */}
               <div>
                 {/* Peso campione (grammi sample) */}
@@ -1331,7 +1331,7 @@ export default function OperationForm({
                   control={form.control}
                   name="sampleWeight"
                   render={({ field }) => (
-                    <FormItem className="mb-2">
+                    <FormItem className="mb-0">
                       <FormLabel className="text-xs">Grammi sample</FormLabel>
                       <FormControl>
                         <Input 
@@ -1363,7 +1363,7 @@ export default function OperationForm({
                   control={form.control}
                   name="liveAnimals"
                   render={({ field }) => (
-                    <FormItem className="mb-2">
+                    <FormItem className="mb-0">
                       <FormLabel className="text-xs">Numero animali vivi</FormLabel>
                       <FormControl>
                         <Input 
@@ -1434,7 +1434,7 @@ export default function OperationForm({
                   control={form.control}
                   name="totalSample"
                   render={({ field }) => (
-                    <FormItem className="mb-2">
+                    <FormItem className="mb-0">
                       <FormLabel className="text-xs">Totale sample</FormLabel>
                       <FormControl>
                         <Input 
@@ -1459,7 +1459,7 @@ export default function OperationForm({
                   control={form.control}
                   name="mortalityRate"
                   render={({ field }) => (
-                    <FormItem className="mb-2">
+                    <FormItem className="mb-0">
                       <FormLabel className="text-xs">% morti</FormLabel>
                       <FormControl>
                         <Input 
@@ -1484,7 +1484,7 @@ export default function OperationForm({
                   control={form.control}
                   name="manualCountAdjustment"
                   render={({ field }) => (
-                    <div className="flex items-center mt-4">
+                    <div className="flex items-center mt-1">
                       <input
                         type="checkbox"
                         id="manualCountAdjustment"
@@ -1677,7 +1677,7 @@ export default function OperationForm({
           />
 
           {/* SGR viene determinato automaticamente, mostriamo solo le informazioni sulla crescita */}
-          <div className="col-span-2 mb-2">
+          <div className="col-span-2 mb-1">
             <h3 className="text-sm font-semibold mb-1">Informazioni SGR</h3>
             {watchAnimalsPerKg && basketOperations && basketOperations.length > 0 ? (
               <div className="p-2 rounded-md border bg-muted/20 text-sm">
@@ -1907,8 +1907,8 @@ export default function OperationForm({
 
           {/* BILANCIO ANIMALI - Mostra il bilancio solo per prima-attivazione con lotto selezionato */}
           {watchType === 'prima-attivazione' && watchLotId && animalBalance && (
-            <div className="border rounded-md p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
+            <div className="border rounded-md p-2 bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 shadow-sm">
+              <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-semibold text-blue-900">
                   📊 Bilancio Animali - Lotto {animalBalance.supplierLotNumber || `#${animalBalance.lotId}`}
                 </h3>
@@ -1917,18 +1917,18 @@ export default function OperationForm({
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-1">
                 {/* Totale animali */}
-                <div className="bg-white rounded-md p-3 border border-blue-100">
-                  <div className="text-xs text-blue-600 font-medium mb-1">Totale Animali</div>
+                <div className="bg-white rounded-md p-2 border border-blue-100">
+                  <div className="text-xs text-blue-600 font-medium">Totale Animali</div>
                   <div className="text-2xl font-bold text-blue-900">
                     {animalBalance.totalAnimals?.toLocaleString('it-IT') || '0'}
                   </div>
                 </div>
 
                 {/* Animali già usati */}
-                <div className="bg-white rounded-md p-3 border border-orange-100">
-                  <div className="text-xs text-orange-600 font-medium mb-1">Già Utilizzati</div>
+                <div className="bg-white rounded-md p-2 border border-orange-100">
+                  <div className="text-xs text-orange-600 font-medium">Già Utilizzati</div>
                   <div className="text-2xl font-bold text-orange-900">
                     {animalBalance.usedAnimals?.toLocaleString('it-IT') || '0'}
                   </div>
