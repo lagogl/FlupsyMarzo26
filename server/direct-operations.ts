@@ -3,7 +3,7 @@
 
 import type { Express } from "express";
 import { db } from './db';
-import { operations, cycles, baskets } from '../shared/schema';
+import { operations, cycles, baskets, lots } from '../shared/schema';
 import { sql, eq, and, between } from 'drizzle-orm';
 import { broadcastMessage } from './websocket';
 import { BasketsCache } from './baskets-cache-service.js';
@@ -482,6 +482,46 @@ export function implementDirectOperationRoute(app: Express) {
       
       console.log("Dati operazione dopo la normalizzazione:");
       console.log(JSON.stringify(operationData, null, 2));
+      
+      // ===== VALIDAZIONE ANIMALI PER PRIMA-ATTIVAZIONE =====
+      if (operationData.type === 'prima-attivazione' && operationData.lotId && operationData.animalCount) {
+        console.log(`🔍 VALIDAZIONE ANIMALI - Operazione prima-attivazione: ${operationData.animalCount} animali da lotto ${operationData.lotId}`);
+        
+        // Recupera il lotto direttamente da operationData.lotId
+        const lotResult = await db.select().from(lots).where(eq(lots.id, operationData.lotId)).limit(1);
+        if (lotResult.length === 0) {
+          throw new Error(`Lotto non trovato: ${operationData.lotId}`);
+        }
+        
+        const lotData = lotResult[0];
+        const totalAnimalsInLot = lotData.animalCount || 0;
+        console.log(`✓ Lotto trovato: ID ${lotData.id}, totale animali: ${totalAnimalsInLot}`);
+        
+        // Calcola animali già utilizzati in altre operazioni "prima-attivazione" dello stesso lotto
+        const existingPrimaAttivazioniResult = await db
+          .select({ animalCount: operations.animalCount })
+          .from(operations)
+          .where(
+            and(
+              eq(operations.type, 'prima-attivazione'),
+              eq(operations.lotId, lotData.id)
+            )
+          );
+        
+        const usedAnimals = existingPrimaAttivazioniResult.reduce((sum, op) => sum + (op.animalCount || 0), 0);
+        const availableAnimals = totalAnimalsInLot - usedAnimals;
+        
+        console.log(`📊 BILANCIO ANIMALI LOTTO: Totale=${totalAnimalsInLot}, Usati=${usedAnimals}, Disponibili=${availableAnimals}`);
+        
+        // Valida
+        if (operationData.animalCount > availableAnimals) {
+          const message = `Non puoi usare ${operationData.animalCount} animali. Il lotto ha solo ${availableAnimals} animali disponibili (Totale: ${totalAnimalsInLot}, Già usati: ${usedAnimals})`;
+          console.error(`❌ ${message}`);
+          throw new Error(message);
+        }
+        
+        console.log(`✅ Validazione OK: ${operationData.animalCount} animali <= ${availableAnimals} disponibili`);
+      }
       
       // 4. LOGICA SPECIALIZZATA PER PRIMA ATTIVAZIONE
       if (operationData.type === 'prima-attivazione') {
