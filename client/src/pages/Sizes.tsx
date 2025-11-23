@@ -5,13 +5,17 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 import SizeForm from '@/components/SizeForm';
 
 export default function Sizes() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingSize, setEditingSize] = useState<any>(null);
+  const [editError, setEditError] = useState<string>('');
+  const { toast } = useToast();
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: 'asc' | 'desc';
@@ -63,6 +67,29 @@ export default function Sizes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
       setEditingSize(null);
+      setEditError('');
+      toast({
+        title: 'Taglia aggiornata',
+        description: 'I dati della taglia sono stati salvati correttamente'
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || 'Errore durante l\'aggiornamento della taglia';
+      
+      if (errorMessage.includes('PROTEZIONE DATI') || errorMessage.includes('range')) {
+        setEditError(
+          'I range (minAnimalsPerKg/maxAnimalsPerKg) di questa taglia non possono essere modificati perché è associata a operazioni esistenti. ' +
+          'Puoi modificare: nome, colore, e note.'
+        );
+      } else {
+        setEditError(errorMessage);
+      }
+      
+      toast({
+        variant: 'destructive',
+        title: 'Errore',
+        description: errorMessage
+      });
     }
   });
 
@@ -272,17 +299,29 @@ export default function Sizes() {
       {/* Edit Size Dialog */}
       <Dialog 
         open={editingSize !== null} 
-        onOpenChange={(open) => !open && setEditingSize(null)}>
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingSize(null);
+            setEditError('');
+          }
+        }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Modifica Taglia</DialogTitle>
           </DialogHeader>
           {editingSize && (
-            <SizeForm 
-              defaultValues={editingSize}
-              onSubmit={(data) => updateSizeMutation.mutate({ id: editingSize.id, ...data })} 
-              isLoading={updateSizeMutation.isPending}
-            />
+            <>
+              {editError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{editError}</AlertDescription>
+                </Alert>
+              )}
+              <SizeForm 
+                defaultValues={editingSize}
+                onSubmit={(data) => updateSizeMutation.mutate({ id: editingSize.id, ...data })} 
+                isLoading={updateSizeMutation.isPending}
+              />
+            </>
           )}
         </DialogContent>
       </Dialog>
