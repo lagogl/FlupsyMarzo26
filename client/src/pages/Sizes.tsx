@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Plus, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -43,8 +43,6 @@ export default function Sizes() {
   const { data: sizes, isLoading, refetch: refetchSizes } = useQuery({
     queryKey: ['/api/sizes'],
   });
-
-  const queryClient = useQueryClient();
 
   // Create mutation
   const createSizeMutation = useMutation({
