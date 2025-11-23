@@ -55,9 +55,9 @@ export default function Sizes() {
     onSuccess: () => {
       setIsCreateDialogOpen(false);
       // Attendiamo 2 secondi per assicurare che il server cache sia completamente invalidato
+      // Poi invalidiamo React Query cache che triggerà automaticamente il refetch
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-        refetchSizes();
       }, 2000); // 2 secondi per dare tempo al server di invalidare la cache
     }
   });
@@ -76,12 +76,11 @@ export default function Sizes() {
         title: 'Taglia aggiornata',
         description: 'I dati della taglia sono stati salvati correttamente'
       });
-      // Non invalidiamo subito - lasciamo che il WebSocket lo faccia
       // Attendiamo 2 secondi per assicurare che il server cache sia completamente invalidato
+      // Poi invalidiamo React Query cache che triggerà automaticamente il refetch
       setTimeout(() => {
-        console.log('🔄 Forzando refetch dopo mutation success');
+        console.log('🔄 Invalidando cache React Query dopo mutation success');
         queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-        refetchSizes();
       }, 2000); // 2 secondi per dare tempo al server di invalidare la cache
     },
     onError: (error: any) => {
