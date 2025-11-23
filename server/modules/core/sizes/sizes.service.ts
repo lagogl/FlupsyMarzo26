@@ -43,24 +43,27 @@ export class SizesService {
    * Create new size
    */
   async createSize(sizeData: any) {
-    this.invalidateCache();
-    return await storage.createSize(sizeData);
+    const result = await storage.createSize(sizeData);
+    this.invalidateCache(); // Invalida DOPO il salvataggio
+    return result;
   }
 
   /**
    * Update size
    */
   async updateSize(id: number, updateData: any) {
-    this.invalidateCache();
-    return await storage.updateSize(id, updateData);
+    const result = await storage.updateSize(id, updateData);
+    this.invalidateCache(); // Invalida DOPO il salvataggio
+    return result;
   }
 
   /**
    * Delete size
    */
   async deleteSize(id: number) {
-    this.invalidateCache();
-    return await storage.deleteSize(id);
+    const result = await storage.deleteSize(id);
+    this.invalidateCache(); // Invalida DOPO il salvataggio
+    return result;
   }
 
   /**
