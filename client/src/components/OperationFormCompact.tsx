@@ -229,6 +229,16 @@ export default function OperationFormCompact({
     enabled: !isLoading,
   });
 
+  // Fetch animal balance for prima-attivazione (DEVE ESSERE PRIMA DI isFormValid)
+  const { data: animalBalance, isLoading: isLoadingBalance } = useQuery({
+    queryKey: ['/api/operations/lot', watchLotId, 'animal-balance'],
+    queryFn: () => {
+      if (!watchLotId) return null;
+      return fetch(`/api/operations/lot/${watchLotId}/animal-balance`).then(res => res.json());
+    },
+    enabled: !!watchLotId && watchType === 'prima-attivazione',
+  });
+
   // Funzione per validare la data confrontando con l'ultima operazione
   const validateOperationDate = useMemo(() => {
     if (!watchDate || !watchBasketId || !watchCycleId || !operations) {
@@ -395,16 +405,6 @@ export default function OperationFormCompact({
   const { data: lots } = useQuery({ 
     queryKey: ['/api/lots/active'],
     enabled: !isLoading,
-  });
-  
-  // Fetch animal balance for prima-attivazione
-  const { data: animalBalance, isLoading: isLoadingBalance } = useQuery({
-    queryKey: ['/api/operations/lot', watchLotId, 'animal-balance'],
-    queryFn: () => {
-      if (!watchLotId) return null;
-      return fetch(`/api/operations/lot/${watchLotId}/animal-balance`).then(res => res.json());
-    },
-    enabled: !!watchLotId && watchType === 'prima-attivazione',
   });
 
   // WebSocket listeners identici a quelli della tabella operazioni che funzionano perfettamente
