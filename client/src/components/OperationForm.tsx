@@ -943,8 +943,8 @@ export default function OperationForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={onSubmitForm} className="space-y-1">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+      <form onSubmit={onSubmitForm} className="space-y-0">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5">
           {/* Step 1: Select FLUPSY */}
           <FormField
             control={form.control}
@@ -1134,14 +1134,14 @@ export default function OperationForm({
             // Mostra avviso per operazioni di Prima Attivazione
             if (watchType === 'prima-attivazione') {
               return (
-                <div className="col-span-1 md:col-span-2 rounded-md border border-blue-100 bg-blue-50 p-1 text-xs text-blue-600">
+                <div className="col-span-1 md:col-span-3 rounded-md border border-blue-100 bg-blue-50 p-0.5 text-xs text-blue-600">
                   <div className="flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="mr-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="font-medium">Un nuovo ciclo verrà creato automaticamente.</span>
+                    <span className="font-medium text-xs">Un nuovo ciclo verrà creato automaticamente.</span>
                   </div>
-                  <div className="mt-1 ml-7">
+                  <div className="mt-0 ml-5">
                     Operazione di Prima Attivazione genera un ciclo con codice automatico nel formato basket#-flupsy#-YYMM.
                   </div>
                 </div>
@@ -1320,10 +1320,10 @@ export default function OperationForm({
           />
 
           {/* Campi standardizzati per inserimento dati di misurazione - Layout compatto */}
-          <div className="border rounded-md p-1 mb-0 bg-blue-50 border-blue-100">
-            <h3 className="text-xs font-semibold mb-0 text-blue-700">Dati di misurazione standardizzati</h3>
+          <div className="col-span-1 md:col-span-3 border rounded-md p-1 mb-0 bg-blue-50 border-blue-100">
+            <h3 className="text-xs font-semibold mb-0.5 text-blue-700">Dati di misurazione standardizzati</h3>
             
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-1">
               {/* Prima colonna */}
               <div>
                 {/* Peso campione (grammi sample) */}
@@ -1331,8 +1331,8 @@ export default function OperationForm({
                   control={form.control}
                   name="sampleWeight"
                   render={({ field }) => (
-                    <FormItem className="mb-0">
-                      <FormLabel className="text-xs leading-none">Grammi sample</FormLabel>
+                    <FormItem className="mb-0.5">
+                      <FormLabel className="text-xs leading-none text-gray-600">Gr. Sample</FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
@@ -1363,8 +1363,8 @@ export default function OperationForm({
                   control={form.control}
                   name="liveAnimals"
                   render={({ field }) => (
-                    <FormItem className="mb-0">
-                      <FormLabel className="text-xs">Numero animali vivi</FormLabel>
+                    <FormItem className="mb-0.5">
+                      <FormLabel className="text-xs text-gray-600">N. Vivi</FormLabel>
                       <FormControl>
                         <Input 
                           type="text" 
@@ -1397,8 +1397,8 @@ export default function OperationForm({
                   control={form.control}
                   name="deadCount"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">Numero animali morti</FormLabel>
+                    <FormItem className="mb-0.5">
+                      <FormLabel className="text-xs text-gray-600">N. Morti</FormLabel>
                       <FormControl>
                         <Input 
                           type="text" 
