@@ -52,13 +52,14 @@ export default function Sizes() {
       method: 'POST',
       body: newSize
     }),
-    onSuccess: () => {
+    onSuccess: (newSize: any) => {
       setIsCreateDialogOpen(false);
-      // Attendiamo 2 secondi per assicurare che il server cache sia completamente invalidato
-      // Poi invalidiamo React Query cache che triggerà automaticamente il refetch
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-      }, 2000); // 2 secondi per dare tempo al server di invalidare la cache
+      // Aggiungi il nuovo dato alla cache React Query
+      const previousData = queryClient.getQueryData(['/api/sizes']) as any[];
+      if (previousData) {
+        const updatedData = [...previousData, newSize];
+        queryClient.setQueryData(['/api/sizes'], updatedData);
+      }
     }
   });
 
@@ -69,19 +70,22 @@ export default function Sizes() {
       method: 'PATCH',
       body: size
     }),
-    onSuccess: () => {
+    onSuccess: (updatedSize: any) => {
       setEditingSize(null);
       setEditError('');
       toast({
         title: 'Taglia aggiornata',
         description: 'I dati della taglia sono stati salvati correttamente'
       });
-      // Attendiamo 2 secondi per assicurare che il server cache sia completamente invalidato
-      // Poi invalidiamo React Query cache che triggerà automaticamente il refetch
-      setTimeout(() => {
-        console.log('🔄 Invalidando cache React Query dopo mutation success');
-        queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-      }, 2000); // 2 secondi per dare tempo al server di invalidare la cache
+      // Aggiorna la cache React Query con il dato appena ritornato dal server
+      // Questo evita il refetch completo e è molto più veloce
+      const previousData = queryClient.getQueryData(['/api/sizes']) as any[];
+      if (previousData) {
+        const updatedData = previousData.map(s => 
+          s.id === updatedSize.id ? updatedSize : s
+        );
+        queryClient.setQueryData(['/api/sizes'], updatedData);
+      }
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || 'Errore durante l\'aggiornamento della taglia';
