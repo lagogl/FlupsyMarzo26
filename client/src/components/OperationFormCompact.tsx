@@ -1009,34 +1009,10 @@ export default function OperationFormCompact({
     }
     
     // Chiamata diretta alla funzione di submit per gli altri casi
+    // Il parent (Operations.tsx) gestisce chiusura dialog, toast e invalidazione cache
     if (onSubmit) {
       console.log("Chiamata onSubmit con:", formattedValues);
       onSubmit(formattedValues);
-      
-      // Refresh ultra-ottimizzato: aggiorna solo ciò che è necessario
-      setTimeout(async () => {
-        try {
-          // Reset immediato del form per reattività
-          form.reset();
-          
-          // Mostra notifica immediata
-          toast({
-            title: "Operazione registrata",
-            description: "L'operazione è stata salvata con successo.",
-            variant: "default",
-          });
-          
-          // Invalida solo le operazioni (più veloce)
-          queryClient.invalidateQueries({ 
-            queryKey: ['/api/operations-optimized'],
-            exact: false,
-            refetchType: 'active'
-          });
-          
-        } catch (error) {
-          console.error("Errore durante l'aggiornamento:", error);
-        }
-      }, 200); // Ulteriormente ridotto per maggiore reattività
     }
   };
 
