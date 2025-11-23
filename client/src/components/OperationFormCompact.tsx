@@ -295,6 +295,12 @@ export default function OperationFormCompact({
     // Validazione specifica per tipo operazione
     switch (watchType) {
       case 'prima-attivazione':
+        // VALIDAZIONE ANIMALI DISPONIBILI: Blocca se supera il limite del lotto
+        if (animalBalance && watchAnimalCount && watchAnimalCount > animalBalance.availableAnimals) {
+          console.log('⛔ SUBMIT BLOCCATO: Animali richiesti superiori alla disponibilità del lotto');
+          return false;
+        }
+        
         if (watchManualCountAdjustment) {
           // Modalità manuale: richiede numero animali, animali per kg, mortalità (peso totale calcolato auto)
           const watchMortalityRate = form.watch("mortalityRate");
@@ -342,7 +348,7 @@ export default function OperationFormCompact({
       default:
         return false;
     }
-  }, [watchFlupsyId, watchBasketId, watchType, watchDate, watchLotId, watchAnimalsPerKg, watchSampleWeight, watchLiveAnimals, watchTotalWeight, watchManualCountAdjustment, watchAnimalCount, isDateValid, form, formErrors.animalsPerKg]);
+  }, [watchFlupsyId, watchBasketId, watchType, watchDate, watchLotId, watchAnimalsPerKg, watchSampleWeight, watchLiveAnimals, watchTotalWeight, watchManualCountAdjustment, watchAnimalCount, isDateValid, form, formErrors.animalsPerKg, animalBalance, watchCycleId]);
 
   // Query per ottenere dati da database
   const { data: flupsys } = useQuery({ 
@@ -1561,27 +1567,51 @@ export default function OperationFormCompact({
 
                 {/* BILANCIO ANIMALI - Solo per prima-attivazione */}
                 {watchType === 'prima-attivazione' && watchLotId && animalBalance && (
-                  <div className="col-span-1 border rounded-md p-3 bg-blue-50 border-blue-200">
-                    <div className="text-xs font-semibold text-blue-900 mb-2">📊 Bilancio Animali</div>
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="bg-white p-2 rounded border border-blue-100">
-                        <div className="text-xs text-blue-600">Totale</div>
-                        <div className="font-bold text-blue-900">{animalBalance.totalAnimals?.toLocaleString('it-IT') || '0'}</div>
-                      </div>
-                      <div className="bg-white p-2 rounded border border-orange-100">
-                        <div className="text-xs text-orange-600">Usati</div>
-                        <div className="font-bold text-orange-900">{animalBalance.usedAnimals?.toLocaleString('it-IT') || '0'}</div>
-                      </div>
-                      <div className={`p-2 rounded border ${animalBalance.availableAnimals > 0 ? 'bg-white border-green-100' : 'bg-red-100 border-red-300'}`}>
-                        <div className={`text-xs ${animalBalance.availableAnimals > 0 ? 'text-green-600' : 'text-red-600'}`}>Disp.</div>
-                        <div className={`font-bold ${animalBalance.availableAnimals > 0 ? 'text-green-900' : 'text-red-900'}`}>{animalBalance.availableAnimals?.toLocaleString('it-IT') || '0'}</div>
+                  <div className="col-span-1 space-y-2">
+                    <div className="border rounded-md p-3 bg-blue-50 border-blue-200">
+                      <div className="text-xs font-semibold text-blue-900 mb-2">📊 Bilancio Animali</div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-white p-2 rounded border border-blue-100">
+                          <div className="text-xs text-blue-600">Totale</div>
+                          <div className="font-bold text-blue-900">{animalBalance.totalAnimals?.toLocaleString('it-IT') || '0'}</div>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-orange-100">
+                          <div className="text-xs text-orange-600">Usati</div>
+                          <div className="font-bold text-orange-900">{animalBalance.usedAnimals?.toLocaleString('it-IT') || '0'}</div>
+                        </div>
+                        <div className={`p-2 rounded border ${animalBalance.availableAnimals > 0 ? 'bg-white border-green-100' : 'bg-red-100 border-red-300'}`}>
+                          <div className={`text-xs ${animalBalance.availableAnimals > 0 ? 'text-green-600' : 'text-red-600'}`}>Disp.</div>
+                          <div className={`font-bold ${animalBalance.availableAnimals > 0 ? 'text-green-900' : 'text-red-900'}`}>{animalBalance.availableAnimals?.toLocaleString('it-IT') || '0'}</div>
+                        </div>
                       </div>
                     </div>
+                    
+                    {/* ALERT GRANDE: Supera il limite */}
                     {watchAnimalCount && animalBalance.availableAnimals >= 0 && watchAnimalCount > animalBalance.availableAnimals && (
-                      <div className="text-xs text-red-700 mt-2 font-semibold">❌ Errore: Animali insufficienti!</div>
+                      <div className="bg-red-100 border-2 border-red-400 rounded-md p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="text-red-600 text-lg">⚠️</div>
+                          <div className="flex-1">
+                            <div className="text-sm font-bold text-red-900 mb-1">Animali insufficienti!</div>
+                            <div className="text-xs text-red-800">
+                              Stai tentando di usare <span className="font-bold">{watchAnimalCount.toLocaleString('it-IT')}</span> animali, 
+                              ma solo <span className="font-bold">{animalBalance.availableAnimals.toLocaleString('it-IT')}</span> sono disponibili.
+                            </div>
+                            <div className="text-xs text-red-700 mt-1 font-semibold">
+                              Eccedenza: <span className="font-bold">{(watchAnimalCount - animalBalance.availableAnimals).toLocaleString('it-IT')}</span> animali
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     )}
+                    
+                    {/* Conferma OK */}
                     {watchAnimalCount && animalBalance.availableAnimals >= 0 && watchAnimalCount <= animalBalance.availableAnimals && (
-                      <div className="text-xs text-green-700 mt-2 font-semibold">✅ OK: {(animalBalance.availableAnimals - watchAnimalCount).toLocaleString('it-IT')} rimasti</div>
+                      <div className="bg-green-50 border border-green-300 rounded-md p-2">
+                        <div className="text-xs text-green-700 font-semibold">
+                          ✅ OK: Dopo questa operazione rimarranno <span className="font-bold">{(animalBalance.availableAnimals - watchAnimalCount).toLocaleString('it-IT')}</span> animali disponibili
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
