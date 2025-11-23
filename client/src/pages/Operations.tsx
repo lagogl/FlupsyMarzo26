@@ -457,57 +457,6 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
 export default function Operations() {
   const queryClient = useQueryClient();
 
-  // Funzione per reset completo cache
-  const handleCompleteReset = async () => {
-    try {
-      // 1. Pulizia React Query cache
-      queryClient.clear();
-      
-      // 2. Pulizia localStorage
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
-      
-      // 3. Pulizia sessionStorage
-      sessionStorage.clear();
-      
-      // 4. Invalidazione cache server
-      await fetch('/api/cache/invalidate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          keys: ['operations', 'baskets', 'cycles', 'flupsys', 'sizes', 'lots', 'sgr']
-        })
-      });
-      
-      toast({
-        title: "Reset Cache Completato",
-        description: "Tutte le cache sono state pulite e i dati ricaricati",
-        duration: 3000
-      });
-      
-      // Refresh pagina dopo 1 secondo per vedere il toast
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
-      
-    } catch (error) {
-      toast({
-        title: "Errore Reset Cache",
-        description: "Si è verificato un errore durante la pulizia delle cache",
-        variant: "destructive",
-        duration: 5000
-      });
-    }
-  };
-
   // WebSocket listeners per aggiornamenti real-time
   useWebSocketMessage('operation_created', async () => {
     console.log('📋 OPERATIONS: Nuova operazione creata, aggiorno lista in real-time');
@@ -1762,17 +1711,6 @@ export default function Operations() {
           }}>
             <Plus className="h-4 w-4 mr-1" />
             Nuova Operazione
-          </Button>
-          
-          {/* Pulsante Debug Reset Cache - SEMPRE VISIBILE per Edge */}
-          <Button 
-            onClick={handleCompleteReset}
-            variant="destructive"
-            size="sm"
-            className="bg-red-600 hover:bg-red-700 text-white font-bold border-2 border-red-800 shadow-lg"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            🧹 PULISCI CACHE
           </Button>
         </div>
       </div>
