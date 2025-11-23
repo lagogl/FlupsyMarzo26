@@ -422,26 +422,14 @@ class OperationsService {
     console.log('🚀 CREATE OPERATION SERVICE - Ricevuto:', JSON.stringify(data, null, 2));
     
     // VALIDAZIONE: Controlla il numero di animali per "prima-attivazione"
-    if (data.type === 'prima-attivazione' && data.cycleId && data.animalCount) {
-      console.log(`🔍 VALIDAZIONE ANIMALI - Operazione prima-attivazione: ${data.animalCount} animali`);
+    // Usa data.lotId direttamente (può arrivare dal frontend senza cycleId)
+    if (data.type === 'prima-attivazione' && data.lotId && data.animalCount) {
+      console.log(`🔍 VALIDAZIONE ANIMALI - Operazione prima-attivazione: ${data.animalCount} animali da lotto ${data.lotId}`);
       
-      // Recupera il cycle per ottenere il lotId
-      const cycle = await db.select().from(cycles).where(eq(cycles.id, data.cycleId)).limit(1);
-      if (cycle.length === 0) {
-        throw new Error(`Ciclo non trovato: ${data.cycleId}`);
-      }
-      
-      const cycleData = cycle[0];
-      console.log(`✓ Ciclo trovato: ID ${cycleData.id}, lotId: ${cycleData.lotId}`);
-      
-      if (!cycleData.lotId) {
-        throw new Error(`Il ciclo non ha un lotto associato`);
-      }
-      
-      // Recupera il lotto
-      const lot = await db.select().from(lots).where(eq(lots.id, cycleData.lotId)).limit(1);
+      // Recupera il lotto direttamente da data.lotId
+      const lot = await db.select().from(lots).where(eq(lots.id, data.lotId)).limit(1);
       if (lot.length === 0) {
-        throw new Error(`Lotto non trovato: ${cycleData.lotId}`);
+        throw new Error(`Lotto non trovato: ${data.lotId}`);
       }
       
       const lotData = lot[0];
