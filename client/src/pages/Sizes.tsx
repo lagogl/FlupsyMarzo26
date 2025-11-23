@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Plus, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { useWebSocketMessage } from '@/lib/websocket';
 import SizeForm from '@/components/SizeForm';
 
 export default function Sizes() {
@@ -45,12 +44,6 @@ export default function Sizes() {
     queryKey: ['/api/sizes'],
   });
 
-  // Listen for WebSocket size updates
-  useWebSocketMessage('size_updated', () => {
-    // Invalida cache e ricarica i dati quando una taglia viene aggiornata
-    queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-    setTimeout(() => refetchSizes(), 200);
-  });
 
   // Create mutation
   const createSizeMutation = useMutation({
@@ -61,9 +54,11 @@ export default function Sizes() {
     }),
     onSuccess: () => {
       setIsCreateDialogOpen(false);
-      // Invalida la cache e ricarica subito i dati
-      queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-      setTimeout(() => refetchSizes(), 500); // Attendi 500ms per assicurare che il server abbia invalidato la cache
+      // Attendiamo 2 secondi per assicurare che il server cache sia completamente invalidato
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
+        refetchSizes();
+      }, 2000); // 2 secondi per dare tempo al server di invalidare la cache
     }
   });
 
@@ -81,9 +76,13 @@ export default function Sizes() {
         title: 'Taglia aggiornata',
         description: 'I dati della taglia sono stati salvati correttamente'
       });
-      // Invalida la cache e ricarica subito i dati
-      queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
-      setTimeout(() => refetchSizes(), 500); // Attendi 500ms per assicurare che il server abbia invalidato la cache
+      // Non invalidiamo subito - lasciamo che il WebSocket lo faccia
+      // Attendiamo 2 secondi per assicurare che il server cache sia completamente invalidato
+      setTimeout(() => {
+        console.log('🔄 Forzando refetch dopo mutation success');
+        queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
+        refetchSizes();
+      }, 2000); // 2 secondi per dare tempo al server di invalidare la cache
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || 'Errore durante l\'aggiornamento della taglia';
