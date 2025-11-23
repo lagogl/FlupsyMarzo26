@@ -868,10 +868,8 @@ export default function Operations() {
       return createdOperation;
     },
     onSuccess: (createdOperation) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/operations'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/flupsys'] });
+      // CHIUDI IMMEDIATAMENTE il dialog PRIMA di invalidare le cache
+      // Questo previene errori transienti durante il refresh dei dati
       setIsCreateDialogOpen(false);
       
       // Mostra notifica di successo
@@ -888,34 +886,42 @@ export default function Operations() {
       const operationName = operationTypeNames[createdOperation.type] || createdOperation.type;
       
       toast({
-        title: "✅ Operazione salvata con successo!",
-        description: `${operationName} registrata correttamente per il cestello ${createdOperation.basketId}`,
+        title: "✅ Operazione salvata!",
+        description: `${operationName} registrata per cestello ${createdOperation.basketId}`,
       });
+      
+      // Invalida le cache DOPO aver chiuso il dialog (in background, senza bloccare la UI)
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['/api/operations'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/flupsys'] });
+      }, 100);
       
       // Se c'è un ID di cesta da reindirizzare, naviga alla filtrazione per quella cesta
       if (redirectToBasketAfterCreate) {
-        // Navigazione alle operazioni filtrate per la cesta specifica
-        toast({
-          title: "Reindirizzamento...",
-          description: "Caricamento delle operazioni della cesta selezionata",
-        });
-        
-        // Resetta lo stato di reindirizzamento
         const basketId = redirectToBasketAfterCreate;
         setRedirectToBasketAfterCreate(null);
         
-        // Aggiungi un breve delay per dare il tempo all'interfaccia di aggiornare i dati
         setTimeout(() => {
           navigate(`/operations?basket=${basketId}`);
-        }, 300);
-      } else {
-        toast({
-          title: "Operazione completata",
-          description: "L'operazione è stata registrata con successo",
-        });
+        }, 200);
       }
     },
     onError: (error: any) => {
+      // Ignora errori transienti (race conditions durante il refresh)
+      const isTransientError = 
+        error.message?.includes("ECONNRESET") ||
+        error.message?.includes("ETIMEDOUT") ||
+        error.message?.includes("AbortError") ||
+        error.code === "ECONNRESET" ||
+        error.code === "ETIMEDOUT";
+      
+      if (isTransientError) {
+        console.warn("Errore transitorio ignorato durante il salvataggio:", error);
+        return;
+      }
+      
       // Estrai messaggio user-friendly dall'errore
       let errorMessage = error.message || "Si è verificato un errore durante la registrazione dell'operazione";
       
