@@ -967,9 +967,21 @@ export default function Operations() {
       }
     },
     onError: (error: any) => {
+      // Estrai messaggio user-friendly dall'errore
+      let errorMessage = error.message || "Si è verificato un errore durante la registrazione dell'operazione";
+      
+      // Se l'errore contiene "Non puoi usare", è un errore di validazione animali - mantieni il messaggio
+      if (errorMessage.includes("Non puoi usare")) {
+        // Il messaggio è già user-friendly
+      } else if (errorMessage.includes("JSON")) {
+        errorMessage = "Errore nella trasmissione dei dati. Controlla i valori inseriti.";
+      } else if (errorMessage.includes("timeout") || errorMessage.includes("Timeout")) {
+        errorMessage = "Il server ha impiegato troppo tempo a rispondere. Riprova.";
+      }
+      
       toast({
-        title: "Errore",
-        description: error.message || "Si è verificato un errore durante la registrazione dell'operazione",
+        title: "❌ Errore nella registrazione",
+        description: errorMessage,
         variant: "destructive",
       });
     }

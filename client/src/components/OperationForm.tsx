@@ -944,10 +944,7 @@ export default function OperationForm({
   return (
     <Form {...form}>
       <form onSubmit={onSubmitForm} className="space-y-0">
-        <div className="flex gap-0.5 h-[calc(90vh-160px)] overflow-hidden">
-          {/* COLONNA 1: Dati Operazione e Posizionamento */}
-          <div className="flex-1 overflow-y-auto border-r pr-0.5">
-            <div className="space-y-0.5 pr-0.5">
+        <div className="grid grid-cols-3 gap-0.5">
           {/* Step 1: Select FLUPSY */}
           <FormField
             control={form.control}
