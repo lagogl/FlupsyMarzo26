@@ -72,6 +72,9 @@ export class SizesService {
   private invalidateCache() {
     sizesCache.flushAll();
     console.log("🧹 SIZES SERVICE: Cache invalidated");
+    
+    // Invalida anche il cache privato in db-storage
+    storage.invalidateSizesCache();
   }
 }
 

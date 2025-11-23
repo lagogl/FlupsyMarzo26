@@ -1162,6 +1162,15 @@ export class DbStorage implements IStorage {
     
     return allSizes;
   }
+
+  /**
+   * Invalida il cache privato di sizes (chiamato da SizesService)
+   */
+  invalidateSizesCache() {
+    this.sizesCache = null;
+    this.sizesCacheTimestamp = 0;
+    console.log("🧹 DB-STORAGE: Sizes cache invalidated");
+  }
   
   // Added this method to support FLUPSY units view with main sizes data
   async getAllSizes(): Promise<Size[]> {
