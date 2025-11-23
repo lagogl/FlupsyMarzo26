@@ -41,25 +41,28 @@ export default function DraggableCalculator({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isMinimized, setIsMinimized] = useState(false);
   
-  // Dati del calcolatore - inizializzati a 0 per nuove misurazioni
-  const [sampleWeight, setSampleWeight] = useState(0);
+  // Dati del calcolatore - state stringa per input decimali, numeri per il resto
+  const [sampleWeightInput, setSampleWeightInput] = useState('');
   const [sampleCount, setSampleCount] = useState(0);
-  const [totalWeight, setTotalWeight] = useState(0);
+  const [totalWeightInput, setTotalWeightInput] = useState('');
   const [deadCount, setDeadCount] = useState(0);
   const [animalsPerKg, setAnimalsPerKg] = useState(initialData.animalsPerKg || 0);
   const [basketPosition, setBasketPosition] = useState(initialData.position || 1);
   
   const calculatorRef = useRef<HTMLDivElement>(null);
   
-  // Helper per normalizzare input decimali: accetta sia virgola che punto
-  const handleDecimalInput = (value: string): number => {
-    // Sostituisce virgola con punto per normalizzare
+  // Helper per convertire input stringa in numero (accetta virgola e punto)
+  const parseDecimalInput = (value: string): number => {
+    if (!value || value.trim() === '') return 0;
+    // Sostituisce virgola con punto
     const normalized = value.replace(',', '.');
-    // Converte a numero
     const num = parseFloat(normalized);
-    // Ritorna il numero se valido, altrimenti 0
     return isNaN(num) ? 0 : num;
   };
+  
+  // Converti input stringa in numeri per calcoli
+  const sampleWeight = parseDecimalInput(sampleWeightInput);
+  const totalWeight = parseDecimalInput(totalWeightInput);
   
   // Query per ottenere le taglie
   const { data: sizes = [] } = useQuery({
@@ -179,8 +182,14 @@ export default function DraggableCalculator({
                 <Input
                   type="text"
                   inputMode="decimal"
-                  value={sampleWeight || ''}
-                  onChange={(e) => setSampleWeight(handleDecimalInput(e.target.value))}
+                  value={sampleWeightInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Accetta solo numeri, punto e virgola
+                    if (value === '' || /^[0-9,.]*$/.test(value)) {
+                      setSampleWeightInput(value);
+                    }
+                  }}
                   className="h-7 text-xs"
                   placeholder="0"
                 />
@@ -189,8 +198,8 @@ export default function DraggableCalculator({
                 <Label className="text-xs text-blue-700">N° Animali Vivi</Label>
                 <Input
                   type="number"
-                  value={sampleCount}
-                  onChange={(e) => setSampleCount(Number(e.target.value))}
+                  value={sampleCount || ''}
+                  onChange={(e) => setSampleCount(Number(e.target.value) || 0)}
                   className="h-7 text-xs"
                 />
               </div>
@@ -199,8 +208,14 @@ export default function DraggableCalculator({
                 <Input
                   type="text"
                   inputMode="decimal"
-                  value={totalWeight || ''}
-                  onChange={(e) => setTotalWeight(handleDecimalInput(e.target.value))}
+                  value={totalWeightInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Accetta solo numeri, punto e virgola
+                    if (value === '' || /^[0-9,.]*$/.test(value)) {
+                      setTotalWeightInput(value);
+                    }
+                  }}
                   className="h-7 text-xs"
                   placeholder="0"
                 />
@@ -209,8 +224,8 @@ export default function DraggableCalculator({
                 <Label className="text-xs text-red-700">Animali Morti</Label>
                 <Input
                   type="number"
-                  value={deadCount}
-                  onChange={(e) => setDeadCount(Number(e.target.value))}
+                  value={deadCount || ''}
+                  onChange={(e) => setDeadCount(Number(e.target.value) || 0)}
                   className="h-7 text-xs"
                 />
               </div>
