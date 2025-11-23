@@ -28,6 +28,24 @@ export default function BackupPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   
+  const queryClient = useQueryClient();
+
+  // Funzione helper per invalidare tutte le cache critiche dopo una modifica del database
+  const invalidateAllCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/database/backups'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/lots'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/operations'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/sizes'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/flupsys'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/lots'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/mortality-rates'] });
+    // Invalida tutte le queries per assicurarsi che tutti i dati vengono ricaricati
+    queryClient.clear();
+  };
+
   // Mutation per ripristinare da file caricato
   const restoreFromFileMutation = useMutation({
     mutationFn: async ({ sqlContent, fileName }: { sqlContent: string, fileName: string }) => {
@@ -46,6 +64,8 @@ export default function BackupPage() {
       });
       setSelectedFile(null);
       setIsUploading(false);
+      // Invalida tutte le cache dopo il ripristino
+      invalidateAllCaches();
     },
     onError: (error) => {
       toast({
@@ -107,8 +127,6 @@ export default function BackupPage() {
     }
   };
 
-  const queryClient = useQueryClient();
-  
   // Query per recuperare i backup disponibili
   const { 
     data: backups = [], 
@@ -164,6 +182,8 @@ export default function BackupPage() {
         title: "Database ripristinato con successo",
         description: "Il database è stato ripristinato correttamente dal backup selezionato.",
       });
+      // Invalida tutte le cache dopo il ripristino
+      invalidateAllCaches();
     },
     onError: (error) => {
       toast({
