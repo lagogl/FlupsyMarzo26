@@ -54,6 +54,7 @@ import OrdiniCondivisi from "@/pages/OrdiniCondivisi";
 // Importazione AI Dashboard
 import AIDashboard from "@/pages/AIDashboard";
 import AIReportGenerator from "@/pages/AIReportGenerator";
+import AIEnhanced from "@/pages/AIEnhanced";
 // Importazione Giacenze Range
 import GiacenzeRange from "@/pages/GiacenzeRange";
 // Importazione Storico Vagliature
@@ -130,6 +131,7 @@ function Router() {
       <ProtectedRoute path="/sales-reports" component={SalesReports}/>
       <ProtectedRoute path="/ai-dashboard" component={AIDashboard}/>
       <ProtectedRoute path="/ai-report-generator" component={AIReportGenerator}/>
+      <ProtectedRoute path="/ai-enhanced" component={AIEnhanced}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
       <ProtectedRoute path="/task-management" component={TaskManagement}/>

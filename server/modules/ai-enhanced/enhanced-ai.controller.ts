@@ -25,7 +25,7 @@ import {
   RELATIONSHIP_GRAPH,
   KEY_METRICS
 } from "./metadata.service.js";
-import { db } from "../../db/index.js";
+import { db } from "../../db";
 
 /**
  * Registra routes per AI Enhanced
