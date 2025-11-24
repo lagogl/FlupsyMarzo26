@@ -107,10 +107,22 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     extractedTables.add(tableName);
   }
   
-  // Verifica che tutte le tabelle (escluse le CTEs) siano nella whitelist
+  // Lista di parole riservate SQL e funzioni che NON sono tabelle
+  const sqlReservedWords = new Set([
+    'current_date', 'current_time', 'current_timestamp', 'current_user',
+    'now', 'today', 'dual', 'unnest', 'generate_series',
+    'lateral', 'values', 'ordinality'
+  ]);
+  
+  // Verifica che tutte le tabelle (escluse le CTEs e parole riservate) siano nella whitelist
   for (const tableName of extractedTables) {
     // Ignora le CTEs (sono tabelle temporanee definite nella query stessa)
     if (cteNames.has(tableName)) {
+      continue;
+    }
+    
+    // Ignora parole riservate SQL e funzioni
+    if (sqlReservedWords.has(tableName)) {
       continue;
     }
     
