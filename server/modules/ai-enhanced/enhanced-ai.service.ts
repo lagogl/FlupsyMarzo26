@@ -8,6 +8,7 @@
  */
 
 import OpenAI from "openai";
+import { pool } from "../../db.js";
 import { 
   generateDatabaseDescription, 
   generateMinimalContext,
@@ -127,7 +128,29 @@ Domanda: "Quanto posso vendere di taglia TP-2800 il mese prossimo?"
 - Aggrega per FLUPSY quando serve vista d'insieme
 - Includi sempre range temporale nelle query per performance
 - Evita SELECT * - specifica solo i campi necessari
-- Usa subquery per calcoli complessi invece di query multiple`;
+- Usa subquery per calcoli complessi invece di query multiple
+
+# IMPORTANTE: CONVENZIONI NAMING DATABASE
+**CRITICAL**: Il database PostgreSQL usa SNAKE_CASE per tutti i nomi di colonne, NON camelCase!
+
+Esempi CORRETTI:
+- basket_id (NOT basketId)
+- cycle_id (NOT cycleId)
+- flupsy_id (NOT flupsyId)
+- size_id (NOT sizeId)
+- lot_id (NOT lotId)
+- animal_count (NOT animalCount)
+- total_weight (NOT totalWeight)
+- animals_per_kg (NOT animalsPerKg)
+- average_weight (NOT averageWeight)
+- dead_count (NOT deadCount)
+- mortality_rate (NOT mortalityRate)
+- physical_number (NOT physicalNumber)
+- current_cycle_id (NOT currentCycleId)
+- start_date (NOT startDate)
+- end_date (NOT endDate)
+
+**SEMPRE usa snake_case nelle query SQL!**`;
 }
 
 /**
@@ -267,8 +290,7 @@ export async function analyzeQuestionWithEnhancedAI(
  */
 export async function executeAndAnalyzeQuery(
   sqlQuery: string,
-  queryParams: any[],
-  db: any // Pool database Drizzle
+  queryParams: any[] = []
 ): Promise<{
   success: boolean;
   data?: any[];
@@ -283,8 +305,8 @@ export async function executeAndAnalyzeQuery(
       paramsCount: queryParams.length
     });
 
-    // Esegui query
-    const result = await db.execute({ sql: sqlQuery, params: queryParams });
+    // Esegui query usando il pool PostgreSQL direttamente
+    const result = await pool.query(sqlQuery, queryParams);
     
     console.log('✅ Query executed:', {
       rowCount: result.rows?.length || 0

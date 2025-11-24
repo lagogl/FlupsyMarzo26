@@ -25,7 +25,6 @@ import {
   RELATIONSHIP_GRAPH,
   KEY_METRICS
 } from "./metadata.service.js";
-import { db } from "../../db";
 
 /**
  * SECURITY: Tabelle accessibili per le query AI
@@ -78,12 +77,18 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
   }
   
   // 4. Verifica che acceda solo a tabelle permesse (estrazione tabelle dal SQL)
-  const fromMatches = lowerQuery.match(/\bfrom\s+(\w+)/gi) || [];
-  const joinMatches = lowerQuery.match(/\bjoin\s+(\w+)/gi) || [];
-  const allMatches = [...fromMatches, ...joinMatches];
+  // Regex migliorato: cattura nome tabella anche con alias (es. "FROM operations o" -> "operations")
+  const tableRegex = /\b(?:from|join)\s+([a-z_][a-z0-9_]*)/gi;
+  const matches = lowerQuery.matchAll(tableRegex);
+  const extractedTables = new Set<string>();
   
-  for (const match of allMatches) {
-    const tableName = match.replace(/^(from|join)\s+/i, '').trim();
+  for (const match of matches) {
+    const tableName = match[1]; // Gruppo di cattura: nome tabella
+    extractedTables.add(tableName);
+  }
+  
+  // Verifica che tutte le tabelle siano nella whitelist
+  for (const tableName of extractedTables) {
     if (!ALLOWED_TABLES.includes(tableName)) {
       return { valid: false, error: `Query non permessa: tabella '${tableName}' non nella whitelist` };
     }
@@ -319,7 +324,7 @@ export function registerEnhancedAIRoutes(app: Express) {
         limit
       });
 
-      const result = await executeAndAnalyzeQuery(finalQuery, queryParams, db);
+      const result = await executeAndAnalyzeQuery(finalQuery, queryParams);
 
       res.json(result);
 
@@ -400,8 +405,7 @@ export function registerEnhancedAIRoutes(app: Express) {
 
           queryResult = await executeAndAnalyzeQuery(
             finalQuery, 
-            aiResponse.queryParams || [], 
-            db
+            aiResponse.queryParams || []
           );
         } else {
           console.error('❌ SECURITY: Query bloccata in ask-and-execute:', validation.error);
