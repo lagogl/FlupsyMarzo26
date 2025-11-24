@@ -522,17 +522,160 @@ class OperationsService {
   }
 
   /**
-   * Aggiorna un'operazione
+   * Aggiorna un'operazione con validazioni di sicurezza
    */
   async updateOperation(id: number, data: any) {
+    console.log(`🔄 UPDATE OPERATION: Aggiornamento operazione ${id}`, data);
+    
+    // 1. Recupera l'operazione esistente
+    const [existingOperation] = await db
+      .select()
+      .from(operations)
+      .where(eq(operations.id, id))
+      .limit(1);
+    
+    if (!existingOperation) {
+      throw new Error(`Operazione ${id} non trovata`);
+    }
+    
+    console.log(`📋 Operazione esistente:`, existingOperation);
+    
+    // 2. BLOCCA modifiche a campi critici immutabili
+    if (data.basketId !== undefined && data.basketId !== existingOperation.basketId) {
+      throw new Error('Non è possibile modificare il cestello di un\'operazione esistente');
+    }
+    
+    if (data.cycleId !== undefined && data.cycleId !== existingOperation.cycleId) {
+      throw new Error('Non è possibile modificare il ciclo di un\'operazione esistente');
+    }
+    
+    // 3. Se viene modificata la data, applica validazioni
+    if (data.date && data.date !== existingOperation.date) {
+      console.log(`📅 Modifica data: ${existingOperation.date} → ${data.date}`);
+      
+      const basketId = existingOperation.basketId;
+      const cycleId = existingOperation.cycleId;
+      
+      // Recupera informazioni cestello per messaggi errore
+      const [basketInfo] = await db
+        .select({
+          physicalNumber: baskets.physicalNumber
+        })
+        .from(baskets)
+        .where(eq(baskets.id, basketId))
+        .limit(1);
+      
+      const physicalNumber = basketInfo?.physicalNumber || basketId;
+      
+      // Recupera tutte le altre operazioni dello stesso cestello e ciclo (escludendo quella in modifica)
+      // Gestisce sia cycleId definito che null
+      const whereConditions = [
+        eq(operations.basketId, basketId),
+        sql`${operations.id} != ${id}` // Escludi l'operazione che stiamo modificando
+      ];
+      
+      if (cycleId !== null) {
+        whereConditions.push(eq(operations.cycleId, cycleId));
+      } else {
+        // Se cycleId è null, recupera TUTTE le operazioni del cestello per validare
+        console.log(`⚠️ Operazione con cycleId null - validazione su tutte le operazioni del cestello`);
+      }
+      
+      const otherOperations = await db
+        .select()
+        .from(operations)
+        .where(and(...whereConditions))
+        .orderBy(sql`${operations.date} ASC`); // Ordine cronologico ascendente
+      
+      console.log(`🔍 Trovate ${otherOperations.length} altre operazioni${cycleId ? ` nel ciclo ${cycleId}` : ' nel cestello'}`);
+      
+      const newDate = new Date(data.date);
+      const newDateString = data.date;
+      
+      // VALIDAZIONE 1: Nessun'altra operazione nella stessa data
+      const sameDate = otherOperations.find(op => op.date === newDateString);
+      if (sameDate) {
+        throw new Error(
+          `Esiste già un'operazione (ID: ${sameDate.id}) per la cesta ${physicalNumber} nella data ${newDateString}. ` +
+          `Ogni cesta può avere massimo una operazione per data.`
+        );
+      }
+      
+      // VALIDAZIONE 2: Rispetta ordine cronologico
+      // Trova l'operazione immediatamente precedente e successiva nella nuova posizione temporale
+      let previousOp = null;
+      let nextOp = null;
+      
+      for (const op of otherOperations) {
+        const opDate = new Date(op.date);
+        
+        if (opDate < newDate) {
+          // Questa è potenzialmente l'operazione precedente
+          if (!previousOp || opDate > new Date(previousOp.date)) {
+            previousOp = op;
+          }
+        } else if (opDate > newDate) {
+          // Questa è potenzialmente l'operazione successiva
+          if (!nextOp || opDate < new Date(nextOp.date)) {
+            nextOp = op;
+          }
+        }
+      }
+      
+      // Verifica limiti temporali
+      if (previousOp) {
+        const prevDate = new Date(previousOp.date);
+        if (newDate <= prevDate) {
+          const prevDateStr = prevDate.toLocaleDateString('it-IT');
+          const minValidDate = new Date(prevDate);
+          minValidDate.setDate(minValidDate.getDate() + 1);
+          const minValidDateStr = minValidDate.toLocaleDateString('it-IT');
+          
+          throw new Error(
+            `⚠️ Data non valida: Esiste un'operazione precedente del ${prevDateStr}. ` +
+            `La nuova data deve essere dal ${minValidDateStr} in poi.`
+          );
+        }
+      }
+      
+      if (nextOp) {
+        const nextDate = new Date(nextOp.date);
+        if (newDate >= nextDate) {
+          const nextDateStr = nextDate.toLocaleDateString('it-IT');
+          const maxValidDate = new Date(nextDate);
+          maxValidDate.setDate(maxValidDate.getDate() - 1);
+          const maxValidDateStr = maxValidDate.toLocaleDateString('it-IT');
+          
+          throw new Error(
+            `⚠️ Data non valida: Esiste un'operazione successiva del ${nextDateStr}. ` +
+            `La nuova data deve essere fino al ${maxValidDateStr}.`
+          );
+        }
+      }
+      
+      console.log(`✅ Validazione data superata`);
+    }
+    
+    // 4. Esegui l'aggiornamento
     const [updated] = await db
       .update(operations)
       .set(data)
       .where(eq(operations.id, id))
       .returning();
     
-    // Invalida cache
+    console.log(`✅ Operazione ${id} aggiornata con successo`);
+    
+    // 5. Invalida cache
     OperationsCache.clear();
+    
+    // 6. Notifica WebSocket se disponibile
+    if (typeof (global as any).broadcastUpdate === 'function') {
+      console.log("✅ WEBSOCKET: Invio notifica per operazione modificata");
+      (global as any).broadcastUpdate('operation_updated', {
+        operation: updated,
+        message: `Operazione ${updated.type} modificata`
+      });
+    }
     
     return updated;
   }
