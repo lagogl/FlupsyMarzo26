@@ -114,33 +114,60 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     cteNames.add(match[1]); // Nomi delle CTEs aggiuntive
   }
   
-  // Poi estraiamo tutte le tabelle usate nelle clausole FROM e JOIN
-  // Regex migliorato: cattura nome tabella E alias opzionale
-  // Es: "FROM operations o" -> cattura "operations" e alias "o"
-  // Es: "FROM operations AS o" -> cattura "operations" e alias "o"
+  // Parser deterministico con blocklist esplicita
+  // STRATEGIA: Permettere alias arbitrari mappati a tabelle whitelisted,
+  // ma bloccare ESPLICITAMENTE alias che matchano tabelle sensibili note
   const tableRegex = /\b(?:from|join)\s+([a-z_][a-z0-9_]*)(?:\s+(?:as\s+)?([a-z_][a-z0-9_]*))?/gi;
   const matches = lowerQuery.matchAll(tableRegex);
   
-  // Map: table name -> alias (se esiste)
-  const tableToAliasMap = new Map<string, string>();
-  const tablesToValidate = new Set<string>(); // Solo le tabelle reali da validare
-  const knownAliases = new Set<string>(); // Solo alias (NON nomi di tabelle)
+  const tablesToValidate = new Set<string>();
+  const aliasToTable = new Map<string, string>(); // Mapping: alias → table_name
+  
+  // SECURITY: Lista esplicita di nomi tabella che NON possono essere usati come alias
+  // Questa è una lista conservativa delle tabelle più sensibili o comuni che non sono in whitelist
+  const FORBIDDEN_ALIAS_NAMES = [
+    // Tabelle sensibili (accesso negato)
+    'users', 'user', 'accounts', 'account',
+    'email_config', 'emails', 'mail',
+    'fatture_in_cloud_config', 'config', 'configs', 'configuration',
+    'notification_settings', 'settings',
+    // Tabelle comuni che potrebbero esistere ma non sono in whitelist
+    'logs', 'log', 'reports', 'report',
+    'sessions', 'session', 'tokens', 'token',
+    'permissions', 'roles', 'role'
+  ];
   
   for (const match of matches) {
-    const tableName = match[1]; // Gruppo 1: nome tabella o alias
-    const aliasName = match[2];  // Gruppo 2: alias esplicito (opzionale)
+    const firstToken = match[1];
+    const secondToken = match[2];
     
-    // Se c'è un alias esplicito, allora tableName è il nome reale della tabella
-    if (aliasName) {
-      tablesToValidate.add(tableName); // Valida il nome della tabella
-      knownAliases.add(aliasName);     // Memorizza l'alias per ignorarlo
-      tableToAliasMap.set(tableName, aliasName);
-    } else {
-      // Nessun alias: potrebbe essere un nome di tabella O un alias usato in un JOIN
-      // Lo aggiungiamo a tablesToValidate solo se non è un alias conosciuto
-      if (!knownAliases.has(tableName)) {
-        tablesToValidate.add(tableName);
+    if (secondToken) {
+      // Pattern: "FROM table_name alias"
+      
+      // 1. Valida sempre la tabella
+      tablesToValidate.add(firstToken);
+      
+      // 2. SECURITY: Blocca alias che coincidono con tabelle proibite
+      if (FORBIDDEN_ALIAS_NAMES.includes(secondToken)) {
+        return { 
+          valid: false, 
+          error: `Query non permessa: alias '${secondToken}' coincide con tabella sensibile` 
+        };
       }
+      
+      // 3. Registra mapping alias→table (permettendo alias arbitrari)
+      aliasToTable.set(secondToken, firstToken);
+      
+    } else {
+      // Pattern: "FROM something" (nessun alias)
+      
+      // Se è un alias registrato → skip (tabella sottostante già validata)
+      if (aliasToTable.has(firstToken)) {
+        continue;
+      }
+      
+      // Altrimenti → valida
+      tablesToValidate.add(firstToken);
     }
   }
   
