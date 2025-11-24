@@ -29,18 +29,19 @@ import {
 /**
  * SECURITY: Tabelle accessibili per le query AI
  * Esclude tabelle sensibili come users, passwords, api_keys
+ * NOTA: Nomi normalizzati in lowercase per confronto case-insensitive
  */
 const ALLOWED_TABLES = [
   'flupsys', 'baskets', 'cycles', 'operations', 'sizes', 'lots',
-  'sgr', 'sgrGiornalieri', 'sgrPerTaglia',
-  'screeningOperations', 'screeningSourceBaskets', 'screeningDestinationBaskets',
-  'selections', 'selectionSourceBaskets', 'selectionDestinationBaskets',
-  'advancedSales', 'saleBags', 'ddt', 'ddtRighe',
-  'ordini', 'ordiniRighe',
-  'task_operators', 'selectionTasks', 'selectionTaskBaskets', 'selectionTaskAssignments',
-  'basketLotComposition', 'basketGroups',
-  'lotLedger', 'mortalityRates',
-  'growthAnalysisRuns', 'basketGrowthProfiles'
+  'sgr', 'sgrgiornalieri', 'sgrpertaglia',
+  'screeningoperations', 'screeningsourcebaskets', 'screeningdestinationbaskets',
+  'selections', 'selectionsourcebaskets', 'selectiondestinationbaskets',
+  'advancedsales', 'salebags', 'ddt', 'ddtrighe',
+  'ordini', 'ordinirighe',
+  'task_operators', 'selectiontasks', 'selectiontaskbaskets', 'selectiontaskassignments',
+  'basketlotcomposition', 'basketgroups',
+  'lotledger', 'mortalityrates',
+  'growthanalysisruns', 'basketgrowthprofiles'
 ];
 
 /**
