@@ -371,11 +371,6 @@ export default function OperationFormCompact({
     enabled: !isLoading,
   });
   
-  const { data: sgrs } = useQuery({ 
-    queryKey: ['/api/sgr'],
-    enabled: !isLoading,
-  });
-  
   const { data: baskets, refetch: refetchBaskets } = useQuery({ 
     queryKey: ['/api/baskets', 'includeAll'],
     queryFn: async () => {
@@ -1590,97 +1585,6 @@ export default function OperationFormCompact({
                       </div>
                     )}
                   </div>
-                )}
-
-                {/* SGR Rate (calcolato automaticamente per operazioni su cicli attivi) */}
-                {watchType && watchType !== 'prima-attivazione' && watchType !== 'cessazione' && (
-                  <FormField
-                    control={form.control}
-                    name="sgrId"
-                    render={({ field }) => {
-                      // Calcola l'SGR automaticamente per operazioni su cicli attivi
-                      const calculatedSGR = useMemo(() => {
-                        const selectedBasket = baskets?.find(b => b.id === watchBasketId);
-                        const isActiveWithCycle = selectedBasket && (selectedBasket.state === 'active' || basketHasActiveCycle);
-                        
-                        if (!isActiveWithCycle || !operations || !watchAnimalsPerKg) return null;
-                        
-                        // Trova l'operazione di prima attivazione per questo cestello
-                        const firstActivationOp = operations.find((op: any) => 
-                          op.basketId === watchBasketId && 
-                          op.type === 'prima-attivazione'
-                        );
-                        
-                        if (!firstActivationOp || !firstActivationOp.averageWeight) return null;
-                        
-                        // Calcola i giorni trascorsi
-                        const currentDate = new Date(form.getValues('date') || new Date());
-                        const firstActivationDate = new Date(firstActivationOp.date);
-                        const daysDiff = Math.max(1, Math.floor((currentDate.getTime() - firstActivationDate.getTime()) / (1000 * 3600 * 24)));
-                        
-                        // Calcola il peso medio attuale
-                        const currentAvgWeight = watchAnimalsPerKg ? 1000 / watchAnimalsPerKg : 0;
-                        const initialAvgWeight = firstActivationOp.averageWeight;
-                        
-                        if (currentAvgWeight <= initialAvgWeight) return null;
-                        
-                        // Formula SGR: ((Peso finale / Peso iniziale)^(1/giorni) - 1) * 100
-                        const sgrDaily = (Math.pow(currentAvgWeight / initialAvgWeight, 1 / daysDiff) - 1) * 100;
-                        
-                        console.log('🧮 Calcolo SGR automatico:', {
-                          initialWeight: initialAvgWeight,
-                          currentWeight: currentAvgWeight,
-                          days: daysDiff,
-                          sgrDaily: sgrDaily.toFixed(3)
-                        });
-                        
-                        return {
-                          value: sgrDaily,
-                          display: `${sgrDaily.toFixed(2)}% (calcolato)`
-                        };
-                      }, [baskets, watchBasketId, basketHasActiveCycle, operations, watchAnimalsPerKg, form]);
-                      
-                      return (
-                        <FormItem className="mb-1">
-                          <FormLabel className="text-xs font-medium">Tasso SGR</FormLabel>
-                          {calculatedSGR ? (
-                            <div className="h-8 px-3 py-2 border border-input bg-gray-50 rounded-md text-sm flex items-center">
-                              <span className="text-green-700 font-medium">{calculatedSGR.display}</span>
-                            </div>
-                          ) : (
-                            <Select
-                              disabled={isLoading || !sgrs || sgrs.length === 0}
-                              value={field.value?.toString() || ''}
-                              onValueChange={(value) => field.onChange(Number(value))}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="h-8 text-sm">
-                                  <SelectValue placeholder="Seleziona tasso SGR" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {sgrs?.length > 0 ? sgrs.map((sgr: any) => (
-                                  <SelectItem key={sgr.id} value={sgr.id.toString()}>
-                                    {sgr.month} ({sgr.percentage}% giornaliero)
-                                  </SelectItem>
-                                )) : (
-                                  <SelectItem value="loading" disabled>
-                                    Caricamento SGR...
-                                  </SelectItem>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          )}
-                          {calculatedSGR && (
-                            <FormDescription className="text-xs text-green-600">
-                              SGR calcolato automaticamente dal confronto con la Prima Attivazione
-                            </FormDescription>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
                 )}
 
                 {/* Size selection (condizionale) */}
