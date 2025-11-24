@@ -21,11 +21,29 @@ import {
   AlertCircle,
   CheckCircle,
   Code,
-  Table as TableIcon
+  Table as TableIcon,
+  Download,
+  FileJson,
+  FileSpreadsheet
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { apiRequest } from "@/lib/queryClient";
 
 interface AIResponse {
@@ -52,11 +70,14 @@ interface HealthCheck {
   };
 }
 
+type OutputFormat = 'json' | 'table' | 'csv';
+
 export default function AIEnhanced() {
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState<AIResponse | null>(null);
   const [queryResult, setQueryResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('ask');
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>('table');
 
   // Health check
   const { data: healthData, isLoading: healthLoading } = useQuery<{ success: boolean } & HealthCheck>({
@@ -126,6 +147,7 @@ export default function AIEnhanced() {
     },
     onSuccess: (data) => {
       setQueryResult(data);
+      setOutputFormat('table'); // Reset to default format
     }
   });
 
@@ -148,7 +170,9 @@ export default function AIEnhanced() {
       }
       if (data.queryResult) {
         setQueryResult(data.queryResult);
+        setOutputFormat('table'); // Reset to default format
       }
+      setActiveTab('results');
     }
   });
 
@@ -168,6 +192,47 @@ export default function AIEnhanced() {
       sqlQuery: response.sqlQuery,
       queryParams: response.queryParams || []
     });
+  };
+
+  // Export functions
+  const downloadAsJSON = () => {
+    if (!queryResult?.data) return;
+    const blob = new Blob([JSON.stringify(queryResult.data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai-query-result-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAsCSV = () => {
+    if (!queryResult?.data || queryResult.data.length === 0) return;
+    
+    const headers = Object.keys(queryResult.data[0]);
+    const csvRows = [
+      headers.join(','),
+      ...queryResult.data.map((row: any) => 
+        headers.map(h => {
+          const value = row[h];
+          // Escape commas and quotes
+          if (value === null || value === undefined) return '';
+          const strValue = String(value);
+          if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+            return `"${strValue.replace(/"/g, '""')}"`;
+          }
+          return strValue;
+        }).join(',')
+      )
+    ];
+    
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai-query-result-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const exampleQuestions = [
@@ -426,18 +491,139 @@ export default function AIEnhanced() {
               {queryResult && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TableIcon className="h-5 w-5" />
-                      Risultati Query ({queryResult.rowCount || 0} righe)
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <TableIcon className="h-5 w-5" />
+                        Risultati Query ({queryResult.rowCount || 0} righe)
+                      </CardTitle>
+                      {queryResult.success && queryResult.data && queryResult.data.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <Select value={outputFormat} onValueChange={(v) => setOutputFormat(v as OutputFormat)}>
+                            <SelectTrigger className="w-[140px]" data-testid="select-output-format">
+                              <SelectValue placeholder="Formato" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="table">
+                                <div className="flex items-center gap-2">
+                                  <TableIcon className="h-4 w-4" />
+                                  Tabella
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="json">
+                                <div className="flex items-center gap-2">
+                                  <FileJson className="h-4 w-4" />
+                                  JSON
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="csv">
+                                <div className="flex items-center gap-2">
+                                  <FileSpreadsheet className="h-4 w-4" />
+                                  CSV
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            data-testid="button-download-json"
+                            variant="outline"
+                            size="sm"
+                            onClick={downloadAsJSON}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            JSON
+                          </Button>
+                          <Button
+                            data-testid="button-download-csv"
+                            variant="outline"
+                            size="sm"
+                            onClick={downloadAsCSV}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            CSV
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     {queryResult.success ? (
-                      <ScrollArea className="h-[400px]">
-                        <pre className="text-xs">
-                          {JSON.stringify(queryResult.data, null, 2)}
-                        </pre>
-                      </ScrollArea>
+                      queryResult.data && queryResult.data.length > 0 ? (
+                        <>
+                          {/* Table Format */}
+                          {outputFormat === 'table' && (
+                            <ScrollArea className="h-[500px] w-full">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    {Object.keys(queryResult.data[0]).map((key) => (
+                                      <TableHead key={key} className="font-bold whitespace-nowrap">
+                                        {key}
+                                      </TableHead>
+                                    ))}
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {queryResult.data.map((row: any, idx: number) => (
+                                    <TableRow key={idx} data-testid={`row-result-${idx}`}>
+                                      {Object.values(row).map((value: any, cellIdx: number) => (
+                                        <TableCell key={cellIdx} className="whitespace-nowrap">
+                                          {value === null || value === undefined ? (
+                                            <span className="text-muted-foreground italic">null</span>
+                                          ) : typeof value === 'object' ? (
+                                            <code className="text-xs">{JSON.stringify(value)}</code>
+                                          ) : (
+                                            String(value)
+                                          )}
+                                        </TableCell>
+                                      ))}
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </ScrollArea>
+                          )}
+
+                          {/* JSON Format */}
+                          {outputFormat === 'json' && (
+                            <ScrollArea className="h-[500px]">
+                              <pre className="text-xs bg-muted p-4 rounded">
+                                {JSON.stringify(queryResult.data, null, 2)}
+                              </pre>
+                            </ScrollArea>
+                          )}
+
+                          {/* CSV Format */}
+                          {outputFormat === 'csv' && (
+                            <ScrollArea className="h-[500px]">
+                              <pre className="text-xs font-mono bg-muted p-4 rounded">
+                                {(() => {
+                                  const headers = Object.keys(queryResult.data[0]);
+                                  const csvRows = [
+                                    headers.join(','),
+                                    ...queryResult.data.map((row: any) => 
+                                      headers.map(h => {
+                                        const value = row[h];
+                                        if (value === null || value === undefined) return '';
+                                        const strValue = String(value);
+                                        if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+                                          return `"${strValue.replace(/"/g, '""')}"`;
+                                        }
+                                        return strValue;
+                                      }).join(',')
+                                    )
+                                  ];
+                                  return csvRows.join('\n');
+                                })()}
+                              </pre>
+                            </ScrollArea>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Database className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>Nessun risultato trovato</p>
+                        </div>
+                      )
                     ) : (
                       <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
