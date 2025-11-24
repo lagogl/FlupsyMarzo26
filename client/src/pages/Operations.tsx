@@ -240,25 +240,29 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
   const onSubmit = (data: EditOperationFormData) => {
     console.log('Form submitted with data:', data);
     console.log('Derived values:', derivedValues);
+    console.log('Data date value:', data.date, 'Type:', typeof data.date);
     
+    // Costruisci payload pulito solo con i campi modificabili
     const payload = {
       id: operation.id,
       operation: {
-        ...operation,
-        // Usa la nuova data dal form se presente, altrimenti mantieni quella originale
+        // Data - formatta se presente e diversa dall'originale
         date: data.date ? format(data.date, 'yyyy-MM-dd') : operation.date,
-        notes: data.notes || operation.notes,
-        animalCount: data.animalCount || operation.animalCount,
-        totalWeight: data.totalWeight || operation.totalWeight,
-        deadCount: data.deadCount || operation.deadCount,
-        // Usa i valori calcolati o quelli esistenti
+        // Campi numerici
+        animalCount: data.animalCount ?? operation.animalCount,
+        totalWeight: data.totalWeight ?? operation.totalWeight,
+        deadCount: data.deadCount ?? operation.deadCount,
+        // Campi calcolati
         animalsPerKg: derivedValues.animalsPerKg || operation.animalsPerKg,
         averageWeight: derivedValues.averageWeight || operation.averageWeight,
-        mortalityRate: derivedValues.mortalityRate || operation.mortalityRate
+        mortalityRate: derivedValues.mortalityRate || operation.mortalityRate,
+        // Note
+        notes: data.notes || operation.notes
       }
     };
     
     console.log('Payload being sent:', payload);
+    console.log('Date in payload:', payload.operation.date);
     updateOperationMutation.mutate(payload);
   };
 
