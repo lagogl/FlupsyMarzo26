@@ -77,6 +77,25 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
   }
   
   // 4. Verifica che acceda solo a tabelle permesse (estrazione tabelle dal SQL)
+  // Prima, estraiamo tutte le CTEs (Common Table Expressions) definite con WITH ... AS
+  // Supporta: WITH cte AS, WITH RECURSIVE cte AS, WITH cte (col1, col2) AS, multiple CTEs
+  const cteRegex = /\bwith\s+(?:recursive\s+)?([a-z_][a-z0-9_]*)(?:\s*\([^)]*\))?\s+as\s*\(/gi;
+  const cteMatches = lowerQuery.matchAll(cteRegex);
+  const cteNames = new Set<string>();
+  
+  for (const match of cteMatches) {
+    cteNames.add(match[1]); // Nome della CTE temporanea
+  }
+  
+  // Gestisce anche CTEs multiple separate da virgola (WITH cte1 AS (...), cte2 AS (...))
+  const multipleCteRegex = /,\s*([a-z_][a-z0-9_]*)(?:\s*\([^)]*\))?\s+as\s*\(/gi;
+  const multipleCteMatches = lowerQuery.matchAll(multipleCteRegex);
+  
+  for (const match of multipleCteMatches) {
+    cteNames.add(match[1]); // Nomi delle CTEs aggiuntive
+  }
+  
+  // Poi estraiamo tutte le tabelle usate nelle clausole FROM e JOIN
   // Regex migliorato: cattura nome tabella anche con alias (es. "FROM operations o" -> "operations")
   const tableRegex = /\b(?:from|join)\s+([a-z_][a-z0-9_]*)/gi;
   const matches = lowerQuery.matchAll(tableRegex);
@@ -87,8 +106,14 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     extractedTables.add(tableName);
   }
   
-  // Verifica che tutte le tabelle siano nella whitelist
+  // Verifica che tutte le tabelle (escluse le CTEs) siano nella whitelist
   for (const tableName of extractedTables) {
+    // Ignora le CTEs (sono tabelle temporanee definite nella query stessa)
+    if (cteNames.has(tableName)) {
+      continue;
+    }
+    
+    // Verifica che la tabella reale sia nella whitelist
     if (!ALLOWED_TABLES.includes(tableName)) {
       return { valid: false, error: `Query non permessa: tabella '${tableName}' non nella whitelist` };
     }
