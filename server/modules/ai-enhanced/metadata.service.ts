@@ -244,7 +244,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     category: 'Analytics',
     fields: [
       { name: 'id', type: 'integer', description: 'ID univoco', required: true },
-      { name: 'month', type: 'text', description: 'Mese (es. January)', required: true },
+      { name: 'month', type: 'text', description: 'Mese in italiano minuscolo (es. gennaio, febbraio, marzo). IMPORTANT: When comparing with dates, use: LOWER(TO_CHAR(date_column, \'TMMonth\')) = LOWER(month)', required: true },
       { name: 'sizeId', type: 'integer', description: 'Taglia di riferimento', required: true },
       { name: 'calculatedSgr', type: 'real', description: 'SGR medio % per mese+taglia', required: true },
       { name: 'sampleCount', type: 'integer', description: 'Numero operazioni usate per calcolo', required: true },
