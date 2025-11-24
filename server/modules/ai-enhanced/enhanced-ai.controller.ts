@@ -115,14 +115,33 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
   }
   
   // Poi estraiamo tutte le tabelle usate nelle clausole FROM e JOIN
-  // Regex migliorato: cattura nome tabella anche con alias (es. "FROM operations o" -> "operations")
-  const tableRegex = /\b(?:from|join)\s+([a-z_][a-z0-9_]*)/gi;
+  // Regex migliorato: cattura nome tabella E alias opzionale
+  // Es: "FROM operations o" -> cattura "operations" e alias "o"
+  // Es: "FROM operations AS o" -> cattura "operations" e alias "o"
+  const tableRegex = /\b(?:from|join)\s+([a-z_][a-z0-9_]*)(?:\s+(?:as\s+)?([a-z_][a-z0-9_]*))?/gi;
   const matches = lowerQuery.matchAll(tableRegex);
-  const extractedTables = new Set<string>();
+  
+  // Map: table name -> alias (se esiste)
+  const tableToAliasMap = new Map<string, string>();
+  const tablesToValidate = new Set<string>(); // Solo le tabelle reali da validare
+  const knownAliases = new Set<string>(); // Solo alias (NON nomi di tabelle)
   
   for (const match of matches) {
-    const tableName = match[1]; // Gruppo di cattura: nome tabella
-    extractedTables.add(tableName);
+    const tableName = match[1]; // Gruppo 1: nome tabella o alias
+    const aliasName = match[2];  // Gruppo 2: alias esplicito (opzionale)
+    
+    // Se c'è un alias esplicito, allora tableName è il nome reale della tabella
+    if (aliasName) {
+      tablesToValidate.add(tableName); // Valida il nome della tabella
+      knownAliases.add(aliasName);     // Memorizza l'alias per ignorarlo
+      tableToAliasMap.set(tableName, aliasName);
+    } else {
+      // Nessun alias: potrebbe essere un nome di tabella O un alias usato in un JOIN
+      // Lo aggiungiamo a tablesToValidate solo se non è un alias conosciuto
+      if (!knownAliases.has(tableName)) {
+        tablesToValidate.add(tableName);
+      }
+    }
   }
   
   // Lista di parole riservate SQL e funzioni che NON sono tabelle
@@ -132,8 +151,9 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     'lateral', 'values', 'ordinality'
   ]);
   
-  // Verifica che tutte le tabelle (escluse le CTEs e parole riservate) siano nella whitelist
-  for (const tableName of extractedTables) {
+  // Verifica che tutte le tabelle REALI (escluse CTEs e parole riservate) siano nella whitelist
+  // SICUREZZA: Validazione SOLO su nomi di tabelle reali, MAI sugli alias
+  for (const tableName of tablesToValidate) {
     // Ignora le CTEs (sono tabelle temporanee definite nella query stessa)
     if (cteNames.has(tableName)) {
       continue;
@@ -145,6 +165,7 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     }
     
     // Verifica che la tabella reale sia nella whitelist
+    // IMPORTANTE: questo viene chiamato SOLO per nomi di tabelle reali, MAI per alias
     if (!ALLOWED_TABLES.includes(tableName)) {
       return { valid: false, error: `Query non permessa: tabella '${tableName}' non nella whitelist` };
     }
