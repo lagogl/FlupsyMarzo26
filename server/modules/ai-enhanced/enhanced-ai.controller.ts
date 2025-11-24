@@ -27,21 +27,39 @@ import {
 } from "./metadata.service.js";
 
 /**
- * SECURITY: Tabelle accessibili per le query AI
+ * SECURITY: Tabelle accessibili per le query AI  
  * Esclude tabelle sensibili come users, passwords, api_keys
  * NOTA: Nomi normalizzati in lowercase per confronto case-insensitive
+ * AGGIORNATO: 54 tabelle totali documentate
  */
 const ALLOWED_TABLES = [
+  // Core
   'flupsys', 'baskets', 'cycles', 'operations', 'sizes', 'lots',
-  'sgr', 'sgrgiornalieri', 'sgrpertaglia',
-  'screeningoperations', 'screeningsourcebaskets', 'screeningdestinationbaskets',
-  'selections', 'selectionsourcebaskets', 'selectiondestinationbaskets',
-  'advancedsales', 'salebags', 'ddt', 'ddtrighe',
-  'ordini', 'ordinirighe',
-  'task_operators', 'selectiontasks', 'selectiontaskbaskets', 'selectiontaskassignments',
   'basketlotcomposition', 'basketgroups',
-  'lotledger', 'mortalityrates',
-  'growthanalysisruns', 'basketgrowthprofiles'
+  // Analytics
+  'sgr', 'sgrgiornalieri', 'sgrpertaglia',
+  'growthanalysisruns', 'basketgrowthprofiles', 'growthdistributions',
+  'lotledger', 'lotinventorytransactions', 'lotmortalityrecords', 'mortalityrates',
+  'targetsizeannotations',
+  // Screening
+  'screeningoperations', 'screeningsourcebaskets', 'screeningdestinationbaskets',
+  'screeningbaskethistory', 'screeninglotreferences', 'screeningimpactanalysis',
+  // Selection
+  'selections', 'selectionsourcebaskets', 'selectiondestinationbaskets',
+  'selectionbaskethistory', 'selectionlotreferences',
+  'selectiontasks', 'selectiontaskbaskets', 'selectiontaskassignments',
+  'bagallocations',
+  // Sales
+  'advancedsales', 'salebags', 'saleoperationsref', 'ddt', 'ddtrighe', 'clienti',
+  // Orders  
+  'ordini', 'ordinirighe',
+  // Task operators
+  'task_operators',
+  // Sync
+  'externalcustomerssync', 'externaldeliveriessync', 'externaldeliverydetailssync',
+  'externalsalessync', 'syncstatus',
+  // Config (non-sensitive)
+  'notifications', 'notificationsettings', 'configurazione'
 ];
 
 /**

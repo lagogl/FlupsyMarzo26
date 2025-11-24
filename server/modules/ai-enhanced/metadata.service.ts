@@ -448,6 +448,673 @@ export const DATABASE_METADATA: TableMetadata[] = [
       'Valore totale ordini',
       'Tasso completamento ordini'
     ]
+  },
+
+  {
+    name: 'ordiniRighe',
+    description: 'Righe ordini - dettaglio righe ordini condivisi',
+    primaryKey: 'id',
+    category: 'Sales',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco riga', required: true },
+      { name: 'ordineId', type: 'integer', description: 'Ordine di appartenenza', required: true },
+      { name: 'prodottoId', type: 'integer', description: 'Prodotto ordinato', required: true },
+      { name: 'quantita', type: 'real', description: 'Quantità ordinata', required: true },
+      { name: 'quantitaConsegnata', type: 'real', description: 'Quantità consegnata', required: false },
+      { name: 'quantitaResidue', type: 'real', description: 'Quantità residua', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'ordini', foreignKey: 'ordineId', description: 'Riga in ordine' }
+    ],
+    keyMetrics: []
+  },
+
+  // ========== CORE - Tabelle aggiunte ==========
+  {
+    name: 'basketGroups',
+    description: 'Gruppi di cestelli - raggruppamento logico per gestione selezioni/task',
+    primaryKey: 'id',
+    category: 'Core',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco gruppo', required: true },
+      { name: 'name', type: 'text', description: 'Nome del gruppo (es. "Pronti vendita")', required: true },
+      { name: 'purpose', type: 'text', description: 'Scopo del gruppo', required: false },
+      { name: 'color', type: 'text', description: 'Colore evidenziazione (hex)', required: false },
+      { name: 'highlightOrder', type: 'integer', description: 'Ordine visualizzazione', required: false }
+    ],
+    relationships: [
+      { type: 'one-to-many', targetTable: 'baskets', foreignKey: 'groupId', description: 'Gruppo contiene molti cestelli' }
+    ],
+    keyMetrics: [
+      'Numero cestelli per gruppo',
+      'Utilizzo gruppi',
+      'Gruppi più frequenti'
+    ]
+  },
+
+  {
+    name: 'sgr',
+    description: 'SGR mensile globale - indici crescita medi per mese (fallback se SGR per taglia non disponibile)',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'month', type: 'text', description: 'Mese (January, February...)', required: true },
+      { name: 'percentage', type: 'real', description: 'Percentuale crescita mensile', required: true },
+      { name: 'calculatedFromReal', type: 'boolean', description: 'Se calcolato da dati reali', required: false }
+    ],
+    relationships: [],
+    keyMetrics: [
+      'SGR medio annuale',
+      'Variazione stagionale',
+      'Confronto SGR globale vs specifico per taglia'
+    ]
+  },
+
+  // ========== ANALYTICS - Tabelle crescita avanzate ==========
+  {
+    name: 'growthAnalysisRuns',
+    description: 'Esecuzioni analisi crescita AI - run di clustering e analisi predittiva',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco run', required: true },
+      { name: 'runDate', type: 'timestamp', description: 'Data esecuzione analisi', required: true },
+      { name: 'dataStartDate', type: 'date', description: 'Data inizio dati analizzati', required: true },
+      { name: 'dataEndDate', type: 'date', description: 'Data fine dati analizzati', required: true },
+      { name: 'totalBaskets', type: 'integer', description: 'Cestelli analizzati', required: true },
+      { name: 'algorithmVersion', type: 'text', description: 'Versione algoritmo', required: false }
+    ],
+    relationships: [
+      { type: 'one-to-many', targetTable: 'basketGrowthProfiles', foreignKey: 'analysisRunId', description: 'Run genera profili per cestelli' }
+    ],
+    keyMetrics: [
+      'Numero run di analisi',
+      'Accuratezza previsioni',
+      'Cestelli clusterizzati'
+    ]
+  },
+
+  {
+    name: 'basketGrowthProfiles',
+    description: 'Profili crescita cestelli - cluster di performance (fast/average/slow)',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco profilo', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello profilato', required: true },
+      { name: 'analysisRunId', type: 'integer', description: 'Run analisi', required: false },
+      { name: 'growthCluster', type: 'text', description: 'Cluster: fast/average/slow', required: false },
+      { name: 'sgrDeviation', type: 'real', description: 'Deviazione % da SGR medio', required: false },
+      { name: 'confidenceScore', type: 'real', description: 'Confidenza classificazione (0-1)', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Profilo di un cestello' },
+      { type: 'many-to-one', targetTable: 'growthAnalysisRuns', foreignKey: 'analysisRunId', description: 'Generato da run analisi' }
+    ],
+    keyMetrics: [
+      'Distribuzione cluster crescita',
+      'Accuratezza predizioni',
+      'Cestelli ad alta performance'
+    ]
+  },
+
+  {
+    name: 'growthDistributions',
+    description: 'Distribuzioni crescita - istogrammi e statistiche distribuzione peso/taglia',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello', required: true },
+      { name: 'operationId', type: 'integer', description: 'Operazione di riferimento', required: true },
+      { name: 'distributionData', type: 'jsonb', description: 'Dati distribuzione istogramma', required: true }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Distribuzione per cestello' },
+      { type: 'many-to-one', targetTable: 'operations', foreignKey: 'operationId', description: 'Distribuzione da operazione' }
+    ],
+    keyMetrics: [
+      'Uniformità distribuzione taglie',
+      'Varianza peso animali',
+      'Deviazione standard crescita'
+    ]
+  },
+
+  // ========== SCREENING - Tabelle dettaglio ==========
+  {
+    name: 'screeningSourceBaskets',
+    description: 'Cestelli origine vagliatura - cestelli sottoposti a vagliatura',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'screeningId', type: 'integer', description: 'Vagliatura di riferimento', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello origine', required: true },
+      { name: 'cycleId', type: 'integer', description: 'Ciclo attivo', required: true },
+      { name: 'dismissed', type: 'boolean', description: 'Se cestello dismesso', required: true },
+      { name: 'animalCount', type: 'integer', description: 'Animali pre-vagliatura', required: false },
+      { name: 'totalWeight', type: 'real', description: 'Peso totale pre-vagliatura', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'screeningOperations', foreignKey: 'screeningId', description: 'Cestello in vagliatura' },
+      { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Cestello origine' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'screeningDestinationBaskets',
+    description: 'Cestelli destinazione vagliatura - nuovi cestelli creati da vagliatura (sopra/sotto)',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'screeningId', type: 'integer', description: 'Vagliatura di riferimento', required: true },
+      { name: 'basketId', type: 'integer', description: 'Nuovo cestello', required: true },
+      { name: 'category', type: 'text', description: 'Categoria: sopra/sotto', required: true },
+      { name: 'animalCount', type: 'integer', description: 'Animali stimati', required: false },
+      { name: 'liveAnimals', type: 'integer', description: 'Animali vivi', required: false },
+      { name: 'deadCount', type: 'integer', description: 'Animali morti', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'screeningOperations', foreignKey: 'screeningId', description: 'Cestello da vagliatura' },
+      { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Nuovo cestello' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'screeningBasketHistory',
+    description: 'Storia cestelli vagliatura - tracciabilità modifiche durante vagliatura',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello', required: true },
+      { name: 'screeningId', type: 'integer', description: 'Vagliatura', required: true },
+      { name: 'eventType', type: 'text', description: 'Tipo evento', required: true },
+      { name: 'timestamp', type: 'timestamp', description: 'Timestamp evento', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'screeningLotReferences',
+    description: 'Riferimenti lotti vagliatura - traccia lotti coinvolti in vagliatura',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'screeningId', type: 'integer', description: 'Vagliatura', required: true },
+      { name: 'lotId', type: 'integer', description: 'Lotto', required: true },
+      { name: 'animalCount', type: 'integer', description: 'Animali del lotto vagliati', required: false }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'screeningImpactAnalysis',
+    description: 'Analisi impatto vagliatura - metriche qualità e risultati vagliatura',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'screeningId', type: 'integer', description: 'Vagliatura analizzata', required: true },
+      { name: 'totalMortality', type: 'integer', description: 'Mortalità totale', required: false },
+      { name: 'mortalityRate', type: 'real', description: 'Tasso mortalità %', required: false },
+      { name: 'qualityScore', type: 'real', description: 'Score qualità (0-100)', required: false }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  // ========== SELECTION - Tabelle dettaglio ==========
+  {
+    name: 'selectionSourceBaskets',
+    description: 'Cestelli origine selezione - cestelli selezionati per vendita/trasferimento',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'selectionId', type: 'integer', description: 'Selezione', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello origine', required: true },
+      { name: 'cycleId', type: 'integer', description: 'Ciclo attivo', required: true },
+      { name: 'animalCount', type: 'integer', description: 'Animali pre-selezione', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'selections', foreignKey: 'selectionId', description: 'Cestello in selezione' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'selectionDestinationBaskets',
+    description: 'Cestelli destinazione selezione - output della selezione (venduti/riposizionati)',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'selectionId', type: 'integer', description: 'Selezione', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello destinazione', required: true },
+      { name: 'destinationType', type: 'text', description: 'Tipo: sold/placed', required: true },
+      { name: 'animalCount', type: 'integer', description: 'Animali totali', required: false },
+      { name: 'liveAnimals', type: 'integer', description: 'Animali vivi', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'selections', foreignKey: 'selectionId', description: 'Cestello da selezione' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'selectionBasketHistory',
+    description: 'Storia cestelli selezione - tracciabilità modifiche durante selezione',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello', required: true },
+      { name: 'selectionId', type: 'integer', description: 'Selezione', required: true },
+      { name: 'eventType', type: 'text', description: 'Tipo evento', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'selectionLotReferences',
+    description: 'Riferimenti lotti selezione - traccia lotti coinvolti in selezione',
+    primaryKey: 'id',
+    category: 'Screening',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'selectionId', type: 'integer', description: 'Selezione', required: true },
+      { name: 'lotId', type: 'integer', description: 'Lotto', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'selectionTaskAssignments',
+    description: 'Assegnazioni task selezione - operatori assegnati a task di selezione',
+    primaryKey: 'id',
+    category: 'Operations',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'taskId', type: 'integer', description: 'Task selezione', required: true },
+      { name: 'operatorId', type: 'integer', description: 'Operatore assegnato', required: true },
+      { name: 'assignedAt', type: 'timestamp', description: 'Data assegnazione', required: true },
+      { name: 'completedAt', type: 'timestamp', description: 'Data completamento', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'selectionTasks', foreignKey: 'taskId', description: 'Assegnazione a task' },
+      { type: 'many-to-one', targetTable: 'task_operators', foreignKey: 'operatorId', description: 'Operatore assegnato' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'selectionTaskBaskets',
+    description: 'Cestelli nei task selezione - cestelli assegnati a task specifici',
+    primaryKey: 'id',
+    category: 'Operations',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'taskId', type: 'integer', description: 'Task', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello', required: true },
+      { name: 'flupsyId', type: 'integer', description: 'FLUPSY', required: true },
+      { name: 'completed', type: 'boolean', description: 'Se completato', required: true }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'selectionTasks', foreignKey: 'taskId', description: 'Cestello in task' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'bagAllocations',
+    description: 'Allocazioni sacchi - traccia distribuzione animali in sacchi durante selezione',
+    primaryKey: 'id',
+    category: 'Sales',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'selectionId', type: 'integer', description: 'Selezione', required: true },
+      { name: 'basketId', type: 'integer', description: 'Cestello origine', required: true },
+      { name: 'bagNumber', type: 'integer', description: 'Numero sacco', required: true },
+      { name: 'allocatedAnimals', type: 'integer', description: 'Animali allocati al sacco', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  // ========== SALES - Tabelle vendite ==========
+  {
+    name: 'saleBags',
+    description: 'Sacchi vendita - dettaglio sacchi in vendite avanzate',
+    primaryKey: 'id',
+    category: 'Sales',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco sacco', required: true },
+      { name: 'advancedSaleId', type: 'integer', description: 'Vendita avanzata', required: true },
+      { name: 'bagNumber', type: 'integer', description: 'Numero sacco progressivo', required: true },
+      { name: 'sizeCode', type: 'text', description: 'Codice taglia (es. TP-3000)', required: true },
+      { name: 'totalWeight', type: 'real', description: 'Peso totale sacco', required: true },
+      { name: 'animalCount', type: 'integer', description: 'Numero animali', required: true },
+      { name: 'animalsPerKg', type: 'real', description: 'Animali per kg', required: true }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'Sacco in vendita' }
+    ],
+    keyMetrics: [
+      'Sacchi per vendita',
+      'Peso medio sacchi',
+      'Distribuzione taglie vendute'
+    ]
+  },
+
+  {
+    name: 'saleOperationsRef',
+    description: 'Riferimenti operazioni vendita - collega operazioni a vendite',
+    primaryKey: 'id',
+    category: 'Sales',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'advancedSaleId', type: 'integer', description: 'Vendita', required: true },
+      { name: 'operationId', type: 'integer', description: 'Operazione collegata', required: true }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'Operazione di vendita' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'ddtRighe',
+    description: 'Righe DDT - dettaglio righe documenti di trasporto',
+    primaryKey: 'id',
+    category: 'Sales',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco riga', required: true },
+      { name: 'ddtId', type: 'integer', description: 'DDT di appartenenza', required: true },
+      { name: 'descrizione', type: 'text', description: 'Descrizione prodotto', required: true },
+      { name: 'quantita', type: 'decimal', description: 'Quantità', required: true },
+      { name: 'unitaMisura', type: 'text', description: 'Unità misura (es. NR, KG)', required: true },
+      { name: 'advancedSaleId', type: 'integer', description: 'Riferimento vendita avanzata', required: false },
+      { name: 'saleBagId', type: 'integer', description: 'Riferimento sacco vendita', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'ddt', foreignKey: 'ddtId', description: 'Riga in DDT' }
+    ],
+    keyMetrics: []
+  },
+
+  {
+    name: 'clienti',
+    description: 'Clienti Fatture in Cloud - clienti importati da Fatture in Cloud API',
+    primaryKey: 'id',
+    category: 'Sales',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco cliente', required: true },
+      { name: 'fiCloudId', type: 'integer', description: 'ID in Fatture in Cloud', required: true },
+      { name: 'nome', type: 'text', description: 'Nome cliente', required: true },
+      { name: 'codice', type: 'text', description: 'Codice cliente', required: false },
+      { name: 'indirizzo', type: 'text', description: 'Indirizzo', required: false },
+      { name: 'citta', type: 'text', description: 'Città', required: false },
+      { name: 'piva', type: 'text', description: 'Partita IVA', required: false }
+    ],
+    relationships: [],
+    keyMetrics: [
+      'Numero clienti attivi',
+      'Top clienti per volume vendite',
+      'Distribuzione geografica clienti'
+    ]
+  },
+
+  // ========== LOT TRACKING - Tracciabilità lotti ==========
+  {
+    name: 'lotLedger',
+    description: 'Registro movimenti lotti - libro mastro inventario lotti',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco movimento', required: true },
+      { name: 'date', type: 'date', description: 'Data movimento', required: true },
+      { name: 'lotId', type: 'integer', description: 'Lotto', required: true },
+      { name: 'type', type: 'text', description: 'Tipo: in/activation/transfer_out/transfer_in/sale/mortality', required: true },
+      { name: 'quantity', type: 'numeric', description: 'Quantità animali movimento', required: true },
+      { name: 'sourceCycleId', type: 'integer', description: 'Ciclo origine', required: false },
+      { name: 'destCycleId', type: 'integer', description: 'Ciclo destinazione', required: false }
+    ],
+    relationships: [
+      { type: 'many-to-one', targetTable: 'lots', foreignKey: 'lotId', description: 'Movimento di lotto' }
+    ],
+    keyMetrics: [
+      'Movimenti per lotto',
+      'Saldo inventario lotto',
+      'Turnover lotto'
+    ]
+  },
+
+  {
+    name: 'lotInventoryTransactions',
+    description: 'Transazioni inventario lotti - log dettagliato transazioni inventario',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco transazione', required: true },
+      { name: 'lotId', type: 'integer', description: 'Lotto', required: true },
+      { name: 'transactionDate', type: 'timestamp', description: 'Data transazione', required: true },
+      { name: 'transactionType', type: 'text', description: 'Tipo transazione', required: true },
+      { name: 'quantity', type: 'integer', description: 'Quantità', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'lotMortalityRecords',
+    description: 'Registri mortalità lotti - eventi mortalità per lotto',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco record', required: true },
+      { name: 'lotId', type: 'integer', description: 'Lotto', required: true },
+      { name: 'recordDate', type: 'date', description: 'Data registrazione', required: true },
+      { name: 'deadCount', type: 'integer', description: 'Numero morti', required: true },
+      { name: 'cause', type: 'text', description: 'Causa mortalità', required: false }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'mortalityRates',
+    description: 'Tassi mortalità - tassi medi mortalità per periodo/taglia',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'period', type: 'text', description: 'Periodo (mensile/trimestrale)', required: true },
+      { name: 'sizeId', type: 'integer', description: 'Taglia', required: false },
+      { name: 'mortalityRate', type: 'real', description: 'Tasso mortalità %', required: true },
+      { name: 'sampleSize', type: 'integer', description: 'Numero campioni', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'targetSizeAnnotations',
+    description: 'Annotazioni taglie target - note e obiettivi per taglie specifiche',
+    primaryKey: 'id',
+    category: 'Analytics',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'sizeId', type: 'integer', description: 'Taglia target', required: true },
+      { name: 'annotation', type: 'text', description: 'Nota/obiettivo', required: true },
+      { name: 'createdAt', type: 'timestamp', description: 'Data creazione', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  // ========== SYNC & CONFIG - Tabelle sincronizzazione e configurazione ==========
+  {
+    name: 'externalCustomersSync',
+    description: 'Sync clienti esterni - sincronizzazione clienti da app esterno',
+    primaryKey: 'id',
+    category: 'Sync',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'externalId', type: 'integer', description: 'ID cliente in app esterno', required: true },
+      { name: 'internalId', type: 'integer', description: 'ID cliente interno', required: false },
+      { name: 'lastSyncAt', type: 'timestamp', description: 'Ultimo sync', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'externalDeliveriesSync',
+    description: 'Sync consegne esterne - sincronizzazione consegne da app esterno',
+    primaryKey: 'id',
+    category: 'Sync',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'externalId', type: 'integer', description: 'ID consegna in app esterno', required: true },
+      { name: 'internalId', type: 'integer', description: 'ID consegna interno', required: false },
+      { name: 'lastSyncAt', type: 'timestamp', description: 'Ultimo sync', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'externalDeliveryDetailsSync',
+    description: 'Sync dettagli consegne esterne - sincronizzazione dettagli consegne',
+    primaryKey: 'id',
+    category: 'Sync',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'externalId', type: 'integer', description: 'ID dettaglio in app esterno', required: true },
+      { name: 'deliveryId', type: 'integer', description: 'ID consegna', required: true },
+      { name: 'lastSyncAt', type: 'timestamp', description: 'Ultimo sync', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'externalSalesSync',
+    description: 'Sync vendite esterne - sincronizzazione vendite da app esterno',
+    primaryKey: 'id',
+    category: 'Sync',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'externalId', type: 'integer', description: 'ID vendita in app esterno', required: true },
+      { name: 'internalId', type: 'integer', description: 'ID vendita interno', required: false },
+      { name: 'lastSyncAt', type: 'timestamp', description: 'Ultimo sync', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'syncStatus',
+    description: 'Stato sincronizzazioni - tracking stato sync tra sistemi',
+    primaryKey: 'id',
+    category: 'Sync',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'syncType', type: 'text', description: 'Tipo sync (customers/orders/deliveries)', required: true },
+      { name: 'lastSyncAt', type: 'timestamp', description: 'Ultimo sync riuscito', required: false },
+      { name: 'status', type: 'text', description: 'Stato: success/error/pending', required: true },
+      { name: 'errorMessage', type: 'text', description: 'Messaggio errore', required: false }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'notifications',
+    description: 'Notifiche - sistema notifiche utenti',
+    primaryKey: 'id',
+    category: 'Config',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco notifica', required: true },
+      { name: 'userId', type: 'integer', description: 'Utente destinatario', required: true },
+      { name: 'type', type: 'text', description: 'Tipo notifica', required: true },
+      { name: 'message', type: 'text', description: 'Messaggio', required: true },
+      { name: 'read', type: 'boolean', description: 'Se letta', required: true },
+      { name: 'createdAt', type: 'timestamp', description: 'Data creazione', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'notificationSettings',
+    description: 'Impostazioni notifiche - preferenze notifiche per utente',
+    primaryKey: 'id',
+    category: 'Config',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'userId', type: 'integer', description: 'Utente', required: true },
+      { name: 'emailEnabled', type: 'boolean', description: 'Email abilitate', required: true },
+      { name: 'pushEnabled', type: 'boolean', description: 'Push abilitate', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'emailConfig',
+    description: 'Configurazione email - impostazioni SMTP e email (SENSIBILE)',
+    primaryKey: 'id',
+    category: 'Config',
+    sensitiveFields: ['smtpPassword', 'apiKey'],
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'smtpHost', type: 'text', description: 'Host SMTP', required: true },
+      { name: 'smtpPort', type: 'integer', description: 'Porta SMTP', required: true },
+      { name: 'smtpUser', type: 'text', description: 'Username SMTP', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'fattureInCloudConfig',
+    description: 'Configurazione Fatture in Cloud - OAuth e API config (SENSIBILE)',
+    primaryKey: 'id',
+    category: 'Config',
+    sensitiveFields: ['accessToken', 'refreshToken', 'clientSecret'],
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'companyId', type: 'integer', description: 'ID azienda Fatture in Cloud', required: true },
+      { name: 'clientId', type: 'text', description: 'Client ID OAuth', required: true }
+    ],
+    relationships: [],
+    keyMetrics: []
+  },
+
+  {
+    name: 'configurazione',
+    description: 'Configurazione globale - impostazioni generali sistema',
+    primaryKey: 'id',
+    category: 'Config',
+    fields: [
+      { name: 'id', type: 'integer', description: 'ID univoco', required: true },
+      { name: 'chiave', type: 'text', description: 'Chiave configurazione', required: true },
+      { name: 'valore', type: 'text', description: 'Valore configurazione', required: false },
+      { name: 'descrizione', type: 'text', description: 'Descrizione', required: false }
+    ],
+    relationships: [],
+    keyMetrics: []
   }
 ];
 
