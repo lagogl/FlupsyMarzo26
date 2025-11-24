@@ -85,7 +85,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     ],
     relationships: [
       { type: 'many-to-one', targetTable: 'flupsys', foreignKey: 'flupsyId', description: 'Cestello appartiene a un FLUPSY' },
-      { type: 'many-to-one', targetTable: 'basket_groups', foreignKey: 'groupId', description: 'Cestello può appartenere a un gruppo' },
+      { type: 'many-to-one', targetTable: 'basketGroups', foreignKey: 'groupId', description: 'Cestello può appartenere a un gruppo' },
       { type: 'one-to-many', targetTable: 'cycles', foreignKey: 'basketId', description: 'Cestello ha molti cicli produttivi' },
       { type: 'one-to-many', targetTable: 'operations', foreignKey: 'basketId', description: 'Cestello ha molte operazioni' }
     ],
@@ -143,7 +143,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     relationships: [
       { type: 'one-to-many', targetTable: 'cycles', foreignKey: 'lotId', description: 'Lotto usato in molti cicli' },
       { type: 'many-to-one', targetTable: 'sizes', foreignKey: 'sizeId', description: 'Lotto ha taglia iniziale' },
-      { type: 'one-to-many', targetTable: 'basket_lot_composition', foreignKey: 'lotId', description: 'Lotto può essere misto in cestelli' }
+      { type: 'one-to-many', targetTable: 'basketLotComposition', foreignKey: 'lotId', description: 'Lotto può essere misto in cestelli' }
     ],
     keyMetrics: [
       'Animali rimanenti nel lotto',
@@ -168,7 +168,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     ],
     relationships: [
       { type: 'one-to-many', targetTable: 'operations', foreignKey: 'sizeId', description: 'Taglia usata in molte operazioni' },
-      { type: 'one-to-many', targetTable: 'sgr_per_taglia', foreignKey: 'sizeId', description: 'Taglia ha SGR specifico' }
+      { type: 'one-to-many', targetTable: 'sgrPerTaglia', foreignKey: 'sizeId', description: 'Taglia ha SGR specifico' }
     ],
     keyMetrics: [
       'Numero operazioni per taglia',
@@ -212,7 +212,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'basket_lot_composition',
+    name: 'basketLotComposition',
     description: 'Composizione lotti misti nei cestelli - traccia percentuali di più lotti',
     primaryKey: 'id',
     category: 'Core',
@@ -238,7 +238,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== GROWTH & ANALYTICS ==========
   {
-    name: 'sgr_per_taglia',
+    name: 'sgrPerTaglia',
     description: 'SGR (Specific Growth Rate) calcolato per taglia e mese - indice crescita specifico',
     primaryKey: 'id',
     category: 'Analytics',
@@ -261,7 +261,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'sgr_giornalieri',
+    name: 'sgrGiornalieri',
     description: 'Dati giornalieri ambientali da sonda Seneye - temperatura, pH, ossigeno',
     primaryKey: 'id',
     category: 'Analytics',
@@ -284,7 +284,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== SCREENING & SELECTION ==========
   {
-    name: 'screening_operations',
+    name: 'screeningOperations',
     description: 'Operazioni di vagliatura - separazione molluschi per dimensione',
     primaryKey: 'id',
     category: 'Screening',
@@ -296,8 +296,8 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'status', type: 'text', description: 'Stato: draft, completed, cancelled', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'screening_source_baskets', foreignKey: 'screeningId', description: 'Cestelli origine vagliatura' },
-      { type: 'one-to-many', targetTable: 'screening_destination_baskets', foreignKey: 'screeningId', description: 'Cestelli destinazione vagliatura' }
+      { type: 'one-to-many', targetTable: 'screeningSourceBaskets', foreignKey: 'screeningId', description: 'Cestelli origine vagliatura' },
+      { type: 'one-to-many', targetTable: 'screeningDestinationBaskets', foreignKey: 'screeningId', description: 'Cestelli destinazione vagliatura' }
     ],
     keyMetrics: [
       'Numero cestelli vagl iati',
@@ -320,8 +320,8 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'status', type: 'text', description: 'Stato: draft, completed, cancelled', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'selection_source_baskets', foreignKey: 'selectionId', description: 'Cestelli origine selezione' },
-      { type: 'one-to-many', targetTable: 'selection_destination_baskets', foreignKey: 'selectionId', description: 'Cestelli destinazione selezione' }
+      { type: 'one-to-many', targetTable: 'selectionSourceBaskets', foreignKey: 'selectionId', description: 'Cestelli origine selezione' },
+      { type: 'one-to-many', targetTable: 'selectionDestinationBaskets', foreignKey: 'selectionId', description: 'Cestelli destinazione selezione' }
     ],
     keyMetrics: [
       'Numero selezioni per scopo',
@@ -332,7 +332,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== SALES & DDT ==========
   {
-    name: 'advanced_sales',
+    name: 'advancedSales',
     description: 'Vendite avanzate - master vendite con clienti e documenti',
     primaryKey: 'id',
     category: 'Sales',
@@ -344,7 +344,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'status', type: 'text', description: 'Stato: draft, confirmed, delivered', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'sale_bags', foreignKey: 'saleId', description: 'Sacchi della vendita' },
+      { type: 'one-to-many', targetTable: 'saleBags', foreignKey: 'saleId', description: 'Sacchi della vendita' },
       { type: 'one-to-many', targetTable: 'ddt', foreignKey: 'advancedSaleId', description: 'DDT della vendita' }
     ],
     keyMetrics: [
@@ -367,7 +367,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'customerSnapshot', type: 'jsonb', description: 'Snapshot dati cliente immutabile', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'advanced_sales', foreignKey: 'advancedSaleId', description: 'DDT per vendita avanzata' },
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'DDT per vendita avanzata' },
       { type: 'one-to-many', targetTable: 'ddtRighe', foreignKey: 'ddtId', description: 'Righe del DDT' }
     ],
     keyMetrics: [
@@ -394,7 +394,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'active', type: 'boolean', description: 'Operatore attivo', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'selection_task_assignments', foreignKey: 'operatorId', description: 'Attività assegnate' }
+      { type: 'one-to-many', targetTable: 'selectionTaskAssignments', foreignKey: 'operatorId', description: 'Attività assegnate' }
     ],
     keyMetrics: [
       'Numero operatori attivi',
@@ -405,7 +405,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'selection_tasks',
+    name: 'selectionTasks',
     description: 'Attività di selezione - task assegnati agli operatori',
     primaryKey: 'id',
     category: 'Operations',
@@ -417,8 +417,8 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'dueDate', type: 'date', description: 'Scadenza task', required: false }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'selection_task_assignments', foreignKey: 'taskId', description: 'Assegnazioni task' },
-      { type: 'one-to-many', targetTable: 'selection_task_baskets', foreignKey: 'taskId', description: 'Cestelli del task' }
+      { type: 'one-to-many', targetTable: 'selectionTaskAssignments', foreignKey: 'taskId', description: 'Assegnazioni task' },
+      { type: 'one-to-many', targetTable: 'selectionTaskBaskets', foreignKey: 'taskId', description: 'Cestelli del task' }
     ],
     keyMetrics: [
       'Task completati vs pendenti',
@@ -441,7 +441,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'statoOrdine', type: 'text', description: 'Stato: pending, in_progress, completed', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'ordini_righe', foreignKey: 'ordineId', description: 'Righe ordine' }
+      { type: 'one-to-many', targetTable: 'ordiniRighe', foreignKey: 'ordineId', description: 'Righe ordine' }
     ],
     keyMetrics: [
       'Ordini aperti',
@@ -451,7 +451,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'ordini_righe',
+    name: 'ordiniRighe',
     description: 'Righe ordini - dettaglio righe ordini condivisi',
     primaryKey: 'id',
     category: 'Sales',
@@ -471,7 +471,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== CORE - Tabelle aggiunte ==========
   {
-    name: 'basket_groups',
+    name: 'basketGroups',
     description: 'Gruppi di cestelli - raggruppamento logico per gestione selezioni/task',
     primaryKey: 'id',
     category: 'Core',
@@ -513,7 +513,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== ANALYTICS - Tabelle crescita avanzate ==========
   {
-    name: 'growth_analysis_runs',
+    name: 'growthAnalysisRuns',
     description: 'Esecuzioni analisi crescita AI - run di clustering e analisi predittiva',
     primaryKey: 'id',
     category: 'Analytics',
@@ -526,7 +526,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'algorithmVersion', type: 'text', description: 'Versione algoritmo', required: false }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'basket_growth_profiles', foreignKey: 'analysisRunId', description: 'Run genera profili per cestelli' }
+      { type: 'one-to-many', targetTable: 'basketGrowthProfiles', foreignKey: 'analysisRunId', description: 'Run genera profili per cestelli' }
     ],
     keyMetrics: [
       'Numero run di analisi',
@@ -536,7 +536,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'basket_growth_profiles',
+    name: 'basketGrowthProfiles',
     description: 'Profili crescita cestelli - cluster di performance (fast/average/slow)',
     primaryKey: 'id',
     category: 'Analytics',
@@ -550,7 +550,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     ],
     relationships: [
       { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Profilo di un cestello' },
-      { type: 'many-to-one', targetTable: 'growth_analysis_runs', foreignKey: 'analysisRunId', description: 'Generato da run analisi' }
+      { type: 'many-to-one', targetTable: 'growthAnalysisRuns', foreignKey: 'analysisRunId', description: 'Generato da run analisi' }
     ],
     keyMetrics: [
       'Distribuzione cluster crescita',
@@ -560,7 +560,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'growth_distributions',
+    name: 'growthDistributions',
     description: 'Distribuzioni crescita - istogrammi e statistiche distribuzione peso/taglia',
     primaryKey: 'id',
     category: 'Analytics',
@@ -583,7 +583,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== SCREENING - Tabelle dettaglio ==========
   {
-    name: 'screening_source_baskets',
+    name: 'screeningSourceBaskets',
     description: 'Cestelli origine vagliatura - cestelli sottoposti a vagliatura',
     primaryKey: 'id',
     category: 'Screening',
@@ -597,14 +597,14 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'totalWeight', type: 'real', description: 'Peso totale pre-vagliatura', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'screening_operations', foreignKey: 'screeningId', description: 'Cestello in vagliatura' },
+      { type: 'many-to-one', targetTable: 'screeningOperations', foreignKey: 'screeningId', description: 'Cestello in vagliatura' },
       { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Cestello origine' }
     ],
     keyMetrics: []
   },
 
   {
-    name: 'screening_destination_baskets',
+    name: 'screeningDestinationBaskets',
     description: 'Cestelli destinazione vagliatura - nuovi cestelli creati da vagliatura (sopra/sotto)',
     primaryKey: 'id',
     category: 'Screening',
@@ -618,14 +618,14 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'deadCount', type: 'integer', description: 'Animali morti', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'screening_operations', foreignKey: 'screeningId', description: 'Cestello da vagliatura' },
+      { type: 'many-to-one', targetTable: 'screeningOperations', foreignKey: 'screeningId', description: 'Cestello da vagliatura' },
       { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Nuovo cestello' }
     ],
     keyMetrics: []
   },
 
   {
-    name: 'screening_basket_history',
+    name: 'screeningBasketHistory',
     description: 'Storia cestelli vagliatura - tracciabilità modifiche durante vagliatura',
     primaryKey: 'id',
     category: 'Screening',
@@ -641,7 +641,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'screening_lot_references',
+    name: 'screeningLotReferences',
     description: 'Riferimenti lotti vagliatura - traccia lotti coinvolti in vagliatura',
     primaryKey: 'id',
     category: 'Screening',
@@ -656,7 +656,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'screening_impact_analysis',
+    name: 'screeningImpactAnalysis',
     description: 'Analisi impatto vagliatura - metriche qualità e risultati vagliatura',
     primaryKey: 'id',
     category: 'Screening',
@@ -673,7 +673,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== SELECTION - Tabelle dettaglio ==========
   {
-    name: 'selection_source_baskets',
+    name: 'selectionSourceBaskets',
     description: 'Cestelli origine selezione - cestelli selezionati per vendita/trasferimento',
     primaryKey: 'id',
     category: 'Screening',
@@ -691,7 +691,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'selection_destination_baskets',
+    name: 'selectionDestinationBaskets',
     description: 'Cestelli destinazione selezione - output della selezione (venduti/riposizionati)',
     primaryKey: 'id',
     category: 'Screening',
@@ -710,7 +710,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'selection_basket_history',
+    name: 'selectionBasketHistory',
     description: 'Storia cestelli selezione - tracciabilità modifiche durante selezione',
     primaryKey: 'id',
     category: 'Screening',
@@ -725,7 +725,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'selection_lot_references',
+    name: 'selectionLotReferences',
     description: 'Riferimenti lotti selezione - traccia lotti coinvolti in selezione',
     primaryKey: 'id',
     category: 'Screening',
@@ -739,7 +739,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'selection_task_assignments',
+    name: 'selectionTaskAssignments',
     description: 'Assegnazioni task selezione - operatori assegnati a task di selezione',
     primaryKey: 'id',
     category: 'Operations',
@@ -751,14 +751,14 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'completedAt', type: 'timestamp', description: 'Data completamento', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'selection_tasks', foreignKey: 'taskId', description: 'Assegnazione a task' },
+      { type: 'many-to-one', targetTable: 'selectionTasks', foreignKey: 'taskId', description: 'Assegnazione a task' },
       { type: 'many-to-one', targetTable: 'task_operators', foreignKey: 'operatorId', description: 'Operatore assegnato' }
     ],
     keyMetrics: []
   },
 
   {
-    name: 'selection_task_baskets',
+    name: 'selectionTaskBaskets',
     description: 'Cestelli nei task selezione - cestelli assegnati a task specifici',
     primaryKey: 'id',
     category: 'Operations',
@@ -770,13 +770,13 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'completed', type: 'boolean', description: 'Se completato', required: true }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'selection_tasks', foreignKey: 'taskId', description: 'Cestello in task' }
+      { type: 'many-to-one', targetTable: 'selectionTasks', foreignKey: 'taskId', description: 'Cestello in task' }
     ],
     keyMetrics: []
   },
 
   {
-    name: 'bag_allocations',
+    name: 'bagAllocations',
     description: 'Allocazioni sacchi - traccia distribuzione animali in sacchi durante selezione',
     primaryKey: 'id',
     category: 'Sales',
@@ -793,7 +793,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== SALES - Tabelle vendite ==========
   {
-    name: 'sale_bags',
+    name: 'saleBags',
     description: 'Sacchi vendita - dettaglio sacchi in vendite avanzate',
     primaryKey: 'id',
     category: 'Sales',
@@ -807,7 +807,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'animalsPerKg', type: 'real', description: 'Animali per kg', required: true }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'advanced_sales', foreignKey: 'advancedSaleId', description: 'Sacco in vendita' }
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'Sacco in vendita' }
     ],
     keyMetrics: [
       'Sacchi per vendita',
@@ -817,7 +817,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'sale_operations_ref',
+    name: 'saleOperationsRef',
     description: 'Riferimenti operazioni vendita - collega operazioni a vendite',
     primaryKey: 'id',
     category: 'Sales',
@@ -827,13 +827,13 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'operationId', type: 'integer', description: 'Operazione collegata', required: true }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'advanced_sales', foreignKey: 'advancedSaleId', description: 'Operazione di vendita' }
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'Operazione di vendita' }
     ],
     keyMetrics: []
   },
 
   {
-    name: 'ddt_righe',
+    name: 'ddtRighe',
     description: 'Righe DDT - dettaglio righe documenti di trasporto',
     primaryKey: 'id',
     category: 'Sales',
@@ -876,7 +876,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== LOT TRACKING - Tracciabilità lotti ==========
   {
-    name: 'lot_ledger',
+    name: 'lotLedger',
     description: 'Registro movimenti lotti - libro mastro inventario lotti',
     primaryKey: 'id',
     category: 'Analytics',
@@ -900,7 +900,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'lot_inventory_transactions',
+    name: 'lotInventoryTransactions',
     description: 'Transazioni inventario lotti - log dettagliato transazioni inventario',
     primaryKey: 'id',
     category: 'Analytics',
@@ -916,7 +916,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'lot_mortality_records',
+    name: 'lotMortalityRecords',
     description: 'Registri mortalità lotti - eventi mortalità per lotto',
     primaryKey: 'id',
     category: 'Analytics',
@@ -932,7 +932,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'mortality_rates',
+    name: 'mortalityRates',
     description: 'Tassi mortalità - tassi medi mortalità per periodo/taglia',
     primaryKey: 'id',
     category: 'Analytics',
@@ -948,7 +948,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'target_size_annotations',
+    name: 'targetSizeAnnotations',
     description: 'Annotazioni taglie target - note e obiettivi per taglie specifiche',
     primaryKey: 'id',
     category: 'Analytics',
@@ -964,7 +964,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   // ========== SYNC & CONFIG - Tabelle sincronizzazione e configurazione ==========
   {
-    name: 'external_customers_sync',
+    name: 'externalCustomersSync',
     description: 'Sync clienti esterni - sincronizzazione clienti da app esterno',
     primaryKey: 'id',
     category: 'Sync',
@@ -979,7 +979,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'external_deliveries_sync',
+    name: 'externalDeliveriesSync',
     description: 'Sync consegne esterne - sincronizzazione consegne da app esterno',
     primaryKey: 'id',
     category: 'Sync',
@@ -994,7 +994,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'external_delivery_details_sync',
+    name: 'externalDeliveryDetailsSync',
     description: 'Sync dettagli consegne esterne - sincronizzazione dettagli consegne',
     primaryKey: 'id',
     category: 'Sync',
@@ -1009,7 +1009,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'external_sales_sync',
+    name: 'externalSalesSync',
     description: 'Sync vendite esterne - sincronizzazione vendite da app esterno',
     primaryKey: 'id',
     category: 'Sync',
@@ -1024,7 +1024,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'sync_status',
+    name: 'syncStatus',
     description: 'Stato sincronizzazioni - tracking stato sync tra sistemi',
     primaryKey: 'id',
     category: 'Sync',
@@ -1057,7 +1057,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'notification_settings',
+    name: 'notificationSettings',
     description: 'Impostazioni notifiche - preferenze notifiche per utente',
     primaryKey: 'id',
     category: 'Config',
@@ -1072,7 +1072,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'email_config',
+    name: 'emailConfig',
     description: 'Configurazione email - impostazioni SMTP e email (SENSIBILE)',
     primaryKey: 'id',
     category: 'Config',
@@ -1088,7 +1088,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
   },
 
   {
-    name: 'fatture_in_cloud_config',
+    name: 'fattureInCloudConfig',
     description: 'Configurazione Fatture in Cloud - OAuth e API config (SENSIBILE)',
     primaryKey: 'id',
     category: 'Config',

@@ -30,36 +30,36 @@ import {
  * SECURITY: Tabelle accessibili per le query AI  
  * Esclude tabelle sensibili come users, passwords, api_keys
  * NOTA: Nomi normalizzati in lowercase per confronto case-insensitive
- * AGGIORNATO: 54 tabelle totali documentate
+ * AGGIORNATO: 54 tabelle totali documentate con nomi snake_case corretti
  */
 const ALLOWED_TABLES = [
   // Core
   'flupsys', 'baskets', 'cycles', 'operations', 'sizes', 'lots',
-  'basketlotcomposition', 'basketgroups',
+  'basket_lot_composition', 'basket_groups',
   // Analytics
-  'sgr', 'sgrgiornalieri', 'sgrpertaglia',
-  'growthanalysisruns', 'basketgrowthprofiles', 'growthdistributions',
-  'lotledger', 'lotinventorytransactions', 'lotmortalityrecords', 'mortalityrates',
-  'targetsizeannotations',
+  'sgr', 'sgr_giornalieri', 'sgr_per_taglia',
+  'growth_analysis_runs', 'basket_growth_profiles', 'growth_distributions',
+  'lot_ledger', 'lot_inventory_transactions', 'lot_mortality_records', 'mortality_rates',
+  'target_size_annotations',
   // Screening
-  'screeningoperations', 'screeningsourcebaskets', 'screeningdestinationbaskets',
-  'screeningbaskethistory', 'screeninglotreferences', 'screeningimpactanalysis',
+  'screening_operations', 'screening_source_baskets', 'screening_destination_baskets',
+  'screening_basket_history', 'screening_lot_references', 'screening_impact_analysis',
   // Selection
-  'selections', 'selectionsourcebaskets', 'selectiondestinationbaskets',
-  'selectionbaskethistory', 'selectionlotreferences',
-  'selectiontasks', 'selectiontaskbaskets', 'selectiontaskassignments',
-  'bagallocations',
+  'selections', 'selection_source_baskets', 'selection_destination_baskets',
+  'selection_basket_history', 'selection_lot_references',
+  'selection_tasks', 'selection_task_baskets', 'selection_task_assignments',
+  'bag_allocations',
   // Sales
-  'advancedsales', 'salebags', 'saleoperationsref', 'ddt', 'ddtrighe', 'clienti',
+  'advanced_sales', 'sale_bags', 'sale_operations_ref', 'ddt', 'ddt_righe', 'clienti',
   // Orders  
-  'ordini', 'ordinirighe',
+  'ordini', 'ordini_righe',
   // Task operators
   'task_operators',
   // Sync
-  'externalcustomerssync', 'externaldeliveriessync', 'externaldeliverydetailssync',
-  'externalsalessync', 'syncstatus',
+  'external_customers_sync', 'external_deliveries_sync', 'external_delivery_details_sync',
+  'external_sales_sync', 'sync_status',
   // Config (non-sensitive)
-  'notifications', 'notificationsettings', 'configurazione'
+  'notifications', 'notification_settings', 'configurazione'
 ];
 
 /**

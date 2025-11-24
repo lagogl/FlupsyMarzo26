@@ -85,7 +85,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     ],
     relationships: [
       { type: 'many-to-one', targetTable: 'flupsys', foreignKey: 'flupsyId', description: 'Cestello appartiene a un FLUPSY' },
-      { type: 'many-to-one', targetTable: 'basket_groups', foreignKey: 'groupId', description: 'Cestello può appartenere a un gruppo' },
+      { type: 'many-to-one', targetTable: 'basketGroups', foreignKey: 'groupId', description: 'Cestello può appartenere a un gruppo' },
       { type: 'one-to-many', targetTable: 'cycles', foreignKey: 'basketId', description: 'Cestello ha molti cicli produttivi' },
       { type: 'one-to-many', targetTable: 'operations', foreignKey: 'basketId', description: 'Cestello ha molte operazioni' }
     ],
@@ -143,7 +143,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     relationships: [
       { type: 'one-to-many', targetTable: 'cycles', foreignKey: 'lotId', description: 'Lotto usato in molti cicli' },
       { type: 'many-to-one', targetTable: 'sizes', foreignKey: 'sizeId', description: 'Lotto ha taglia iniziale' },
-      { type: 'one-to-many', targetTable: 'basket_lot_composition', foreignKey: 'lotId', description: 'Lotto può essere misto in cestelli' }
+      { type: 'one-to-many', targetTable: 'basketLotComposition', foreignKey: 'lotId', description: 'Lotto può essere misto in cestelli' }
     ],
     keyMetrics: [
       'Animali rimanenti nel lotto',
@@ -168,7 +168,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     ],
     relationships: [
       { type: 'one-to-many', targetTable: 'operations', foreignKey: 'sizeId', description: 'Taglia usata in molte operazioni' },
-      { type: 'one-to-many', targetTable: 'sgr_per_taglia', foreignKey: 'sizeId', description: 'Taglia ha SGR specifico' }
+      { type: 'one-to-many', targetTable: 'sgrPerTaglia', foreignKey: 'sizeId', description: 'Taglia ha SGR specifico' }
     ],
     keyMetrics: [
       'Numero operazioni per taglia',
@@ -296,8 +296,8 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'status', type: 'text', description: 'Stato: draft, completed, cancelled', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'screening_source_baskets', foreignKey: 'screeningId', description: 'Cestelli origine vagliatura' },
-      { type: 'one-to-many', targetTable: 'screening_destination_baskets', foreignKey: 'screeningId', description: 'Cestelli destinazione vagliatura' }
+      { type: 'one-to-many', targetTable: 'screeningSourceBaskets', foreignKey: 'screeningId', description: 'Cestelli origine vagliatura' },
+      { type: 'one-to-many', targetTable: 'screeningDestinationBaskets', foreignKey: 'screeningId', description: 'Cestelli destinazione vagliatura' }
     ],
     keyMetrics: [
       'Numero cestelli vagl iati',
@@ -320,8 +320,8 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'status', type: 'text', description: 'Stato: draft, completed, cancelled', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'selection_source_baskets', foreignKey: 'selectionId', description: 'Cestelli origine selezione' },
-      { type: 'one-to-many', targetTable: 'selection_destination_baskets', foreignKey: 'selectionId', description: 'Cestelli destinazione selezione' }
+      { type: 'one-to-many', targetTable: 'selectionSourceBaskets', foreignKey: 'selectionId', description: 'Cestelli origine selezione' },
+      { type: 'one-to-many', targetTable: 'selectionDestinationBaskets', foreignKey: 'selectionId', description: 'Cestelli destinazione selezione' }
     ],
     keyMetrics: [
       'Numero selezioni per scopo',
@@ -344,7 +344,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'status', type: 'text', description: 'Stato: draft, confirmed, delivered', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'sale_bags', foreignKey: 'saleId', description: 'Sacchi della vendita' },
+      { type: 'one-to-many', targetTable: 'saleBags', foreignKey: 'saleId', description: 'Sacchi della vendita' },
       { type: 'one-to-many', targetTable: 'ddt', foreignKey: 'advancedSaleId', description: 'DDT della vendita' }
     ],
     keyMetrics: [
@@ -367,7 +367,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'customerSnapshot', type: 'jsonb', description: 'Snapshot dati cliente immutabile', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'advanced_sales', foreignKey: 'advancedSaleId', description: 'DDT per vendita avanzata' },
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'DDT per vendita avanzata' },
       { type: 'one-to-many', targetTable: 'ddtRighe', foreignKey: 'ddtId', description: 'Righe del DDT' }
     ],
     keyMetrics: [
@@ -394,7 +394,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'active', type: 'boolean', description: 'Operatore attivo', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'selection_task_assignments', foreignKey: 'operatorId', description: 'Attività assegnate' }
+      { type: 'one-to-many', targetTable: 'selectionTaskAssignments', foreignKey: 'operatorId', description: 'Attività assegnate' }
     ],
     keyMetrics: [
       'Numero operatori attivi',
@@ -417,8 +417,8 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'dueDate', type: 'date', description: 'Scadenza task', required: false }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'selection_task_assignments', foreignKey: 'taskId', description: 'Assegnazioni task' },
-      { type: 'one-to-many', targetTable: 'selection_task_baskets', foreignKey: 'taskId', description: 'Cestelli del task' }
+      { type: 'one-to-many', targetTable: 'selectionTaskAssignments', foreignKey: 'taskId', description: 'Assegnazioni task' },
+      { type: 'one-to-many', targetTable: 'selectionTaskBaskets', foreignKey: 'taskId', description: 'Cestelli del task' }
     ],
     keyMetrics: [
       'Task completati vs pendenti',
@@ -441,7 +441,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'statoOrdine', type: 'text', description: 'Stato: pending, in_progress, completed', required: true }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'ordini_righe', foreignKey: 'ordineId', description: 'Righe ordine' }
+      { type: 'one-to-many', targetTable: 'ordiniRighe', foreignKey: 'ordineId', description: 'Righe ordine' }
     ],
     keyMetrics: [
       'Ordini aperti',
@@ -526,7 +526,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'algorithmVersion', type: 'text', description: 'Versione algoritmo', required: false }
     ],
     relationships: [
-      { type: 'one-to-many', targetTable: 'basket_growth_profiles', foreignKey: 'analysisRunId', description: 'Run genera profili per cestelli' }
+      { type: 'one-to-many', targetTable: 'basketGrowthProfiles', foreignKey: 'analysisRunId', description: 'Run genera profili per cestelli' }
     ],
     keyMetrics: [
       'Numero run di analisi',
@@ -550,7 +550,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
     ],
     relationships: [
       { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Profilo di un cestello' },
-      { type: 'many-to-one', targetTable: 'growth_analysis_runs', foreignKey: 'analysisRunId', description: 'Generato da run analisi' }
+      { type: 'many-to-one', targetTable: 'growthAnalysisRuns', foreignKey: 'analysisRunId', description: 'Generato da run analisi' }
     ],
     keyMetrics: [
       'Distribuzione cluster crescita',
@@ -597,7 +597,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'totalWeight', type: 'real', description: 'Peso totale pre-vagliatura', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'screening_operations', foreignKey: 'screeningId', description: 'Cestello in vagliatura' },
+      { type: 'many-to-one', targetTable: 'screeningOperations', foreignKey: 'screeningId', description: 'Cestello in vagliatura' },
       { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Cestello origine' }
     ],
     keyMetrics: []
@@ -618,7 +618,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'deadCount', type: 'integer', description: 'Animali morti', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'screening_operations', foreignKey: 'screeningId', description: 'Cestello da vagliatura' },
+      { type: 'many-to-one', targetTable: 'screeningOperations', foreignKey: 'screeningId', description: 'Cestello da vagliatura' },
       { type: 'many-to-one', targetTable: 'baskets', foreignKey: 'basketId', description: 'Nuovo cestello' }
     ],
     keyMetrics: []
@@ -751,7 +751,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'completedAt', type: 'timestamp', description: 'Data completamento', required: false }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'selection_tasks', foreignKey: 'taskId', description: 'Assegnazione a task' },
+      { type: 'many-to-one', targetTable: 'selectionTasks', foreignKey: 'taskId', description: 'Assegnazione a task' },
       { type: 'many-to-one', targetTable: 'task_operators', foreignKey: 'operatorId', description: 'Operatore assegnato' }
     ],
     keyMetrics: []
@@ -770,7 +770,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'completed', type: 'boolean', description: 'Se completato', required: true }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'selection_tasks', foreignKey: 'taskId', description: 'Cestello in task' }
+      { type: 'many-to-one', targetTable: 'selectionTasks', foreignKey: 'taskId', description: 'Cestello in task' }
     ],
     keyMetrics: []
   },
@@ -807,7 +807,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'animalsPerKg', type: 'real', description: 'Animali per kg', required: true }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'advanced_sales', foreignKey: 'advancedSaleId', description: 'Sacco in vendita' }
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'Sacco in vendita' }
     ],
     keyMetrics: [
       'Sacchi per vendita',
@@ -827,7 +827,7 @@ export const DATABASE_METADATA: TableMetadata[] = [
       { name: 'operationId', type: 'integer', description: 'Operazione collegata', required: true }
     ],
     relationships: [
-      { type: 'many-to-one', targetTable: 'advanced_sales', foreignKey: 'advancedSaleId', description: 'Operazione di vendita' }
+      { type: 'many-to-one', targetTable: 'advancedSales', foreignKey: 'advancedSaleId', description: 'Operazione di vendita' }
     ],
     keyMetrics: []
   },
