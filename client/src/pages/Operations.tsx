@@ -149,9 +149,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
+import { DatePicker } from '@/components/ui/date-picker';
 
 // Schema di validazione per il form di modifica
 const editOperationSchema = z.object({
+  date: z.date().optional(), // Data modificabile con validazioni backend
   notes: z.string().nullable().optional(),
   animalCount: z.number().min(0, "Il numero di animali deve essere positivo").nullable().optional(),
   totalWeight: z.number().min(0, "Il peso totale deve essere positivo").nullable().optional(),  
@@ -205,6 +207,7 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
   const form = useForm<EditOperationFormData>({
     resolver: zodResolver(editOperationSchema),
     defaultValues: {
+      date: operation.date ? new Date(operation.date) : new Date(),
       notes: operation.notes || '',
       animalCount: operation.animalCount || 0,
       totalWeight: operation.totalWeight || 0,
@@ -242,6 +245,8 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
       id: operation.id,
       operation: {
         ...operation,
+        // Usa la nuova data dal form se presente, altrimenti mantieni quella originale
+        date: data.date ? format(data.date, 'yyyy-MM-dd') : operation.date,
         notes: data.notes || operation.notes,
         animalCount: data.animalCount || operation.animalCount,
         totalWeight: data.totalWeight || operation.totalWeight,
@@ -249,8 +254,7 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
         // Usa i valori calcolati o quelli esistenti
         animalsPerKg: derivedValues.animalsPerKg || operation.animalsPerKg,
         averageWeight: derivedValues.averageWeight || operation.averageWeight,
-        mortalityRate: derivedValues.mortalityRate || operation.mortalityRate,
-        date: isValidDate(operation.date) ? new Date(operation.date) : new Date()
+        mortalityRate: derivedValues.mortalityRate || operation.mortalityRate
       }
     };
     
@@ -277,12 +281,23 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
               </div>
             </div>
             
-            <div>
-              <label className="text-sm font-medium">Data</label>
-              <div className="text-sm text-gray-600 mt-1 p-2 bg-gray-100 rounded">
-                {safeFormatDate(operation.date, 'dd/MM/yyyy')}
-              </div>
-            </div>
+            <FormField
+              control={form.control}
+              name="date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Data</FormLabel>
+                  <FormControl>
+                    <DatePicker
+                      date={field.value}
+                      onDateChange={field.onChange}
+                      disabled={isReadOnly}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <div>
               <label className="text-sm font-medium">Cestello</label>
