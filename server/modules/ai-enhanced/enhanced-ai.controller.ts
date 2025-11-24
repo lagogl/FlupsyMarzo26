@@ -371,7 +371,10 @@ export function registerEnhancedAIRoutes(app: Express) {
       let finalQuery = sqlQuery.trim();
       const queryLowerCheck = finalQuery.toLowerCase();
       if (!queryLowerCheck.includes('limit')) {
-        finalQuery += ` LIMIT ${limit}`;
+        // Rimuovi punto e virgola finale se presente
+        finalQuery = finalQuery.replace(/;[\s]*$/, '').trim();
+        // Aggiungi LIMIT prima del punto e virgola
+        finalQuery += ` LIMIT ${limit};`;
       }
 
       console.log('📊 Executing query:', {
@@ -456,7 +459,10 @@ export function registerEnhancedAIRoutes(app: Express) {
           
           // Smart LIMIT handling: only add if not present anywhere in query
           if (!queryLower.includes('limit')) {
-            finalQuery += ` LIMIT ${limit}`;
+            // Rimuovi punto e virgola finale se presente
+            finalQuery = finalQuery.replace(/;[\s]*$/, '').trim();
+            // Aggiungi LIMIT prima del punto e virgola
+            finalQuery += ` LIMIT ${limit};`;
           } else {
             console.log('⚠️ Query already contains LIMIT clause - using as-is');
           }
