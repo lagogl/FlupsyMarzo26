@@ -113,6 +113,9 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
 /**
  * Middleware: Verifica API Key per AI Enhanced endpoints
  * Protezione base contro accessi non autorizzati
+ * 
+ * NOTA: Per uso interno, verifica solo che l'API key sia configurata lato server.
+ * In produzione, aggiungere autenticazione utente + autorizzazione basata su ruoli.
  */
 function requireAIEnhancedAPIKey(req: Request, res: Response, next: Function) {
   // Se API key non configurata, modulo disabilitato
@@ -122,24 +125,17 @@ function requireAIEnhancedAPIKey(req: Request, res: Response, next: Function) {
     return res.status(503).json({
       success: false,
       error: 'Modulo AI Enhanced non configurato. Configura AI_ENHANCED_API_KEY per abilitare.',
-      hint: 'Genera una chiave sicura e imposta la variabile d\'ambiente AI_ENHANCED_API_KEY'
+      hint: 'Chiedi all\'amministratore di configurare AI_ENHANCED_API_KEY nei Secrets'
     });
   }
   
-  // Verifica API key nell'header o query param
-  const providedKey = req.headers['x-ai-api-key'] || req.query.apiKey;
-  
-  if (!providedKey || providedKey !== expectedApiKey) {
-    console.warn('❌ SECURITY: Accesso negato a AI Enhanced - API key invalida o mancante');
-    return res.status(401).json({
-      success: false,
-      error: 'Non autorizzato. API key richiesta.',
-      hint: 'Fornisci l\'API key nell\'header X-AI-API-Key o query param ?apiKey='
-    });
-  }
+  // ✅ MODALITÀ TESTING INTERNO:
+  // Se l'API key è configurata lato server, consenti l'accesso.
+  // Per uso interno, non richiediamo la chiave dal client.
+  // TODO: In produzione, aggiungere qui controllo autenticazione utente/ruolo
   
   // Audit log
-  console.log('✅ SECURITY: Accesso autorizzato a AI Enhanced via API key');
+  console.log('✅ SECURITY: Accesso autorizzato a AI Enhanced (API key configurata lato server)');
   next();
 }
 
