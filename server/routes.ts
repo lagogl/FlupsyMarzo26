@@ -28,6 +28,7 @@ import {
 } from "../shared/schema";
 import { registerAIRoutes } from "./controllers/ai-controller";
 import { registerAIReportRoutes } from "./controllers/ai-report-controller";
+import { registerEnhancedAIRoutes } from "./modules/ai-enhanced/enhanced-ai.controller";
 import { 
   getNotificationSettings, 
   updateNotificationSetting
@@ -409,6 +410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // === AI Routes ===
   registerAIRoutes(app);
   registerAIReportRoutes(app);
+  registerEnhancedAIRoutes(app); // 🚀 Modulo AI Potenziato (separato, non interferisce con sistema esistente)
   app.get("/api/sequences/info", SequenceController.getSequencesInfo);
   
   // === Lot Lifecycle Management Routes ===
