@@ -1,13 +1,13 @@
 /**
  * ENHANCED AI SERVICE
  * 
- * Servizio DeepSeek AI potenziato con conoscenza completa del database.
+ * Servizio Claude AI (Anthropic) potenziato con conoscenza completa del database.
  * Utilizza il metadata service per fornire contesto ricco all'AI.
  * 
  * STRATEGIA #1: Database Knowledge Base implementata
  */
 
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { pool } from "../../db.js";
 import { 
   generateDatabaseDescription, 
@@ -17,25 +17,26 @@ import {
   getTableMetadata
 } from "./metadata.service.js";
 
-const AI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_BASE_URL = 'https://api.deepseek.com';
-const AI_MODEL = 'deepseek-chat';
+const AI_API_KEY = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+const AI_BASE_URL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
+const AI_MODEL = 'claude-sonnet-4-5';
 
-// Client DeepSeek
-let aiClient: OpenAI | null = null;
+// Client Claude (Anthropic via Replit AI Integrations)
+let aiClient: Anthropic | null = null;
 
 function initializeClient() {
-  const currentApiKey = process.env.OPENAI_API_KEY;
-  if (currentApiKey && currentApiKey.length > 10) {
-    aiClient = new OpenAI({
+  const currentApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  const currentBaseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
+  
+  if (currentApiKey && currentBaseUrl) {
+    aiClient = new Anthropic({
       apiKey: currentApiKey,
-      baseURL: AI_BASE_URL,
-      timeout: 20000
+      baseURL: currentBaseUrl,
     });
-    console.log('✅ Enhanced AI Client initialized');
+    console.log('✅ Enhanced AI Client initialized (Claude 3.5 Sonnet via Replit AI Integrations)');
     return true;
   }
-  console.log('⚠️ Enhanced AI Client: API key missing');
+  console.log('⚠️ Enhanced AI Client: API key or base URL missing');
   return false;
 }
 
@@ -44,7 +45,7 @@ initializeClient();
 
 // Ricarica periodica
 setInterval(() => {
-  const newApiKey = process.env.OPENAI_API_KEY;
+  const newApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (newApiKey && (!aiClient || newApiKey !== AI_API_KEY)) {
     console.log('🔄 Enhanced AI: Ricaricando client...');
     initializeClient();
@@ -230,25 +231,26 @@ export async function analyzeQuestionWithEnhancedAI(
     userPrompt += `MODALITÀ: ${request.mode || 'analysis'}\n\n`;
     userPrompt += `Analizza questa domanda e fornisci una risposta strutturata in JSON come specificato nelle istruzioni.`;
 
-    // Chiamata a DeepSeek con metadata completo
-    const response = await aiClient.chat.completions.create({
+    // Chiamata a Claude con metadata completo del database
+    const message = await aiClient.messages.create({
       model: AI_MODEL,
+      system: buildSystemPrompt(),
       messages: [
-        {
-          role: "system",
-          content: buildSystemPrompt()
-        },
         {
           role: "user",
           content: userPrompt
         }
       ],
-      response_format: { type: "json_object" },
       temperature: 0.2, // Bassa per risposte più deterministiche
-      max_tokens: 3000
+      max_tokens: 4096
     });
 
-    const aiResponse = JSON.parse(response.choices[0].message.content || '{}');
+    const content = message.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type from Claude');
+    }
+    
+    const aiResponse = JSON.parse(content.text || '{}');
     
     console.log('✅ Enhanced AI Response:', {
       tablesNeeded: aiResponse.tables_needed?.length || 0,
