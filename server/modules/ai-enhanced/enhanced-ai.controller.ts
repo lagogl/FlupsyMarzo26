@@ -28,15 +28,138 @@ import {
 import { db } from "../../db";
 
 /**
- * Registra routes per AI Enhanced
+ * SECURITY: Tabelle accessibili per le query AI
+ * Esclude tabelle sensibili come users, passwords, api_keys
  */
+const ALLOWED_TABLES = [
+  'flupsys', 'baskets', 'cycles', 'operations', 'sizes', 'lots',
+  'sgr', 'sgrGiornalieri', 'sgrPerTaglia',
+  'screeningOperations', 'screeningSourceBaskets', 'screeningDestinationBaskets',
+  'selections', 'selectionSourceBaskets', 'selectionDestinationBaskets',
+  'advancedSales', 'saleBags', 'ddt', 'ddtRighe',
+  'ordini', 'ordiniRighe',
+  'task_operators', 'selectionTasks', 'selectionTaskBaskets', 'selectionTaskAssignments',
+  'basketLotComposition', 'basketGroups',
+  'lotLedger', 'mortalityRates',
+  'growthAnalysisRuns', 'basketGrowthProfiles'
+];
+
+/**
+ * SECURITY: Valida query SQL per sicurezza
+ * - Blocca query distruttive (DROP, DELETE, etc)
+ * - Blocca accesso a tabelle sensibili
+ * - Blocca accesso a colonne password/token
+ */
+function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } {
+  const lowerQuery = sqlQuery.toLowerCase().trim();
+  
+  // 1. Blocca query distruttive
+  const destructiveKeywords = ['drop', 'delete', 'truncate', 'update', 'insert', 'alter', 'create', 'grant', 'revoke'];
+  for (const keyword of destructiveKeywords) {
+    if (new RegExp(`\\b${keyword}\\b`, 'i').test(lowerQuery)) {
+      return { valid: false, error: `Query non permessa: contiene parola chiave distruttiva '${keyword}'` };
+    }
+  }
+  
+  // 2. Blocca accesso a tabelle sensibili
+  const blockedTables = ['users', 'email_config', 'fatture_in_cloud_config', 'notification_settings'];
+  for (const table of blockedTables) {
+    if (new RegExp(`\\bfrom\\s+${table}\\b|\\bjoin\\s+${table}\\b`, 'i').test(lowerQuery)) {
+      return { valid: false, error: `Query non permessa: accesso a tabella sensibile '${table}' negato` };
+    }
+  }
+  
+  // 3. Blocca accesso a colonne sensibili
+  const blockedColumns = ['password', 'api_key', 'token', 'secret', 'access_token', 'refresh_token'];
+  for (const column of blockedColumns) {
+    if (new RegExp(`\\b${column}\\b`, 'i').test(lowerQuery)) {
+      return { valid: false, error: `Query non permessa: accesso a colonna sensibile '${column}' negato` };
+    }
+  }
+  
+  // 4. Verifica che acceda solo a tabelle permesse (estrazione tabelle dal SQL)
+  const fromMatches = lowerQuery.match(/\bfrom\s+(\w+)/gi) || [];
+  const joinMatches = lowerQuery.match(/\bjoin\s+(\w+)/gi) || [];
+  const allMatches = [...fromMatches, ...joinMatches];
+  
+  for (const match of allMatches) {
+    const tableName = match.replace(/^(from|join)\s+/i, '').trim();
+    if (!ALLOWED_TABLES.includes(tableName)) {
+      return { valid: false, error: `Query non permessa: tabella '${tableName}' non nella whitelist` };
+    }
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * EXPERIMENTAL MODULE - NOT FOR PRODUCTION
+ * 
+ * SECURITY WARNING: Questo modulo è SPERIMENTALE e destinato solo a TESTING.
+ * NON deve essere esposto in produzione senza un sistema di autenticazione robusto.
+ * 
+ * Protezioni implementate:
+ * - API Key richiesta (variabile d'ambiente AI_ENHANCED_API_KEY)
+ * - Whitelist tabelle accessibili
+ * - Validazione query SQL rigorosa
+ * - Blocco tabelle/colonne sensibili
+ * - Logging audit delle query
+ * - Rate limiting (TODO)
+ * 
+ * IMPORTANTE: Questo modulo esiste per sperimentare funzionalità AI avanzate.
+ * Per produzione, implementare autenticazione completa + autorizzazione basata su ruoli.
+ */
+
+/**
+ * Middleware: Verifica API Key per AI Enhanced endpoints
+ * Protezione base contro accessi non autorizzati
+ */
+function requireAIEnhancedAPIKey(req: Request, res: Response, next: Function) {
+  // Se API key non configurata, modulo disabilitato
+  const expectedApiKey = process.env.AI_ENHANCED_API_KEY;
+  
+  if (!expectedApiKey || expectedApiKey.length < 16) {
+    return res.status(503).json({
+      success: false,
+      error: 'Modulo AI Enhanced non configurato. Configura AI_ENHANCED_API_KEY per abilitare.',
+      hint: 'Genera una chiave sicura e imposta la variabile d\'ambiente AI_ENHANCED_API_KEY'
+    });
+  }
+  
+  // Verifica API key nell'header o query param
+  const providedKey = req.headers['x-ai-api-key'] || req.query.apiKey;
+  
+  if (!providedKey || providedKey !== expectedApiKey) {
+    console.warn('❌ SECURITY: Accesso negato a AI Enhanced - API key invalida o mancante');
+    return res.status(401).json({
+      success: false,
+      error: 'Non autorizzato. API key richiesta.',
+      hint: 'Fornisci l\'API key nell\'header X-AI-API-Key o query param ?apiKey='
+    });
+  }
+  
+  // Audit log
+  console.log('✅ SECURITY: Accesso autorizzato a AI Enhanced via API key');
+  next();
+}
+
 export function registerEnhancedAIRoutes(app: Express) {
+  
+  const apiKeyConfigured = process.env.AI_ENHANCED_API_KEY && process.env.AI_ENHANCED_API_KEY.length >= 16;
+  
+  if (apiKeyConfigured) {
+    console.log('✅ SECURITY: AI Enhanced protetto con API Key');
+  } else {
+    console.log('⚠️  SECURITY WARNING: AI Enhanced disabilitato - AI_ENHANCED_API_KEY non configurata');
+    console.log('💡 Configura AI_ENHANCED_API_KEY con una chiave sicura (min 16 caratteri)');
+  }
+
   
   // ========== HEALTH & INFO ==========
   
   /**
    * GET /api/ai-enhanced/health
-   * Verifica stato servizio AI potenziato
+   * Verifica stato servizio AI potenziato (pubblico, non richiede API key)
    */
   app.get("/api/ai-enhanced/health", async (req: Request, res: Response) => {
     try {
@@ -56,9 +179,9 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * GET /api/ai-enhanced/metadata
-   * Ottieni metadata database (per debug/info)
+   * Ottieni metadata database (richiede API key)
    */
-  app.get("/api/ai-enhanced/metadata", async (req: Request, res: Response) => {
+  app.get("/api/ai-enhanced/metadata", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { format = 'minimal' } = req.query;
 
@@ -88,9 +211,9 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * GET /api/ai-enhanced/database-description
-   * Ottieni descrizione testuale completa del database
+   * Ottieni descrizione testuale completa del database (richiede API key)
    */
-  app.get("/api/ai-enhanced/database-description", async (req: Request, res: Response) => {
+  app.get("/api/ai-enhanced/database-description", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const description = generateDatabaseDescription();
       res.json({
@@ -110,7 +233,7 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * POST /api/ai-enhanced/ask
-   * Fai una domanda all'AI potenziato
+   * Fai una domanda all'AI potenziato (richiede API key)
    * 
    * Body: {
    *   question: string,
@@ -118,7 +241,7 @@ export function registerEnhancedAIRoutes(app: Express) {
    *   mode?: 'query' | 'analysis' | 'recommendation'
    * }
    */
-  app.post("/api/ai-enhanced/ask", async (req: Request, res: Response) => {
+  app.post("/api/ai-enhanced/ask", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const aiRequest: EnhancedAIRequest = req.body;
 
@@ -151,7 +274,7 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * POST /api/ai-enhanced/execute-query
-   * Esegui una query SQL generata dall'AI
+   * Esegui una query SQL generata dall'AI (richiede API key)
    * 
    * Body: {
    *   sqlQuery: string,
@@ -159,7 +282,7 @@ export function registerEnhancedAIRoutes(app: Express) {
    *   limit?: number (default 1000)
    * }
    */
-  app.post("/api/ai-enhanced/execute-query", async (req: Request, res: Response) => {
+  app.post("/api/ai-enhanced/execute-query", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { sqlQuery, queryParams = [], limit = 1000 } = req.body;
 
@@ -170,21 +293,27 @@ export function registerEnhancedAIRoutes(app: Express) {
         });
       }
 
-      // Security: Previeni query distruttive
-      const lowerQuery = sqlQuery.toLowerCase().trim();
-      const destructiveKeywords = ['drop', 'delete', 'truncate', 'update', 'insert', 'alter'];
-      const hasDestructive = destructiveKeywords.some(kw => lowerQuery.includes(kw));
-
-      if (hasDestructive) {
+      // Security: Validazione rigorosa query
+      const validation = validateSQLQuery(sqlQuery);
+      if (!validation.valid) {
+        console.error('❌ SECURITY: Query bloccata:', validation.error);
         return res.status(403).json({
           success: false,
-          error: 'Query non permessa: solo SELECT queries sono consentite'
+          error: validation.error
         });
       }
+      
+      // Audit logging
+      console.log('📊 AI Query Execution:', {
+        queryPreview: sqlQuery.substring(0, 150) + '...',
+        timestamp: new Date().toISOString(),
+        paramsCount: queryParams.length
+      });
 
       // Aggiungi LIMIT se non presente
       let finalQuery = sqlQuery.trim();
-      if (!lowerQuery.includes('limit')) {
+      const queryLowerCheck = finalQuery.toLowerCase();
+      if (!queryLowerCheck.includes('limit')) {
         finalQuery += ` LIMIT ${limit}`;
       }
 
@@ -210,7 +339,7 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * POST /api/ai-enhanced/ask-and-execute
-   * Fai domanda + esegui query in un solo step
+   * Fai domanda + esegui query in un solo step (richiede API key)
    * 
    * Body: {
    *   question: string,
@@ -219,7 +348,7 @@ export function registerEnhancedAIRoutes(app: Express) {
    *   limit?: number
    * }
    */
-  app.post("/api/ai-enhanced/ask-and-execute", async (req: Request, res: Response) => {
+  app.post("/api/ai-enhanced/ask-and-execute", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { 
         question, 
@@ -258,13 +387,18 @@ export function registerEnhancedAIRoutes(app: Express) {
       if (executeQuery && aiResponse.sqlQuery) {
         
         // Security check
-        const lowerQuery = aiResponse.sqlQuery.toLowerCase().trim();
-        const destructiveKeywords = ['drop', 'delete', 'truncate', 'update', 'insert', 'alter'];
-        const hasDestructive = destructiveKeywords.some(kw => lowerQuery.includes(kw));
-
-        if (!hasDestructive) {
+        const validation = validateSQLQuery(aiResponse.sqlQuery);
+        
+        if (validation.valid) {
+          
+          // Audit logging
+          console.log('🔮 AI Ask&Execute Query:', {
+            queryPreview: aiResponse.sqlQuery.substring(0, 150) + '...',
+            timestamp: new Date().toISOString()
+          });
           let finalQuery = aiResponse.sqlQuery.trim();
-          if (!lowerQuery.includes('limit')) {
+          const queryLower = finalQuery.toLowerCase();
+          if (!queryLower.includes('limit')) {
             finalQuery += ` LIMIT ${limit}`;
           }
 
@@ -274,9 +408,10 @@ export function registerEnhancedAIRoutes(app: Express) {
             db
           );
         } else {
+          console.error('❌ SECURITY: Query bloccata in ask-and-execute:', validation.error);
           queryResult = {
             success: false,
-            error: 'Query non eseguita: solo SELECT queries sono permesse'
+            error: validation.error || 'Query non permessa'
           };
         }
       }
@@ -302,7 +437,7 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * POST /api/ai-enhanced/conversation/ask
-   * Fai domanda in una conversazione persistente (multi-turno)
+   * Fai domanda in una conversazione persistente (multi-turno) (richiede API key)
    * 
    * Body: {
    *   sessionId: string,
@@ -310,7 +445,7 @@ export function registerEnhancedAIRoutes(app: Express) {
    *   context?: { ... }
    * }
    */
-  app.post("/api/ai-enhanced/conversation/ask", async (req: Request, res: Response) => {
+  app.post("/api/ai-enhanced/conversation/ask", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { sessionId, question, context } = req.body;
 
@@ -365,9 +500,9 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * DELETE /api/ai-enhanced/conversation/:sessionId
-   * Cancella conversazione
+   * Cancella conversazione (richiede API key)
    */
-  app.delete("/api/ai-enhanced/conversation/:sessionId", async (req: Request, res: Response) => {
+  app.delete("/api/ai-enhanced/conversation/:sessionId", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { sessionId } = req.params;
       clearConversation(sessionId);
@@ -389,9 +524,9 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * GET /api/ai-enhanced/tables
-   * Lista tabelle disponibili
+   * Lista tabelle disponibili (richiede API key)
    */
-  app.get("/api/ai-enhanced/tables", async (req: Request, res: Response) => {
+  app.get("/api/ai-enhanced/tables", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { category } = req.query;
 
@@ -423,9 +558,9 @@ export function registerEnhancedAIRoutes(app: Express) {
 
   /**
    * GET /api/ai-enhanced/tables/:tableName
-   * Dettagli tabella specifica
+   * Dettagli tabella specifica (richiede API key)
    */
-  app.get("/api/ai-enhanced/tables/:tableName", async (req: Request, res: Response) => {
+  app.get("/api/ai-enhanced/tables/:tableName", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { tableName } = req.params;
       const table = getTableMetadata(tableName);
