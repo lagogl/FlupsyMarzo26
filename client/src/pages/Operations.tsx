@@ -218,6 +218,17 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
     }
   });
 
+  // Debug degli errori di validazione
+  React.useEffect(() => {
+    const subscription = form.watch(() => {
+      const errors = form.formState.errors;
+      if (Object.keys(errors).length > 0) {
+        console.log('🔴 ERRORI DI VALIDAZIONE:', errors);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
   const isReadOnly = operation.type === 'prima-attivazione';
   
   // Calcoli derivati
@@ -461,6 +472,12 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
                 <Button
                   type="submit"
                   disabled={updateOperationMutation.isPending}
+                  onClick={() => {
+                    console.log('🔵 PULSANTE SUBMIT CLICCATO');
+                    console.log('🔵 Form values:', form.getValues());
+                    console.log('🔵 Form errors:', form.formState.errors);
+                    console.log('🔵 Form is valid:', form.formState.isValid);
+                  }}
                 >
                   {updateOperationMutation.isPending ? 'Salvataggio...' : 'Salva modifiche'}
                 </Button>
