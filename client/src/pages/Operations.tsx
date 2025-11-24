@@ -218,17 +218,6 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
     }
   });
 
-  // Debug degli errori di validazione
-  React.useEffect(() => {
-    const subscription = form.watch(() => {
-      const errors = form.formState.errors;
-      if (Object.keys(errors).length > 0) {
-        console.log('🔴 ERRORI DI VALIDAZIONE:', errors);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [form]);
-
   const isReadOnly = operation.type === 'prima-attivazione';
   
   // Calcoli derivati
@@ -249,31 +238,20 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
   }, [form.watch('animalCount'), form.watch('totalWeight'), form.watch('deadCount')]);
 
   const onSubmit = (data: EditOperationFormData) => {
-    console.log('Form submitted with data:', data);
-    console.log('Derived values:', derivedValues);
-    console.log('Data date value:', data.date, 'Type:', typeof data.date);
-    
-    // Costruisci payload pulito solo con i campi modificabili
     const payload = {
       id: operation.id,
       operation: {
-        // Data - formatta se presente e diversa dall'originale
         date: data.date ? format(data.date, 'yyyy-MM-dd') : operation.date,
-        // Campi numerici
         animalCount: data.animalCount ?? operation.animalCount,
         totalWeight: data.totalWeight ?? operation.totalWeight,
         deadCount: data.deadCount ?? operation.deadCount,
-        // Campi calcolati
         animalsPerKg: derivedValues.animalsPerKg || operation.animalsPerKg,
         averageWeight: derivedValues.averageWeight || operation.averageWeight,
         mortalityRate: derivedValues.mortalityRate || operation.mortalityRate,
-        // Note
         notes: data.notes || operation.notes
       }
     };
     
-    console.log('Payload being sent:', payload);
-    console.log('Date in payload:', payload.operation.date);
     updateOperationMutation.mutate(payload);
   };
 
@@ -468,20 +446,12 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
               {isReadOnly ? 'Chiudi' : 'Annulla'}
             </Button>
             {!isReadOnly && (
-              <>
-                <Button
-                  type="submit"
-                  disabled={updateOperationMutation.isPending}
-                  onClick={() => {
-                    console.log('🔵 PULSANTE SUBMIT CLICCATO');
-                    console.log('🔵 Form values:', form.getValues());
-                    console.log('🔵 Form errors:', form.formState.errors);
-                    console.log('🔵 Form is valid:', form.formState.isValid);
-                  }}
-                >
-                  {updateOperationMutation.isPending ? 'Salvataggio...' : 'Salva modifiche'}
-                </Button>
-              </>
+              <Button
+                type="submit"
+                disabled={updateOperationMutation.isPending}
+              >
+                {updateOperationMutation.isPending ? 'Salvataggio...' : 'Salva modifiche'}
+              </Button>
             )}
           </div>
         </form>
