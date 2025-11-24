@@ -305,7 +305,7 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
                   <FormControl>
                     <DatePicker
                       date={field.value}
-                      onDateChange={field.onChange}
+                      onSelect={field.onChange}
                       disabled={isReadOnly}
                     />
                   </FormControl>
