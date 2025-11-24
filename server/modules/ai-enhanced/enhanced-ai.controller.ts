@@ -448,16 +448,20 @@ export function registerEnhancedAIRoutes(app: Express) {
         
         if (validation.valid) {
           
-          // Audit logging
-          console.log('🔮 AI Ask&Execute Query:', {
-            queryPreview: aiResponse.sqlQuery.substring(0, 150) + '...',
-            timestamp: new Date().toISOString()
-          });
+          // Audit logging with FULL query
+          console.log('🔮 AI Generated Query (ORIGINAL):', aiResponse.sqlQuery);
+          
           let finalQuery = aiResponse.sqlQuery.trim();
           const queryLower = finalQuery.toLowerCase();
+          
+          // Smart LIMIT handling: only add if not present anywhere in query
           if (!queryLower.includes('limit')) {
             finalQuery += ` LIMIT ${limit}`;
+          } else {
+            console.log('⚠️ Query already contains LIMIT clause - using as-is');
           }
+          
+          console.log('🔮 AI Ask&Execute Final Query:', finalQuery);
 
           queryResult = await executeAndAnalyzeQuery(
             finalQuery, 
