@@ -106,6 +106,16 @@ secureLogger.info('Logging middleware: Secure API logger initialized with PII pr
     console.error("❌ Errore durante l'inizializzazione dello scheduler SGR:", error);
   }
 
+  // Inizializza il modulo LCI (Life Cycle Inventory) per ECOTAPES
+  console.log("🌿 Inizializzazione modulo LCI...");
+  try {
+    const { registerLciModule } = await import('./modules/lci');
+    await registerLciModule(app);
+    console.log("✅ Modulo LCI inizializzato");
+  } catch (error) {
+    console.error("⚠️ Errore durante l'inizializzazione del modulo LCI:", error);
+  }
+
   // Inizializza il servizio di sincronizzazione esterno (temporaneamente disabilitato)
   console.log("🔄 Servizio sincronizzazione esterno temporaneamente disabilitato per debug");
   // setTimeout(async () => {
