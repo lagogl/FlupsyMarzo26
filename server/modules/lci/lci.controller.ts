@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { lciMaterialsService } from "./services/lci-materials.service";
 import { lciConsumablesService } from "./services/lci-consumables.service";
 import { lciDataService } from "./services/lci-data.service";
+import { lciExportService } from "./services/lci-export.service";
 import { productionAdapter } from "./adapters/production-adapter";
 import { lotsAdapter } from "./adapters/lots-adapter";
 import { flupsyAdapter } from "./adapters/flupsy-adapter";
@@ -377,6 +378,68 @@ export class LciController {
       const year = parseInt(req.params.year);
       const data = await lotsAdapter.getYearlyInput(year);
       res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async exportExcel(req: Request, res: Response) {
+    try {
+      const year = parseInt(req.params.year);
+      if (isNaN(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ error: "Invalid year parameter" });
+      }
+
+      const excelBuffer = await lciExportService.generateExcelReport(year);
+      
+      const filename = `LCI_ECOTAPES_${year}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', excelBuffer.length);
+      
+      res.send(excelBuffer);
+    } catch (error: any) {
+      console.error('Error exporting LCI Excel:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async getExportPreview(req: Request, res: Response) {
+    try {
+      const year = parseInt(req.params.year);
+      if (isNaN(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ error: "Invalid year parameter" });
+      }
+
+      const data = await lciExportService.generateReportData(year);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async getAllConsumptionLogs(req: Request, res: Response) {
+    try {
+      const { consumableId, year } = req.query;
+      const logs = await lciExportService.getConsumptionLogs(
+        consumableId ? parseInt(consumableId as string) : undefined,
+        year ? parseInt(year as string) : undefined
+      );
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async createConsumptionLog(req: Request, res: Response) {
+    try {
+      const parsed = insertLciConsumptionLogSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const log = await lciExportService.addConsumptionLog(parsed.data as any);
+      res.status(201).json(log);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -34,6 +34,12 @@ router.get("/reports/:id", (req, res) => lciController.getReportById(req, res));
 router.post("/reports", (req, res) => lciController.createReport(req, res));
 router.post("/reports/:id/finalize", (req, res) => lciController.finalizeReport(req, res));
 
+router.get("/export/preview/:year", (req, res) => lciController.getExportPreview(req, res));
+router.get("/export/excel/:year", (req, res) => lciController.exportExcel(req, res));
+
+router.get("/consumption-logs", (req, res) => lciController.getAllConsumptionLogs(req, res));
+router.post("/consumption-logs", (req, res) => lciController.createConsumptionLog(req, res));
+
 router.get("/flupsy/overview", (req, res) => lciController.getFlupsyOverview(req, res));
 router.get("/lots/input/:year", (req, res) => lciController.getLotsInput(req, res));
 

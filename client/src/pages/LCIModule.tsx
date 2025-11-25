@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Leaf, Package, Zap, FileText, Plus, Trash2, Edit, RefreshCw, Settings, BarChart3 } from "lucide-react";
+import { Leaf, Package, Zap, FileText, Plus, Trash2, Edit, Download, BarChart3, Calendar, Eye, FileSpreadsheet, Clock } from "lucide-react";
 import { Helmet } from "react-helmet";
 
 interface LciMaterial {
@@ -45,6 +45,17 @@ interface LciConsumable {
   createdAt: string;
 }
 
+interface LciConsumptionLog {
+  id: number;
+  consumableId: number;
+  periodStart: string;
+  periodEnd: string;
+  amount: string;
+  source: string;
+  notes: string | null;
+  createdAt: string;
+}
+
 interface LciStatus {
   enabled: boolean;
   settings: {
@@ -56,6 +67,28 @@ interface LciStatus {
   }[];
 }
 
+interface LCIReportPreview {
+  companyInfo: {
+    name: string;
+    location: string;
+    coordinates: string;
+    facilityType: string;
+    facilitySizeM2: number;
+  };
+  referenceYear: number;
+  materials: any[];
+  consumables: any[];
+  production: any[];
+  summary: {
+    totalMaterialsKg: number;
+    totalAnnualizedMaterialsKg: number;
+    totalProductionKg: number;
+    totalInputPieces: number;
+    totalOutputPieces: number;
+    overallSurvivalRate: number;
+  };
+}
+
 const MATERIAL_CATEGORIES = ['FLUPSY', 'Raceway', 'Filtri', 'Pompe', 'Illuminazione', 'Strutture', 'Elettrico', 'Altro'];
 const CONSUMABLE_CATEGORIES = ['Energia', 'Carburante', 'Chimico', 'Acqua', 'Altro'];
 
@@ -64,8 +97,12 @@ export default function LCIModule() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [materialDialogOpen, setMaterialDialogOpen] = useState(false);
   const [consumableDialogOpen, setConsumableDialogOpen] = useState(false);
+  const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<LciMaterial | null>(null);
   const [editingConsumable, setEditingConsumable] = useState<LciConsumable | null>(null);
+  const [selectedConsumableForLog, setSelectedConsumableForLog] = useState<LciConsumable | null>(null);
+  const [reportYear, setReportYear] = useState(new Date().getFullYear());
+  const [showPreview, setShowPreview] = useState(false);
 
   const { data: status, isLoading: statusLoading } = useQuery<LciStatus>({
     queryKey: ['/api/lci/status'],
@@ -77,6 +114,15 @@ export default function LCIModule() {
 
   const { data: consumables = [], isLoading: consumablesLoading } = useQuery<LciConsumable[]>({
     queryKey: ['/api/lci/consumables'],
+  });
+
+  const { data: consumptionLogs = [] } = useQuery<LciConsumptionLog[]>({
+    queryKey: ['/api/lci/consumption-logs'],
+  });
+
+  const { data: reportPreview, isLoading: previewLoading, refetch: refetchPreview } = useQuery<LCIReportPreview>({
+    queryKey: ['/api/lci/export/preview', reportYear],
+    enabled: showPreview,
   });
 
   const createMaterialMutation = useMutation({
@@ -150,6 +196,21 @@ export default function LCIModule() {
     },
   });
 
+  const createLogMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest('/api/lci/consumption-logs', { method: 'POST', body: JSON.stringify(data) });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/lci/consumption-logs'] });
+      setLogDialogOpen(false);
+      setSelectedConsumableForLog(null);
+      toast({ title: "Log registrato", description: "Il consumo è stato registrato con successo." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Errore", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleMaterialSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -186,6 +247,46 @@ export default function LCIModule() {
     createConsumableMutation.mutate(data);
   };
 
+  const handleLogSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedConsumableForLog) return;
+    
+    const formData = new FormData(e.currentTarget);
+    const data = {
+      consumableId: selectedConsumableForLog.id,
+      periodStart: formData.get('periodStart') as string,
+      periodEnd: formData.get('periodEnd') as string,
+      amount: formData.get('amount') as string,
+      source: 'manual',
+      notes: formData.get('notes') as string || null,
+    };
+
+    createLogMutation.mutate(data);
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      toast({ title: "Generazione in corso...", description: "Preparazione del file Excel ECOTAPES" });
+      
+      const response = await fetch(`/api/lci/export/excel/${reportYear}`);
+      if (!response.ok) throw new Error('Errore durante la generazione del report');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `LCI_ECOTAPES_${reportYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast({ title: "Report generato", description: "Il file Excel è stato scaricato con successo." });
+    } catch (error: any) {
+      toast({ title: "Errore", description: error.message, variant: "destructive" });
+    }
+  };
+
   const companyInfo = status?.settings.find(s => s.key === 'company_info')?.value;
   const activeMaterials = materials.filter(m => m.active);
   const activeConsumables = consumables.filter(c => c.active);
@@ -200,6 +301,11 @@ export default function LCIModule() {
     weight: activeMaterials.filter(m => m.category === cat).reduce((sum, m) => 
       sum + (m.quantity || 1) * (parseFloat(m.unitWeightKg || '0') || 0), 0),
   })).filter(c => c.count > 0);
+
+  const getConsumableName = (consumableId: number) => {
+    const c = consumables.find(c => c.id === consumableId);
+    return c?.name || 'Sconosciuto';
+  };
 
   if (statusLoading) {
     return (
@@ -236,7 +342,7 @@ export default function LCIModule() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
             <TabsTrigger value="dashboard" className="flex items-center gap-2" data-testid="tab-dashboard">
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
@@ -248,6 +354,10 @@ export default function LCIModule() {
             <TabsTrigger value="consumables" className="flex items-center gap-2" data-testid="tab-consumables">
               <Zap className="h-4 w-4" />
               <span className="hidden sm:inline">Consumabili</span>
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="flex items-center gap-2" data-testid="tab-logs">
+              <Clock className="h-4 w-4" />
+              <span className="hidden sm:inline">Log Consumo</span>
             </TabsTrigger>
             <TabsTrigger value="reports" className="flex items-center gap-2" data-testid="tab-reports">
               <FileText className="h-4 w-4" />
@@ -289,13 +399,11 @@ export default function LCIModule() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Anno Riferimento</CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Log Consumo</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold" data-testid="text-reference-year">
-                    {status?.settings.find(s => s.key === 'default_reference_year')?.value || 2025}
-                  </div>
-                  <p className="text-xs text-muted-foreground">per report LCI</p>
+                  <div className="text-2xl font-bold" data-testid="text-logs-count">{consumptionLogs.length}</div>
+                  <p className="text-xs text-muted-foreground">registrazioni effettuate</p>
                 </CardContent>
               </Card>
             </div>
@@ -317,26 +425,6 @@ export default function LCIModule() {
                         <span className="font-medium">{cat.weight.toFixed(1)} kg</span>
                       </div>
                     ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {companyInfo && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    Informazioni Impianto
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div><strong>Azienda:</strong> {companyInfo.name}</div>
-                    <div><strong>Località:</strong> {companyInfo.location}</div>
-                    <div><strong>Coordinate:</strong> {companyInfo.coordinates}</div>
-                    <div><strong>Superficie:</strong> {companyInfo.facility_size_m2?.toLocaleString()} m²</div>
-                    <div className="md:col-span-2"><strong>Tipo Impianto:</strong> {companyInfo.facility_type}</div>
                   </div>
                 </CardContent>
               </Card>
@@ -576,14 +664,107 @@ export default function LCIModule() {
                           {consumable.ecoinventProcess || '-'}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => deleteConsumableMutation.mutate(consumable.id)}
-                            data-testid={`button-delete-consumable-${consumable.id}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <div className="flex gap-1 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => { setSelectedConsumableForLog(consumable); setLogDialogOpen(true); }}
+                              data-testid={`button-log-consumable-${consumable.id}`}
+                            >
+                              <Plus className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteConsumableMutation.mutate(consumable.id)}
+                              data-testid={`button-delete-consumable-${consumable.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            )}
+
+            <Dialog open={logDialogOpen} onOpenChange={setLogDialogOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Registra Consumo</DialogTitle>
+                  <DialogDescription>
+                    {selectedConsumableForLog ? `Registra il consumo per: ${selectedConsumableForLog.name}` : ''}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleLogSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="log-start">Data Inizio *</Label>
+                      <Input id="log-start" name="periodStart" type="date" required data-testid="input-log-start" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="log-end">Data Fine *</Label>
+                      <Input id="log-end" name="periodEnd" type="date" required data-testid="input-log-end" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="log-amount">Quantità Consumata ({selectedConsumableForLog?.unit}) *</Label>
+                    <Input id="log-amount" name="amount" type="number" step="0.001" required data-testid="input-log-amount" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="log-notes">Note</Label>
+                    <Input id="log-notes" name="notes" data-testid="input-log-notes" />
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={createLogMutation.isPending} data-testid="button-save-log">
+                      {createLogMutation.isPending ? 'Salvataggio...' : 'Registra'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          <TabsContent value="logs" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Log Consumo</h2>
+            </div>
+
+            {consumptionLogs.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Nessun log di consumo registrato</p>
+                  <p className="text-sm">Registra i consumi dalla tab Consumabili usando il pulsante +</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Consumabile</TableHead>
+                      <TableHead>Periodo</TableHead>
+                      <TableHead className="text-right">Quantità</TableHead>
+                      <TableHead>Fonte</TableHead>
+                      <TableHead>Note</TableHead>
+                      <TableHead>Registrato</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {consumptionLogs.map(log => (
+                      <TableRow key={log.id} data-testid={`row-log-${log.id}`}>
+                        <TableCell className="font-medium">{getConsumableName(log.consumableId)}</TableCell>
+                        <TableCell>
+                          {new Date(log.periodStart).toLocaleDateString('it-IT')} - {new Date(log.periodEnd).toLocaleDateString('it-IT')}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{log.amount}</TableCell>
+                        <TableCell><Badge variant="secondary">{log.source}</Badge></TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{log.notes || '-'}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {new Date(log.createdAt).toLocaleDateString('it-IT')}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -596,13 +777,97 @@ export default function LCIModule() {
           <TabsContent value="reports" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Report LCI</CardTitle>
-                <CardDescription>Generazione report per il progetto ECOTAPES</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5" />
+                  Export Report LCI
+                </CardTitle>
+                <CardDescription>Genera report Excel compatibile con ECOTAPES</CardDescription>
               </CardHeader>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Funzionalità report in sviluppo</p>
-                <p className="text-sm">Prossimamente: generazione Excel compatibile ECOTAPES</p>
+              <CardContent className="space-y-6">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                  <div className="space-y-2">
+                    <Label htmlFor="report-year">Anno di Riferimento</Label>
+                    <Select value={reportYear.toString()} onValueChange={(v) => setReportYear(parseInt(v))}>
+                      <SelectTrigger className="w-32" data-testid="select-report-year">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[2023, 2024, 2025, 2026].map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => { setShowPreview(true); refetchPreview(); }}
+                      data-testid="button-preview-report"
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Anteprima
+                    </Button>
+                    <Button onClick={handleExportExcel} data-testid="button-export-excel">
+                      <Download className="h-4 w-4 mr-2" />
+                      Scarica Excel
+                    </Button>
+                  </div>
+                </div>
+
+                {showPreview && (
+                  <div className="border rounded-lg p-4 space-y-4">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <Eye className="h-4 w-4" />
+                      Anteprima Report {reportYear}
+                    </h3>
+                    
+                    {previewLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-4 w-64" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                    ) : reportPreview ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <h4 className="font-medium mb-2">Riepilogo Materiali</h4>
+                          <p>Elementi: {reportPreview.materials.length}</p>
+                          <p>Peso Totale: {reportPreview.summary.totalMaterialsKg.toFixed(1)} kg</p>
+                          <p>Peso Annualizzato: {reportPreview.summary.totalAnnualizedMaterialsKg.toFixed(1)} kg/anno</p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium mb-2">Riepilogo Consumabili</h4>
+                          <p>Tipologie: {reportPreview.consumables.length}</p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium mb-2">Riepilogo Produzione</h4>
+                          <p>Taglie: {reportPreview.production.length}</p>
+                          <p>Produzione: {reportPreview.summary.totalProductionKg.toFixed(1)} kg</p>
+                          <p>Animali Output: {reportPreview.summary.totalOutputPieces.toLocaleString()}</p>
+                          <p>Sopravvivenza: {reportPreview.summary.overallSurvivalRate.toFixed(1)}%</p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium mb-2">Azienda</h4>
+                          <p>{reportPreview.companyInfo.name}</p>
+                          <p>{reportPreview.companyInfo.location}</p>
+                          <p>{reportPreview.companyInfo.facilityType}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">Nessun dato disponibile per questo anno</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <h4 className="font-medium mb-2">Il report Excel includerà:</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Foglio Riepilogo con informazioni aziendali e totali</li>
+                    <li>• Foglio Materiali con inventario completo e pesi annualizzati</li>
+                    <li>• Foglio Consumabili con consumi annuali per categoria</li>
+                    <li>• Foglio Produzione con dati input/output per taglia</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
