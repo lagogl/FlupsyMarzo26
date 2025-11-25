@@ -17,26 +17,23 @@ import {
   getTableMetadata
 } from "./metadata.service.js";
 
-const AI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-const AI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+const AI_API_KEY = process.env.OPENAI_API_KEY;
 const AI_MODEL = 'gpt-4o'; // ChatGPT Omni
 
-// Client OpenAI via Replit AI Integrations
+// Client OpenAI con API key personale dell'utente
 let aiClient: OpenAI | null = null;
 
 function initializeClient() {
-  const currentApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  const currentBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const currentApiKey = process.env.OPENAI_API_KEY;
   
-  if (currentApiKey && currentBaseUrl) {
+  if (currentApiKey) {
     aiClient = new OpenAI({
       apiKey: currentApiKey,
-      baseURL: currentBaseUrl,
     });
-    console.log('✅ Enhanced AI Client initialized (GPT-4o via Replit AI Integrations)');
+    console.log('✅ Enhanced AI Client initialized (GPT-4o with user API key)');
     return true;
   }
-  console.log('⚠️ Enhanced AI Client: API key or base URL missing');
+  console.log('⚠️ Enhanced AI Client: OPENAI_API_KEY missing');
   return false;
 }
 
@@ -45,7 +42,7 @@ initializeClient();
 
 // Ricarica periodica
 setInterval(() => {
-  const newApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const newApiKey = process.env.OPENAI_API_KEY;
   if (newApiKey && (!aiClient || newApiKey !== AI_API_KEY)) {
     console.log('🔄 Enhanced AI: Ricaricando client...');
     initializeClient();
