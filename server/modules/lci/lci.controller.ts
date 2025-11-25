@@ -7,6 +7,9 @@ import { lotsAdapter } from "./adapters/lots-adapter";
 import { flupsyAdapter } from "./adapters/flupsy-adapter";
 import { insertLciMaterialSchema, insertLciConsumableSchema, insertLciConsumptionLogSchema, insertLciProductionSnapshotSchema, insertLciReportSchema } from "@shared/lci-schema";
 
+const updateLciMaterialSchema = insertLciMaterialSchema.partial();
+const updateLciConsumableSchema = insertLciConsumableSchema.partial();
+
 export class LciController {
   async getStatus(req: Request, res: Response) {
     try {
@@ -63,7 +66,14 @@ export class LciController {
   async updateMaterial(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
-      const material = await lciMaterialsService.update(id, req.body);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid material ID" });
+      }
+      const parsed = updateLciMaterialSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const material = await lciMaterialsService.update(id, parsed.data);
       if (!material) {
         return res.status(404).json({ error: "Material not found" });
       }
@@ -76,11 +86,14 @@ export class LciController {
   async deleteMaterial(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid material ID" });
+      }
       const success = await lciMaterialsService.delete(id);
       if (!success) {
         return res.status(404).json({ error: "Material not found" });
       }
-      res.json({ success: true });
+      res.json({ success: true, message: "Material deactivated (soft delete)" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -111,7 +124,20 @@ export class LciController {
       if (!Array.isArray(materials)) {
         return res.status(400).json({ error: "materials must be an array" });
       }
-      const result = await lciMaterialsService.bulkImport(materials);
+      const validatedMaterials = [];
+      const errors = [];
+      for (let i = 0; i < materials.length; i++) {
+        const parsed = insertLciMaterialSchema.safeParse(materials[i]);
+        if (parsed.success) {
+          validatedMaterials.push(parsed.data);
+        } else {
+          errors.push({ index: i, errors: parsed.error.errors });
+        }
+      }
+      if (errors.length > 0) {
+        return res.status(400).json({ error: "Validation failed for some materials", validationErrors: errors });
+      }
+      const result = await lciMaterialsService.bulkImport(validatedMaterials);
       res.status(201).json({ imported: result.length, materials: result });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -161,7 +187,14 @@ export class LciController {
   async updateConsumable(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
-      const consumable = await lciConsumablesService.update(id, req.body);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid consumable ID" });
+      }
+      const parsed = updateLciConsumableSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const consumable = await lciConsumablesService.update(id, parsed.data);
       if (!consumable) {
         return res.status(404).json({ error: "Consumable not found" });
       }
@@ -174,11 +207,14 @@ export class LciController {
   async deleteConsumable(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid consumable ID" });
+      }
       const success = await lciConsumablesService.delete(id);
       if (!success) {
         return res.status(404).json({ error: "Consumable not found" });
       }
-      res.json({ success: true });
+      res.json({ success: true, message: "Consumable deactivated (soft delete)" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

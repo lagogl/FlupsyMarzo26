@@ -1,4 +1,4 @@
-import { db } from "@db";
+import { db } from "../../../db";
 import { lciMaterials, type LciMaterial, type InsertLciMaterial } from "@shared/lci-schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import type { LciMaterialFilter, LciMaterialCategory } from "../types/lci.types";

@@ -1,4 +1,4 @@
-import { db } from "@db";
+import { db } from "../../../db";
 import { lciConsumables, lciConsumptionLogs, type LciConsumable, type LciConsumptionLog, type InsertLciConsumable, type InsertLciConsumptionLog } from "@shared/lci-schema";
 import { eq, and, between, desc, sql } from "drizzle-orm";
 import type { LciConsumableFilter, LciConsumptionSummary } from "../types/lci.types";

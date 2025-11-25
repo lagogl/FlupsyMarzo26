@@ -1,4 +1,4 @@
-import { db } from "@db";
+import { db } from "../../../db";
 import { sql } from "drizzle-orm";
 import type { FlupsyAdapterData } from "../types/lci.types";
 

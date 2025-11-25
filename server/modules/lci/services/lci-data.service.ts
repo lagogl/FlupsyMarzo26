@@ -1,4 +1,4 @@
-import { db } from "@db";
+import { db } from "../../../db";
 import { lciProductionSnapshots, lciReports, lciSettings, type LciProductionSnapshot, type LciReport, type LciSetting, type InsertLciProductionSnapshot, type InsertLciReport } from "@shared/lci-schema";
 import { eq, and, desc } from "drizzle-orm";
 import { lciMaterialsService } from "./lci-materials.service";
