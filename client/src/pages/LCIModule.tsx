@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { Leaf, Package, Zap, FileText, Plus, Trash2, Edit, Download, BarChart3, Calendar, Eye, FileSpreadsheet, Clock } from "lucide-react";
+import { Leaf, Package, Zap, FileText, Plus, Trash2, Edit, Download, BarChart3, Calendar, Eye, FileSpreadsheet, Clock, ChevronRight, Smartphone, Monitor } from "lucide-react";
 import { Helmet } from "react-helmet";
 
 interface LciMaterial {
@@ -92,8 +94,45 @@ interface LCIReportPreview {
 const MATERIAL_CATEGORIES = ['FLUPSY', 'Raceway', 'Filtri', 'Pompe', 'Illuminazione', 'Strutture', 'Elettrico', 'Altro'];
 const CONSUMABLE_CATEGORIES = ['Energia', 'Carburante', 'Chimico', 'Acqua', 'Altro'];
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const isSmallScreen = window.innerWidth < 768;
+      setIsMobile(isTouchDevice && isSmallScreen);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+function useViewPreference() {
+  const [forceDesktop, setForceDesktopState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('lci-view-preference') === 'desktop';
+    }
+    return false;
+  });
+
+  const setForceDesktop = (value: boolean) => {
+    setForceDesktopState(value);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lci-view-preference', value ? 'desktop' : 'mobile');
+    }
+  };
+
+  return { forceDesktop, setForceDesktop };
+}
+
 export default function LCIModule() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+  const { forceDesktop, setForceDesktop } = useViewPreference();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [materialDialogOpen, setMaterialDialogOpen] = useState(false);
   const [consumableDialogOpen, setConsumableDialogOpen] = useState(false);
@@ -103,6 +142,7 @@ export default function LCIModule() {
   const [selectedConsumableForLog, setSelectedConsumableForLog] = useState<LciConsumable | null>(null);
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   const [showPreview, setShowPreview] = useState(false);
+  const [quickLogSheet, setQuickLogSheet] = useState(false);
 
   const { data: status, isLoading: statusLoading } = useQuery<LciStatus>({
     queryKey: ['/api/lci/status'],
@@ -208,6 +248,7 @@ export default function LCIModule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/lci/consumption-logs'] });
       setLogDialogOpen(false);
+      setQuickLogSheet(false);
       setSelectedConsumableForLog(null);
       toast({ title: "Log registrato", description: "Il consumo è stato registrato con successo." });
     },
@@ -312,6 +353,8 @@ export default function LCIModule() {
     return c?.name || 'Sconosciuto';
   };
 
+  const showMobileUI = isMobile && !forceDesktop;
+
   if (statusLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -320,6 +363,672 @@ export default function LCIModule() {
           {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32" />)}
         </div>
       </div>
+    );
+  }
+
+  if (showMobileUI) {
+    return (
+      <>
+        <Helmet>
+          <title>LCI Mobile - ECOTAPES | Delta Futuro</title>
+          <meta name="description" content="Life Cycle Inventory mobile interface for field data collection" />
+        </Helmet>
+
+        <div className="flex flex-col h-[100dvh] bg-background">
+          <header className="sticky top-0 z-50 bg-background border-b px-4 py-3 safe-area-top">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Leaf className="h-6 w-6 text-green-600" />
+                <span className="font-semibold text-lg">LCI Mobile</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setForceDesktop(true)}
+                className="text-xs"
+                data-testid="button-switch-desktop"
+              >
+                <Monitor className="h-4 w-4 mr-1" />
+                Desktop
+              </Button>
+            </div>
+          </header>
+
+          <ScrollArea className="flex-1">
+            <div className="p-4 pb-24 space-y-4">
+              {activeTab === "dashboard" && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Card className="touch-manipulation" data-testid="mobile-card-materials">
+                      <CardContent className="p-4 text-center">
+                        <Package className="h-8 w-8 mx-auto mb-2 text-blue-500" />
+                        <div className="text-2xl font-bold">{activeMaterials.length}</div>
+                        <div className="text-xs text-muted-foreground">Materiali</div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="touch-manipulation" data-testid="mobile-card-weight">
+                      <CardContent className="p-4 text-center">
+                        <BarChart3 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                        <div className="text-2xl font-bold">{totalMaterialWeight.toFixed(0)}</div>
+                        <div className="text-xs text-muted-foreground">kg Totali</div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="touch-manipulation" data-testid="mobile-card-consumables">
+                      <CardContent className="p-4 text-center">
+                        <Zap className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
+                        <div className="text-2xl font-bold">{activeConsumables.length}</div>
+                        <div className="text-xs text-muted-foreground">Consumabili</div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="touch-manipulation" data-testid="mobile-card-logs">
+                      <CardContent className="p-4 text-center">
+                        <Clock className="h-8 w-8 mx-auto mb-2 text-purple-500" />
+                        <div className="text-2xl font-bold">{consumptionLogs.length}</div>
+                        <div className="text-xs text-muted-foreground">Log</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Azione Rapida</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Button 
+                        className="w-full h-14 text-lg" 
+                        onClick={() => setQuickLogSheet(true)}
+                        data-testid="button-quick-log"
+                      >
+                        <Plus className="h-6 w-6 mr-3" />
+                        Registra Consumo
+                      </Button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Button 
+                          variant="outline" 
+                          className="h-12"
+                          onClick={() => { setEditingMaterial(null); setMaterialDialogOpen(true); }}
+                          data-testid="button-mobile-add-material"
+                        >
+                          <Package className="h-5 w-5 mr-2" />
+                          Materiale
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="h-12"
+                          onClick={() => { setEditingConsumable(null); setConsumableDialogOpen(true); }}
+                          data-testid="button-mobile-add-consumable"
+                        >
+                          <Zap className="h-5 w-5 mr-2" />
+                          Consumabile
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {materialsByCategory.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Materiali per Categoria</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {materialsByCategory.map(cat => (
+                          <div key={cat.category} className="flex items-center justify-between py-2 border-b last:border-0">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">{cat.category}</Badge>
+                              <span className="text-sm text-muted-foreground">{cat.count}</span>
+                            </div>
+                            <span className="font-medium text-sm">{cat.weight.toFixed(1)} kg</span>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )}
+
+              {activeTab === "materials" && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Materiali</h2>
+                    <Button 
+                      size="sm"
+                      onClick={() => { setEditingMaterial(null); setMaterialDialogOpen(true); }}
+                      data-testid="button-mobile-materials-add"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Aggiungi
+                    </Button>
+                  </div>
+
+                  {materialsLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+                    </div>
+                  ) : activeMaterials.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-12 text-center">
+                        <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground/30" />
+                        <p className="text-muted-foreground">Nessun materiale</p>
+                        <Button 
+                          className="mt-4"
+                          onClick={() => { setEditingMaterial(null); setMaterialDialogOpen(true); }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Aggiungi il primo
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="space-y-3">
+                      {activeMaterials.map(material => (
+                        <Card 
+                          key={material.id} 
+                          className="touch-manipulation active:scale-[0.98] transition-transform"
+                          data-testid={`mobile-material-${material.id}`}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="font-medium text-base">{material.name}</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge variant="secondary" className="text-xs">{material.category}</Badge>
+                                  {material.materialType && (
+                                    <span className="text-xs text-muted-foreground">{material.materialType}</span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 mt-3 text-sm">
+                                  <div>
+                                    <div className="text-muted-foreground text-xs">Quantità</div>
+                                    <div className="font-medium">{material.quantity} {material.unit}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground text-xs">Peso Tot.</div>
+                                    <div className="font-medium">
+                                      {((material.quantity || 1) * (parseFloat(material.unitWeightKg || '0') || 0)).toFixed(1)} kg
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground text-xs">Vita Utile</div>
+                                    <div className="font-medium">{material.expectedLifeYears ? `${material.expectedLifeYears}a` : '-'}</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-10 w-10"
+                                  onClick={() => { setEditingMaterial(material); setMaterialDialogOpen(true); }}
+                                >
+                                  <Edit className="h-5 w-5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-10 w-10"
+                                  onClick={() => deleteMaterialMutation.mutate(material.id)}
+                                >
+                                  <Trash2 className="h-5 w-5 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {activeTab === "consumables" && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Consumabili</h2>
+                    <Button 
+                      size="sm"
+                      onClick={() => { setEditingConsumable(null); setConsumableDialogOpen(true); }}
+                      data-testid="button-mobile-consumables-add"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Aggiungi
+                    </Button>
+                  </div>
+
+                  {consumablesLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+                    </div>
+                  ) : activeConsumables.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-12 text-center">
+                        <Zap className="h-16 w-16 mx-auto mb-4 text-muted-foreground/30" />
+                        <p className="text-muted-foreground">Nessun consumabile</p>
+                        <Button 
+                          className="mt-4"
+                          onClick={() => { setEditingConsumable(null); setConsumableDialogOpen(true); }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Aggiungi il primo
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="space-y-3">
+                      {activeConsumables.map(consumable => (
+                        <Card 
+                          key={consumable.id} 
+                          className="touch-manipulation active:scale-[0.98] transition-transform"
+                          data-testid={`mobile-consumable-${consumable.id}`}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1" onClick={() => { setSelectedConsumableForLog(consumable); setQuickLogSheet(true); }}>
+                                <div className="font-medium text-base">{consumable.name}</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge variant="secondary" className="text-xs">{consumable.category}</Badge>
+                                  <span className="text-xs text-muted-foreground">{consumable.unit}</span>
+                                </div>
+                                {consumable.defaultAnnualAmount && (
+                                  <div className="mt-2 text-sm text-muted-foreground">
+                                    Default: {consumable.defaultAnnualAmount} {consumable.unit}/anno
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="default"
+                                  size="icon"
+                                  className="h-12 w-12 bg-green-600 hover:bg-green-700"
+                                  onClick={() => { setSelectedConsumableForLog(consumable); setQuickLogSheet(true); }}
+                                  data-testid={`button-mobile-log-${consumable.id}`}
+                                >
+                                  <Plus className="h-6 w-6" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-12 w-12"
+                                  onClick={() => deleteConsumableMutation.mutate(consumable.id)}
+                                >
+                                  <Trash2 className="h-5 w-5 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {activeTab === "reports" && (
+                <>
+                  <h2 className="text-lg font-semibold">Report Excel</h2>
+                  
+                  <Card>
+                    <CardContent className="p-4 space-y-4">
+                      <div className="space-y-2">
+                        <Label>Anno di Riferimento</Label>
+                        <Select value={reportYear.toString()} onValueChange={(v) => setReportYear(parseInt(v))}>
+                          <SelectTrigger className="h-12" data-testid="mobile-select-year">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[2023, 2024, 2025, 2026].map(year => (
+                              <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <Button 
+                        className="w-full h-14 text-lg"
+                        onClick={handleExportExcel}
+                        data-testid="button-mobile-export"
+                      >
+                        <Download className="h-6 w-6 mr-3" />
+                        Scarica Excel ECOTAPES
+                      </Button>
+
+                      <Button 
+                        variant="outline"
+                        className="w-full h-12"
+                        onClick={() => { setShowPreview(true); refetchPreview(); }}
+                        data-testid="button-mobile-preview"
+                      >
+                        <Eye className="h-5 w-5 mr-2" />
+                        Anteprima
+                      </Button>
+
+                      {showPreview && reportPreview && (
+                        <div className="border rounded-lg p-4 space-y-3 text-sm bg-muted/30">
+                          <div className="font-medium">Riepilogo {reportYear}</div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-muted-foreground text-xs">Materiali</div>
+                              <div>{reportPreview.materials.length} elementi</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground text-xs">Peso Tot.</div>
+                              <div>{reportPreview.summary.totalMaterialsKg.toFixed(1)} kg</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground text-xs">Consumabili</div>
+                              <div>{reportPreview.consumables.length} tipi</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground text-xs">Produzione</div>
+                              <div>{reportPreview.summary.totalProductionKg.toFixed(1)} kg</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-sm font-medium mb-2">Il report include:</div>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li>• Riepilogo azienda e totali</li>
+                        <li>• Inventario materiali</li>
+                        <li>• Consumi annuali</li>
+                        <li>• Dati produzione</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </div>
+          </ScrollArea>
+
+          <nav className="fixed bottom-0 left-0 right-0 bg-background border-t safe-area-bottom z-50">
+            <div className="grid grid-cols-4 h-16">
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`flex flex-col items-center justify-center gap-1 ${activeTab === "dashboard" ? "text-primary" : "text-muted-foreground"}`}
+                data-testid="mobile-nav-dashboard"
+              >
+                <BarChart3 className="h-5 w-5" />
+                <span className="text-xs">Home</span>
+              </button>
+              <button
+                onClick={() => setActiveTab("materials")}
+                className={`flex flex-col items-center justify-center gap-1 ${activeTab === "materials" ? "text-primary" : "text-muted-foreground"}`}
+                data-testid="mobile-nav-materials"
+              >
+                <Package className="h-5 w-5" />
+                <span className="text-xs">Materiali</span>
+              </button>
+              <button
+                onClick={() => setActiveTab("consumables")}
+                className={`flex flex-col items-center justify-center gap-1 ${activeTab === "consumables" ? "text-primary" : "text-muted-foreground"}`}
+                data-testid="mobile-nav-consumables"
+              >
+                <Zap className="h-5 w-5" />
+                <span className="text-xs">Consumabili</span>
+              </button>
+              <button
+                onClick={() => setActiveTab("reports")}
+                className={`flex flex-col items-center justify-center gap-1 ${activeTab === "reports" ? "text-primary" : "text-muted-foreground"}`}
+                data-testid="mobile-nav-reports"
+              >
+                <FileText className="h-5 w-5" />
+                <span className="text-xs">Report</span>
+              </button>
+            </div>
+          </nav>
+
+          <Sheet 
+            open={quickLogSheet} 
+            onOpenChange={(open) => {
+              if (!open) {
+                setSelectedConsumableForLog(null);
+              }
+              setQuickLogSheet(open);
+            }}
+          >
+            <SheetContent side="bottom" className="h-auto max-h-[85vh] rounded-t-2xl">
+              <SheetHeader className="text-left">
+                <SheetTitle className="text-xl">Registra Consumo</SheetTitle>
+                <SheetDescription>
+                  {selectedConsumableForLog ? selectedConsumableForLog.name : 'Seleziona un consumabile'}
+                </SheetDescription>
+              </SheetHeader>
+              
+              {!selectedConsumableForLog ? (
+                <div className="py-4 space-y-3">
+                  {activeConsumables.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Zap className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
+                      <p className="text-muted-foreground mb-4">Nessun consumabile disponibile</p>
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          setQuickLogSheet(false);
+                          setConsumableDialogOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Crea Consumabile
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground mb-2">Seleziona il consumabile da registrare:</p>
+                      {activeConsumables.map(c => (
+                        <Button
+                          key={c.id}
+                          variant="outline"
+                          className="w-full h-16 justify-between text-left touch-manipulation"
+                          onClick={() => setSelectedConsumableForLog(c)}
+                          data-testid={`sheet-select-consumable-${c.id}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Zap className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <div className="font-medium">{c.name}</div>
+                              <div className="text-xs text-muted-foreground">{c.category} - {c.unit}</div>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                        </Button>
+                      ))}
+                    </>
+                  )}
+                  <Button 
+                    variant="ghost" 
+                    className="w-full h-12 mt-2"
+                    onClick={() => setQuickLogSheet(false)}
+                  >
+                    Chiudi
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleLogSubmit} className="py-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base">Quantità ({selectedConsumableForLog.unit})</Label>
+                    <Input 
+                      name="amount" 
+                      type="number" 
+                      step="0.001" 
+                      inputMode="decimal"
+                      required 
+                      className="h-14 text-lg"
+                      placeholder="es. 1500"
+                      data-testid="sheet-input-amount"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Data Inizio</Label>
+                      <Input 
+                        name="periodStart" 
+                        type="date" 
+                        required 
+                        className="h-12"
+                        defaultValue={new Date().toISOString().split('T')[0]}
+                        data-testid="sheet-input-start"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data Fine</Label>
+                      <Input 
+                        name="periodEnd" 
+                        type="date" 
+                        required 
+                        className="h-12"
+                        defaultValue={new Date().toISOString().split('T')[0]}
+                        data-testid="sheet-input-end"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Note (opzionale)</Label>
+                    <Input 
+                      name="notes" 
+                      className="h-12"
+                      placeholder="es. Lettura contatore"
+                      data-testid="sheet-input-notes"
+                    />
+                  </div>
+
+                  <SheetFooter className="gap-2 sm:gap-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 h-12"
+                      onClick={() => setSelectedConsumableForLog(null)}
+                    >
+                      Indietro
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      className="flex-1 h-12 text-lg"
+                      disabled={createLogMutation.isPending}
+                      data-testid="sheet-button-save"
+                    >
+                      {createLogMutation.isPending ? 'Salvataggio...' : 'Registra'}
+                    </Button>
+                  </SheetFooter>
+                </form>
+              )}
+            </SheetContent>
+          </Sheet>
+
+          <Dialog open={materialDialogOpen} onOpenChange={setMaterialDialogOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editingMaterial ? 'Modifica Materiale' : 'Nuovo Materiale'}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleMaterialSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome *</Label>
+                  <Input id="name" name="name" defaultValue={editingMaterial?.name} required className="h-12" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Categoria *</Label>
+                  <Select name="category" defaultValue={editingMaterial?.category || MATERIAL_CATEGORIES[0]}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MATERIAL_CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="quantity">Quantità</Label>
+                    <Input id="quantity" name="quantity" type="number" defaultValue={editingMaterial?.quantity || 1} className="h-12" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unit">Unità</Label>
+                    <Input id="unit" name="unit" defaultValue={editingMaterial?.unit || 'pc'} className="h-12" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="unitWeightKg">Peso (kg)</Label>
+                    <Input id="unitWeightKg" name="unitWeightKg" type="number" step="0.001" defaultValue={editingMaterial?.unitWeightKg || ''} className="h-12" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="expectedLifeYears">Vita (anni)</Label>
+                    <Input id="expectedLifeYears" name="expectedLifeYears" type="number" step="0.5" defaultValue={editingMaterial?.expectedLifeYears || ''} className="h-12" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="materialType">Tipo Materiale</Label>
+                  <Input id="materialType" name="materialType" placeholder="es. PVC, HDPE, Acciaio..." defaultValue={editingMaterial?.materialType || ''} className="h-12" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Note</Label>
+                  <Input id="notes" name="notes" defaultValue={editingMaterial?.notes || ''} className="h-12" />
+                </div>
+                <DialogFooter>
+                  <Button type="submit" className="w-full h-12" disabled={createMaterialMutation.isPending || updateMaterialMutation.isPending}>
+                    {(createMaterialMutation.isPending || updateMaterialMutation.isPending) ? 'Salvataggio...' : 'Salva'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={consumableDialogOpen} onOpenChange={setConsumableDialogOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Nuovo Consumabile</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleConsumableSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cons-name">Nome *</Label>
+                  <Input id="cons-name" name="name" required className="h-12" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Categoria *</Label>
+                  <Select name="category" defaultValue={CONSUMABLE_CATEGORIES[0]}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONSUMABLE_CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cons-unit">Unità di Misura *</Label>
+                  <Input id="cons-unit" name="unit" placeholder="es. kWh, L, kg, m³" required className="h-12" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cons-amount">Consumo Annuale Default</Label>
+                  <Input id="cons-amount" name="defaultAnnualAmount" type="number" step="0.001" className="h-12" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cons-notes">Note</Label>
+                  <Input id="cons-notes" name="notes" className="h-12" />
+                </div>
+                <DialogFooter>
+                  <Button type="submit" className="w-full h-12" disabled={createConsumableMutation.isPending}>
+                    {createConsumableMutation.isPending ? 'Salvataggio...' : 'Salva'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </>
     );
   }
 
@@ -341,9 +1050,22 @@ export default function LCIModule() {
               Life Cycle Inventory per {companyInfo?.name || 'Delta Futuro'}
             </p>
           </div>
-          <Badge variant={status?.enabled ? "default" : "secondary"} className="w-fit">
-            {status?.enabled ? "Modulo Attivo" : "Modulo Disabilitato"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {forceDesktop && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setForceDesktop(false)}
+                data-testid="button-switch-mobile"
+              >
+                <Smartphone className="h-4 w-4 mr-1" />
+                Vista Mobile
+              </Button>
+            )}
+            <Badge variant={status?.enabled ? "default" : "secondary"} className="w-fit">
+              {status?.enabled ? "Modulo Attivo" : "Modulo Disabilitato"}
+            </Badge>
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
