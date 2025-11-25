@@ -1,13 +1,13 @@
 /**
  * ENHANCED AI SERVICE
  * 
- * Servizio Claude AI (Anthropic) potenziato con conoscenza completa del database.
+ * Servizio GPT-4o (OpenAI) potenziato con conoscenza completa del database.
  * Utilizza il metadata service per fornire contesto ricco all'AI.
  * 
  * STRATEGIA #1: Database Knowledge Base implementata
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { pool } from "../../db.js";
 import { 
   generateDatabaseDescription, 
@@ -17,23 +17,23 @@ import {
   getTableMetadata
 } from "./metadata.service.js";
 
-const AI_API_KEY = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-const AI_BASE_URL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
-const AI_MODEL = 'claude-sonnet-4-5';
+const AI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+const AI_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+const AI_MODEL = 'gpt-4o'; // ChatGPT Omni
 
-// Client Claude (Anthropic via Replit AI Integrations)
-let aiClient: Anthropic | null = null;
+// Client OpenAI via Replit AI Integrations
+let aiClient: OpenAI | null = null;
 
 function initializeClient() {
-  const currentApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-  const currentBaseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
+  const currentApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const currentBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   
   if (currentApiKey && currentBaseUrl) {
-    aiClient = new Anthropic({
+    aiClient = new OpenAI({
       apiKey: currentApiKey,
       baseURL: currentBaseUrl,
     });
-    console.log('✅ Enhanced AI Client initialized (Claude 3.5 Sonnet via Replit AI Integrations)');
+    console.log('✅ Enhanced AI Client initialized (GPT-4o via Replit AI Integrations)');
     return true;
   }
   console.log('⚠️ Enhanced AI Client: API key or base URL missing');
@@ -45,7 +45,7 @@ initializeClient();
 
 // Ricarica periodica
 setInterval(() => {
-  const newApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  const newApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   if (newApiKey && (!aiClient || newApiKey !== AI_API_KEY)) {
     console.log('🔄 Enhanced AI: Ricaricando client...');
     initializeClient();
@@ -192,7 +192,7 @@ export async function analyzeQuestionWithEnhancedAI(
   if (!aiClient) {
     return {
       success: false,
-      error: 'AI client non configurato. Verifica API key DeepSeek.',
+      error: 'AI client non configurato. Verifica configurazione OpenAI.',
       analysis: '',
       tablesNeeded: [],
       explanation: '',
@@ -231,26 +231,25 @@ export async function analyzeQuestionWithEnhancedAI(
     userPrompt += `MODALITÀ: ${request.mode || 'analysis'}\n\n`;
     userPrompt += `Analizza questa domanda e fornisci una risposta strutturata in JSON come specificato nelle istruzioni.`;
 
-    // Chiamata a Claude con metadata completo del database
-    const message = await aiClient.messages.create({
+    // Chiamata a GPT-4o con metadata completo del database
+    const completion = await aiClient.chat.completions.create({
       model: AI_MODEL,
-      system: buildSystemPrompt(),
       messages: [
+        {
+          role: "system",
+          content: buildSystemPrompt()
+        },
         {
           role: "user",
           content: userPrompt
         }
       ],
       temperature: 0.2, // Bassa per risposte più deterministiche
-      max_tokens: 4096
+      max_tokens: 4096,
+      response_format: { type: "json_object" } // Forza risposta JSON
     });
 
-    const content = message.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type from Claude');
-    }
-    
-    const aiResponse = JSON.parse(content.text || '{}');
+    const aiResponse = JSON.parse(completion.choices[0]?.message?.content || '{}');
     
     console.log('✅ Enhanced AI Response:', {
       tablesNeeded: aiResponse.tables_needed?.length || 0,
