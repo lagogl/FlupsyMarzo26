@@ -122,6 +122,11 @@ export default function LCIModule() {
 
   const { data: reportPreview, isLoading: previewLoading, refetch: refetchPreview } = useQuery<LCIReportPreview>({
     queryKey: ['/api/lci/export/preview', reportYear],
+    queryFn: async () => {
+      const res = await fetch(`/api/lci/export/preview/${reportYear}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Errore durante il caricamento dell\'anteprima');
+      return res.json();
+    },
     enabled: showPreview,
   });
 
