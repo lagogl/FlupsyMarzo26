@@ -66,6 +66,8 @@ import MixedLotsAnalytics from "@/pages/MixedLotsAnalytics";
 import LotLedgerStatistics from "@/pages/LotLedgerStatistics";
 // Importazione AI Growth Variability Analysis
 import GrowthVariabilityAnalysis from "@/pages/GrowthVariabilityAnalysis";
+// Importazione LCI Module (ECOTAPES)
+import LCIModule from "@/pages/LCIModule";
 // Importazione Task Management (Gestione Attività)
 import TaskManagement from "@/pages/TaskManagement";
 // Importazione Operators (Gestione Operatori)
@@ -136,6 +138,7 @@ function Router() {
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
       <ProtectedRoute path="/task-management" component={TaskManagement}/>
       <ProtectedRoute path="/operators" component={Operators}/>
+      <ProtectedRoute path="/lci" component={LCIModule}/>
       
       {/* Redirezione per pagine rimosse */}
       <Route path="/tp3000-forecast">

@@ -157,7 +157,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <TrendingUp className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.sgrIndices, path: "/sgr" },
         { icon: <PieChart className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.salesReports, path: "/sales-reports" },
         { icon: <FileText className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.plantDiary, path: "/diario-di-impianto" },
-        { icon: <Leaf className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.environmentalImpact, path: "/eco-impact" }
+        { icon: <Leaf className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.environmentalImpact, path: "/eco-impact" },
+        { icon: <Leaf className="h-5 w-5 mr-2 text-green-600" />, label: "LCI - ECOTAPES", path: "/lci" }
       ]
     },
     {
