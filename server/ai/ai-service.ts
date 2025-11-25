@@ -1,47 +1,35 @@
 import OpenAI from "openai";
 import { AutonomousAIService } from "./autonomous-ai-service";
 
-// Configurazione DeepSeek AI secondo documentazione ufficiale v1
-// URL: https://api-docs.deepseek.com/
+// Configurazione OpenAI GPT-4o con API key personale dell'utente
 const AI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_BASE_URL = 'https://api.deepseek.com'; // URL fisso come da documentazione
-const AI_MODEL = 'deepseek-chat'; // Punta a DeepSeek-V3-0324
+const AI_MODEL = 'gpt-4o'; // ChatGPT Omni
 
-console.log('🔧 DeepSeek Official Config:', { 
-  baseURL: AI_BASE_URL, 
+console.log('🔧 OpenAI GPT-4o Config:', { 
   model: AI_MODEL,
   hasApiKey: !!AI_API_KEY,
   keyStatus: AI_API_KEY ? `${AI_API_KEY.slice(0, 8)}...${AI_API_KEY.slice(-4)}` : 'MISSING'
 });
 
-// Client DeepSeek configurato con ricaricamento dinamico
+// Client OpenAI configurato con ricaricamento dinamico
 let aiClient: OpenAI | null = null;
 
 function initializeAIClient() {
   const currentApiKey = process.env.OPENAI_API_KEY;
   try {
     if (currentApiKey && currentApiKey.length > 10) {
-      // Configurazione esatta come documentazione DeepSeek
       aiClient = new OpenAI({
         apiKey: currentApiKey,
-        baseURL: AI_BASE_URL,
-        timeout: 15000,
-        defaultHeaders: {
-          'Content-Type': 'application/json'
-        }
+        timeout: 30000,
       });
-      console.log('✅ DeepSeek client initialized:', {
-        baseURL: AI_BASE_URL,
-        model: AI_MODEL,
-        keyPrefix: currentApiKey.slice(0, 8) + '...'
-      });
+      console.log('✅ OpenAI GPT-4o client initialized (AI Dashboard)');
       return true;
     } else {
-      console.log('⚠️ DeepSeek API key missing or invalid');
+      console.log('⚠️ OpenAI API key missing or invalid');
       return false;
     }
-  } catch (error) {
-    console.log('⚠️ DeepSeek initialization error:', error.message);
+  } catch (error: any) {
+    console.log('⚠️ OpenAI initialization error:', error.message);
     return false;
   }
 }
@@ -53,7 +41,7 @@ initializeAIClient();
 setInterval(() => {
   const newApiKey = process.env.OPENAI_API_KEY;
   if (newApiKey && (!aiClient || newApiKey !== AI_API_KEY)) {
-    console.log('🔄 Rilevato aggiornamento API key, ricarico DeepSeek client...');
+    console.log('🔄 Rilevato aggiornamento API key, ricarico OpenAI client...');
     initializeAIClient();
   }
 }, 10000); // Controlla ogni 10 secondi
