@@ -359,9 +359,12 @@ export default function SpreadsheetOperations() {
     queryKey: ['/api/lots'],
   });
 
-  const { data: cycles } = useQuery({
+  const { data: cyclesResponse } = useQuery({
     queryKey: ['/api/cycles'],
   });
+  
+  // Estrai l'array cycles dalla risposta (API restituisce {cycles: [...]})
+  const cycles = Array.isArray(cyclesResponse) ? cyclesResponse : (cyclesResponse as any)?.cycles || [];
 
   // Query per dati SGR per calcoli previsioni
   const { data: sgrData } = useQuery({
