@@ -359,6 +359,10 @@ export default function SpreadsheetOperations() {
     queryKey: ['/api/lots'],
   });
 
+  const { data: cycles } = useQuery({
+    queryKey: ['/api/cycles'],
+  });
+
   // Query per dati SGR per calcoli previsioni
   const { data: sgrData } = useQuery({
     queryKey: ['/api/sgr'],
