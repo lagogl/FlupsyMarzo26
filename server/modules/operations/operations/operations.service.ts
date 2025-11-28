@@ -682,17 +682,24 @@ class OperationsService {
 
   /**
    * Elimina un'operazione
+   * 
+   * @deprecated Usa operationsLifecycleService.deleteOperation() per garantire
+   * la consistenza dei dati (cascade, reset cestelli, cache, WebSocket).
+   * Questo metodo reindirizza automaticamente al servizio lifecycle.
    */
   async deleteOperation(id: number) {
-    const [deleted] = await db
-      .delete(operations)
-      .where(eq(operations.id, id))
-      .returning();
+    console.warn(`⚠️ [DEPRECATO] operationsService.deleteOperation(${id}) chiamato - reindirizzamento a LifecycleService`);
     
-    // Invalida cache
-    OperationsCache.clear();
+    // 🎯 Reindirizza al servizio lifecycle centralizzato
+    const { operationsLifecycleService } = await import('../../../services/operations-lifecycle.service.js');
+    const result = await operationsLifecycleService.deleteOperation(id);
     
-    return deleted;
+    if (!result.success) {
+      throw new Error(result.errors.join(', ') || `Errore eliminazione operazione ${id}`);
+    }
+    
+    // Mantiene compatibilità restituendo l'operazione "eliminata" (tipo fittizio per retrocompatibilità)
+    return { id, deleted: true, ...result };
   }
 
   /**

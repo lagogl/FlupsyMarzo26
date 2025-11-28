@@ -59,6 +59,7 @@ import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-
 import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
 import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import { getBasketLotComposition } from "./services/basket-lot-composition.service";
+import { operationsLifecycleService } from "./services/operations-lifecycle.service";
 
 // Importazione del router per le API esterne
 // API esterne disabilitate
@@ -2917,104 +2918,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/operations/:id", async (req, res) => {
-    console.log("🗑️ DELETE /api/operations/:id - INIZIO");
+    console.log("🗑️ DELETE /api/operations/:id - INIZIO (via LifecycleService)");
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid operation ID" });
       }
 
-      console.log(`🗑️ Eliminazione operazione ID: ${id}`);
+      console.log(`🗑️ Eliminazione operazione ID: ${id} tramite OperationsLifecycleService`);
 
-      // Check if the operation exists
-      const operation = await storage.getOperation(id);
-      if (!operation) {
-        console.log(`❌ Operazione ${id} non trovata`);
-        return res.status(404).json({ message: "Operation not found" });
-      }
+      // 🎯 USA IL SERVIZIO LIFECYCLE CENTRALIZZATO
+      // Il servizio gestisce TUTTO: cascade, reset cestelli, cache, WebSocket
+      const result = await operationsLifecycleService.deleteOperation(id);
 
-      console.log(`✅ Operazione trovata: ID ${id}, tipo: ${operation.type}`);
-      
-      // Verifica se è un'operazione di prima-attivazione
-      if (operation.type === 'prima-attivazione') {
-        console.log(`⚠️ ATTENZIONE: L'operazione ID: ${id} è una prima-attivazione`);
-        console.log(`🔄 La cancellazione comporterà l'eliminazione del ciclo associato ID: ${operation.cycleId}`);
-      }
-
-      console.log(`🔄 Avvio eliminazione operazione...`);
-      
-      // 🎯 GESTIONE LOTTI MISTI: Verifica se l'operazione è collegata a composizione mista
-      await handleBasketLotCompositionOnDelete(operation);
-      
-      // Delete the operation con cascade handling
-      const success = await storage.deleteOperation(id);
-      console.log(`🔄 Risultato eliminazione: ${success}`);
-      
-      if (success) {
-        console.log(`✅ Operazione ${id} eliminata con successo`);
+      if (result.success) {
+        console.log(`✅ Operazione ${id} eliminata con successo via LifecycleService`);
+        console.log(`📋 Tabelle pulite: ${result.cleanedTables.join(', ')}`);
         
-        if (operation.type === 'prima-attivazione') {
-          // Notifica il frontend che c'è stata una cancellazione a cascata
-          try {
-            console.log("🚨 ROUTES.TS: Invio notifiche WebSocket per prima-attivazione eliminata");
-            
-            // Notifica eliminazione operazione e ciclo
-            broadcastMessage('operation_deleted', {
-              operationId: id,
-              basketId: operation.basketId,
-              operationType: operation.type,
-              message: `Operazione prima-attivazione eliminata`
-            });
-            
-            // Notifica eliminazione ciclo  
-            broadcastMessage('cycle_deleted', {
-              cycleId: operation.cycleId,
-              basketId: operation.basketId,
-              message: `Ciclo eliminato dopo rimozione prima attivazione`
-            });
-            
-            // IMPORTANTE: Notifica aggiornamento cestello per aggiornare la UI
-            broadcastMessage('basket_updated', {
-              basketId: operation.basketId,
-              state: 'disponibile',
-              message: `Cestello aggiornato dopo eliminazione operazione`
-            });
-          } catch (wsError) {
-            console.error("❌ ROUTES.TS: Errore nell'invio notifiche WebSocket:", wsError);
-          }
-          
-          return res.status(200).json({
-            message: "Operation deleted successfully with all related data cleanup",
-            operationId: id,
-            deletedOperation: operation,
-            cycleDeleted: operation.cycleId,
-            basketReset: operation.basketId
-          });
-        } else {
-          // Broadcast operation deleted event via WebSockets
-          try {
-            console.log("🚨 ROUTES.TS: Invio notifica WebSocket per operazione eliminata");
-            broadcastMessage('operation_deleted', {
-              operationId: id,
-              type: operation.type,
-              message: `Operazione ${id} eliminata`
-            });
-            
-            // Broadcast anche basket_updated per sincronizzare mini-mappa e dropdown
-            console.log("🚨 ROUTES.TS: Invio notifica WebSocket per aggiornamento cestelli");
-            broadcastMessage('basket_updated', {
-              basketId: operation.basketId,
-              message: `Cestello aggiornato dopo eliminazione operazione ${operation.type}`
-            });
-          } catch (wsError) {
-            console.error("❌ ROUTES.TS: Errore nell'invio della notifica WebSocket per delete:", wsError);
-          }
-          
-          return res.status(200).json({ message: "Operation deleted successfully" });
-        }
+        return res.status(200).json({
+          message: result.cycleDeleted 
+            ? "Operation deleted successfully with all related data cleanup"
+            : "Operation deleted successfully",
+          operationId: id,
+          operationType: result.operationType,
+          cycleDeleted: result.cycleDeleted,
+          basketReset: result.basketReset,
+          cleanedTables: result.cleanedTables
+        });
       } else {
-        console.log(`❌ Eliminazione operazione ${id} fallita`);
-        return res.status(500).json({ message: "Failed to delete operation" });
+        console.log(`❌ Eliminazione operazione ${id} fallita: ${result.errors.join(', ')}`);
+        return res.status(result.errors.includes(`Operazione ${id} non trovata`) ? 404 : 500).json({ 
+          message: result.errors.join(', ') || "Failed to delete operation" 
+        });
       }
     } catch (error) {
       console.error("❌ Error deleting operation:", error);
@@ -3026,38 +2961,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ROUTE DI EMERGENZA PER ELIMINAZIONE OPERAZIONI
+  // NOTA: Ora usa lo stesso servizio lifecycle della route standard
   app.post("/api/operations/:id/delete", async (req, res) => {
-    console.log("🚨 EMERGENCY DELETE ROUTE - INIZIO");
+    console.log("🚨 EMERGENCY DELETE ROUTE - INIZIO (via LifecycleService)");
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid operation ID" });
       }
 
-      console.log(`🚨 Eliminazione di emergenza operazione ID: ${id}`);
+      console.log(`🚨 Eliminazione di emergenza operazione ID: ${id} tramite LifecycleService`);
 
-      // Check if the operation exists
-      const operation = await storage.getOperation(id);
-      if (!operation) {
-        console.log(`❌ Operazione ${id} non trovata`);
-        return res.status(404).json({ message: "Operation not found" });
-      }
+      // 🎯 USA IL SERVIZIO LIFECYCLE CENTRALIZZATO (stesso della route standard)
+      const result = await operationsLifecycleService.deleteOperation(id);
 
-      console.log(`✅ Operazione trovata: ID ${id}, tipo: ${operation.type}`);
-      
-      // Delete the operation con cascade handling
-      const success = await storage.deleteOperation(id);
-      console.log(`🔄 Risultato eliminazione: ${success}`);
-      
-      if (success) {
-        console.log(`✅ Operazione ${id} eliminata con successo`);
+      if (result.success) {
+        console.log(`✅ Operazione ${id} eliminata con successo via LifecycleService`);
         return res.status(200).json({ 
           message: "Operation deleted successfully",
-          operationId: id
+          operationId: id,
+          operationType: result.operationType,
+          cycleDeleted: result.cycleDeleted,
+          basketReset: result.basketReset,
+          cleanedTables: result.cleanedTables
         });
       } else {
-        console.log(`❌ Eliminazione operazione ${id} fallita`);
-        return res.status(500).json({ message: "Failed to delete operation" });
+        console.log(`❌ Eliminazione operazione ${id} fallita: ${result.errors.join(', ')}`);
+        return res.status(result.errors.includes(`Operazione ${id} non trovata`) ? 404 : 500).json({ 
+          message: result.errors.join(', ') || "Failed to delete operation" 
+        });
       }
     } catch (error) {
       console.error("❌ Error in emergency delete:", error);
@@ -3067,7 +2999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-  */
+
   // Fine delle route delle operations migrate al modulo
 
   // === Giacenze Range API routes ===

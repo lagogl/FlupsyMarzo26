@@ -92,92 +92,41 @@ export function implementDirectOperationRoute(app: Express) {
   });
   
   // ===== ROUTE DI ELIMINAZIONE DIRETTA =====
-  console.log("🗑️ Registrazione route DELETE: /api/emergency-delete/:id");
+  // NOTA: Ora usa il servizio lifecycle centralizzato per eliminazioni consistenti
+  console.log("🗑️ Registrazione route DELETE: /api/emergency-delete/:id (via LifecycleService)");
   app.post('/api/emergency-delete/:id', async (req, res) => {
-    console.log("🚨🚨🚨 DIRECT DELETE ROUTE CHIAMATA! 🚨🚨🚨");
+    console.log("🚨🚨🚨 DIRECT DELETE ROUTE CHIAMATA (via LifecycleService)! 🚨🚨🚨");
     try {
       const id = parseInt(req.params.id);
-      console.log(`🚨 DIRECT DELETE: Eliminazione operazione ID: ${id}`);
+      console.log(`🚨 DIRECT DELETE: Eliminazione operazione ID: ${id} tramite LifecycleService`);
 
       if (isNaN(id)) {
         console.log("❌ ID non valido");
         return res.status(400).json({ message: "Invalid operation ID" });
       }
 
-      // Importa lo storage per usare il metodo completo di eliminazione
-      const { storage } = await import('./storage.js');
-      
-      // Recupera i dettagli dell'operazione prima di eliminarla
-      const operation = await storage.getOperation(id);
-      
-      if (!operation) {
-        console.log(`❌ Operazione ${id} non trovata`);
-        return res.status(404).json({ message: "Operation not found" });
-      }
+      // 🎯 USA IL SERVIZIO LIFECYCLE CENTRALIZZATO
+      // Il servizio gestisce TUTTO: cascade, reset cestelli, cache, WebSocket
+      const { operationsLifecycleService } = await import('./services/operations-lifecycle.service.js');
+      const result = await operationsLifecycleService.deleteOperation(id);
 
-      console.log(`🔍 Operazione trovata: tipo=${operation.type}, basketId=${operation.basketId}, cycleId=${operation.cycleId}`);
-
-      // Usa il metodo storage.deleteOperation() che include TUTTE le pulizie necessarie:
-      // - Eliminazione operazioni del ciclo
-      // - Pulizia basket_lot_composition
-      // - Pulizia cycle_impacts
-      // - Pulizia lot_ledger
-      // - Pulizia screening_lot_references
-      // - Pulizia selection_lot_references
-      // - Pulizia screening/selection source/destination baskets
-      // - Eliminazione ciclo
-      // - Reset cestello
-      console.log("🗑️ Eliminazione operazione con pulizia completa tramite storage.deleteOperation()...");
-      const success = await storage.deleteOperation(id);
-      
-      if (success) {
-        console.log(`✅ Operazione ${id} eliminata con successo con pulizia completa database`);
-
-        // Invalida cache operazioni
-        const { OperationsCache } = await import('./operations-cache-service.js');
-        OperationsCache.clear();
-        console.log('🔄 Cache operazioni invalidata');
-
-        // Invia notifiche WebSocket per aggiornamenti real-time
-        if (typeof (global as any).broadcastUpdate === 'function') {
-          console.log("📡 Invio notifiche WebSocket per eliminazione operazione");
-          
-          (global as any).broadcastUpdate('operation_deleted', {
-            operationId: id,
-            basketId: operation.basketId,
-            operationType: operation.type,
-            message: `Operazione ${operation.type} eliminata`
-          });
-          
-          if (operation.type === 'prima-attivazione' && operation.cycleId) {
-            (global as any).broadcastUpdate('cycle_deleted', {
-              cycleId: operation.cycleId,
-              basketId: operation.basketId,
-              message: `Ciclo eliminato dopo rimozione prima attivazione`
-            });
-          }
-          
-          (global as any).broadcastUpdate('basket_updated', {
-            basketId: operation.basketId,
-            state: 'disponibile',
-            message: `Cestello aggiornato dopo eliminazione operazione`
-          });
-          
-          console.log("✅ Notifiche WebSocket inviate");
-        } else {
-          console.warn("⚠️ WebSocket non disponibile per notifiche");
-        }
+      if (result.success) {
+        console.log(`✅ Operazione ${id} eliminata con successo via LifecycleService`);
+        console.log(`📋 Tabelle pulite: ${result.cleanedTables.join(', ')}`);
 
         return res.status(200).json({ 
           message: "Operation deleted successfully with all related data cleanup",
           operationId: id,
-          deletedOperation: operation,
-          cycleDeleted: operation.type === 'prima-attivazione' && operation.cycleId ? operation.cycleId : null,
-          basketReset: operation.basketId
+          operationType: result.operationType,
+          cycleDeleted: result.cycleDeleted,
+          basketReset: result.basketReset,
+          cleanedTables: result.cleanedTables
         });
       } else {
-        console.log(`❌ Nessuna operazione eliminata`);
-        return res.status(404).json({ message: "Operation not found" });
+        console.log(`❌ Eliminazione operazione ${id} fallita: ${result.errors.join(', ')}`);
+        return res.status(result.errors.includes(`Operazione ${id} non trovata`) ? 404 : 500).json({ 
+          message: result.errors.join(', ') || "Failed to delete operation" 
+        });
       }
     } catch (error) {
       console.error("❌ Error in direct delete:", error);
