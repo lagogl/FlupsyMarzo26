@@ -1420,9 +1420,10 @@ export default function VagliaturaConMappa() {
                     {destinationBaskets.length > 0 && (
                       <div className="border rounded-md p-3">
                         <h3 className="text-sm font-semibold mb-2">Cestelli Destinazione ({destinationBaskets.length})</h3>
-                        <div className="max-h-[150px] overflow-y-auto space-y-2">
+                        <div className="max-h-[250px] overflow-y-auto space-y-2">
                           {destinationBaskets.map((basket, index) => {
                             const basketDetails = baskets.find(b => b.id === basket.basketId);
+                            const destFlupsy = flupsys.find(f => f.id === basket.flupsyId);
                             // Per le ceste virtuali, usa la posizione come identificatore univoco
                             const uniqueKey = basket.basketId < 0 ? `virtual-${basket.position || 'N'}` : basket.basketId;
                             const displayNumber = basketDetails?.physicalNumber || `Pos. ${basket.position}`;
@@ -1447,27 +1448,37 @@ export default function VagliaturaConMappa() {
                               : null;
                             
                             return (
-                              <div key={uniqueKey} className="text-xs p-2 border rounded bg-gray-50">
+                              <div key={uniqueKey} className="text-xs p-2 border rounded bg-green-50 border-green-200">
                                 <div className="flex justify-between items-start">
                                   <div className="flex-1">
-                                    <div className="font-medium">Cestello #{displayNumber}</div>
-                                    {basketSize && (
-                                      <div className="text-blue-600 font-medium">{basketSize.code}</div>
-                                    )}
-                                    <div className="text-gray-600">
+                                    <div className="flex justify-between items-center">
+                                      <div className="font-bold text-green-800">Cestello #{displayNumber}</div>
+                                      {basketSize && (
+                                        <span className="bg-green-600 text-white px-1.5 py-0.5 rounded text-[10px] font-medium">
+                                          {basketSize.code}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-green-700 font-medium mt-1">
+                                      {destFlupsy?.name || getFlupsyName(destinationFlupsyId) || 'FLUPSY destinazione'}
+                                    </div>
+                                    <div className="text-gray-600 mt-0.5">
+                                      Pos: {basketDetails?.row || ''}{basketDetails?.position || basket.position || 'N/A'}
+                                    </div>
+                                    <div className="text-gray-700 mt-1 font-medium">
                                       {formatNumberItalian(basket.animalCount || 0)} animali
                                     </div>
                                     {basket.animalsPerKg && (
-                                      <div className="text-gray-600">
+                                      <div className="text-gray-500 text-[10px]">
                                         {formatNumberItalian(basket.animalsPerKg)} animali/kg
                                       </div>
                                     )}
                                     {basket.destinationType === 'sold' && basket.saleClient && (
-                                      <div className="text-gray-600">Cliente: {basket.saleClient}</div>
+                                      <div className="text-red-600 font-medium mt-1">Cliente: {basket.saleClient}</div>
                                     )}
                                   </div>
                                   <div className="ml-2">
-                                    <Badge variant={basket.destinationType === 'sold' ? 'destructive' : 'outline'}>
+                                    <Badge variant={basket.destinationType === 'sold' ? 'destructive' : 'outline'} className="text-[10px]">
                                       {basket.destinationType === 'sold' ? 'Vendita' : 'Posto'}
                                     </Badge>
                                   </div>
