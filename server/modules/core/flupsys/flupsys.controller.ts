@@ -176,34 +176,13 @@ export class FlupsyController {
     try {
       console.log("🔄 Forzando aggiornamento statistiche FLUPSY...");
 
+      // Invalida TUTTE le cache con funzione centralizzata
       try {
-        const { invalidateCache: invalidateBasketsCache } = await import("../../../controllers/baskets-controller");
-        if (typeof invalidateBasketsCache === 'function') {
-          invalidateBasketsCache();
-          console.log("✅ Cache cestelli invalidata");
-        }
+        const { invalidateAllCaches } = await import("../../../services/operations-lifecycle.service");
+        invalidateAllCaches();
+        console.log("✅ Tutte le cache invalidate (centralizzato)");
       } catch (error: any) {
-        console.log("⚠️ Errore invalidazione cache cestelli:", error.message);
-      }
-
-      try {
-        const cyclesController = await import("../../../controllers/cycles-controller");
-        if (typeof cyclesController.invalidateCache === 'function') {
-          cyclesController.invalidateCache();
-          console.log("✅ Cache cicli invalidata");
-        }
-      } catch (error: any) {
-        console.log("⚠️ Errore invalidazione cache cicli:", error.message);
-      }
-
-      try {
-        const operationsController = await import("../../../controllers/operations-unified-controller");
-        if (operationsController.invalidateUnifiedCache) {
-          operationsController.invalidateUnifiedCache();
-          console.log("✅ Cache operazioni invalidata");
-        }
-      } catch (error: any) {
-        console.log("⚠️ Errore invalidazione cache operazioni:", error.message);
+        console.log("⚠️ Errore invalidazione cache:", error.message);
       }
 
       res.json({ 

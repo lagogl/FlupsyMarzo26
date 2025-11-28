@@ -106,6 +106,25 @@ secureLogger.info('Logging middleware: Secure API logger initialized with PII pr
     console.error("❌ Errore durante l'inizializzazione dello scheduler SGR:", error);
   }
 
+  // Inizializza lo scheduler di controllo integrità notturno
+  console.log("🔍 Inizializzazione scheduler controllo integrità notturno...");
+  try {
+    const { startNightlyScheduler, runIntegrityCheck } = await import('./services/nightly-integrity-check.service');
+    startNightlyScheduler();
+    console.log("✅ Scheduler controllo integrità attivo (esecuzione ore 03:00)");
+    
+    // Esegui un controllo iniziale all'avvio (in background)
+    setTimeout(() => {
+      runIntegrityCheck().then(result => {
+        if (result.status === 'issues_found') {
+          console.log(`⚠️ Controllo iniziale: ${result.issuesFound.length} anomalie rilevate`);
+        }
+      }).catch(err => console.error('Errore controllo iniziale:', err));
+    }, 10000);
+  } catch (error) {
+    console.error("⚠️ Errore durante l'inizializzazione dello scheduler integrità:", error);
+  }
+
   // Inizializza il modulo LCI (Life Cycle Inventory) per ECOTAPES
   console.log("🌿 Inizializzazione modulo LCI...");
   try {

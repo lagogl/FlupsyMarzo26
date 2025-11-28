@@ -6,9 +6,7 @@ import { db } from './db';
 import { operations, cycles, baskets, lots } from '../shared/schema';
 import { sql, eq, and, between } from 'drizzle-orm';
 import { broadcastMessage } from './websocket';
-import { BasketsCache } from './baskets-cache-service.js';
-import { OperationsCache } from './operations-cache-service.js';
-import { invalidateUnifiedCache } from './controllers/operations-unified-controller.js';
+import { invalidateAllCaches } from './services/operations-lifecycle.service.js';
 import { LotAutoStatsService } from './services/lot-auto-stats-service.js';
 import { determineSizeByAnimalsPerKg } from './utils/size-determination.js';
 
@@ -42,50 +40,31 @@ export function implementDirectOperationRoute(app: Express) {
   app.post('/api/operations-cache-clear', async (req, res) => {
     console.log("🔄🔄🔄 CACHE INVALIDATION ROUTE CHIAMATA! 🔄🔄🔄");
     try {
-      // Invalida la cache delle operazioni
-      const { OperationsCache } = await import('./operations-cache-service.js');
-      OperationsCache.clear();
-      console.log('🗑️ Cache operazioni completamente invalidata');
-      
-      // Invalida anche la cache unificata se presente
-      try {
-        const { invalidateUnifiedCache } = await import('./controllers/operations-unified-controller.js');
-        invalidateUnifiedCache();
-        console.log('🔄 Cache unificata invalidata');
-      } catch (error) {
-        console.warn('⚠️ Errore nell\'invalidazione cache unificata:', error);
-      }
-      
-      // Invalida la cache dei cicli
-      try {
-        const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
-        clearCyclesCache();
-        console.log('🔄 Cache cicli invalidata');
-      } catch (error) {
-        console.warn('⚠️ Errore nell\'invalidazione cache cicli:', error);
-      }
+      // Invalida TUTTE le cache con funzione centralizzata
+      invalidateAllCaches();
+      console.log('🗑️ Tutte le cache invalidate (centralizzato)');
       
       // Invia notifica WebSocket per refresh delle interfacce
       if (typeof (global as any).broadcastUpdate === 'function') {
         (global as any).broadcastUpdate('cache_cleared', {
-          cacheType: 'operations',
+          cacheType: 'all',
           timestamp: new Date().toISOString(),
-          message: 'Cache operazioni invalidata - refresh richiesto'
+          message: 'Tutte le cache invalidate - refresh richiesto'
         });
         console.log('📡 Notifica WebSocket di cache clearing inviata');
       }
       
       return res.json({
         success: true,
-        message: 'Operations cache cleared successfully',
+        message: 'All caches cleared successfully',
         timestamp: new Date().toISOString(),
-        cleared: ['operations_cache', 'unified_cache']
+        cleared: ['operations_cache', 'baskets_cache', 'unified_cache', 'position_cache', 'cycles_cache']
       });
     } catch (error) {
       console.error('❌ Errore durante l\'invalidazione cache:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error clearing operations cache',
+        message: 'Error clearing caches',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
@@ -544,22 +523,10 @@ export function implementDirectOperationRoute(app: Express) {
           
           // 5. Invalidazione cache del server e notifica WebSocket
           try {
-            // Invalida la cache cestelli, operazioni e cicli nel server
-            console.log("🗑️ DIRECT-OPERATIONS: Invalidando cache del server...");
-            BasketsCache.clear();
-            OperationsCache.clear();
-            invalidateUnifiedCache(); // Invalida anche la cache unificata operations
-            
-            // Invalida cache cicli - CRITICO per visualizzare nuovi cicli
-            try {
-              const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
-              clearCyclesCache();
-              console.log("✅ DIRECT-OPERATIONS: Cache cicli invalidata per mostrare nuovi cicli");
-            } catch (error: any) {
-              console.log("⚠️ DIRECT-OPERATIONS: Errore invalidazione cache cicli:", error?.message || error);
-            }
-            
-            console.log("✅ DIRECT-OPERATIONS: Cache cestelli, operazioni, cicli e cache unificata invalidate");
+            // Invalida TUTTE le cache con funzione centralizzata
+            console.log("🗑️ DIRECT-OPERATIONS: Invalidando tutte le cache...");
+            invalidateAllCaches();
+            console.log("✅ DIRECT-OPERATIONS: Tutte le cache invalidate (centralizzato)");
             
             console.log("🚨 DIRECT-OPERATIONS: Invio notifica WebSocket per nuova operazione");
             const result = broadcastMessage('operation_created', {
@@ -662,21 +629,10 @@ export function implementDirectOperationRoute(app: Express) {
           
           // 4. Invalidazione cache del server e notifica WebSocket
           try {
-            console.log("🗑️ DIRECT-OPERATIONS: Invalidando cache del server...");
-            BasketsCache.clear();
-            OperationsCache.clear();
-            invalidateUnifiedCache(); // Invalida anche la cache unificata operations
-            
-            // Invalida cache cicli - CRITICO per visualizzare nuovi cicli
-            try {
-              const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
-              clearCyclesCache();
-              console.log("✅ DIRECT-OPERATIONS: Cache cicli invalidata per mostrare nuovi cicli");
-            } catch (error: any) {
-              console.log("⚠️ DIRECT-OPERATIONS: Errore invalidazione cache cicli:", error?.message || error);
-            }
-            
-            console.log("✅ DIRECT-OPERATIONS: Cache cestelli, operazioni, cicli e cache unificata invalidate");
+            // Invalida TUTTE le cache con funzione centralizzata
+            console.log("🗑️ DIRECT-OPERATIONS: Invalidando tutte le cache...");
+            invalidateAllCaches();
+            console.log("✅ DIRECT-OPERATIONS: Tutte le cache invalidate (centralizzato)");
           } catch (cacheError) {
             console.error("❌ DIRECT-OPERATIONS: Errore nell'invalidazione cache:", cacheError);
           }
@@ -758,21 +714,10 @@ export function implementDirectOperationRoute(app: Express) {
         
         // Invalidazione cache del server
         try {
-          console.log("🗑️ DIRECT-OPERATIONS: Invalidando cache del server...");
-          BasketsCache.clear();
-          OperationsCache.clear();
-          invalidateUnifiedCache(); // Invalida anche la cache unificata operations
-          
-          // Invalida cache cicli - CRITICO per visualizzare nuovi cicli
-          try {
-            const { clearCyclesCache } = await import('./modules/operations/cycles/cycles.controller.js');
-            clearCyclesCache();
-            console.log("✅ DIRECT-OPERATIONS: Cache cicli invalidata per mostrare nuovi cicli");
-          } catch (error) {
-            console.log("⚠️ DIRECT-OPERATIONS: Errore invalidazione cache cicli:", error?.message || error);
-          }
-          
-          console.log("✅ DIRECT-OPERATIONS: Cache cestelli, operazioni, cicli e cache unificata invalidate");
+          // Invalida TUTTE le cache con funzione centralizzata
+          console.log("🗑️ DIRECT-OPERATIONS: Invalidando tutte le cache...");
+          invalidateAllCaches();
+          console.log("✅ DIRECT-OPERATIONS: Tutte le cache invalidate (centralizzato)");
         } catch (cacheError) {
           console.error("❌ DIRECT-OPERATIONS: Errore nell'invalidazione cache:", cacheError);
         }

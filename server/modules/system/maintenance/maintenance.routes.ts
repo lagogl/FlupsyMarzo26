@@ -279,14 +279,15 @@ maintenanceRoutes.get('/operations-cache-clear', async (req: Request, res: Respo
   try {
     console.log('🗑️ Pulizia cache operazioni richiesta...');
     
-    // Chiama il metodo di invalidazione cache del controller operations
-    const { invalidateUnifiedCache } = await import("../../../controllers/operations-unified-controller");
-    invalidateUnifiedCache();
+    // Invalida TUTTE le cache con funzione centralizzata
+    const { invalidateAllCaches } = await import("../../../services/operations-lifecycle.service");
+    invalidateAllCaches();
     
     return sendSuccess(res, { 
       cleared: true,
-      timestamp: new Date().toISOString()
-    }, "Cache operazioni invalidata con successo");
+      timestamp: new Date().toISOString(),
+      caches: ['operations_cache', 'baskets_cache', 'unified_cache', 'position_cache', 'cycles_cache']
+    }, "Tutte le cache invalidate con successo");
     
   } catch (error) {
     return sendError(res, error, "Errore durante l'invalidazione della cache");
@@ -338,5 +339,86 @@ maintenanceRoutes.delete('/emergency-delete/:id', async (req: Request, res: Resp
     
   } catch (error) {
     return sendError(res, error, "Errore durante l'eliminazione di emergenza");
+  }
+});
+
+/**
+ * Route per eseguire manualmente il controllo di integrità del database
+ */
+maintenanceRoutes.get('/integrity-check', async (req: Request, res: Response) => {
+  try {
+    console.log('🔍 Controllo integrità manuale richiesto...');
+    
+    const { runIntegrityCheck } = await import("../../../services/nightly-integrity-check.service");
+    const result = await runIntegrityCheck();
+    
+    return sendSuccess(res, { 
+      check: result
+    }, result.status === 'healthy' 
+      ? "Database consistente - nessuna anomalia rilevata" 
+      : `Trovate ${result.issuesFound.length} anomalie`);
+    
+  } catch (error) {
+    return sendError(res, error, "Errore durante il controllo integrità");
+  }
+});
+
+/**
+ * Route per visualizzare l'ultimo risultato del controllo di integrità
+ */
+maintenanceRoutes.get('/integrity-check/last', async (req: Request, res: Response) => {
+  try {
+    const { getLastCheckResult } = await import("../../../services/nightly-integrity-check.service");
+    const result = getLastCheckResult();
+    
+    if (!result) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Nessun controllo eseguito ancora" 
+      });
+    }
+    
+    return sendSuccess(res, { check: result }, "Ultimo risultato controllo integrità");
+    
+  } catch (error) {
+    return sendError(res, error, "Errore durante il recupero dell'ultimo controllo");
+  }
+});
+
+/**
+ * Route per visualizzare gli audit logs
+ */
+maintenanceRoutes.get('/audit-logs', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const { getRecentAuditLogs } = await import("../../../services/audit-log.service");
+    const logs = await getRecentAuditLogs(limit);
+    
+    return sendSuccess(res, { 
+      logs,
+      count: logs.length
+    }, `Ultimi ${logs.length} audit logs`);
+    
+  } catch (error) {
+    return sendError(res, error, "Errore durante il recupero degli audit logs");
+  }
+});
+
+/**
+ * Route per visualizzare gli audit logs di un'entità specifica
+ */
+maintenanceRoutes.get('/audit-logs/:entityType/:entityId', async (req: Request, res: Response) => {
+  try {
+    const { entityType, entityId } = req.params;
+    const { getAuditLogsForEntity } = await import("../../../services/audit-log.service");
+    const logs = await getAuditLogsForEntity(entityType as any, parseInt(entityId));
+    
+    return sendSuccess(res, { 
+      logs,
+      count: logs.length
+    }, `Audit logs per ${entityType} ${entityId}`);
+    
+  } catch (error) {
+    return sendError(res, error, "Errore durante il recupero degli audit logs");
   }
 });

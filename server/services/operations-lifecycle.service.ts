@@ -32,6 +32,7 @@ import { OperationsCache } from '../operations-cache-service.js';
 import { BasketsCache } from '../baskets-cache-service.js';
 import { positionCache } from '../position-cache-service.js';
 import { handleBasketLotCompositionOnDelete } from './basket-lot-composition.service.js';
+import { logOperationDeleted, logBasketStateChanged, logCycleClosed } from './audit-log.service.js';
 
 interface DeleteOperationResult {
   success: boolean;
@@ -111,6 +112,12 @@ class OperationsLifecycleService {
       console.log(`🗑️ [LIFECYCLE] Eliminazione operazione normale ${operationId}`);
       await db.delete(operations).where(eq(operations.id, operationId));
       result.cleanedTables.push('operations');
+
+      // 3d. Registra nel log di audit
+      await logOperationDeleted(operationId, operation, {
+        cascadeType: 'normal',
+        cleanedTables: result.cleanedTables
+      });
 
       // 4. Invalida cache
       this.invalidateAllCaches();
@@ -201,6 +208,15 @@ class OperationsLifecycleService {
       result.basketReset = basketId;
       result.cleanedTables.push('baskets (reset state)');
       console.log(`🔄 [LIFECYCLE] Cestello ${basketId} resettato a disponibile`);
+
+      // FASE 4b: Registra nel log di audit (cascade)
+      await logOperationDeleted(operation.id, operation, {
+        cascadeType: 'prima-attivazione',
+        cycleId,
+        basketId,
+        operationsDeleted: cycleOperations.length,
+        cleanedTables: result.cleanedTables
+      });
 
       // FASE 5: Invalida cache
       this.invalidateAllCaches();

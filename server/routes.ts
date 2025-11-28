@@ -46,7 +46,8 @@ import { LotLifecycleController } from "./controllers/lot-lifecycle-controller";
 // Import utility centralizzate
 import { sendError, sendSuccess } from "./utils/error-handler";
 import * as SequenceController from "./controllers/sequence-controller";
-import { getOperationsUnified, invalidateUnifiedCache } from "./controllers/operations-unified-controller";
+import { getOperationsUnified } from "./controllers/operations-unified-controller";
+import { invalidateAllCaches } from "./services/operations-lifecycle.service";
 
 // 🎯 MODULI ORGANIZZATI
 import { flupsyRoutes } from "./modules/core/flupsys";
@@ -2477,9 +2478,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: `Cestello aggiornato dopo prima attivazione`
           });
           
-          // Invalida cache unificata per aggiornamento istantaneo
-          invalidateUnifiedCache();
-          console.log("🚨 Cache unificata invalidata dopo prima-attivazione");
+          // Invalida TUTTE le cache per aggiornamento istantaneo
+          invalidateAllCaches();
+          console.log("🚨 Tutte le cache invalidate dopo prima-attivazione");
         } else {
           console.error("❌ WEBSOCKET NON TROVATO: global.broadcastUpdate non è una funzione!");
           console.error("❌ WEBSOCKET NON TROVATO: Questo significa che il WebSocket non è configurato correttamente");
@@ -2682,9 +2683,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: `Cestello aggiornato dopo chiusura ciclo`
             });
             
-            // Invalida cache unificata per aggiornamento istantaneo
-            invalidateUnifiedCache();
-            console.log("🚨 Cache unificata invalidata dopo chiusura ciclo");
+            // Invalida TUTTE le cache per aggiornamento istantaneo
+            invalidateAllCaches();
+            console.log("🚨 Tutte le cache invalidate dopo chiusura ciclo");
           }
           
           return res.status(201).json(newOperation);
@@ -2761,10 +2762,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const newOperation = await storage.createOperation(operationData);
           console.log("OPERAZIONE CREATA CON SUCCESSO:", JSON.stringify(newOperation, null, 2));
           
-          // Invalida la cache delle operazioni per aggiornamenti istantanei
-          const { OperationsCache } = await import('./operations-cache-service');
-          OperationsCache.clear();
-          console.log('🔄 Cache operazioni invalidata per aggiornamento istantaneo del registro');
+          // Invalida TUTTE le cache per aggiornamenti istantanei (centralizzato)
+          invalidateAllCaches();
+          console.log('🔄 Tutte le cache invalidate per aggiornamento istantaneo del registro');
           
           // Controlla in tempo reale se il cestello ha raggiunto una taglia target
           if (newOperation && newOperation.id) {
@@ -2789,10 +2789,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 basketId: newOperation.basketId,
                 message: `Cestello aggiornato dopo operazione ${newOperation.type}`
               });
-              
-              // Invalida cache unificata per aggiornamento istantaneo
-              invalidateUnifiedCache();
-              console.log("🚨 ROUTES.TS: Cache unificata invalidata");
               
               console.log("🚨 ROUTES.TS: Notifica WebSocket cestelli inviata");
             } else {
