@@ -325,13 +325,26 @@ export const sizes = pgTable("sizes", {
   color: text("color"), // colore HEX per visualizzazione grafica
 });
 
+// Cycles (Cicli Produttivi) - DEVE essere definita PRIMA di operations per il foreign key
+export const cycles = pgTable("cycles", {
+  id: serial("id").primaryKey(),
+  basketId: integer("basket_id").notNull().references(() => baskets.id, { onDelete: 'cascade' }), // FK: se cestello eliminato, ciclo eliminato
+  lotId: integer("lot_id"), // reference to the lot
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  state: text("state").notNull().default("active"), // active, closed
+}, (table) => ({
+  stateIdx: index("cycles_state_idx").on(table.state),
+  basketIdIdx: index("cycles_basket_id_idx").on(table.basketId),
+}));
+
 // Operations (Operazioni)
 export const operations = pgTable("operations", {
   id: serial("id").primaryKey(),
   date: date("date").notNull(),
   type: text("type", { enum: operationTypes }).notNull(),
-  basketId: integer("basket_id").notNull(), // reference to the basket
-  cycleId: integer("cycle_id").notNull(), // reference to the cycle
+  basketId: integer("basket_id").notNull().references(() => baskets.id, { onDelete: 'cascade' }), // FK: se cestello eliminato, operazione eliminata
+  cycleId: integer("cycle_id").notNull().references(() => cycles.id, { onDelete: 'cascade' }), // FK: se ciclo eliminato, operazione eliminata
   sizeId: integer("size_id").notNull().references(() => sizes.id, { onDelete: 'restrict' }), // TASSATIVO: La taglia è OBBLIGATORIA in OGNI operazione
   sgrId: integer("sgr_id"), // reference to the SGR
   lotId: integer("lot_id"), // reference to the lot
@@ -347,18 +360,6 @@ export const operations = pgTable("operations", {
 }, (table) => ({
   basketIdIdx: index("operations_basket_id_idx").on(table.basketId),
   cycleIdIdx: index("operations_cycle_id_idx").on(table.cycleId),
-}));
-
-// Cycles (Cicli Produttivi)
-export const cycles = pgTable("cycles", {
-  id: serial("id").primaryKey(),
-  basketId: integer("basket_id").notNull(), // reference to the basket
-  lotId: integer("lot_id"), // reference to the lot
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date"),
-  state: text("state").notNull().default("active"), // active, closed
-}, (table) => ({
-  stateIdx: index("cycles_state_idx").on(table.state),
 }));
 
 // SGR (Indici di Crescita)

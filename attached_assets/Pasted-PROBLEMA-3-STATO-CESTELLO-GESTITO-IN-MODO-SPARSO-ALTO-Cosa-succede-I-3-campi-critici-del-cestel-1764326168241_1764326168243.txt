@@ -1,0 +1,54 @@
+PROBLEMA 3: STATO CESTELLO GESTITO IN MODO SPARSO (ALTO)
+Cosa succede: I 3 campi critici del cestello (current_cycle_id, cycle_code, state) vengono modificati in:
+
+Handler prima-attivazione
+Flussi di vagliatura (screening)
+Flussi di selezione
+Route dirette
+Ogni modulo tocca solo 1 o 2 campi, non tutti e 3.
+
+Soluzione proposta: Creare una funzione helper setBasketCycleState(basketId, cycleId, cycleCode, state) che aggiorna SEMPRE tutti e 3 i campi insieme, e obbligare tutti i moduli a usarla.
+
+🟠 PROBLEMA 4: CANCELLAZIONE PRIMA-ATTIVAZIONE (ALTO)
+Cosa succede: Quando cancelli un'operazione di "prima-attivazione":
+
+L'operazione viene eliminata
+MA il ciclo che aveva creato potrebbe rimanere orfano
+Il cestello potrebbe rimanere "attivo" senza operazioni
+Soluzione proposta:
+
+Aggiungere un FK con ON DELETE CASCADE da cycles a operations
+OPPURE un trigger che automaticamente cancella il ciclo e resetta il cestello
+🔴 PROBLEMA 5: MANCANZA CONSTRAINT DATABASE (CRITICO)
+Cosa succede: Lo schema Drizzle attuale NON ha foreign key constraints su:
+
+cycles.basketId → baskets
+operations.cycleId → cycles
+operations.basketId → baskets
+Rischio: Il database non può bloccare la creazione di record orfani.
+
+Soluzione proposta:
+
+Aggiungere FK constraints con ON DELETE CASCADE o SET NULL dove appropriato
+Creare un job notturno di controllo integrità che trova e segnala inconsistenze
+🟡 PROBLEMA 6: CACHE NON INVALIDATA (MEDIO)
+Cosa succede: L'invalidazione cache (WebSocket + cache server) avviene solo nelle route di emergenza. Le cancellazioni normali lasciano cache stale.
+
+Rischio: L'interfaccia mostra dati vecchi fino al refresh manuale.
+
+Soluzione proposta: Spostare l'invalidazione cache dentro il servizio lifecycle centralizzato, così ogni operazione broadcast gli eventi operation_deleted, cycle_deleted, basket_updated.
+
+DECISIONI RICHIESTE
+Per procedere, dimmi per ogni problema:
+
+Servizio Lifecycle Centralizzato - Vuoi che crei un servizio unico per gestire tutte le cancellazioni?
+
+Chiusura Cicli Completa - Approvi la modifica per resettare sempre tutti i campi cestello?
+
+Helper setBasketCycleState - Vuoi che unifichi tutti gli aggiornamenti stato cestello?
+
+Cascade Delete Prima-Attivazione - Preferisci trigger database o logica applicativa?
+
+FK Constraints - Vuoi aggiungere i vincoli foreign key al database?
+
+Cache Invalidation Centralizzata - Approvi l'unificazione della logica cache?
