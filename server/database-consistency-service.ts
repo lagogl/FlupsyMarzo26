@@ -39,13 +39,15 @@ export async function detectAndFixDatabaseInconsistencies() {
         description: 'Cestelli con currentCycleId che puntano a cicli eliminati'
       });
 
-      // Correggi automaticamente: imposta currentCycleId a null e state a 'available'
+      // Correggi automaticamente: imposta currentCycleId a null, state a 'available' e cycleCode a null
+      // IMPORTANTE: aggiorna tutti e tre i campi per consistenza (state, currentCycleId, cycleCode)
       for (const item of orphanedBaskets) {
         await db
           .update(baskets)
           .set({
+            state: 'available',
             currentCycleId: null,
-            state: 'available'
+            cycleCode: null
           })
           .where(eq(baskets.id, item.id));
       }
@@ -71,11 +73,16 @@ export async function detectAndFixDatabaseInconsistencies() {
         description: 'Cestelli in stato "in-use" ma senza currentCycleId'
       });
 
-      // Correggi: imposta stato a 'available'
+      // Correggi: imposta stato a 'available' e resetta cycleCode per consistenza
+      // IMPORTANTE: aggiorna tutti e tre i campi per consistenza (state, currentCycleId, cycleCode)
       for (const basket of basketsInUseWithoutCycle) {
         await db
           .update(baskets)
-          .set({ state: 'available' })
+          .set({ 
+            state: 'available',
+            currentCycleId: null,
+            cycleCode: null
+          })
           .where(eq(baskets.id, basket.id));
       }
 

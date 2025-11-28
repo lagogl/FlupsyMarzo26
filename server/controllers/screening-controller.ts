@@ -369,22 +369,41 @@ export async function executeScreeningOperation(req: Request, res: Response) {
         // La gestione delle posizioni avviene ora direttamente tramite i campi della tabella baskets
         
         // Handle different destination types
+        // IMPORTANTE: tutti gli update di baskets devono includere state, currentCycleId, cycleCode
+        
         if (destBasket.destinationType === 'sold') {
-          // Per cestelli venduti, aggiorna solo il ciclo (nessuna posizione FLUPSY)
+          // Per cestelli venduti, il contenuto viene venduto quindi il cestello diventa disponibile
+          // Il ciclo viene chiuso e il cestello è libero per essere riutilizzato
           await tx.update(baskets)
             .set({
-              currentCycleId: sourceCycleId
+              state: 'available',
+              currentCycleId: null,
+              cycleCode: null
               // Non aggiorniamo flupsyId, row, position per cestelli venduti
             })
             .where(eq(baskets.id, destBasket.basketId));
         } else {
-          // Per cestelli posizionati, aggiorna ciclo e posizione
+          // Per cestelli posizionati, aggiorna ciclo e posizione con tutti i campi
           const safePosition = safeInteger(destBasket.position);
           const safeFlupsyId = safeInteger(destBasket.flupsyId);
           
+          // Genera cycleCode usando il flupsyId dal record del cestello se non specificato
+          const screeningDate = new Date(date || new Date());
+          const yearMonth = `${screeningDate.getFullYear().toString().slice(-2)}${(screeningDate.getMonth() + 1).toString().padStart(2, '0')}`;
+          
+          const [fullBasketInfo] = await tx.select({ 
+            physicalNumber: baskets.physicalNumber,
+            flupsyId: baskets.flupsyId 
+          }).from(baskets).where(eq(baskets.id, destBasket.basketId));
+          
+          const effectiveFlupsyId = safeFlupsyId ?? fullBasketInfo?.flupsyId ?? 1;
+          const cycleCode = `${fullBasketInfo?.physicalNumber || destBasket.basketId}-${effectiveFlupsyId}-${yearMonth}`;
+          
           // Costruisci l'oggetto di update condizionalmente
           const updateData: any = {
+            state: 'active',
             currentCycleId: sourceCycleId,
+            cycleCode: cycleCode,
             row: destBasket.row
           };
           
