@@ -3131,20 +3131,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Applica filtri manualmente (paginazione simulata)
       const page = parseInt(req.query.page as string) || 1;
       const pageSize = parseInt(req.query.pageSize as string) || 20;
+      const lotId = req.query.id ? parseInt(req.query.id as string) : undefined;
       const supplier = req.query.supplier as string;
       const quality = req.query.quality as string;
       const sizeId = req.query.sizeId ? parseInt(req.query.sizeId as string) : undefined;
+      const dateFrom = req.query.dateFrom as string;
+      const dateTo = req.query.dateTo as string;
       
       // Filtri
       let filteredLots = lotsWithSizes;
+      if (lotId) {
+        filteredLots = filteredLots.filter(lot => lot.id === lotId);
+      }
       if (supplier) {
-        filteredLots = filteredLots.filter(lot => lot.supplier === supplier);
+        filteredLots = filteredLots.filter(lot => lot.supplier?.toLowerCase().includes(supplier.toLowerCase()));
       }
       if (quality) {
         filteredLots = filteredLots.filter(lot => lot.quality === quality);
       }
       if (sizeId) {
         filteredLots = filteredLots.filter(lot => lot.sizeId === sizeId);
+      }
+      if (dateFrom) {
+        filteredLots = filteredLots.filter(lot => lot.arrivalDate >= dateFrom);
+      }
+      if (dateTo) {
+        filteredLots = filteredLots.filter(lot => lot.arrivalDate <= dateTo);
       }
       
       // Paginazione

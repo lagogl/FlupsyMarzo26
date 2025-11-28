@@ -57,6 +57,7 @@ export default function Lots() {
     params.append('pageSize', pageSize.toString());
     
     // Aggiungi i filtri avanzati solo se valorizzati
+    if (filterValues.id) params.append('id', filterValues.id);
     if (filterValues.supplier) params.append('supplier', filterValues.supplier);
     if (filterValues.quality) params.append('quality', filterValues.quality);
     if (filterValues.dateFrom) params.append('dateFrom', filterValues.dateFrom);
