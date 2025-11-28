@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Eye, Search, Filter, Plus, Package2, Edit, Trash2, AlertCircle, BarChart, ArrowUpDown, Layers, Table2, FileDown, RefreshCw } from 'lucide-react';
+import { Eye, Search, Filter, Plus, Package2, Edit, Trash2, AlertCircle, BarChart, ArrowUpDown, Layers, Table2, FileDown, RefreshCw, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -49,6 +49,39 @@ export default function Lots() {
     quality: '',
     sizeId: ''
   });
+  
+  // Calcola i filtri attivi per mostrare l'indicatore visivo
+  const activeFilters = Object.entries(filterValues).filter(([_, value]) => value !== '');
+  const activeFilterCount = activeFilters.length;
+  
+  // Mappa per i nomi leggibili dei filtri
+  const filterLabels: Record<string, string> = {
+    id: 'ID Lotto',
+    dateFrom: 'Data da',
+    dateTo: 'Data a',
+    supplier: 'Fornitore',
+    quality: 'Qualità',
+    sizeId: 'Taglia'
+  };
+  
+  // Funzione per rimuovere un singolo filtro
+  const removeFilter = (key: string) => {
+    setFilterValues(prev => ({ ...prev, [key]: '' }));
+    setCurrentPage(1);
+  };
+  
+  // Funzione per pulire tutti i filtri
+  const clearAllFilters = () => {
+    setFilterValues({
+      id: '',
+      dateFrom: '',
+      dateTo: '',
+      supplier: '',
+      quality: '',
+      sizeId: ''
+    });
+    setCurrentPage(1);
+  };
   
   // Prepara i parametri per la query ottimizzata
   const buildQueryParams = () => {
@@ -394,12 +427,18 @@ export default function Lots() {
             {viewMode === 'simple' ? 'Vista Dettagliata' : 'Vista Semplice'}
           </Button>
           <Button 
-            variant="outline" 
+            variant={activeFilterCount > 0 ? "default" : "outline"}
             size="sm"
             onClick={() => setIsFilterDialogOpen(true)}
+            className={activeFilterCount > 0 ? "bg-blue-600 hover:bg-blue-700" : ""}
           >
             <Filter className="h-4 w-4 mr-1" />
             Filtra
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-2 bg-white text-blue-600 h-5 min-w-5 flex items-center justify-center">
+                {activeFilterCount}
+              </Badge>
+            )}
           </Button>
           <Button 
             variant="outline" 
@@ -443,6 +482,38 @@ export default function Lots() {
           </Button>
         </div>
       </div>
+
+      {/* Barra filtri attivi - sempre visibile quando ci sono filtri */}
+      {activeFilterCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-amber-800 font-medium flex items-center">
+            <Filter className="h-4 w-4 mr-1" />
+            Filtri attivi:
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {activeFilters.map(([key, value]) => (
+              <Badge 
+                key={key} 
+                variant="secondary" 
+                className="bg-amber-100 text-amber-800 hover:bg-amber-200 cursor-pointer flex items-center gap-1 pr-1"
+                onClick={() => removeFilter(key)}
+              >
+                {filterLabels[key]}: {value}
+                <X className="h-3 w-3 ml-1" />
+              </Badge>
+            ))}
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-amber-700 hover:text-amber-900 hover:bg-amber-100 ml-auto"
+            onClick={clearAllFilters}
+          >
+            <X className="h-4 w-4 mr-1" />
+            Pulisci tutti
+          </Button>
+        </div>
+      )}
 
       {/* Search and Filter */}
       <div className="bg-white p-4 rounded-lg shadow mb-6">
