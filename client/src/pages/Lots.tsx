@@ -102,15 +102,18 @@ export default function Lots() {
   
   // Query lotti ottimizzata con paginazione e filtri
   const { data: lotsData, isLoading } = useQuery({
-    queryKey: ['/api/lots/optimized', currentPage, pageSize, filterValues],
+    queryKey: ['/api/lots/optimized', currentPage, pageSize, JSON.stringify(filterValues)],
     queryFn: async () => {
       const queryParams = buildQueryParams();
+      console.log('🔍 LOTS QUERY - Filtri applicati:', filterValues);
+      console.log('🔍 LOTS QUERY - Query string:', queryParams);
       const response = await fetch(`/api/lots/optimized?${queryParams}`);
       if (!response.ok) {
         throw new Error('Errore nel caricamento dei lotti');
       }
       return response.json();
-    }
+    },
+    staleTime: 0
   });
   
   // Estrai i dati dai risultati
