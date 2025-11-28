@@ -87,12 +87,6 @@ export default function VagliaturaConMappa() {
       basket.position && basket.position.trim() !== ''
     );
     
-    console.log('Controllo cestelli destinazione posizionati:', {
-      totalDestinations: destinationBaskets.length,
-      allHavePosition,
-      basketsWithPosition: destinationBaskets.filter(b => b.position && b.position.trim() !== '').length
-    });
-    
     return allHavePosition;
   }, [destinationBaskets]);
   
@@ -166,10 +160,6 @@ export default function VagliaturaConMappa() {
     // Usa il flupsyId appropriato in base alla modalità
     const activeFlupsyId = specificFlupsyId !== undefined ? specificFlupsyId : (mode === 'source' ? originFlupsyId : destinationFlupsyId);
     
-    // Stampa informazioni di debug
-    console.log(`Arricchimento di ${baskets.length} cestelli con ${operations.length} operazioni (mode: ${mode})`);
-    console.log(`FLUPSY selezionato per ${mode}: ${activeFlupsyId}`);
-    
     // Filtra i cestelli in base alla modalità:
     // - source: cestelli con ciclo attivo (origine per vagliatura)
     // - destination: tutti i cestelli del FLUPSY (disponibili + origine)
@@ -188,15 +178,8 @@ export default function VagliaturaConMappa() {
       }
     });
     
-    console.log(`Cestelli filtrati per FLUPSY ${activeFlupsyId} (mode: ${mode}): ${filteredBaskets.length}`);
-    
     // Crea una mappa delle ultime operazioni per ogni cestello
     const lastOperationsMap: Record<number, any> = {};
-    
-    // Stampa alcune operazioni di esempio per debug
-    if (operations.length > 0) {
-      console.log("Esempio di operazione:", operations[0]);
-    }
     
     // Popola la mappa SOLO se siamo in modalità 'source'
     // In modalità 'destination', i cestelli disponibili NON devono mostrare dati operativi
@@ -234,9 +217,6 @@ export default function VagliaturaConMappa() {
         }
       });
     }
-    
-    // Log del numero di operazioni trovate
-    console.log(`Operazioni uniche trovate (mode ${mode}): ${Object.keys(lastOperationsMap).length}`);
     
     // Determina la taglia in base agli animali per kg
     function findSizeByAnimalsPerKg(animalsPerKg: number) {
@@ -306,22 +286,12 @@ export default function VagliaturaConMappa() {
         size = findSizeByAnimalsPerKg(lastOperation.animalsPerKg);
       }
       
-      // Registra informazioni di debug per cestello
-      if (lastOperation) {
-        console.log(`Cestello #${basket.physicalNumber} (${basket.row}-${basket.position}): ` +
-                    `${lastOperation.animalCount} animali, ${lastOperation.animalsPerKg} per kg, ` + 
-                    `Taglia: ${size?.code || 'Non determinata'}`);
-      }
-      
       return {
         ...basket,
         lastOperation: lastOperation || undefined,
         size: size || undefined
       };
     });
-    
-    // Registra risultati complessivi
-    console.log(`Cestelli arricchiti: ${enhancedBaskets.length}`);
     
     return enhancedBaskets;
   };
@@ -467,12 +437,6 @@ export default function VagliaturaConMappa() {
       op.basketId === basketId && new Date(op.date) > vagliaturaDate
     );
     
-    if (futureOperations.length > 0) {
-      console.log(`Cestello #${basketId} ha ${futureOperations.length} operazioni future rispetto a ${date}:`, 
-        futureOperations.map((op: any) => ({ id: op.id, date: op.date, type: op.type }))
-      );
-    }
-    
     return futureOperations.length > 0;
   };
   
@@ -497,12 +461,6 @@ export default function VagliaturaConMappa() {
       });
       return;
     }
-    
-    console.log('🎯 DEBUG - toggleSourceBasket chiamato:', {
-      basket_id: basket.id,
-      basket_physicalNumber: basket.physicalNumber,
-      current_sourceBaskets_length: sourceBaskets.length
-    });
     
     // Verifica se il cestello è già selezionato
     const isAlreadySelected = sourceBaskets.some(sb => sb.basketId === basket.id);
@@ -589,21 +547,6 @@ export default function VagliaturaConMappa() {
         // Calcolo percentuale: (morti / totale nel campione) * 100
         newData.mortalityRate = Math.round((newData.deadCount / totalSampleAnimals) * 100);
         
-        // Verifica del calcolo per garantire che sia corretto
-        console.log('Calcolo mortalità CORRETTO:', {
-          'animali vivi nel campione': newData.sampleCount,
-          'animali morti nel campione': newData.deadCount,
-          'totale animali nel campione': totalSampleAnimals,
-          'percentuale mortalità': newData.mortalityRate,
-          formula: `(${newData.deadCount} / ${totalSampleAnimals}) * 100 = ${newData.mortalityRate}%`
-        });
-        
-        // Esempio: in un campione di 100 animali totali, se 50 sono morti e 50 sono vivi
-        // la mortalità sarà (50 / 100) * 100 = 50%
-        console.log('Esempio verifica 50%:', {
-          esempio: '50 morti, 50 vivi in un campione totale di 100',
-          calcolo: `(50 / 100) * 100 = ${Math.round((50 / 100) * 100)}%`
-        });
       } else {
         newData.mortalityRate = 0;
       }
@@ -617,13 +560,6 @@ export default function VagliaturaConMappa() {
         const mortalityFactor = newData.mortalityRate / 100;
         newData.animalCount = Math.round(totalTheoretical * (1 - mortalityFactor));
         
-        console.log('Calcolo animali vivi con mortalità:', {
-          'peso totale (g)': newData.totalWeight,
-          'animali per kg': newData.animalsPerKg,
-          'totale teorico': totalTheoretical,
-          'fattore mortalità': mortalityFactor,
-          'animali vivi calcolati': newData.animalCount
-        });
       }
     } else {
       newData.mortalityRate = 0;
@@ -863,13 +799,6 @@ export default function VagliaturaConMappa() {
       // Passo 3: Aggiungere i cestelli origine
       updateStep('add-sources', 'in-progress', 2);
       
-      // DEBUG: Log dettagliato per identificare il problema
-      console.log('🔍 DEBUG - Cestelli origine prima dell\'invio:', {
-        sourceBaskets,
-        sourceBaskets_length: sourceBaskets.length,
-        sourceBaskets_isArray: Array.isArray(sourceBaskets)
-      });
-      
       // Verifica di sicurezza aggiuntiva
       if (!sourceBaskets || sourceBaskets.length === 0) {
         throw new Error('Nessun cestello origine selezionato. Impossibile procedere.');
@@ -883,11 +812,6 @@ export default function VagliaturaConMappa() {
           selectionId,
           flupsyId: basketDetails?.flupsyId || (originFlupsyId ? parseInt(originFlupsyId) : null)
         };
-      });
-      
-      console.log('🔍 DEBUG - Dati cestelli origine preparati per invio:', {
-        sourceBasketData,
-        sourceBasketData_length: sourceBasketData.length
       });
       
       const sourceResponse = await fetch(`/api/selections/${selectionId}/source-baskets`, {
@@ -1508,12 +1432,7 @@ export default function VagliaturaConMappa() {
                           // Aggiungiamo un flag per indicare se è un cestello origine (solo se stesso FLUPSY)
                           isSourceBasket: !isCrossFlupsy && sourceBaskets.some(sb => sb.basketId === b.id)
                         }))}
-                        selectedBaskets={(() => {
-                          const selectedIds = destinationBaskets.map(b => b.basketId);
-                          console.log('DEBUG: selectedBaskets passati a FlupsyMapVisualizer:', selectedIds);
-                          console.log('DEBUG: destinationBaskets completa:', destinationBaskets);
-                          return selectedIds;
-                        })()}
+                        selectedBaskets={destinationBaskets.map(b => b.basketId)}
                         soldBasketIds={destinationBaskets.filter(b => b.destinationType === 'sold').map(b => b.basketId)}
                         onBasketClick={(basket) => toggleDestinationBasket(basket)}
                         mode="destination"
@@ -2189,7 +2108,6 @@ export default function VagliaturaConMappa() {
                         ...measurementData,
                         deadCount: value
                       });
-                      console.log('Dati aggiornati dopo cambio animali morti:', updatedData);
                       setMeasurementData(updatedData);
                     }}
                   />
@@ -2238,34 +2156,17 @@ export default function VagliaturaConMappa() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsMeasurementDialogOpen(false)}>Annulla</Button>
             <Button onClick={() => {
-              console.log('=== INIZIO CALCOLO FORZATO ===');
-              console.log('Dati misurazione prima del calcolo:', measurementData);
-              
               // FORZA sempre il ricalcolo per essere sicuri
               let finalAnimalsPerKg = 0;
               if (measurementData.sampleWeight > 0 && measurementData.sampleCount > 0) {
                 finalAnimalsPerKg = Math.round((measurementData.sampleCount / measurementData.sampleWeight) * 1000);
-                console.log(`CALCOLO FORZATO animalsPerKg: (${measurementData.sampleCount} / ${measurementData.sampleWeight}) * 1000 = ${finalAnimalsPerKg}`);
-              } else {
-                console.log('ERRORE: Non posso calcolare animalsPerKg perché:');
-                console.log(`- sampleWeight: ${measurementData.sampleWeight}`);
-                console.log(`- sampleCount: ${measurementData.sampleCount}`);
               }
               
               // FORZA sempre il ricalcolo del conteggio animali
               let finalAnimalCount = measurementData.animalCount;
               if (measurementData.totalWeight > 0 && finalAnimalsPerKg > 0) {
                 finalAnimalCount = Math.round(measurementData.totalWeight * finalAnimalsPerKg);
-                console.log(`CALCOLO FORZATO animalCount: ${measurementData.totalWeight} * ${finalAnimalsPerKg} = ${finalAnimalCount}`);
               }
-              
-              console.log('DATI FINALI DA INVIARE:', {
-                sampleWeight: measurementData.sampleWeight,
-                sampleCount: measurementData.sampleCount,
-                totalWeight: measurementData.totalWeight,
-                animalsPerKg: finalAnimalsPerKg,
-                animalCount: finalAnimalCount
-              });
               
               // Crea un nuovo cestello destinazione con i dati inseriti
               const newDestinationBasket: DestinationBasket = {
