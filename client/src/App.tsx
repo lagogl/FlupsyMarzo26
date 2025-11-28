@@ -156,6 +156,7 @@ function Router() {
       {/* Modulo selezione rimosso - ora si usa solo Vagliatura con Mappa */}
       
       {/* Vagliatura con Mappa routes */}
+      <ProtectedRoute path="/vagliatura" component={VagliaturaConMappa}/>
       <ProtectedRoute path="/vagliatura-con-mappa" component={VagliaturaConMappa}/>
       
       {/* Storico Vagliature routes */}
