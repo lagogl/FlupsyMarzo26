@@ -975,7 +975,10 @@ export default function Lots() {
             </Button>
             <Button 
               type="submit"
-              onClick={() => setIsFilterDialogOpen(false)}
+              onClick={() => {
+                setCurrentPage(1);
+                setIsFilterDialogOpen(false);
+              }}
             >
               Applica filtri
             </Button>
