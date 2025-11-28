@@ -916,14 +916,14 @@ export default function Lots() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Qualità</label>
               <Select 
-                value={filterValues.quality}
-                onValueChange={(value) => setFilterValues({...filterValues, quality: value})}
+                value={filterValues.quality || "all"}
+                onValueChange={(value) => setFilterValues({...filterValues, quality: value === "all" ? "" : value})}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Tutte le qualità" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tutte</SelectItem>
+                  <SelectItem value="all">Tutte</SelectItem>
                   <SelectItem value="normali">Normali</SelectItem>
                   <SelectItem value="teste">Teste</SelectItem>
                   <SelectItem value="code">Code</SelectItem>
@@ -934,14 +934,14 @@ export default function Lots() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Taglia</label>
               <Select 
-                value={filterValues.sizeId}
-                onValueChange={(value) => setFilterValues({...filterValues, sizeId: value})}
+                value={filterValues.sizeId || "all"}
+                onValueChange={(value) => setFilterValues({...filterValues, sizeId: value === "all" ? "" : value})}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Tutte le taglie" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tutte</SelectItem>
+                  <SelectItem value="all">Tutte</SelectItem>
                   {lots && lots.length > 0 && [...new Set(lots.filter(lot => lot.size).map(lot => JSON.stringify(lot.size)))]
                     .map(sizeStr => JSON.parse(sizeStr))
                     .sort((a, b) => a.code.localeCompare(b.code))
