@@ -31,6 +31,7 @@ import {
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { OperationsCache } from '../operations-cache-service.js';
 import { BasketsCache } from '../baskets-cache-service.js';
+import { positionCache } from '../position-cache-service.js';
 import { handleBasketLotCompositionOnDelete } from './basket-lot-composition.service.js';
 
 interface DeleteOperationResult {
@@ -391,45 +392,72 @@ class OperationsLifecycleService {
   }
 
   /**
-   * Invalida tutte le cache rilevanti
+   * METODO CENTRALIZZATO: Invalida tutte le cache rilevanti
+   * 
+   * IMPORTANTE: Questo metodo DEVE essere chiamato dopo qualsiasi operazione
+   * che modifica dati che potrebbero essere cachati (operazioni, cestelli, cicli).
+   * 
+   * Cache invalidate:
+   * 1. OperationsCache - cache operazioni
+   * 2. BasketsCache - cache cestelli
+   * 3. positionCache - cache posizioni cestelli
+   * 4. UnifiedCache - cache controller unificato
+   * 5. CyclesCache - cache cicli
    */
-  private invalidateAllCaches(): void {
+  invalidateAllCaches(): void {
+    console.log('🔄 [LIFECYCLE] === INVALIDAZIONE CACHE CENTRALIZZATA ===');
+    const invalidated: string[] = [];
+    const errors: string[] = [];
+
+    // 1. Cache operazioni
     try {
       OperationsCache.clear();
-      console.log('🗑️ [LIFECYCLE] Cache operazioni invalidata');
+      invalidated.push('operations');
     } catch (e) {
-      console.warn('⚠️ [LIFECYCLE] Errore invalidazione cache operazioni:', e);
+      errors.push(`operations: ${e instanceof Error ? e.message : String(e)}`);
     }
 
+    // 2. Cache cestelli
     try {
       BasketsCache.clear();
-      console.log('🗑️ [LIFECYCLE] Cache cestelli invalidata');
+      invalidated.push('baskets');
     } catch (e) {
-      console.warn('⚠️ [LIFECYCLE] Errore invalidazione cache cestelli:', e);
+      errors.push(`baskets: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // Invalida cache unificata
+    // 3. Cache posizioni
     try {
-      import('../controllers/operations-unified-controller.js').then(module => {
+      positionCache.invalidateAll();
+      invalidated.push('positions');
+    } catch (e) {
+      errors.push(`positions: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    // 4. Cache unificata (async import per evitare dipendenze circolari)
+    import('../controllers/operations-unified-controller.js')
+      .then(module => {
         if (module.invalidateUnifiedCache) {
           module.invalidateUnifiedCache();
           console.log('🗑️ [LIFECYCLE] Cache unificata invalidata');
         }
-      });
-    } catch (e) {
-      console.warn('⚠️ [LIFECYCLE] Errore invalidazione cache unificata:', e);
-    }
+      })
+      .catch(e => console.warn('⚠️ [LIFECYCLE] Cache unificata non disponibile:', e.message));
 
-    // Invalida cache cicli
-    try {
-      import('../modules/operations/cycles/cycles.controller.js').then(module => {
+    // 5. Cache cicli (async import per evitare dipendenze circolari)
+    import('../modules/operations/cycles/cycles.controller.js')
+      .then(module => {
         if (module.clearCyclesCache) {
           module.clearCyclesCache();
           console.log('🗑️ [LIFECYCLE] Cache cicli invalidata');
         }
-      });
-    } catch (e) {
-      console.warn('⚠️ [LIFECYCLE] Errore invalidazione cache cicli:', e);
+      })
+      .catch(e => console.warn('⚠️ [LIFECYCLE] Cache cicli non disponibile:', e.message));
+
+    // Report risultato
+    if (errors.length === 0) {
+      console.log(`✅ [LIFECYCLE] Cache invalidate: ${invalidated.join(', ')}`);
+    } else {
+      console.log(`⚠️ [LIFECYCLE] Cache invalidate: ${invalidated.join(', ')}; Errori: ${errors.join(', ')}`);
     }
   }
 
@@ -618,4 +646,16 @@ export async function setBasketCycleState(params: {
   state: 'available' | 'active' | 'cessated';
 }): Promise<void> {
   return operationsLifecycleService.setBasketCycleState(params);
+}
+
+/**
+ * FUNZIONE HELPER ESPORTATA: invalidateAllCaches
+ * 
+ * IMPORTANTE: Questa funzione DEVE essere usata ovunque si invalidano le cache
+ * invece di chiamare singolarmente le varie cache.
+ * 
+ * Invalida tutte le cache: operazioni, cestelli, posizioni, unificata, cicli.
+ */
+export function invalidateAllCaches(): void {
+  return operationsLifecycleService.invalidateAllCaches();
 }
