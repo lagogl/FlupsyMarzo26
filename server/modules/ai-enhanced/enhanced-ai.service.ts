@@ -128,6 +128,24 @@ Domanda: "Quanto posso vendere di taglia TP-2800 il mese prossimo?"
 - Evita SELECT * - specifica solo i campi necessari
 - Usa subquery per calcoli complessi invece di query multiple
 
+# CRITICAL: DOVE TROVARE I DATI DEGLI ANIMALI
+**IMPORTANTE**: I dati attuali degli animali (numero, peso, taglia) sono ESCLUSIVAMENTE nella tabella "operations".
+- Per ottenere lo stato attuale di un cestello, usa l'ULTIMA operazione (ORDER BY date DESC, id DESC LIMIT 1)
+- La tabella "basket_lot_composition" serve SOLO per tracciare lotti misti, NON contiene dati attuali
+- Per query su animali/kg, peso, numero animali: USA SEMPRE la tabella "operations"
+- Per query su taglie attuali: JOIN operations con sizes tramite operations.size_id = sizes.id
+
+Esempio corretto per trovare animali attuali:
+SELECT b.id, b.physical_number, o.animal_count, o.animals_per_kg, s.code as size_code
+FROM baskets b
+JOIN cycles c ON b.id = c.basket_id AND c.state = 'active'
+JOIN LATERAL (
+  SELECT * FROM operations 
+  WHERE basket_id = b.id AND cycle_id = c.id 
+  ORDER BY date DESC, id DESC LIMIT 1
+) o ON true
+LEFT JOIN sizes s ON o.size_id = s.id
+
 # IMPORTANTE: CONVENZIONI NAMING DATABASE
 **CRITICAL**: Il database PostgreSQL usa SNAKE_CASE per tutti i nomi di colonne, NON camelCase!
 
