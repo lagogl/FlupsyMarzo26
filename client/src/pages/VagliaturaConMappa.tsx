@@ -1167,13 +1167,22 @@ export default function VagliaturaConMappa() {
                             const basketDetails = baskets.find(b => b.id === basket.basketId);
                             const basketFlupsy = flupsys.find(f => f.id === basketDetails?.flupsyId);
                             
+                            // Trova l'ultima operazione direttamente dalla lista operazioni
+                            const basketOperations = (operations as any[])
+                              .filter((op: any) => op.basketId === basket.basketId)
+                              .sort((a: any, b: any) => {
+                                const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+                                return dateCompare !== 0 ? dateCompare : b.id - a.id;
+                              });
+                            const lastOp = basketOperations[0];
+                            
                             // Trova la taglia dal sizeId o dagli animali/kg
-                            const basketSize = basketDetails?.lastOperation?.sizeId 
-                              ? sizes?.find(size => size.id === basketDetails.lastOperation!.sizeId)
-                              : basketDetails?.lastOperation?.animalsPerKg 
+                            const basketSize = lastOp?.sizeId 
+                              ? sizes?.find(size => size.id === lastOp.sizeId)
+                              : lastOp?.animalsPerKg 
                                 ? sizes?.find(size => 
-                                    basketDetails.lastOperation!.animalsPerKg! >= (size.minAnimalsPerKg ?? 0) && 
-                                    basketDetails.lastOperation!.animalsPerKg! <= (size.maxAnimalsPerKg ?? Infinity)
+                                    lastOp.animalsPerKg >= (size.minAnimalsPerKg ?? 0) && 
+                                    lastOp.animalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
                                   )
                                 : null;
 
@@ -1195,14 +1204,14 @@ export default function VagliaturaConMappa() {
                                 <div className="text-gray-600 flex gap-2 mt-0.5">
                                   <span>Pos: {basketDetails?.row}{basketDetails?.position}</span>
                                 </div>
-                                {basketDetails?.lastOperation?.animalCount && (
+                                {lastOp?.animalCount && (
                                   <div className="text-gray-700 mt-1 font-medium">
-                                    {formatNumberItalian(basketDetails.lastOperation.animalCount)} animali
+                                    {formatNumberItalian(lastOp.animalCount)} animali
                                   </div>
                                 )}
-                                {basketDetails?.lastOperation?.animalsPerKg && (
+                                {lastOp?.animalsPerKg && (
                                   <div className="text-gray-500 text-[10px]">
-                                    {formatNumberItalian(basketDetails.lastOperation.animalsPerKg)} animali/kg
+                                    {formatNumberItalian(lastOp.animalsPerKg)} animali/kg
                                   </div>
                                 )}
                               </div>
