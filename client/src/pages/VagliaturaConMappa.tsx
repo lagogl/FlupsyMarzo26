@@ -1718,18 +1718,55 @@ export default function VagliaturaConMappa() {
                     </div>
                   </div>
                   
-                  {/* Info FLUPSY */}
+                  {/* Info FLUPSY - Mostra tutti i FLUPSY coinvolti */}
                   <div className="mt-4 grid grid-cols-2 gap-4">
                     <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
                       <Label className="text-blue-800">FLUPSY Origine</Label>
-                      <p className="text-blue-900 font-medium">{getFlupsyName(originFlupsyId) || 'Non selezionato'}</p>
+                      {(() => {
+                        const originFlupsyIds = [...new Set(sourceBaskets.map(b => b.flupsyId).filter(Boolean))];
+                        if (originFlupsyIds.length === 0) {
+                          return <p className="text-blue-900 font-medium">Non selezionato</p>;
+                        }
+                        if (originFlupsyIds.length === 1) {
+                          return <p className="text-blue-900 font-medium">{getFlupsyName(String(originFlupsyIds[0]))}</p>;
+                        }
+                        return (
+                          <div className="space-y-1">
+                            {originFlupsyIds.map(fId => (
+                              <Badge key={fId} variant="outline" className="mr-1 bg-blue-100 text-blue-800 border-blue-300">
+                                {getFlupsyName(String(fId))}
+                              </Badge>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className={`p-3 rounded-md border ${isCrossFlupsy ? 'bg-amber-50 border-amber-300' : 'bg-green-50 border-green-200'}`}>
                       <Label className={isCrossFlupsy ? 'text-amber-800' : 'text-green-800'}>FLUPSY Destinazione</Label>
-                      <p className={`font-medium ${isCrossFlupsy ? 'text-amber-900' : 'text-green-900'}`}>
-                        {getFlupsyName(destinationFlupsyId) || 'Non selezionato'}
-                        {isCrossFlupsy && <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-800 border-amber-400">Cross-FLUPSY</Badge>}
-                      </p>
+                      {(() => {
+                        const destFlupsyIds = [...new Set(destinationBaskets.map(b => b.flupsyId).filter(Boolean))];
+                        if (destFlupsyIds.length === 0) {
+                          return <p className={`font-medium ${isCrossFlupsy ? 'text-amber-900' : 'text-green-900'}`}>Non selezionato</p>;
+                        }
+                        if (destFlupsyIds.length === 1) {
+                          return (
+                            <p className={`font-medium ${isCrossFlupsy ? 'text-amber-900' : 'text-green-900'}`}>
+                              {getFlupsyName(String(destFlupsyIds[0]))}
+                              {isCrossFlupsy && <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-800 border-amber-400">Cross-FLUPSY</Badge>}
+                            </p>
+                          );
+                        }
+                        return (
+                          <div className="space-y-1">
+                            {destFlupsyIds.map(fId => (
+                              <Badge key={fId} variant="outline" className={`mr-1 ${isCrossFlupsy ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-green-100 text-green-800 border-green-300'}`}>
+                                {getFlupsyName(String(fId))}
+                              </Badge>
+                            ))}
+                            {isCrossFlupsy && <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-400">Cross-FLUPSY</Badge>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1793,6 +1830,7 @@ export default function VagliaturaConMappa() {
                         <TableHeader>
                           <TableRow className="bg-blue-100">
                             <TableHead className="text-blue-800">Cestello</TableHead>
+                            <TableHead className="text-blue-800">FLUPSY</TableHead>
                             <TableHead className="text-blue-800">Taglia</TableHead>
                             <TableHead className="text-right text-blue-800">Animali</TableHead>
                             <TableHead className="text-right text-blue-800">Animali/kg</TableHead>
@@ -1801,21 +1839,21 @@ export default function VagliaturaConMappa() {
                         </TableHeader>
                         <TableBody>
                           {sourceBaskets.map(basket => {
-                            // Trova la taglia corrispondente usando priorità sizeId
                             const basketDetails = baskets.find(b => b.id === basket.basketId);
+                            const basketFlupsy = flupsys.find(f => f.id === basket.flupsyId);
                             
-                            // Trova la taglia corrispondente usando priorità sizeId
-                            const basketSize = basketDetails?.lastOperation?.sizeId 
-                              ? sizes?.find(size => size.id === basketDetails.lastOperation!.sizeId)
-                              : basket.animalsPerKg 
-                                ? sizes?.find(size => 
-                                    basket.animalsPerKg! >= (size.minAnimalsPerKg ?? 0) && basket.animalsPerKg! <= (size.maxAnimalsPerKg ?? Infinity)
-                                  )
-                                : null;
+                            const basketSize = basket.animalsPerKg 
+                              ? sizes?.find(size => 
+                                  basket.animalsPerKg! >= (size.minAnimalsPerKg ?? 0) && basket.animalsPerKg! <= (size.maxAnimalsPerKg ?? Infinity)
+                                )
+                              : null;
                             
                             return (
                               <TableRow key={basket.basketId} className="bg-blue-25 hover:bg-blue-100">
                                 <TableCell className="font-medium text-blue-900">#{basket.physicalNumber}</TableCell>
+                                <TableCell className="text-blue-800 text-xs">
+                                  {basketFlupsy?.name || getFlupsyName(String(basket.flupsyId)) || 'N/A'}
+                                </TableCell>
                                 <TableCell>
                                   {basketSize ? (
                                     <Badge variant="outline" className="bg-blue-200 text-blue-800 border-blue-400">{basketSize.code}</Badge>
@@ -1852,6 +1890,7 @@ export default function VagliaturaConMappa() {
                           <TableHeader>
                             <TableRow className="bg-red-100">
                               <TableHead className="text-red-800">Cestello</TableHead>
+                              <TableHead className="text-red-800">FLUPSY</TableHead>
                               <TableHead className="text-red-800">Taglia</TableHead>
                               <TableHead className="text-red-800">Cliente</TableHead>
                               <TableHead className="text-red-800">Data</TableHead>
@@ -1863,22 +1902,19 @@ export default function VagliaturaConMappa() {
                           </TableHeader>
                           <TableBody>
                             {soldBaskets.map(basket => {
-                              // Trova la taglia corrispondente usando priorità sizeId
                               const basketDetails = baskets.find(b => b.id === basket.basketId);
+                              const soldFlupsy = flupsys.find(f => f.id === basket.flupsyId);
                               
-                              // Calcola animalsPerKg se mancante, usando la stessa logica del completamento
                               let finalAnimalsPerKg = basket.animalsPerKg || 0;
                               if ((!finalAnimalsPerKg || finalAnimalsPerKg === 0) && basket.sampleWeight && basket.sampleCount && basket.sampleWeight > 0 && basket.sampleCount > 0) {
                                 finalAnimalsPerKg = Math.round((basket.sampleCount / basket.sampleWeight) * 1000);
                               }
                               
-                              const basketSize = basketDetails?.lastOperation?.sizeId 
-                                ? sizes?.find(size => size.id === basketDetails.lastOperation!.sizeId)
-                                : finalAnimalsPerKg > 0
-                                  ? sizes?.find(size => 
-                                      finalAnimalsPerKg >= (size.minAnimalsPerKg ?? 0) && finalAnimalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
-                                    )
-                                  : null;
+                              const basketSize = finalAnimalsPerKg > 0
+                                ? sizes?.find(size => 
+                                    finalAnimalsPerKg >= (size.minAnimalsPerKg ?? 0) && finalAnimalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
+                                  )
+                                : null;
                               
                               return (
                                 <TableRow key={basket.basketId} className="bg-red-25 hover:bg-red-100">
@@ -1887,6 +1923,9 @@ export default function VagliaturaConMappa() {
                                     {basket.isAlsoSource && (
                                       <Badge variant="secondary" className="ml-2 text-xs bg-blue-200 text-blue-800">Origine</Badge>
                                     )}
+                                  </TableCell>
+                                  <TableCell className="text-red-800 text-xs">
+                                    {soldFlupsy?.name || getFlupsyName(String(basket.flupsyId)) || 'N/A'}
                                   </TableCell>
                                   <TableCell>
                                     {basketSize ? (
@@ -1912,7 +1951,6 @@ export default function VagliaturaConMappa() {
                                       size="sm"
                                       className="h-6 px-2 text-xs text-red-700 hover:bg-red-200"
                                       onClick={() => {
-                                        // Precompila i dati di vendita
                                         setDirectSaleData({
                                           client: basket.saleClient || 'Cliente',
                                           date: basket.saleDate || new Date().toISOString().split('T')[0],
@@ -1922,7 +1960,6 @@ export default function VagliaturaConMappa() {
                                           selectedBasketId: basket.basketId
                                         });
                                         
-                                        // Precompila anche i dati di misurazione per permettere il ricalcolo
                                         setMeasurementData(prev => ({
                                           ...prev,
                                           basketId: basket.basketId,
@@ -1963,6 +2000,7 @@ export default function VagliaturaConMappa() {
                           <TableHeader>
                             <TableRow className="bg-green-100">
                               <TableHead className="text-green-800">Cestello</TableHead>
+                              <TableHead className="text-green-800">FLUPSY</TableHead>
                               <TableHead className="text-green-800">Taglia</TableHead>
                               <TableHead className="text-green-800">Posizione</TableHead>
                               <TableHead className="text-right text-green-800">Animali</TableHead>
@@ -1972,22 +2010,19 @@ export default function VagliaturaConMappa() {
                           </TableHeader>
                           <TableBody>
                             {placedBaskets.map(basket => {
-                              // Trova la taglia corrispondente usando priorità sizeId
                               const basketDetails = baskets.find(b => b.id === basket.basketId);
+                              const destFlupsy = flupsys.find(f => f.id === basket.flupsyId);
                               
-                              // Calcola animalsPerKg se mancante, usando la stessa logica del completamento
                               let finalAnimalsPerKg = basket.animalsPerKg || 0;
                               if ((!finalAnimalsPerKg || finalAnimalsPerKg === 0) && basket.sampleWeight && basket.sampleCount && basket.sampleWeight > 0 && basket.sampleCount > 0) {
                                 finalAnimalsPerKg = Math.round((basket.sampleCount / basket.sampleWeight) * 1000);
                               }
                               
-                              const basketSize = basketDetails?.lastOperation?.sizeId 
-                                ? sizes?.find(size => size.id === basketDetails.lastOperation!.sizeId)
-                                : finalAnimalsPerKg > 0
-                                  ? sizes?.find(size => 
-                                      finalAnimalsPerKg >= (size.minAnimalsPerKg ?? 0) && finalAnimalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
-                                    )
-                                  : null;
+                              const basketSize = finalAnimalsPerKg > 0
+                                ? sizes?.find(size => 
+                                    finalAnimalsPerKg >= (size.minAnimalsPerKg ?? 0) && finalAnimalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
+                                  )
+                                : null;
                               
                               return (
                                 <TableRow key={basket.basketId} className="bg-green-25 hover:bg-green-100">
@@ -1996,6 +2031,9 @@ export default function VagliaturaConMappa() {
                                     {basket.isAlsoSource && (
                                       <Badge variant="secondary" className="ml-2 text-xs bg-blue-200 text-blue-800">Origine</Badge>
                                     )}
+                                  </TableCell>
+                                  <TableCell className="text-green-800 text-xs">
+                                    {destFlupsy?.name || getFlupsyName(String(basket.flupsyId)) || getFlupsyName(destinationFlupsyId) || 'N/A'}
                                   </TableCell>
                                   <TableCell>
                                     {basketSize ? (
