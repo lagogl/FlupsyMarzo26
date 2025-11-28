@@ -1162,9 +1162,10 @@ export default function VagliaturaConMappa() {
                     {sourceBaskets.length > 0 && (
                       <div className="border rounded-md p-3">
                         <h3 className="text-sm font-semibold mb-2">Cestelli Selezionati ({sourceBaskets.length})</h3>
-                        <div className="max-h-[200px] overflow-y-auto space-y-2">
+                        <div className="max-h-[300px] overflow-y-auto space-y-2">
                           {sourceBaskets.map(basket => {
                             const basketDetails = baskets.find(b => b.id === basket.basketId);
+                            const basketFlupsy = flupsys.find(f => f.id === basketDetails?.flupsyId);
                             
                             // Trova la taglia dal sizeId o dagli animali/kg
                             const basketSize = basketDetails?.lastOperation?.sizeId 
@@ -1177,18 +1178,30 @@ export default function VagliaturaConMappa() {
                                 : null;
 
                             return (
-                              <div key={basket.basketId} className="text-xs p-2 border rounded bg-gray-50">
-                                <div className="font-medium">Cestello #{basketDetails?.physicalNumber}</div>
-                                {basketSize && (
-                                  <div className="text-blue-600 font-medium">{basketSize.code}</div>
-                                )}
+                              <div key={basket.basketId} className="text-xs p-2 border rounded bg-blue-50 border-blue-200">
+                                <div className="flex justify-between items-start">
+                                  <div className="font-bold text-blue-800">
+                                    Cestello #{basketDetails?.physicalNumber}
+                                  </div>
+                                  {basketSize && (
+                                    <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[10px] font-medium">
+                                      {basketSize.code}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-blue-700 font-medium mt-1">
+                                  {basketFlupsy?.name || 'FLUPSY sconosciuto'}
+                                </div>
+                                <div className="text-gray-600 flex gap-2 mt-0.5">
+                                  <span>Pos: {basketDetails?.row}{basketDetails?.position}</span>
+                                </div>
                                 {basketDetails?.lastOperation?.animalCount && (
-                                  <div className="text-gray-600">
+                                  <div className="text-gray-700 mt-1 font-medium">
                                     {formatNumberItalian(basketDetails.lastOperation.animalCount)} animali
                                   </div>
                                 )}
                                 {basketDetails?.lastOperation?.animalsPerKg && (
-                                  <div className="text-gray-600">
+                                  <div className="text-gray-500 text-[10px]">
                                     {formatNumberItalian(basketDetails.lastOperation.animalsPerKg)} animali/kg
                                   </div>
                                 )}
