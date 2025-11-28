@@ -12,6 +12,7 @@ import { pool } from "../../db.js";
 import { 
   generateDatabaseDescription, 
   generateMinimalContext,
+  generateDynamicSchemaDescription,
   COMMON_QUERY_PATTERNS,
   KEY_METRICS,
   getTableMetadata
@@ -49,12 +50,31 @@ setInterval(() => {
   }
 }, 10000);
 
+// Cache per lo schema dinamico (ricaricato ogni 5 minuti)
+let dynamicSchemaCache: string | null = null;
+let dynamicSchemaCacheTime: number = 0;
+const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 minuti
+
+async function getDynamicSchema(): Promise<string> {
+  const now = Date.now();
+  if (dynamicSchemaCache && (now - dynamicSchemaCacheTime) < SCHEMA_CACHE_TTL) {
+    return dynamicSchemaCache;
+  }
+  
+  console.log('🔄 Ricaricamento schema dinamico database...');
+  dynamicSchemaCache = await generateDynamicSchemaDescription();
+  dynamicSchemaCacheTime = now;
+  console.log('✅ Schema dinamico caricato');
+  return dynamicSchemaCache;
+}
+
 /**
  * PROMPT SYSTEM AVANZATO
- * Include contesto completo del database
+ * Include contesto completo del database con schema dinamico
  */
-function buildSystemPrompt(): string {
+async function buildSystemPrompt(): Promise<string> {
   const dbDescription = generateDatabaseDescription();
+  const dynamicSchema = await getDynamicSchema();
   
   return `Sei un esperto data analyst specializzato in acquacoltura con accesso completo al database FLUPSY Management System.
 
@@ -67,8 +87,11 @@ Aiuti gli utenti a ottenere insights dai dati rispondendo a domande complesse ch
 - Identificazione anomalie
 - Raccomandazioni operative
 
-# CONOSCENZA DEL DATABASE
+# CONOSCENZA DEL DATABASE (documentazione)
 ${dbDescription}
+
+# SCHEMA REALE DEL DATABASE (letto dinamicamente con dati di esempio)
+${dynamicSchema}
 
 # PATTERN DI QUERY COMUNI
 ${COMMON_QUERY_PATTERNS.map(p => `
@@ -252,7 +275,7 @@ export async function analyzeQuestionWithEnhancedAI(
       messages: [
         {
           role: "system",
-          content: buildSystemPrompt()
+          content: await buildSystemPrompt()
         },
         {
           role: "user",

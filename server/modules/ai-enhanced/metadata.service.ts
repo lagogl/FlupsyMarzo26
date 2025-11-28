@@ -1349,3 +1349,137 @@ export function generateMinimalContext(): {
     keyMetrics: Object.values(KEY_METRICS).flat().slice(0, 20)
   };
 }
+
+/**
+ * SCHEMA DINAMICO: Legge lo schema reale dal database PostgreSQL
+ * Questa funzione permette all'AI di capire autonomamente la struttura
+ */
+import { pool } from "../../db.js";
+
+export async function getDynamicDatabaseSchema(): Promise<{
+  tables: Array<{
+    name: string;
+    columns: Array<{ name: string; type: string; nullable: boolean }>;
+    sampleData?: any[];
+    rowCount: number;
+  }>;
+  foreignKeys: Array<{
+    table: string;
+    column: string;
+    referencesTable: string;
+    referencesColumn: string;
+  }>;
+}> {
+  try {
+    // 1. Ottieni tutte le tabelle
+    const tablesResult = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+        AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `);
+
+    const tables: any[] = [];
+
+    for (const tableRow of tablesResult.rows) {
+      const tableName = tableRow.table_name;
+
+      // 2. Ottieni le colonne per ogni tabella
+      const columnsResult = await pool.query(`
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+        ORDER BY ordinal_position
+      `, [tableName]);
+
+      // 3. Conta righe
+      const countResult = await pool.query(`SELECT COUNT(*) FROM "${tableName}"`);
+      const rowCount = parseInt(countResult.rows[0].count);
+
+      // 4. Prendi 3 esempi (solo per tabelle con dati)
+      let sampleData: any[] = [];
+      if (rowCount > 0) {
+        try {
+          const sampleResult = await pool.query(`SELECT * FROM "${tableName}" LIMIT 3`);
+          sampleData = sampleResult.rows;
+        } catch (e) {
+          // Ignora errori sui sample
+        }
+      }
+
+      tables.push({
+        name: tableName,
+        columns: columnsResult.rows.map(col => ({
+          name: col.column_name,
+          type: col.data_type,
+          nullable: col.is_nullable === 'YES'
+        })),
+        sampleData: sampleData.length > 0 ? sampleData : undefined,
+        rowCount
+      });
+    }
+
+    // 5. Ottieni foreign keys
+    const fkResult = await pool.query(`
+      SELECT
+        tc.table_name,
+        kcu.column_name,
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+        AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+    `);
+
+    const foreignKeys = fkResult.rows.map(fk => ({
+      table: fk.table_name,
+      column: fk.column_name,
+      referencesTable: fk.foreign_table_name,
+      referencesColumn: fk.foreign_column_name
+    }));
+
+    return { tables, foreignKeys };
+  } catch (error: any) {
+    console.error('Errore lettura schema dinamico:', error.message);
+    return { tables: [], foreignKeys: [] };
+  }
+}
+
+/**
+ * Genera descrizione schema dinamico per il prompt AI
+ */
+export async function generateDynamicSchemaDescription(): Promise<string> {
+  const schema = await getDynamicDatabaseSchema();
+  
+  let description = `# DATABASE SCHEMA REALE (letto dinamicamente)\n\n`;
+  description += `Tabelle totali: ${schema.tables.length}\n\n`;
+
+  // Tabelle principali con dati
+  const tablesWithData = schema.tables.filter(t => t.rowCount > 0);
+  description += `## TABELLE CON DATI (${tablesWithData.length})\n\n`;
+
+  for (const table of tablesWithData) {
+    description += `### ${table.name} (${table.rowCount} righe)\n`;
+    description += `Colonne: ${table.columns.map(c => `${c.name}:${c.type}`).join(', ')}\n`;
+    
+    if (table.sampleData && table.sampleData.length > 0) {
+      description += `Esempio: ${JSON.stringify(table.sampleData[0], null, 0).substring(0, 200)}...\n`;
+    }
+    description += `\n`;
+  }
+
+  // Foreign keys
+  description += `## RELAZIONI (Foreign Keys)\n\n`;
+  for (const fk of schema.foreignKeys) {
+    description += `- ${fk.table}.${fk.column} → ${fk.referencesTable}.${fk.referencesColumn}\n`;
+  }
+
+  return description;
+}
