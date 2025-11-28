@@ -101,6 +101,8 @@ export const screeningOperations = pgTable("screening_operations", {
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di creazione
   updatedAt: timestamp("updated_at"), // Data e ora di ultimo aggiornamento
   notes: text("notes"), // Note aggiuntive
+  isCrossFlupsy: boolean("is_cross_flupsy").default(false), // Flag per identificare trasferimenti tra FLUPSY diversi
+  transportMetadata: jsonb("transport_metadata"), // Metadati trasporto: { operatorName, transportTime, notes }
 });
 
 // Screening Source Baskets (Ceste di origine per la vagliatura)
@@ -109,6 +111,7 @@ export const screeningSourceBaskets = pgTable("screening_source_baskets", {
   screeningId: integer("screening_id").notNull(), // Riferimento all'operazione di vagliatura
   basketId: integer("basket_id").notNull(), // Riferimento alla cesta di origine
   cycleId: integer("cycle_id").notNull(), // Riferimento al ciclo attivo della cesta
+  flupsyId: integer("flupsy_id"), // FLUPSY di origine della cesta (per cross-FLUPSY screening)
   dismissed: boolean("dismissed").notNull().default(false), // Indica se la cesta è stata dismessa
   positionReleased: boolean("position_released").notNull().default(false), // Indica se la posizione è stata liberata temporaneamente
   // Dati della cesta di origine al momento della selezione per la vagliatura
@@ -176,6 +179,10 @@ export const selections = pgTable("selections", {
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di creazione
   updatedAt: timestamp("updated_at"), // Data e ora di ultimo aggiornamento
   notes: text("notes"), // Note aggiuntive
+  isCrossFlupsy: boolean("is_cross_flupsy").default(false), // Flag per vagliatura cross-FLUPSY
+  originFlupsyId: integer("origin_flupsy_id"), // FLUPSY di origine per vagliatura cross-FLUPSY
+  destinationFlupsyId: integer("destination_flupsy_id"), // FLUPSY di destinazione per vagliatura cross-FLUPSY
+  transportMetadata: jsonb("transport_metadata"), // Metadati trasporto: { operatorName, transportTime, notes }
 });
 
 // Selection Source Baskets (Ceste di origine per la selezione)
@@ -184,6 +191,7 @@ export const selectionSourceBaskets = pgTable("selection_source_baskets", {
   selectionId: integer("selection_id").notNull(), // Riferimento all'operazione di selezione
   basketId: integer("basket_id").notNull(), // Riferimento alla cesta di origine
   cycleId: integer("cycle_id").notNull(), // Riferimento al ciclo attivo della cesta
+  flupsyId: integer("flupsy_id"), // FLUPSY di origine (per cross-FLUPSY vagliatura)
   // Dati della cesta di origine al momento della selezione
   animalCount: integer("animal_count"), // Numero di animali
   totalWeight: real("total_weight"), // Peso totale in grammi

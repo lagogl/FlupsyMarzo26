@@ -477,7 +477,15 @@ export async function getSelectionById(req: Request, res: Response) {
  */
 export async function createSelection(req: Request, res: Response) {
   try {
-    const { date, notes, purpose = 'vagliatura' } = req.body;
+    const { 
+      date, 
+      notes, 
+      purpose = 'vagliatura',
+      isCrossFlupsy = false,
+      originFlupsyId = null,
+      destinationFlupsyId = null,
+      transportMetadata = null
+    } = req.body;
     
     // Genera selectionNumber - dovrebbe essere incrementale
     const lastSelection = await db.select({ selectionNumber: selections.selectionNumber })
@@ -487,12 +495,22 @@ export async function createSelection(req: Request, res: Response) {
       
     const nextSelectionNumber = lastSelection.length > 0 ? lastSelection[0].selectionNumber + 1 : 1;
     
+    // Log per debug cross-FLUPSY
+    if (isCrossFlupsy) {
+      console.log(`🔄 Creazione vagliatura CROSS-FLUPSY: origine=${originFlupsyId}, destinazione=${destinationFlupsyId}`);
+      console.log(`📦 Metadati trasporto:`, transportMetadata);
+    }
+    
     const [newSelection] = await db.insert(selections).values({
       date: date,
       selectionNumber: nextSelectionNumber,
       purpose: purpose,
       status: 'draft',
       notes: notes || '',
+      isCrossFlupsy: isCrossFlupsy,
+      originFlupsyId: originFlupsyId,
+      destinationFlupsyId: destinationFlupsyId,
+      transportMetadata: transportMetadata,
       createdAt: new Date(),
       updatedAt: new Date()
     }).returning();
@@ -653,6 +671,7 @@ export async function addSourceBaskets(req: Request, res: Response) {
         selectionId: Number(id),
         basketId: sourceBasket.basketId,
         cycleId: basketData.currentCycleId,
+        flupsyId: sourceBasket.flupsyId || null, // ✅ FLUPSY di origine per cross-FLUPSY
         animalCount: sourceBasket.animalCount,
         totalWeight: sourceBasket.totalWeight || null,
         animalsPerKg: sourceBasket.animalsPerKg || null,

@@ -96,8 +96,19 @@ export default function VagliaturaConMappa() {
     return allHavePosition;
   }, [destinationBaskets]);
   
-  // FLUPSY selezionato per la visualizzazione
-  const [selectedFlupsyId, setSelectedFlupsyId] = useState<string | null>(null);
+  // FLUPSY separati per origine e destinazione (supporta cross-FLUPSY)
+  const [originFlupsyId, setOriginFlupsyId] = useState<string | null>(null);
+  const [destinationFlupsyId, setDestinationFlupsyId] = useState<string | null>(null);
+  
+  // Metadati trasporto per cross-FLUPSY
+  const [transportMetadata, setTransportMetadata] = useState({
+    operatorName: '',
+    transportTime: '',
+    notes: ''
+  });
+  
+  // Flag per determinare se è una vagliatura cross-FLUPSY
+  const isCrossFlupsy = originFlupsyId !== null && destinationFlupsyId !== null && originFlupsyId !== destinationFlupsyId;
   
   // Valori calcolati per il numero di animali
   const [calculatedValues, setCalculatedValues] = useState({
@@ -149,18 +160,21 @@ export default function VagliaturaConMappa() {
   });
   
   // Funzione per arricchire i cestelli con i dati delle operazioni e taglie
-  function getEnhancedBaskets(mode: 'source' | 'destination' = 'source') {
+  function getEnhancedBaskets(mode: 'source' | 'destination' = 'source', specificFlupsyId?: string | null) {
     if (!baskets || !Array.isArray(operations) || !Array.isArray(sizes)) return baskets;
+    
+    // Usa il flupsyId appropriato in base alla modalità
+    const activeFlupsyId = specificFlupsyId !== undefined ? specificFlupsyId : (mode === 'source' ? originFlupsyId : destinationFlupsyId);
     
     // Stampa informazioni di debug
     console.log(`Arricchimento di ${baskets.length} cestelli con ${operations.length} operazioni (mode: ${mode})`);
-    console.log(`FLUPSY selezionato: ${selectedFlupsyId}`);
+    console.log(`FLUPSY selezionato per ${mode}: ${activeFlupsyId}`);
     
     // Filtra i cestelli in base alla modalità:
     // - source: cestelli con ciclo attivo (origine per vagliatura)
     // - destination: tutti i cestelli del FLUPSY (disponibili + origine)
     const filteredBaskets = baskets.filter(b => {
-      const matchesFlupsy = b.flupsyId === (selectedFlupsyId ? parseInt(selectedFlupsyId) : null);
+      const matchesFlupsy = b.flupsyId === (activeFlupsyId ? parseInt(activeFlupsyId) : null);
       if (!matchesFlupsy) return false;
       
       if (mode === 'source') {
@@ -174,7 +188,7 @@ export default function VagliaturaConMappa() {
       }
     });
     
-    console.log(`Cestelli filtrati per FLUPSY ${selectedFlupsyId} (mode: ${mode}): ${filteredBaskets.length}`);
+    console.log(`Cestelli filtrati per FLUPSY ${activeFlupsyId} (mode: ${mode}): ${filteredBaskets.length}`);
     
     // Crea una mappa delle ultime operazioni per ogni cestello
     const lastOperationsMap: Record<number, any> = {};
@@ -318,12 +332,18 @@ export default function VagliaturaConMappa() {
     enabled: true
   });
 
-  // Funzione per ottenere il nome del FLUPSY selezionato
-  const getSelectedFlupsyName = (): string | undefined => {
-    if (!selectedFlupsyId || !flupsys) return undefined;
-    const selectedFlupsy = flupsys.find(f => f.id === parseInt(selectedFlupsyId));
+  // Funzione per ottenere il nome del FLUPSY selezionato (per origine o destinazione)
+  const getFlupsyName = (flupsyId: string | null): string | undefined => {
+    if (!flupsyId || !flupsys) return undefined;
+    const selectedFlupsy = flupsys.find(f => f.id === parseInt(flupsyId));
     return selectedFlupsy?.name;
   };
+  
+  // Alias per compatibilità con codice esistente
+  const getSelectedFlupsyName = (): string | undefined => getFlupsyName(originFlupsyId);
+  
+  // Funzione per ottenere il nome del FLUPSY destinazione
+  const getDestinationFlupsyName = (): string | undefined => getFlupsyName(destinationFlupsyId);
   
   // Mutazione per completare la vagliatura
   const completeScreeningMutation = useMutation({
@@ -809,7 +829,11 @@ export default function VagliaturaConMappa() {
           purpose: selection.purpose,
           notes: selection.notes,
           screeningType: selection.screeningType,
-          referenceSizeId: selection.referenceSizeId
+          referenceSizeId: selection.referenceSizeId,
+          isCrossFlupsy,
+          originFlupsyId: originFlupsyId ? parseInt(originFlupsyId) : null,
+          destinationFlupsyId: destinationFlupsyId ? parseInt(destinationFlupsyId) : null,
+          transportMetadata: isCrossFlupsy ? transportMetadata : null
         };
         
         const selectionResponse = await fetch('/api/selections', {
@@ -851,10 +875,15 @@ export default function VagliaturaConMappa() {
         throw new Error('Nessun cestello origine selezionato. Impossibile procedere.');
       }
       
-      const sourceBasketData = sourceBaskets.map(basket => ({
-        ...basket,
-        selectionId
-      }));
+      const sourceBasketData = sourceBaskets.map(basket => {
+        // Trova il cestello per ottenere il flupsyId
+        const basketDetails = baskets.find(b => b.id === basket.basketId);
+        return {
+          ...basket,
+          selectionId,
+          flupsyId: basketDetails?.flupsyId || (originFlupsyId ? parseInt(originFlupsyId) : null)
+        };
+      });
       
       console.log('🔍 DEBUG - Dati cestelli origine preparati per invio:', {
         sourceBasketData,
@@ -909,7 +938,8 @@ export default function VagliaturaConMappa() {
           selectionId,
           animalsPerKg: finalAnimalsPerKg,
           animalCount: finalAnimalCount,
-          sizeId: finalSizeId
+          sizeId: finalSizeId,
+          flupsyId: destinationFlupsyId ? parseInt(destinationFlupsyId) : basket.flupsyId
         };
       });
       
@@ -1099,18 +1129,24 @@ export default function VagliaturaConMappa() {
                 </div>
               )}
               
-              {/* Selettore FLUPSY - Visibile solo dopo conferma data */}
+              {/* Selettore FLUPSY ORIGINE - Visibile solo dopo conferma data */}
               {isDateConfirmed && (
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                 <div className="lg:col-span-1">
                   <div className="space-y-4 sticky top-4">
                     <div>
-                      <Label htmlFor="flupsy">Seleziona FLUPSY</Label>
+                      <Label htmlFor="flupsy-origin">Seleziona FLUPSY Origine</Label>
                       <Select 
-                        value={selectedFlupsyId || undefined} 
-                        onValueChange={setSelectedFlupsyId}
+                        value={originFlupsyId || undefined} 
+                        onValueChange={(value) => {
+                          setOriginFlupsyId(value);
+                          // Se non è ancora stato selezionato un FLUPSY destinazione, preseleziona lo stesso
+                          if (!destinationFlupsyId) {
+                            setDestinationFlupsyId(value);
+                          }
+                        }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger data-testid="select-flupsy-origin">
                           <SelectValue placeholder="Seleziona un FLUPSY" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1175,16 +1211,16 @@ export default function VagliaturaConMappa() {
                   </div>
                 </div>
                 
-                {/* Visualizzatore FLUPSY - Sempre in primo piano */}
+                {/* Visualizzatore FLUPSY ORIGINE - Sempre in primo piano */}
                 <div className="lg:col-span-3">
                   <div className="border rounded-lg p-4 bg-gray-50 min-h-[400px] flex items-center justify-center">
                     {isLoadingFlupsys || isLoadingBaskets ? (
                       <Spinner className="h-8 w-8" />
-                    ) : !selectedFlupsyId ? (
+                    ) : !originFlupsyId ? (
                       <p className="text-muted-foreground">Seleziona un FLUPSY per visualizzare i cestelli</p>
                     ) : (
                       <FlupsyMapVisualizer 
-                        flupsyId={String(selectedFlupsyId)}
+                        flupsyId={String(originFlupsyId)}
                         flupsyName={getSelectedFlupsyName()}
                         baskets={getEnhancedBaskets('source')}
                         selectedBaskets={sourceBaskets.map(b => b.basketId)}
@@ -1222,26 +1258,43 @@ export default function VagliaturaConMappa() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Avviso Cross-FLUPSY */}
+              {isCrossFlupsy && (
+                <Alert className="bg-amber-50 border-amber-300">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-800">Vagliatura Cross-FLUPSY</AlertTitle>
+                  <AlertDescription className="text-amber-700">
+                    Stai trasferendo cestelli da <strong>{getFlupsyName(originFlupsyId)}</strong> a <strong>{getFlupsyName(destinationFlupsyId)}</strong>. 
+                    Al completamento sarà richiesto di inserire i dati del trasporto.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                 <div className="lg:col-span-1">
                   <div className="space-y-4 sticky top-4">
                     <div>
-                      <Label htmlFor="flupsy">Seleziona FLUPSY</Label>
+                      <Label htmlFor="flupsy-destination">Seleziona FLUPSY Destinazione</Label>
                       <Select 
-                        value={selectedFlupsyId || undefined} 
-                        onValueChange={setSelectedFlupsyId}
+                        value={destinationFlupsyId || undefined} 
+                        onValueChange={setDestinationFlupsyId}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger data-testid="select-flupsy-destination">
                           <SelectValue placeholder="Seleziona un FLUPSY" />
                         </SelectTrigger>
                         <SelectContent>
                           {flupsys.map(flupsy => (
                             <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
-                              {flupsy.name}
+                              {flupsy.name} {flupsy.id.toString() === originFlupsyId && "(Origine)"}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {isCrossFlupsy && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          FLUPSY diverso da origine - trasferimento inter-FLUPSY
+                        </p>
+                      )}
                     </div>
                     
                     {/* Opzione per selezionare ceste per vendita (visibile solo dopo aver posizionato tutte le ceste destinazione) */}
@@ -1406,21 +1459,21 @@ export default function VagliaturaConMappa() {
                   </div>
                 </div>
                 
-                {/* Visualizzatore FLUPSY - Sempre in primo piano */}
+                {/* Visualizzatore FLUPSY DESTINAZIONE - Sempre in primo piano */}
                 <div className="lg:col-span-3">
                   <div className="border rounded-lg p-4 bg-gray-50 min-h-[400px] flex items-center justify-center">
                     {isLoadingFlupsys || isLoadingBaskets ? (
                       <Spinner className="h-8 w-8" />
-                    ) : !selectedFlupsyId ? (
+                    ) : !destinationFlupsyId ? (
                       <p className="text-muted-foreground">Seleziona un FLUPSY per visualizzare i cestelli</p>
                     ) : (
                       <FlupsyMapVisualizer 
-                        flupsyId={String(selectedFlupsyId)}
-                        flupsyName={getSelectedFlupsyName()}
+                        flupsyId={String(destinationFlupsyId)}
+                        flupsyName={getDestinationFlupsyName()}
                         baskets={getEnhancedBaskets('destination').map(b => ({
                           ...b,
-                          // Aggiungiamo un flag per indicare se è un cestello origine
-                          isSourceBasket: sourceBaskets.some(sb => sb.basketId === b.id)
+                          // Aggiungiamo un flag per indicare se è un cestello origine (solo se stesso FLUPSY)
+                          isSourceBasket: !isCrossFlupsy && sourceBaskets.some(sb => sb.basketId === b.id)
                         }))}
                         selectedBaskets={(() => {
                           const selectedIds = destinationBaskets.map(b => b.basketId);
@@ -1631,7 +1684,70 @@ export default function VagliaturaConMappa() {
                       />
                     </div>
                   </div>
+                  
+                  {/* Info FLUPSY */}
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                      <Label className="text-blue-800">FLUPSY Origine</Label>
+                      <p className="text-blue-900 font-medium">{getFlupsyName(originFlupsyId) || 'Non selezionato'}</p>
+                    </div>
+                    <div className={`p-3 rounded-md border ${isCrossFlupsy ? 'bg-amber-50 border-amber-300' : 'bg-green-50 border-green-200'}`}>
+                      <Label className={isCrossFlupsy ? 'text-amber-800' : 'text-green-800'}>FLUPSY Destinazione</Label>
+                      <p className={`font-medium ${isCrossFlupsy ? 'text-amber-900' : 'text-green-900'}`}>
+                        {getFlupsyName(destinationFlupsyId) || 'Non selezionato'}
+                        {isCrossFlupsy && <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-800 border-amber-400">Cross-FLUPSY</Badge>}
+                      </p>
+                    </div>
+                  </div>
                 </div>
+                
+                {/* Form Metadati Trasporto - Solo per Cross-FLUPSY */}
+                {isCrossFlupsy && (
+                  <div className="border rounded-md p-4 bg-amber-50 border-amber-300">
+                    <h3 className="text-lg font-medium mb-3 text-amber-800 flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5" />
+                      Dati Trasporto Inter-FLUPSY
+                    </h3>
+                    <p className="text-sm text-amber-700 mb-4">
+                      Inserisci i dati del trasporto tra i due FLUPSY per garantire la tracciabilità.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="transport-operator" className="text-amber-800">Operatore Responsabile</Label>
+                        <Input 
+                          id="transport-operator"
+                          data-testid="input-transport-operator"
+                          value={transportMetadata.operatorName}
+                          onChange={(e) => setTransportMetadata(prev => ({...prev, operatorName: e.target.value}))}
+                          placeholder="Nome operatore"
+                          className="bg-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="transport-time" className="text-amber-800">Data/Ora Trasporto</Label>
+                        <Input 
+                          id="transport-time"
+                          data-testid="input-transport-time"
+                          type="datetime-local"
+                          value={transportMetadata.transportTime}
+                          onChange={(e) => setTransportMetadata(prev => ({...prev, transportTime: e.target.value}))}
+                          className="bg-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="transport-notes" className="text-amber-800">Note Trasporto</Label>
+                        <Input 
+                          id="transport-notes"
+                          data-testid="input-transport-notes"
+                          value={transportMetadata.notes}
+                          onChange={(e) => setTransportMetadata(prev => ({...prev, notes: e.target.value}))}
+                          placeholder="Note aggiuntive"
+                          className="bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Cestelli origine */}
                 <div>

@@ -227,3 +227,60 @@ COMMENT ON TABLE audit_logs IS 'Registro di tutte le operazioni critiche per tra
 -- Per rimuovere la tabella audit_logs:
 -- DROP TABLE IF EXISTS audit_logs;
 -- ============================================================================
+
+-- ============================================================================
+-- SEZIONE 7: CROSS-FLUPSY VAGLIATURA SUPPORT
+-- Data: 2024-11-28
+-- ============================================================================
+--
+-- DESCRIZIONE:
+-- Estensione dello schema per supportare operazioni di vagliatura (screening)
+-- tra FLUPSY diversi. Permette di trasferire cestelli da un FLUPSY di origine
+-- a un FLUPSY di destinazione diverso.
+--
+-- NUOVE COLONNE:
+-- 1. selections.is_cross_flupsy - Flag per indicare vagliatura cross-FLUPSY
+-- 2. selections.origin_flupsy_id - ID del FLUPSY di origine
+-- 3. selections.destination_flupsy_id - ID del FLUPSY di destinazione
+-- 4. selections.transport_metadata - Metadati trasporto (operatore, tempo, note)
+-- 5. selection_source_baskets.flupsy_id - FLUPSY di origine del cestello
+-- ============================================================================
+
+-- Colonne cross-FLUPSY nella tabella selections
+ALTER TABLE selections 
+  ADD COLUMN IF NOT EXISTS is_cross_flupsy BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS origin_flupsy_id INTEGER,
+  ADD COLUMN IF NOT EXISTS destination_flupsy_id INTEGER,
+  ADD COLUMN IF NOT EXISTS transport_metadata JSONB;
+
+-- Commenti esplicativi
+COMMENT ON COLUMN selections.is_cross_flupsy IS 'True se la vagliatura coinvolge FLUPSY diversi';
+COMMENT ON COLUMN selections.origin_flupsy_id IS 'ID del FLUPSY di origine per cross-FLUPSY';
+COMMENT ON COLUMN selections.destination_flupsy_id IS 'ID del FLUPSY di destinazione per cross-FLUPSY';
+COMMENT ON COLUMN selections.transport_metadata IS 'JSON: {operatorName, transportTime, notes} per tracciabilità trasporto';
+
+-- Colonna flupsyId nella tabella selection_source_baskets
+ALTER TABLE selection_source_baskets
+  ADD COLUMN IF NOT EXISTS flupsy_id INTEGER;
+
+COMMENT ON COLUMN selection_source_baskets.flupsy_id IS 'FLUPSY di origine del cestello (per cross-FLUPSY)';
+
+-- Indici per ottimizzare le query cross-FLUPSY
+CREATE INDEX IF NOT EXISTS idx_selections_cross_flupsy ON selections(is_cross_flupsy) WHERE is_cross_flupsy = true;
+CREATE INDEX IF NOT EXISTS idx_selections_origin_flupsy ON selections(origin_flupsy_id) WHERE origin_flupsy_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_selections_destination_flupsy ON selections(destination_flupsy_id) WHERE destination_flupsy_id IS NOT NULL;
+
+-- ============================================================================
+-- NOTE DI ROLLBACK SEZIONE 7:
+-- ============================================================================
+-- 
+-- Per rimuovere le colonne cross-FLUPSY:
+-- ALTER TABLE selections DROP COLUMN IF EXISTS is_cross_flupsy;
+-- ALTER TABLE selections DROP COLUMN IF EXISTS origin_flupsy_id;
+-- ALTER TABLE selections DROP COLUMN IF EXISTS destination_flupsy_id;
+-- ALTER TABLE selections DROP COLUMN IF EXISTS transport_metadata;
+-- ALTER TABLE selection_source_baskets DROP COLUMN IF EXISTS flupsy_id;
+-- DROP INDEX IF EXISTS idx_selections_cross_flupsy;
+-- DROP INDEX IF EXISTS idx_selections_origin_flupsy;
+-- DROP INDEX IF EXISTS idx_selections_destination_flupsy;
+-- ============================================================================
