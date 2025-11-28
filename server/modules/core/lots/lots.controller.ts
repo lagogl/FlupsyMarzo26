@@ -26,6 +26,7 @@ export class LotsController {
   async getOptimized(req: Request, res: Response) {
     try {
       const filters = {
+        id: req.query.id as string | undefined,
         state: req.query.state as string | undefined,
         supplier: req.query.supplier as string | undefined,
         quality: req.query.quality as string | undefined,

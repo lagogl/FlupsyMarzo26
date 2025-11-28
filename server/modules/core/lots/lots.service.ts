@@ -41,6 +41,7 @@ export class LotsService {
    * Get optimized lots with filtering
    */
   async getOptimizedLots(filters?: { 
+    id?: string;
     state?: string; 
     supplier?: string;
     quality?: string;
@@ -63,6 +64,12 @@ export class LotsService {
     }));
 
     // Apply filters
+    if (filters?.id) {
+      const lotIdNum = parseInt(filters.id);
+      if (!isNaN(lotIdNum)) {
+        lotsWithSizes = lotsWithSizes.filter(lot => lot.id === lotIdNum);
+      }
+    }
     if (filters?.state) {
       lotsWithSizes = lotsWithSizes.filter(lot => lot.state === filters.state);
     }
