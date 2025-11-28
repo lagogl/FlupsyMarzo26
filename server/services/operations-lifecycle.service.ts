@@ -17,7 +17,6 @@ import {
   cycles, 
   baskets,
   basketLotComposition,
-  cycleImpacts,
   lotLedger,
   screeningSourceBaskets,
   screeningDestinationBaskets,
@@ -250,16 +249,12 @@ class OperationsLifecycleService {
       console.warn(`⚠️ [LIFECYCLE] Errore pulizia basket_lot_composition:`, e);
     }
 
-    // 3. cycle_impacts
+    // 3. cycle_impacts (usa SQL raw - tabella potrebbe non esistere)
     try {
-      const deleted = await db.delete(cycleImpacts)
-        .where(eq(cycleImpacts.cycleId, cycleId))
-        .returning({ id: cycleImpacts.id });
-      if (deleted.length > 0) {
-        result.cleanedTables.push(`cycle_impacts (${deleted.length})`);
-      }
+      await db.execute(sql`DELETE FROM cycle_impacts WHERE cycle_id = ${cycleId}`);
+      result.cleanedTables.push('cycle_impacts');
     } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia cycle_impacts:`, e);
+      // Tabella potrebbe non esistere, ignora silenziosamente
     }
 
     // 4. lot_ledger (SET NULL per preservare storico)
