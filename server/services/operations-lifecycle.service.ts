@@ -602,3 +602,20 @@ class OperationsLifecycleService {
 }
 
 export const operationsLifecycleService = new OperationsLifecycleService();
+
+/**
+ * FUNZIONE HELPER ESPORTATA: setBasketCycleState
+ * 
+ * Questa funzione DEVE essere usata ovunque si modifichi lo stato di un cestello
+ * per garantire consistenza tra currentCycleId, cycleCode e state.
+ * 
+ * @param params - Parametri per l'aggiornamento dello stato
+ */
+export async function setBasketCycleState(params: {
+  basketId: number;
+  currentCycleId: number | null;
+  cycleCode: string | null;
+  state: 'available' | 'active' | 'cessated';
+}): Promise<void> {
+  return operationsLifecycleService.setBasketCycleState(params);
+}
