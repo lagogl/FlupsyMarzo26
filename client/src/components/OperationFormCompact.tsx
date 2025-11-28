@@ -224,8 +224,9 @@ export default function OperationFormCompact({
   const [dateValidationMessage, setDateValidationMessage] = useState<string>("");
 
   // Query per ottenere operazioni (necessarie per validazione data)
+  // CRITICO: includeAll=true per caricare TUTTE le operazioni, non solo le prime 20
   const { data: operations } = useQuery({
-    queryKey: ['/api/operations'],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 1000 }],
     enabled: !isLoading,
   });
 
