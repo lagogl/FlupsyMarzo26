@@ -969,11 +969,12 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             })
             .where(eq(cycles.id, basketInfo[0].currentCycleId));
 
-          // 3. LIBERA IL CESTELLO (disponibile per riutilizzo)
+          // 3. LIBERA IL CESTELLO (disponibile per riutilizzo) - AGGIORNA TUTTI I CAMPI PER CONSISTENZA
           await tx.update(baskets)
             .set({ 
               state: 'available',
-              currentCycleId: null
+              currentCycleId: null,
+              cycleCode: null
             })
             .where(eq(baskets.id, sourceBasket.basketId));
 
@@ -1196,9 +1197,11 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           // Rendi cestello disponibile - CORREZIONE: Non forzare posizione hardcoded
           // Se il cestello venduto aveva una posizione specificata, la mantiene
           // Altrimenti, lascia NULL per evitare conflitti
+          // IMPORTANTE: aggiorna tutti e tre i campi per consistenza (state, currentCycleId, cycleCode)
           let updateData: any = { 
             state: 'available',
-            currentCycleId: null  // Usa null invece di undefined
+            currentCycleId: null,
+            cycleCode: null
           };
 
           // Se c'è una posizione specificata per il cestello venduto, usala
@@ -1238,13 +1241,20 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             const row = match[1];
             const position = parseInt(match[2]);
             
+            // Genera cycleCode nel formato: numeroCesta-numeroFlupsy-YYMM
+            const selectionDate = new Date(selection[0].date);
+            const yearMonth = `${selectionDate.getFullYear().toString().slice(-2)}${(selectionDate.getMonth() + 1).toString().padStart(2, '0')}`;
+            const [destBasketInfo] = await tx.select({ physicalNumber: baskets.physicalNumber }).from(baskets).where(eq(baskets.id, destBasket.basketId));
+            const cycleCode = `${destBasketInfo?.physicalNumber || destBasket.basketId}-${destBasket.flupsyId || 1}-${yearMonth}`;
+            
             await tx.update(baskets)
               .set({
                 flupsyId: destBasket.flupsyId || 1,
                 row: row,
                 position: position,
                 state: 'active',
-                currentCycleId: newCycle.id
+                currentCycleId: newCycle.id,
+                cycleCode: cycleCode
               })
               .where(eq(baskets.id, destBasket.basketId));
           }

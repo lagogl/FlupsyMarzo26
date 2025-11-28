@@ -412,9 +412,12 @@ export async function executeScreeningOperation(req: Request, res: Response) {
         
         // Aggiorna il cestello come disponibile (libero)
         // Non modificiamo row e position perché sono campi non-nullable nella tabella baskets
+        // IMPORTANTE: aggiorna tutti e tre i campi per consistenza (state, currentCycleId, cycleCode)
         await tx.update(baskets)
           .set({
-            currentCycleId: null
+            state: 'available',
+            currentCycleId: null,
+            cycleCode: null
           })
           .where(eq(baskets.id, sourceBasket.id));
       }));

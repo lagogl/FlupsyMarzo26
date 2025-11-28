@@ -1978,10 +1978,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newCycle = cycles_result[0];
       
-      // Aggiorna cestello
+      // Genera cycleCode nel formato: numeroCesta-numeroFlupsy-YYMM
+      const cycleCodeDate = new Date(formattedDate);
+      const yearMonth = `${cycleCodeDate.getFullYear().toString().slice(-2)}${(cycleCodeDate.getMonth() + 1).toString().padStart(2, '0')}`;
+      const cycleCode = `${basket.physicalNumber}-${basket.flupsyId}-${yearMonth}`;
+      
+      // Aggiorna cestello (tutti e tre i campi per consistenza)
       await db.update(schema.baskets).set({
         state: 'active',
-        currentCycleId: newCycle.id
+        currentCycleId: newCycle.id,
+        cycleCode: cycleCode
       }).where(eq(schema.baskets.id, basketId));
       
       // Crea operazione senza .returning() con riferimento al lotto
