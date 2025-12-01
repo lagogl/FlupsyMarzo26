@@ -21,6 +21,8 @@ interface ScreeningDetail {
     id: number;
     basketId: number;
     cycleId: number;
+    physicalNumber?: number | null;
+    cycleCode?: string | null;
     animalCount: number | null;
     totalWeight: number | null;
     animalsPerKg: number | null;
@@ -31,6 +33,8 @@ interface ScreeningDetail {
     id: number;
     basketId: number;
     cycleId: number;
+    physicalNumber?: number | null;
+    cycleCode?: string | null;
     category: string | null;
     animalCount: number | null;
     totalWeight: number | null;
@@ -250,8 +254,8 @@ export default function ScreeningDetail() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Cestello ID</TableHead>
-                <TableHead>Ciclo ID</TableHead>
+                <TableHead>Cesta</TableHead>
+                <TableHead>Ciclo</TableHead>
                 <TableHead>FLUPSY</TableHead>
                 <TableHead className="text-right">Animali</TableHead>
                 <TableHead className="text-right">Peso (kg)</TableHead>
@@ -262,8 +266,8 @@ export default function ScreeningDetail() {
             <TableBody>
               {(screening.sourceBaskets || []).map((basket) => (
                 <TableRow key={basket.id} data-testid={`row-source-${basket.id}`}>
-                  <TableCell>{basket.basketId}</TableCell>
-                  <TableCell>{basket.cycleId}</TableCell>
+                  <TableCell className="font-medium">#{basket.physicalNumber ?? basket.basketId}</TableCell>
+                  <TableCell>{basket.cycleCode || `#${basket.cycleId}`}</TableCell>
                   <TableCell>{basket.flupsyName || '-'}</TableCell>
                   <TableCell className="text-right">{formatNumber(basket.animalCount)}</TableCell>
                   <TableCell className="text-right">{formatNumber(basket.totalWeight)}</TableCell>
@@ -290,8 +294,8 @@ export default function ScreeningDetail() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Cestello ID</TableHead>
-                <TableHead>Ciclo ID</TableHead>
+                <TableHead>Cesta</TableHead>
+                <TableHead>Ciclo</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>FLUPSY</TableHead>
                 <TableHead className="text-right">Animali</TableHead>
@@ -311,8 +315,8 @@ export default function ScreeningDetail() {
                 
                 return (
                   <TableRow key={basket.id} data-testid={`row-dest-${basket.id}`}>
-                    <TableCell>{basket.basketId}</TableCell>
-                    <TableCell>{basket.cycleId}</TableCell>
+                    <TableCell className="font-medium">#{basket.physicalNumber ?? basket.basketId}</TableCell>
+                    <TableCell>{basket.cycleCode || `#${basket.cycleId}`}</TableCell>
                     <TableCell className={
                       category === 'Venduta' 
                         ? 'text-orange-600 dark:text-orange-400 font-semibold' 

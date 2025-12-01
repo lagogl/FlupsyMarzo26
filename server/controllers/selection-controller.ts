@@ -379,36 +379,60 @@ export async function getSelectionById(req: Request, res: Response) {
     const sourceBasketRows = await db.select().from(selectionSourceBaskets)
       .where(eq(selectionSourceBaskets.selectionId, Number(id)));
 
-    // Arricchisci con flupsyName
+    // Arricchisci con flupsyName, physicalNumber e cycleCode
     const sourceBaskets = await Promise.all(sourceBasketRows.map(async (sb) => {
       let flupsyName = null;
-      // Recupera basket per ottenere flupsyId
+      let physicalNumber = null;
+      let cycleCode = null;
+      
+      // Recupera basket per ottenere flupsyId e physicalNumber
       const [basket] = await db.select().from(baskets)
         .where(eq(baskets.id, sb.basketId))
         .limit(1);
       
-      if (basket?.flupsyId) {
-        const [flupsy] = await db.select().from(flupsys)
-          .where(eq(flupsys.id, basket.flupsyId))
-          .limit(1);
-        flupsyName = flupsy?.name || null;
+      if (basket) {
+        physicalNumber = basket.physicalNumber;
+        
+        if (basket.flupsyId) {
+          const [flupsy] = await db.select().from(flupsys)
+            .where(eq(flupsys.id, basket.flupsyId))
+            .limit(1);
+          flupsyName = flupsy?.name || null;
+        }
       }
-      return { ...sb, flupsyName };
+      
+      // Recupera cycleCode dal ciclo se presente
+      if (sb.cycleId) {
+        const [cycle] = await db.select().from(cycles)
+          .where(eq(cycles.id, sb.cycleId))
+          .limit(1);
+        if (cycle) {
+          // Costruisce il cycleCode nel formato standard se non presente
+          const [cycleBasket] = await db.select().from(baskets)
+            .where(eq(baskets.id, cycle.basketId))
+            .limit(1);
+          cycleCode = cycleBasket?.cycleCode || `${cycleBasket?.physicalNumber || sb.basketId}-${cycle.id}`;
+        }
+      }
+      
+      return { ...sb, flupsyName, physicalNumber, cycleCode };
     }));
 
     // Recupera i cestelli di destinazione (solo dalla tabella)
     const destBasketRows = await db.select().from(selectionDestinationBaskets)
       .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
 
-    // Arricchisci con flupsyName, row, position e size
+    // Arricchisci con flupsyName, row, position, size, physicalNumber e cycleCode
     const destinationBaskets = await Promise.all(destBasketRows.map(async (destBasket) => {
       let flupsyName = null;
       let flupsyId = null;
       let row = null;
       let position = null;
       let size = null;
+      let physicalNumber = null;
+      let cycleCode = null;
       
-      // Recupera basket per ottenere flupsyId, row e position
+      // Recupera basket per ottenere flupsyId, row, position e physicalNumber
       const [basket] = await db.select().from(baskets)
         .where(eq(baskets.id, destBasket.basketId))
         .limit(1);
@@ -417,12 +441,27 @@ export async function getSelectionById(req: Request, res: Response) {
         flupsyId = basket.flupsyId;
         row = basket.row;
         position = basket.position;
+        physicalNumber = basket.physicalNumber;
+        cycleCode = basket.cycleCode;
         
         if (basket.flupsyId) {
           const [flupsy] = await db.select().from(flupsys)
             .where(eq(flupsys.id, basket.flupsyId))
             .limit(1);
           flupsyName = flupsy?.name || null;
+        }
+      }
+      
+      // Se cycleCode non presente nel basket, costruiscilo dal ciclo
+      if (!cycleCode && destBasket.cycleId) {
+        const [cycle] = await db.select().from(cycles)
+          .where(eq(cycles.id, destBasket.cycleId))
+          .limit(1);
+        if (cycle) {
+          const [cycleBasket] = await db.select().from(baskets)
+            .where(eq(baskets.id, cycle.basketId))
+            .limit(1);
+          cycleCode = cycleBasket?.cycleCode || `${cycleBasket?.physicalNumber || destBasket.basketId}-${cycle.id}`;
         }
       }
       
@@ -445,6 +484,8 @@ export async function getSelectionById(req: Request, res: Response) {
         flupsyName,
         row,
         position,
+        physicalNumber,
+        cycleCode,
         positionAssigned: row !== null && position !== null,
         size
       };
@@ -1649,21 +1690,83 @@ export async function generatePDFReport(req: Request, res: Response) {
     const mortality = Math.max(0, totalSourceAnimals - totalDestAnimals);
     const mortalityPercent = totalSourceAnimals > 0 ? ((mortality / totalSourceAnimals) * 100).toFixed(2) : '0';
     
-    // Arricchisci source baskets con dati FLUPSY
+    // Arricchisci source baskets con dati FLUPSY, physicalNumber e cycleCode
     const enrichedSourceBaskets = await Promise.all(sourceBaskets.map(async (basket: any) => {
-      if (basket.flupsyId) {
-        const flupsyInfo = await db.select({ name: flupsys.name })
-          .from(flupsys)
-          .where(eq(flupsys.id, basket.flupsyId))
-          .limit(1);
-        return { ...basket, flupsyName: flupsyInfo[0]?.name || null };
+      let enriched = { ...basket, flupsyName: null, physicalNumber: null, cycleCode: null };
+      
+      // Recupera basket per physicalNumber e flupsyId
+      const [basketInfo] = await db.select()
+        .from(baskets)
+        .where(eq(baskets.id, basket.basketId))
+        .limit(1);
+      
+      if (basketInfo) {
+        enriched.physicalNumber = basketInfo.physicalNumber;
+        
+        if (basketInfo.flupsyId) {
+          const flupsyInfo = await db.select({ name: flupsys.name })
+            .from(flupsys)
+            .where(eq(flupsys.id, basketInfo.flupsyId))
+            .limit(1);
+          enriched.flupsyName = flupsyInfo[0]?.name || null;
+        }
       }
-      return { ...basket, flupsyName: null };
+      
+      // Recupera cycleCode
+      if (basket.cycleId) {
+        const [cycleInfo] = await db.select()
+          .from(cycles)
+          .where(eq(cycles.id, basket.cycleId))
+          .limit(1);
+        if (cycleInfo) {
+          const [cycleBasket] = await db.select()
+            .from(baskets)
+            .where(eq(baskets.id, cycleInfo.basketId))
+            .limit(1);
+          enriched.cycleCode = cycleBasket?.cycleCode || `${cycleBasket?.physicalNumber || basket.basketId}-${basket.cycleId}`;
+        }
+      }
+      
+      return enriched;
     }));
     
-    // Arricchisci destBaskets con dati taglie e FLUPSY
+    // Arricchisci destBaskets con dati taglie, FLUPSY, physicalNumber e cycleCode
     const enrichedDestBaskets = await Promise.all(destBaskets.map(async (basket: any) => {
-      let enriched = { ...basket, sizeCode: null, flupsyName: null };
+      let enriched = { ...basket, sizeCode: null, flupsyName: null, physicalNumber: null, cycleCode: null };
+      
+      // Recupera basket per physicalNumber e flupsyId
+      const [basketInfo] = await db.select()
+        .from(baskets)
+        .where(eq(baskets.id, basket.basketId))
+        .limit(1);
+      
+      if (basketInfo) {
+        enriched.physicalNumber = basketInfo.physicalNumber;
+        enriched.cycleCode = basketInfo.cycleCode;
+        
+        if (basketInfo.flupsyId) {
+          const flupsyInfo = await db.select({ name: flupsys.name })
+            .from(flupsys)
+            .where(eq(flupsys.id, basketInfo.flupsyId))
+            .limit(1);
+          enriched.flupsyName = flupsyInfo[0]?.name || null;
+        }
+      }
+      
+      // Se cycleCode non presente, costruiscilo dal ciclo
+      if (!enriched.cycleCode && basket.cycleId) {
+        const [cycleInfo] = await db.select()
+          .from(cycles)
+          .where(eq(cycles.id, basket.cycleId))
+          .limit(1);
+        if (cycleInfo) {
+          const [cycleBasket] = await db.select()
+            .from(baskets)
+            .where(eq(baskets.id, cycleInfo.basketId))
+            .limit(1);
+          enriched.cycleCode = cycleBasket?.cycleCode || `${cycleBasket?.physicalNumber || basket.basketId}-${basket.cycleId}`;
+        }
+      }
       
       if (basket.sizeId) {
         const sizeInfo = await db.select({ code: sizes.code })
@@ -1671,14 +1774,6 @@ export async function generatePDFReport(req: Request, res: Response) {
           .where(eq(sizes.id, basket.sizeId))
           .limit(1);
         enriched.sizeCode = sizeInfo[0]?.code || null;
-      }
-      
-      if (basket.flupsyId) {
-        const flupsyInfo = await db.select({ name: flupsys.name })
-          .from(flupsys)
-          .where(eq(flupsys.id, basket.flupsyId))
-          .limit(1);
-        enriched.flupsyName = flupsyInfo[0]?.name || null;
       }
       
       return enriched;
@@ -1860,8 +1955,8 @@ export async function generatePDFReport(req: Request, res: Response) {
     <table>
         <thead>
             <tr>
-                <th>Cestello ID</th>
-                <th>Ciclo ID</th>
+                <th>Cesta</th>
+                <th>Ciclo</th>
                 <th>FLUPSY</th>
                 <th class="text-right">Animali</th>
                 <th class="text-right">Peso (kg)</th>
@@ -1872,8 +1967,8 @@ export async function generatePDFReport(req: Request, res: Response) {
         <tbody>
             ${enrichedSourceBaskets.map(b => `
                 <tr>
-                    <td>#${b.basketId}</td>
-                    <td>${b.cycleId || '-'}</td>
+                    <td>#${b.physicalNumber ?? b.basketId}</td>
+                    <td>${b.cycleCode || '#' + b.cycleId}</td>
                     <td>${b.flupsyName || '-'}</td>
                     <td class="text-right">${(b.animalCount || 0).toLocaleString('it-IT')}</td>
                     <td class="text-right">${(b.totalWeight || 0).toFixed(2)}</td>
@@ -1888,8 +1983,8 @@ export async function generatePDFReport(req: Request, res: Response) {
     <table>
         <thead>
             <tr>
-                <th>Cestello ID</th>
-                <th>Ciclo ID</th>
+                <th>Cesta</th>
+                <th>Ciclo</th>
                 <th>Categoria</th>
                 <th>FLUPSY</th>
                 <th class="text-right">Animali</th>
@@ -1904,8 +1999,8 @@ export async function generatePDFReport(req: Request, res: Response) {
                 const categoryClass = category === 'Venduta' ? 'category-sold' : 'category-repositioned';
                 return `
                 <tr>
-                    <td>#${b.basketId}</td>
-                    <td>${b.cycleId || '-'}</td>
+                    <td>#${b.physicalNumber ?? b.basketId}</td>
+                    <td>${b.cycleCode || '#' + b.cycleId}</td>
                     <td class="${categoryClass}">${category}</td>
                     <td>${b.flupsyName || '-'}</td>
                     <td class="text-right">${(b.animalCount || 0).toLocaleString('it-IT')}</td>
