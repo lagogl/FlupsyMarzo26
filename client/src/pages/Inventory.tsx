@@ -271,7 +271,9 @@ export default function Inventory() {
     // Calcola statistiche per ogni cesta
     activeBaskets.forEach((basket: any) => {
       // Trova l'ultima operazione di questa cesta (usando operazioni filtrate per data)
-      const basketOperations = filteredOperations
+      // IMPORTANTE: Usa 'filtered' (variabile locale) invece di 'filteredOperations' (stato React)
+      // perché setFilteredOperations è asincrono e lo stato non è ancora aggiornato
+      const basketOperations = filtered
         .filter((op: any) => op.basketId === basket.id)
         .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
@@ -354,6 +356,11 @@ export default function Inventory() {
       basket.state === 'active' && basket.currentCycleId !== null
     );
     
+    // Filtra le operazioni fino alla data di riferimento (NON usare filteredOperations stato React)
+    const opsFiltered = operations ? (operations as any[]).filter((op: any) => 
+      new Date(op.date) <= referenceDate
+    ) : [];
+    
     // Prepara mappe per ricerca veloce
     const flupsyMap = new Map();
     (flupsys as any[]).forEach((flupsy: any) => {
@@ -374,8 +381,8 @@ export default function Inventory() {
     const basketsDataArray: BasketData[] = [];
     
     activeBaskets.forEach((basket: any) => {
-      // Utilizzare filteredOperations, già filtrato per data di riferimento
-      const basketOperations = filteredOperations
+      // Utilizzare opsFiltered (variabile locale) invece di filteredOperations (stato React asincrono)
+      const basketOperations = opsFiltered
         .filter((op: any) => op.basketId === basket.id)
         .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
