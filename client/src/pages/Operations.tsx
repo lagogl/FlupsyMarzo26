@@ -1406,9 +1406,19 @@ export default function Operations() {
       }
 
       // Filtro per FLUPSY
+      // Usa flupsyName dall'API (posizione al momento dell'operazione) 
+      // oppure basket.flupsyId come fallback
       if (filters.flupsyFilter !== 'all') {
         const selectedFlupsyId = parseInt(filters.flupsyFilter);
-        if (op.basket?.flupsyId !== selectedFlupsyId) {
+        const selectedFlupsy = flupsys?.find((f: any) => f.id === selectedFlupsyId);
+        
+        // Controlla prima flupsyName (dal server, posizione storica)
+        if (op.flupsyName && selectedFlupsy) {
+          if (op.flupsyName.trim() !== selectedFlupsy.name.trim()) {
+            return false;
+          }
+        } else if (op.basket?.flupsyId !== selectedFlupsyId) {
+          // Fallback al basket corrente
           return false;
         }
       }
@@ -1455,7 +1465,7 @@ export default function Operations() {
     }
     return sorted;
     
-  }, [operations, cycles, baskets, lots, sizes, filters.searchTerm, filters.typeFilter, filters.dateFilter, filters.flupsyFilter, filters.cycleFilter, filters.cycleStateFilter, sortConfig]);
+  }, [operations, cycles, baskets, lots, sizes, flupsys, filters.searchTerm, filters.typeFilter, filters.dateFilter, filters.flupsyFilter, filters.cycleFilter, filters.cycleStateFilter, sortConfig]);
   
   // Get filtered cycles based on selected filters
   const filteredCycleIds = useMemo(() => {
