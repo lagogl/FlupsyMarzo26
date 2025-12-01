@@ -1406,19 +1406,28 @@ export default function Operations() {
       }
 
       // Filtro per FLUPSY
-      // Usa flupsyName dall'API (posizione al momento dell'operazione) 
-      // oppure basket.flupsyId come fallback
+      // Usa flupsyName dall'API (posizione storica) per filtrare correttamente
       if (filters.flupsyFilter !== 'all') {
         const selectedFlupsyId = parseInt(filters.flupsyFilter);
-        const selectedFlupsy = flupsys?.find((f: any) => f.id === selectedFlupsyId);
         
-        // Controlla prima flupsyName (dal server, posizione storica)
-        if (op.flupsyName && selectedFlupsy) {
-          if (op.flupsyName.trim() !== selectedFlupsy.name.trim()) {
+        // Trova il nome del FLUPSY selezionato
+        const selectedFlupsy = flupsys?.find((f: any) => f.id === selectedFlupsyId);
+        if (!selectedFlupsy) {
+          return false;
+        }
+        
+        // Controlla flupsyName (dal server - posizione al momento dell'operazione)
+        // oppure basket.flupsyId come fallback (posizione attuale)
+        const opFlupsyName = op.flupsyName?.trim();
+        const selectedFlupsyName = selectedFlupsy.name?.trim();
+        
+        if (opFlupsyName) {
+          // Usa il nome del FLUPSY dall'operazione (storico)
+          if (opFlupsyName !== selectedFlupsyName) {
             return false;
           }
         } else if (op.basket?.flupsyId !== selectedFlupsyId) {
-          // Fallback al basket corrente
+          // Fallback: usa la posizione attuale del cestello
           return false;
         }
       }
