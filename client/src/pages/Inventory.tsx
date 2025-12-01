@@ -147,14 +147,14 @@ export default function Inventory() {
   // Operazioni filtrate per data di riferimento
   const [filteredOperations, setFilteredOperations] = useState<any[]>([]);
 
-  // Carica dati necessari
+  // Carica dati necessari - IMPORTANTE: usa includeAll=true per ottenere tutti i dati
   const { data: baskets, isLoading: loadingBaskets } = useQuery({
-    queryKey: ['/api/baskets'],
+    queryKey: ['/api/baskets', { includeAll: true }],
     queryFn: getQueryFn({ on401: "throw" })
   });
 
   const { data: operations, isLoading: loadingOperations } = useQuery({
-    queryKey: ['/api/operations'],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 1000 }],
     queryFn: getQueryFn({ on401: "throw" })
   });
 
@@ -164,12 +164,12 @@ export default function Inventory() {
   });
   
   const { data: flupsys, isLoading: loadingFlupsys } = useQuery({
-    queryKey: ['/api/flupsys'],
+    queryKey: ['/api/flupsys', { includeAll: true }],
     queryFn: getQueryFn({ on401: "throw" })
   });
   
   const { data: cyclesData, isLoading: loadingCycles } = useQuery({
-    queryKey: ['/api/cycles'],
+    queryKey: ['/api/cycles', { includeAll: true }],
     queryFn: getQueryFn({ on401: "throw" })
   });
   
