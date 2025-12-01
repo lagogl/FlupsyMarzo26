@@ -210,7 +210,7 @@ export default function Inventory() {
       calculateInventoryStats();
       prepareBasketData();
     }
-  }, [baskets, operations, sizes, flupsys, cycles, referenceDate, targetSize]);
+  }, [baskets, operations, sizes, flupsys, cycles, referenceDate, targetDate, targetSize]);
   
   // Calcola le previsioni di crescita quando cambiano i parametri
   useEffect(() => {
@@ -223,22 +223,29 @@ export default function Inventory() {
   const calculateInventoryStats = () => {
     if (!baskets || !operations || !sizes) return;
     
-    console.log("Calcolo statistiche con data di riferimento:", formatDateIT(referenceDate));
+    // Usa l'intervallo [referenceDate, targetDate] per filtrare le operazioni
+    const startDate = new Date(referenceDate);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = targetDate ? new Date(targetDate) : new Date();
+    endDate.setHours(23, 59, 59, 999);
+    
+    console.log("Calcolo statistiche con intervallo:", formatDateIT(startDate), "→", formatDateIT(endDate));
     
     // Filtra solo le ceste attive con un ciclo
     const activeBaskets = (baskets as any[]).filter((basket: any) => 
       basket.state === 'active' && basket.currentCycleId !== null
     );
     
-    // Filtra le operazioni fino alla data di riferimento selezionata e aggiorna lo stato
-    const filtered = operations ? (operations as any[]).filter((op: any) => 
-      new Date(op.date) <= referenceDate
-    ) : [];
+    // Filtra le operazioni nell'intervallo [referenceDate, targetDate]
+    const filtered = operations ? (operations as any[]).filter((op: any) => {
+      const opDate = new Date(op.date);
+      return opDate >= startDate && opDate <= endDate;
+    }) : [];
     
     // Aggiorna lo stato delle operazioni filtrate
     setFilteredOperations(filtered);
     
-    console.log("Operazioni filtrate per data:", Array.isArray(filtered) ? filtered.length : 0, "su", Array.isArray(operations) ? operations.length : 0);
+    console.log("Operazioni filtrate per intervallo:", Array.isArray(filtered) ? filtered.length : 0, "su", Array.isArray(operations) ? operations.length : 0);
 
     // Prepara un map per le dimensioni
     const sizeMap = new Map();
@@ -356,10 +363,17 @@ export default function Inventory() {
       basket.state === 'active' && basket.currentCycleId !== null
     );
     
-    // Filtra le operazioni fino alla data di riferimento (NON usare filteredOperations stato React)
-    const opsFiltered = operations ? (operations as any[]).filter((op: any) => 
-      new Date(op.date) <= referenceDate
-    ) : [];
+    // Usa l'intervallo [referenceDate, targetDate] per filtrare le operazioni
+    const startDate = new Date(referenceDate);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = targetDate ? new Date(targetDate) : new Date();
+    endDate.setHours(23, 59, 59, 999);
+    
+    // Filtra le operazioni nell'intervallo [referenceDate, targetDate]
+    const opsFiltered = operations ? (operations as any[]).filter((op: any) => {
+      const opDate = new Date(op.date);
+      return opDate >= startDate && opDate <= endDate;
+    }) : [];
     
     // Prepara mappe per ricerca veloce
     const flupsyMap = new Map();
