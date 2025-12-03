@@ -841,8 +841,10 @@ export default function VagliaturaConMappa() {
           finalAnimalsPerKg = Math.round((basket.sampleCount / basket.sampleWeight) * 1000);
         }
         
+        // FIX: Usa il valore animalCount già calcolato dal calcolatore popup (include mortalità)
+        // Ricalcola SOLO se animalCount non è stato impostato (fallback di sicurezza)
         let finalAnimalCount = basket.animalCount || 0;
-        if (basket.totalWeight && basket.totalWeight > 0 && finalAnimalsPerKg > 0) {
+        if (finalAnimalCount === 0 && basket.totalWeight && basket.totalWeight > 0 && finalAnimalsPerKg > 0) {
           finalAnimalCount = Math.round(basket.totalWeight * finalAnimalsPerKg);
         }
         
