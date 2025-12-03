@@ -425,9 +425,9 @@ export default function Baskets() {
     const firstOperation = basketOperations[basketOperations.length - 1];
     const activationDate = firstOperation?.date || null;
 
-    // Peso cesta: dall'ultima operazione con totalWeight (converti grammi -> kg)
+    // Peso cesta: dall'ultima operazione con totalWeight (già in KG nel database)
     const operationWithWeight = basketOperations.find(op => op.totalWeight && op.totalWeight > 0);
-    const pesoCesta = operationWithWeight?.totalWeight ? operationWithWeight.totalWeight / 1000 : null;
+    const pesoCesta = operationWithWeight?.totalWeight || null;
 
     // pz/Kg: dall'ultima operazione con animalsPerKg
     const animalsPerKg = operationsWithAnimalsPerKg.length > 0 ? operationsWithAnimalsPerKg[0].animalsPerKg : null;
