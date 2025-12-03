@@ -759,6 +759,39 @@ export default function VagliaturaConMappa() {
       updateStep('create-selection', 'in-progress', 1);
       let selectionId = selection.id;
       
+      // FIX BUG: Deriva originFlupsyId dai cestelli origine SELEZIONATI, non dallo stato UI
+      // Lo stato originFlupsyId può essere sovrascritto navigando la mappa
+      const derivedOriginFlupsyId = (() => {
+        // Raccogli tutti i flupsyId unici dai cestelli origine
+        const originFlupsyIds = sourceBaskets
+          .map(sb => {
+            const basketDetails = baskets.find(b => b.id === sb.basketId);
+            return basketDetails?.flupsyId;
+          })
+          .filter((id): id is number => id !== undefined && id !== null);
+        
+        // Rimuovi duplicati e verifica che siano tutti dallo stesso FLUPSY
+        const uniqueFlupsyIds = [...new Set(originFlupsyIds)];
+        
+        if (uniqueFlupsyIds.length === 0) {
+          console.warn('⚠️ Nessun flupsyId trovato nei cestelli origine');
+          return originFlupsyId ? parseInt(originFlupsyId) : null;
+        }
+        
+        if (uniqueFlupsyIds.length > 1) {
+          console.warn('⚠️ Cestelli origine provengono da FLUPSY diversi:', uniqueFlupsyIds);
+        }
+        
+        console.log('✅ FLUPSY origine derivato dai cestelli:', uniqueFlupsyIds[0]);
+        return uniqueFlupsyIds[0];
+      })();
+      
+      // Determina se è cross-FLUPSY basandosi sui dati reali
+      const derivedDestinationFlupsyId = destinationFlupsyId ? parseInt(destinationFlupsyId) : null;
+      const derivedIsCrossFlupsy = derivedOriginFlupsyId !== null && 
+                                    derivedDestinationFlupsyId !== null && 
+                                    derivedOriginFlupsyId !== derivedDestinationFlupsyId;
+      
       if (!selectionId) {
         const createSelectionData = {
           date: selection.date,
@@ -766,10 +799,10 @@ export default function VagliaturaConMappa() {
           notes: selection.notes,
           screeningType: selection.screeningType,
           referenceSizeId: selection.referenceSizeId,
-          isCrossFlupsy,
-          originFlupsyId: originFlupsyId ? parseInt(originFlupsyId) : null,
-          destinationFlupsyId: destinationFlupsyId ? parseInt(destinationFlupsyId) : null,
-          transportMetadata: isCrossFlupsy ? transportMetadata : null
+          isCrossFlupsy: derivedIsCrossFlupsy,
+          originFlupsyId: derivedOriginFlupsyId,
+          destinationFlupsyId: derivedDestinationFlupsyId,
+          transportMetadata: derivedIsCrossFlupsy ? transportMetadata : null
         };
         
         const selectionResponse = await fetch('/api/selections', {
@@ -805,12 +838,19 @@ export default function VagliaturaConMappa() {
       }
       
       const sourceBasketData = sourceBaskets.map(basket => {
-        // Trova il cestello per ottenere il flupsyId
+        // Trova il cestello per ottenere il flupsyId DAL CESTELLO REALE, non dallo stato UI
         const basketDetails = baskets.find(b => b.id === basket.basketId);
+        const basketFlupsyId = basketDetails?.flupsyId;
+        
+        if (!basketFlupsyId) {
+          console.warn(`⚠️ Cestello origine ${basket.basketId} non ha flupsyId!`);
+        }
+        
         return {
           ...basket,
           selectionId,
-          flupsyId: basketDetails?.flupsyId || (originFlupsyId ? parseInt(originFlupsyId) : null)
+          // FIX BUG: Usa SEMPRE il flupsyId del cestello reale, con derivedOriginFlupsyId come ultimo fallback
+          flupsyId: basketFlupsyId || derivedOriginFlupsyId
         };
       });
       
