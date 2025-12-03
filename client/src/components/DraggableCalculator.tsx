@@ -123,11 +123,11 @@ export default function DraggableCalculator({
   const handleConfirm = () => {
     onConfirm({
       sampleWeight,
-      sampleCount,
+      sampleCount: Math.round(sampleCount),
       totalWeight,
-      deadCount,
-      animalCount,
-      animalsPerKg,
+      deadCount: Math.round(deadCount),
+      animalCount: Math.round(animalCount),
+      animalsPerKg: Math.round(calculatedAnimalsPerKg),
       mortalityRate,
       position: basketPosition
     });
@@ -197,9 +197,16 @@ export default function DraggableCalculator({
               <div>
                 <Label className="text-xs text-blue-700">N° Animali Vivi</Label>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={sampleCount || ''}
-                  onChange={(e) => setSampleCount(Number(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || /^\d+$/.test(value)) {
+                      setSampleCount(parseInt(value, 10) || 0);
+                    }
+                  }}
                   className="h-7 text-xs"
                 />
               </div>
@@ -223,9 +230,16 @@ export default function DraggableCalculator({
               <div>
                 <Label className="text-xs text-red-700">Animali Morti</Label>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={deadCount || ''}
-                  onChange={(e) => setDeadCount(Number(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || /^\d+$/.test(value)) {
+                      setDeadCount(parseInt(value, 10) || 0);
+                    }
+                  }}
                   className="h-7 text-xs"
                 />
               </div>
