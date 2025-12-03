@@ -2158,15 +2158,17 @@ export default function VagliaturaConMappa() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsMeasurementDialogOpen(false)}>Annulla</Button>
             <Button onClick={() => {
-              // FORZA sempre il ricalcolo per essere sicuri
-              let finalAnimalsPerKg = 0;
+              // Ricalcola animalsPerKg per sicurezza
+              let finalAnimalsPerKg = measurementData.animalsPerKg || 0;
               if (measurementData.sampleWeight > 0 && measurementData.sampleCount > 0) {
                 finalAnimalsPerKg = Math.round((measurementData.sampleCount / measurementData.sampleWeight) * 1000);
               }
               
-              // FORZA sempre il ricalcolo del conteggio animali
+              // FIX BUG MORTALITÀ: Usa il valore calcolato da calculateMeasurementValues che include già la mortalità
+              // Ricalcola SOLO se animalCount è 0 (fallback di sicurezza)
               let finalAnimalCount = measurementData.animalCount;
-              if (measurementData.totalWeight > 0 && finalAnimalsPerKg > 0) {
+              if (finalAnimalCount === 0 && measurementData.totalWeight > 0 && finalAnimalsPerKg > 0) {
+                // Calcolo teorico senza mortalità (solo come fallback)
                 finalAnimalCount = Math.round(measurementData.totalWeight * finalAnimalsPerKg);
               }
               
