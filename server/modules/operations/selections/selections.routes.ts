@@ -26,4 +26,8 @@ router.post("/selections/migrate-basket-lot-data", (req, res) => selectionsContr
 router.delete("/selections/:id/source-baskets/:sourceBasketId", (req, res) => selectionsController.removeSourceBasket(req, res));
 router.delete("/selections/:id/destination-baskets/:destinationBasketId", (req, res) => selectionsController.removeDestinationBasket(req, res));
 
+// ========== CANCELLATION Routes ==========
+router.get("/selections/:id/cancellation-check", (req, res) => selectionsController.checkCancellation(req, res));
+router.post("/selections/:id/cancel", (req, res) => selectionsController.cancelSelection(req, res));
+
 export default router;

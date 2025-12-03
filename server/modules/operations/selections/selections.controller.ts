@@ -18,7 +18,9 @@ import {
   removeDestinationBasket,
   completeSelectionFixed,
   migrateBasketLotData,
-  generatePDFReport
+  generatePDFReport,
+  checkSelectionCancellation,
+  cancelSelection
 } from "../../../controllers/selection-controller";
 
 export class SelectionsController {
@@ -190,6 +192,22 @@ export class SelectionsController {
    */
   async generatePDFReport(req: Request, res: Response) {
     return await generatePDFReport(req, res);
+  }
+
+  /**
+   * GET /api/selections/:id/cancellation-check
+   * Check if a selection can be safely cancelled
+   */
+  async checkCancellation(req: Request, res: Response) {
+    return await checkSelectionCancellation(req, res);
+  }
+
+  /**
+   * POST /api/selections/:id/cancel
+   * Cancel a selection and rollback all changes
+   */
+  async cancelSelection(req: Request, res: Response) {
+    return await cancelSelection(req, res);
   }
 }
 
