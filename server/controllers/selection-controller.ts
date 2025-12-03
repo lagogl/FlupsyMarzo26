@@ -781,7 +781,7 @@ export async function addDestinationBaskets(req: Request, res: Response) {
         animalCount: destBasket.animalCount,
         liveAnimals: destBasket.liveAnimals || destBasket.animalCount,
         totalWeight: destBasket.totalWeight || null,
-        animalsPerKg: destBasket.animalsPerKg || null,
+        animalsPerKg: destBasket.animalsPerKg ? Math.round(destBasket.animalsPerKg) : null,
         sizeId: destBasket.sizeId || null,
         deadCount: destBasket.deadCount || 0,
         mortalityRate: destBasket.mortalityRate || 0,
@@ -2057,6 +2057,108 @@ export async function generatePDFReport(req: Request, res: Response) {
     return res.status(500).json({
       success: false,
       error: `Errore durante la generazione del PDF: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+}
+
+// =============== CANCELLAZIONE SICURA VAGLIATURA ===============
+
+/**
+ * Verifica se una vagliatura può essere cancellata in sicurezza
+ * GET /api/selections/:id/cancellation-check
+ */
+export async function checkSelectionCancellation(req: Request, res: Response) {
+  try {
+    const selectionId = parseInt(req.params.id);
+    
+    if (isNaN(selectionId)) {
+      return res.status(400).json({
+        success: false,
+        error: "ID vagliatura non valido"
+      });
+    }
+
+    const { selectionRollbackService } = await import('../services/selection-rollback.service');
+    const result = await selectionRollbackService.validateCancellation(selectionId);
+
+    return res.status(200).json({
+      success: true,
+      ...result
+    });
+
+  } catch (error) {
+    console.error("Errore verifica cancellazione vagliatura:", error);
+    return res.status(500).json({
+      success: false,
+      error: `Errore durante la verifica: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+}
+
+/**
+ * Esegue la cancellazione completa di una vagliatura
+ * POST /api/selections/:id/cancel
+ */
+export async function cancelSelection(req: Request, res: Response) {
+  try {
+    const selectionId = parseInt(req.params.id);
+    
+    if (isNaN(selectionId)) {
+      return res.status(400).json({
+        success: false,
+        error: "ID vagliatura non valido"
+      });
+    }
+
+    console.log(`🗑️ [API] Richiesta cancellazione vagliatura ${selectionId}`);
+
+    const { selectionRollbackService } = await import('../services/selection-rollback.service');
+    
+    // Prima verifica se può essere cancellata
+    const validation = await selectionRollbackService.validateCancellation(selectionId);
+    
+    if (!validation.canCancel) {
+      return res.status(400).json({
+        success: false,
+        error: "Impossibile cancellare questa vagliatura",
+        blockers: validation.blockers
+      });
+    }
+
+    // Esegui il rollback
+    const result = await selectionRollbackService.executeRollback(selectionId);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: "Errore durante la cancellazione",
+        details: result.errors
+      });
+    }
+
+    // Notifica via WebSocket
+    try {
+      const { broadcastMessage } = await import('../websocket');
+      broadcastMessage({
+        type: 'selection_cancelled',
+        selectionId,
+        restoredEntities: result.restoredEntities
+      });
+    } catch (wsError) {
+      console.log('⚠️ [API] WebSocket notification failed:', wsError);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Vagliatura #${validation.selectionNumber} cancellata con successo`,
+      restoredEntities: result.restoredEntities
+    });
+
+  } catch (error) {
+    console.error("Errore cancellazione vagliatura:", error);
+    return res.status(500).json({
+      success: false,
+      error: `Errore durante la cancellazione: ${error instanceof Error ? error.message : String(error)}`
     });
   }
 }
