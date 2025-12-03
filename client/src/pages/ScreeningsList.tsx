@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import CancelScreeningDialog from "@/components/CancelScreeningDialog";
 
 interface SelectionListItem {
   id: number;
@@ -250,6 +251,10 @@ export default function ScreeningsList() {
                                 <Download className="h-4 w-4 mr-1" />
                                 PDF
                               </Button>
+                              <CancelScreeningDialog
+                                selectionId={screening.id}
+                                selectionNumber={screening.selectionNumber}
+                              />
                             </div>
                           </TableCell>
                         </TableRow>
