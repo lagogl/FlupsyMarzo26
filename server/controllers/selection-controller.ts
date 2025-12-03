@@ -211,9 +211,16 @@ export async function getSelections(req: Request, res: Response) {
     const screeningNumber = req.query.screeningNumber as string;
     const dateFrom = req.query.dateFrom as string;
     const dateTo = req.query.dateTo as string;
+    const includeAll = req.query.includeAll === 'true';
     
     // Build where conditions
     const conditions = [];
+    
+    // Di default mostra solo le vagliature completate, a meno che non si richieda includeAll
+    if (!includeAll) {
+      conditions.push(eq(selections.status, 'completed'));
+    }
+    
     if (screeningNumber) {
       conditions.push(eq(selections.selectionNumber, parseInt(screeningNumber)));
     }
