@@ -870,6 +870,29 @@ export default function VagliaturaConMappa() {
       
       // Passo 4: Aggiungere i cestelli destinazione
       updateStep('add-destinations', 'in-progress', 3);
+      
+      // FIX BUG: Deriva destinationFlupsyId dai cestelli destinazione SELEZIONATI
+      // Lo stato destinationFlupsyId può essere inaffidabile se l'utente naviga la mappa
+      const derivedDestFlupsyIdFromBaskets = (() => {
+        const destFlupsyIds = destinationBaskets
+          .map(db => db.flupsyId)
+          .filter((id): id is number => id !== undefined && id !== null && id > 0);
+        
+        const uniqueFlupsyIds = [...new Set(destFlupsyIds)];
+        
+        if (uniqueFlupsyIds.length === 0) {
+          console.warn('⚠️ Nessun flupsyId trovato nei cestelli destinazione, uso fallback');
+          return derivedDestinationFlupsyId;
+        }
+        
+        if (uniqueFlupsyIds.length > 1) {
+          console.warn('⚠️ Cestelli destinazione su FLUPSY diversi:', uniqueFlupsyIds);
+        }
+        
+        console.log('✅ FLUPSY destinazione derivato dai cestelli:', uniqueFlupsyIds[0]);
+        return uniqueFlupsyIds[0];
+      })();
+      
       const destinationBasketData = destinationBaskets.map(basket => {
         // USA LE POSIZIONI SELEZIONATE DALL'UTENTE (già salvate in basket.row e basket.position)
         // NON cercare nel database, perché quelle sono le posizioni originali!
@@ -898,6 +921,13 @@ export default function VagliaturaConMappa() {
           }
         }
         
+        // FIX BUG: Usa SEMPRE il flupsyId del cestello selezionato (già corretto dal click)
+        // Il flupsyId è stato salvato quando l'utente ha selezionato il cestello sulla mappa
+        const basketFlupsyId = basket.flupsyId;
+        if (!basketFlupsyId || basketFlupsyId <= 0) {
+          console.warn(`⚠️ Cestello destinazione ${basket.basketId} non ha flupsyId valido!`);
+        }
+        
         return {
           ...basket,
           position: formattedPosition,
@@ -905,7 +935,8 @@ export default function VagliaturaConMappa() {
           animalsPerKg: finalAnimalsPerKg,
           animalCount: finalAnimalCount,
           sizeId: finalSizeId,
-          flupsyId: destinationFlupsyId ? parseInt(destinationFlupsyId) : basket.flupsyId
+          // FIX: Usa il flupsyId del cestello (già corretto), con derivato come fallback
+          flupsyId: basketFlupsyId && basketFlupsyId > 0 ? basketFlupsyId : derivedDestFlupsyIdFromBaskets
         };
       });
       
