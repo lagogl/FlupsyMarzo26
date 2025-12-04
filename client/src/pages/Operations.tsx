@@ -2382,7 +2382,7 @@ export default function Operations() {
                       onClick={() => handleSortClick('totalWeight')}
                     >
                       <div className="flex items-center">
-                        Peso (g)
+                        Peso (Kg)
                         {sortConfig.key === 'totalWeight' && (
                           <span className="ml-2">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
@@ -2396,7 +2396,7 @@ export default function Operations() {
                       onClick={() => handleSortClick('averageWeight')}
                     >
                       <div className="flex items-center">
-                        P.M. (mg)
+                        P.M. (Mg)
                         {sortConfig.key === 'averageWeight' && (
                           <span className="ml-2">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
