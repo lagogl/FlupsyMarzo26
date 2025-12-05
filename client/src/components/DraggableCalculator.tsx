@@ -344,7 +344,7 @@ export default function DraggableCalculator({
                         onChange={() => setQualityNote('belli')}
                         className="w-3 h-3"
                       />
-                      <span>Belli</span>
+                      <span>Medi</span>
                     </label>
                     <label className="flex items-center gap-1 cursor-pointer">
                       <input
@@ -354,7 +354,7 @@ export default function DraggableCalculator({
                         onChange={() => setQualityNote('brutti')}
                         className="w-3 h-3"
                       />
-                      <span>Brutti</span>
+                      <span>Code</span>
                     </label>
                     {qualityNote && (
                       <button
