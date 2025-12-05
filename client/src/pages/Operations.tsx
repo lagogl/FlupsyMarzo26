@@ -625,8 +625,8 @@ export default function Operations() {
     queryKey: ['/api/flupsys'],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    enabled: false, // Caricata solo quando serve
+    refetchOnMount: true, // Carica all'avvio per popolare il dropdown
+    enabled: true, // Necessario per il filtro FLUPSY
   });
 
   const { data: sgrs = [] } = useQuery({
