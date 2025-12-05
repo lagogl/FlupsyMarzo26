@@ -31,6 +31,7 @@ interface DraggableCalculatorProps {
     position?: number;
     screeningPosition?: 'sopra' | 'sotto' | null;
     qualityNote?: 'belli' | 'brutti' | null;
+    customNote?: string;
   };
 }
 
@@ -56,6 +57,7 @@ export default function DraggableCalculator({
   // Note operative opzionali
   const [screeningPosition, setScreeningPosition] = useState<'sopra' | 'sotto' | null>(initialData.screeningPosition || null);
   const [qualityNote, setQualityNote] = useState<'belli' | 'brutti' | null>(initialData.qualityNote || null);
+  const [customNote, setCustomNote] = useState(initialData.customNote || '');
   
   const calculatorRef = useRef<HTMLDivElement>(null);
   
@@ -139,7 +141,8 @@ export default function DraggableCalculator({
       mortalityRate,
       position: basketPosition,
       screeningPosition,
-      qualityNote
+      qualityNote,
+      customNote: customNote.trim() || undefined
     });
   };
   
@@ -364,6 +367,18 @@ export default function DraggableCalculator({
                     )}
                   </div>
                 </div>
+              </div>
+              
+              {/* Campo testo libero */}
+              <div className="mt-2 pt-2 border-t border-slate-200">
+                <input
+                  type="text"
+                  value={customNote}
+                  onChange={(e) => setCustomNote(e.target.value)}
+                  placeholder="Nota aggiuntiva (opzionale)..."
+                  className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  maxLength={100}
+                />
               </div>
             </div>
             

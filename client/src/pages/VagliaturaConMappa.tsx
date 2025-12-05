@@ -2759,7 +2759,8 @@ export default function VagliaturaConMappa() {
             sizeId: measurementData.sizeId,
             isAlsoSource: measurementData.isAlsoSource,
             screeningPosition: data.screeningPosition,
-            qualityNote: data.qualityNote
+            qualityNote: data.qualityNote,
+            customNote: data.customNote
           };
           
           setDestinationBaskets(prev => [...prev, newDestinationBasket]);
@@ -2779,7 +2780,8 @@ export default function VagliaturaConMappa() {
           animalsPerKg: measurementData.animalsPerKg,
           position: parseInt(measurementData.position) || 1,
           screeningPosition: measurementData.screeningPosition,
-          qualityNote: measurementData.qualityNote
+          qualityNote: measurementData.qualityNote,
+          customNote: measurementData.customNote
         }}
       />
 
