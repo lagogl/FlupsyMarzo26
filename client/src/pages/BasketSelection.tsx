@@ -515,19 +515,27 @@ export default function BasketSelection() {
     const indicators: string[] = [];
     let primaryColor = 'text-gray-300'; // Grigio di default (quasi invisibile)
     
+    // Usa regex per match esatto delle parole (word boundary)
+    const hasSopra = /\bSOPRA\b/.test(notes) || notes.includes('SOPRA VAGLIATURA');
+    const hasSotto = /\bSOTTO\b/.test(notes) || notes.includes('SOTTO VAGLIATURA');
+    // MEDI e CODE - match esatto come parola separata, non dentro altre parole
+    const hasMedi = /\bMEDI\b/.test(notes) && !/INTERMEDI/.test(notes);
+    const hasCode = /\bCODE\b/.test(notes);
+    
     // Priorità: SOPRA > SOTTO > MEDI > CODE
-    if (notes.includes('SOPRA VAGLIATURA') || notes.includes('SOPRA')) {
+    if (hasSopra) {
       primaryColor = 'text-blue-500';
       indicators.push('Sopra');
-    } else if (notes.includes('SOTTO VAGLIATURA') || notes.includes('SOTTO')) {
+    } else if (hasSotto) {
       primaryColor = 'text-purple-500';
       indicators.push('Sotto');
     }
     
-    if (notes.includes('MEDI')) {
+    // Qualità (può coesistere con posizione)
+    if (hasMedi) {
       if (indicators.length === 0) primaryColor = 'text-green-500';
       indicators.push('Medi');
-    } else if (notes.includes('CODE')) {
+    } else if (hasCode) {
       if (indicators.length === 0) primaryColor = 'text-red-500';
       indicators.push('Code');
     }
