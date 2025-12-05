@@ -152,6 +152,9 @@ function Router() {
       </Route>
       
       {/* Modulo screening rimosso - ora si usa solo Vagliatura con Mappa */}
+      <Route path="/screening">
+        {() => <Redirect to="/vagliatura" />}
+      </Route>
       
       {/* Modulo selezione rimosso - ora si usa solo Vagliatura con Mappa */}
       
