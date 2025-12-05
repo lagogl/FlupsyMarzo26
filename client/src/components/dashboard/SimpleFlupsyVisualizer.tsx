@@ -43,9 +43,9 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
     return allBaskets.filter((basket: any) => selectedFlupsyIds.includes(basket.flupsyId));
   }, [allBaskets, selectedFlupsyIds]);
 
-  // Fetch operations for tooltip data - aggiornamento real-time via WebSocket
+  // Fetch operations for tooltip data - carica TUTTE per evitare esclusioni
   const { data: operations, isLoading: isLoadingOperations } = useQuery({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 100 }],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
 

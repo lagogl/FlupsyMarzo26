@@ -135,7 +135,7 @@ export default function CyclesPaginated() {
   const allCycles = cyclesResponse?.cycles || [];
   
   const { data: operations = [] } = useQuery<Operation[]>({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 100 }],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
     staleTime: 60000 // Cache for 1 minute per performance
   });
   

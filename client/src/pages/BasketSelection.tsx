@@ -240,7 +240,7 @@ export default function BasketSelection() {
   });
   
   const { data: operations, isLoading: operationsLoading } = useQuery<Operation[]>({
-    queryKey: ['/api/operations?includeAll=true&pageSize=100'],
+    queryKey: ['/api/operations?includeAll=true&pageSize=500'],
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -328,7 +328,7 @@ export default function BasketSelection() {
       type: 'all'
     });
     await queryClient.refetchQueries({ 
-      queryKey: ['/api/operations?includeAll=true&pageSize=100'],
+      queryKey: ['/api/operations?includeAll=true&pageSize=500'],
       type: 'all'
     });
     await queryClient.refetchQueries({ 

@@ -579,7 +579,7 @@ export default function Operations() {
   
   // AGGIORNAMENTO REAL-TIME: staleTime=0 per refresh immediato via WebSocket
   const { data: operations = [], isLoading: operationsLoading, error: operationsError } = useQuery({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 100 }],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false, // Non rifare richieste quando torni nella pagina
     refetchOnMount: false, // Non rifare richieste al mount se hai dati

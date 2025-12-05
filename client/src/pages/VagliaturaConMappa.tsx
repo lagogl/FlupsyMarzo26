@@ -146,9 +146,9 @@ export default function VagliaturaConMappa() {
     enabled: true
   });
   
-  // Query specifica per recuperare le operazioni più recenti - ottimizzata per performance
+  // Query specifica per recuperare le operazioni - carica TUTTE per evitare esclusioni
   const { data: operations = [], isLoading: isLoadingOperations } = useQuery({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 100 }],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
     enabled: true,
     staleTime: 60000 // Cache for 1 minute per performance
   });

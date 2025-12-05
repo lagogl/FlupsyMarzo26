@@ -59,9 +59,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return allBaskets.filter((basket: any) => selectedFlupsyIds.includes(basket.flupsyId));
   }, [allBaskets, selectedFlupsyIds]);
 
-  // Fetch operations for tooltip data - ottimizzata per performance
+  // Fetch operations for tooltip data - carica TUTTE le operazioni per evitare esclusioni
   const { data: operations, isLoading: isLoadingOperations } = useQuery({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 100 }],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
     staleTime: 60000, // 1 minute per performance
   });
 
