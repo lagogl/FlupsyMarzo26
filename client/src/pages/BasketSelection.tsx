@@ -540,9 +540,12 @@ export default function BasketSelection() {
       indicators.push('Code');
     }
     
+    // Mostra la nota completa nel tooltip
+    const fullNote = basket.lastOperation?.notes || '';
+    
     return {
       color: primaryColor,
-      tooltip: indicators.length > 0 ? `Note: ${indicators.join(', ')}` : 'Nessuna nota operativa',
+      tooltip: fullNote.trim() || 'Nessuna nota operativa',
       hasNote: indicators.length > 0
     };
   };
