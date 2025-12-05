@@ -2664,6 +2664,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             cycleCode: null
           });
           
+          // 🔴 REGISTRA VENDITA NEL LOT_LEDGER per tracciabilità completa
+          if (type === 'vendita' && newOperation.lotId && newOperation.animalCount) {
+            try {
+              const idempotencyKey = `standalone_sale_${newOperation.id}_${newOperation.lotId}`;
+              
+              await db.insert(schema.lotLedger).values({
+                date: format(date, 'yyyy-MM-dd'),
+                lotId: newOperation.lotId,
+                type: 'sale',
+                quantity: newOperation.animalCount.toString(),
+                operationId: newOperation.id,
+                basketId: basketId,
+                allocationMethod: 'measured',
+                notes: `Vendita standalone cestello #${basket.physicalNumber} - ${newOperation.animalCount.toLocaleString('it-IT')} animali`,
+                idempotencyKey: idempotencyKey
+              });
+              
+              console.log(`✅ LOT_LEDGER: Registrata vendita standalone - Lotto ${newOperation.lotId}, ${newOperation.animalCount} animali`);
+            } catch (ledgerError: any) {
+              if (ledgerError.code === '23505') {
+                console.log(`⚠️ LOT_LEDGER: Vendita già registrata (idempotent) per operazione ${newOperation.id}`);
+              } else {
+                console.error(`❌ LOT_LEDGER: Errore registrazione vendita:`, ledgerError);
+              }
+            }
+          }
+          
           // Broadcast operation and cycle closure events via WebSockets
           if (typeof (global as any).broadcastUpdate === 'function') {
             (global as any).broadcastUpdate('operation_created', {
