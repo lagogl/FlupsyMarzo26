@@ -942,7 +942,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       animalsPerKg: selectionDestinationBaskets.animalsPerKg,
       sizeId: selectionDestinationBaskets.sizeId,
       deadCount: selectionDestinationBaskets.deadCount,
-      mortalityRate: selectionDestinationBaskets.mortalityRate
+      mortalityRate: selectionDestinationBaskets.mortalityRate,
+      notes: selectionDestinationBaskets.notes
     })
     .from(selectionDestinationBaskets)
     .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
@@ -1189,6 +1190,12 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           operationNotes += ` - LOTTO MISTO: ${compositionDetails}`;
         }
         
+        // Concatena note operative dal cestello destinazione (se presenti)
+        if (destBasket.notes) {
+          operationNotes += ` | ${destBasket.notes}`;
+          console.log(`   📝 Note operative aggiunte: ${destBasket.notes}`);
+        }
+        
         const operationMetadata = isMixedLot 
           ? JSON.stringify({ isMixed: true, sourceSelection: Number(id), dominantLot: primaryLotId, lotCount: lotComposition.size })
           : null;
@@ -1228,6 +1235,11 @@ export async function completeSelectionFixed(req: Request, res: Response) {
               .join(', ');
             
             saleNotes += ` - LOTTO MISTO: ${compositionDetails}`;
+          }
+          
+          // Concatena note operative dal cestello destinazione (se presenti)
+          if (destBasket.notes) {
+            saleNotes += ` | ${destBasket.notes}`;
           }
           
           const [saleOperation] = await tx.insert(operations).values({

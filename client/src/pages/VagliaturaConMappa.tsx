@@ -931,6 +931,18 @@ export default function VagliaturaConMappa() {
           console.warn(`⚠️ Cestello destinazione ${basket.basketId} non ha flupsyId valido!`);
         }
         
+        // Costruisci le note operative se presenti
+        const operativeNotes: string[] = [];
+        if (basket.screeningPosition === 'sopra') operativeNotes.push('SOPRA VAGLIATURA');
+        if (basket.screeningPosition === 'sotto') operativeNotes.push('SOTTO VAGLIATURA');
+        if (basket.qualityNote === 'belli') operativeNotes.push('BELLI');
+        if (basket.qualityNote === 'brutti') operativeNotes.push('BRUTTI CON MOLTI MORTI');
+        
+        // Concatena le note operative alle note esistenti
+        const finalNotes = operativeNotes.length > 0 
+          ? operativeNotes.join(' - ')
+          : null;
+        
         return {
           ...basket,
           position: formattedPosition,
@@ -939,7 +951,9 @@ export default function VagliaturaConMappa() {
           animalCount: finalAnimalCount,
           sizeId: finalSizeId,
           // FIX: Usa il flupsyId del cestello (già corretto), con derivato come fallback
-          flupsyId: basketFlupsyId && basketFlupsyId > 0 ? basketFlupsyId : derivedDestFlupsyIdFromBaskets
+          flupsyId: basketFlupsyId && basketFlupsyId > 0 ? basketFlupsyId : derivedDestFlupsyIdFromBaskets,
+          // Note operative opzionali
+          notes: finalNotes
         };
       });
       
