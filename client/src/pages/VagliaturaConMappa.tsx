@@ -2757,7 +2757,9 @@ export default function VagliaturaConMappa() {
             saleClient: null,
             selectionId: 0,
             sizeId: measurementData.sizeId,
-            isAlsoSource: measurementData.isAlsoSource
+            isAlsoSource: measurementData.isAlsoSource,
+            screeningPosition: data.screeningPosition,
+            qualityNote: data.qualityNote
           };
           
           setDestinationBaskets(prev => [...prev, newDestinationBasket]);
@@ -2775,7 +2777,9 @@ export default function VagliaturaConMappa() {
           totalWeight: measurementData.totalWeight,
           deadCount: measurementData.deadCount,
           animalsPerKg: measurementData.animalsPerKg,
-          position: parseInt(measurementData.position) || 1
+          position: parseInt(measurementData.position) || 1,
+          screeningPosition: measurementData.screeningPosition,
+          qualityNote: measurementData.qualityNote
         }}
       />
 

@@ -19,6 +19,8 @@ interface DraggableCalculatorProps {
     animalsPerKg: number;
     mortalityRate: number;
     position: number;
+    screeningPosition: 'sopra' | 'sotto' | null;
+    qualityNote: 'belli' | 'brutti' | null;
   }) => void;
   initialData?: {
     sampleWeight?: number;
@@ -27,6 +29,8 @@ interface DraggableCalculatorProps {
     deadCount?: number;
     animalsPerKg?: number;
     position?: number;
+    screeningPosition?: 'sopra' | 'sotto' | null;
+    qualityNote?: 'belli' | 'brutti' | null;
   };
 }
 
@@ -48,6 +52,10 @@ export default function DraggableCalculator({
   const [deadCount, setDeadCount] = useState(0);
   const [animalsPerKg, setAnimalsPerKg] = useState(initialData.animalsPerKg || 0);
   const [basketPosition, setBasketPosition] = useState(initialData.position || 1);
+  
+  // Note operative opzionali
+  const [screeningPosition, setScreeningPosition] = useState<'sopra' | 'sotto' | null>(initialData.screeningPosition || null);
+  const [qualityNote, setQualityNote] = useState<'belli' | 'brutti' | null>(initialData.qualityNote || null);
   
   const calculatorRef = useRef<HTMLDivElement>(null);
   
@@ -129,7 +137,9 @@ export default function DraggableCalculator({
       animalCount: Math.round(animalCount),
       animalsPerKg: Math.round(calculatedAnimalsPerKg),
       mortalityRate,
-      position: basketPosition
+      position: basketPosition,
+      screeningPosition,
+      qualityNote
     });
   };
   
@@ -276,6 +286,84 @@ export default function DraggableCalculator({
               <div className="flex justify-between">
                 <span className="text-orange-600">Mortalità:</span>
                 <span className="font-medium">{mortalityRate}%</span>
+              </div>
+            </div>
+            
+            {/* Note operative opzionali */}
+            <div className="bg-slate-50 p-2 rounded border border-slate-200">
+              <div className="text-xs font-medium mb-2 text-slate-600">📝 Note (opzionali)</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {/* Posizione vagliatura */}
+                <div className="space-y-1">
+                  <span className="text-slate-500">Posizione:</span>
+                  <div className="flex flex-col gap-1">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="screeningPos"
+                        checked={screeningPosition === 'sopra'}
+                        onChange={() => setScreeningPosition('sopra')}
+                        className="w-3 h-3"
+                      />
+                      <span>Sopra</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="screeningPos"
+                        checked={screeningPosition === 'sotto'}
+                        onChange={() => setScreeningPosition('sotto')}
+                        className="w-3 h-3"
+                      />
+                      <span>Sotto</span>
+                    </label>
+                    {screeningPosition && (
+                      <button
+                        type="button"
+                        onClick={() => setScreeningPosition(null)}
+                        className="text-red-500 hover:text-red-700 text-left text-[10px]"
+                      >
+                        ✕ Rimuovi
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Qualità */}
+                <div className="space-y-1">
+                  <span className="text-slate-500">Qualità:</span>
+                  <div className="flex flex-col gap-1">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="qualityN"
+                        checked={qualityNote === 'belli'}
+                        onChange={() => setQualityNote('belli')}
+                        className="w-3 h-3"
+                      />
+                      <span>Belli</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="qualityN"
+                        checked={qualityNote === 'brutti'}
+                        onChange={() => setQualityNote('brutti')}
+                        className="w-3 h-3"
+                      />
+                      <span>Brutti</span>
+                    </label>
+                    {qualityNote && (
+                      <button
+                        type="button"
+                        onClick={() => setQualityNote(null)}
+                        className="text-red-500 hover:text-red-700 text-left text-[10px]"
+                      >
+                        ✕ Rimuovi
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
             
