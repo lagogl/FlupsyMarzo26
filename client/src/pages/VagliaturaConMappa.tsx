@@ -1892,6 +1892,7 @@ export default function VagliaturaConMappa() {
                               <TableHead className="text-right text-red-800">Animali</TableHead>
                               <TableHead className="text-right text-red-800">Animali/kg</TableHead>
                               <TableHead className="text-right text-red-800">Peso (kg)</TableHead>
+                              <TableHead className="text-red-800">Note</TableHead>
                               <TableHead className="w-12 text-red-800"></TableHead>
                             </TableRow>
                           </TableHeader>
@@ -1910,6 +1911,13 @@ export default function VagliaturaConMappa() {
                                     finalAnimalsPerKg >= (size.minAnimalsPerKg ?? 0) && finalAnimalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
                                   )
                                 : null;
+                              
+                              // Costruisci le note operative per vendite
+                              const operativeNotes: string[] = [];
+                              if (basket.screeningPosition === 'sopra') operativeNotes.push('SOPRA VAGLIATURA');
+                              if (basket.screeningPosition === 'sotto') operativeNotes.push('SOTTO VAGLIATURA');
+                              if (basket.qualityNote === 'belli') operativeNotes.push('BELLI');
+                              if (basket.qualityNote === 'brutti') operativeNotes.push('BRUTTI CON MOLTI MORTI');
                               
                               return (
                                 <TableRow key={basket.basketId} className="bg-red-25 hover:bg-red-100">
@@ -1940,6 +1948,24 @@ export default function VagliaturaConMappa() {
                                   <TableCell className="text-right text-red-900">
                                     {basket.totalWeight || 0}
                                   </TableCell>
+                                  <TableCell className="text-red-800 text-xs">
+                                    {operativeNotes.length > 0 ? (
+                                      <div className="flex flex-col gap-1">
+                                        {operativeNotes.map((note, idx) => (
+                                          <Badge key={idx} variant="outline" className={`text-xs ${
+                                            note.includes('SOPRA') ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                            note.includes('SOTTO') ? 'bg-purple-100 text-purple-700 border-purple-300' :
+                                            note.includes('BELLI') ? 'bg-green-100 text-green-700 border-green-300' :
+                                            'bg-red-100 text-red-700 border-red-300'
+                                          }`}>
+                                            {note}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 italic">-</span>
+                                    )}
+                                  </TableCell>
                                   <TableCell>
                                     <Button
                                       variant="ghost"
@@ -1965,7 +1991,9 @@ export default function VagliaturaConMappa() {
                                           animalsPerKg: basket.animalsPerKg || 0,
                                           deadCount: basket.deadCount || 0,
                                           mortalityRate: 0,
-                                          destinationType: 'sold' as 'sold'
+                                          destinationType: 'sold' as 'sold',
+                                          screeningPosition: basket.screeningPosition || null,
+                                          qualityNote: basket.qualityNote || null
                                         }));
                                         
                                         setIsDirectSaleDialogOpen(true);
@@ -2001,6 +2029,7 @@ export default function VagliaturaConMappa() {
                               <TableHead className="text-right text-green-800">Animali</TableHead>
                               <TableHead className="text-right text-green-800">Animali/kg</TableHead>
                               <TableHead className="text-right text-green-800">Peso (kg)</TableHead>
+                              <TableHead className="text-green-800">Note</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -2018,6 +2047,13 @@ export default function VagliaturaConMappa() {
                                     finalAnimalsPerKg >= (size.minAnimalsPerKg ?? 0) && finalAnimalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
                                   )
                                 : null;
+                              
+                              // Costruisci le note operative
+                              const operativeNotes: string[] = [];
+                              if (basket.screeningPosition === 'sopra') operativeNotes.push('SOPRA VAGLIATURA');
+                              if (basket.screeningPosition === 'sotto') operativeNotes.push('SOTTO VAGLIATURA');
+                              if (basket.qualityNote === 'belli') operativeNotes.push('BELLI');
+                              if (basket.qualityNote === 'brutti') operativeNotes.push('BRUTTI CON MOLTI MORTI');
                               
                               return (
                                 <TableRow key={basket.basketId} className="bg-green-25 hover:bg-green-100">
@@ -2048,6 +2084,24 @@ export default function VagliaturaConMappa() {
                                   </TableCell>
                                   <TableCell className="text-right text-green-900">
                                     {basket.totalWeight || 0}
+                                  </TableCell>
+                                  <TableCell className="text-green-800 text-xs">
+                                    {operativeNotes.length > 0 ? (
+                                      <div className="flex flex-col gap-1">
+                                        {operativeNotes.map((note, idx) => (
+                                          <Badge key={idx} variant="outline" className={`text-xs ${
+                                            note.includes('SOPRA') ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                            note.includes('SOTTO') ? 'bg-purple-100 text-purple-700 border-purple-300' :
+                                            note.includes('BELLI') ? 'bg-green-100 text-green-700 border-green-300' :
+                                            'bg-red-100 text-red-700 border-red-300'
+                                          }`}>
+                                            {note}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 italic">-</span>
+                                    )}
                                   </TableCell>
                                 </TableRow>
                               );
