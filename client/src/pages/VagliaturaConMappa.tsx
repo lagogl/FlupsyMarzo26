@@ -520,7 +520,8 @@ export default function VagliaturaConMappa() {
     sizeId: 0,
     // Note operative opzionali
     screeningPosition: null as 'sopra' | 'sotto' | null,
-    qualityNote: null as 'belli' | 'brutti' | null
+    qualityNote: null as 'belli' | 'brutti' | null,
+    customNote: ''
   });
 
   // Funzione per calcolare i valori basati sui dati di misurazione
@@ -1932,6 +1933,7 @@ export default function VagliaturaConMappa() {
                               if (basket.screeningPosition === 'sotto') operativeNotes.push('SOTTO VAGLIATURA');
                               if (basket.qualityNote === 'belli') operativeNotes.push('BELLI');
                               if (basket.qualityNote === 'brutti') operativeNotes.push('BRUTTI CON MOLTI MORTI');
+                              if (basket.customNote) operativeNotes.push(basket.customNote);
                               
                               return (
                                 <TableRow key={basket.basketId} className="bg-red-25 hover:bg-red-100">
@@ -2068,6 +2070,7 @@ export default function VagliaturaConMappa() {
                               if (basket.screeningPosition === 'sotto') operativeNotes.push('SOTTO VAGLIATURA');
                               if (basket.qualityNote === 'belli') operativeNotes.push('BELLI');
                               if (basket.qualityNote === 'brutti') operativeNotes.push('BRUTTI CON MOLTI MORTI');
+                              if (basket.customNote) operativeNotes.push(basket.customNote);
                               
                               return (
                                 <TableRow key={basket.basketId} className="bg-green-25 hover:bg-green-100">
@@ -2107,7 +2110,8 @@ export default function VagliaturaConMappa() {
                                             note.includes('SOPRA') ? 'bg-blue-100 text-blue-700 border-blue-300' :
                                             note.includes('SOTTO') ? 'bg-purple-100 text-purple-700 border-purple-300' :
                                             note.includes('BELLI') ? 'bg-green-100 text-green-700 border-green-300' :
-                                            'bg-red-100 text-red-700 border-red-300'
+                                            note.includes('BRUTTI') ? 'bg-red-100 text-red-700 border-red-300' :
+                                            'bg-gray-100 text-gray-700 border-gray-300'
                                           }`}>
                                             {note}
                                           </Badge>

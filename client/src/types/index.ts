@@ -105,6 +105,7 @@ export interface DestinationBasket {
   // Note operative opzionali
   screeningPosition?: 'sopra' | 'sotto' | null; // Sopra vagliatura / Sotto vagliatura
   qualityNote?: 'belli' | 'brutti' | null; // Belli / Brutti con molti morti
+  customNote?: string; // Nota personalizzata libera
 }
 
 // Tipo operazione
