@@ -297,7 +297,11 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               
               {!latestOperation && (
                 <div className="text-xs text-center my-2 text-gray-500">
-                  In deposito
+                  {basket.currentCycleId ? (
+                    <span className="text-blue-600">Attiva (dati in caricamento)</span>
+                  ) : (
+                    'In deposito'
+                  )}
                 </div>
               )}
             </div>
