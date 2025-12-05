@@ -226,6 +226,10 @@ export default function BasketSelection() {
   const [showAssignGroupDialog, setShowAssignGroupDialog] = useState(false);
   const [filterTrigger, setFilterTrigger] = useState(0);
   
+  // Stati per filtro note operative (prevalente su FLUPSY e taglie)
+  const [notePositionFilter, setNotePositionFilter] = useState<'sopra' | 'sotto' | null>(null);
+  const [noteQualityFilter, setNoteQualityFilter] = useState<'medi' | 'code' | null>(null);
+  
   // Stati per indicatori visivi dei filtri
   
   // Queries per caricare i dati - CARICA TUTTI I DATI (includeAll=true)
@@ -746,6 +750,35 @@ export default function BasketSelection() {
     // Nuovo approccio: crea un array di funzioni filtro e applica solo quelle che hanno valori significativi
     const filterFunctions: Array<(basket: BasketInfo) => boolean> = [];
     
+    // FILTRO NOTE OPERATIVE (PREVALENTE) - applicato prima di FLUPSY e taglie
+    // Se selezionato, riduce il set di ceste prima degli altri filtri
+    const hasNoteFilter = notePositionFilter !== null || noteQualityFilter !== null;
+    if (hasNoteFilter) {
+      filterFunctions.push((basket: BasketInfo) => {
+        // Cerca nelle note dell'ultima operazione
+        const notes = basket.lastOperation?.notes || '';
+        const notesUpper = notes.toUpperCase();
+        
+        // Verifica filtro posizione (sopra/sotto vagliatura)
+        if (notePositionFilter === 'sopra' && !notesUpper.includes('SOPRA VAGLIATURA')) {
+          return false;
+        }
+        if (notePositionFilter === 'sotto' && !notesUpper.includes('SOTTO VAGLIATURA')) {
+          return false;
+        }
+        
+        // Verifica filtro qualità (medi/code)
+        if (noteQualityFilter === 'medi' && !notesUpper.includes('MEDI')) {
+          return false;
+        }
+        if (noteQualityFilter === 'code' && !notesUpper.includes('CODE')) {
+          return false;
+        }
+        
+        return true;
+      });
+    }
+    
     // Filtro per taglia
     if (formValues.sizes && formValues.sizes.length > 0) {
       filterFunctions.push((basket: BasketInfo) => 
@@ -861,7 +894,7 @@ export default function BasketSelection() {
       totalAnimals: total, 
       totalBySize 
     };
-  }, [basketInfos, sortColumn, sortDirection, filterTrigger]);
+  }, [basketInfos, sortColumn, sortDirection, filterTrigger, notePositionFilter, noteQualityFilter]);
   
   // Gestisci aggiornamento dei filtri
   const onSubmitFilters = (data: z.infer<typeof filterSchema>) => {
@@ -1341,6 +1374,95 @@ export default function BasketSelection() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Filtri principali</h3>
+                    
+                    {/* FILTRO NOTE OPERATIVE (PREVALENTE) */}
+                    <div className="p-3 border rounded-lg bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                          📝 Note Operative (prevalente)
+                        </span>
+                        {(notePositionFilter || noteQualityFilter) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-2 text-xs text-amber-700"
+                            onClick={() => {
+                              setNotePositionFilter(null);
+                              setNoteQualityFilter(null);
+                            }}
+                          >
+                            ✕ Rimuovi
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Posizione vagliatura */}
+                        <div className="space-y-1">
+                          <span className="text-xs text-amber-700 dark:text-amber-300">Posizione:</span>
+                          <div className="flex flex-col gap-1">
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="notePosition"
+                                checked={notePositionFilter === 'sopra'}
+                                onChange={() => setNotePositionFilter('sopra')}
+                                className="w-4 h-4"
+                              />
+                              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                                Sopra
+                              </Badge>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="notePosition"
+                                checked={notePositionFilter === 'sotto'}
+                                onChange={() => setNotePositionFilter('sotto')}
+                                className="w-4 h-4"
+                              />
+                              <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
+                                Sotto
+                              </Badge>
+                            </label>
+                          </div>
+                        </div>
+                        
+                        {/* Qualità */}
+                        <div className="space-y-1">
+                          <span className="text-xs text-amber-700 dark:text-amber-300">Qualità:</span>
+                          <div className="flex flex-col gap-1">
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="noteQuality"
+                                checked={noteQualityFilter === 'medi'}
+                                onChange={() => setNoteQualityFilter('medi')}
+                                className="w-4 h-4"
+                              />
+                              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                                Medi
+                              </Badge>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="noteQuality"
+                                checked={noteQualityFilter === 'code'}
+                                onChange={() => setNoteQualityFilter('code')}
+                                className="w-4 h-4"
+                              />
+                              <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
+                                Code
+                              </Badge>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 italic">
+                        Se selezionato, filtra prima per note, poi applica altri filtri
+                      </p>
+                    </div>
                     
                     <FormField
                       control={form.control}
