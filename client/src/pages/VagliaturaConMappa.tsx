@@ -544,22 +544,22 @@ export default function VagliaturaConMappa() {
       // La formula corretta è: (morti / totale animali nel campione) * 100
       // dove totale animali nel campione include sia vivi che morti
       if (totalSampleAnimals > 0) {
-        // Calcolo percentuale: (morti / totale nel campione) * 100
-        newData.mortalityRate = Math.round((newData.deadCount / totalSampleAnimals) * 100);
+        // IMPORTANTE: Manteniamo la precisione decimale per il calcolo
+        // Arrotondiamo solo per la visualizzazione (2 decimali)
+        const exactMortalityPercent = (newData.deadCount / totalSampleAnimals) * 100;
+        newData.mortalityRate = Math.round(exactMortalityPercent * 100) / 100; // 2 decimali
         
+        // Calcola animali vivi usando la mortalità ESATTA (non arrotondata)
+        if (newData.totalWeight > 0 && newData.animalsPerKg > 0) {
+          // Calcola il totale teorico (considerando come se fossero tutti vivi)
+          const totalTheoretical = Math.round(newData.totalWeight * newData.animalsPerKg);
+          
+          // Applica la percentuale di mortalità ESATTA per ottenere i vivi reali
+          const mortalityFactor = exactMortalityPercent / 100;
+          newData.animalCount = Math.round(totalTheoretical * (1 - mortalityFactor));
+        }
       } else {
         newData.mortalityRate = 0;
-      }
-      
-      // Ora ricalcoliamo il numero totale di animali vivi considerando la mortalità
-      if (newData.totalWeight > 0 && newData.animalsPerKg > 0) {
-        // Calcola il totale teorico (considerando come se fossero tutti vivi)
-        const totalTheoretical = Math.round(newData.totalWeight * newData.animalsPerKg);
-        
-        // Applica la percentuale di mortalità per ottenere i vivi reali
-        const mortalityFactor = newData.mortalityRate / 100;
-        newData.animalCount = Math.round(totalTheoretical * (1 - mortalityFactor));
-        
       }
     } else {
       newData.mortalityRate = 0;
