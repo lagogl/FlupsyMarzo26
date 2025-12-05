@@ -69,7 +69,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useWebSocketMessage } from '@/lib/websocket';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
-import { ArrowUpDown, Fan, Filter, Download, Trash, Info, Activity, Check, Share2, ClipboardCheck, LucideIcon } from 'lucide-react';
+import { ArrowUpDown, Fan, Filter, Download, Trash, Info, Activity, Check, Share2, ClipboardCheck, LucideIcon, StickyNote } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useForm } from 'react-hook-form';
@@ -509,6 +509,36 @@ export default function BasketSelection() {
     );
   }, [basketInfos, selectedBaskets]);
   
+  // Helper per determinare il colore dell'icona note
+  const getNoteIndicator = (basket: BasketInfo): { color: string; tooltip: string; hasNote: boolean } => {
+    const notes = basket.lastOperation?.notes?.toUpperCase() || '';
+    const indicators: string[] = [];
+    let primaryColor = 'text-gray-300'; // Grigio di default (quasi invisibile)
+    
+    // Priorità: SOPRA > SOTTO > MEDI > CODE
+    if (notes.includes('SOPRA VAGLIATURA') || notes.includes('SOPRA')) {
+      primaryColor = 'text-blue-500';
+      indicators.push('Sopra');
+    } else if (notes.includes('SOTTO VAGLIATURA') || notes.includes('SOTTO')) {
+      primaryColor = 'text-purple-500';
+      indicators.push('Sotto');
+    }
+    
+    if (notes.includes('MEDI')) {
+      if (indicators.length === 0) primaryColor = 'text-green-500';
+      indicators.push('Medi');
+    } else if (notes.includes('CODE')) {
+      if (indicators.length === 0) primaryColor = 'text-red-500';
+      indicators.push('Code');
+    }
+    
+    return {
+      color: primaryColor,
+      tooltip: indicators.length > 0 ? `Note: ${indicators.join(', ')}` : 'Nessuna nota operativa',
+      hasNote: indicators.length > 0
+    };
+  };
+
   // Definizione delle colonne
   const columns: Column[] = [
     {
@@ -527,9 +557,11 @@ export default function BasketSelection() {
       cell: (basket) => {
         // Trova il gruppo se assegnato
         const group = basket.groupId ? basketGroups?.find(g => g.id === basket.groupId) : null;
+        // Indicatore note operative
+        const noteIndicator = getNoteIndicator(basket);
         
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {/* Indicatore gruppo colorato */}
             <div 
               className="w-4 h-4 rounded border flex-shrink-0"
@@ -540,6 +572,21 @@ export default function BasketSelection() {
               }}
               title={group ? `Gruppo: ${group.name}` : 'Nessun gruppo'}
             />
+            
+            {/* Icona note operative */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <StickyNote 
+                    className={`w-3 h-3 flex-shrink-0 ${noteIndicator.color} ${noteIndicator.hasNote ? 'opacity-100' : 'opacity-30'}`}
+                    data-testid={`note-indicator-${basket.id}`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p className="text-xs">{noteIndicator.tooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
             <div className="flex flex-col">
               <span className="font-medium">#{basket.physicalNumber}</span>
