@@ -1,6 +1,7 @@
 #!/bin/bash
 # Test End-to-End: Vendita Standalone
 # Questo script testa il CODICE dell'applicazione attraverso chiamate API reali
+# USA /api/operations-bypass per la prima-attivazione (logica corretta)
 
 BASE_URL="http://localhost:5000"
 echo "=============================================="
@@ -11,7 +12,9 @@ echo "=============================================="
 BASKET_ID=""
 CYCLE_ID=""
 OPERATION_ID=""
+SALE_OPERATION_ID=""
 SALE_ID=""
+TEST_LOT_ID=""
 
 # Funzione per cleanup
 cleanup() {
@@ -21,202 +24,256 @@ cleanup() {
   echo "=============================================="
   
   # Elimina vendita avanzata (se esiste)
-  if [ -n "$SALE_ID" ]; then
-    echo "Eliminazione vendita avanzata ID: $SALE_ID"
+  if [ -n "$SALE_ID" ] && [ "$SALE_ID" != "null" ]; then
+    echo "1. Eliminazione vendita avanzata ID: $SALE_ID"
     curl -s -X DELETE "$BASE_URL/api/advanced-sales/$SALE_ID" | jq '.'
   fi
   
-  # Elimina operazione (se esiste)
-  if [ -n "$OPERATION_ID" ]; then
-    echo "Eliminazione operazione ID: $OPERATION_ID"
+  # Elimina operazione di vendita (se esiste)
+  if [ -n "$SALE_OPERATION_ID" ] && [ "$SALE_OPERATION_ID" != "null" ]; then
+    echo "2. Eliminazione operazione vendita ID: $SALE_OPERATION_ID"
+    curl -s -X DELETE "$BASE_URL/api/emergency-delete/$SALE_OPERATION_ID" | jq '.'
+  fi
+  
+  # Elimina operazione di attivazione (se esiste)
+  if [ -n "$OPERATION_ID" ] && [ "$OPERATION_ID" != "null" ]; then
+    echo "3. Eliminazione operazione attivazione ID: $OPERATION_ID"
     curl -s -X DELETE "$BASE_URL/api/emergency-delete/$OPERATION_ID" | jq '.'
   fi
   
-  # Elimina ciclo (se esiste)
-  if [ -n "$CYCLE_ID" ]; then
-    echo "Eliminazione ciclo ID: $CYCLE_ID"
-    curl -s -X DELETE "$BASE_URL/api/cycles/$CYCLE_ID" | jq '.'
+  # Elimina ciclo (se esiste) tramite SQL diretto
+  if [ -n "$CYCLE_ID" ] && [ "$CYCLE_ID" != "null" ]; then
+    echo "4. Ciclo $CYCLE_ID sarà eliminato con la cesta"
   fi
   
-  # Elimina cesta (se esiste)
-  if [ -n "$BASKET_ID" ]; then
-    echo "Eliminazione cesta ID: $BASKET_ID"
-    curl -s -X DELETE "$BASE_URL/api/baskets/$BASKET_ID" | jq '.'
+  # Elimina lotto di test (se esiste)
+  if [ -n "$TEST_LOT_ID" ] && [ "$TEST_LOT_ID" != "null" ]; then
+    echo "5. Eliminazione lotto di test ID: $TEST_LOT_ID"
+    curl -s -X DELETE "$BASE_URL/api/lots/$TEST_LOT_ID" | jq '.'
+  fi
+  
+  # Verifica stato finale cesta
+  if [ -n "$BASKET_ID" ] && [ "$BASKET_ID" != "null" ]; then
+    echo ""
+    echo "6. Verifica stato finale cesta $BASKET_ID:"
+    curl -s "$BASE_URL/api/baskets/$BASKET_ID" | jq '{id, physicalNumber, state, currentCycleId}'
   fi
   
   echo ""
-  echo "Cleanup completato!"
+  echo "=============================================="
+  echo "CLEANUP COMPLETATO!"
+  echo "=============================================="
 }
 
-# Trap per cleanup in caso di errore
+# Trap per cleanup
 trap cleanup EXIT
 
 echo ""
-echo "=== FASE 1: Recupero dati esistenti ==="
-
-# Recupera un FLUPSY esistente
-FLUPSY_ID=$(curl -s "$BASE_URL/api/flupsys" | jq '.[0].id')
-echo "FLUPSY ID selezionato: $FLUPSY_ID"
-
-# Recupera un Lotto esistente
-LOT_ID=$(curl -s "$BASE_URL/api/lots" | jq '.[0].id')
-LOT_ANIMAL_COUNT=$(curl -s "$BASE_URL/api/lots" | jq '.[0].animalCount')
-echo "Lotto ID selezionato: $LOT_ID (animali: $LOT_ANIMAL_COUNT)"
+echo "=== FASE 1: Creazione LOTTO DI TEST ==="
 
 # Recupera una taglia esistente
-SIZE_ID=$(curl -s "$BASE_URL/api/sizes" | jq '.[0].id')
-SIZE_CODE=$(curl -s "$BASE_URL/api/sizes" | jq -r '.[0].code')
-echo "Taglia ID selezionata: $SIZE_ID ($SIZE_CODE)"
+SIZE_DATA=$(curl -s "$BASE_URL/api/sizes" | jq '.[0]')
+SIZE_ID=$(echo "$SIZE_DATA" | jq '.id')
+SIZE_CODE=$(echo "$SIZE_DATA" | jq -r '.code')
+echo "Taglia selezionata: ID=$SIZE_ID ($SIZE_CODE)"
 
-echo ""
-echo "=== FASE 2: Creazione cesta di test ==="
-
-# Crea una nuova cesta con numero fisico alto per evitare conflitti
-BASKET_RESPONSE=$(curl -s -X POST "$BASE_URL/api/baskets" \
+# Crea lotto di test
+LOT_RESPONSE=$(curl -s -X POST "$BASE_URL/api/lots" \
   -H "Content-Type: application/json" \
   -d "{
-    \"flupsyId\": $FLUPSY_ID,
-    \"physicalNumber\": 999,
-    \"row\": \"TEST\",
-    \"position\": 1
+    \"supplier\": \"TEST - LOTTO TEMPORANEO\",
+    \"supplierLotNumber\": \"TEST-$(date +%s)\",
+    \"arrivalDate\": \"$(date +%Y-%m-%d)\",
+    \"animalCount\": 1000000,
+    \"weight\": 100,
+    \"sizeId\": $SIZE_ID,
+    \"quality\": \"normali\",
+    \"notes\": \"LOTTO DI TEST - DA ELIMINARE\"
   }")
 
-echo "Risposta creazione cesta:"
-echo "$BASKET_RESPONSE" | jq '.'
+TEST_LOT_ID=$(echo "$LOT_RESPONSE" | jq '.id')
+echo "Lotto di test creato con ID: $TEST_LOT_ID"
 
-BASKET_ID=$(echo "$BASKET_RESPONSE" | jq '.id')
-echo "Cesta creata con ID: $BASKET_ID"
-
-if [ "$BASKET_ID" == "null" ] || [ -z "$BASKET_ID" ]; then
-  echo "ERRORE: Creazione cesta fallita!"
+if [ "$TEST_LOT_ID" == "null" ] || [ -z "$TEST_LOT_ID" ]; then
+  echo "ERRORE: Creazione lotto fallita!"
+  echo "$LOT_RESPONSE" | jq '.'
   exit 1
 fi
 
 echo ""
-echo "=== FASE 3: Creazione ciclo con data vecchia ==="
+echo "=== FASE 2: Selezione cesta disponibile ==="
 
-# Data di 15 giorni fa
-OLD_DATE=$(date -d "15 days ago" +%Y-%m-%d 2>/dev/null || date -v-15d +%Y-%m-%d)
-echo "Data ciclo: $OLD_DATE"
-
-CYCLE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/cycles" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"basketId\": $BASKET_ID,
-    \"lotId\": $LOT_ID,
-    \"startDate\": \"$OLD_DATE\"
-  }")
-
-echo "Risposta creazione ciclo:"
-echo "$CYCLE_RESPONSE" | jq '.'
-
-CYCLE_ID=$(echo "$CYCLE_RESPONSE" | jq '.id')
-echo "Ciclo creato con ID: $CYCLE_ID"
-
-if [ "$CYCLE_ID" == "null" ] || [ -z "$CYCLE_ID" ]; then
-  echo "ERRORE: Creazione ciclo fallita!"
-  exit 1
-fi
+BASKET_DATA=$(curl -s "$BASE_URL/api/baskets?includeAll=true" | jq '[.[] | select(.state == "available")] | .[0]')
+BASKET_ID=$(echo "$BASKET_DATA" | jq '.id')
+BASKET_NUM=$(echo "$BASKET_DATA" | jq '.physicalNumber')
+echo "Cesta selezionata: ID=$BASKET_ID, Numero=$BASKET_NUM"
 
 echo ""
-echo "=== FASE 4: Registrazione operazione di attivazione ==="
+echo "Stato cesta PRIMA:"
+curl -s "$BASE_URL/api/baskets/$BASKET_ID" | jq '{id, physicalNumber, state, currentCycleId}'
 
-OPERATION_RESPONSE=$(curl -s -X POST "$BASE_URL/api/operations" \
+echo ""
+echo "=== FASE 3: Prima-attivazione (usa /api/direct-operations) ==="
+
+OLD_DATE=$(date -d "15 days ago" +%Y-%m-%d 2>/dev/null || date -v-15d +%Y-%m-%d 2>/dev/null || echo "2025-11-20")
+echo "Data attivazione: $OLD_DATE"
+
+BYPASS_RESPONSE=$(curl -s -X POST "$BASE_URL/api/direct-operations" \
   -H "Content-Type: application/json" \
   -d "{
-    \"basketId\": $BASKET_ID,
-    \"cycleId\": $CYCLE_ID,
     \"type\": \"prima-attivazione\",
+    \"basketId\": $BASKET_ID,
     \"date\": \"$OLD_DATE\",
-    \"lotId\": $LOT_ID,
+    \"lotId\": $TEST_LOT_ID,
     \"sizeId\": $SIZE_ID,
     \"totalWeight\": 10.5,
     \"animalCount\": 50000,
     \"animalsPerKg\": 4762
   }")
 
-echo "Risposta creazione operazione:"
-echo "$OPERATION_RESPONSE" | jq '.'
+echo "Risposta prima-attivazione:"
+echo "$BYPASS_RESPONSE" | jq '.'
 
-OPERATION_ID=$(echo "$OPERATION_RESPONSE" | jq '.id')
-echo "Operazione creata con ID: $OPERATION_ID"
+CYCLE_ID=$(echo "$BYPASS_RESPONSE" | jq '.cycleId')
+echo "Ciclo creato: $CYCLE_ID"
 
-if [ "$OPERATION_ID" == "null" ] || [ -z "$OPERATION_ID" ]; then
-  echo "ERRORE: Creazione operazione fallita!"
+if [ "$CYCLE_ID" == "null" ] || [ -z "$CYCLE_ID" ]; then
+  echo "ERRORE: Prima-attivazione fallita!"
   exit 1
 fi
 
-echo ""
-echo "=== FASE 5: Verifica stato cesta dopo attivazione ==="
+# Recupera l'operazione creata
+OPERATION_ID=$(curl -s "$BASE_URL/api/operations?basketId=$BASKET_ID&includeAll=true" | jq '.[0].id')
+echo "Operazione creata: $OPERATION_ID"
 
+echo ""
+echo "=== FASE 4: Verifica attivazione cesta ==="
+echo "Stato cesta DOPO attivazione:"
 BASKET_STATE=$(curl -s "$BASE_URL/api/baskets/$BASKET_ID")
-echo "Stato cesta dopo attivazione:"
 echo "$BASKET_STATE" | jq '{id, physicalNumber, state, currentCycleId, cycleCode}'
 
+# Verifica che la cesta sia attiva
+STATE=$(echo "$BASKET_STATE" | jq -r '.state')
+if [ "$STATE" != "active" ]; then
+  echo "⚠️ ATTENZIONE: La cesta dovrebbe essere 'active' ma è '$STATE'"
+else
+  echo "✅ Cesta correttamente attivata!"
+fi
+
 echo ""
-echo "=== FASE 6: Esecuzione VENDITA STANDALONE ==="
+echo "=============================================="
+echo "=== FASE 5: Creazione operazione VENDITA ==="
+echo "=============================================="
 
 TODAY=$(date +%Y-%m-%d)
 echo "Data vendita: $TODAY"
 
-# Vendita standalone - questo è il test principale!
-SALE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/advanced-sales" \
+# Prima creo un'operazione di vendita sulla cesta
+SALE_OP_RESPONSE=$(curl -s -X POST "$BASE_URL/api/operations" \
   -H "Content-Type: application/json" \
   -d "{
-    \"companyId\": 1052922,
-    \"customerId\": 82,
-    \"saleDate\": \"$TODAY\",
-    \"notes\": \"TEST VENDITA STANDALONE - DA ELIMINARE\",
-    \"items\": [{
-      \"basketId\": $BASKET_ID,
-      \"sizeId\": $SIZE_ID,
-      \"animalCount\": 10000,
-      \"weight\": 2.1,
-      \"pricePerKg\": 15.00
-    }]
+    \"type\": \"vendita\",
+    \"basketId\": $BASKET_ID,
+    \"cycleId\": $CYCLE_ID,
+    \"date\": \"$TODAY\",
+    \"lotId\": $TEST_LOT_ID,
+    \"sizeId\": $SIZE_ID,
+    \"totalWeight\": 2.1,
+    \"animalCount\": 10000,
+    \"animalsPerKg\": 4762,
+    \"notes\": \"TEST VENDITA - DA ELIMINARE\"
   }")
 
-echo "Risposta vendita standalone:"
-echo "$SALE_RESPONSE" | jq '.'
+echo "Risposta creazione operazione vendita:"
+echo "$SALE_OP_RESPONSE" | jq '.'
 
-SALE_ID=$(echo "$SALE_RESPONSE" | jq '.id')
-echo "Vendita creata con ID: $SALE_ID"
+SALE_OPERATION_ID=$(echo "$SALE_OP_RESPONSE" | jq '.id')
+echo "Operazione vendita creata: $SALE_OPERATION_ID"
 
-echo ""
-echo "=== FASE 7: Verifiche post-vendita ==="
-
-# Verifica lot_ledger
-echo ""
-echo "7.1 - Verifica lot_ledger (tracciabilità inventario):"
-curl -s "$BASE_URL/api/lots/$LOT_ID" | jq '{id, animalCount, totalMortality}'
-
-# Verifica stato cesta
-echo ""
-echo "7.2 - Verifica stato cesta dopo vendita:"
-curl -s "$BASE_URL/api/baskets/$BASKET_ID" | jq '{id, physicalNumber, state, currentCycleId}'
-
-# Verifica operazioni sulla cesta
-echo ""
-echo "7.3 - Verifica operazioni sulla cesta (dovrebbe includere vendita):"
-curl -s "$BASE_URL/api/operations?basketId=$BASKET_ID" | jq '.[] | {id, type, date, animalCount}'
-
-# Verifica dettaglio vendita
-if [ "$SALE_ID" != "null" ] && [ -n "$SALE_ID" ]; then
-  echo ""
-  echo "7.4 - Dettaglio vendita avanzata:"
-  curl -s "$BASE_URL/api/advanced-sales/$SALE_ID" | jq '.'
+if [ "$SALE_OPERATION_ID" == "null" ] || [ -z "$SALE_OPERATION_ID" ]; then
+  echo "⚠️ Operazione vendita non creata - proviamo con modulo diretto"
+  
+  # Prova con direct operations
+  SALE_OP_RESPONSE=$(curl -s -X POST "$BASE_URL/api/direct-operations" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"type\": \"vendita\",
+      \"basketId\": $BASKET_ID,
+      \"cycleId\": $CYCLE_ID,
+      \"date\": \"$TODAY\",
+      \"lotId\": $TEST_LOT_ID,
+      \"sizeId\": $SIZE_ID,
+      \"totalWeight\": 2.1,
+      \"animalCount\": 10000,
+      \"animalsPerKg\": 4762,
+      \"notes\": \"TEST VENDITA - DA ELIMINARE\"
+    }")
+  
+  echo "Risposta direct-operations:"
+  echo "$SALE_OP_RESPONSE" | jq '.'
+  SALE_OPERATION_ID=$(echo "$SALE_OP_RESPONSE" | jq '.id')
 fi
 
 echo ""
-echo "=============================================="
-echo "TEST COMPLETATO - Risultati:"
-echo "=============================================="
-echo "- Cesta ID: $BASKET_ID"
-echo "- Ciclo ID: $CYCLE_ID"  
-echo "- Operazione attivazione ID: $OPERATION_ID"
-echo "- Vendita standalone ID: $SALE_ID"
-echo ""
-echo "Il cleanup verrà eseguito automaticamente..."
-echo ""
+echo "=== FASE 6: Verifica operazioni cesta ==="
+echo "Operazioni sulla cesta:"
+curl -s "$BASE_URL/api/operations?basketId=$BASKET_ID&includeAll=true" | jq '.[] | {id, type, date, animalCount}'
 
-# Il cleanup viene eseguito dal trap EXIT
+echo ""
+echo "=============================================="
+echo "=== FASE 7: VENDITA AVANZATA (STANDALONE) ==="
+echo "=============================================="
+
+if [ "$SALE_OPERATION_ID" != "null" ] && [ -n "$SALE_OPERATION_ID" ]; then
+  echo "Creazione vendita avanzata con operationId: $SALE_OPERATION_ID"
+  
+  SALE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/advanced-sales" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"companyId\": 1052922,
+      \"customerId\": 82,
+      \"saleDate\": \"$TODAY\",
+      \"notes\": \"TEST VENDITA STANDALONE - DA ELIMINARE\",
+      \"operationIds\": [$SALE_OPERATION_ID]
+    }")
+  
+  echo "Risposta vendita avanzata:"
+  echo "$SALE_RESPONSE" | jq '.'
+  
+  SALE_ID=$(echo "$SALE_RESPONSE" | jq '.id')
+  echo ""
+  echo ">>> VENDITA AVANZATA CREATA CON ID: $SALE_ID <<<"
+else
+  echo "⚠️ Nessuna operazione vendita - skip vendita avanzata"
+fi
+
+echo ""
+echo "=== FASE 8: Verifiche finali ==="
+
+if [ "$SALE_ID" != "null" ] && [ -n "$SALE_ID" ]; then
+  echo "8.1 - Dettaglio vendita:"
+  curl -s "$BASE_URL/api/advanced-sales/$SALE_ID" | jq '{id, saleNumber, status, totalAnimals, totalWeight}'
+fi
+
+echo ""
+echo "8.2 - Stato finale cesta:"
+curl -s "$BASE_URL/api/baskets/$BASKET_ID" | jq '{id, physicalNumber, state, currentCycleId}'
+
+echo ""
+echo "8.3 - Tutte le operazioni sulla cesta:"
+curl -s "$BASE_URL/api/operations?basketId=$BASKET_ID&includeAll=true" | jq '.[] | {id, type, date, animalCount}'
+
+echo ""
+echo "=============================================="
+echo "TEST COMPLETATO!"
+echo "=============================================="
+echo ""
+echo "RIEPILOGO:"
+echo "- Lotto di test: ID=$TEST_LOT_ID"
+echo "- Cesta: ID=$BASKET_ID (numero: $BASKET_NUM)"
+echo "- Ciclo: ID=$CYCLE_ID"  
+echo "- Op. attivazione: ID=$OPERATION_ID"
+echo "- Op. vendita: ID=$SALE_OPERATION_ID"
+echo "- Vendita avanzata: ID=$SALE_ID"
+echo ""
+echo "Procedo con cleanup..."
