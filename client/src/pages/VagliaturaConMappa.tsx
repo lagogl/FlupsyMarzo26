@@ -517,7 +517,10 @@ export default function VagliaturaConMappa() {
     saleDate: new Date().toISOString().split('T')[0],
     saleClient: 'Cliente',
     isAlsoSource: false,
-    sizeId: 0
+    sizeId: 0,
+    // Note operative opzionali
+    screeningPosition: null as 'sopra' | 'sotto' | null,
+    qualityNote: null as 'belli' | 'brutti' | null
   });
 
   // Funzione per calcolare i valori basati sui dati di misurazione
@@ -2224,6 +2227,85 @@ export default function VagliaturaConMappa() {
                 <span className="ml-2 text-xs text-slate-500">(Cestello #{measurementData.physicalNumber})</span>
               </div>
             </div>
+            
+            {/* Note operative opzionali */}
+            <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+              <h3 className="text-sm font-medium mb-3 text-slate-700">📝 Note Operative (opzionali)</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* Posizione vagliatura */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-600">Posizione Vaglio</Label>
+                  <div className="flex flex-col space-y-2">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="screeningPosition"
+                        checked={measurementData.screeningPosition === 'sopra'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sopra' }))}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm">Sopra vagliatura</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="screeningPosition"
+                        checked={measurementData.screeningPosition === 'sotto'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sotto' }))}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm">Sotto vagliatura</span>
+                    </label>
+                    {measurementData.screeningPosition && (
+                      <button
+                        type="button"
+                        onClick={() => setMeasurementData(prev => ({ ...prev, screeningPosition: null }))}
+                        className="text-xs text-red-500 hover:text-red-700 text-left"
+                      >
+                        ✕ Rimuovi selezione
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Qualità */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-600">Qualità</Label>
+                  <div className="flex flex-col space-y-2">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="qualityNote"
+                        checked={measurementData.qualityNote === 'belli'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, qualityNote: 'belli' }))}
+                        className="w-4 h-4 text-green-600"
+                      />
+                      <span className="text-sm">Belli</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="qualityNote"
+                        checked={measurementData.qualityNote === 'brutti'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, qualityNote: 'brutti' }))}
+                        className="w-4 h-4 text-red-600"
+                      />
+                      <span className="text-sm">Brutti con molti morti</span>
+                    </label>
+                    {measurementData.qualityNote && (
+                      <button
+                        type="button"
+                        onClick={() => setMeasurementData(prev => ({ ...prev, qualityNote: null }))}
+                        className="text-xs text-red-500 hover:text-red-700 text-left"
+                      >
+                        ✕ Rimuovi selezione
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           
           <DialogFooter>
@@ -2260,7 +2342,10 @@ export default function VagliaturaConMappa() {
                 saleClient: null,
                 selectionId: 0,
                 sizeId: measurementData.sizeId,
-                isAlsoSource: measurementData.isAlsoSource
+                isAlsoSource: measurementData.isAlsoSource,
+                // Note operative opzionali
+                screeningPosition: measurementData.screeningPosition,
+                qualityNote: measurementData.qualityNote
               };
               
               setDestinationBaskets(prev => [...prev, newDestinationBasket]);
@@ -2439,6 +2524,85 @@ export default function VagliaturaConMappa() {
                 onChange={(e) => setDirectSaleData({...directSaleData, client: e.target.value})}
               />
             </div>
+            
+            {/* Note operative opzionali */}
+            <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+              <h3 className="text-sm font-medium mb-3 text-slate-700">📝 Note Operative (opzionali)</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* Posizione vagliatura */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-600">Posizione Vaglio</Label>
+                  <div className="flex flex-col space-y-2">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="screeningPositionSale"
+                        checked={measurementData.screeningPosition === 'sopra'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sopra' }))}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm">Sopra vagliatura</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="screeningPositionSale"
+                        checked={measurementData.screeningPosition === 'sotto'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sotto' }))}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm">Sotto vagliatura</span>
+                    </label>
+                    {measurementData.screeningPosition && (
+                      <button
+                        type="button"
+                        onClick={() => setMeasurementData(prev => ({ ...prev, screeningPosition: null }))}
+                        className="text-xs text-red-500 hover:text-red-700 text-left"
+                      >
+                        ✕ Rimuovi selezione
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Qualità */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-600">Qualità</Label>
+                  <div className="flex flex-col space-y-2">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="qualityNoteSale"
+                        checked={measurementData.qualityNote === 'belli'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, qualityNote: 'belli' }))}
+                        className="w-4 h-4 text-green-600"
+                      />
+                      <span className="text-sm">Belli</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="qualityNoteSale"
+                        checked={measurementData.qualityNote === 'brutti'}
+                        onChange={() => setMeasurementData(prev => ({ ...prev, qualityNote: 'brutti' }))}
+                        className="w-4 h-4 text-red-600"
+                      />
+                      <span className="text-sm">Brutti con molti morti</span>
+                    </label>
+                    {measurementData.qualityNote && (
+                      <button
+                        type="button"
+                        onClick={() => setMeasurementData(prev => ({ ...prev, qualityNote: null }))}
+                        className="text-xs text-red-500 hover:text-red-700 text-left"
+                      >
+                        ✕ Rimuovi selezione
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           
           <DialogFooter>
@@ -2470,7 +2634,10 @@ export default function VagliaturaConMappa() {
                 saleClient: directSaleData.client,
                 selectionId: 0,
                 sizeId: measurementData.sizeId || 0,
-                isAlsoSource: sourceBaskets.some(sb => sb.basketId === selectedBasket.id)
+                isAlsoSource: sourceBaskets.some(sb => sb.basketId === selectedBasket.id),
+                // Note operative opzionali
+                screeningPosition: measurementData.screeningPosition,
+                qualityNote: measurementData.qualityNote
               };
               
               if (existingIndex >= 0) {

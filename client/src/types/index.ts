@@ -102,6 +102,9 @@ export interface DestinationBasket {
   saleClient?: string | null;
   createdAt?: string;
   isAlsoSource?: boolean; // Flag per identificare cestelli che sono anche origine
+  // Note operative opzionali
+  screeningPosition?: 'sopra' | 'sotto' | null; // Sopra vagliatura / Sotto vagliatura
+  qualityNote?: 'belli' | 'brutti' | null; // Belli / Brutti con molti morti
 }
 
 // Tipo operazione
