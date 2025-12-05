@@ -608,6 +608,75 @@ export class BasketsService {
       baskets: nullRowBaskets
     };
   }
+
+  /**
+   * ENDPOINT OTTIMIZZATO: Restituisce l'ultima operazione per ogni cesta attiva
+   * Usa window function (ROW_NUMBER) per performance ottimali
+   * Ritorna una mappa basketId -> operazione per O(1) lookup
+   */
+  async getLatestOperations(): Promise<Record<number, any>> {
+    const startTime = Date.now();
+    
+    // Query ottimizzata con window function per ottenere l'ultima operazione per ogni cesta
+    // Nomi colonne: total_weight, animal_count, animals_per_kg, mortality_rate, lot_id, size_id
+    const result = await db.execute(sql`
+      WITH ranked_operations AS (
+        SELECT 
+          o.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY o.basket_id 
+            ORDER BY o.date DESC, o.id DESC
+          ) as rn
+        FROM operations o
+        INNER JOIN baskets b ON o.basket_id = b.id
+        WHERE b.current_cycle_id IS NOT NULL
+      )
+      SELECT 
+        id,
+        basket_id as "basketId",
+        cycle_id as "cycleId",
+        type,
+        date,
+        total_weight as "totalWeight",
+        animal_count as "animalCount",
+        animals_per_kg as "animalsPerKg",
+        average_weight as "averageWeight",
+        dead_count as "deadCount",
+        mortality_rate as "mortalityRate",
+        lot_id as "lotId",
+        size_id as "sizeId",
+        notes
+      FROM ranked_operations
+      WHERE rn = 1
+      ORDER BY basket_id
+    `);
+    
+    // Converti il risultato in una mappa basketId -> operazione
+    const operationsMap: Record<number, any> = {};
+    for (const row of result.rows as any[]) {
+      operationsMap[row.basketId] = {
+        id: row.id,
+        basketId: row.basketId,
+        cycleId: row.cycleId,
+        type: row.type,
+        date: row.date,
+        totalWeight: row.totalWeight ? parseFloat(row.totalWeight) : null,
+        animalCount: row.animalCount,
+        animalsPerKg: row.animalsPerKg,
+        averageWeight: row.averageWeight ? parseFloat(row.averageWeight) : null,
+        deadCount: row.deadCount,
+        mortalityRate: row.mortalityRate ? parseFloat(row.mortalityRate) : null,
+        lotId: row.lotId,
+        sizeId: row.sizeId,
+        notes: row.notes
+      };
+    }
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[PERF] getLatestOperations: ${Object.keys(operationsMap).length} operazioni in ${queryTime}ms`);
+    
+    return operationsMap;
+  }
 }
 
 // Export singleton instance

@@ -963,6 +963,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Ottieni ceste disponibili per la selezione (IMPORTANTE: questa rotta deve venire prima di /api/baskets/:id)
   app.get("/api/baskets/available", getAvailableBaskets);
 
+  // NOTA: /api/baskets/latest-operations è gestito dal modulo baskets (server/modules/operations/baskets)
+
   app.get("/api/baskets/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);

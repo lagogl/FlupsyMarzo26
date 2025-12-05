@@ -43,9 +43,9 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
     return allBaskets.filter((basket: any) => selectedFlupsyIds.includes(basket.flupsyId));
   }, [allBaskets, selectedFlupsyIds]);
 
-  // Fetch operations for tooltip data - carica TUTTE per evitare esclusioni
-  const { data: operations, isLoading: isLoadingOperations } = useQuery({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
+  // ENDPOINT OTTIMIZZATO: Carica solo l'ultima operazione per ogni cesta attiva
+  const { data: latestOperationsMap, isLoading: isLoadingOperations } = useQuery<Record<number, any>>({
+    queryKey: ['/api/baskets/latest-operations'],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
 
@@ -69,59 +69,25 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
     staleTime: 3600000, // 1 hour - le taglie cambiano raramente
   });
 
-  // Debug logging
-  React.useEffect(() => {
-    if (filteredBaskets) {
-      console.log(`SimpleFlupsyVisualizer: Filtered ${filteredBaskets.length} baskets`);
-      // Group by FLUPSY
-      const basketsByFlupsy = filteredBaskets.reduce((acc: any, basket: any) => {
-        acc[basket.flupsyId] = (acc[basket.flupsyId] || 0) + 1;
-        return acc;
-      }, {});
-      console.log('Distribution by FLUPSY:', basketsByFlupsy);
-    }
-  }, [filteredBaskets]);
-
-  // Helper function to get the latest operation for a basket
+  // Helper function to get the latest operation for a basket (usa la mappa ottimizzata)
   const getLatestOperation = (basketId: number) => {
-    if (!operations || !Array.isArray(operations)) {
-      console.log('Operations not available or not an array', operations);
-      return null;
-    }
-
-    // Add debugging output
-    console.log(`Looking for operations for basket ${basketId} among ${operations.length} operations`);
+    if (!latestOperationsMap) return null;
     
-    const basketOperations = operations.filter((op: any) => op.basketId === basketId);
-    console.log(`Found ${basketOperations.length} operations for basket ${basketId}`);
-    
-    if (basketOperations.length === 0) return null;
-
-    // Sort by date descending and take the first one
-    const latestOp = basketOperations.sort((a: any, b: any) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    )[0];
-    
-    console.log(`Latest operation for basket ${basketId}:`, latestOp);
-    return latestOp;
+    // Accesso diretto dalla mappa - O(1) invece di O(n)
+    return latestOperationsMap[basketId] || null;
   };
 
-  // Helper function to get operations for a basket
+  // Helper function to get operations for a basket (per compatibilità)
   const getOperationsForBasket = (basketId: number): any[] => {
-    if (!operations || !Array.isArray(operations)) return [];
-    return operations.filter((op: any) => op.basketId === basketId);
+    const latestOp = latestOperationsMap?.[basketId];
+    return latestOp ? [latestOp] : [];
   };
   
   // Helper function to check if a basket has a large size (TP-3000 or higher)
   const hasLargeSize = (basket: any): boolean => {
     if (!basket || basket.state !== 'active') return false;
     
-    const basketOperations = getOperationsForBasket(basket.id);
-    const sortedOperations = [...basketOperations].sort((a: any, b: any) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-    
-    const latestOperation = sortedOperations.length > 0 ? sortedOperations[0] : null;
+    const latestOperation = getLatestOperation(basket.id);
     if (!latestOperation?.animalsPerKg) return false;
     
     // Determina se è una taglia grande basandosi sul numero di animali per kg

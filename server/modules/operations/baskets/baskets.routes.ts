@@ -16,6 +16,7 @@ router.get('/check-position', (req, res) => basketsController.checkPosition(req,
 router.get('/next-number/:flupsyId', (req, res) => basketsController.getNextNumber(req, res));
 router.get('/next-position/:flupsyId', (req, res) => basketsController.getNextPosition(req, res));
 router.get('/available', (req, res) => basketsController.getAvailable(req, res));
+router.get('/latest-operations', (req, res) => basketsController.getLatestOperations(req, res));
 
 // Route CRUD principali
 router.get('/', (req, res) => basketsController.getBaskets(req, res));

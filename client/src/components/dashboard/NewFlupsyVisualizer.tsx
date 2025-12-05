@@ -59,9 +59,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return allBaskets.filter((basket: any) => selectedFlupsyIds.includes(basket.flupsyId));
   }, [allBaskets, selectedFlupsyIds]);
 
-  // Fetch operations for tooltip data - carica TUTTE le operazioni per evitare esclusioni
-  const { data: operations, isLoading: isLoadingOperations } = useQuery({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
+  // ENDPOINT OTTIMIZZATO: Carica solo l'ultima operazione per ogni cesta attiva
+  // Questo è molto più efficiente rispetto a caricare tutte le operazioni
+  const { data: latestOperationsMap, isLoading: isLoadingOperations } = useQuery<Record<number, any>>({
+    queryKey: ['/api/baskets/latest-operations'],
     staleTime: 60000, // 1 minute per performance
   });
 
@@ -85,9 +86,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     staleTime: 3600000, // 1 hour - le taglie cambiano raramente
   });
 
-  // Helper function to get the latest operation for a basket
+  // Helper function to get the latest operation for a basket (usa la mappa ottimizzata)
   const getLatestOperation = (basketId: number) => {
-    if (!operations || !Array.isArray(operations)) return null;
+    if (!latestOperationsMap) return null;
     
     // Prima verifica se il cestello ha un ciclo attivo
     const basket = filteredBaskets.find((b: any) => b.id === basketId);
@@ -96,24 +97,14 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       return null;
     }
     
-    const basketOperations = operations.filter((op: any) => op.basketId === basketId);
-    if (basketOperations.length === 0) return null;
-
-    // Sort by date descending and then by ID descending for same-date operations
-    return basketOperations.sort((a: any, b: any) => {
-      const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
-      if (dateCompare === 0) {
-        // Se le date sono uguali, ordina per ID
-        return (b.id || 0) - (a.id || 0);
-      }
-      return dateCompare;
-    })[0];
+    // Accesso diretto dalla mappa - O(1) invece di O(n)
+    return latestOperationsMap[basketId] || null;
   };
 
-  // Helper function to get operations for a basket
+  // Helper function to get operations for a basket (per compatibilità)
   const getOperationsForBasket = (basketId: number): any[] => {
-    if (!operations || !Array.isArray(operations)) return [];
-    return operations.filter((op: any) => op.basketId === basketId);
+    const latestOp = latestOperationsMap?.[basketId];
+    return latestOp ? [latestOp] : [];
   };
   
   // Helper function to check if a basket has a large size (TP-3000 or higher)

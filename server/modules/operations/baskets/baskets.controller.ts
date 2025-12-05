@@ -244,6 +244,21 @@ export class BasketsController {
   }
 
   /**
+   * GET /api/baskets/latest-operations
+   * ENDPOINT OTTIMIZZATO: Restituisce l'ultima operazione per ogni cesta attiva
+   * Usa window function per performance ottimali - O(1) lookup per cesta
+   */
+  async getLatestOperations(req: Request, res: Response) {
+    try {
+      const result = await basketsService.getLatestOperations();
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching latest operations:", error);
+      res.status(500).json({ message: "Errore nel recupero delle ultime operazioni" });
+    }
+  }
+
+  /**
    * GET /api/baskets/:id
    * Singolo cestello per ID
    */
