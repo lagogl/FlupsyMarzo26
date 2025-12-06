@@ -2221,6 +2221,21 @@ export default function OperationFormCompact({
                               } else {
                                 const numValue = parseFloat(value);
                                 field.onChange(isNaN(numValue) ? null : numValue);
+                                // Calcola automaticamente animali/kg se abbiamo numero animali
+                                const currentAnimalCount = form.getValues('animalCount');
+                                if (currentAnimalCount && numValue > 0) {
+                                  const animalsPerKg = Math.round((currentAnimalCount / numValue) * 1000);
+                                  form.setValue('animalsPerKg', animalsPerKg);
+                                  // Trova e imposta la taglia
+                                  if (sizes && sizes.length > 0) {
+                                    const size = sizes.find((s: any) => 
+                                      s.minAnimalsPerKg <= animalsPerKg && s.maxAnimalsPerKg >= animalsPerKg
+                                    );
+                                    if (size) {
+                                      form.setValue('sizeId', size.id);
+                                    }
+                                  }
+                                }
                               }
                             }}
                             onBlur={field.onBlur}
@@ -2255,6 +2270,21 @@ export default function OperationFormCompact({
                               } else {
                                 const numValue = parseInt(value, 10);
                                 field.onChange(isNaN(numValue) ? null : numValue);
+                                // Calcola automaticamente animali/kg se abbiamo peso
+                                const currentTotalWeight = form.getValues('totalWeight');
+                                if (currentTotalWeight && currentTotalWeight > 0 && numValue > 0) {
+                                  const animalsPerKg = Math.round((numValue / currentTotalWeight) * 1000);
+                                  form.setValue('animalsPerKg', animalsPerKg);
+                                  // Trova e imposta la taglia
+                                  if (sizes && sizes.length > 0) {
+                                    const size = sizes.find((s: any) => 
+                                      s.minAnimalsPerKg <= animalsPerKg && s.maxAnimalsPerKg >= animalsPerKg
+                                    );
+                                    if (size) {
+                                      form.setValue('sizeId', size.id);
+                                    }
+                                  }
+                                }
                               }
                             }}
                             onBlur={field.onBlur}
@@ -2267,31 +2297,44 @@ export default function OperationFormCompact({
                     )}
                   />
                   
-                  {/* Animali per Kg */}
+                  {/* Animali per Kg - calcolato automaticamente */}
                   <FormField
                     control={form.control}
                     name="animalsPerKg"
                     render={({ field }) => (
                       <FormItem className="mb-1">
-                        <FormLabel className="text-xs font-medium">Animali per Kg</FormLabel>
+                        <FormLabel className="text-xs font-medium">Animali per Kg <span className="text-amber-600">(calcolato)</span></FormLabel>
                         <FormControl>
                           <Input 
-                            type="number" 
-                            placeholder="Animali per kg"
-                            className="h-8 text-sm"
-                            value={field.value === null || field.value === undefined ? '' : field.value}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value === '') {
-                                field.onChange(null);
-                              } else {
-                                const numValue = parseInt(value, 10);
-                                field.onChange(isNaN(numValue) ? null : numValue);
-                              }
-                            }}
-                            onBlur={field.onBlur}
-                            name={field.name}
-                            ref={field.ref}
+                            type="text" 
+                            placeholder="Calcolato automaticamente"
+                            className="h-8 text-sm bg-amber-50"
+                            readOnly
+                            value={field.value === null || field.value === undefined ? '' : field.value.toLocaleString('it-IT')}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Taglia calcolata */}
+                  <FormField
+                    control={form.control}
+                    name="sizeId"
+                    render={({ field }) => (
+                      <FormItem className="mb-1">
+                        <FormLabel className="text-xs font-medium">Taglia <span className="text-amber-600">(calcolata)</span></FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="text" 
+                            className="h-8 text-sm bg-amber-50"
+                            readOnly
+                            value={(() => {
+                              if (!field.value || !sizes) return '';
+                              const size = sizes.find((s: any) => s.id === field.value);
+                              return size ? `${size.name} (${size.minAnimalsPerKg?.toLocaleString('it-IT')}-${size.maxAnimalsPerKg?.toLocaleString('it-IT')} animali/kg)` : '';
+                            })()}
                           />
                         </FormControl>
                         <FormMessage />
