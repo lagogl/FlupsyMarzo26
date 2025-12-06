@@ -260,6 +260,24 @@ function configureSocketHandlers() {
           variant: data.data?.step === 'complete' ? 'default' : 'default',
           duration: data.data?.step === 'complete' ? 4000 : 1500,
         });
+      } else if (data.type === 'lot_created' || data.type === 'lot_updated' || data.type === 'lot_deleted') {
+        // Invalida la cache dei lotti quando arrivano aggiornamenti via WebSocket
+        // Importazione dinamica per evitare dipendenze circolari
+        import('@/lib/queryClient').then(({ queryClient }) => {
+          queryClient.invalidateQueries({ queryKey: ['/api/lots'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/lots/optimized'] });
+          console.log(`🔄 Cache lotti invalidata via WebSocket (${data.type})`);
+        }).catch(err => console.error('Errore invalidazione cache lotti:', err));
+        
+        // Toast per notificare l'aggiornamento
+        if (data.type === 'lot_created') {
+          toast({
+            title: 'Nuovo lotto creato',
+            description: data.data?.message || `Lotto ${data.data?.lot?.supplier || ''} aggiunto`,
+            variant: 'default',
+            duration: 3000,
+          });
+        }
       } else if (data.message && data.type !== 'connection') {
         // Toast standard per altri tipi di notifiche
         toast({
