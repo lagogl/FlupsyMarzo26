@@ -365,6 +365,9 @@ export const operations = pgTable("operations", {
   notes: text("notes"),
   metadata: text("metadata"), // metadati aggiuntivi in formato JSON (per API esterne)
   source: text("source").notNull().default("desktop_manager"), // origine operazione: 'desktop_manager' o 'mobile_nfc'
+  cancelledAt: timestamp("cancelled_at"), // Data/ora annullamento vendita (null = non annullata)
+  cancellationReason: text("cancellation_reason"), // Motivo annullamento (es. "Cliente non ha ritirato")
+  restoredToFlupsyId: integer("restored_to_flupsy_id"), // FLUPSY dove la cesta è stata ripristinata (può essere diverso dall'originale)
 }, (table) => ({
   basketIdIdx: index("operations_basket_id_idx").on(table.basketId),
   cycleIdIdx: index("operations_cycle_id_idx").on(table.cycleId),

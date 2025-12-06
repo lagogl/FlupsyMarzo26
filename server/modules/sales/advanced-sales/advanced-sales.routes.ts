@@ -30,6 +30,10 @@ router.get('/:id/download-pdf', AdvancedSalesController.downloadSalePDF);
 router.post('/:id/generate-ddt', AdvancedSalesController.generateDDT);
 router.get('/:id/report.pdf', AdvancedSalesController.generatePDFReport);
 
+// Annullamento vendita (ripristino cesta e ciclo)
+router.get('/operations/:operationId/details', AdvancedSalesController.getSaleOperationDetails);
+router.post('/operations/:operationId/cancel', AdvancedSalesController.cancelSaleOperation);
+
 // Note: DDT routes are handled separately in routes.ts due to different base path
 
 export default router;

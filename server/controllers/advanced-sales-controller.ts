@@ -4,7 +4,7 @@
  */
 import { Request, Response } from "express";
 import { db } from "../db";
-import { eq, desc, and, gte, lte, sql, isNotNull, inArray } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzle-orm";
 import { pdfGenerator } from "../services/pdf-generator";
 import path from "path";
 import fs from "fs";
@@ -28,7 +28,9 @@ import {
   insertAdvancedSaleSchema,
   insertSaleBagSchema,
   insertBagAllocationSchema,
-  insertSaleOperationsRefSchema
+  insertSaleOperationsRefSchema,
+  cycles,
+  lotLedger
 } from "../../shared/schema";
 import { format } from "date-fns";
 import { apiRequest, getConfigValue } from "./fatture-in-cloud-controller";
@@ -135,6 +137,7 @@ export async function getAvailableSaleOperations(req: Request, res: Response) {
       isNotNull(operations.animalCount),
       isNotNull(operations.totalWeight),
       isNotNull(operations.animalsPerKg),
+      isNull(operations.cancelledAt), // Esclude operazioni già annullate
       processed === 'true' ? isNotNull(saleOperationsRef.id) : sql`${saleOperationsRef.id} IS NULL`,
       ...dateFilter
     ))
@@ -1969,6 +1972,255 @@ export async function deleteSale(req: Request, res: Response) {
     res.status(500).json({
       success: false,
       error: error.message || "Errore nello storno della vendita"
+    });
+  }
+}
+
+/**
+ * Annulla un'operazione di vendita (tipo 'vendita')
+ * Riattiva il ciclo chiuso, ripristina la cesta e crea entry di reversal nel lotLedger
+ * Permette di specificare un FLUPSY diverso dall'originale
+ */
+export async function cancelSaleOperation(req: Request, res: Response) {
+  try {
+    const operationId = parseInt(req.params.operationId);
+    const { targetFlupsyId, targetRow, targetPosition, reason } = req.body;
+
+    if (!operationId || isNaN(operationId)) {
+      return res.status(400).json({
+        success: false,
+        error: "ID operazione non valido"
+      });
+    }
+
+    if (!targetFlupsyId || !targetRow || targetPosition === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: "È necessario specificare FLUPSY, fila e posizione di destinazione"
+      });
+    }
+
+    console.log(`🔄 Inizio annullamento operazione vendita #${operationId}`);
+
+    // 1. Recupera l'operazione di vendita
+    const [saleOperation] = await db.select()
+      .from(operations)
+      .where(and(
+        eq(operations.id, operationId),
+        eq(operations.type, 'vendita')
+      ));
+
+    if (!saleOperation) {
+      return res.status(404).json({
+        success: false,
+        error: "Operazione di vendita non trovata"
+      });
+    }
+
+    // Verifica che non sia già stata annullata
+    if (saleOperation.cancelledAt) {
+      return res.status(400).json({
+        success: false,
+        error: "Questa operazione di vendita è già stata annullata"
+      });
+    }
+
+    // 2. Recupera il ciclo associato
+    const [cycle] = await db.select()
+      .from(cycles)
+      .where(eq(cycles.id, saleOperation.cycleId));
+
+    if (!cycle) {
+      return res.status(404).json({
+        success: false,
+        error: "Ciclo associato non trovato"
+      });
+    }
+
+    // 3. Recupera la cesta
+    const [basket] = await db.select()
+      .from(baskets)
+      .where(eq(baskets.id, saleOperation.basketId));
+
+    if (!basket) {
+      return res.status(404).json({
+        success: false,
+        error: "Cesta non trovata"
+      });
+    }
+
+    // 4. Verifica che la posizione di destinazione sia libera
+    const [existingBasketInPosition] = await db.select()
+      .from(baskets)
+      .where(and(
+        eq(baskets.flupsyId, targetFlupsyId),
+        eq(baskets.row, targetRow),
+        eq(baskets.position, targetPosition),
+        sql`${baskets.id} != ${basket.id}`
+      ));
+
+    if (existingBasketInPosition && existingBasketInPosition.state === 'active') {
+      return res.status(400).json({
+        success: false,
+        error: `La posizione ${targetRow}-${targetPosition} nel FLUPSY selezionato è già occupata da una cesta attiva`
+      });
+    }
+
+    // 5. Esegui l'annullamento in transazione
+    await db.transaction(async (tx) => {
+      // 5a. Riattiva il ciclo
+      await tx.update(cycles)
+        .set({
+          state: 'active',
+          endDate: null
+        })
+        .where(eq(cycles.id, saleOperation.cycleId));
+      console.log(`✅ Ciclo #${saleOperation.cycleId} riattivato`);
+
+      // 5b. Genera il cycleCode per la nuova posizione
+      const now = new Date();
+      const monthYear = `${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear().toString().slice(-2)}`;
+      const newCycleCode = `${basket.physicalNumber}-${targetFlupsyId}-${monthYear}`;
+
+      // 5c. Aggiorna la cesta (posizione, FLUPSY, stato)
+      await tx.update(baskets)
+        .set({
+          state: 'active',
+          currentCycleId: saleOperation.cycleId,
+          cycleCode: newCycleCode,
+          flupsyId: targetFlupsyId,
+          row: targetRow,
+          position: targetPosition
+        })
+        .where(eq(baskets.id, basket.id));
+      console.log(`✅ Cesta #${basket.physicalNumber} ripristinata in FLUPSY ${targetFlupsyId}, posizione ${targetRow}-${targetPosition}`);
+
+      // 5d. Marca l'operazione di vendita come annullata
+      await tx.update(operations)
+        .set({
+          cancelledAt: new Date(),
+          cancellationReason: reason || 'Cliente non ha ritirato',
+          restoredToFlupsyId: targetFlupsyId
+        })
+        .where(eq(operations.id, operationId));
+      console.log(`✅ Operazione #${operationId} marcata come annullata`);
+
+      // 5e. Crea entry di reversal nel lotLedger se c'era un'allocazione
+      if (saleOperation.lotId && saleOperation.animalCount) {
+        await tx.insert(lotLedger).values({
+          lotId: saleOperation.lotId,
+          operationType: 'sale_reversal',
+          quantity: saleOperation.animalCount, // Positivo perché ripristiniamo
+          operationId: operationId,
+          notes: `Annullamento vendita: ${reason || 'Cliente non ha ritirato'}. Cesta #${basket.physicalNumber} ripristinata in FLUPSY ${targetFlupsyId}`,
+          sourceCycleId: saleOperation.cycleId
+        });
+        console.log(`✅ Entry lotLedger sale_reversal creata per lotto #${saleOperation.lotId}`);
+      }
+    });
+
+    // 6. Recupera info FLUPSY per la risposta
+    const [targetFlupsy] = await db.select()
+      .from(flupsys)
+      .where(eq(flupsys.id, targetFlupsyId));
+
+    console.log(`✅ Annullamento vendita completato: operazione #${operationId}`);
+
+    res.json({
+      success: true,
+      message: `Vendita annullata. Cesta #${basket.physicalNumber} ripristinata in ${targetFlupsy?.name || 'FLUPSY ' + targetFlupsyId}, posizione ${targetRow}-${targetPosition}`,
+      restoredData: {
+        operationId,
+        basketId: basket.id,
+        basketPhysicalNumber: basket.physicalNumber,
+        cycleId: saleOperation.cycleId,
+        targetFlupsyId,
+        targetFlupsyName: targetFlupsy?.name,
+        targetRow,
+        targetPosition,
+        reason: reason || 'Cliente non ha ritirato'
+      }
+    });
+
+  } catch (error: any) {
+    console.error("❌ Errore nell'annullamento vendita:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Errore nell'annullamento della vendita"
+    });
+  }
+}
+
+/**
+ * Ottiene i dettagli di un'operazione di vendita per l'annullamento
+ */
+export async function getSaleOperationDetails(req: Request, res: Response) {
+  try {
+    const operationId = parseInt(req.params.operationId);
+
+    if (!operationId || isNaN(operationId)) {
+      return res.status(400).json({
+        success: false,
+        error: "ID operazione non valido"
+      });
+    }
+
+    // Recupera l'operazione con dettagli correlati
+    const [result] = await db.select({
+      operationId: operations.id,
+      date: operations.date,
+      animalCount: operations.animalCount,
+      totalWeight: operations.totalWeight,
+      animalsPerKg: operations.animalsPerKg,
+      cancelledAt: operations.cancelledAt,
+      cancellationReason: operations.cancellationReason,
+      cycleId: operations.cycleId,
+      basketId: operations.basketId,
+      basketPhysicalNumber: baskets.physicalNumber,
+      basketFlupsyId: baskets.flupsyId,
+      basketRow: baskets.row,
+      basketPosition: baskets.position,
+      basketState: baskets.state,
+      sizeCode: sizes.code,
+      sizeName: sizes.name,
+      cycleState: cycles.state
+    })
+    .from(operations)
+    .leftJoin(baskets, eq(operations.basketId, baskets.id))
+    .leftJoin(sizes, eq(operations.sizeId, sizes.id))
+    .leftJoin(cycles, eq(operations.cycleId, cycles.id))
+    .where(and(
+      eq(operations.id, operationId),
+      eq(operations.type, 'vendita')
+    ));
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: "Operazione di vendita non trovata"
+      });
+    }
+
+    // Recupera tutti i FLUPSY attivi per la selezione
+    const availableFlupsys = await db.select({
+      id: flupsys.id,
+      name: flupsys.name,
+      maxPositions: flupsys.maxPositions
+    })
+    .from(flupsys)
+    .where(eq(flupsys.active, true));
+
+    res.json({
+      success: true,
+      operation: result,
+      availableFlupsys
+    });
+
+  } catch (error: any) {
+    console.error("Errore nel recupero dettagli operazione:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Errore nel recupero dei dettagli"
     });
   }
 }

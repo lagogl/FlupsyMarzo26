@@ -17,6 +17,7 @@ import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpD
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 import AdvancedSalesConfigTab from "./AdvancedSalesConfigTab";
+import CancelSaleOperationDialog from "@/components/CancelSaleOperationDialog";
 
 interface SaleOperation {
   operationId: number;
@@ -588,6 +589,7 @@ export default function AdvancedSales() {
                       <TableHead>Peso (kg)</TableHead>
                       <TableHead>Animali/kg</TableHead>
                       <TableHead>Stato</TableHead>
+                      <TableHead>Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -614,6 +616,15 @@ export default function AdvancedSales() {
                           <Badge variant={op.processed ? "secondary" : "default"}>
                             {op.processed ? "Processata" : "Disponibile"}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <CancelSaleOperationDialog
+                            operationId={op.operationId}
+                            basketPhysicalNumber={op.basketPhysicalNumber}
+                            onCancelled={() => {
+                              queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/operations'] });
+                            }}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
