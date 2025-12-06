@@ -161,13 +161,13 @@ export function implementDirectOperationRoute(app: Express) {
         throw new Error("Il peso totale grammi è obbligatorio e deve essere maggiore di 0");
       }
       
-      // I grammi sample sono obbligatori solo per operazioni misura (NON per operazioni peso/prima-attivazione) e se NON è modalità manuale
-      if (operationData.type !== 'peso' && operationData.type !== 'prima-attivazione' && !operationData.manualCountAdjustment && (!operationData.sampleWeight || operationData.sampleWeight <= 0)) {
+      // I grammi sample sono obbligatori solo per operazioni misura (NON per operazioni peso/prima-attivazione/vendita) e se NON è modalità manuale
+      if (operationData.type !== 'peso' && operationData.type !== 'prima-attivazione' && operationData.type !== 'vendita' && !operationData.manualCountAdjustment && (!operationData.sampleWeight || operationData.sampleWeight <= 0)) {
         throw new Error("I grammi sample sono obbligatori e devono essere maggiori di 0");
       }
       
-      // Per le operazioni peso rapide e prima-attivazione, deadCount non è obbligatorio
-      if (operationData.type !== 'peso' && operationData.type !== 'prima-attivazione' && (operationData.deadCount === undefined || operationData.deadCount === null || operationData.deadCount < 0)) {
+      // Per le operazioni peso rapide, prima-attivazione e vendita, deadCount non è obbligatorio
+      if (operationData.type !== 'peso' && operationData.type !== 'prima-attivazione' && operationData.type !== 'vendita' && (operationData.deadCount === undefined || operationData.deadCount === null || operationData.deadCount < 0)) {
         throw new Error("Il numero animali morti è obbligatorio e deve essere maggiore o uguale a 0");
       }
       
