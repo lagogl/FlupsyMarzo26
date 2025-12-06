@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { 
   AlertTriangle, Loader2, ClipboardList, 
-  MapPin, Link, Scale, Ruler 
+  MapPin, Link, Scale, Ruler, ShoppingCart 
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWebSocketMessage } from "@/lib/websocket";
@@ -1079,6 +1079,25 @@ export default function OperationFormCompact({
                     </FormItem>
                   )}
                 />
+
+                {/* Avviso per operazioni di Vendita */}
+                {watchType === 'vendita' && (
+                  <div className="col-span-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                    <div className="flex items-center">
+                      <AlertTriangle className="mr-1 h-4 w-4" />
+                      <span className="font-medium">ATTENZIONE: Operazione di chiusura ciclo</span>
+                    </div>
+                    <div className="mt-1 ml-5 space-y-1">
+                      <div>La vendita comporta:</div>
+                      <ul className="list-disc ml-4">
+                        <li>Chiusura definitiva del ciclo attivo</li>
+                        <li>Il cestello tornerà disponibile</li>
+                        <li>Registrazione nel libro mastro lotti per tracciabilità</li>
+                      </ul>
+                      <div className="font-medium mt-1">Compila: Peso Totale (g) e Numero Animali nella sezione dedicata sotto</div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Data */}
                 <FormField
@@ -2171,6 +2190,114 @@ export default function OperationFormCompact({
                       )}
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sezione Vendita - abilitata solo per 'vendita' */}
+            {watchType === 'vendita' && (
+              <div className="bg-red-50 p-4 rounded-md border border-red-200">
+                <h3 className="text-sm font-semibold mb-3 text-red-700 flex items-center">
+                  <ShoppingCart className="h-4 w-4 mr-1" /> Dati Vendita
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Peso Totale */}
+                  <FormField
+                    control={form.control}
+                    name="totalWeight"
+                    render={({ field }) => (
+                      <FormItem className="mb-1">
+                        <FormLabel className="text-xs font-medium">Peso Totale (g) <span className="text-red-500">*</span></FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="Peso in grammi"
+                            className="h-8 text-sm"
+                            value={field.value === null || field.value === undefined ? '' : field.value}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '') {
+                                field.onChange(null);
+                              } else {
+                                const numValue = parseFloat(value);
+                                field.onChange(isNaN(numValue) ? null : numValue);
+                              }
+                            }}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Numero Animali */}
+                  <FormField
+                    control={form.control}
+                    name="animalCount"
+                    render={({ field }) => (
+                      <FormItem className="mb-1">
+                        <FormLabel className="text-xs font-medium">Numero Animali <span className="text-red-500">*</span></FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="text" 
+                            placeholder="Numero animali venduti"
+                            className="h-8 text-sm"
+                            value={field.value === null || field.value === undefined 
+                              ? '' 
+                              : field.value.toLocaleString('it-IT')}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/[^0-9]/g, '');
+                              if (value === '') {
+                                field.onChange(null);
+                              } else {
+                                const numValue = parseInt(value, 10);
+                                field.onChange(isNaN(numValue) ? null : numValue);
+                              }
+                            }}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Animali per Kg */}
+                  <FormField
+                    control={form.control}
+                    name="animalsPerKg"
+                    render={({ field }) => (
+                      <FormItem className="mb-1">
+                        <FormLabel className="text-xs font-medium">Animali per Kg</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="Animali per kg"
+                            className="h-8 text-sm"
+                            value={field.value === null || field.value === undefined ? '' : field.value}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '') {
+                                field.onChange(null);
+                              } else {
+                                const numValue = parseInt(value, 10);
+                                field.onChange(isNaN(numValue) ? null : numValue);
+                              }
+                            }}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               </div>
             )}
