@@ -77,9 +77,7 @@ const operationSchema = z.object({
   }).min(1, "Il peso totale deve essere maggiore di 0"),
   // Campi opzionali di base, validati condizionalmente tramite superRefine
   sampleWeight: z.number().nullable().optional(),
-  deadCount: z.number({
-    required_error: "Il numero animali morti è obbligatorio",
-  }).min(0, "Il numero animali morti deve essere maggiore o uguale a 0"),
+  deadCount: z.number().nullable().optional().default(0),
   // Campi calcolati automaticamente o inseriti manualmente
   animalsPerKg: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
@@ -121,6 +119,17 @@ const operationSchema = z.object({
           path: ['liveAnimals'],
           message: 'Il numero animali vivi nel campione deve essere maggiore di 0',
         });
+      }
+      
+      // Valida deadCount solo per misura (non prima-attivazione, non vendita)
+      if (data.type === 'misura') {
+        if (data.deadCount === null || data.deadCount === undefined || data.deadCount < 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['deadCount'],
+            message: 'Il numero animali morti è obbligatorio per le misurazioni',
+          });
+        }
       }
     }
   } else {
