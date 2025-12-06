@@ -3,7 +3,7 @@
 
 import type { Express } from "express";
 import { db } from './db';
-import { operations, cycles, baskets, lots } from '../shared/schema';
+import { operations, cycles, baskets, lots, lotLedger } from '../shared/schema';
 import { sql, eq, and, between } from 'drizzle-orm';
 import { broadcastMessage } from './websocket';
 import { invalidateAllCaches } from './services/operations-lifecycle.service.js';
@@ -586,7 +586,44 @@ export function implementDirectOperationRoute(app: Express) {
           // 🔄 AUTO-STATS: Aggiorna automaticamente statistiche lotto
           await LotAutoStatsService.onOperationCreated(newOperation[0]);
           
-          // 1.1 Crea notifica per operazione di vendita se è di tipo vendita
+          // 1.1 Registra nel lotLedger per tracciabilità vendita (come fa VagliaturaConMappa)
+          if (operationData.type === 'vendita' && operationData.lotId && operationData.animalCount) {
+            try {
+              const idempotencyKey = `sale_direct_${newOperation[0].id}_${operationData.lotId}_${operationData.basketId}`;
+              
+              await tx.insert(lotLedger).values({
+                date: operationData.date,
+                lotId: operationData.lotId,
+                type: 'sale',
+                quantity: operationData.animalCount.toString(),
+                sourceCycleId: operationData.cycleId,
+                destCycleId: null,
+                selectionId: null, // Non proveniente da vagliatura
+                operationId: newOperation[0].id,
+                basketId: operationData.basketId,
+                allocationMethod: 'measured',
+                allocationBasis: {
+                  source: 'direct_sale',
+                  operationId: newOperation[0].id,
+                  totalWeight: operationData.totalWeight,
+                  animalsPerKg: operationData.animalsPerKg
+                },
+                idempotencyKey: idempotencyKey,
+                notes: `Vendita diretta da modulo Operazioni - ${operationData.animalCount.toLocaleString('it-IT')} animali`
+              });
+              
+              console.log(`📊 LOTLEDGER: Registrata vendita diretta - Lotto ${operationData.lotId}, ${operationData.animalCount} animali`);
+            } catch (ledgerError: any) {
+              if (ledgerError.code === '23505') { // Unique constraint violation (idempotent)
+                console.log(`⚠️ LOTLEDGER: Entry già esistente (idempotent) per operazione ${newOperation[0].id}`);
+              } else {
+                console.error('❌ LOTLEDGER: Errore durante registrazione vendita:', ledgerError);
+                // Non blocchiamo l'operazione se fallisce la registrazione lotLedger
+              }
+            }
+          }
+          
+          // 1.2 Crea notifica per operazione di vendita se è di tipo vendita
           if (operationData.type === 'vendita' && app.locals.createSaleNotification) {
             try {
               console.log("Creazione notifica per operazione di vendita...");
