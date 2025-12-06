@@ -12,11 +12,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertTriangle, Undo2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 import AdvancedSalesConfigTab from "./AdvancedSalesConfigTab";
+
+interface FlupsyOption {
+  id: number;
+  name: string;
+  location: string;
+  basketCount: number;
+}
 
 interface SaleOperation {
   operationId: number;
@@ -89,6 +98,10 @@ export default function AdvancedSales() {
   const [baseSupplyByBasket, setBaseSupplyByBasket] = useState<Record<number, BasketSupply>>({});
   const [openCustomerCombobox, setOpenCustomerCombobox] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelingOperation, setCancelingOperation] = useState<SaleOperation | null>(null);
+  const [destinationFlupsyId, setDestinationFlupsyId] = useState<number | null>(null);
+  const [destinationPosition, setDestinationPosition] = useState<number | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -136,6 +149,42 @@ export default function AdvancedSales() {
   const { data: salesData, isLoading: loadingSales } = useQuery({
     queryKey: ['/api/advanced-sales'],
     queryFn: () => apiRequest('/api/advanced-sales')
+  });
+
+  // Query per FLUPSY disponibili (per annullamento vendita)
+  const { data: flupsysData } = useQuery({
+    queryKey: ['/api/advanced-sales/flupsys/available'],
+    queryFn: () => apiRequest('/api/advanced-sales/flupsys/available'),
+    enabled: cancelDialogOpen
+  });
+
+  // Mutation per annullare vendita
+  const cancelSaleMutation = useMutation({
+    mutationFn: ({ operationId, destinationFlupsyId, destinationPosition }: { operationId: number; destinationFlupsyId?: number; destinationPosition?: number }) =>
+      apiRequest(`/api/advanced-sales/operations/${operationId}/cancel`, 'POST', { destinationFlupsyId, destinationPosition }),
+    onSuccess: (response: any) => {
+      toast({ 
+        variant: "success", 
+        title: "Vendita annullata", 
+        description: response.message 
+      });
+      setCancelDialogOpen(false);
+      setCancelingOperation(null);
+      setDestinationFlupsyId(null);
+      setDestinationPosition(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/operations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/operations'] });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Errore", 
+        description: error.message || "Errore nell'annullamento della vendita",
+        variant: "destructive" 
+      });
+    }
   });
 
   // Mutation per creare vendita
@@ -530,6 +579,22 @@ export default function AdvancedSales() {
     window.open(`/api/advanced-sales/${saleId}/report.pdf`, '_blank');
   };
 
+  const handleOpenCancelDialog = (op: SaleOperation) => {
+    setCancelingOperation(op);
+    setDestinationFlupsyId(null);
+    setDestinationPosition(null);
+    setCancelDialogOpen(true);
+  };
+
+  const handleConfirmCancel = () => {
+    if (!cancelingOperation) return;
+    cancelSaleMutation.mutate({
+      operationId: cancelingOperation.operationId,
+      destinationFlupsyId: destinationFlupsyId || undefined,
+      destinationPosition: destinationPosition || undefined
+    });
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -588,6 +653,7 @@ export default function AdvancedSales() {
                       <TableHead>Peso (kg)</TableHead>
                       <TableHead>Animali/kg</TableHead>
                       <TableHead>Stato</TableHead>
+                      <TableHead>Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -614,6 +680,20 @@ export default function AdvancedSales() {
                           <Badge variant={op.processed ? "secondary" : "default"}>
                             {op.processed ? "Processata" : "Disponibile"}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {!op.processed && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleOpenCancelDialog(op)}
+                              className="gap-1"
+                              data-testid={`button-cancel-sale-${op.operationId}`}
+                            >
+                              <Undo2 className="h-3 w-3" />
+                              Annulla
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -967,6 +1047,108 @@ export default function AdvancedSales() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog per annullamento vendita */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <AlertTriangle className="h-5 w-5" />
+              Annulla Vendita
+            </DialogTitle>
+            <DialogDescription>
+              Stai per annullare la vendita del cestello #{cancelingOperation?.basketPhysicalNumber}.
+              Il ciclo verrà riaperto e la cesta tornerà attiva.
+            </DialogDescription>
+          </DialogHeader>
+
+          {cancelingOperation && (
+            <div className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-1">
+                <p className="text-sm font-medium text-orange-800">Dettagli operazione:</p>
+                <ul className="text-sm text-orange-700 space-y-0.5">
+                  <li>Data: {format(new Date(cancelingOperation.date), 'dd/MM/yyyy')}</li>
+                  <li>Cestello: #{cancelingOperation.basketPhysicalNumber}</li>
+                  <li>Animali: {cancelingOperation.animalCount?.toLocaleString()}</li>
+                  <li>Peso: {(cancelingOperation.totalWeight / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2 })} kg</li>
+                  <li>Taglia: {cancelingOperation.sizeCode}</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="destinationFlupsy">FLUPSY di destinazione (opzionale)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Se la cesta deve essere spostata in un altro FLUPSY, selezionalo qui.
+                  Altrimenti verrà ripristinata nella posizione originale.
+                </p>
+                <Select
+                  value={destinationFlupsyId?.toString() || "same"}
+                  onValueChange={(value) => {
+                    setDestinationFlupsyId(value === "same" ? null : parseInt(value));
+                    if (value === "same") setDestinationPosition(null);
+                  }}
+                >
+                  <SelectTrigger id="destinationFlupsy" data-testid="select-destination-flupsy">
+                    <SelectValue placeholder="Stessa posizione originale" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="same">Stessa posizione originale</SelectItem>
+                    {flupsysData?.flupsys?.map((flupsy: FlupsyOption) => (
+                      <SelectItem 
+                        key={flupsy.id} 
+                        value={flupsy.id.toString()}
+                        data-testid={`item-flupsy-${flupsy.id}`}
+                      >
+                        {flupsy.name} ({flupsy.location || 'N/A'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {destinationFlupsyId && (
+                <div className="space-y-2">
+                  <Label htmlFor="destinationPosition">Posizione nel FLUPSY (opzionale)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Indica la posizione nel FLUPSY di destinazione. Se vuota, verrà mantenuta la posizione originale.
+                  </p>
+                  <Input
+                    id="destinationPosition"
+                    type="number"
+                    min={1}
+                    value={destinationPosition || ''}
+                    onChange={(e) => setDestinationPosition(e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="Es: 1, 2, 3..."
+                    data-testid="input-destination-position"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCancelDialogOpen(false);
+                setCancelingOperation(null);
+              }}
+              disabled={cancelSaleMutation.isPending}
+              data-testid="button-cancel-dialog-close"
+            >
+              Chiudi
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCancel}
+              disabled={cancelSaleMutation.isPending}
+              data-testid="button-confirm-cancel-sale"
+            >
+              {cancelSaleMutation.isPending ? 'Annullamento...' : 'Conferma Annullamento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
