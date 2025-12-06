@@ -2656,7 +2656,7 @@ export default function Operations() {
                           {op.animalCount ? op.animalCount.toLocaleString() : '-'}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                          {op.totalWeight ? parseFloat(op.totalWeight).toLocaleString('it-IT', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '-'}
+                          {op.totalWeight ? (parseFloat(op.totalWeight) / 1000).toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                           {(() => {

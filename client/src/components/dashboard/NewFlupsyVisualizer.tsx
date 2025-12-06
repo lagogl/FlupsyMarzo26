@@ -264,7 +264,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   <div className="grid grid-cols-2 gap-1 mt-1">
                     <div className="text-[11px] text-gray-600">Qtà:</div>
                     <div className="text-[11px] text-right">
-                      {latestOperation.totalWeight?.toFixed(3).replace('.', ',')}kg
+                      {latestOperation.totalWeight ? (latestOperation.totalWeight / 1000).toFixed(3).replace('.', ',') : '0'}kg
                     </div>
                     
                     <div className="text-[11px] text-gray-600">Nr.animali:</div>

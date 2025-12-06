@@ -270,7 +270,7 @@ export default function ScreeningDetail() {
                   <TableCell>{basket.cycleCode || `#${basket.cycleId}`}</TableCell>
                   <TableCell>{basket.flupsyName || '-'}</TableCell>
                   <TableCell className="text-right">{formatNumber(basket.animalCount)}</TableCell>
-                  <TableCell className="text-right">{formatNumber(basket.totalWeight)}</TableCell>
+                  <TableCell className="text-right">{basket.totalWeight ? (basket.totalWeight / 1000).toFixed(2) : '-'}</TableCell>
                   <TableCell className="text-right">{formatNumber(basket.animalsPerKg)}</TableCell>
                   <TableCell className="text-center">
                     <Badge variant={basket.dismissed ? 'default' : 'secondary'}>
@@ -324,7 +324,7 @@ export default function ScreeningDetail() {
                     }>{category}</TableCell>
                     <TableCell>{basket.flupsyName || '-'}</TableCell>
                     <TableCell className="text-right">{formatNumber(basket.animalCount)}</TableCell>
-                    <TableCell className="text-right">{formatNumber(basket.totalWeight)}</TableCell>
+                    <TableCell className="text-right">{basket.totalWeight ? (basket.totalWeight / 1000).toFixed(2) : '-'}</TableCell>
                     <TableCell className="text-right">{formatNumber(basket.animalsPerKg)}</TableCell>
                     <TableCell>
                       {basket.positionAssigned ? (

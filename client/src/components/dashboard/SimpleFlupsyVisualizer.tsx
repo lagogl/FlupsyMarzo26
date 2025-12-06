@@ -223,7 +223,7 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
                   {/* Peso totale */}
                   <div className="text-[10px] text-gray-500 mt-1">
                     {latestOperation.totalWeight && 
-                      `${latestOperation.totalWeight.toLocaleString('it-IT')}kg`}
+                      `${(latestOperation.totalWeight / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}kg`}
                   </div>
                   
                   {/* Numero animali */}

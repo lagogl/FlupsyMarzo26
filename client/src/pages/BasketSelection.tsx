@@ -687,7 +687,7 @@ export default function BasketSelection() {
       header: 'Peso cesta',
       cell: (basket) => {
         if (!basket.lastOperation?.totalWeight) return <span className="text-muted-foreground">-</span>;
-        return <span>{basket.lastOperation.totalWeight.toFixed(2)} Kg</span>;
+        return <span>{(basket.lastOperation.totalWeight / 1000).toFixed(2)} Kg</span>;
       },
     },
     {
@@ -1019,7 +1019,7 @@ export default function BasketSelection() {
       'Taglia': basket.size?.code || 'N/D',
       'Animali': basket.animalCount,
       'pz / Kg': basket.lastOperation?.animalsPerKg ? Math.round(basket.lastOperation.animalsPerKg).toLocaleString('it-IT') : 'N/D',
-      'Peso cesta (Kg)': basket.lastOperation?.totalWeight?.toFixed(2) || 'N/D',
+      'Peso cesta (Kg)': basket.lastOperation?.totalWeight ? (basket.lastOperation.totalWeight / 1000).toFixed(2) : 'N/D',
       'Peso medio (g)': basket.lastOperation?.averageWeight?.toFixed(2) || 'N/D',
       'Età ciclo (giorni)': basket.cycleDuration || 'N/D',
       'Ultima operazione': basket.lastOperation ? format(new Date(basket.lastOperation.date), 'dd/MM/yyyy') : 'N/D',

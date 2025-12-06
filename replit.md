@@ -56,6 +56,13 @@ Preferred communication style: Simple, everyday language.
 - **Cross-FLUPSY Screening System (Nov 2024)**: Extended screening (vagliatura) module to support basket transfers between different FLUPSY installations. **Schema Extensions**: `selections` table includes `is_cross_flupsy` (boolean flag), `origin_flupsy_id`, `destination_flupsy_id`, and `transport_metadata` (JSONB with operatorName, transportTime, notes for traceability). `selection_source_baskets` includes `flupsy_id` to track source basket's origin FLUPSY. **Frontend (VagliaturaConMappa.tsx)**: Separate origin/destination FLUPSY selection with transport metadata form in riepilogo tab. Cross-FLUPSY indicator badge when origin differs from destination. **Backend (selection-controller.ts)**: `createSelection()` and `addSourceBaskets()` persist all cross-FLUPSY fields with debug logging. **Database Indexes**: Partial indexes on `is_cross_flupsy`, `origin_flupsy_id`, `destination_flupsy_id` for optimized queries. **Migration**: Documented in `docs/migrations/001_data_integrity_constraints.sql` Section 7 with rollback instructions.
 - **LCI Module (Life Cycle Inventory)**: Independent module for Life Cycle Inventory management, integrated for ECOTAPES project requirements, with dedicated database tables, API, and Excel report generation.
 
+### Weight Unit Conventions (Dec 2024)
+- **Database Storage**: All weights (`total_weight` in operations table) are stored in **GRAMS**.
+- **Form Input**: All weight input fields accept values in **GRAMS** with labels clearly indicating "(g)" or "(grammi)".
+- **Display Output**: When displaying to users with "Peso (kg)" label, always **divide by 1000** to convert from grams to kilograms.
+- **Key Files Updated**: NewFlupsyVisualizer.tsx, SimpleFlupsyVisualizer.tsx, VagliaturaConMappa.tsx, BasketSelection.tsx, AdvancedSales.tsx, Baskets.tsx, ScreeningDetail.tsx, Operations.tsx.
+- **Export Files**: Excel/CSV exports that show "Peso (kg)" must also divide totalWeight by 1000.
+
 ### System Design Choices
 - **Data Flow**: User input flows from React components to PostgreSQL via TanStack Query, Express API, and Drizzle ORM, with real-time updates via WebSocket.
 - **External Integration Flow**: Standardized JSON data exchange with API key authentication, focusing on data consistency and conflict resolution.

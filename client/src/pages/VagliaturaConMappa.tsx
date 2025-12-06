@@ -1579,7 +1579,7 @@ export default function VagliaturaConMappa() {
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-blue-800 truncate">Cestelli Origine</div>
                         <div className="text-xs text-blue-600 tabular-nums">
-                          {sourceBaskets.length} cest. • {formatNumberItalian(originAnimals)} anim. • {originWeight}kg
+                          {sourceBaskets.length} cest. • {formatNumberItalian(originAnimals)} anim. • {(originWeight / 1000).toFixed(2)}kg
                         </div>
                       </div>
                     </div>
@@ -1591,7 +1591,7 @@ export default function VagliaturaConMappa() {
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-red-800 truncate">Cestelli Venduti</div>
                           <div className="text-xs text-red-600 tabular-nums">
-                            {soldBaskets.length} cest. • {formatNumberItalian(soldAnimals)} anim. • {soldWeight}kg
+                            {soldBaskets.length} cest. • {formatNumberItalian(soldAnimals)} anim. • {(soldWeight / 1000).toFixed(2)}kg
                           </div>
                         </div>
                       </div>
@@ -1604,7 +1604,7 @@ export default function VagliaturaConMappa() {
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-green-800 truncate">Cestelli Riposizionati</div>
                           <div className="text-xs text-green-600 tabular-nums">
-                            {placedBaskets.length} cest. • {formatNumberItalian(placedAnimals)} anim. • {placedWeight}kg
+                            {placedBaskets.length} cest. • {formatNumberItalian(placedAnimals)} anim. • {(placedWeight / 1000).toFixed(2)}kg
                           </div>
                         </div>
                       </div>
@@ -1852,7 +1852,7 @@ export default function VagliaturaConMappa() {
                                   {formatNumberItalian(basket.animalsPerKg || 0)}
                                 </TableCell>
                                 <TableCell className="text-right text-blue-900">
-                                  {basket.totalWeight || 0}
+                                  {((basket.totalWeight || 0) / 1000).toFixed(2)}
                                 </TableCell>
                               </TableRow>
                             );
@@ -1936,7 +1936,7 @@ export default function VagliaturaConMappa() {
                                     {formatNumberItalian(finalAnimalsPerKg)}
                                   </TableCell>
                                   <TableCell className="text-right text-red-900">
-                                    {basket.totalWeight || 0}
+                                    {((basket.totalWeight || 0) / 1000).toFixed(2)}
                                   </TableCell>
                                   <TableCell className="text-red-800 text-xs">
                                     {operativeNotes.length > 0 ? (
@@ -2074,7 +2074,7 @@ export default function VagliaturaConMappa() {
                                     {formatNumberItalian(finalAnimalsPerKg)}
                                   </TableCell>
                                   <TableCell className="text-right text-green-900">
-                                    {basket.totalWeight || 0}
+                                    {((basket.totalWeight || 0) / 1000).toFixed(2)}
                                   </TableCell>
                                   <TableCell className="text-green-800 text-xs">
                                     {operativeNotes.length > 0 ? (
