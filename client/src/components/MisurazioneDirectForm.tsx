@@ -347,8 +347,8 @@ export default function MisurazioneDirectForm({
       
       console.log(`Misurazione: conteggio animali ${animalCountSource}:`, animalCount);
       
-      // Converti il peso totale da kg a grammi per il salvataggio nel database
-      const totalWeightInGrams = totalWeight ? Math.round(totalWeight * 1000) : null;
+      // Il peso totale è già in grammi (input standardizzato)
+      const totalWeightInGrams = totalWeight ? Math.round(totalWeight) : null;
       
       // Verifica validità data
       if (lastOperationDate) {
@@ -596,10 +596,10 @@ export default function MisurazioneDirectForm({
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Peso totale della cesta (kg)</label>
+              <label className="block text-sm font-medium mb-1">Peso totale della cesta (g)</label>
               <Input 
                 type="number" 
-                placeholder="Peso totale in kg"
+                placeholder="Peso totale in grammi"
                 step="0.1"
                 value={totalWeight?.toString() || ''}
                 onChange={e => setTotalWeight(parseFloat(e.target.value) || null)}
@@ -791,7 +791,7 @@ export default function MisurazioneDirectForm({
             </div>
             {calculatedValues.totalWeight && (
               <div>
-                <label className="block text-xs text-muted-foreground">Peso totale stimato (kg):</label>
+                <label className="block text-xs text-muted-foreground">Peso totale stimato (g):</label>
                 <div className="font-semibold text-md">
                   {calculatedValues.totalWeight}
                 </div>

@@ -221,7 +221,7 @@ export default function PesoDirectForm({
         animalsPerKg: formData.animalsPerKg,
         averageWeight: formData.averageWeight,
         animalCount: defaultAnimalCount, // Utilizziamo il conteggio precedente per mantenere la coerenza
-        totalWeight: parseFloat(formData.totalWeight) * 1000, // Converti in grammi per il database
+        totalWeight: parseFloat(formData.totalWeight), // Già in grammi (input standardizzato)
         sampleWeight: parseFloat(formData.sampleWeight), // Campo obbligatorio per le operazioni peso
         notes: formData.notes
       };
@@ -377,18 +377,18 @@ export default function PesoDirectForm({
         
         {/* Peso totale */}
         <div>
-          <label className="block text-sm font-medium mb-1">Peso totale della cesta (kg)</label>
+          <label className="block text-sm font-medium mb-1">Peso totale della cesta (g)</label>
           <Input
             type="number"
-            step="0.001"
+            step="0.1"
             min="0"
-            placeholder="Inserisci il peso in kg"
+            placeholder="Inserisci il peso in grammi"
             value={formData.totalWeight}
             onChange={(e) => handleChange('totalWeight', e.target.value)}
             className="w-full"
           />
           <p className="text-xs text-slate-500 mt-1">
-            Inserisci il peso totale in kilogrammi (kg)
+            Inserisci il peso totale in grammi (g)
           </p>
         </div>
         
