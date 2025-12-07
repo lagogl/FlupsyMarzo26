@@ -2107,15 +2107,17 @@ export async function cancelSaleOperation(req: Request, res: Response) {
 
       // 5e. Crea entry di reversal nel lotLedger se c'era un'allocazione
       if (saleOperation.lotId && saleOperation.animalCount) {
+        const today = new Date().toISOString().split('T')[0];
         await tx.insert(lotLedger).values({
+          date: today,
           lotId: saleOperation.lotId,
-          operationType: 'sale_reversal',
-          quantity: saleOperation.animalCount, // Positivo perché ripristiniamo
+          type: 'in', // Rientro animali nel lotto (annullamento vendita)
+          quantity: String(saleOperation.animalCount), // Positivo perché ripristiniamo
           operationId: operationId,
           notes: `Annullamento vendita: ${reason || 'Cliente non ha ritirato'}. Cesta #${basket.physicalNumber} ripristinata in FLUPSY ${targetFlupsyId}`,
           sourceCycleId: saleOperation.cycleId
         });
-        console.log(`✅ Entry lotLedger sale_reversal creata per lotto #${saleOperation.lotId}`);
+        console.log(`✅ Entry lotLedger 'in' (reversal) creata per lotto #${saleOperation.lotId}`);
       }
     });
 
