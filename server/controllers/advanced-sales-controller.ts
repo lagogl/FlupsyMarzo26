@@ -2123,7 +2123,7 @@ export async function cancelSaleOperation(req: Request, res: Response) {
     });
 
     // 5f. Invalida cache operazioni per evitare dati stantii
-    OperationsCache.invalidateAll();
+    OperationsCache.clear();
     console.log(`✅ Cache operazioni invalidata`);
 
     // 6. Recupera info FLUPSY per la risposta
