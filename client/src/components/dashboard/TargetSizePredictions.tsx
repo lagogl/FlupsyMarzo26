@@ -29,14 +29,19 @@ interface TargetSizePrediction {
     date: string;
     animalsPerKg: number | null;
     averageWeight: number | null;
+    animalCount?: number | null;
   } | null;
   daysRemaining: number;
   currentWeight?: number;
   targetWeight?: number;
-  // Taglia effettiva che verrà raggiunta (potrebbe essere la target o una superiore)
   actualSize?: Size;
-  // Taglia richiesta nella query
   requestedSize?: Size;
+  animalCount?: number;
+}
+
+interface Flupsy {
+  id: number;
+  name: string;
 }
 
 interface Size {
@@ -57,11 +62,29 @@ export function TargetSizePredictions() {
     queryFn: getQueryFn<Size[]>({ on401: "throw" }),
   });
   
+  // Recupera i FLUPSY per avere i nomi
+  const { data: flupsys } = useQuery({
+    queryKey: ['/api/flupsys'],
+    queryFn: getQueryFn<Flupsy[]>({ on401: "throw" }),
+  });
+  
+  // Mappa flupsyId -> nome
+  const flupsyNameMap = flupsys?.reduce((acc, f) => {
+    acc[f.id] = f.name;
+    return acc;
+  }, {} as Record<number, string>) || {};
+  
   // Recupera le previsioni usando il nuovo endpoint che supporta diverse taglie
   const { data: predictions, isLoading, isError, refetch } = useQuery({
     queryKey: [`/api/size-predictions?size=${targetSize}&days=${days}`, targetSize, days],
     queryFn: getQueryFn<TargetSizePrediction[]>({ on401: "throw" }),
   });
+  
+  // Calcola il totale degli animali dalle previsioni
+  const totalAnimals = predictions?.reduce((sum, p) => {
+    const count = p.animalCount || p.lastOperation?.animalCount || 0;
+    return sum + count;
+  }, 0) || 0;
 
   // Funzione per formattare la data in italiano
   const formatDateIT = (dateStr: string) => {
@@ -91,12 +114,23 @@ export function TargetSizePredictions() {
     <Card className="w-full">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-xl font-bold">Ceste in arrivo a {targetSize}</CardTitle>
-            <CardDescription>
-              Previsioni di crescita verso la taglia commerciale {targetSize} 
-              {days === 14 ? " (prossime 2 settimane)" : ` (prossimi ${days} giorni)`}
-            </CardDescription>
+          <div className="flex items-center gap-6">
+            {/* Totale animali in grande */}
+            {totalAnimals > 0 && (
+              <div className="flex flex-col items-center justify-center bg-primary/10 rounded-lg px-4 py-2">
+                <span className="text-3xl font-bold text-primary">
+                  {totalAnimals.toLocaleString('it-IT')}
+                </span>
+                <span className="text-xs text-muted-foreground">animali totali</span>
+              </div>
+            )}
+            <div>
+              <CardTitle className="text-xl font-bold">Ceste in arrivo a {targetSize}</CardTitle>
+              <CardDescription>
+                Previsioni di crescita verso la taglia commerciale {targetSize} 
+                {days === 14 ? " (prossime 2 settimane)" : ` (prossimi ${days} giorni)`}
+              </CardDescription>
+            </div>
           </div>
           <div className="flex items-center space-x-4">
             {/* Selezione della taglia target */}
@@ -181,6 +215,12 @@ export function TargetSizePredictions() {
                     {prediction.basket.row && prediction.basket.position && (
                       <Badge variant="outline" className="ml-2 text-xs">
                         {prediction.basket.row}-{prediction.basket.position}
+                      </Badge>
+                    )}
+                    {/* Nome FLUPSY */}
+                    {flupsyNameMap[prediction.basket.flupsyId] && (
+                      <Badge variant="secondary" className="ml-2 text-xs bg-slate-100">
+                        {flupsyNameMap[prediction.basket.flupsyId]}
                       </Badge>
                     )}
                     
