@@ -14,6 +14,10 @@ build = ["npm", "run", "build"]
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 35993
+externalPort = 3000
+
 [[workflows.workflow]]
 name = "Project"
 mode = "parallel"
