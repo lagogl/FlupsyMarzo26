@@ -142,6 +142,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Helper function to get basket color class based on size
+  // LOGICA COLORI: Verde = vendibili (TP-3000+), Rosso = non vendibili (sotto TP-3000)
+  // Animali GRANDI = meno animali/kg = vendibili (VERDE)
+  // Animali PICCOLI = più animali/kg = non vendibili (ROSSO)
   const getBasketColorClass = (basket: any) => {
     if (!basket) return 'bg-gray-100 border-dashed border-gray-300';
     
@@ -158,43 +161,71 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     }
     
     // Check if we have a valid animalsPerKg value
-    if (!latestOperation.animalsPerKg) {
+    const animalsPerKg = latestOperation.animalsPerKg;
+    if (!animalsPerKg) {
       return 'bg-blue-50 border-blue-300';
     }
     
-    // Get size from database if available
-    if (latestOperation.sizeId && sizes && Array.isArray(sizes)) {
-      const size = sizes.find((s: any) => s.id === latestOperation.sizeId);
-      if (size) {
-        // Personalizza i colori in base ai codici taglia dell'immagine di riferimento
-        if (size.code.includes('TP-800')) return 'bg-red-50 border-red-500';
-        if (size.code.includes('TP-1000') || size.code.includes('TP-1140')) return 'bg-orange-50 border-orange-500';
-        if (size.code.includes('TP-1500')) return 'bg-lime-50 border-lime-500';
-        if (size.code.includes('TP-2000')) return 'bg-yellow-50 border-yellow-500';
-        if (size.code.includes('TP-3000')) return 'bg-teal-50 border-teal-500';
-        if (size.code.includes('TP-4000') || size.code.includes('TP-5000')) return 'bg-blue-50 border-blue-500';
-        if (size.code.includes('TP-6000')) return 'bg-green-50 border-green-500';
+    // SOGLIA VENDITA: TP-3000 = max 29000 animali/kg
+    // animalsPerKg <= 29000 = VERDE (vendibili, animali grandi)
+    // animalsPerKg > 29000 = ROSSO (non vendibili, animali piccoli)
+    
+    if (animalsPerKg <= 29000) {
+      // VERDE - Vendibili (TP-3000 e superiori = animali grandi)
+      // Intensità aumenta con animali più grandi (meno per kg)
+      if (animalsPerKg <= 1200) {
+        // TP-10000: 801-1200 - Verde più intenso
+        return 'bg-green-600 border-green-800 text-white';
+      } else if (animalsPerKg <= 1800) {
+        // TP-9000: 1201-1800
+        return 'bg-green-500 border-green-700 text-white';
+      } else if (animalsPerKg <= 2300) {
+        // TP-8000: 1801-2300
+        return 'bg-green-400 border-green-600';
+      } else if (animalsPerKg <= 3000) {
+        // TP-7000: 2301-3000
+        return 'bg-green-300 border-green-500';
+      } else if (animalsPerKg <= 6000) {
+        // TP-6000, TP-5500: 3001-6000
+        return 'bg-green-200 border-green-400';
+      } else if (animalsPerKg <= 9000) {
+        // TP-5000: 6001-9000
+        return 'bg-green-150 border-green-300';
+      } else if (animalsPerKg <= 15000) {
+        // TP-4500, TP-4000: 9001-15000
+        return 'bg-emerald-100 border-emerald-300';
+      } else if (animalsPerKg <= 20000) {
+        // TP-3500: 15001-20000
+        return 'bg-lime-100 border-lime-300';
+      } else {
+        // TP-3000: 20001-29000 - Verde più chiaro (soglia vendita)
+        return 'bg-lime-50 border-lime-200';
       }
-    }
-    
-    // Fallback based on animalsPerKg if no size found
-    const apkg = latestOperation.animalsPerKg;
-    
-    // Colori specificati nell'immagine di riferimento
-    if (apkg <= 800) {
-      return 'bg-red-50 border-red-500'; // Pre-ingresso iniziale
-    } else if (apkg <= 1140) {
-      return 'bg-orange-50 border-orange-500'; // Pre-ingresso avanzato
-    } else if (apkg <= 1500) {
-      return 'bg-lime-50 border-lime-500'; // Ingresso iniziale
-    } else if (apkg <= 2000) {
-      return 'bg-yellow-50 border-yellow-500'; // Ingresso avanzato
-    } else if (apkg <= 3000) {
-      return 'bg-teal-50 border-teal-500'; // Pre-vendita
-    } else if (apkg <= 5000) {
-      return 'bg-blue-50 border-blue-500'; // Commerciale
     } else {
-      return 'bg-green-50 border-green-500'; // Commerciale grande
+      // ROSSO - Non vendibili (sotto TP-3000 = animali piccoli)
+      // Intensità aumenta con animali più piccoli (più per kg)
+      if (animalsPerKg <= 40000) {
+        // TP-2800: 29001-40000 - Rosso più chiaro
+        return 'bg-red-50 border-red-200';
+      } else if (animalsPerKg <= 97000) {
+        // TP-2500, TP-2000: 40001-97000
+        return 'bg-red-100 border-red-300';
+      } else if (animalsPerKg <= 190000) {
+        // TP-1900, TP-1800: 97001-190000
+        return 'bg-red-200 border-red-400';
+      } else if (animalsPerKg <= 350000) {
+        // TP-1500, TP-1260: 190001-350000
+        return 'bg-red-300 border-red-500';
+      } else if (animalsPerKg <= 880000) {
+        // TP-1140, TP-1000: 350001-880000
+        return 'bg-red-400 border-red-600';
+      } else if (animalsPerKg <= 1000000) {
+        // TP-800: 880001-1000000
+        return 'bg-red-500 border-red-700 text-white';
+      } else {
+        // TP-700 e inferiori: > 1M animali/kg - Rosso più intenso
+        return 'bg-red-600 border-red-800 text-white';
+      }
     }
   };
 
@@ -522,37 +553,61 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             
 
             
-            {/* Legenda Colori Taglie */}
-            <div className="flex flex-wrap gap-2 mb-2">
+            {/* Legenda Colori Taglie - VENDIBILI (VERDE) */}
+            <div className="mb-1">
+              <span className="text-xs font-semibold text-green-700">VENDIBILI (TP-3000 e superiori)</span>
+            </div>
+            <div className="flex flex-wrap gap-2 mb-3">
               <div className="flex items-center gap-1 text-xs">
-                <span className="w-4 h-4 bg-red-50 border border-red-500"></span>
-                <span>TP-800 e inferiori (Pre-ingresso iniziale)</span>
+                <span className="w-4 h-4 bg-green-600 border border-green-800"></span>
+                <span>TP-10000, TP-9000 (Grandi)</span>
               </div>
               <div className="flex items-center gap-1 text-xs">
-                <span className="w-4 h-4 bg-orange-50 border border-orange-500"></span>
-                <span>TP-1000, TP-1140 (Pre-ingresso avanzato)</span>
+                <span className="w-4 h-4 bg-green-400 border border-green-600"></span>
+                <span>TP-8000, TP-7000</span>
               </div>
               <div className="flex items-center gap-1 text-xs">
-                <span className="w-4 h-4 bg-lime-50 border border-lime-500"></span>
-                <span>TP-1500 (Ingresso iniziale)</span>
+                <span className="w-4 h-4 bg-green-200 border border-green-400"></span>
+                <span>TP-6000, TP-5000</span>
               </div>
               <div className="flex items-center gap-1 text-xs">
-                <span className="w-4 h-4 bg-yellow-50 border border-yellow-500"></span>
-                <span>TP-2000 (Ingresso avanzato)</span>
+                <span className="w-4 h-4 bg-emerald-100 border border-emerald-300"></span>
+                <span>TP-4500, TP-4000</span>
               </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="w-4 h-4 bg-lime-100 border border-lime-300"></span>
+                <span>TP-3500</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="w-4 h-4 bg-lime-50 border border-lime-200"></span>
+                <span>TP-3000 (Soglia vendita)</span>
+              </div>
+            </div>
+            
+            {/* Legenda Colori Taglie - NON VENDIBILI (ROSSO) */}
+            <div className="mb-1">
+              <span className="text-xs font-semibold text-red-700">NON VENDIBILI (sotto TP-3000)</span>
             </div>
             <div className="flex flex-wrap gap-2">
               <div className="flex items-center gap-1 text-xs">
-                <span className="w-4 h-4 bg-teal-50 border border-teal-500"></span>
-                <span>TP-3000 (Pre-vendita)</span>
+                <span className="w-4 h-4 bg-red-50 border border-red-200"></span>
+                <span>TP-2800</span>
               </div>
               <div className="flex items-center gap-1 text-xs">
-                <span className="w-4 h-4 bg-blue-50 border border-blue-500"></span>
-                <span>TP-4000, TP-5000 (Commerciale)</span>
+                <span className="w-4 h-4 bg-red-100 border border-red-300"></span>
+                <span>TP-2500, TP-2000</span>
               </div>
               <div className="flex items-center gap-1 text-xs">
-                <span className="w-4 h-4 bg-green-50 border border-green-500"></span>
-                <span>TP-6000 e superiori (Commerciale grande)</span>
+                <span className="w-4 h-4 bg-red-200 border border-red-400"></span>
+                <span>TP-1900, TP-1800</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="w-4 h-4 bg-red-300 border border-red-500"></span>
+                <span>TP-1500, TP-1260</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="w-4 h-4 bg-red-500 border border-red-700"></span>
+                <span>TP-1000 e inferiori (Piccoli)</span>
               </div>
               <div className="flex items-center gap-1 text-xs">
                 <span className="w-4 h-4 bg-gray-100 border border-dashed border-gray-400"></span>

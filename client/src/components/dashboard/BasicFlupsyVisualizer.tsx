@@ -255,34 +255,51 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
           if (sizeCode.startsWith('TP-')) {
             const num = parseInt(sizeCode.replace('TP-', ''));
             
-            if (num >= 6000) {
-              // TP-6000 e superiori - Commerciale grande
-              borderClass = 'border-red-600 border-4';
+            // NUOVA LOGICA: Verde = vendibili (TP-3000+), Rosso = non vendibili
+            if (num >= 10000) {
+              // TP-10000 - Vendibile grande (verde intenso)
+              borderClass = 'border-green-800 border-4';
+              bgClass = 'bg-green-600 text-white';
+            } else if (num >= 7000 && num < 10000) {
+              // TP-7000-9000 - Vendibile
+              borderClass = 'border-green-600 border-3';
+              bgClass = 'bg-green-400';
+            } else if (num >= 5000 && num < 7000) {
+              // TP-5000, TP-6000 - Vendibile
+              borderClass = 'border-green-500 border-2';
+              bgClass = 'bg-green-200';
+            } else if (num >= 4000 && num < 5000) {
+              // TP-4000 - Vendibile
+              borderClass = 'border-emerald-400 border-2';
+              bgClass = 'bg-emerald-100';
+            } else if (num >= 3500 && num < 4000) {
+              // TP-3500 - Vendibile
+              borderClass = 'border-lime-400 border-2';
+              bgClass = 'bg-lime-100';
+            } else if (num >= 3000 && num < 3500) {
+              // TP-3000 - Soglia vendita (verde chiaro)
+              borderClass = 'border-lime-300 border-2';
+              bgClass = 'bg-lime-50';
+            } else if (num >= 2500 && num < 3000) {
+              // TP-2800, TP-2500 - Non vendibile (rosso chiaro)
+              borderClass = 'border-red-200 border-2';
               bgClass = 'bg-red-50';
-            } else if (num >= 4000 && num < 6000) {
-              // TP-4000, TP-5000 - Commerciale
-              borderClass = 'border-red-500 border-3';
-              bgClass = 'bg-red-50';
-            } else if (num >= 3000 && num < 4000) {
-              // TP-3000 - Pre-vendita
-              borderClass = 'border-orange-500 border-2';
-              bgClass = 'bg-orange-50';
-            } else if (num >= 2000 && num < 3000) {
-              // TP-2000 - Ingrasso avanzato
-              borderClass = 'border-yellow-500 border-2';
-              bgClass = 'bg-yellow-50';
-            } else if (num >= 1500 && num < 2000) {
-              // TP-1500 - Ingrasso iniziale
-              borderClass = 'border-green-600 border-2';
-              bgClass = 'bg-green-50';
-            } else if (num >= 1000 && num < 1500) {
-              // TP-1000, TP-1140 - Pre-ingrasso avanzato
-              borderClass = 'border-sky-500 border-2';
-              bgClass = 'bg-sky-50';
+            } else if (num >= 1800 && num < 2500) {
+              // TP-2000, TP-1900, TP-1800 - Non vendibile
+              borderClass = 'border-red-400 border-2';
+              bgClass = 'bg-red-200';
+            } else if (num >= 1200 && num < 1800) {
+              // TP-1500, TP-1260 - Non vendibile
+              borderClass = 'border-red-500 border-2';
+              bgClass = 'bg-red-300';
+            } else if (num >= 800 && num < 1200) {
+              // TP-1000, TP-1140, TP-800 - Non vendibile
+              borderClass = 'border-red-600 border-2';
+              bgClass = 'bg-red-400';
             } else {
-              // TP-800 e inferiori - Pre-ingrasso iniziale
-              borderClass = 'border-sky-400 border-2';
-              bgClass = 'bg-sky-50';
+              // TP-700 e inferiori - Non vendibile (rosso intenso)
+              borderClass = 'border-red-800 border-3';
+              bgClass = 'bg-red-600 text-white';
             }
           } else {
             // Fallback se non è un codice TP-
@@ -943,35 +960,57 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
           </div>
         </div>
         
-        <div className="flex flex-wrap gap-2 mt-3">
-          {/* Legenda taglie dettagliata basata sul sistema TP- */}
+        {/* Legenda taglie - VENDIBILI (VERDE) */}
+        <div className="mt-3 mb-1">
+          <span className="text-xs font-semibold text-green-700">VENDIBILI (TP-3000 e superiori)</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-sky-400 bg-sky-50"></div>
-            <span>TP-800 e inferiori (Pre-ingrasso iniziale)</span>
+            <div className="w-3 h-3 rounded-sm border-4 border-green-800 bg-green-600"></div>
+            <span>TP-10000, TP-9000 (Grandi)</span>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-sky-500 bg-sky-50"></div>
-            <span>TP-1000, TP-1140 (Pre-ingrasso avanzato)</span>
+            <div className="w-3 h-3 rounded-sm border-2 border-green-600 bg-green-400"></div>
+            <span>TP-8000, TP-7000</span>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-green-600 bg-green-50"></div>
-            <span>TP-1500 (Ingrasso iniziale)</span>
+            <div className="w-3 h-3 rounded-sm border-2 border-green-500 bg-green-200"></div>
+            <span>TP-6000, TP-5000</span>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-yellow-500 bg-yellow-50"></div>
-            <span>TP-2000 (Ingrasso avanzato)</span>
+            <div className="w-3 h-3 rounded-sm border-2 border-emerald-400 bg-emerald-100"></div>
+            <span>TP-4000</span>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-orange-500 bg-orange-50"></div>
-            <span>TP-3000 (Pre-vendita)</span>
+            <div className="w-3 h-3 rounded-sm border-2 border-lime-300 bg-lime-50"></div>
+            <span>TP-3000 (Soglia vendita)</span>
+          </div>
+        </div>
+        
+        {/* Legenda taglie - NON VENDIBILI (ROSSO) */}
+        <div className="mt-2 mb-1">
+          <span className="text-xs font-semibold text-red-700">NON VENDIBILI (sotto TP-3000)</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-1 text-xs">
+            <div className="w-3 h-3 rounded-sm border-2 border-red-200 bg-red-50"></div>
+            <span>TP-2800</span>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-3 border-red-500 bg-red-50"></div>
-            <span>TP-4000, TP-5000 (Commerciale)</span>
+            <div className="w-3 h-3 rounded-sm border-2 border-red-400 bg-red-200"></div>
+            <span>TP-2000, TP-1900</span>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-4 border-red-600 bg-red-50"></div>
-            <span>TP-6000 e superiori (Commerciale grande)</span>
+            <div className="w-3 h-3 rounded-sm border-2 border-red-500 bg-red-300"></div>
+            <span>TP-1500, TP-1260</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs">
+            <div className="w-3 h-3 rounded-sm border-2 border-red-600 bg-red-400"></div>
+            <span>TP-1000, TP-800</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs">
+            <div className="w-3 h-3 rounded-sm border-3 border-red-800 bg-red-600"></div>
+            <span>TP-700 e inferiori (Piccoli)</span>
           </div>
           <div className="flex items-center gap-1 text-xs">
             <div className="w-3 h-3 rounded-sm border-2 border-dashed border-slate-400 bg-slate-100/50"></div>
