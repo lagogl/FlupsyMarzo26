@@ -660,7 +660,7 @@ export function implementDirectOperationRoute(app: Express) {
           console.log("Aggiornamento stato cestello...");
           const updatedBasket = await tx.update(baskets)
             .set({ 
-              state: 'disponibile',
+              state: 'available',
               currentCycleId: null,
               cycleCode: null
             })
