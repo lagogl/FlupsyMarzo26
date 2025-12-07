@@ -107,16 +107,16 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return latestOp ? [latestOp] : [];
   };
   
-  // Helper function to check if a basket has a large size (TP-3000 or higher)
+  // Helper function to check if a basket has a large size (TP-3000 or higher = sellable)
   const hasLargeSize = (basket: any): boolean => {
     if (!basket || basket.state !== 'active') return false;
     
     const latestOperation = getLatestOperation(basket.id);
     if (!latestOperation?.animalsPerKg) return false;
     
-    // Determina se è una taglia grande basandosi sul numero di animali per kg
-    // La taglia TP-3000 o superiore ha animalsPerKg <= 3000
-    return latestOperation.animalsPerKg <= 3000;
+    // SOGLIA VENDITA: TP-3000 = max 29000 animali/kg
+    // animalsPerKg <= 29000 significa taglia vendibile (animali grandi)
+    return latestOperation.animalsPerKg <= 29000;
   };
   
   // Helper function to get size code from the sizes table based on animalsPerKg
