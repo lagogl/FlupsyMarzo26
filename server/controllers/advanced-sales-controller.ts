@@ -1979,8 +1979,13 @@ export async function deleteSale(req: Request, res: Response) {
 
 /**
  * Annulla un'operazione di vendita (tipo 'vendita')
- * Riattiva il ciclo chiuso, ripristina la cesta e crea entry di reversal nel lotLedger
- * Permette di specificare un FLUPSY diverso dall'originale
+ * HARD DELETE: elimina l'operazione dalla tabella operations
+ * Riattiva il ciclo chiuso, ripristina la cesta
+ * 
+ * Due casi:
+ * - Caso 1 (Modulo Operazioni): Solo cancellazione e ripristino
+ * - Caso 2 (Vagliatura con Mappa): Cancellazione + creazione operazione "misura" con stessi dati
+ *   Identificato dal pattern "Vendita diretta da vagliatura" nelle note
  */
 export async function cancelSaleOperation(req: Request, res: Response) {
   try {
@@ -2018,7 +2023,7 @@ export async function cancelSaleOperation(req: Request, res: Response) {
       });
     }
 
-    // Verifica che non sia già stata annullata
+    // Verifica che non sia già stata annullata (per compatibilità con vecchi soft-delete)
     if (saleOperation.cancelledAt) {
       return res.status(400).json({
         success: false,
@@ -2067,9 +2072,30 @@ export async function cancelSaleOperation(req: Request, res: Response) {
       });
     }
 
-    // 5. Esegui l'annullamento in transazione
+    // 5. Determina se l'origine è da Vagliatura con Mappa
+    const isFromVagliatura = saleOperation.notes && 
+      saleOperation.notes.includes('Vendita diretta da vagliatura');
+    
+    console.log(`📋 Origine vendita: ${isFromVagliatura ? 'Vagliatura con Mappa' : 'Modulo Operazioni'}`);
+
+    // Salva i dati della vendita prima di eliminarla (per eventuale operazione misura)
+    const saleData = {
+      date: saleOperation.date,
+      animalCount: saleOperation.animalCount,
+      totalWeight: saleOperation.totalWeight,
+      animalsPerKg: saleOperation.animalsPerKg,
+      sizeId: saleOperation.sizeId,
+      lotId: saleOperation.lotId,
+      cycleId: saleOperation.cycleId,
+      basketId: saleOperation.basketId,
+      notes: saleOperation.notes
+    };
+
+    let newMisuraOperationId: number | null = null;
+
+    // 6. Esegui l'annullamento in transazione
     await db.transaction(async (tx) => {
-      // 5a. Riattiva il ciclo
+      // 6a. Riattiva il ciclo
       await tx.update(cycles)
         .set({
           state: 'active',
@@ -2078,12 +2104,12 @@ export async function cancelSaleOperation(req: Request, res: Response) {
         .where(eq(cycles.id, saleOperation.cycleId));
       console.log(`✅ Ciclo #${saleOperation.cycleId} riattivato`);
 
-      // 5b. Genera il cycleCode per la nuova posizione
+      // 6b. Genera il cycleCode per la nuova posizione
       const now = new Date();
       const monthYear = `${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear().toString().slice(-2)}`;
       const newCycleCode = `${basket.physicalNumber}-${targetFlupsyId}-${monthYear}`;
 
-      // 5c. Aggiorna la cesta (posizione, FLUPSY, stato)
+      // 6c. Aggiorna la cesta (posizione, FLUPSY, stato)
       await tx.update(baskets)
         .set({
           state: 'active',
@@ -2096,46 +2122,64 @@ export async function cancelSaleOperation(req: Request, res: Response) {
         .where(eq(baskets.id, basket.id));
       console.log(`✅ Cesta #${basket.physicalNumber} ripristinata in FLUPSY ${targetFlupsyId}, posizione ${targetRow}-${targetPosition}`);
 
-      // 5d. Marca l'operazione di vendita come annullata
-      await tx.update(operations)
-        .set({
-          cancelledAt: new Date(),
-          cancellationReason: reason || 'Cliente non ha ritirato',
-          restoredToFlupsyId: targetFlupsyId
-        })
-        .where(eq(operations.id, operationId));
-      console.log(`✅ Operazione #${operationId} marcata come annullata`);
-
-      // 5e. Crea entry di reversal nel lotLedger se c'era un'allocazione
-      if (saleOperation.lotId && saleOperation.animalCount) {
+      // 6d. Crea entry di reversal nel lotLedger se c'era un'allocazione
+      if (saleData.lotId && saleData.animalCount) {
         const today = new Date().toISOString().split('T')[0];
         await tx.insert(lotLedger).values({
           date: today,
-          lotId: saleOperation.lotId,
+          lotId: saleData.lotId,
           type: 'in', // Rientro animali nel lotto (annullamento vendita)
-          quantity: String(saleOperation.animalCount), // Positivo perché ripristiniamo
-          operationId: operationId,
+          quantity: String(saleData.animalCount),
           notes: `Annullamento vendita: ${reason || 'Cliente non ha ritirato'}. Cesta #${basket.physicalNumber} ripristinata in FLUPSY ${targetFlupsyId}`,
-          sourceCycleId: saleOperation.cycleId
+          sourceCycleId: saleData.cycleId
         });
-        console.log(`✅ Entry lotLedger 'in' (reversal) creata per lotto #${saleOperation.lotId}`);
+        console.log(`✅ Entry lotLedger 'in' (reversal) creata per lotto #${saleData.lotId}`);
+      }
+
+      // 6e. HARD DELETE dell'operazione di vendita
+      await tx.delete(operations)
+        .where(eq(operations.id, operationId));
+      console.log(`✅ Operazione #${operationId} ELIMINATA dalla tabella operations`);
+
+      // 6f. Se origine da Vagliatura con Mappa, crea operazione "misura" con stessi dati
+      if (isFromVagliatura) {
+        const vagliaturaMatch = saleData.notes?.match(/vagliatura #(\d+)/i);
+        const vagliaturaNum = vagliaturaMatch ? vagliaturaMatch[1] : 'N/D';
+        
+        const [newMisura] = await tx.insert(operations).values({
+          type: 'misura',
+          date: saleData.date, // Stessa data della vendita annullata
+          basketId: saleData.basketId,
+          cycleId: saleData.cycleId,
+          animalCount: saleData.animalCount,
+          totalWeight: saleData.totalWeight,
+          animalsPerKg: saleData.animalsPerKg,
+          sizeId: saleData.sizeId,
+          lotId: saleData.lotId,
+          notes: `Misura da vagliatura #${vagliaturaNum} (vendita annullata: ${reason || 'Cliente non ha ritirato'})`
+        }).returning();
+        
+        newMisuraOperationId = newMisura.id;
+        console.log(`✅ Creata operazione MISURA #${newMisura.id} con stessi dati della vendita`);
       }
     });
 
-    // 5f. Invalida cache operazioni per evitare dati stantii
+    // 7. Invalida cache operazioni per evitare dati stantii
     OperationsCache.clear();
     console.log(`✅ Cache operazioni invalidata`);
 
-    // 6. Recupera info FLUPSY per la risposta
+    // 8. Recupera info FLUPSY per la risposta
     const [targetFlupsy] = await db.select()
       .from(flupsys)
       .where(eq(flupsys.id, targetFlupsyId));
 
-    console.log(`✅ Annullamento vendita completato: operazione #${operationId}`);
+    console.log(`✅ Annullamento vendita completato: operazione #${operationId} eliminata`);
 
     res.json({
       success: true,
-      message: `Vendita annullata. Cesta #${basket.physicalNumber} ripristinata in ${targetFlupsy?.name || 'FLUPSY ' + targetFlupsyId}, posizione ${targetRow}-${targetPosition}`,
+      message: isFromVagliatura 
+        ? `Vendita annullata e convertita in misura. Cesta #${basket.physicalNumber} ripristinata in ${targetFlupsy?.name || 'FLUPSY ' + targetFlupsyId}, posizione ${targetRow}-${targetPosition}`
+        : `Vendita annullata. Cesta #${basket.physicalNumber} ripristinata in ${targetFlupsy?.name || 'FLUPSY ' + targetFlupsyId}, posizione ${targetRow}-${targetPosition}`,
       restoredData: {
         operationId,
         basketId: basket.id,
@@ -2145,7 +2189,9 @@ export async function cancelSaleOperation(req: Request, res: Response) {
         targetFlupsyName: targetFlupsy?.name,
         targetRow,
         targetPosition,
-        reason: reason || 'Cliente non ha ritirato'
+        reason: reason || 'Cliente non ha ritirato',
+        isFromVagliatura,
+        newMisuraOperationId
       }
     });
 
