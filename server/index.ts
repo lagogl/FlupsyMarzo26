@@ -135,6 +135,11 @@ async function runBackgroundInitialization() {
   }
 }
 
+// Health check endpoint - responds immediately for Replit's health probe
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 (async () => {
   // Inizializza il servizio di sincronizzazione esterno (temporaneamente disabilitato)
   console.log("🔄 Servizio sincronizzazione esterno temporaneamente disabilitato per debug");
