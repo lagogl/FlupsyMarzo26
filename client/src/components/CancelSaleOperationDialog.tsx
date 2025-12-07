@@ -148,8 +148,9 @@ export default function CancelSaleOperationDialog({
 
   const isPositionOccupied = (row: string, position: number) => {
     if (!occupiedPositions) return false;
+    // Una posizione è occupata se c'è qualsiasi cesta (indipendentemente dallo stato)
     return occupiedPositions.some(
-      (b: any) => b.row === row && b.position === position && b.state === "active"
+      (b: any) => b.row === row && b.position === position
     );
   };
 
