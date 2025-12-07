@@ -82,15 +82,20 @@ export default function CancelSaleOperationDialog({
     enabled: open,
   });
 
-  const { data: occupiedPositions } = useQuery<any[]>({
-    queryKey: ["/api/baskets", selectedFlupsyId],
+  const { data: allBaskets } = useQuery<any[]>({
+    queryKey: ["/api/baskets"],
     queryFn: async () => {
-      const res = await fetch(`/api/baskets?flupsyId=${selectedFlupsyId}&includeAll=true`);
+      const res = await fetch(`/api/baskets?includeAll=true`);
       if (!res.ok) throw new Error("Errore durante il recupero delle posizioni");
       return res.json();
     },
-    enabled: !!selectedFlupsyId,
+    enabled: open,
   });
+
+  // Filtra i cestelli del FLUPSY selezionato lato client
+  const occupiedPositions = selectedFlupsyId 
+    ? (allBaskets || []).filter((b: any) => b.flupsyId === selectedFlupsyId)
+    : [];
 
   const { data: selectedFlupsy } = useQuery<Flupsy>({
     queryKey: ["/api/flupsys", selectedFlupsyId],
@@ -143,70 +148,63 @@ export default function CancelSaleOperationDialog({
 
   const operation = detailsResponse?.operation;
   const availableFlupsys = detailsResponse?.availableFlupsys || [];
-  const maxPositions = selectedFlupsy?.maxPositions || 10;
-  const positionsPerRow = Math.ceil(maxPositions / 2);
 
-  const isPositionOccupied = (row: string, position: number) => {
-    if (!occupiedPositions) return false;
-    // Una posizione è occupata se c'è qualsiasi cesta (indipendentemente dallo stato)
-    return occupiedPositions.some(
-      (b: any) => b.row === row && b.position === position
-    );
+  // Filtra solo le ceste con stato 'available' nel FLUPSY selezionato
+  const availableBaskets = selectedFlupsyId 
+    ? occupiedPositions.filter((b: any) => b.state === 'available')
+    : [];
+
+  const canSubmit = selectedFlupsyId && selectedRow && selectedPosition !== null;
+
+  const handleBasketClick = (basket: any) => {
+    setSelectedRow(basket.row);
+    setSelectedPosition(basket.position);
   };
 
-  const canSubmit = selectedFlupsyId && selectedRow && selectedPosition !== null && !isPositionOccupied(selectedRow, selectedPosition);
-
-  const handlePositionClick = (row: string, position: number) => {
-    if (!isPositionOccupied(row, position)) {
-      setSelectedRow(row);
-      setSelectedPosition(position);
-    }
-  };
-
-  const renderPositionGrid = () => {
+  const renderAvailableBaskets = () => {
     if (!selectedFlupsyId) return null;
+
+    if (availableBaskets.length === 0) {
+      return (
+        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+          <p className="text-sm text-yellow-800">
+            Nessuna cesta disponibile in questo FLUPSY.
+          </p>
+          <p className="text-xs text-yellow-600 mt-1">
+            Seleziona un altro FLUPSY con ceste libere.
+          </p>
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-2 mt-4">
-        <Label className="text-sm font-medium">Seleziona posizione</Label>
-        <div className="p-3 bg-muted rounded-lg space-y-2">
-          {["SX", "DX"].map((row) => (
-            <div key={row} className="flex items-center gap-1">
-              <span className="text-xs font-medium text-gray-500 w-6">{row}:</span>
-              <div className="flex gap-1 flex-wrap">
-                {Array.from({ length: positionsPerRow }, (_, i) => {
-                  const position = i + 1;
-                  const occupied = isPositionOccupied(row, position);
-                  const selected = selectedRow === row && selectedPosition === position;
-                  
-                  return (
-                    <button
-                      key={`${row}-${position}`}
-                      type="button"
-                      onClick={() => handlePositionClick(row, position)}
-                      disabled={occupied}
-                      className={`w-8 h-8 rounded border text-xs font-medium transition-all
-                        ${occupied 
-                          ? "bg-red-100 border-red-400 text-red-700 cursor-not-allowed" 
-                          : selected 
-                            ? "bg-blue-500 border-blue-600 text-white ring-2 ring-blue-300" 
-                            : "bg-white border-gray-300 text-gray-600 hover:bg-blue-50 hover:border-blue-300"
-                        }`}
-                      data-testid={`position-${row}-${position}`}
-                    >
-                      {position}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+        <Label className="text-sm font-medium">Seleziona cesta disponibile ({availableBaskets.length} disponibili)</Label>
+        <div className="p-3 bg-muted rounded-lg">
+          <div className="grid grid-cols-5 gap-2">
+            {availableBaskets.map((basket: any) => {
+              const selected = selectedRow === basket.row && selectedPosition === basket.position;
+              return (
+                <button
+                  key={basket.id}
+                  type="button"
+                  onClick={() => handleBasketClick(basket)}
+                  className={`p-2 rounded border text-xs font-medium transition-all
+                    ${selected 
+                      ? "bg-blue-500 border-blue-600 text-white ring-2 ring-blue-300" 
+                      : "bg-green-50 border-green-300 text-green-700 hover:bg-green-100 hover:border-green-400"
+                    }`}
+                  data-testid={`basket-${basket.id}`}
+                >
+                  <div className="font-bold">#{basket.physicalNumber}</div>
+                  <div className="text-[10px] opacity-75">{basket.row}-{basket.position}</div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-4 text-xs text-muted-foreground mt-3">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-white border border-gray-300"></span> Libera
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-red-100 border border-red-400"></span> Occupata
+              <span className="w-3 h-3 rounded bg-green-50 border border-green-300"></span> Disponibile
             </span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded bg-blue-500 border border-blue-600"></span> Selezionata
@@ -307,7 +305,7 @@ export default function CancelSaleOperationDialog({
               </Select>
             </div>
 
-            {renderPositionGrid()}
+            {renderAvailableBaskets()}
 
             {selectedRow && selectedPosition && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
