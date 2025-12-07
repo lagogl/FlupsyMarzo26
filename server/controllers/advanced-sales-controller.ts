@@ -34,6 +34,7 @@ import {
 } from "../../shared/schema";
 import { format } from "date-fns";
 import { apiRequest, getConfigValue } from "./fatture-in-cloud-controller";
+import { OperationsCache } from "../operations-cache-service.js";
 
 /**
  * Ottiene il prossimo numero DDT disponibile verificando sia il database locale che Fatture in Cloud
@@ -2120,6 +2121,10 @@ export async function cancelSaleOperation(req: Request, res: Response) {
         console.log(`✅ Entry lotLedger 'in' (reversal) creata per lotto #${saleOperation.lotId}`);
       }
     });
+
+    // 5f. Invalida cache operazioni per evitare dati stantii
+    OperationsCache.invalidateAll();
+    console.log(`✅ Cache operazioni invalidata`);
 
     // 6. Recupera info FLUPSY per la risposta
     const [targetFlupsy] = await db.select()
