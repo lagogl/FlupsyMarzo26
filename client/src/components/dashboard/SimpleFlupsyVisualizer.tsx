@@ -175,7 +175,7 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
         return 'bg-green-200 border-green-400 border-2';
       } else if (animalsPerKg <= 9000) {
         // TP-5000: 6001-9000
-        return 'bg-green-150 border-green-300 border-2';
+        return 'bg-green-100 border-green-300 border-2';
       } else if (animalsPerKg <= 13000) {
         // TP-4500: 9001-13000
         return 'bg-emerald-100 border-emerald-300 border-2';

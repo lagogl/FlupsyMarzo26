@@ -190,7 +190,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
         return 'bg-green-200 border-green-400';
       } else if (animalsPerKg <= 9000) {
         // TP-5000: 6001-9000
-        return 'bg-green-150 border-green-300';
+        return 'bg-green-100 border-green-300';
       } else if (animalsPerKg <= 15000) {
         // TP-4500, TP-4000: 9001-15000
         return 'bg-emerald-100 border-emerald-300';
