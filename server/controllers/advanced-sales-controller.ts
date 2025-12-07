@@ -35,6 +35,7 @@ import {
 import { format } from "date-fns";
 import { apiRequest, getConfigValue } from "./fatture-in-cloud-controller";
 import { OperationsCache } from "../operations-cache-service.js";
+import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
 
 /**
  * Ottiene il prossimo numero DDT disponibile verificando sia il database locale che Fatture in Cloud
@@ -2164,9 +2165,9 @@ export async function cancelSaleOperation(req: Request, res: Response) {
       }
     });
 
-    // 7. Invalida cache operazioni per evitare dati stantii
-    OperationsCache.clear();
-    console.log(`✅ Cache operazioni invalidata`);
+    // 7. Invalida TUTTE le cache (operazioni, cestelli, cicli) per evitare dati stantii
+    invalidateAllCaches();
+    console.log(`✅ Tutte le cache invalidate (operazioni, cestelli, cicli)`);
 
     // 8. Recupera info FLUPSY per la risposta
     const [targetFlupsy] = await db.select()
