@@ -265,11 +265,28 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Render a basket position within a FLUPSY
-  const renderBasketPosition = (flupsy: any, basket: any) => {
+  const renderBasketPosition = (flupsy: any, basket: any, highlightLargeSizes: boolean = false) => {
     if (!basket) return null;
     
     // Get the latest operation for tooltip info
     const latestOperation = getLatestOperation(basket.id);
+    
+    // Check if this basket has a sellable size (TP-3000+)
+    const isSellableSize = latestOperation?.animalsPerKg && latestOperation.animalsPerKg <= 29000;
+    
+    // Additional styling for "Con taglie grandi" mode
+    let highlightClasses = '';
+    let opacityClasses = '';
+    
+    if (highlightLargeSizes) {
+      if (isSellableSize) {
+        // Sellable baskets: golden ring + pulsing animation
+        highlightClasses = 'ring-4 ring-yellow-400 ring-offset-2 shadow-lg animate-pulse';
+      } else {
+        // Non-sellable baskets: faded
+        opacityClasses = 'opacity-40';
+      }
+    }
     
     // Formato della cesta secondo l'immagine di riferimento
     return (
@@ -280,8 +297,16 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               onClick={() => handleBasketClick(basket)}
               className={`border rounded-md p-2 min-w-[140px] ${
                 getBasketColorClass(basket)
-              } cursor-pointer hover:shadow-md transition-shadow`}
+              } ${highlightClasses} ${opacityClasses} cursor-pointer hover:shadow-md transition-all relative`}
             >
+              {/* Star badge for sellable baskets in highlight mode */}
+              {highlightLargeSizes && isSellableSize && (
+                <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 shadow-md">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-800" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                </div>
+              )}
               <div className="text-xs text-center text-gray-500 font-medium">CESTA #{basket.physicalNumber}</div>
               
               {latestOperation && (
@@ -392,7 +417,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Function to render a single FLUPSY
-  const renderFlupsy = (flupsy: any) => {
+  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false) => {
     // Estrai il valore max_positions dal database (accettando varie possibili denominazioni)
     const maxPositionsFromDB = flupsy.max_positions || flupsy.maxPositions || flupsy.maxPosition || flupsy["max-positions"];
     const maxPositions = maxPositionsFromDB || 10; // Fallback se il valore non è presente
@@ -471,7 +496,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste DX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {dxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes) : (
                     <div 
                       key={`empty-dx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -506,7 +531,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste SX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {sxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes) : (
                     <div 
                       key={`empty-sx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -644,7 +669,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasLargeSize(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, true))}
             </TabsContent>
           </Tabs>
         </>
