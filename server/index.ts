@@ -58,11 +58,11 @@ secureLogger.info('Cache middleware: DISABLED - forcing fresh asset download');
 app.use(createSecureApiLogger());
 secureLogger.info('Logging middleware: Secure API logger initialized with PII protection');
 
-(async () => {
+// Background initialization function - runs AFTER server is listening
+async function runBackgroundInitialization() {
   // Test di connessione database con timeout
   console.log("\n===== TEST DI CONNESSIONE DATABASE =====");
   try {
-    // Timeout di 10 secondi per il test del database
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Timeout connessione database (10s)')), 10000)
     );
@@ -70,7 +70,7 @@ secureLogger.info('Logging middleware: Secure API logger initialized with PII pr
     console.log("✅ Connessione database principale verificata con successo");
   } catch (error) {
     console.error("❌ Errore connessione database principale:", error);
-    console.log("⚠️ Continuando con avvio del server...");
+    console.log("⚠️ Continuando comunque...");
   }
   console.log("===== FINE TEST DI CONNESSIONE DATABASE =====\n");
   
@@ -113,7 +113,6 @@ secureLogger.info('Logging middleware: Secure API logger initialized with PII pr
     startNightlyScheduler();
     console.log("✅ Scheduler controllo integrità attivo (esecuzione ore 03:00)");
     
-    // Esegui un controllo iniziale all'avvio (in background)
     setTimeout(() => {
       runIntegrityCheck().then(result => {
         if (result.status === 'issues_found') {
@@ -134,7 +133,9 @@ secureLogger.info('Logging middleware: Secure API logger initialized with PII pr
   } catch (error) {
     console.error("⚠️ Errore durante l'inizializzazione del modulo LCI:", error);
   }
+}
 
+(async () => {
   // Inizializza il servizio di sincronizzazione esterno (temporaneamente disabilitato)
   console.log("🔄 Servizio sincronizzazione esterno temporaneamente disabilitato per debug");
   // setTimeout(async () => {
@@ -295,9 +296,14 @@ secureLogger.info('Logging middleware: Secure API logger initialized with PII pr
 
   // Start the server with proper error handling
   try {
-    // Small delay to ensure all initialization is complete
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Start server IMMEDIATELY for health check to pass
     await startServer(port);
+    
+    // Run heavy initializations in background AFTER server is listening
+    console.log("🚀 Server in ascolto - avvio inizializzazioni in background...");
+    runBackgroundInitialization().catch(err => {
+      console.error("⚠️ Errore durante inizializzazioni in background:", err);
+    });
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
