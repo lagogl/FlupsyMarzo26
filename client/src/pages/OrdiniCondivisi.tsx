@@ -546,25 +546,47 @@ export default function OrdiniCondivisi() {
       );
     }
     if (ordine.fattureInCloudId) {
+      const isRefreshing = refreshingUrlId === ordine.id;
       return (
         <div className="flex items-center gap-1.5">
           <CheckCircle2 className="w-4 h-4 text-green-600" />
           <span className="text-xs font-medium text-blue-600">Sincronizzato</span>
-          {ordine.urlDocumento && (
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              className="h-6 px-1.5 hover:bg-blue-100 flex items-center gap-1 text-green-600"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(ordine.urlDocumento!, '_blank', 'noopener,noreferrer');
-              }}
-              data-testid={`link-fic-${ordine.id}`}
-            >
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-6 px-1.5 hover:bg-blue-100 flex items-center gap-1 text-green-600"
+            disabled={isRefreshing}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (ordine.urlDocumento) {
+                window.open(ordine.urlDocumento, '_blank', 'noopener,noreferrer');
+              } else {
+                refreshDocumentoUrl.mutate(ordine.id);
+              }
+            }}
+            data-testid={`link-fic-${ordine.id}`}
+          >
+            {isRefreshing ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
               <FileText className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium">#{ordine.numero}</span>
-            </Button>
-          )}
+            )}
+            <span className="text-xs font-medium">#{ordine.numero}</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 hover:bg-amber-100 text-amber-600"
+            title="Rigenera link documento"
+            disabled={isRefreshing}
+            onClick={(e) => {
+              e.stopPropagation();
+              refreshDocumentoUrl.mutate(ordine.id);
+            }}
+            data-testid={`refresh-link-${ordine.id}`}
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
       );
     }
@@ -651,6 +673,51 @@ export default function OrdiniCondivisi() {
       toast({
         title: '❌ Errore sincronizzazione',
         description: error.message || 'Impossibile sincronizzare con Fatture in Cloud',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const [refreshingUrlId, setRefreshingUrlId] = useState<number | null>(null);
+  
+  const refreshDocumentoUrl = useMutation({
+    mutationFn: async (ordineId: number) => {
+      setRefreshingUrlId(ordineId);
+      const response = await fetch(`/api/fatture-in-cloud/orders/${ordineId}/refresh-url`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Errore nel refresh del link');
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      setRefreshingUrlId(null);
+      if (data.success && data.urlDocumento) {
+        queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi'] });
+        window.open(data.urlDocumento, '_blank', 'noopener,noreferrer');
+        toast({
+          title: '✅ Link rigenerato',
+          description: 'Il link al documento è stato aggiornato',
+        });
+      } else if (data.fallbackUrl) {
+        window.open(data.fallbackUrl, '_blank', 'noopener,noreferrer');
+        toast({
+          title: '⚠️ Link non disponibile',
+          description: data.message || 'Reindirizzamento a Fatture in Cloud',
+        });
+      } else {
+        toast({
+          title: '⚠️ Link non disponibile',
+          description: data.message || 'Accedi direttamente a Fatture in Cloud',
+          variant: 'destructive',
+        });
+      }
+    },
+    onError: (error: any) => {
+      setRefreshingUrlId(null);
+      toast({
+        title: '❌ Errore',
+        description: error.message || 'Impossibile rigenerare il link',
         variant: 'destructive',
       });
     },

@@ -962,6 +962,116 @@ router.get('/orders', async (req: Request, res: Response) => {
   }
 });
 
+// Rigenerare URL documento da Fatture in Cloud
+// Questo endpoint viene usato quando il link originale è scaduto
+router.get('/orders/:id/refresh-url', async (req: Request, res: Response) => {
+  try {
+    const ordineId = parseInt(req.params.id);
+    
+    // Verifica che il DB esterno sia disponibile
+    if (!isDbEsternoAvailable() || !dbEsterno) {
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Database esterno non disponibile' 
+      });
+    }
+    
+    // Recupera ordine dal DB esterno
+    const [ordine] = await dbEsterno
+      .select()
+      .from(ordiniCondivisi)
+      .where(eq(ordiniCondivisi.id, ordineId));
+      
+    if (!ordine) {
+      return res.status(404).json({ success: false, message: 'Ordine non trovato' });
+    }
+    
+    if (!ordine.fattureInCloudId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Ordine non sincronizzato con Fatture in Cloud' 
+      });
+    }
+    
+    await refreshTokenIfNeeded();
+    
+    // Chiama API Fatture in Cloud per ottenere dettagli documento con URL
+    try {
+      const response = await withRetry(() => 
+        apiRequest('GET', `/issued_documents/${ordine.fattureInCloudId}?fieldset=detailed`)
+      );
+      
+      const documento = response.data.data;
+      
+      // Cerca URL del documento nelle varie proprietà possibili
+      let urlDocumento = null;
+      
+      // 1. Prova attachment_url (PDF allegato)
+      if (documento.attachment_url) {
+        urlDocumento = documento.attachment_url;
+      }
+      // 2. Prova url (link diretto)
+      else if (documento.url) {
+        urlDocumento = documento.url;
+      }
+      // 3. Costruisci URL pubblico se disponibile il permalink token
+      else if (documento.url_token) {
+        urlDocumento = `https://secure.fattureincloud.it/invoices/compute/${documento.url_token}`;
+      }
+      // 4. Prova a richiedere esplicitamente il PDF
+      else {
+        try {
+          const pdfResponse = await withRetry(() =>
+            apiRequest('GET', `/issued_documents/${ordine.fattureInCloudId}/get_pdf_url`)
+          );
+          if (pdfResponse.data?.data?.url) {
+            urlDocumento = pdfResponse.data.data.url;
+          }
+        } catch (pdfError) {
+          console.log('Impossibile ottenere URL PDF diretto');
+        }
+      }
+      
+      if (urlDocumento) {
+        // Aggiorna URL nel database esterno
+        await dbEsterno
+          .update(ordiniCondivisi)
+          .set({ urlDocumento: urlDocumento, updatedAt: new Date() })
+          .where(eq(ordiniCondivisi.id, ordineId));
+        
+        console.log(`✅ URL documento rigenerato per ordine ${ordineId}: ${urlDocumento.substring(0, 50)}...`);
+        
+        res.json({
+          success: true,
+          urlDocumento: urlDocumento,
+          message: 'URL documento rigenerato con successo'
+        });
+      } else {
+        // Nessun URL trovato, costruisci link diretto a Fatture in Cloud
+        const companyId = await getConfigValue('fatture_in_cloud_company_id');
+        const fallbackUrl = companyId 
+          ? `https://secure.fattureincloud.it/issued_documents/${documento.type}s/${ordine.fattureInCloudId}?company_id=${companyId}`
+          : null;
+        
+        res.json({
+          success: false,
+          message: 'URL documento non disponibile da API. Accedi direttamente a Fatture in Cloud.',
+          fallbackUrl: fallbackUrl
+        });
+      }
+    } catch (apiError: any) {
+      console.error('Errore API Fatture in Cloud:', apiError.message);
+      res.status(500).json({
+        success: false,
+        message: `Impossibile rigenerare URL: ${apiError.message}`
+      });
+    }
+  } catch (error: any) {
+    console.error('Errore rigenerazione URL documento:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Ottenere dettagli ordine con righe dal database esterno
 router.get('/orders/:id', async (req: Request, res: Response) => {
   try {
