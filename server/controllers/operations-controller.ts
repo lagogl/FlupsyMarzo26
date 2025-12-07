@@ -7,7 +7,7 @@
 
 import { db } from '../db.js';
 import { operations, baskets, flupsys, lots, sizes, basketLotComposition } from '../../shared/schema.js';
-import { sql, eq, and, or, between, desc, inArray } from 'drizzle-orm';
+import { sql, eq, and, or, between, desc, inArray, isNull } from 'drizzle-orm';
 import { OperationsCache } from '../operations-cache-service.js';
 
 // Nomi delle colonne principali per la query ottimizzata - INCLUDE LOT DATA
@@ -177,6 +177,9 @@ export async function getOperationsOptimized(options: OperationsOptions = {}) {
         return { operations: [], totalCount: 0 };
       }
     }
+    
+    // Escludi operazioni cancellate (cancelledAt non null)
+    whereConditions.push(isNull(operations.cancelledAt));
     
     // Costruisci la condizione WHERE completa
     const whereClause = whereConditions.length > 0 
