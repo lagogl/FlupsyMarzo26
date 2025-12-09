@@ -1051,7 +1051,7 @@ export async function generateDDT(req: Request, res: Response) {
           .map((item: any) => `${item.basket!.physicalNumber}`)
           .join(', ');
 
-        const descrizione = `Sacco #${bagData.bagNumber} - Cestelli: ${basketNames || 'N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${bagData.totalWeight} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
+        const descrizione = `Sacco #${bagData.bagNumber} - Cestelli: ${basketNames || 'N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${(bagData.totalWeight / 1000).toFixed(2)} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
 
         const [riga] = await db.insert(ddtRighe).values({
           ddtId: ddtCreato.id,
@@ -1368,7 +1368,7 @@ export async function generatePDFReport(req: Request, res: Response) {
       xPos += col3Width;
       doc.text(bagData.animalCount.toLocaleString('it-IT'), xPos, currentY, { width: col4Width, continued: false });
       xPos += col4Width;
-      doc.text(bagData.totalWeight.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), xPos, currentY, { width: col5Width, continued: false });
+      doc.text((bagData.totalWeight / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), xPos, currentY, { width: col5Width, continued: false });
       xPos += col5Width;
       doc.text(Math.round(bagData.animalsPerKg).toLocaleString('it-IT'), xPos, currentY, { width: col6Width, continued: false });
       xPos += col6Width;
@@ -1393,7 +1393,7 @@ export async function generatePDFReport(req: Request, res: Response) {
     currentY += 18;
     doc.text(`Animali totali: ${(saleData.totalAnimals || 0).toLocaleString('it-IT')}`, margin + 10, currentY);
     currentY += 18;
-    doc.text(`Peso totale: ${(saleData.totalWeight || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`, margin + 10, currentY);
+    doc.text(`Peso totale: ${((saleData.totalWeight || 0) / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`, margin + 10, currentY);
     
     if (saleData.notes) {
       currentY += 40;
@@ -1649,7 +1649,7 @@ export async function generateDDTPDF(req: Request, res: Response) {
     doc.fontSize(10);
     doc.text(`Colli: ${ddtData.totaleColli || 0}`, margin, currentY);
     currentY += 15;
-    doc.text(`Peso totale: ${parseFloat(ddtData.pesoTotale || '0').toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`, margin, currentY);
+    doc.text(`Peso totale: ${(parseFloat(ddtData.pesoTotale || '0') / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`, margin, currentY);
     currentY += 15;
 
     if (ddtData.note) {
