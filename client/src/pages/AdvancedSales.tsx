@@ -158,7 +158,7 @@ export default function AdvancedSales() {
           sizeCode: op.sizeCode,
           sizeName: op.sizeName,
           totalAnimals: op.animalCount,
-          totalWeightKg: op.totalWeight,
+          totalWeightKg: op.totalWeight / 1000,
           animalsPerKg: op.animalsPerKg
         };
       });
@@ -250,7 +250,7 @@ export default function AdvancedSales() {
                 sizeCode: "", // Non disponibile in questo endpoint
                 sizeName: "",
                 totalAnimals: op.originalAnimals,
-                totalWeightKg: op.originalWeight,
+                totalWeightKg: op.originalWeight / 1000,
                 animalsPerKg: op.originalAnimalsPerKg
               };
             });
