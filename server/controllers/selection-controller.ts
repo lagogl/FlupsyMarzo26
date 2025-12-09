@@ -1994,7 +1994,7 @@ export async function generatePDFReport(req: Request, res: Response) {
                     <td>${b.cycleCode || '#' + b.cycleId}</td>
                     <td>${b.flupsyName || '-'}</td>
                     <td class="text-right">${(b.animalCount || 0).toLocaleString('it-IT')}</td>
-                    <td class="text-right">${(b.totalWeight || 0).toFixed(2)}</td>
+                    <td class="text-right">${((b.totalWeight || 0) / 1000).toFixed(2)}</td>
                     <td class="text-right">${(b.animalsPerKg || 0).toLocaleString('it-IT')}</td>
                     <td class="text-center">${b.dismissed ? 'Sì' : 'No'}</td>
                 </tr>
@@ -2027,7 +2027,7 @@ export async function generatePDFReport(req: Request, res: Response) {
                     <td class="${categoryClass}">${category}</td>
                     <td>${b.flupsyName || '-'}</td>
                     <td class="text-right">${(b.animalCount || 0).toLocaleString('it-IT')}</td>
-                    <td class="text-right">${(b.totalWeight || 0).toFixed(2)}</td>
+                    <td class="text-right">${((b.totalWeight || 0) / 1000).toFixed(2)}</td>
                     <td class="text-right">${(b.animalsPerKg || 0).toLocaleString('it-IT')}</td>
                     <td>${b.position || '-'}</td>
                 </tr>
