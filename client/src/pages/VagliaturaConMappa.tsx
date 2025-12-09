@@ -2372,6 +2372,9 @@ export default function VagliaturaConMappa() {
               }
               
               // Crea un nuovo cestello destinazione con i dati inseriti
+              // CRITICAL FIX: Converti totalWeight da kg a grammi (il database si aspetta grammi)
+              const totalWeightInGrams = Math.round(measurementData.totalWeight * 1000);
+              
               const newDestinationBasket: DestinationBasket = {
                 basketId: measurementData.basketId,
                 physicalNumber: measurementData.physicalNumber,
@@ -2382,7 +2385,7 @@ export default function VagliaturaConMappa() {
                 deadCount: measurementData.deadCount,
                 sampleWeight: measurementData.sampleWeight,
                 sampleCount: measurementData.sampleCount,
-                totalWeight: measurementData.totalWeight,
+                totalWeight: totalWeightInGrams,
                 animalsPerKg: finalAnimalsPerKg,
                 saleDate: null,
                 saleClient: null,
@@ -2663,6 +2666,9 @@ export default function VagliaturaConMappa() {
               const existingIndex = destinationBaskets.findIndex(db => db.basketId === directSaleData.selectedBasketId);
               
               // Crea un nuovo cestello destinazione di tipo vendita con i dati inseriti
+              // CRITICAL FIX: Converti totalWeight da kg a grammi (il database si aspetta grammi)
+              const totalWeightInGrams = Math.round(directSaleData.totalWeight * 1000);
+              
               const updatedDestinationBasket: DestinationBasket = {
                 basketId: selectedBasket.id,
                 physicalNumber: selectedBasket.physicalNumber,
@@ -2674,7 +2680,7 @@ export default function VagliaturaConMappa() {
                 deadCount: 0,
                 sampleWeight: measurementData.sampleWeight,
                 sampleCount: measurementData.sampleCount,
-                totalWeight: directSaleData.totalWeight,
+                totalWeight: totalWeightInGrams,
                 animalsPerKg: directSaleData.animalsPerKg,
                 saleDate: directSaleData.date,
                 saleClient: directSaleData.client,
@@ -2718,6 +2724,9 @@ export default function VagliaturaConMappa() {
         onClose={() => setIsCalculatorOpen(false)}
         onConfirm={(data) => {
           // Crea un nuovo cestello destinazione con i dati calcolati
+          // CRITICAL FIX: Converti totalWeight da kg a grammi (il database si aspetta grammi)
+          const totalWeightInGrams = Math.round(data.totalWeight * 1000);
+          
           const newDestinationBasket: DestinationBasket = {
             basketId: measurementData.basketId,
             physicalNumber: measurementData.physicalNumber,
@@ -2729,7 +2738,7 @@ export default function VagliaturaConMappa() {
             deadCount: data.deadCount,
             sampleWeight: data.sampleWeight,
             sampleCount: data.sampleCount,
-            totalWeight: data.totalWeight,
+            totalWeight: totalWeightInGrams,
             animalsPerKg: data.animalsPerKg,
             saleDate: null,
             saleClient: null,
