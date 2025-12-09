@@ -390,13 +390,21 @@ class OperationsLifecycleService {
 
     console.log(`🔄 [LIFECYCLE] setBasketCycleState - basketId=${basketId}, cycleId=${currentCycleId}, code=${cycleCode}, state=${state}`);
 
+    // FIX: Rimuovi dal gruppo quando il cestello diventa available
+    const updateData: any = {
+      currentCycleId,
+      cycleCode,
+      state,
+      nfcData: currentCycleId === null ? null : undefined // Reset NFC solo se si libera il cestello
+    };
+    
+    // Quando il cestello diventa available, rimuovilo dal gruppo
+    if (state === 'available') {
+      updateData.groupId = null;
+    }
+
     await db.update(baskets)
-      .set({
-        currentCycleId,
-        cycleCode,
-        state,
-        nfcData: currentCycleId === null ? null : undefined // Reset NFC solo se si libera il cestello
-      })
+      .set(updateData)
       .where(eq(baskets.id, basketId));
 
     console.log(`✅ [LIFECYCLE] Stato cestello ${basketId} aggiornato: ${state}, cycleId=${currentCycleId}`);

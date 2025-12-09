@@ -1038,11 +1038,13 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             .where(eq(cycles.id, basketInfo[0].currentCycleId));
 
           // 3. LIBERA IL CESTELLO (disponibile per riutilizzo) - AGGIORNA TUTTI I CAMPI PER CONSISTENZA
+          // FIX: Rimuovi anche dal gruppo quando il ciclo si chiude
           await tx.update(baskets)
             .set({ 
               state: 'available',
               currentCycleId: null,
-              cycleCode: null
+              cycleCode: null,
+              groupId: null
             })
             .where(eq(baskets.id, sourceBasket.basketId));
 
@@ -1277,10 +1279,12 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           // Se il cestello venduto aveva una posizione specificata, la mantiene
           // Altrimenti, lascia NULL per evitare conflitti
           // IMPORTANTE: aggiorna tutti e tre i campi per consistenza (state, currentCycleId, cycleCode)
+          // FIX: Rimuovi anche dal gruppo quando venduto
           let updateData: any = { 
             state: 'available',
             currentCycleId: null,
-            cycleCode: null
+            cycleCode: null,
+            groupId: null
           };
 
           // Se c'è una posizione specificata per il cestello venduto, usala

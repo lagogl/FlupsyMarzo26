@@ -320,12 +320,14 @@ class SelectionRollbackService {
       const sourceBasketIds = new Set(sourceBaskets.map(sb => sb.basketId));
       for (const db_basket of destinationBaskets) {
         if (db_basket.basketId && !sourceBasketIds.has(db_basket.basketId)) {
+          // FIX: Rimuovi anche dal gruppo quando il cestello diventa available
           await db
             .update(baskets)
             .set({ 
               state: 'available', 
               currentCycleId: null, 
-              cycleCode: null 
+              cycleCode: null,
+              groupId: null
             })
             .where(eq(baskets.id, db_basket.basketId));
           
