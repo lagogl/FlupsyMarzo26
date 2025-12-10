@@ -656,7 +656,8 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
           syncStatus: 'in_sync' as const, // Stato intermedio
           lastSyncAt: new Date(),
           cancellato: false, // Marca come attivo (soft delete)
-          // quantitaTotale e tagliaRichiesta verranno aggiornati dopo aver inserito le righe
+          // quantita e quantitaTotale e tagliaRichiesta verranno aggiornati dopo aver inserito le righe
+          quantita: 0, // Campo obbligatorio per DB esterno
           quantitaTotale: 0,
           tagliaRichiesta: ''
         };
@@ -793,6 +794,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
             await dbEsterno
               .update(ordiniCondivisi)
               .set({
+                quantita: Math.round(quantitaTotale), // Campo obbligatorio DB esterno
                 quantitaTotale: Math.round(quantitaTotale),
                 tagliaRichiesta,
                 note: oggetto ? oggetto : null, // Importa OGGETTO da FIC (subject o visible_subject)
@@ -840,7 +842,8 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
             .update(ordiniCondivisi)
             .set({ 
               syncStatus: 'errore',
-              quantitaTotale: 0, // Reset per evitare dati inconsistenti
+              quantita: 0, // Reset per evitare dati inconsistenti
+              quantitaTotale: 0,
               tagliaRichiesta: '',
               updatedAt: new Date() 
             })

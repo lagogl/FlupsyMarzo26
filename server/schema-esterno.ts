@@ -13,8 +13,9 @@ export const ordiniCondivisi = pgTable("ordini", {
   data: date("data").notNull(),
   clienteId: integer("cliente_id").notNull(),
   clienteNome: text("cliente_nome"),
-  stato: varchar("stato", { length: 50 }), // "Aperto" | "In Lavorazione" | "Parziale" | "Completato" | "Annullato"
-  quantitaTotale: integer("quantita_totale").notNull().default(0), // Totale animali ordinati
+  stato: text("stato").notNull().default('Aperto'), // "Aperto" | "In Lavorazione" | "Parziale" | "Completato" | "Annullato"
+  quantita: integer("quantita").notNull().default(0), // Campo obbligatorio per DB esterno
+  quantitaTotale: integer("quantita_totale").default(0), // Totale animali ordinati (opzionale)
   tagliaRichiesta: text("taglia_richiesta").notNull().default(''),
   
   // Date consegna (range)
