@@ -521,9 +521,12 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
       progress: 0 
     });
     
+    const currentYear = new Date().getFullYear();
+    console.log(`📅 Recupero ordini per anno ${currentYear}`);
+    
     while (hasMorePages) {
       const response = await withRetry(() => 
-        apiRequest('GET', `/issued_documents?type=order&page=${currentPage}&per_page=${perPage}`)
+        apiRequest('GET', `/issued_documents?type=order&year=${currentYear}&page=${currentPage}&per_page=${perPage}`)
       );
       
       const pageData = response.data.data || [];
