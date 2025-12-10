@@ -576,17 +576,47 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
       // Traccia ID FIC trovato (per soft delete)
       idsFICTrovati.push(ordineFIC.id);
       
-      // Recupera cliente locale (per clienteId)
+      // Recupera cliente locale (per clienteId) - se non esiste, crealo automaticamente
       let clienteLocale = null;
       if (ordineFIC.entity?.id) {
         const clientiTrovati = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, ordineFIC.entity.id));
         if (clientiTrovati.length > 0) {
           clienteLocale = clientiTrovati[0];
+        } else {
+          // Cliente non trovato - crealo automaticamente da FIC
+          console.log(`🔄 Cliente FIC ${ordineFIC.entity.id} non trovato, creazione automatica...`);
+          try {
+            const [nuovoCliente] = await db.insert(clienti).values({
+              denominazione: ordineFIC.entity.name || 'Cliente sconosciuto',
+              indirizzo: 'N/A',
+              comune: 'N/A',
+              cap: 'N/A',
+              provincia: 'N/A',
+              paese: 'Italia',
+              email: 'N/A',
+              telefono: 'N/A',
+              piva: 'N/A',
+              codiceFiscale: 'N/A',
+              fattureInCloudId: ordineFIC.entity.id,
+              attivo: true
+            }).returning();
+            clienteLocale = nuovoCliente;
+            console.log(`✅ Cliente creato automaticamente: ${nuovoCliente.denominazione} (ID: ${nuovoCliente.id})`);
+          } catch (errCliente: any) {
+            console.error(`⚠️ Errore creazione cliente automatico: ${errCliente.message}`);
+          }
         }
       }
       
       // === SYNC DB ESTERNO (unica destinazione) ===
       let ordineIdEsterno: number | null = null;
+      
+      // Verifica che abbiamo un cliente valido (richiesto da FK)
+      if (!clienteLocale?.id) {
+        console.warn(`⚠️ Ordine ${ordineFIC.id} (${ordineFIC.number}) saltato: cliente non trovato/creabile (FIC entity: ${ordineFIC.entity?.id || 'nessuno'})`);
+        ordiniFalliti.push({ id: ordineFIC.id, error: `Cliente FIC ${ordineFIC.entity?.id || 'N/A'} non trovato` });
+        continue;
+      }
       
       try {
         // Verifica nuovamente disponibilità DB esterno ad ogni iterazione
@@ -614,7 +644,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         const datiOrdineEsterno = {
           numero: ordineFIC.number || null,
           data: ordineFIC.date || new Date().toISOString().split('T')[0],
-          clienteId: clienteLocale?.id || 0,
+          clienteId: clienteLocale.id, // Garantito valido dal check precedente
           clienteNome: ordineFIC.entity?.name || 'Cliente non trovato',
           stato: statoNormalizzato,
           totale: ordineFIC.amount_net?.toString() || '0',
