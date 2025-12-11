@@ -414,10 +414,13 @@ export default function BasketSelection() {
       // Filtra le operazioni per questa cesta
       const basketOperations = operations.filter(op => op.basketId === basket.id);
       
-      // Ordina le operazioni per data (la più recente prima)
-      const sortedOperations = [...basketOperations].sort((a, b) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+      // Ordina le operazioni per data (la più recente prima), con ordinamento secondario per ID
+      // L'ID più alto indica l'operazione inserita per ultima (es. prima-attivazione dopo chiusura-ciclo-vagliatura)
+      const sortedOperations = [...basketOperations].sort((a, b) => {
+        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        return b.id - a.id; // Ordinamento secondario per ID (più recente = ID più alto)
+      });
       
       // Ultima operazione
       const lastOperation = sortedOperations.length > 0 ? sortedOperations[0] : null;
