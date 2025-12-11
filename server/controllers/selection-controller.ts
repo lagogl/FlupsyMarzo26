@@ -1330,6 +1330,7 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             const [destBasketInfo] = await tx.select({ physicalNumber: baskets.physicalNumber }).from(baskets).where(eq(baskets.id, destBasket.basketId));
             const cycleCode = `${destBasketInfo?.physicalNumber || destBasket.basketId}-${destBasket.flupsyId || 1}-${yearMonth}`;
             
+            // FIX: Dissocia dal gruppo anche le ceste destinazione posizionate
             await tx.update(baskets)
               .set({
                 flupsyId: destBasket.flupsyId || 1,
@@ -1337,7 +1338,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
                 position: position,
                 state: 'active',
                 currentCycleId: newCycle.id,
-                cycleCode: cycleCode
+                cycleCode: cycleCode,
+                groupId: null // Dissocia dal gruppo dopo vagliatura
               })
               .where(eq(baskets.id, destBasket.basketId));
           }
