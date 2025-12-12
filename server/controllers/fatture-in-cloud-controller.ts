@@ -645,7 +645,7 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
           numero: ordineFIC.number || null,
           data: ordineFIC.date || new Date().toISOString().split('T')[0],
           clienteId: clienteLocale.id, // Garantito valido dal check precedente
-          clienteNome: ordineFIC.entity?.name || 'Cliente non trovato',
+          clienteNome: clienteLocale.denominazione || ordineFIC.entity?.name || 'Cliente non trovato', // Usa nome dal DB locale per consistenza
           stato: statoNormalizzato,
           totale: ordineFIC.amount_net?.toString() || '0',
           valuta: ordineFIC.currency?.id || 'EUR',

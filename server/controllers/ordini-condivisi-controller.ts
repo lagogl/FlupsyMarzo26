@@ -416,6 +416,44 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 /**
+ * PATCH /api/ordini-condivisi/:id
+ * Aggiorna dati ordine (clienteNome, stato, note, ecc.)
+ */
+router.patch('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { clienteNome, clienteId, stato, note } = req.body;
+    
+    if (!dbEsterno) {
+      return res.status(503).json({ error: 'Database esterno non disponibile' });
+    }
+    
+    // Prepara campi da aggiornare
+    const updateData: any = { updatedAt: sql`NOW()` };
+    if (clienteNome !== undefined) updateData.clienteNome = clienteNome;
+    if (clienteId !== undefined) updateData.clienteId = clienteId;
+    if (stato !== undefined) updateData.stato = stato;
+    if (note !== undefined) updateData.note = note;
+    
+    await dbEsterno
+      .update(ordiniCondivisi)
+      .set(updateData)
+      .where(eq(ordiniCondivisi.id, parseInt(id)));
+    
+    res.json({
+      success: true,
+      message: 'Ordine aggiornato'
+    });
+  } catch (error: any) {
+    console.error('Errore aggiornamento ordine:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * PATCH /api/ordini-condivisi/:id/delivery-range
  * Aggiorna range di consegna ordine
  */
