@@ -725,6 +725,12 @@ export default function BasketSelection() {
           </div>
         );
       },
+      sortable: true,
+      sortFn: (a, b) => {
+        const dateA = a.lastOperation?.date ? new Date(a.lastOperation.date).getTime() : 0;
+        const dateB = b.lastOperation?.date ? new Date(b.lastOperation.date).getTime() : 0;
+        return dateA - dateB;
+      },
     },
     {
       id: 'growth',
