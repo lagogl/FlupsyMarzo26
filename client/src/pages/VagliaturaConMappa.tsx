@@ -314,11 +314,19 @@ export default function VagliaturaConMappa() {
         description: "La vagliatura è stata completata con successo",
         variant: "default"
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/selections'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/operations'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/flupsys'] });
+      // Invalida TUTTE le query che iniziano con questi prefissi per aggiornare tutti i moduli
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          if (typeof key !== 'string') return false;
+          return key.startsWith('/api/baskets') || 
+                 key.startsWith('/api/operations') || 
+                 key.startsWith('/api/selections') ||
+                 key.startsWith('/api/cycles') ||
+                 key.startsWith('/api/flupsys') ||
+                 key.startsWith('/api/advanced-selection');
+        }
+      });
       navigate('/');
     },
     onError: (error: any) => {
