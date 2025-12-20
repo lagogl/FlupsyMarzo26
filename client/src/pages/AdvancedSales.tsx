@@ -115,6 +115,19 @@ export default function AdvancedSales() {
     return remaining;
   }, [baseSupplyByBasket, allocatedByBasket]);
 
+  // Calcola totale globale degli animali disponibili (somma di tutti i cestelli)
+  const totalGlobalAvailable = useMemo(() => {
+    return Object.values(baseSupplyByBasket).reduce((sum, supply) => sum + supply.totalAnimals, 0);
+  }, [baseSupplyByBasket]);
+
+  // Calcola totale globale degli animali già allocati nei sacchi
+  const totalGlobalAllocated = useMemo(() => {
+    return bagConfigs.reduce((sum, bag) => sum + bag.animalCount, 0);
+  }, [bagConfigs]);
+
+  // Calcola animali rimanenti globalmente
+  const totalGlobalRemaining = totalGlobalAvailable - totalGlobalAllocated;
+
   // Query per operazioni di vendita disponibili
   const { data: availableOperations, isLoading: loadingOperations } = useQuery({
     queryKey: ['/api/advanced-sales/operations'],
@@ -342,12 +355,11 @@ export default function AdvancedSales() {
     const supply = baseSupplyByBasket[basketId];
     if (!supply) return;
 
-    // Validazione: verifica che ci siano abbastanza animali disponibili
-    const remaining = remainingByBasket[basketId] || 0;
-    if (animalCount > remaining) {
+    // Validazione globale: verifica che ci siano abbastanza animali disponibili nel totale dei cestelli selezionati
+    if (animalCount > totalGlobalRemaining) {
       toast({
         title: "Errore",
-        description: `Solo ${remaining.toLocaleString()} animali disponibili nel cestello #${supply.basketPhysicalNumber}`,
+        description: `Solo ${totalGlobalRemaining.toLocaleString()} animali disponibili in totale dai cestelli selezionati`,
         variant: "destructive"
       });
       return;
@@ -387,13 +399,12 @@ export default function AdvancedSales() {
   // Clona un sacco
   const cloneBag = (bagIndex: number) => {
     const bag = bagConfigs[bagIndex];
-    const basketId = bag.allocations[0].sourceBasketId;
-    const remaining = remainingByBasket[basketId] || 0;
     
-    if (bag.animalCount > remaining) {
+    // Validazione globale: verifica che ci siano abbastanza animali disponibili nel totale
+    if (bag.animalCount > totalGlobalRemaining) {
       toast({
         title: "Errore",
-        description: `Solo ${remaining.toLocaleString()} animali disponibili per clonare questo sacco`,
+        description: `Solo ${totalGlobalRemaining.toLocaleString()} animali disponibili in totale per clonare questo sacco`,
         variant: "destructive"
       });
       return;
