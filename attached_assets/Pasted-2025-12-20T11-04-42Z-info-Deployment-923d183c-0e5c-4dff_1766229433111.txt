@@ -1,0 +1,49 @@
+2025-12-20T11:04:42Z info: Deployment: 923d183c-0e5c-4dff-b4a8-d508c81a9a4e
+2025-12-20T11:04:42Z info: Connecting to builder
+2025-12-20T11:04:43Z info: Builder connected
+2025-12-20T11:04:45Z info: Installing packages
+2025-12-20T11:04:46Z info: Starting Build
+
+> rest-express@1.0.0 build
+> vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+
+
+vite v5.4.20 building for production...
+
+transforming...
+
+✓ 3710 modules transformed.
+
+[plugin:vite:reporter] [plugin vite:reporter] 
+(!) /home/runner/workspace/client/src/lib/utils.ts is dynamically imported by /home/runner/workspace/client/src/components/OperationForm.tsx, /home/runner/workspace/client/src/components/OperationFormCompact.tsx, /home/runner/workspace/client/src/pages/SpreadsheetOperations.tsx, /home/runner/workspace/client/src/pages/SpreadsheetOperations.tsx but also statically imported by /home/runner/workspace/client/src/FlupsyVisualizer.tsx, /home/runner/workspace/client/src/components/GrowthPerformanceIndicator.tsx, /home/runner/workspace/client/src/components/GrowthPredictionChart.tsx, /home/runner/workspace/client/src/components/MultiSizeGrowthComparisonChart.tsx, /home/runner/workspace/client/src/components/SizeGrowthTimeline.tsx, /home/runner/workspace/client/src/components/WebSocketIndicator.tsx, /home/runner/workspace/client/src/components/dashboard/NewFlupsyVisualizer.tsx, /home/runner/workspace/client/src/components/inventory/GrowthComparison.tsx, /home/runner/workspace/client/src/components/inventory/SalesTimeline.tsx, /home/runner/workspace/client/src/components/ui/accordion.tsx, /home/runner/workspace/client/src/components/ui/alert-dialog.tsx, /home/runner/workspace/client/src/components/ui/alert.tsx, /home/runner/workspace/client/src/components/ui/badge.tsx, /home/runner/workspace/client/src/components/ui/button.tsx, /home/runner/workspace/client/src/components/ui/calendar.tsx, /home/runner/workspace/client/src/components/ui/card.tsx, /home/runner/workspace/client/src/components/ui/checkbox.tsx, /home/runner/workspace/client/src/components/ui/command.tsx, /home/runner/workspace/client/src/components/ui/contextual-tooltip.tsx, /home/runner/workspace/client/src/components/ui/date-picker.tsx, /home/runner/workspace/client/src/components/ui/date-range-picker.tsx, /home/runner/workspace/client/src/components/ui/dialog.tsx, /home/runner/workspace/client/src/components/ui/dropdown-menu.tsx, /home/runner/workspace/client/src/components/ui/form.tsx, /home/runner/workspace/client/src/components/ui/hover-card.tsx, /home/runner/workspace/client/src/components/ui/input.tsx, /home/runner/workspace/client/src/components/ui/label.tsx, /home/runner/workspace/client/src/components/ui/pagination.tsx, /home/runner/workspace/client/src/components/ui/popover.tsx, /home/runner/workspace/client/src/components/ui/progress.tsx, /home/runner/workspace/client/src/components/ui/radio-group.tsx, /home/runner/workspace/client/src/components/ui/scroll-area.tsx, /home/runner/workspace/client/src/components/ui/select.tsx, /home/runner/workspace/client/src/components/ui/separator.tsx, /home/runner/workspace/client/src/components/ui/sheet.tsx, /home/runner/workspace/client/src/components/ui/skeleton.tsx, /home/runner/workspace/client/src/components/ui/slider.tsx, /home/runner/workspace/client/src/components/ui/spinner.tsx, /home/runner/workspace/client/src/components/ui/switch.tsx, /home/runner/workspace/client/src/components/ui/table.tsx, /home/runner/workspace/client/src/components/ui/tabs.tsx, /home/runner/workspace/client/src/components/ui/textarea.tsx, /home/runner/workspace/client/src/components/ui/toast.tsx, /home/runner/workspace/client/src/components/ui/toggle-group.tsx, /home/runner/workspace/client/src/components/ui/toggle.tsx, /home/runner/workspace/client/src/components/ui/tooltip.tsx, /home/runner/workspace/client/src/components/vagliatura-mappa/FlupsyMapVisualizer.tsx, /home/runner/workspace/client/src/pages/CycleDetail.tsx, /home/runner/workspace/client/src/pages/DiarioDiBordo.tsx, /home/runner/workspace/client/src/pages/FlupsyComparison.tsx, /home/runner/workspace/client/src/pages/FlupsyComparisonEnhanced.tsx, /home/runner/workspace/client/src/pages/FlupsyFullView.tsx, /home/runner/workspace/client/src/pages/GrowJourney.tsx, /home/runner/workspace/client/src/pages/Inventory.tsx, /home/runner/workspace/client/src/pages/OperationDetail.tsx, /home/runner/workspace/client/src/pages/Operations.tsx, dynamic import will not move module into another chunk.
+
+
+rendering chunks...
+
+computing gzip size...
+
+../dist/public/index.html                     4.81 kB │ gzip:   1.93 kB
+
+✓ built in 19.37s
+
+
+  dist/index.js  1.6mb ⚠️
+
+⚡ Done in 1203ms
+
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.7.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+npm notice To update run: npm install -g npm@11.7.0
+npm notice
+
+2025-12-20T11:05:16Z info: Pushing pid1 binary layer...
+2025-12-20T11:05:26Z info: Pushing Repl layer...
+2025-12-20T11:05:26Z info: Pushing hosting layer...
+2025-12-20T11:05:26Z warning: Detected broken symlink! The path "/tmp/pulse-PKdhtXMmr18n" does not exist.
+2025-12-20T11:05:26Z info: Nix layers for this Repl are uncached.
+2025-12-20T11:05:26Z info: Pushing nix-0 layer...
+2025-12-20T11:05:27Z info: Created hosting layer
+2025-12-20T11:05:28Z info: Created pid1 binary layer
+2025-12-20T11:10:10Z info: Created Repl layer
+Deployment timed out. Check the Logs tab for more details. - 2025-12-20T11:13:42.449Z
