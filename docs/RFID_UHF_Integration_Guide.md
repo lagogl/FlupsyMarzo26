@@ -172,6 +172,210 @@ FLUPSY (1) ──────── (N) BASKETS
 
 ---
 
+## Gestione Cicli Produttivi (CYCLES)
+
+### Concetto di Ciclo
+
+Un **ciclo produttivo** rappresenta il periodo di vita degli animali in un cestello, dalla prima attivazione fino alla vendita o cessazione. È l'entità centrale per tracciare tutte le operazioni.
+
+### Stati del Ciclo
+
+| Stato | Descrizione |
+|-------|-------------|
+| `active` | Ciclo in corso, animali presenti nel cestello |
+| `closed` | Ciclo terminato (vendita, cessazione, vagliatura) |
+
+### Relazione Ciclo ↔ Cestello
+
+```
+BASKET (cestello fisico)
+  │
+  ├── state: 'available'  →  current_cycle_id: NULL (nessun ciclo)
+  │
+  └── state: 'active'     →  current_cycle_id: 123 (ciclo attivo)
+                               │
+                               └── CYCLE id=123
+                                     │
+                                     ├── lot_id → LOTTO di provenienza
+                                     ├── start_date → Data inizio
+                                     ├── end_date → NULL (attivo) o data fine
+                                     └── state → 'active' o 'closed'
+```
+
+### INVARIANTE CRITICA
+
+**Il campo `current_cycle_id` del cestello DEVE sempre corrispondere al ciclo attivo.**
+
+Quando il ciclo viene chiuso:
+1. `cycles.state` → `'closed'`
+2. `cycles.end_date` → data di chiusura
+3. `baskets.state` → `'available'`
+4. `baskets.current_cycle_id` → `NULL`
+
+Questa sincronizzazione è **atomica** e gestita dal backend.
+
+### Ciclo di Vita Completo
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           CICLO DI VITA CESTELLO                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   CESTELLO VUOTO                                                            │
+│   state: 'available'                                                        │
+│   current_cycle_id: NULL                                                    │
+│         │                                                                   │
+│         ▼                                                                   │
+│   ┌─────────────────────┐                                                   │
+│   │  PRIMA ATTIVAZIONE  │  ← Operazione type='prima-attivazione'            │
+│   │  (Creazione Ciclo)  │                                                   │
+│   └─────────────────────┘                                                   │
+│         │                                                                   │
+│         ▼                                                                   │
+│   CESTELLO ATTIVO                                                           │
+│   state: 'active'                                                           │
+│   current_cycle_id: 123                                                     │
+│         │                                                                   │
+│         │  ┌──────────────────────────────────────────┐                     │
+│         │  │         OPERAZIONI SUL CICLO             │                     │
+│         │  ├──────────────────────────────────────────┤                     │
+│         │  │  • misura (pesatura)                     │                     │
+│         │  │  • pulizia                               │                     │
+│         │  │  • trattamento                           │                     │
+│         │  │  • vagliatura (può creare nuovi cicli)   │                     │
+│         │  └──────────────────────────────────────────┘                     │
+│         │                                                                   │
+│         ▼                                                                   │
+│   ┌─────────────────────┐                                                   │
+│   │  CHIUSURA CICLO     │  ← Operazione type='vendita' o 'cessazione'       │
+│   └─────────────────────┘                                                   │
+│         │                                                                   │
+│         ▼                                                                   │
+│   CESTELLO VUOTO                                                            │
+│   state: 'available'  (torna disponibile per nuovo ciclo)                   │
+│   current_cycle_id: NULL                                                    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### API Cicli
+
+#### Lista tutti i cicli
+```
+GET /api/cycles?state=active&includeAll=true
+```
+
+**Risposta:**
+```json
+{
+  "cycles": [
+    {
+      "id": 123,
+      "basketId": 86,
+      "lotId": 45,
+      "startDate": "2024-10-15",
+      "endDate": null,
+      "state": "active",
+      "basketPhysicalNumber": 6,
+      "flupsyId": 1,
+      "flupsyName": "FLUPSY 1",
+      "lotSupplier": "Fornitore ABC"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 10,
+    "totalCount": 45,
+    "totalPages": 5
+  }
+}
+```
+
+#### Cicli attivi con dettagli
+```
+GET /api/cycles/active-with-details
+```
+
+#### Singolo ciclo
+```
+GET /api/cycles/:id
+```
+
+#### Cicli di un cestello (storico)
+```
+GET /api/cycles/basket/:basketId
+```
+
+**Risposta:** Array di tutti i cicli (attivi e chiusi) di quel cestello, ordinati per data decrescente.
+
+#### Creazione nuovo ciclo
+```
+POST /api/cycles
+```
+
+**Body:**
+```json
+{
+  "basketId": 86,
+  "lotId": 45,
+  "startDate": "2024-12-20"
+}
+```
+
+**Note:**
+- Il backend imposta automaticamente `state: 'active'`
+- Il backend aggiorna `baskets.current_cycle_id` e `baskets.state`
+- Va creata anche un'operazione di tipo `prima-attivazione`
+
+#### Chiusura ciclo
+```
+POST /api/cycles/:id/close
+```
+
+**Body (opzionale):**
+```json
+{
+  "endDate": "2024-12-20"
+}
+```
+
+**Effetti automatici:**
+1. `cycles.state` → `'closed'`
+2. `cycles.end_date` → data fornita o oggi
+3. `baskets.state` → `'available'`
+4. `baskets.current_cycle_id` → `NULL`
+
+### Storico Operazioni di un Ciclo
+
+```
+GET /api/operations?cycleId=123
+```
+
+Restituisce tutte le operazioni registrate per quel ciclo, ordinate per data.
+
+### Operazioni e loro Effetti sul Ciclo
+
+| Operazione | Effetto sul Ciclo |
+|------------|-------------------|
+| `prima-attivazione` | Crea il ciclo, attiva cestello |
+| `misura` | Registra dati, ciclo rimane attivo |
+| `pulizia` | Registra operazione, ciclo attivo |
+| `vagliatura` | Può chiudere ciclo e creare nuovi cicli nei cestelli destinazione |
+| `vendita` | Chiude il ciclo |
+| `cessazione` | Chiude il ciclo (senza vendita) |
+
+### Best Practice per App RFID
+
+1. **Prima di registrare operazioni**: Verificare sempre che `basket.state === 'active'` e `basket.currentCycleId` non sia NULL
+
+2. **Per nuove attivazioni**: Usare cestelli con `state === 'available'`
+
+3. **Non modificare direttamente**: I campi `current_cycle_id` e `state` del cestello sono gestiti dal backend durante creazione/chiusura ciclo
+
+4. **Storico completo**: Usare `GET /api/cycles/basket/:basketId` per vedere tutti i cicli passati di un cestello
+
+---
+
 ## Gestione Tag RFID/NFC
 
 ### Come Funziona Attualmente
