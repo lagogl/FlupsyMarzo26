@@ -1,0 +1,73 @@
+Ecco un riepilogo per lo sviluppatore esterno che gestisce il database Delta Futuro:
+
+Riepilogo: Cicli di Produzione e Tag RFID UHF
+Struttura Dati (Database Delta Futuro)
+Tabella cycles:
+
+id: chiave primaria
+basket_id: riferimento al cesto associato
+start_date: data inizio ciclo
+end_date: data chiusura ciclo (NULL se attivo)
+state: 'active' | 'closed'
+lot_id: lotto di appartenenza
+Tabella baskets:
+
+id: chiave primaria
+physical_number: numero fisico stampato sul cesto
+flupsy_id: FLUPSY di appartenenza
+row, position: posizione nel FLUPSY
+state: 'active' | 'empty'
+current_cycle_id: ciclo attualmente associato
+rfid_uhf_epc: EPC del tag RFID UHF programmato
+rfid_uhf_programmed_at: timestamp programmazione tag
+nfc_data: tag NFC (sistema precedente)
+Cosa fa l'App Mobile FLUPSY
+L'app mobile non chiude i cicli direttamente. Gestisce:
+
+Visualizzazione cicli attivi (cycles.state = 'active')
+Programmazione tag RFID UHF → scrive rfid_uhf_epc e rfid_uhf_programmed_at nella tabella baskets
+Associazione cesto-ciclo → aggiorna baskets.current_cycle_id e cycles.basket_id
+Quando si Chiude un Ciclo (lato Delta Futuro)
+Quando il sistema Delta Futuro chiude un ciclo, dovrebbe:
+
+-- 1. Aggiornare lo stato del ciclo
+UPDATE cycles 
+SET state = 'closed', end_date = CURRENT_DATE 
+WHERE id = <cycle_id>;
+-- 2. Liberare il cesto (opzionale, dipende dalla logica di business)
+UPDATE baskets 
+SET current_cycle_id = NULL, state = 'empty' 
+WHERE current_cycle_id = <cycle_id>;
+NOTA IMPORTANTE sul Tag RFID UHF:
+
+Il tag RFID UHF rimane associato al cesto fisico (baskets.rfid_uhf_epc)
+NON va cancellato quando si chiude un ciclo
+Il tag identifica il cesto fisico, non il ciclo
+Quando il cesto viene riutilizzato in un nuovo ciclo, il tag rimane valido
+Flusso Completo
+1. NUOVO CICLO
+   └── cycles.state = 'active', basket_id = <basket>
+   └── baskets.current_cycle_id = <cycle>, state = 'active'
+2. PROGRAMMAZIONE TAG (App Mobile)
+   └── baskets.rfid_uhf_epc = 'E200...'
+   └── baskets.rfid_uhf_programmed_at = NOW()
+3. OPERAZIONI PRODUZIONE
+   └── Registrazione pesi, vagliatture, trasferimenti...
+4. CHIUSURA CICLO (Desktop Manager / Delta Futuro)
+   └── cycles.state = 'closed', end_date = TODAY
+   └── baskets.current_cycle_id = NULL, state = 'empty'
+   └── baskets.rfid_uhf_epc → MANTIENE IL VALORE (tag rimane sul cesto)
+5. NUOVO CICLO SULLO STESSO CESTO
+   └── Nuovo record in cycles con basket_id = <stesso basket>
+   └── Il tag RFID UHF è già programmato → non serve riprogrammarlo
+Query Utili
+-- Cicli attivi con info tag RFID
+SELECT c.id as cycle_id, b.physical_number, b.rfid_uhf_epc, 
+       CASE WHEN b.rfid_uhf_epc IS NOT NULL THEN 'Taggato' ELSE 'Da taggare' END as status
+FROM cycles c
+JOIN baskets b ON c.basket_id = b.id
+WHERE c.state = 'active';
+-- Cesti con tag RFID programmato
+SELECT id, physical_number, rfid_uhf_epc, rfid_uhf_programmed_at
+FROM baskets 
+WHERE rfid_uhf_epc IS NOT NULL;
