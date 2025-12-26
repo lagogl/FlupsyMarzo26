@@ -76,6 +76,9 @@ CREATE TABLE baskets (
 | `available` | Cestello vuoto, disponibile per nuovo ciclo |
 | `active` | Cestello con ciclo attivo, contiene animali |
 
+> ⚠️ **ATTENZIONE**: Lo stato corretto per un cestello vuoto è **`'available'`**, NON `'empty'`. 
+> Qualsiasi query che usa `state = 'empty'` non funzionerà.
+
 ### 3. CYCLES (Cicli Produttivi)
 
 ```sql
