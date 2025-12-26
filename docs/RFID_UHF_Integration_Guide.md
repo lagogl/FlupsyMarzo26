@@ -50,15 +50,25 @@ CREATE TABLE baskets (
     state TEXT DEFAULT 'available',        -- 'available' | 'active'
     current_cycle_id INTEGER,              -- FK → cycles.id (NULL se non in ciclo)
     
-    -- CAMPI RFID/NFC
-    nfc_data TEXT,                         -- ID univoco tag (es. "basket-86-1703067234567")
-    nfc_last_programmed_at TIMESTAMP,      -- Data/ora programmazione
+    -- CAMPI NFC (sistema legacy)
+    nfc_data TEXT,                         -- ID univoco tag NFC (es. "basket-86-1703067234567")
+    nfc_last_programmed_at TIMESTAMP,      -- Data/ora programmazione NFC
+    
+    -- CAMPI RFID UHF (sistema nuovo)
+    rfid_uhf_epc TEXT,                     -- EPC del tag RFID UHF programmato
+    rfid_uhf_programmed_at TIMESTAMP,      -- Data/ora programmazione tag RFID UHF
     
     row TEXT NOT NULL,                     -- Fila: 'DX' | 'SX' | 'C'
     position INTEGER NOT NULL,             -- Posizione nella fila (1, 2, 3...)
     group_id INTEGER                       -- FK → basket_groups.id (opzionale)
 );
 ```
+
+**NOTA IMPORTANTE sul Tag RFID UHF:**
+- Il tag RFID UHF rimane associato al **cesto fisico** (`baskets.rfid_uhf_epc`)
+- **NON va cancellato** quando si chiude un ciclo
+- Il tag identifica il cesto fisico, non il ciclo
+- Quando il cesto viene riutilizzato in un nuovo ciclo, il tag rimane valido
 
 **Stati del cestello:**
 | Stato | Descrizione |

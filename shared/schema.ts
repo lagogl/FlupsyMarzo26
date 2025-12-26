@@ -66,6 +66,8 @@ export const baskets = pgTable("baskets", {
   currentCycleId: integer("current_cycle_id"), // reference to the current active cycle, null when not in a cycle
   nfcData: text("nfc_data"), // data to be stored in NFC tag
   nfcLastProgrammedAt: timestamp("nfc_last_programmed_at", { mode: 'string' }), // data e ora ultima programmazione tag NFC
+  rfidUhfEpc: text("rfid_uhf_epc"), // EPC del tag RFID UHF programmato
+  rfidUhfProgrammedAt: timestamp("rfid_uhf_programmed_at", { mode: 'string' }), // data e ora programmazione tag RFID UHF
   row: text("row").notNull(), // fila in cui si trova la cesta (DX o SX)
   position: integer("position").notNull(), // posizione numerica nella fila (1, 2, 3, ecc.)
   groupId: integer("group_id"), // reference to basket group (optional - null if not in any group)
