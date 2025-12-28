@@ -486,6 +486,81 @@ export class BasketsController {
       });
     }
   }
+
+  /**
+   * POST /api/baskets/:id/rfid-uhf
+   * Associa un codice RFID UHF progressivo (Cesta-001 a Cesta-999) al cestello
+   * Questo codice va scritto nel Bank User del tag RFID UHF
+   */
+  async assignRfidUhf(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid basket ID" });
+      }
+
+      // Opzionalmente accetta l'EPC fisico del tag (Bank 1)
+      const { epc } = req.body;
+
+      const result = await basketsService.assignRfidUhf(id, epc);
+      
+      if (!result.success) {
+        return res.status(result.status || 400).json(result);
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error assigning RFID UHF:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: (error as Error).message || "Errore durante l'assegnazione RFID UHF" 
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/baskets/:id/rfid-uhf
+   * Rimuove l'associazione RFID UHF dal cestello
+   */
+  async removeRfidUhf(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid basket ID" });
+      }
+
+      const result = await basketsService.removeRfidUhf(id);
+      
+      if (!result.success) {
+        return res.status(result.status || 400).json(result);
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error removing RFID UHF:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: (error as Error).message || "Errore durante la rimozione RFID UHF" 
+      });
+    }
+  }
+
+  /**
+   * GET /api/baskets/next-rfid-uhf-code
+   * Restituisce il prossimo codice RFID UHF disponibile (es. "Cesta-042")
+   */
+  async getNextRfidUhfCode(req: Request, res: Response) {
+    try {
+      const result = await basketsService.getNextRfidUhfCode();
+      res.json(result);
+    } catch (error) {
+      console.error("Error getting next RFID UHF code:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Errore durante il recupero del prossimo codice RFID UHF" 
+      });
+    }
+  }
 }
 
 // Export singleton instance

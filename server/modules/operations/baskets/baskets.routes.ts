@@ -17,6 +17,7 @@ router.get('/next-number/:flupsyId', (req, res) => basketsController.getNextNumb
 router.get('/next-position/:flupsyId', (req, res) => basketsController.getNextPosition(req, res));
 router.get('/available', (req, res) => basketsController.getAvailable(req, res));
 router.get('/latest-operations', (req, res) => basketsController.getLatestOperations(req, res));
+router.get('/next-rfid-uhf-code', (req, res) => basketsController.getNextRfidUhfCode(req, res));
 
 // Route CRUD principali
 router.get('/', (req, res) => basketsController.getBaskets(req, res));
@@ -29,5 +30,9 @@ router.delete('/:id', (req, res) => basketsController.deleteBasket(req, res));
 router.post('/:id/move', (req, res) => basketsController.moveBasket(req, res));
 router.post('/switch-positions', (req, res) => basketsController.switchPositions(req, res));
 router.post('/fix-null-rows', (req, res) => basketsController.fixNullRows(req, res));
+
+// Route RFID UHF
+router.post('/:id/rfid-uhf', (req, res) => basketsController.assignRfidUhf(req, res));
+router.delete('/:id/rfid-uhf', (req, res) => basketsController.removeRfidUhf(req, res));
 
 export default router;

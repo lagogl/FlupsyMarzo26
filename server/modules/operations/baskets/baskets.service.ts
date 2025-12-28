@@ -677,6 +677,153 @@ export class BasketsService {
     
     return operationsMap;
   }
+
+  /**
+   * Genera il prossimo codice RFID UHF disponibile (Cesta-001 a Cesta-999)
+   */
+  async getNextRfidUhfCode(): Promise<{ success: boolean; nextCode: string; nextNumber: number }> {
+    const result = await db.execute(sql`
+      SELECT MAX(
+        CAST(
+          NULLIF(REGEXP_REPLACE(rfid_uhf_user_data, '[^0-9]', '', 'g'), '')
+          AS INTEGER
+        )
+      ) as max_number
+      FROM baskets
+      WHERE rfid_uhf_user_data IS NOT NULL
+        AND rfid_uhf_user_data LIKE 'Cesta-%'
+    `);
+    
+    const rows = result.rows as any[];
+    const maxNumber = rows[0]?.max_number || 0;
+    const nextNumber = maxNumber + 1;
+    
+    if (nextNumber > 999) {
+      throw new Error('Limite massimo codici RFID UHF raggiunto (999)');
+    }
+    
+    const nextCode = `Cesta-${String(nextNumber).padStart(3, '0')}`;
+    
+    return {
+      success: true,
+      nextCode,
+      nextNumber
+    };
+  }
+
+  /**
+   * Assegna un codice RFID UHF progressivo a un cestello
+   * @param basketId ID del cestello
+   * @param epc (opzionale) EPC fisico del tag (Bank 1)
+   */
+  async assignRfidUhf(basketId: number, epc?: string): Promise<{
+    success: boolean;
+    message?: string;
+    basket?: any;
+    rfidCode?: string;
+    status?: number;
+  }> {
+    // Verifica che il cestello esista
+    const basket = await storage.getBasket(basketId);
+    if (!basket) {
+      return {
+        success: false,
+        message: 'Cestello non trovato',
+        status: 404
+      };
+    }
+
+    // Verifica se ha già un codice RFID UHF
+    if (basket.rfidUhfUserData) {
+      return {
+        success: false,
+        message: `Cestello già associato a ${basket.rfidUhfUserData}. Rimuovi prima l'associazione esistente.`,
+        status: 400
+      };
+    }
+
+    // Genera il prossimo codice
+    const { nextCode } = await this.getNextRfidUhfCode();
+    
+    // Aggiorna il cestello
+    const now = new Date().toISOString();
+    const updateData: any = {
+      rfidUhfUserData: nextCode,
+      rfidUhfProgrammedAt: now
+    };
+    
+    // Se è stato fornito l'EPC fisico, salvalo
+    if (epc) {
+      updateData.rfidUhfEpc = epc;
+    }
+    
+    const [updated] = await db
+      .update(baskets)
+      .set(updateData)
+      .where(eq(baskets.id, basketId))
+      .returning();
+    
+    // Invalida cache
+    BasketsCache.clear();
+    
+    console.log(`✅ RFID UHF assegnato: Cestello #${basket.physicalNumber} → ${nextCode}`);
+    
+    return {
+      success: true,
+      message: `Codice ${nextCode} assegnato con successo`,
+      basket: updated,
+      rfidCode: nextCode
+    };
+  }
+
+  /**
+   * Rimuove l'associazione RFID UHF da un cestello
+   */
+  async removeRfidUhf(basketId: number): Promise<{
+    success: boolean;
+    message?: string;
+    status?: number;
+  }> {
+    // Verifica che il cestello esista
+    const basket = await storage.getBasket(basketId);
+    if (!basket) {
+      return {
+        success: false,
+        message: 'Cestello non trovato',
+        status: 404
+      };
+    }
+
+    if (!basket.rfidUhfUserData && !basket.rfidUhfEpc) {
+      return {
+        success: false,
+        message: 'Cestello non ha associazione RFID UHF',
+        status: 400
+      };
+    }
+
+    const oldCode = basket.rfidUhfUserData;
+    
+    // Rimuovi l'associazione
+    await db
+      .update(baskets)
+      .set({
+        rfidUhfEpc: null,
+        rfidUhfUserData: null,
+        rfidUhfProgrammedAt: null
+      })
+      .where(eq(baskets.id, basketId));
+    
+    // Invalida cache
+    BasketsCache.clear();
+    
+    console.log(`🗑️ RFID UHF rimosso: Cestello #${basket.physicalNumber} (era ${oldCode})`);
+    
+    return {
+      success: true,
+      message: `Associazione RFID UHF rimossa (era ${oldCode})`
+    };
+  }
 }
 
 // Export singleton instance
