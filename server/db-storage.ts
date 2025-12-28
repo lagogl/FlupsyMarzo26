@@ -360,8 +360,46 @@ export class DbStorage implements IStorage {
   }
 
   async createBasket(basket: InsertBasket): Promise<Basket> {
+    // Auto-genera codice RFID UHF se non fornito
+    if (!basket.rfidUhfUserData) {
+      const nextCode = await this.getNextRfidUhfCode();
+      basket = {
+        ...basket,
+        rfidUhfUserData: nextCode,
+        rfidUhfProgrammedAt: new Date()
+      };
+      console.log(`createBasket - Auto-assegnato codice RFID UHF: ${nextCode}`);
+    }
+    
     const results = await db.insert(baskets).values(basket).returning();
     return results[0];
+  }
+
+  /**
+   * Genera il prossimo codice RFID UHF disponibile (Cesta-001 a Cesta-999)
+   */
+  private async getNextRfidUhfCode(): Promise<string> {
+    const result = await db.execute(sql`
+      SELECT MAX(
+        CAST(
+          NULLIF(REGEXP_REPLACE(rfid_uhf_user_data, '[^0-9]', '', 'g'), '')
+          AS INTEGER
+        )
+      ) as max_number
+      FROM baskets
+      WHERE rfid_uhf_user_data IS NOT NULL
+        AND rfid_uhf_user_data LIKE 'Cesta-%'
+    `);
+    
+    const rows = result.rows as any[];
+    const maxNumber = rows[0]?.max_number || 0;
+    const nextNumber = maxNumber + 1;
+    
+    if (nextNumber > 999) {
+      throw new Error('Limite massimo codici RFID UHF raggiunto (999)');
+    }
+    
+    return `Cesta-${String(nextNumber).padStart(3, '0')}`;
   }
 
   async updateBasket(id: number, basketUpdate: Partial<Basket>): Promise<Basket | undefined> {
