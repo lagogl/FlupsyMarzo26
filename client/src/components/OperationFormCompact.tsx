@@ -1969,13 +1969,15 @@ export default function OperationFormCompact({
                             value={field.value === null || field.value === undefined ? '' : field.value.toString()}
                             onChange={(e) => {
                               if (!watchManualCountAdjustment) {
-                                const value = e.target.value.replace(/[^0-9]/g, '');
+                                const value = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
                                 if (value === '') {
                                   field.onChange(null);
+                                } else if (value === '.' || value.endsWith('.')) {
+                                  return;
                                 } else {
-                                  const numValue = parseInt(value, 10);
-                                  if (!isNaN(numValue) && numValue <= 999999) {
-                                    field.onChange(numValue);
+                                  const numValue = parseFloat(value);
+                                  if (!isNaN(numValue) && numValue <= 999999.9) {
+                                    field.onChange(Math.round(numValue * 10) / 10);
                                   }
                                 }
                               }
