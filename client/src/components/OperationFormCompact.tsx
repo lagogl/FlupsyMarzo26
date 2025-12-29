@@ -1962,21 +1962,22 @@ export default function OperationFormCompact({
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            type="text" 
+                            type="number" 
+                            step="0.1"
+                            min="0"
+                            max="999999.9"
                             placeholder={watchManualCountAdjustment ? "Peso calcolato automaticamente" : "Peso totale cestello"}
                             className={`h-8 text-sm ${watchManualCountAdjustment ? 'bg-purple-50' : ''}`}
                             readOnly={watchManualCountAdjustment}
-                            value={field.value === null || field.value === undefined ? '' : field.value.toString()}
+                            value={field.value === null || field.value === undefined ? '' : field.value}
                             onChange={(e) => {
                               if (!watchManualCountAdjustment) {
-                                const value = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                                const value = e.target.value;
                                 if (value === '') {
                                   field.onChange(null);
-                                } else if (value === '.' || value.endsWith('.')) {
-                                  return;
                                 } else {
                                   const numValue = parseFloat(value);
-                                  if (!isNaN(numValue) && numValue <= 999999.9) {
+                                  if (!isNaN(numValue) && numValue >= 0 && numValue <= 999999.9) {
                                     field.onChange(Math.round(numValue * 10) / 10);
                                   }
                                 }
