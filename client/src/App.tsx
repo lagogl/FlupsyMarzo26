@@ -31,6 +31,7 @@ import Inventory from "@/pages/Inventory";
 import TestView from "@/pages/TestView";
 import NFCTagManager from "@/pages/NFCTagManager";
 import NFCPrimaAttivazione from "@/pages/NFCPrimaAttivazione";
+import RFIDUHFTagManager from "@/pages/RFIDUHFTagManager";
 import GrowJourney from "@/pages/GrowJourney";
 import BasketSelection from "@/pages/BasketSelection";
 import DiarioDiBordo from "@/pages/DiarioDiBordo";
@@ -122,6 +123,7 @@ function Router() {
       <ProtectedRoute path="/nfc-prima-attivazione" component={NFCPrimaAttivazione}/>
       <ProtectedRoute path="/nfc-tags" component={NFCTagManager}/>
       <ProtectedRoute path="/gestione-tag-nfc" component={NFCTagManager}/>
+      <ProtectedRoute path="/rfid-uhf-tags" component={RFIDUHFTagManager}/>
       <ProtectedRoute path="/grow-journey" component={GrowJourney}/>
       <ProtectedRoute path="/basket-selection" component={BasketSelection}/>
       <ProtectedRoute path="/backup" component={BackupPage} requiredRole="admin" />
