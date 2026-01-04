@@ -74,7 +74,7 @@ export default function RFIDUHFTagManager() {
     isLoading: basketsLoading,
     refetch: refetchBaskets
   } = useQuery<Basket[]>({
-    queryKey: ['/api/baskets'],
+    queryKey: ['/api/baskets?includeAll=true'],
   });
 
   const {
