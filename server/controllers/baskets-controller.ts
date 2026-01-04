@@ -230,6 +230,7 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
       SELECT 
         b.id, b.physical_number, b.flupsy_id, b.cycle_code, 
         b.state, b.current_cycle_id, b.nfc_data, b.nfc_last_programmed_at, b.row, b.position, b.group_id,
+        b.rfid_uhf_epc, b.rfid_uhf_user_data, b.rfid_uhf_programmed_at,
         f.name as flupsy_name,
         COUNT(*) OVER() as total_count,
         -- Solo dati essenziali per performance massime
@@ -316,6 +317,9 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
         currentCycleId: row.current_cycle_id,
         nfcData: row.nfc_data,
         nfcLastProgrammedAt: normalizeTimestamp(row.nfc_last_programmed_at),
+        rfidUhfEpc: row.rfid_uhf_epc,
+        rfidUhfUserData: row.rfid_uhf_user_data,
+        rfidUhfProgrammedAt: normalizeTimestamp(row.rfid_uhf_programmed_at),
         row: row.row,
         position: row.position,
         groupId: row.group_id,
