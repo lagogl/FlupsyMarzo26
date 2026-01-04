@@ -116,10 +116,10 @@ export default function RFIDUHFTagManager() {
         return false;
       }
       
-      if (programmingFilter === 'programmed' && !basket.rfidUhfUserData) {
+      if (programmingFilter === 'programmed' && !basket.rfidUhfEpc) {
         return false;
       }
-      if (programmingFilter === 'not-programmed' && basket.rfidUhfUserData) {
+      if (programmingFilter === 'not-programmed' && basket.rfidUhfEpc) {
         return false;
       }
       
@@ -194,8 +194,8 @@ export default function RFIDUHFTagManager() {
     });
   };
 
-  const programmedCount = baskets.filter(b => b.rfidUhfUserData).length;
-  const notProgrammedCount = baskets.filter(b => !b.rfidUhfUserData).length;
+  const programmedCount = baskets.filter(b => b.rfidUhfEpc).length;
+  const notProgrammedCount = baskets.filter(b => !b.rfidUhfEpc).length;
 
   return (
     <div className="container mx-auto py-6 px-4">
@@ -407,7 +407,7 @@ export default function RFIDUHFTagManager() {
                         </TableCell>
                         <TableCell>{formatDate(basket.rfidUhfProgrammedAt)}</TableCell>
                         <TableCell>
-                          {basket.rfidUhfUserData ? (
+                          {basket.rfidUhfEpc ? (
                             <CheckCircle2 className="h-5 w-5 text-green-600" />
                           ) : (
                             <XCircle className="h-5 w-5 text-orange-400" />
