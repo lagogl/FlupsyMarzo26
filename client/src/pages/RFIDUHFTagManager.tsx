@@ -352,15 +352,6 @@ export default function RFIDUHFTagManager() {
                         {getSortIcon('state')}
                       </div>
                     </TableHead>
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort('rfidUhfUserData')}
-                    >
-                      <div className="flex items-center">
-                        Codice RFID
-                        {getSortIcon('rfidUhfUserData')}
-                      </div>
-                    </TableHead>
                     <TableHead>EPC (Bank 1)</TableHead>
                     <TableHead 
                       className="cursor-pointer hover:bg-muted/50"
@@ -377,14 +368,14 @@ export default function RFIDUHFTagManager() {
                 <TableBody>
                   {basketsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={7} className="text-center py-8">
                         <RefreshCwIcon className="h-6 w-6 animate-spin mx-auto mb-2" />
                         Caricamento...
                       </TableCell>
                     </TableRow>
                   ) : filteredAndSortedBaskets.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         Nessun cestello trovato con i filtri selezionati
                       </TableCell>
                     </TableRow>
@@ -399,10 +390,7 @@ export default function RFIDUHFTagManager() {
                             {basket.state === 'in_use' ? 'In uso' : 'Disponibile'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {basket.rfidUhfUserData || '-'}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground max-w-[150px] truncate">
+                        <TableCell className="font-mono text-xs text-muted-foreground max-w-[200px] truncate">
                           {basket.rfidUhfEpc || '-'}
                         </TableCell>
                         <TableCell>{formatDate(basket.rfidUhfProgrammedAt)}</TableCell>
