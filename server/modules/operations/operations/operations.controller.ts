@@ -306,6 +306,23 @@ export class OperationsController {
       });
     }
   }
+
+  /**
+   * GET /api/operations/last-update
+   * Endpoint leggero per polling efficiente - ritorna solo ultimo ID e timestamp
+   */
+  async getLastUpdate(req: Request, res: Response) {
+    try {
+      const result = await operationsService.getLastUpdate();
+      res.json(result);
+    } catch (error) {
+      console.error("Error getting last update:", error);
+      res.status(500).json({ 
+        message: "Failed to get last update",
+        error: (error as Error).message 
+      });
+    }
+  }
 }
 
 export const operationsController = new OperationsController();

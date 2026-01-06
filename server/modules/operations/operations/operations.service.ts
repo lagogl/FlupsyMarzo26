@@ -745,6 +745,25 @@ class OperationsService {
     console.log(`✓ Bilancio calcolato:`, balance);
     return balance;
   }
+
+  /**
+   * Endpoint leggero per polling efficiente
+   * Ritorna solo ultimo ID e conteggio totale operazioni
+   */
+  async getLastUpdate(): Promise<{ lastId: number; totalCount: number }> {
+    const result = await db.execute(sql`
+      SELECT 
+        COALESCE(MAX(id), 0) as last_id, 
+        COUNT(*) as total_count 
+      FROM operations
+    `);
+    
+    const row = result.rows[0] as any;
+    return {
+      lastId: row?.last_id || 0,
+      totalCount: Number(row?.total_count) || 0
+    };
+  }
 }
 
 export const operationsService = new OperationsService();

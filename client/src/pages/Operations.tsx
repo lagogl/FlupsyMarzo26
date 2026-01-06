@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 
 // Versione aggiornata Operations.tsx v3 - fix cache completo
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -628,6 +628,28 @@ export default function Operations() {
     refetchOnMount: true, // Carica all'avvio per popolare il dropdown
     enabled: true, // Necessario per il filtro FLUPSY
   });
+
+  // POLLING LEGGERO: Check aggiornamenti da app esterne ogni 10 secondi
+  const lastKnownOperationId = useRef<number>(0);
+  const { data: lastUpdateData } = useQuery<{ lastId: number; totalCount: number }>({
+    queryKey: ['/api/operations/last-update'],
+    refetchInterval: 10000, // Polling ogni 10 secondi
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+  // Quando l'ultimo ID cambia, refetch delle operazioni
+  useEffect(() => {
+    if (lastUpdateData?.lastId && lastUpdateData.lastId !== lastKnownOperationId.current) {
+      if (lastKnownOperationId.current !== 0) {
+        console.log('📡 POLLING: Rilevata nuova operazione da app esterna, aggiorno dati...');
+        queryClient.refetchQueries({ queryKey: ['/api/operations'], type: 'all' });
+        queryClient.refetchQueries({ queryKey: ['/api/cycles'], type: 'all' });
+        queryClient.refetchQueries({ queryKey: ['/api/baskets'], type: 'all' });
+      }
+      lastKnownOperationId.current = lastUpdateData.lastId;
+    }
+  }, [lastUpdateData?.lastId, queryClient]);
 
   const { data: sgrs = [] } = useQuery({
     queryKey: ['/api/sgr'],

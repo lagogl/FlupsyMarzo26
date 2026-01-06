@@ -8,6 +8,7 @@ import { operationsController } from './operations.controller';
 const router = Router();
 
 // Route di query specifiche (prima delle route parametriche)
+router.get('/last-update', (req, res) => operationsController.getLastUpdate(req, res));
 router.get('/date-range', (req, res) => operationsController.getOperationsByDateRange(req, res));
 router.get('/basket/:basketId', (req, res) => operationsController.getOperationsByBasket(req, res));
 router.get('/cycle/:cycleId', (req, res) => operationsController.getOperationsByCycle(req, res));
