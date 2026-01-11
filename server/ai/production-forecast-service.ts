@@ -16,6 +16,8 @@ interface MonthlyForecast {
   seedingRequirement: number;
   seedingDeadline: string | null;
   status: 'on_track' | 'warning' | 'critical';
+  stockResiduo: number;
+  seminaT1Richiesta: number;
 }
 
 interface ForecastSummary {
@@ -265,6 +267,19 @@ export class ProductionForecastService {
           status = 'warning';
         }
 
+        const stockResiduo = target.sizeCategory === 'T3' ? stockT3 : 
+                             target.sizeCategory === 'T10' ? stockT10 : stockT1;
+
+        const deficit = budgetAnimals - soldAnimals;
+        let seminaT1Richiesta = 0;
+        if (deficit > 0) {
+          if (target.sizeCategory === 'T3') {
+            seminaT1Richiesta = Math.ceil(deficit / ((1 - mortalityRate) * (1 - mortalityRate)));
+          } else if (target.sizeCategory === 'T10') {
+            seminaT1Richiesta = Math.ceil(deficit / Math.pow(1 - mortalityRate, 3));
+          }
+        }
+
         monthlyData.push({
           year,
           month,
@@ -278,7 +293,9 @@ export class ProductionForecastService {
           varianceOrdersProduction: Math.round(varianceOrdersProduction),
           seedingRequirement,
           seedingDeadline,
-          status
+          status,
+          stockResiduo: Math.round(stockResiduo),
+          seminaT1Richiesta: Math.round(seminaT1Richiesta)
         });
       }
     }

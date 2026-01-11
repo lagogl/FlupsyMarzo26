@@ -23,6 +23,8 @@ interface MonthlyForecast {
   seedingRequirement: number;
   seedingDeadline: string | null;
   status: 'on_track' | 'warning' | 'critical';
+  stockResiduo: number;
+  seminaT1Richiesta: number;
 }
 
 interface InventoryBySize {
@@ -386,9 +388,10 @@ export default function AnalisiScostamenti() {
                       <TableHead>Mese</TableHead>
                       <TableHead>Taglia</TableHead>
                       <TableHead className="text-right">Budget</TableHead>
-                      <TableHead className="text-right">Ordini</TableHead>
-                      <TableHead className="text-right">Produzione</TableHead>
+                      <TableHead className="text-right">Venduto</TableHead>
                       <TableHead className="text-right">Δ Budget</TableHead>
+                      <TableHead className="text-right">Stock Residuo</TableHead>
+                      <TableHead className="text-right text-orange-600">Semina T1</TableHead>
                       <TableHead>Stato</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -402,13 +405,16 @@ export default function AnalisiScostamenti() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">{formatNumber(row.budgetAnimals)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {formatNumber(row.ordersAnimals)}
-                        </TableCell>
                         <TableCell className="text-right">{formatNumber(row.productionForecast)}</TableCell>
                         <TableCell className={`text-right ${getVarianceColor(row.varianceBudgetProduction)}`}>
                           {row.varianceBudgetProduction >= 0 ? '+' : ''}
                           {formatNumber(row.varianceBudgetProduction)}
+                        </TableCell>
+                        <TableCell className="text-right text-blue-600">
+                          {formatNumber(row.stockResiduo)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-orange-600">
+                          {row.seminaT1Richiesta > 0 ? formatNumber(row.seminaT1Richiesta) : '-'}
                         </TableCell>
                         <TableCell>{getStatusBadge(row.status)}</TableCell>
                       </TableRow>
