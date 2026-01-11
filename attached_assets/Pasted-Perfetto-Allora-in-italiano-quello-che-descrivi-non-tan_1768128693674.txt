@@ -1,0 +1,57 @@
+Perfetto. Allora, in italiano, quello che descrivi non è tanto “consigli” generici, ma un sistema di supporto decisionale operativo che genera azioni raccomandate a partire dai dati.
+
+Ecco le formule più adatte (con tono diverso), tutte in italiano:
+
+Opzioni molto centrate (titolo/feature)
+
+Raccomandazioni operative basate sui dati
+
+Supporto decisionale operativo (AI)
+
+Piano operativo suggerito dall’AI
+
+Azioni raccomandate per la gestione dei flupsy
+
+Ottimizzazione operativa guidata dai dati
+
+Gestione assistita (AI) dei flupsy
+
+Se vuoi far capire che produce una lista di cose da fare
+
+Lista attività consigliate
+
+Checklist operativa giornaliera suggerita
+
+Pianificazione delle attività (AI)
+
+Priorità operative suggerite
+
+Se vuoi includere l’obiettivo (massimo accrescimento, minima mortalità)
+
+Raccomandazioni per massimizzare l’accrescimento e minimizzare la mortalità
+
+Azioni consigliate per ottimizzare crescita e sopravvivenza
+
+Gestione ottimizzata per massime performance e minima mortalità
+
+Traduzioni/termini tecnici “giusti” in italiano (più coerenti)
+
+“pesca” (in impianto) → spesso è meglio raccolta / prelievo (o “raccolta parziale”)
+
+pulizia → pulizia / gestione del fouling (se parli di incrostazioni)
+
+campionamenti → campionamenti (biometrici / di biomassa)
+
+misure → misurazioni / monitoraggi (parametri acqua + biometrie)
+
+divisioni di biomassa → separazione della biomassa / calibratura e separazione / suddivisione per taglia (molto usato: “calibratura”)
+
+Una frase pronta (descrizione chiara, stile “prodotto”)
+
+L’AI analizza i dati presenti nel database e genera raccomandazioni operative (raccolta, pulizia/gestione fouling, campionamenti, misurazioni e separazione della biomassa) per gestire al meglio i flupsy, massimizzando l’accrescimento e riducendo la mortalità.
+
+Versione più “da operatori” (semplice e diretta)
+
+Attività consigliate oggi (da dati impianto): pulizia, campionamento, misure, separazione biomassa, prelievi/raccolta.
+
+Se mi dici dove lo devi scrivere (business plan, app, manuale interno, slide) ti do la formulazione “definitiva” con il tono giusto (più tecnico o più commerciale).
