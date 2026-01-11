@@ -87,7 +87,7 @@ export class ProductionForecastService {
         SELECT DISTINCT ON (o.basket_id) 
           o.basket_id,
           o.animals_per_kg,
-          o.live_animals,
+          o.animal_count,
           o.size_id,
           s.name as size_name,
           s.min_animals_per_kg,
@@ -96,8 +96,8 @@ export class ProductionForecastService {
         JOIN baskets b ON b.id = o.basket_id
         JOIN sizes s ON s.id = o.size_id
         WHERE b.state = 'active'
-          AND o.type IN ('misura', 'peso', 'prima_attivazione')
-          AND o.live_animals > 0
+          AND o.type IN ('misura', 'peso', 'prima-attivazione')
+          AND o.animal_count > 0
         ORDER BY o.basket_id, o.date DESC, o.id DESC
       )
       SELECT 
@@ -107,7 +107,7 @@ export class ProductionForecastService {
           ELSE 'T1'
         END as size_category,
         size_name,
-        SUM(live_animals) as total_animals,
+        SUM(animal_count) as total_animals,
         MIN(min_animals_per_kg) || '-' || MAX(max_animals_per_kg) as animals_per_kg_range
       FROM latest_ops
       GROUP BY 
@@ -133,14 +133,14 @@ export class ProductionForecastService {
       WITH latest_ops AS (
         SELECT DISTINCT ON (o.basket_id) 
           o.basket_id,
-          o.live_animals,
+          o.animal_count,
           s.min_animals_per_kg
         FROM operations o
         JOIN baskets b ON b.id = o.basket_id
         JOIN sizes s ON s.id = o.size_id
         WHERE b.state = 'active'
-          AND o.type IN ('misura', 'peso', 'prima_attivazione')
-          AND o.live_animals > 0
+          AND o.type IN ('misura', 'peso', 'prima-attivazione')
+          AND o.animal_count > 0
         ORDER BY o.basket_id, o.date DESC, o.id DESC
       )
       SELECT 
@@ -149,7 +149,7 @@ export class ProductionForecastService {
           WHEN min_animals_per_kg <= 30000 THEN 'T3'
           ELSE 'T1'
         END as size_category,
-        SUM(live_animals) as total_animals
+        SUM(animal_count) as total_animals
       FROM latest_ops
       GROUP BY 
         CASE 
