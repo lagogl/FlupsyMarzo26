@@ -531,6 +531,26 @@ export default function AnalisiScostamenti() {
                         <TableCell>{getStatusBadge(row.status)}</TableCell>
                       </TableRow>
                     ))}
+                    <TableRow className="bg-slate-100 font-bold border-t-2">
+                      <TableCell>TOTALE</TableCell>
+                      <TableCell>-</TableCell>
+                      <TableCell className="text-right">
+                        {formatNumber(filteredData.reduce((sum, r) => sum + r.budgetAnimals, 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatNumber(filteredData.reduce((sum, r) => sum + r.productionForecast, 0))}
+                      </TableCell>
+                      <TableCell className={`text-right ${getVarianceColor(filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0))}`}>
+                        {filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0) >= 0 ? '+' : ''}
+                        {formatNumber(filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0))}
+                      </TableCell>
+                      <TableCell className="text-right">-</TableCell>
+                      <TableCell className="text-right text-orange-600">
+                        {formatNumber(filteredData.reduce((sum, r) => sum + r.seminaT1Richiesta, 0))}
+                      </TableCell>
+                      <TableCell>-</TableCell>
+                      <TableCell>-</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>
