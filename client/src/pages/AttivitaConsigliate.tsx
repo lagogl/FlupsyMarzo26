@@ -17,7 +17,9 @@ import {
   CheckCircle2,
   Brain,
   RefreshCw,
-  Target
+  Target,
+  Layers,
+  Factory
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { Link } from "wouter";
@@ -143,8 +145,11 @@ function ActivitySection({ title, activities, icon: Icon, colorClass }: {
   );
 }
 
+type GroupBy = 'priority' | 'flupsy' | 'type';
+
 export default function AttivitaConsigliate() {
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
+  const [groupBy, setGroupBy] = useState<GroupBy>("priority");
 
   const { data: flupsys } = useQuery<any[]>({
     queryKey: ['/api/flupsys'],
@@ -162,9 +167,27 @@ export default function AttivitaConsigliate() {
     refetchInterval: 60000,
   });
 
-  const highPriorityActivities = activitiesData?.activities?.filter(a => a.priority === 'alta') || [];
-  const mediumPriorityActivities = activitiesData?.activities?.filter(a => a.priority === 'media') || [];
-  const suggestionActivities = activitiesData?.activities?.filter(a => a.priority === 'suggerimento') || [];
+  const activities = activitiesData?.activities || [];
+  
+  const groupedByPriority = {
+    alta: activities.filter(a => a.priority === 'alta'),
+    media: activities.filter(a => a.priority === 'media'),
+    suggerimento: activities.filter(a => a.priority === 'suggerimento'),
+  };
+
+  const groupedByFlupsy = activities.reduce((acc, activity) => {
+    const key = activity.flupsyName || 'Sconosciuto';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(activity);
+    return acc;
+  }, {} as Record<string, RecommendedActivity[]>);
+
+  const groupedByType = activities.reduce((acc, activity) => {
+    const key = activity.type;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(activity);
+    return acc;
+  }, {} as Record<string, RecommendedActivity[]>);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -180,9 +203,9 @@ export default function AttivitaConsigliate() {
               <Brain className="h-5 w-5 text-purple-600" />
               <CardTitle className="text-lg">Analisi AI</CardTitle>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Select value={selectedFlupsyId} onValueChange={setSelectedFlupsyId}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Tutti i FLUPSY" />
                 </SelectTrigger>
                 <SelectContent>
@@ -192,6 +215,17 @@ export default function AttivitaConsigliate() {
                       {flupsy.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+                <SelectTrigger className="w-[180px]">
+                  <Layers className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Raggruppa per..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="priority">Per Priorità</SelectItem>
+                  <SelectItem value="flupsy">Per FLUPSY</SelectItem>
+                  <SelectItem value="type">Per Tipo Attività</SelectItem>
                 </SelectContent>
               </Select>
               <Button 
@@ -253,26 +287,63 @@ export default function AttivitaConsigliate() {
                 </div>
               ) : (
                 <div className="space-y-8">
-                  <ActivitySection 
-                    title="Priorità Alta" 
-                    activities={highPriorityActivities}
-                    icon={AlertTriangle}
-                    colorClass="text-red-600"
-                  />
+                  {groupBy === 'priority' && (
+                    <>
+                      <ActivitySection 
+                        title="Priorità Alta" 
+                        activities={groupedByPriority.alta}
+                        icon={AlertTriangle}
+                        colorClass="text-red-600"
+                      />
+                      <ActivitySection 
+                        title="Priorità Media" 
+                        activities={groupedByPriority.media}
+                        icon={Clock}
+                        colorClass="text-yellow-600"
+                      />
+                      <ActivitySection 
+                        title="Suggerimenti" 
+                        activities={groupedByPriority.suggerimento}
+                        icon={CheckCircle2}
+                        colorClass="text-green-600"
+                      />
+                    </>
+                  )}
                   
-                  <ActivitySection 
-                    title="Priorità Media" 
-                    activities={mediumPriorityActivities}
-                    icon={Clock}
-                    colorClass="text-yellow-600"
-                  />
+                  {groupBy === 'flupsy' && (
+                    <>
+                      {Object.entries(groupedByFlupsy)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([flupsyName, acts]) => (
+                          <ActivitySection 
+                            key={flupsyName}
+                            title={flupsyName} 
+                            activities={acts}
+                            icon={Factory}
+                            colorClass="text-blue-600"
+                          />
+                        ))}
+                    </>
+                  )}
                   
-                  <ActivitySection 
-                    title="Suggerimenti" 
-                    activities={suggestionActivities}
-                    icon={CheckCircle2}
-                    colorClass="text-green-600"
-                  />
+                  {groupBy === 'type' && (
+                    <>
+                      {Object.entries(groupedByType)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([type, acts]) => {
+                          const config = activityConfig[type as ActivityType];
+                          return (
+                            <ActivitySection 
+                              key={type}
+                              title={config?.label || type} 
+                              activities={acts}
+                              icon={config?.icon || Brush}
+                              colorClass="text-gray-700"
+                            />
+                          );
+                        })}
+                    </>
+                  )}
                 </div>
               )}
             </>
