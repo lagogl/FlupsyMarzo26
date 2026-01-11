@@ -1429,3 +1429,24 @@ export type InsertScreeningImpactAnalysis = z.infer<typeof insertScreeningImpact
 
 export type GrowthDistribution = typeof growthDistributions.$inferSelect;
 export type InsertGrowthDistribution = z.infer<typeof insertGrowthDistributionSchema>;
+
+// ===== MODULO ANALISI SCOSTAMENTI PRODUZIONE =====
+
+// Target di produzione/vendita mensili per taglia
+export const productionTargets = pgTable("production_targets", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(), // 1-12
+  sizeCategory: text("size_category").notNull(), // "T3", "T10" o codice taglia
+  targetAnimals: integer("target_animals").notNull(), // Obiettivo animali da vendere
+  targetWeight: real("target_weight"), // Obiettivo peso (kg)
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertProductionTargetSchema = createInsertSchema(productionTargets)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+
+export type ProductionTarget = typeof productionTargets.$inferSelect;
+export type InsertProductionTarget = z.infer<typeof insertProductionTargetSchema>;
