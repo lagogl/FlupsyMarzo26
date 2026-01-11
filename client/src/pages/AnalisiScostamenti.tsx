@@ -8,7 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
 
 interface MonthlyForecast {
@@ -100,18 +101,28 @@ export default function AnalisiScostamenti() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
-  const [mortalityT1, setMortalityT1] = useState<number>(5);
-  const [mortalityT3, setMortalityT3] = useState<number>(3);
-  const [mortalityT10, setMortalityT10] = useState<number>(2);
+  const [inputMortalityT1, setInputMortalityT1] = useState<number>(5);
+  const [inputMortalityT3, setInputMortalityT3] = useState<number>(3);
+  const [inputMortalityT10, setInputMortalityT10] = useState<number>(2);
+  
+  const [appliedMortalityT1, setAppliedMortalityT1] = useState<number>(5);
+  const [appliedMortalityT3, setAppliedMortalityT3] = useState<number>(3);
+  const [appliedMortalityT10, setAppliedMortalityT10] = useState<number>(2);
+
+  const applyMortality = () => {
+    setAppliedMortalityT1(inputMortalityT1);
+    setAppliedMortalityT3(inputMortalityT3);
+    setAppliedMortalityT10(inputMortalityT10);
+  };
 
   const { data, isLoading, error } = useQuery<ForecastData>({
-    queryKey: ['/api/ai/production-forecast', selectedYear, mortalityT1, mortalityT3, mortalityT10],
+    queryKey: ['/api/ai/production-forecast', selectedYear, appliedMortalityT1, appliedMortalityT3, appliedMortalityT10],
     queryFn: async () => {
       const params = new URLSearchParams({
         year: String(selectedYear),
-        mortalityT1: String(mortalityT1),
-        mortalityT3: String(mortalityT3),
-        mortalityT10: String(mortalityT10)
+        mortalityT1: String(appliedMortalityT1),
+        mortalityT3: String(appliedMortalityT3),
+        mortalityT10: String(appliedMortalityT10)
       });
       const response = await fetch(`/api/ai/production-forecast?${params}`);
       if (!response.ok) throw new Error('Errore caricamento dati');
@@ -217,7 +228,7 @@ export default function AnalisiScostamenti() {
           </CardTitle>
         </CardHeader>
         <CardContent className="py-2">
-          <div className="flex flex-wrap gap-6">
+          <div className="flex flex-wrap items-center gap-6">
             <div className="flex items-center gap-2">
               <Label htmlFor="mortalityT1" className="text-sm font-medium w-8">T1:</Label>
               <Input
@@ -226,11 +237,11 @@ export default function AnalisiScostamenti() {
                 min="0"
                 max="50"
                 step="0.5"
-                value={mortalityT1}
-                onChange={(e) => setMortalityT1(parseFloat(e.target.value) || 0)}
+                value={inputMortalityT1}
+                onChange={(e) => setInputMortalityT1(parseFloat(e.target.value) || 0)}
                 className="w-20 h-8"
               />
-              <span className="text-xs text-muted-foreground">% al mese</span>
+              <span className="text-xs text-muted-foreground">%</span>
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="mortalityT3" className="text-sm font-medium w-8">T3:</Label>
@@ -240,11 +251,11 @@ export default function AnalisiScostamenti() {
                 min="0"
                 max="50"
                 step="0.5"
-                value={mortalityT3}
-                onChange={(e) => setMortalityT3(parseFloat(e.target.value) || 0)}
+                value={inputMortalityT3}
+                onChange={(e) => setInputMortalityT3(parseFloat(e.target.value) || 0)}
                 className="w-20 h-8"
               />
-              <span className="text-xs text-muted-foreground">% al mese</span>
+              <span className="text-xs text-muted-foreground">%</span>
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="mortalityT10" className="text-sm font-medium w-8">T10:</Label>
@@ -254,12 +265,20 @@ export default function AnalisiScostamenti() {
                 min="0"
                 max="50"
                 step="0.5"
-                value={mortalityT10}
-                onChange={(e) => setMortalityT10(parseFloat(e.target.value) || 0)}
+                value={inputMortalityT10}
+                onChange={(e) => setInputMortalityT10(parseFloat(e.target.value) || 0)}
                 className="w-20 h-8"
               />
-              <span className="text-xs text-muted-foreground">% al mese</span>
+              <span className="text-xs text-muted-foreground">%</span>
             </div>
+            <Button 
+              onClick={applyMortality}
+              size="sm"
+              className="h-8"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Applica
+            </Button>
           </div>
         </CardContent>
       </Card>
