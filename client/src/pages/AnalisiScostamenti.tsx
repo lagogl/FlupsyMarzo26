@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
 
 interface MonthlyForecast {
@@ -97,11 +99,21 @@ export default function AnalisiScostamenti() {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  
+  const [mortalityT1, setMortalityT1] = useState<number>(5);
+  const [mortalityT3, setMortalityT3] = useState<number>(3);
+  const [mortalityT10, setMortalityT10] = useState<number>(2);
 
   const { data, isLoading, error } = useQuery<ForecastData>({
-    queryKey: ['/api/ai/production-forecast', selectedYear],
+    queryKey: ['/api/ai/production-forecast', selectedYear, mortalityT1, mortalityT3, mortalityT10],
     queryFn: async () => {
-      const response = await fetch(`/api/ai/production-forecast?year=${selectedYear}`);
+      const params = new URLSearchParams({
+        year: String(selectedYear),
+        mortalityT1: String(mortalityT1),
+        mortalityT3: String(mortalityT3),
+        mortalityT10: String(mortalityT10)
+      });
+      const response = await fetch(`/api/ai/production-forecast?${params}`);
       if (!response.ok) throw new Error('Errore caricamento dati');
       return response.json();
     }
@@ -196,6 +208,61 @@ export default function AnalisiScostamenti() {
           </Select>
         </div>
       </div>
+
+      <Card className="bg-slate-50">
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            Parametri Mortalità Mensile (%)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-2">
+          <div className="flex flex-wrap gap-6">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="mortalityT1" className="text-sm font-medium w-8">T1:</Label>
+              <Input
+                id="mortalityT1"
+                type="number"
+                min="0"
+                max="50"
+                step="0.5"
+                value={mortalityT1}
+                onChange={(e) => setMortalityT1(parseFloat(e.target.value) || 0)}
+                className="w-20 h-8"
+              />
+              <span className="text-xs text-muted-foreground">% al mese</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="mortalityT3" className="text-sm font-medium w-8">T3:</Label>
+              <Input
+                id="mortalityT3"
+                type="number"
+                min="0"
+                max="50"
+                step="0.5"
+                value={mortalityT3}
+                onChange={(e) => setMortalityT3(parseFloat(e.target.value) || 0)}
+                className="w-20 h-8"
+              />
+              <span className="text-xs text-muted-foreground">% al mese</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="mortalityT10" className="text-sm font-medium w-8">T10:</Label>
+              <Input
+                id="mortalityT10"
+                type="number"
+                min="0"
+                max="50"
+                step="0.5"
+                value={mortalityT10}
+                onChange={(e) => setMortalityT10(parseFloat(e.target.value) || 0)}
+                className="w-20 h-8"
+              />
+              <span className="text-xs text-muted-foreground">% al mese</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>

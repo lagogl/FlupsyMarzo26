@@ -290,14 +290,15 @@ export class ProductionForecastService {
     return Math.ceil(days);
   }
 
-  async calculateForecast(year: number): Promise<ForecastSummary> {
+  async calculateForecast(
+    year: number, 
+    mortalityRates: { T1: number; T3: number; T10: number } = { T1: 0.05, T3: 0.03, T10: 0.02 }
+  ): Promise<ForecastSummary> {
     const targets = await this.getProductionTargets(year);
     const sgrRates = await this.getSgrRates();
     const currentInventory = await this.getCurrentInventoryBySize();
     const inventoryByCategory = await this.getTotalInventoryByCategory();
     const sgrLookup = await this.getSgrLookup();
-
-    const mortalityRate = 0.15;
 
     const monthlyData: MonthlyForecast[] = [];
     const seedingSchedule: SeedingSchedule[] = [];
@@ -317,12 +318,14 @@ export class ProductionForecastService {
         const growthFactor = Math.pow(1 + monthSgr, 30);
         
         const t1ToT3Transition = stockT1 * 0.15;
-        stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRate * 0.1));
-        stockT3 += t1ToT3Transition * (1 - mortalityRate);
+        stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRates.T1));
+        stockT3 += t1ToT3Transition * (1 - mortalityRates.T1);
         
         const t3ToT10Transition = stockT3 * 0.10;
-        stockT3 = Math.max(0, stockT3 - t3ToT10Transition);
-        stockT10 += t3ToT10Transition * (1 - mortalityRate);
+        stockT3 = Math.max(0, (stockT3 - t3ToT10Transition) * (1 - mortalityRates.T3));
+        stockT10 += t3ToT10Transition * (1 - mortalityRates.T3);
+        
+        stockT10 = stockT10 * (1 - mortalityRates.T10);
       }
       
       const monthTargets = targets.filter(t => t.month === month);
@@ -352,12 +355,15 @@ export class ProductionForecastService {
         const deficit = budgetAnimals - soldAnimals;
         let seminaT1Richiesta = 0;
         
+        const growthMonths = target.sizeCategory === 'T3' ? 6 : 10;
+        const cumulativeMortalityT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
+        const cumulativeMortalityT3 = target.sizeCategory === 'T10' 
+          ? Math.pow(1 - mortalityRates.T3, 4) 
+          : 1;
+        
         if (deficit > 0) {
-          if (target.sizeCategory === 'T3') {
-            seminaT1Richiesta = Math.ceil(deficit / ((1 - mortalityRate) * (1 - mortalityRate)));
-          } else if (target.sizeCategory === 'T10') {
-            seminaT1Richiesta = Math.ceil(deficit / Math.pow(1 - mortalityRate, 3));
-          }
+          const survivalRate = cumulativeMortalityT1 * cumulativeMortalityT3;
+          seminaT1Richiesta = Math.ceil(deficit / survivalRate);
           
           const growthCalc = this.calculateGrowthDaysBackward(
             sgrLookup,

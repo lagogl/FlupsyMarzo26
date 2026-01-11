@@ -846,11 +846,17 @@ export function registerAIRoutes(app: Express) {
   // Modulo: Analisi Scostamenti Produzione
   app.get("/api/ai/production-forecast", async (req: Request, res: Response) => {
     try {
-      const { year } = req.query;
+      const { year, mortalityT1, mortalityT3, mortalityT10 } = req.query;
       const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
       
+      const mortalityRates = {
+        T1: mortalityT1 ? parseFloat(mortalityT1 as string) / 100 : 0.05,
+        T3: mortalityT3 ? parseFloat(mortalityT3 as string) / 100 : 0.03,
+        T10: mortalityT10 ? parseFloat(mortalityT10 as string) / 100 : 0.02
+      };
+      
       const { productionForecastService } = await import('../ai/production-forecast-service');
-      const forecast = await productionForecastService.calculateForecast(targetYear);
+      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
       
       res.json({ success: true, ...forecast });
     } catch (error) {
