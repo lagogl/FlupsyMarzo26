@@ -73,6 +73,8 @@ import LCIModule from "@/pages/LCIModule";
 import TaskManagement from "@/pages/TaskManagement";
 // Importazione Attività Consigliate AI
 import AttivitaConsigliate from "@/pages/AttivitaConsigliate";
+// Importazione Analisi Scostamenti Produzione
+import AnalisiScostamenti from "@/pages/AnalisiScostamenti";
 // Importazione Operators (Gestione Operatori)
 import Operators from "@/pages/Operators";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
@@ -139,6 +141,7 @@ function Router() {
       <ProtectedRoute path="/ai-report-generator" component={AIReportGenerator}/>
       <ProtectedRoute path="/ai-enhanced" component={AIEnhanced}/>
       <ProtectedRoute path="/attivita-consigliate" component={AttivitaConsigliate}/>
+      <ProtectedRoute path="/analisi-scostamenti" component={AnalisiScostamenti}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
       <ProtectedRoute path="/task-management" component={TaskManagement}/>
