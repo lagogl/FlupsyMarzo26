@@ -184,68 +184,76 @@ export class ProductionForecastService {
 
     const avgSgrT1toT3 = 0.95;
     const avgSgrT3toT10 = 0.85;
+    const mortalityRate = 0.15;
 
     const monthlyData: MonthlyForecast[] = [];
-    let runningInventoryT3 = inventoryByCategory.T3 || 0;
-    let runningInventoryT10 = inventoryByCategory.T10 || 0;
-    let runningInventoryT1 = inventoryByCategory.T1 || 0;
+    
+    let stockT1 = inventoryByCategory.T1 || 0;
+    let stockT3 = inventoryByCategory.T3 || 0;
+    let stockT10 = inventoryByCategory.T10 || 0;
 
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
+    const daysToGrowT1toT3 = this.calculateDaysToGrow(100000, 18000, avgSgrT1toT3);
+    const daysToGrowT3toT10 = this.calculateDaysToGrow(18000, 5000, avgSgrT3toT10);
 
     for (let month = 1; month <= 12; month++) {
+      const monthsFromNow = month - currentMonth;
+      
+      if (monthsFromNow > 0) {
+        const daysInMonth = 30;
+        
+        const t1GrowthRate = Math.pow(1 + avgSgrT1toT3 / 100, daysInMonth);
+        const t1ToT3Transition = stockT1 * 0.15;
+        stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRate * 0.1));
+        stockT3 += t1ToT3Transition * (1 - mortalityRate);
+        
+        const t3ToT10Transition = stockT3 * 0.10;
+        stockT3 = Math.max(0, stockT3 - t3ToT10Transition);
+        stockT10 += t3ToT10Transition * (1 - mortalityRate);
+      }
+      
       const monthTargets = targets.filter(t => t.month === month);
       
       for (const target of monthTargets) {
         const budgetAnimals = target.targetAnimals || 0;
         const ordersAnimals = 0;
 
-        let productionForecast = 0;
+        let availableForSale = 0;
+        let soldAnimals = 0;
         let seedingRequirement = 0;
         let seedingDeadline: string | null = null;
 
         if (target.sizeCategory === 'T3') {
-          const monthsUntil = month - currentMonth;
-          const daysUntil = monthsUntil * 30;
-          const daysToGrowT1toT3 = this.calculateDaysToGrow(100000, 25000, avgSgrT1toT3);
+          availableForSale = stockT3;
           
-          if (monthsUntil <= 0) {
-            productionForecast = runningInventoryT3;
-          } else {
-            const growthFactor = Math.pow(1 + avgSgrT1toT3 / 100, daysUntil);
-            const t1Converting = Math.min(runningInventoryT1, budgetAnimals * 0.8);
-            productionForecast = runningInventoryT3 + (t1Converting * 0.85);
-          }
-
-          if (productionForecast < budgetAnimals) {
-            seedingRequirement = Math.ceil((budgetAnimals - productionForecast) / 0.7);
+          soldAnimals = Math.min(availableForSale, budgetAnimals);
+          stockT3 = Math.max(0, stockT3 - soldAnimals);
+          
+          const deficit = budgetAnimals - soldAnimals;
+          if (deficit > 0) {
+            seedingRequirement = Math.ceil(deficit / (1 - mortalityRate));
             const deadlineDate = new Date(year, month - 1, 1);
             deadlineDate.setDate(deadlineDate.getDate() - daysToGrowT1toT3);
             seedingDeadline = deadlineDate.toISOString().split('T')[0];
           }
           
-          runningInventoryT3 = Math.max(0, runningInventoryT3 - budgetAnimals * 0.3);
-          
         } else if (target.sizeCategory === 'T10') {
-          const monthsUntil = month - currentMonth;
-          const daysToGrowT3toT10 = this.calculateDaysToGrow(25000, 3000, avgSgrT3toT10);
+          availableForSale = stockT10;
           
-          if (monthsUntil <= 0) {
-            productionForecast = runningInventoryT10;
-          } else {
-            productionForecast = runningInventoryT10 + (runningInventoryT3 * 0.2);
-          }
-
-          if (productionForecast < budgetAnimals) {
-            seedingRequirement = Math.ceil((budgetAnimals - productionForecast) / 0.5);
+          soldAnimals = Math.min(availableForSale, budgetAnimals);
+          stockT10 = Math.max(0, stockT10 - soldAnimals);
+          
+          const deficit = budgetAnimals - soldAnimals;
+          if (deficit > 0) {
+            seedingRequirement = Math.ceil(deficit / (1 - mortalityRate));
             const deadlineDate = new Date(year, month - 1, 1);
-            deadlineDate.setDate(deadlineDate.getDate() - daysToGrowT3toT10 - 90);
+            deadlineDate.setDate(deadlineDate.getDate() - daysToGrowT1toT3 - daysToGrowT3toT10);
             seedingDeadline = deadlineDate.toISOString().split('T')[0];
           }
-          
-          runningInventoryT10 = Math.max(0, runningInventoryT10 - budgetAnimals * 0.3);
         }
 
+        const productionForecast = soldAnimals;
         const varianceBudgetOrders = ordersAnimals - budgetAnimals;
         const varianceBudgetProduction = productionForecast - budgetAnimals;
         const varianceOrdersProduction = productionForecast - ordersAnimals;
