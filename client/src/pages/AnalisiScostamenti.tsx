@@ -364,17 +364,26 @@ export default function AnalisiScostamenti() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  data.currentInventory.map((inv, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>{inv.sizeName}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatFullNumber(inv.totalAnimals)}
+                  <>
+                    {data.currentInventory.map((inv, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{inv.sizeName}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatFullNumber(inv.totalAnimals)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {inv.animalsPerKgRange}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-slate-100 font-bold">
+                      <TableCell>TOTALE</TableCell>
+                      <TableCell className="text-right">
+                        {formatFullNumber(data.currentInventory.reduce((sum, inv) => sum + inv.totalAnimals, 0))}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {inv.animalsPerKgRange}
-                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
                     </TableRow>
-                  ))
+                  </>
                 )}
               </TableBody>
             </Table>
