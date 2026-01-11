@@ -843,5 +843,63 @@ export function registerAIRoutes(app: Express) {
     }
   });
 
+  // Modulo: Analisi Scostamenti Produzione
+  app.get("/api/ai/production-forecast", async (req: Request, res: Response) => {
+    try {
+      const { year } = req.query;
+      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      
+      const { productionForecastService } = await import('../ai/production-forecast-service');
+      const forecast = await productionForecastService.calculateForecast(targetYear);
+      
+      res.json({ success: true, ...forecast });
+    } catch (error) {
+      console.error('Errore forecast produzione AI:', error);
+      res.status(500).json({ success: false, error: 'Errore elaborazione forecast produzione' });
+    }
+  });
+
+  // GET targets per anno
+  app.get("/api/ai/production-targets", async (req: Request, res: Response) => {
+    try {
+      const { year } = req.query;
+      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      
+      const { productionForecastService } = await import('../ai/production-forecast-service');
+      const targets = await productionForecastService.getProductionTargets(targetYear);
+      
+      res.json({ success: true, targets });
+    } catch (error) {
+      console.error('Errore recupero targets:', error);
+      res.status(500).json({ success: false, error: 'Errore recupero targets' });
+    }
+  });
+
+  // POST/PUT target singolo
+  app.post("/api/ai/production-targets", async (req: Request, res: Response) => {
+    try {
+      const { year, month, sizeCategory, targetAnimals, targetWeight, notes } = req.body;
+      
+      if (!year || !month || !sizeCategory || !targetAnimals) {
+        return res.status(400).json({ success: false, error: 'Campi obbligatori mancanti' });
+      }
+      
+      const { productionForecastService } = await import('../ai/production-forecast-service');
+      await productionForecastService.upsertTarget({
+        year,
+        month,
+        sizeCategory,
+        targetAnimals,
+        targetWeight,
+        notes
+      });
+      
+      res.json({ success: true, message: 'Target aggiornato' });
+    } catch (error) {
+      console.error('Errore aggiornamento target:', error);
+      res.status(500).json({ success: false, error: 'Errore aggiornamento target' });
+    }
+  });
+
   console.log('🤖 Route AI registrate con successo');
 }
