@@ -9,7 +9,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw, Download } from "lucide-react";
+import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
 
 interface MonthlyForecast {
@@ -113,6 +114,40 @@ export default function AnalisiScostamenti() {
     setAppliedMortalityT1(inputMortalityT1);
     setAppliedMortalityT3(inputMortalityT3);
     setAppliedMortalityT10(inputMortalityT10);
+  };
+
+  const exportToExcel = () => {
+    if (!data) return;
+    
+    const exportData = filteredData.map(row => ({
+      'Mese Target': row.monthName,
+      'Taglia': row.sizeCategory,
+      'Budget': row.budgetAnimals,
+      'Venduto': row.productionForecast,
+      'Δ Budget': row.varianceBudgetProduction,
+      'Stock Residuo': row.stockResiduo,
+      'Semina T1': row.seminaT1Richiesta || 0,
+      'Mese Semina': row.meseSeminaT1 || '-',
+      'Stato': row.status === 'on_track' ? 'In linea' : row.status === 'warning' ? 'Attenzione' : 'Critico'
+    }));
+
+    const totals = {
+      'Mese Target': 'TOTALE',
+      'Taglia': '-',
+      'Budget': filteredData.reduce((sum, r) => sum + r.budgetAnimals, 0),
+      'Venduto': filteredData.reduce((sum, r) => sum + r.productionForecast, 0),
+      'Δ Budget': filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0),
+      'Stock Residuo': '-',
+      'Semina T1': filteredData.reduce((sum, r) => sum + r.seminaT1Richiesta, 0),
+      'Mese Semina': '-',
+      'Stato': '-'
+    };
+    exportData.push(totals);
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Scostamenti Produzione');
+    XLSX.writeFile(wb, `Scostamenti_Produzione_${selectedYear}.xlsx`);
   };
 
   const { data, isLoading, error } = useQuery<ForecastData>({
@@ -482,11 +517,17 @@ export default function AnalisiScostamenti() {
 
         <TabsContent value="table">
           <Card>
-            <CardHeader>
-              <CardTitle>Dettaglio Mensile</CardTitle>
-              <CardDescription>
-                Tutti gli scostamenti budget/ordini/produzione per mese e taglia
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Dettaglio Mensile</CardTitle>
+                <CardDescription>
+                  Tutti gli scostamenti budget/ordini/produzione per mese e taglia
+                </CardDescription>
+              </div>
+              <Button onClick={exportToExcel} variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Esporta Excel
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
