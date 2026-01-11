@@ -25,6 +25,20 @@ interface MonthlyForecast {
   status: 'on_track' | 'warning' | 'critical';
   stockResiduo: number;
   seminaT1Richiesta: number;
+  meseSeminaT1: string | null;
+  giorniCrescita: number;
+}
+
+interface SeedingSchedule {
+  seedingMonth: number;
+  seedingYear: number;
+  seedingMonthName: string;
+  targetMonth: number;
+  targetYear: number;
+  targetMonthName: string;
+  targetSize: string;
+  seedT1Amount: number;
+  growthDays: number;
 }
 
 interface InventoryBySize {
@@ -43,6 +57,8 @@ interface ForecastData {
   overallVariance: number;
   monthlyData: MonthlyForecast[];
   currentInventory: InventoryBySize[];
+  seedingSchedule: SeedingSchedule[];
+  totalSeedingT1Required: number;
 }
 
 const formatNumber = (num: number): string => {
@@ -298,17 +314,20 @@ export default function AnalisiScostamenti() {
                 .map((d, idx) => (
                   <div key={idx} className="flex items-center justify-between p-2 border rounded">
                     <div>
-                      <div className="font-medium">{d.monthName} - {d.sizeCategory}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-1">
+                      <div className="font-medium">Target: {d.monthName} {d.sizeCategory}</div>
+                      <div className="text-sm text-orange-600 flex items-center gap-1 font-medium">
                         <Calendar className="h-3 w-3" />
-                        Seminare entro: {d.seedingDeadline ? new Date(d.seedingDeadline).toLocaleDateString('it-IT') : 'N/A'}
+                        Seminare in: {d.meseSeminaT1 || 'N/A'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        ({d.giorniCrescita} giorni di crescita)
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-orange-600">
                         +{formatNumber(d.seedingRequirement)}
                       </div>
-                      <div className="text-xs text-muted-foreground">animali</div>
+                      <div className="text-xs text-muted-foreground">animali T1</div>
                     </div>
                   </div>
                 ))}
@@ -385,13 +404,14 @@ export default function AnalisiScostamenti() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mese</TableHead>
+                      <TableHead>Mese Target</TableHead>
                       <TableHead>Taglia</TableHead>
                       <TableHead className="text-right">Budget</TableHead>
                       <TableHead className="text-right">Venduto</TableHead>
                       <TableHead className="text-right">Δ Budget</TableHead>
                       <TableHead className="text-right">Stock Residuo</TableHead>
                       <TableHead className="text-right text-orange-600">Semina T1</TableHead>
+                      <TableHead className="text-orange-600">Mese Semina</TableHead>
                       <TableHead>Stato</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -415,6 +435,9 @@ export default function AnalisiScostamenti() {
                         </TableCell>
                         <TableCell className="text-right font-medium text-orange-600">
                           {row.seminaT1Richiesta > 0 ? formatNumber(row.seminaT1Richiesta) : '-'}
+                        </TableCell>
+                        <TableCell className="text-orange-600 font-medium">
+                          {row.meseSeminaT1 || '-'}
                         </TableCell>
                         <TableCell>{getStatusBadge(row.status)}</TableCell>
                       </TableRow>

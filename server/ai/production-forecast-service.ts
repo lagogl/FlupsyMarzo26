@@ -18,6 +18,20 @@ interface MonthlyForecast {
   status: 'on_track' | 'warning' | 'critical';
   stockResiduo: number;
   seminaT1Richiesta: number;
+  meseSeminaT1: string | null;
+  giorniCrescita: number;
+}
+
+interface SeedingSchedule {
+  seedingMonth: number;
+  seedingYear: number;
+  seedingMonthName: string;
+  targetMonth: number;
+  targetYear: number;
+  targetMonthName: string;
+  targetSize: string;
+  seedT1Amount: number;
+  growthDays: number;
 }
 
 interface ForecastSummary {
@@ -29,6 +43,8 @@ interface ForecastSummary {
   monthlyData: MonthlyForecast[];
   currentInventory: InventoryBySize[];
   sgrRates: SgrRate[];
+  seedingSchedule: SeedingSchedule[];
+  totalSeedingT1Required: number;
 }
 
 interface InventoryBySize {
@@ -188,7 +204,12 @@ export class ProductionForecastService {
     const avgSgrT3toT10 = 0.85;
     const mortalityRate = 0.15;
 
+    const DAYS_T1_TO_T3 = 180;
+    const DAYS_T3_TO_T10 = 120;
+    const DAYS_T1_TO_T10 = DAYS_T1_TO_T3 + DAYS_T3_TO_T10;
+
     const monthlyData: MonthlyForecast[] = [];
+    const seedingSchedule: SeedingSchedule[] = [];
     
     let stockT1 = inventoryByCategory.T1 || 0;
     let stockT3 = inventoryByCategory.T3 || 0;
@@ -196,16 +217,12 @@ export class ProductionForecastService {
 
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
-    const daysToGrowT1toT3 = this.calculateDaysToGrow(100000, 18000, avgSgrT1toT3);
-    const daysToGrowT3toT10 = this.calculateDaysToGrow(18000, 5000, avgSgrT3toT10);
+    const currentYear = today.getFullYear();
 
     for (let month = 1; month <= 12; month++) {
       const monthsFromNow = month - currentMonth;
       
       if (monthsFromNow > 0) {
-        const daysInMonth = 30;
-        
-        const t1GrowthRate = Math.pow(1 + avgSgrT1toT3 / 100, daysInMonth);
         const t1ToT3Transition = stockT1 * 0.15;
         stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRate * 0.1));
         stockT3 += t1ToT3Transition * (1 - mortalityRate);
@@ -225,34 +242,52 @@ export class ProductionForecastService {
         let soldAnimals = 0;
         let seedingRequirement = 0;
         let seedingDeadline: string | null = null;
+        let meseSeminaT1: string | null = null;
+        let giorniCrescita = 0;
 
         if (target.sizeCategory === 'T3') {
           availableForSale = stockT3;
-          
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT3 = Math.max(0, stockT3 - soldAnimals);
-          
-          const deficit = budgetAnimals - soldAnimals;
-          if (deficit > 0) {
-            seedingRequirement = Math.ceil(deficit / (1 - mortalityRate));
-            const deadlineDate = new Date(year, month - 1, 1);
-            deadlineDate.setDate(deadlineDate.getDate() - daysToGrowT1toT3);
-            seedingDeadline = deadlineDate.toISOString().split('T')[0];
-          }
+          giorniCrescita = DAYS_T1_TO_T3;
           
         } else if (target.sizeCategory === 'T10') {
           availableForSale = stockT10;
-          
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT10 = Math.max(0, stockT10 - soldAnimals);
-          
-          const deficit = budgetAnimals - soldAnimals;
-          if (deficit > 0) {
-            seedingRequirement = Math.ceil(deficit / (1 - mortalityRate));
-            const deadlineDate = new Date(year, month - 1, 1);
-            deadlineDate.setDate(deadlineDate.getDate() - daysToGrowT1toT3 - daysToGrowT3toT10);
-            seedingDeadline = deadlineDate.toISOString().split('T')[0];
+          giorniCrescita = DAYS_T1_TO_T10;
+        }
+
+        const deficit = budgetAnimals - soldAnimals;
+        let seminaT1Richiesta = 0;
+        
+        if (deficit > 0) {
+          if (target.sizeCategory === 'T3') {
+            seminaT1Richiesta = Math.ceil(deficit / ((1 - mortalityRate) * (1 - mortalityRate)));
+          } else if (target.sizeCategory === 'T10') {
+            seminaT1Richiesta = Math.ceil(deficit / Math.pow(1 - mortalityRate, 3));
           }
+          
+          const targetDate = new Date(year, month - 1, 15);
+          const seedingDate = new Date(targetDate);
+          seedingDate.setDate(seedingDate.getDate() - giorniCrescita);
+          
+          seedingDeadline = seedingDate.toISOString().split('T')[0];
+          meseSeminaT1 = MONTH_NAMES[seedingDate.getMonth()] + ' ' + seedingDate.getFullYear();
+          
+          seedingSchedule.push({
+            seedingMonth: seedingDate.getMonth() + 1,
+            seedingYear: seedingDate.getFullYear(),
+            seedingMonthName: MONTH_NAMES[seedingDate.getMonth()],
+            targetMonth: month,
+            targetYear: year,
+            targetMonthName: MONTH_NAMES[month - 1],
+            targetSize: target.sizeCategory,
+            seedT1Amount: Math.round(seminaT1Richiesta),
+            growthDays: giorniCrescita
+          });
+          
+          seedingRequirement = Math.round(seminaT1Richiesta);
         }
 
         const productionForecast = soldAnimals;
@@ -270,16 +305,6 @@ export class ProductionForecastService {
         const stockResiduo = target.sizeCategory === 'T3' ? stockT3 : 
                              target.sizeCategory === 'T10' ? stockT10 : stockT1;
 
-        const deficit = budgetAnimals - soldAnimals;
-        let seminaT1Richiesta = 0;
-        if (deficit > 0) {
-          if (target.sizeCategory === 'T3') {
-            seminaT1Richiesta = Math.ceil(deficit / ((1 - mortalityRate) * (1 - mortalityRate)));
-          } else if (target.sizeCategory === 'T10') {
-            seminaT1Richiesta = Math.ceil(deficit / Math.pow(1 - mortalityRate, 3));
-          }
-        }
-
         monthlyData.push({
           year,
           month,
@@ -295,14 +320,22 @@ export class ProductionForecastService {
           seedingDeadline,
           status,
           stockResiduo: Math.round(stockResiduo),
-          seminaT1Richiesta: Math.round(seminaT1Richiesta)
+          seminaT1Richiesta: Math.round(seminaT1Richiesta),
+          meseSeminaT1,
+          giorniCrescita
         });
       }
     }
 
+    seedingSchedule.sort((a, b) => {
+      if (a.seedingYear !== b.seedingYear) return a.seedingYear - b.seedingYear;
+      return a.seedingMonth - b.seedingMonth;
+    });
+
     const totalBudget = monthlyData.reduce((sum, m) => sum + m.budgetAnimals, 0);
     const totalOrders = monthlyData.reduce((sum, m) => sum + m.ordersAnimals, 0);
     const totalProductionForecast = monthlyData.reduce((sum, m) => sum + m.productionForecast, 0);
+    const totalSeedingT1Required = seedingSchedule.reduce((sum, s) => sum + s.seedT1Amount, 0);
 
     return {
       year,
@@ -312,7 +345,9 @@ export class ProductionForecastService {
       overallVariance: totalProductionForecast - totalBudget,
       monthlyData,
       currentInventory,
-      sgrRates
+      sgrRates,
+      seedingSchedule,
+      totalSeedingT1Required
     };
   }
 
