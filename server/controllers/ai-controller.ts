@@ -826,5 +826,22 @@ export function registerAIRoutes(app: Express) {
     }
   });
 
+  // Modulo: Attività Consigliate AI
+  app.get("/api/ai/recommended-activities", async (req: Request, res: Response) => {
+    try {
+      const { flupsyId } = req.query;
+      const { RecommendedActivitiesService } = await import('../ai/recommended-activities-service');
+      
+      const activities = await RecommendedActivitiesService.getRecommendedActivities(
+        flupsyId ? parseInt(flupsyId as string) : undefined
+      );
+      
+      res.json({ success: true, ...activities });
+    } catch (error) {
+      console.error('Errore attività consigliate AI:', error);
+      res.status(500).json({ success: false, error: 'Errore elaborazione attività consigliate' });
+    }
+  });
+
   console.log('🤖 Route AI registrate con successo');
 }
