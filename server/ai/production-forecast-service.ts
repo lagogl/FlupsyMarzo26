@@ -1,6 +1,10 @@
 import { db } from "../db";
-import { productionTargets, sizes, operations, baskets, cycles } from "@shared/schema";
+import { productionTargets, sizes, operations, baskets, cycles, sgrPerTaglia } from "@shared/schema";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+
+interface SgrByMonthSize {
+  [key: string]: number; // key = "month_sizeId" e.g., "gennaio_3"
+}
 
 interface MonthlyForecast {
   year: number;
@@ -73,6 +77,98 @@ const MONTH_NAMES_LOWER = [
 
 export class ProductionForecastService {
   
+  async getSgrLookup(): Promise<SgrByMonthSize> {
+    const sgrData = await db.execute(sql`
+      SELECT month, size_id, calculated_sgr 
+      FROM sgr_per_taglia
+    `);
+    
+    const lookup: SgrByMonthSize = {};
+    for (const row of sgrData.rows as any[]) {
+      const key = `${row.month}_${row.size_id}`;
+      lookup[key] = row.calculated_sgr;
+    }
+    return lookup;
+  }
+
+  getSgrForMonthAndSize(sgrLookup: SgrByMonthSize, monthIndex: number, fromCategory: string, toCategory: string): number {
+    const monthName = MONTH_NAMES_LOWER[monthIndex];
+    
+    let sizeId: number;
+    if (fromCategory === 'T1' && toCategory === 'T3') {
+      sizeId = 3;
+    } else if (fromCategory === 'T3' && toCategory === 'T10') {
+      sizeId = 21;
+    } else {
+      sizeId = 3;
+    }
+    
+    const key = `${monthName}_${sizeId}`;
+    return sgrLookup[key] || 2.0;
+  }
+
+  calculateGrowthDaysBackward(
+    sgrLookup: SgrByMonthSize,
+    targetMonth: number,
+    targetYear: number,
+    targetCategory: string
+  ): { seedingMonth: number; seedingYear: number; totalDays: number } {
+    const T1_ANIMALS_PER_KG = 50000000;
+    const T3_ANIMALS_PER_KG = 18000;
+    const T10_ANIMALS_PER_KG = 5000;
+
+    let currentWeight = 1000000 / (targetCategory === 'T3' ? T3_ANIMALS_PER_KG : T10_ANIMALS_PER_KG);
+    const targetWeight = targetCategory === 'T10' 
+      ? 1000000 / T1_ANIMALS_PER_KG
+      : 1000000 / T1_ANIMALS_PER_KG;
+
+    let currentMonth = targetMonth - 1;
+    let currentYear = targetYear;
+    let totalDays = 0;
+    let phase = targetCategory === 'T10' ? 'T3_TO_T10' : 'T1_TO_T3';
+
+    const T3_WEIGHT = 1000000 / T3_ANIMALS_PER_KG;
+
+    while (totalDays < 400) {
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+      }
+
+      const fromCat = phase === 'T3_TO_T10' ? 'T3' : 'T1';
+      const toCat = phase === 'T3_TO_T10' ? 'T10' : 'T3';
+      const dailySgr = this.getSgrForMonthAndSize(sgrLookup, currentMonth, fromCat, toCat) / 100;
+
+      const daysInMonth = 30;
+      
+      for (let day = 0; day < daysInMonth && totalDays < 400; day++) {
+        const previousWeight = currentWeight / (1 + dailySgr);
+        currentWeight = previousWeight;
+        totalDays++;
+
+        if (phase === 'T3_TO_T10' && currentWeight <= T3_WEIGHT) {
+          phase = 'T1_TO_T3';
+        }
+        
+        if (phase === 'T1_TO_T3' && currentWeight <= targetWeight) {
+          return {
+            seedingMonth: currentMonth + 1,
+            seedingYear: currentYear,
+            totalDays
+          };
+        }
+      }
+
+      currentMonth--;
+    }
+
+    return {
+      seedingMonth: currentMonth + 1,
+      seedingYear: currentYear,
+      totalDays
+    };
+  }
+
   async getProductionTargets(year: number): Promise<any[]> {
     const targets = await db
       .select()
@@ -199,14 +295,9 @@ export class ProductionForecastService {
     const sgrRates = await this.getSgrRates();
     const currentInventory = await this.getCurrentInventoryBySize();
     const inventoryByCategory = await this.getTotalInventoryByCategory();
+    const sgrLookup = await this.getSgrLookup();
 
-    const avgSgrT1toT3 = 0.95;
-    const avgSgrT3toT10 = 0.85;
     const mortalityRate = 0.15;
-
-    const DAYS_T1_TO_T3 = 180;
-    const DAYS_T3_TO_T10 = 120;
-    const DAYS_T1_TO_T10 = DAYS_T1_TO_T3 + DAYS_T3_TO_T10;
 
     const monthlyData: MonthlyForecast[] = [];
     const seedingSchedule: SeedingSchedule[] = [];
@@ -217,12 +308,14 @@ export class ProductionForecastService {
 
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
-    const currentYear = today.getFullYear();
 
     for (let month = 1; month <= 12; month++) {
       const monthsFromNow = month - currentMonth;
       
       if (monthsFromNow > 0) {
+        const monthSgr = this.getSgrForMonthAndSize(sgrLookup, month - 1, 'T1', 'T3') / 100;
+        const growthFactor = Math.pow(1 + monthSgr, 30);
+        
         const t1ToT3Transition = stockT1 * 0.15;
         stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRate * 0.1));
         stockT3 += t1ToT3Transition * (1 - mortalityRate);
@@ -249,13 +342,11 @@ export class ProductionForecastService {
           availableForSale = stockT3;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT3 = Math.max(0, stockT3 - soldAnimals);
-          giorniCrescita = DAYS_T1_TO_T3;
           
         } else if (target.sizeCategory === 'T10') {
           availableForSale = stockT10;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT10 = Math.max(0, stockT10 - soldAnimals);
-          giorniCrescita = DAYS_T1_TO_T10;
         }
 
         const deficit = budgetAnimals - soldAnimals;
@@ -268,17 +359,23 @@ export class ProductionForecastService {
             seminaT1Richiesta = Math.ceil(deficit / Math.pow(1 - mortalityRate, 3));
           }
           
-          const targetDate = new Date(year, month - 1, 15);
-          const seedingDate = new Date(targetDate);
-          seedingDate.setDate(seedingDate.getDate() - giorniCrescita);
+          const growthCalc = this.calculateGrowthDaysBackward(
+            sgrLookup,
+            month,
+            year,
+            target.sizeCategory
+          );
           
+          giorniCrescita = growthCalc.totalDays;
+          meseSeminaT1 = MONTH_NAMES[growthCalc.seedingMonth - 1] + ' ' + growthCalc.seedingYear;
+          
+          const seedingDate = new Date(growthCalc.seedingYear, growthCalc.seedingMonth - 1, 15);
           seedingDeadline = seedingDate.toISOString().split('T')[0];
-          meseSeminaT1 = MONTH_NAMES[seedingDate.getMonth()] + ' ' + seedingDate.getFullYear();
           
           seedingSchedule.push({
-            seedingMonth: seedingDate.getMonth() + 1,
-            seedingYear: seedingDate.getFullYear(),
-            seedingMonthName: MONTH_NAMES[seedingDate.getMonth()],
+            seedingMonth: growthCalc.seedingMonth,
+            seedingYear: growthCalc.seedingYear,
+            seedingMonthName: MONTH_NAMES[growthCalc.seedingMonth - 1],
             targetMonth: month,
             targetYear: year,
             targetMonthName: MONTH_NAMES[month - 1],
