@@ -332,7 +332,6 @@ export default function AnalisiScostamenti() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Categoria</TableHead>
                   <TableHead>Taglia</TableHead>
                   <TableHead className="text-right">Animali</TableHead>
                   <TableHead className="text-right">an/kg</TableHead>
@@ -341,18 +340,13 @@ export default function AnalisiScostamenti() {
               <TableBody>
                 {data.currentInventory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">
                       Nessun dato inventario disponibile
                     </TableCell>
                   </TableRow>
                 ) : (
                   data.currentInventory.map((inv, idx) => (
                     <TableRow key={idx}>
-                      <TableCell>
-                        <Badge variant={inv.sizeCategory === 'T10' ? 'default' : 'secondary'}>
-                          {inv.sizeCategory}
-                        </Badge>
-                      </TableCell>
                       <TableCell>{inv.sizeName}</TableCell>
                       <TableCell className="text-right font-medium">
                         {formatFullNumber(inv.totalAnimals)}
