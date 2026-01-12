@@ -78,18 +78,35 @@ const MONTH_NAMES_LOWER = [
 
 export class ProductionForecastService {
   
+  private sgrFallback: Record<string, number> = {};
+  
   async getSgrLookup(): Promise<SgrByMonthSize> {
-    const sgrData = await db.execute(sql`
-      SELECT month, size_id, calculated_sgr 
-      FROM sgr_per_taglia
-    `);
+    const [sgrPerTagliaData, sgrFallbackData] = await Promise.all([
+      db.execute(sql`SELECT month, size_id, calculated_sgr FROM sgr_per_taglia`),
+      db.execute(sql`SELECT month, percentage FROM sgr`)
+    ]);
+    
+    for (const row of sgrFallbackData.rows as any[]) {
+      this.sgrFallback[row.month] = row.percentage;
+    }
     
     const lookup: SgrByMonthSize = {};
-    for (const row of sgrData.rows as any[]) {
+    for (const row of sgrPerTagliaData.rows as any[]) {
       const key = `${row.month}_${row.size_id}`;
       lookup[key] = row.calculated_sgr;
     }
     return lookup;
+  }
+  
+  getSgrWithFallback(sgrLookup: SgrByMonthSize, monthName: string, sizeId: number): number {
+    const key = `${monthName}_${sizeId}`;
+    if (sgrLookup[key] !== undefined && sgrLookup[key] !== null) {
+      return sgrLookup[key];
+    }
+    if (this.sgrFallback[monthName] !== undefined) {
+      return this.sgrFallback[monthName];
+    }
+    return 2.0;
   }
 
   getSgrForMonthAndSize(sgrLookup: SgrByMonthSize, monthIndex: number, fromCategory: string, toCategory: string): number {
@@ -104,8 +121,7 @@ export class ProductionForecastService {
       sizeId = 3;
     }
     
-    const key = `${monthName}_${sizeId}`;
-    return sgrLookup[key] || 2.0;
+    return this.getSgrWithFallback(sgrLookup, monthName, sizeId);
   }
 
   calculateGrowthDaysBackward(
@@ -330,8 +346,7 @@ export class ProductionForecastService {
     else if (animalsPerKg > 1200) sizeId = 26;
     else sizeId = 27;
     
-    const key = `${monthName}_${sizeId}`;
-    return sgrLookup[key] || 2.0;
+    return this.getSgrWithFallback(sgrLookup, monthName, sizeId);
   }
 
   async getBasketLevelInventory(): Promise<Array<{basketId: number, animalsPerKg: number, animalCount: number}>> {
