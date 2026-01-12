@@ -70,7 +70,7 @@ export default function Dashboard() {
   const cycles = cyclesData?.cycles || [];
 
   const { data: operations, isLoading: operationsLoading, dataUpdatedAt: operationsUpdatedAt } = useQuery<Operation[]>({
-    queryKey: ['/api/operations', { includeAll: true }],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
   });
 
   const { data: lots, isLoading: lotsLoading, dataUpdatedAt: lotsUpdatedAt } = useQuery<Lot[]>({
