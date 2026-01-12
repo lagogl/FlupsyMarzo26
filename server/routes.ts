@@ -7989,5 +7989,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   }, express.static(path.join(process.cwd(), 'generated-pdfs')));
   
+  // Serve static files from public folder (Excel reports, etc.)
+  app.use('/public', express.static(path.join(process.cwd(), 'public')));
+  
   return httpServer;
 }
