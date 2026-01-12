@@ -907,5 +907,308 @@ export function registerAIRoutes(app: Express) {
     }
   });
 
+  // Export Excel Analitico con tutti i calcoli commentati
+  app.get("/api/ai/production-forecast/export-analytical", async (req: Request, res: Response) => {
+    try {
+      const XLSX = require('xlsx');
+      const { year, mortalityT1, mortalityT3, mortalityT10 } = req.query;
+      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      
+      const mortalityRates = {
+        T1: mortalityT1 ? parseFloat(mortalityT1 as string) / 100 : 0.05,
+        T3: mortalityT3 ? parseFloat(mortalityT3 as string) / 100 : 0.03,
+        T10: mortalityT10 ? parseFloat(mortalityT10 as string) / 100 : 0.02
+      };
+      
+      const { productionForecastService } = await import('../ai/production-forecast-service');
+      
+      const targets = await productionForecastService.getProductionTargets(targetYear);
+      const sgrRates = await productionForecastService.getSgrRates();
+      const inventoryByCategory = await productionForecastService.getTotalInventoryByCategory();
+      const sgrLookup = await productionForecastService.getSgrLookup();
+      
+      const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+        'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+      
+      // FOGLIO 1: PARAMETRI E INVENTARIO INIZIALE
+      const parametriData = [
+        ['REPORT ANALITICO SCOSTAMENTI PRODUZIONE'],
+        [''],
+        ['=== PARAMETRI UTILIZZATI ==='],
+        ['Parametro', 'Valore', 'Commento'],
+        ['Anno Target', targetYear, 'Anno di riferimento per il budget'],
+        ['Mortalità T1 (%)', mortalityRates.T1 * 100, 'Mortalità mensile applicata durante fase T1 (seme piccolo)'],
+        ['Mortalità T3 (%)', mortalityRates.T3 * 100, 'Mortalità mensile applicata durante fase T3 (seme medio)'],
+        ['Mortalità T10 (%)', mortalityRates.T10 * 100, 'Mortalità mensile applicata durante fase T10 (seme grande)'],
+        [''],
+        ['=== INVENTARIO INIZIALE (da operazioni attive) ==='],
+        ['Categoria', 'Animali', 'Criterio Classificazione'],
+        ['T1 (Seme piccolo)', inventoryByCategory.T1 || 0, 'Animali con min_animals_per_kg > 30.000'],
+        ['T3 (Seme medio)', inventoryByCategory.T3 || 0, 'Animali con min_animals_per_kg tra 6.001 e 30.000'],
+        ['T10 (Seme grande)', inventoryByCategory.T10 || 0, 'Animali con min_animals_per_kg <= 6.000'],
+        ['TOTALE INVENTARIO', (inventoryByCategory.T1 || 0) + (inventoryByCategory.T3 || 0) + (inventoryByCategory.T10 || 0), 'Somma di tutte le categorie'],
+      ];
+      
+      // FOGLIO 2: TABELLA SGR PER MESE
+      const sgrData = [
+        ['TABELLA SGR (Specific Growth Rate) PER MESE E TAGLIA'],
+        [''],
+        ['Commento: SGR = tasso di crescita giornaliero specifico. Varia stagionalmente.'],
+        ['I valori provengono dalla tabella sgr_per_taglia del database.'],
+        ['SGR più alto = crescita più veloce (estate). SGR più basso = crescita lenta (inverno).'],
+        [''],
+        ['Mese', 'Size ID', 'Taglia', 'SGR (%/giorno)', 'Commento']
+      ];
+      
+      for (const sgr of sgrRates) {
+        let comment = '';
+        if (sgr.sgr >= 8) comment = 'Crescita molto rapida (estate)';
+        else if (sgr.sgr >= 5) comment = 'Crescita buona (primavera/autunno)';
+        else if (sgr.sgr >= 2) comment = 'Crescita moderata';
+        else comment = 'Crescita lenta (inverno)';
+        
+        sgrData.push([sgr.month, sgr.sizeId, sgr.sizeName, sgr.sgr, comment]);
+      }
+      
+      // FOGLIO 3: CALCOLI DETTAGLIATI MESE PER MESE
+      const calcData: any[] = [
+        ['CALCOLI DETTAGLIATI MENSILI'],
+        [''],
+        ['Legenda formule:'],
+        ['- Stock Residuo = Stock precedente - Venduto + Transizioni da categoria inferiore - Mortalità'],
+        ['- Venduto = MIN(Stock disponibile, Budget)'],
+        ['- Deficit = Budget - Venduto (se negativo = surplus, se positivo = manca stock)'],
+        ['- Sopravvivenza Cumulativa T3 = (1 - Mortalità_T1)^mesi_crescita'],
+        ['- Sopravvivenza Cumulativa T10 = (1 - Mortalità_T1)^6 × (1 - Mortalità_T3)^4'],
+        ['- Semina T1 = Deficit / Sopravvivenza_Cumulativa'],
+        ['- Giorni Crescita = Calcolato all\'indietro usando SGR mensili reali'],
+        [''],
+        ['Mese', 'Taglia', 'Stock Inizio Mese', 'Transizione Entrata', 'Mortalità Applicata', 
+         'Stock Disponibile', 'Budget', 'Venduto', 'Stock Fine Mese', 'Deficit', 
+         'Mesi Crescita', 'Sopravvivenza %', 'Semina T1 Richiesta', 'Mese Semina', 'Giorni Crescita', 'Stato', 'Commento Calcolo']
+      ];
+      
+      let stockT1 = inventoryByCategory.T1 || 0;
+      let stockT3 = inventoryByCategory.T3 || 0;
+      let stockT10 = inventoryByCategory.T10 || 0;
+      
+      const today = new Date();
+      const currentMonth = today.getMonth() + 1;
+      
+      for (let month = 1; month <= 12; month++) {
+        const monthsFromNow = month - currentMonth;
+        
+        const stockT1Inizio = stockT1;
+        const stockT3Inizio = stockT3;
+        const stockT10Inizio = stockT10;
+        
+        let t1ToT3Transition = 0;
+        let t3ToT10Transition = 0;
+        let mortalityT1Applied = 0;
+        let mortalityT3Applied = 0;
+        let mortalityT10Applied = 0;
+        
+        if (monthsFromNow > 0) {
+          t1ToT3Transition = stockT1 * 0.15;
+          mortalityT1Applied = (stockT1 - t1ToT3Transition) * mortalityRates.T1;
+          stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRates.T1));
+          stockT3 += t1ToT3Transition * (1 - mortalityRates.T1);
+          
+          t3ToT10Transition = stockT3 * 0.10;
+          mortalityT3Applied = (stockT3 - t3ToT10Transition) * mortalityRates.T3;
+          stockT3 = Math.max(0, (stockT3 - t3ToT10Transition) * (1 - mortalityRates.T3));
+          stockT10 += t3ToT10Transition * (1 - mortalityRates.T3);
+          
+          mortalityT10Applied = stockT10 * mortalityRates.T10;
+          stockT10 = stockT10 * (1 - mortalityRates.T10);
+        }
+        
+        const monthTargets = targets.filter((t: any) => t.month === month);
+        
+        for (const target of monthTargets) {
+          const budgetAnimals = target.targetAnimals || 0;
+          
+          let stockInizio = 0;
+          let transizione = 0;
+          let mortalita = 0;
+          let stockDisponibile = 0;
+          let venduto = 0;
+          let stockFine = 0;
+          
+          if (target.sizeCategory === 'T3') {
+            stockInizio = stockT3Inizio;
+            transizione = t1ToT3Transition * (1 - mortalityRates.T1);
+            mortalita = mortalityT3Applied;
+            stockDisponibile = stockT3;
+            venduto = Math.min(stockT3, budgetAnimals);
+            stockT3 = Math.max(0, stockT3 - venduto);
+            stockFine = stockT3;
+          } else if (target.sizeCategory === 'T10') {
+            stockInizio = stockT10Inizio;
+            transizione = t3ToT10Transition * (1 - mortalityRates.T3);
+            mortalita = mortalityT10Applied;
+            stockDisponibile = stockT10;
+            venduto = Math.min(stockT10, budgetAnimals);
+            stockT10 = Math.max(0, stockT10 - venduto);
+            stockFine = stockT10;
+          }
+          
+          const deficit = budgetAnimals - venduto;
+          
+          const growthMonths = target.sizeCategory === 'T3' ? 6 : 10;
+          const survivalT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
+          const survivalT3 = target.sizeCategory === 'T10' ? Math.pow(1 - mortalityRates.T3, 4) : 1;
+          const totalSurvival = survivalT1 * survivalT3;
+          
+          let seminaT1 = 0;
+          let meseSemina = '-';
+          let giorniCrescita = 0;
+          let stato = 'In linea';
+          let commento = '';
+          
+          if (deficit > 0) {
+            seminaT1 = Math.ceil(deficit / totalSurvival);
+            
+            const growthCalc = productionForecastService.calculateGrowthDaysBackward(
+              sgrLookup, month, targetYear, target.sizeCategory
+            );
+            giorniCrescita = growthCalc.totalDays;
+            meseSemina = MONTH_NAMES[growthCalc.seedingMonth - 1] + ' ' + growthCalc.seedingYear;
+            
+            commento = `Deficit ${deficit.toLocaleString('it-IT')} animali. ` +
+              `Sopravvivenza: ${(totalSurvival * 100).toFixed(1)}% = ` +
+              `(1-${mortalityRates.T1*100}%)^${growthMonths}` +
+              (target.sizeCategory === 'T10' ? ` × (1-${mortalityRates.T3*100}%)^4` : '') +
+              `. Semina = ${deficit.toLocaleString('it-IT')} / ${(totalSurvival * 100).toFixed(1)}% = ${seminaT1.toLocaleString('it-IT')}`;
+            stato = 'Critico';
+          } else {
+            commento = `Stock sufficiente. Venduto ${venduto.toLocaleString('it-IT')} su budget ${budgetAnimals.toLocaleString('it-IT')}.`;
+            if (venduto >= budgetAnimals) {
+              stato = 'In linea';
+            }
+          }
+          
+          calcData.push([
+            MONTH_NAMES[month - 1],
+            target.sizeCategory,
+            Math.round(stockInizio),
+            Math.round(transizione),
+            Math.round(mortalita),
+            Math.round(stockDisponibile),
+            budgetAnimals,
+            Math.round(venduto),
+            Math.round(stockFine),
+            Math.round(deficit),
+            growthMonths,
+            (totalSurvival * 100).toFixed(1) + '%',
+            Math.round(seminaT1),
+            meseSemina,
+            giorniCrescita,
+            stato,
+            commento
+          ]);
+        }
+      }
+      
+      // FOGLIO 4: RIEPILOGO SEMINE
+      const semineData: any[] = [
+        ['RIEPILOGO SEMINE T1 RICHIESTE'],
+        [''],
+        ['Questo foglio mostra quando e quanto seminare T1 per coprire i deficit di produzione.'],
+        ['Il mese di semina è calcolato all\'indietro dal mese target usando i valori SGR reali.'],
+        [''],
+        ['Mese Target', 'Taglia Target', 'Deficit Animali', 'Semina T1 Richiesta', 'Mese Semina', 
+         'Giorni Crescita', 'Formula Sopravvivenza', 'Sopravvivenza %']
+      ];
+      
+      // Ricalcola per foglio semine
+      stockT1 = inventoryByCategory.T1 || 0;
+      stockT3 = inventoryByCategory.T3 || 0;
+      stockT10 = inventoryByCategory.T10 || 0;
+      
+      for (let month = 1; month <= 12; month++) {
+        const monthsFromNow = month - currentMonth;
+        
+        if (monthsFromNow > 0) {
+          const t1ToT3 = stockT1 * 0.15;
+          stockT1 = Math.max(0, (stockT1 - t1ToT3) * (1 - mortalityRates.T1));
+          stockT3 += t1ToT3 * (1 - mortalityRates.T1);
+          
+          const t3ToT10 = stockT3 * 0.10;
+          stockT3 = Math.max(0, (stockT3 - t3ToT10) * (1 - mortalityRates.T3));
+          stockT10 += t3ToT10 * (1 - mortalityRates.T3);
+          stockT10 = stockT10 * (1 - mortalityRates.T10);
+        }
+        
+        const monthTargets = targets.filter((t: any) => t.month === month);
+        
+        for (const target of monthTargets) {
+          const budget = target.targetAnimals || 0;
+          let available = target.sizeCategory === 'T3' ? stockT3 : stockT10;
+          const sold = Math.min(available, budget);
+          
+          if (target.sizeCategory === 'T3') {
+            stockT3 = Math.max(0, stockT3 - sold);
+          } else {
+            stockT10 = Math.max(0, stockT10 - sold);
+          }
+          
+          const deficit = budget - sold;
+          if (deficit > 0) {
+            const growthMonths = target.sizeCategory === 'T3' ? 6 : 10;
+            const survT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
+            const survT3 = target.sizeCategory === 'T10' ? Math.pow(1 - mortalityRates.T3, 4) : 1;
+            const total = survT1 * survT3;
+            
+            const formula = target.sizeCategory === 'T10' 
+              ? `(1-${mortalityRates.T1*100}%)^${growthMonths} × (1-${mortalityRates.T3*100}%)^4`
+              : `(1-${mortalityRates.T1*100}%)^${growthMonths}`;
+            
+            const growthCalc = productionForecastService.calculateGrowthDaysBackward(
+              sgrLookup, month, targetYear, target.sizeCategory
+            );
+            
+            semineData.push([
+              MONTH_NAMES[month - 1] + ' ' + targetYear,
+              target.sizeCategory,
+              deficit,
+              Math.ceil(deficit / total),
+              MONTH_NAMES[growthCalc.seedingMonth - 1] + ' ' + growthCalc.seedingYear,
+              growthCalc.totalDays,
+              formula,
+              (total * 100).toFixed(1) + '%'
+            ]);
+          }
+        }
+      }
+      
+      // Crea workbook
+      const wb = XLSX.utils.book_new();
+      
+      const ws1 = XLSX.utils.aoa_to_sheet(parametriData);
+      XLSX.utils.book_append_sheet(wb, ws1, 'Parametri e Inventario');
+      
+      const ws2 = XLSX.utils.aoa_to_sheet(sgrData);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Tabella SGR');
+      
+      const ws3 = XLSX.utils.aoa_to_sheet(calcData);
+      ws3['!cols'] = Array(17).fill({ wch: 18 });
+      XLSX.utils.book_append_sheet(wb, ws3, 'Calcoli Dettagliati');
+      
+      const ws4 = XLSX.utils.aoa_to_sheet(semineData);
+      XLSX.utils.book_append_sheet(wb, ws4, 'Riepilogo Semine');
+      
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=Report_Analitico_Scostamenti_${targetYear}.xlsx`);
+      res.send(buffer);
+      
+    } catch (error) {
+      console.error('Errore export analitico:', error);
+      res.status(500).json({ success: false, error: 'Errore generazione report analitico' });
+    }
+  });
+
   console.log('🤖 Route AI registrate con successo');
 }

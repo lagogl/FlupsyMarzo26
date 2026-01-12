@@ -150,6 +150,31 @@ export default function AnalisiScostamenti() {
     XLSX.writeFile(wb, `Scostamenti_Produzione_${selectedYear}.xlsx`);
   };
 
+  const exportAnalyticalReport = async () => {
+    const params = new URLSearchParams({
+      year: String(selectedYear),
+      mortalityT1: String(appliedMortalityT1),
+      mortalityT3: String(appliedMortalityT3),
+      mortalityT10: String(appliedMortalityT10)
+    });
+    
+    const response = await fetch(`/api/ai/production-forecast/export-analytical?${params}`);
+    if (!response.ok) {
+      alert('Errore durante la generazione del report');
+      return;
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Report_Analitico_Scostamenti_${selectedYear}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+  };
+
   const { data, isLoading, error } = useQuery<ForecastData>({
     queryKey: ['/api/ai/production-forecast', selectedYear, appliedMortalityT1, appliedMortalityT3, appliedMortalityT10],
     queryFn: async () => {
@@ -524,10 +549,16 @@ export default function AnalisiScostamenti() {
                   Tutti gli scostamenti budget/ordini/produzione per mese e taglia
                 </CardDescription>
               </div>
-              <Button onClick={exportToExcel} variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Esporta Excel
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={exportToExcel} variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Esporta Excel
+                </Button>
+                <Button onClick={exportAnalyticalReport} variant="default" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Report Analitico
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
