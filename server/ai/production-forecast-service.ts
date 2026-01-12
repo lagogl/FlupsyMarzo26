@@ -291,6 +291,103 @@ export class ProductionForecastService {
     return Math.ceil(days);
   }
 
+  getCategoryFromAnimalsPerKg(animalsPerKg: number): 'T1' | 'T3' | 'T10' {
+    if (animalsPerKg > 30000) return 'T1';
+    if (animalsPerKg > 6000) return 'T3';
+    return 'T10';
+  }
+
+  getSgrForAnimalsPerKg(sgrLookup: SgrByMonthSize, monthIndex: number, animalsPerKg: number): number {
+    const monthName = MONTH_NAMES_LOWER[monthIndex];
+    let sizeId: number;
+    if (animalsPerKg > 70000000) sizeId = 2;
+    else if (animalsPerKg > 30000000) sizeId = 3;
+    else if (animalsPerKg > 20000000) sizeId = 4;
+    else if (animalsPerKg > 15000000) sizeId = 29;
+    else if (animalsPerKg > 8000000) sizeId = 5;
+    else if (animalsPerKg > 2000000) sizeId = 1;
+    else if (animalsPerKg > 1900000) sizeId = 6;
+    else if (animalsPerKg > 1000000) sizeId = 7;
+    else if (animalsPerKg > 880000) sizeId = 8;
+    else if (animalsPerKg > 600000) sizeId = 9;
+    else if (animalsPerKg > 350000) sizeId = 10;
+    else if (animalsPerKg > 300000) sizeId = 11;
+    else if (animalsPerKg > 190000) sizeId = 12;
+    else if (animalsPerKg > 120000) sizeId = 13;
+    else if (animalsPerKg > 97000) sizeId = 14;
+    else if (animalsPerKg > 70000) sizeId = 15;
+    else if (animalsPerKg > 40000) sizeId = 16;
+    else if (animalsPerKg > 29000) sizeId = 28;
+    else if (animalsPerKg > 20000) sizeId = 17;
+    else if (animalsPerKg > 15000) sizeId = 18;
+    else if (animalsPerKg > 13000) sizeId = 19;
+    else if (animalsPerKg > 9000) sizeId = 20;
+    else if (animalsPerKg > 6000) sizeId = 21;
+    else if (animalsPerKg > 3900) sizeId = 22;
+    else if (animalsPerKg > 3000) sizeId = 23;
+    else if (animalsPerKg > 2300) sizeId = 24;
+    else if (animalsPerKg > 1800) sizeId = 25;
+    else if (animalsPerKg > 1200) sizeId = 26;
+    else sizeId = 27;
+    
+    const key = `${monthName}_${sizeId}`;
+    return sgrLookup[key] || 2.0;
+  }
+
+  async getBasketLevelInventory(): Promise<Array<{basketId: number, animalsPerKg: number, animalCount: number}>> {
+    const result = await db.execute(sql`
+      SELECT DISTINCT ON (o.basket_id)
+        o.basket_id,
+        o.animals_per_kg,
+        o.animal_count
+      FROM operations o
+      JOIN baskets b ON b.id = o.basket_id
+      WHERE b.state = 'active'
+        AND o.type IN ('misura', 'peso', 'prima-attivazione')
+        AND o.animal_count > 0
+        AND o.animals_per_kg > 0
+      ORDER BY o.basket_id, o.date DESC, o.id DESC
+    `);
+    
+    return (result.rows as any[]).map(row => ({
+      basketId: row.basket_id,
+      animalsPerKg: parseFloat(row.animals_per_kg) || 50000,
+      animalCount: parseInt(row.animal_count) || 0
+    }));
+  }
+
+  simulateMonthlyGrowth(
+    baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>,
+    sgrLookup: SgrByMonthSize,
+    monthIndex: number,
+    mortalityRates: { T1: number; T3: number; T10: number }
+  ): Array<{basketId: number, animalsPerKg: number, animalCount: number}> {
+    return baskets.map(basket => {
+      const category = this.getCategoryFromAnimalsPerKg(basket.animalsPerKg);
+      const mortality = mortalityRates[category];
+      const sgr = this.getSgrForAnimalsPerKg(sgrLookup, monthIndex, basket.animalsPerKg);
+      const currentWeight = 1000000 / basket.animalsPerKg;
+      const newWeight = currentWeight * Math.pow(1 + sgr / 100, 30);
+      const newAnimalsPerKg = Math.round(1000000 / newWeight);
+      const survivingAnimals = Math.round(basket.animalCount * (1 - mortality));
+      
+      return {
+        basketId: basket.basketId,
+        animalsPerKg: newAnimalsPerKg,
+        animalCount: survivingAnimals
+      };
+    });
+  }
+
+  aggregateByCategory(baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>): Record<string, number> {
+    const result: Record<string, number> = { T1: 0, T3: 0, T10: 0 };
+    for (const basket of baskets) {
+      const category = this.getCategoryFromAnimalsPerKg(basket.animalsPerKg);
+      result[category] += basket.animalCount;
+    }
+    return result;
+  }
+
   async calculateForecast(
     year: number, 
     mortalityRates: { T1: number; T3: number; T10: number } = { T1: 0.05, T3: 0.03, T10: 0.02 }
@@ -298,35 +395,30 @@ export class ProductionForecastService {
     const targets = await this.getProductionTargets(year);
     const sgrRates = await this.getSgrRates();
     const currentInventory = await this.getCurrentInventoryBySize();
-    const inventoryByCategory = await this.getTotalInventoryByCategory();
     const sgrLookup = await this.getSgrLookup();
-
+    
+    let basketInventory = await this.getBasketLevelInventory();
+    
     const monthlyData: MonthlyForecast[] = [];
     const seedingSchedule: SeedingSchedule[] = [];
     
-    let stockT1 = inventoryByCategory.T1 || 0;
-    let stockT3 = inventoryByCategory.T3 || 0;
-    let stockT10 = inventoryByCategory.T10 || 0;
-
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
+    
+    let currentAggregated = this.aggregateByCategory(basketInventory);
+    let stockT1 = currentAggregated.T1;
+    let stockT3 = currentAggregated.T3;
+    let stockT10 = currentAggregated.T10;
 
     for (let month = 1; month <= 12; month++) {
       const monthsFromNow = month - currentMonth;
       
       if (monthsFromNow > 0) {
-        const monthSgr = this.getSgrForMonthAndSize(sgrLookup, month - 1, 'T1', 'T3') / 100;
-        const growthFactor = Math.pow(1 + monthSgr, 30);
-        
-        const t1ToT3Transition = stockT1 * 0.15;
-        stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRates.T1));
-        stockT3 += t1ToT3Transition * (1 - mortalityRates.T1);
-        
-        const t3ToT10Transition = stockT3 * 0.10;
-        stockT3 = Math.max(0, (stockT3 - t3ToT10Transition) * (1 - mortalityRates.T3));
-        stockT10 += t3ToT10Transition * (1 - mortalityRates.T3);
-        
-        stockT10 = stockT10 * (1 - mortalityRates.T10);
+        basketInventory = this.simulateMonthlyGrowth(basketInventory, sgrLookup, month - 1, mortalityRates);
+        const newAggregated = this.aggregateByCategory(basketInventory);
+        stockT1 = newAggregated.T1;
+        stockT3 = newAggregated.T3;
+        stockT10 = newAggregated.T10;
       }
       
       const monthTargets = targets.filter(t => t.month === month);
