@@ -28,6 +28,7 @@ interface MonthlyForecast {
   seedingDeadline: string | null;
   status: 'on_track' | 'warning' | 'critical';
   stockResiduo: number;
+  giacenzaInizioMese: number;
   seminaT1Richiesta: number;
   meseSeminaT1: string | null;
   giorniCrescita: number;
@@ -122,6 +123,7 @@ export default function AnalisiScostamenti() {
     const exportData = filteredData.map(row => ({
       'Mese Target': row.monthName,
       'Taglia': row.sizeCategory,
+      'Giacenza Inizio': row.giacenzaInizioMese,
       'Budget': row.budgetAnimals,
       'Venduto': row.productionForecast,
       'Δ Budget': row.varianceBudgetProduction,
@@ -134,6 +136,7 @@ export default function AnalisiScostamenti() {
     const totals = {
       'Mese Target': 'TOTALE',
       'Taglia': '-',
+      'Giacenza Inizio': '-',
       'Budget': filteredData.reduce((sum, r) => sum + r.budgetAnimals, 0),
       'Venduto': filteredData.reduce((sum, r) => sum + r.productionForecast, 0),
       'Δ Budget': filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0),
@@ -567,6 +570,7 @@ export default function AnalisiScostamenti() {
                     <TableRow>
                       <TableHead>Mese Target</TableHead>
                       <TableHead>Taglia</TableHead>
+                      <TableHead className="text-right">Giacenza Inizio</TableHead>
                       <TableHead className="text-right">Budget</TableHead>
                       <TableHead className="text-right">Venduto</TableHead>
                       <TableHead className="text-right">Δ Budget</TableHead>
@@ -584,6 +588,9 @@ export default function AnalisiScostamenti() {
                           <Badge variant={row.sizeCategory === 'T10' ? 'default' : 'secondary'}>
                             {row.sizeCategory}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-purple-600 font-medium">
+                          {formatNumber(row.giacenzaInizioMese)}
                         </TableCell>
                         <TableCell className="text-right">{formatNumber(row.budgetAnimals)}</TableCell>
                         <TableCell className="text-right">{formatNumber(row.productionForecast)}</TableCell>
@@ -606,6 +613,7 @@ export default function AnalisiScostamenti() {
                     <TableRow className="bg-slate-100 font-bold border-t-2">
                       <TableCell>TOTALE</TableCell>
                       <TableCell>-</TableCell>
+                      <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right">
                         {formatNumber(filteredData.reduce((sum, r) => sum + r.budgetAnimals, 0))}
                       </TableCell>

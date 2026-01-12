@@ -21,6 +21,7 @@ interface MonthlyForecast {
   seedingDeadline: string | null;
   status: 'on_track' | 'warning' | 'critical';
   stockResiduo: number;
+  giacenzaInizioMese: number;
   seminaT1Richiesta: number;
   meseSeminaT1: string | null;
   giorniCrescita: number;
@@ -340,16 +341,21 @@ export class ProductionForecastService {
         let seedingDeadline: string | null = null;
         let meseSeminaT1: string | null = null;
         let giorniCrescita = 0;
+        let giacenzaInizioMese = 0;
 
         if (target.sizeCategory === 'T3') {
+          giacenzaInizioMese = stockT3;
           availableForSale = stockT3;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT3 = Math.max(0, stockT3 - soldAnimals);
           
         } else if (target.sizeCategory === 'T10') {
+          giacenzaInizioMese = stockT10;
           availableForSale = stockT10;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT10 = Math.max(0, stockT10 - soldAnimals);
+        } else if (target.sizeCategory === 'T1') {
+          giacenzaInizioMese = stockT1;
         }
 
         const deficit = budgetAnimals - soldAnimals;
@@ -423,6 +429,7 @@ export class ProductionForecastService {
           seedingDeadline,
           status,
           stockResiduo: Math.round(stockResiduo),
+          giacenzaInizioMese: Math.round(giacenzaInizioMese),
           seminaT1Richiesta: Math.round(seminaT1Richiesta),
           meseSeminaT1,
           giorniCrescita
