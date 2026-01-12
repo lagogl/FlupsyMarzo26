@@ -3,6 +3,7 @@ import { AIService, PredictiveGrowthData } from "../ai/ai-service";
 import { db } from "../db";
 import { baskets, operations, cycles, sgrGiornalieri, sizes, basketLotComposition, lots, flupsys } from "../../shared/schema";
 import { eq, desc, and, gte, lte, sql, isNotNull } from "drizzle-orm";
+import * as XLSX from 'xlsx';
 
 /**
  * Controller per i servizi AI
@@ -910,7 +911,6 @@ export function registerAIRoutes(app: Express) {
   // Export Excel Analitico con tutti i calcoli commentati
   app.get("/api/ai/production-forecast/export-analytical", async (req: Request, res: Response) => {
     try {
-      const XLSX = require('xlsx');
       const { year, mortalityT1, mortalityT3, mortalityT10 } = req.query;
       const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
       
