@@ -420,6 +420,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/lot-lifecycle/recalculate-lot/:lotId", LotLifecycleController.recalculateLotStats);
   app.get("/api/lot-lifecycle/stats", LotLifecycleController.getLifecycleStats);
   
+  // Endpoint per totale animali nei cestelli attivi (calcolo autoritativo dal database)
+  app.get("/api/stats/active-baskets-animals", async (req: Request, res: Response) => {
+    try {
+      const result = await db.execute(sql`
+        WITH latest_ops AS (
+          SELECT DISTINCT ON (o.basket_id) 
+            o.basket_id,
+            o.animal_count
+          FROM operations o
+          JOIN baskets b ON b.id = o.basket_id
+          WHERE b.state = 'active'
+            AND o.type IN ('misura', 'peso', 'prima-attivazione')
+            AND o.animal_count > 0
+          ORDER BY o.basket_id, o.date DESC, o.id DESC
+        )
+        SELECT 
+          COALESCE(SUM(animal_count), 0) as total_animals,
+          COUNT(*) as basket_count
+        FROM latest_ops
+      `);
+      
+      const row = result.rows[0] as any;
+      res.json({
+        success: true,
+        totalAnimals: parseInt(row.total_animals) || 0,
+        basketCount: parseInt(row.basket_count) || 0
+      });
+    } catch (error) {
+      console.error('Errore calcolo animali attivi:', error);
+      res.status(500).json({ success: false, error: 'Errore calcolo' });
+    }
+  });
+  
   // === Basket routes ===
   // 🔄 MIGRATO AL MODULO: server/modules/operations/baskets
   // Le route dei cestelli sono state modularizzate per una migliore organizzazione

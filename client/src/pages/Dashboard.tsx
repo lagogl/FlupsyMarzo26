@@ -77,6 +77,11 @@ export default function Dashboard() {
     queryKey: ['/api/lots', { includeAll: true }],
   });
 
+  // Query per il totale animali (calcolo autoritativo dal backend)
+  const { data: animalsStats } = useQuery<{ success: boolean; totalAnimals: number; basketCount: number }>({
+    queryKey: ['/api/stats/active-baskets-animals'],
+  });
+
   // Query for tasks (for ticker)
   const { data: tasks } = useQuery<any[]>({
     queryKey: ['/api/tasks'],
@@ -416,7 +421,7 @@ export default function Dashboard() {
               changeType={activeBasketsWithoutCycle.length > 0 ? 'warning' : lastMonthBaskets >= 0 ? 'success' : 'error'}
               linkTo="/baskets"
               cardColor="from-blue-50 to-blue-100 border-l-4 border-blue-500"
-              secondaryInfo={`${totalAnimalsInActiveBaskets.toLocaleString('it-IT')} animali`}
+              secondaryInfo={`${(animalsStats?.totalAnimals || 0).toLocaleString('it-IT')} animali`}
             />
           </div>
         </TooltipTrigger>
