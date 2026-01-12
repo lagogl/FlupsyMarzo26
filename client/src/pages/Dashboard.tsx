@@ -219,31 +219,20 @@ export default function Dashboard() {
   }, [activeLots]);
 
   // Calcola il numero totale di animali nelle ceste attive
+  // Usa solo operazioni con animalCount esplicito (misura, peso, prima-attivazione)
   const totalAnimalsInActiveBaskets = activeBaskets.reduce((total, basket) => {
-    // Prendi solo operazioni con conteggio animali o animalsPerKg per ogni cesta
+    // Prendi solo operazioni con conteggio animali esplicito
     const basketOperations = filteredOperations
       .filter(op => op.basketId === basket.id && 
-         (op.animalCount !== null || 
-          op.animalsPerKg !== null))
+         op.animalCount !== null && 
+         op.animalCount !== undefined &&
+         op.animalCount > 0)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
     if (basketOperations.length === 0) return total;
     
-    // Prendi la più recente operazione
-    const latestOperation = basketOperations[0];
-    
-    // Se c'è un conteggio animali esplicito, usa quello
-    if (latestOperation.animalCount !== null && latestOperation.animalCount !== undefined) {
-      return total + latestOperation.animalCount;
-    }
-    
-    // Se non c'è un conteggio esplicito ma c'è animalsPerKg, prova a stimare il numero
-    if (latestOperation.animalsPerKg !== null && latestOperation.animalsPerKg !== undefined) {
-      // Stima usando animali per kg (approssimazione alta per sicurezza)
-      return total + Math.max(1000, latestOperation.animalsPerKg * 10);
-    }
-    
-    return total;
+    // Prendi la più recente operazione con animalCount
+    return total + basketOperations[0].animalCount;
   }, 0);
 
   // Previous month comparison for baskets - removed hardcoded values
