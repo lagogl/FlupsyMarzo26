@@ -374,16 +374,26 @@ router.post('/clients/sync', async (req: Request, res: Response) => {
     
     for (let i = 0; i < allClienti.length; i++) {
       const clienteFIC = allClienti[i];
-      // Cerca cliente esistente per P.IVA o denominazione
+      // Cerca cliente esistente: prima per fattureInCloudId (più affidabile), poi P.IVA, poi denominazione
       let clienteEsistente = null;
       
-      if (clienteFIC.vat_number) {
+      // Prima cerca per ID Fatture in Cloud (più affidabile)
+      if (clienteFIC.id) {
+        const clientiConFicId = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, clienteFIC.id));
+        if (clientiConFicId.length > 0) {
+          clienteEsistente = clientiConFicId[0];
+        }
+      }
+      
+      // Se non trovato, cerca per P.IVA
+      if (!clienteEsistente && clienteFIC.vat_number) {
         const clientiConPiva = await db.select().from(clienti).where(eq(clienti.piva, clienteFIC.vat_number));
         if (clientiConPiva.length > 0) {
           clienteEsistente = clientiConPiva[0];
         }
       }
       
+      // Se ancora non trovato, cerca per nome esatto
       if (!clienteEsistente && clienteFIC.name) {
         const clientiConNome = await db.select().from(clienti).where(eq(clienti.denominazione, clienteFIC.name));
         if (clientiConNome.length > 0) {
@@ -430,8 +440,8 @@ router.post('/clients/sync', async (req: Request, res: Response) => {
         email: clienteFIC.email || '',
         telefono: clienteFIC.phone || '',
         piva: clienteFIC.vat_number || '',
-        codice_fiscale: clienteFIC.tax_code || clienteFIC.vat_number || '',
-        fatture_in_cloud_id: clienteFIC.id
+        codiceFiscale: clienteFIC.tax_code || clienteFIC.vat_number || '',
+        fattureInCloudId: clienteFIC.id
       };
       
       if (clienteEsistente) {
