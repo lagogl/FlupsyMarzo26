@@ -894,6 +894,18 @@ export function registerAIRoutes(app: Express) {
     }
   });
 
+  // Diagnostica ordini - verifica date e distribuzione per taglia
+  app.get("/api/ai/orders-diagnostic", async (req: Request, res: Response) => {
+    try {
+      const { productionForecastService } = await import('../ai/production-forecast-service');
+      const diagnostic = await productionForecastService.getOrdersDiagnostic();
+      res.json({ success: true, ...diagnostic });
+    } catch (error) {
+      console.error('Errore diagnostica ordini:', error);
+      res.status(500).json({ success: false, error: 'Errore diagnostica ordini' });
+    }
+  });
+
   // POST/PUT target singolo
   app.post("/api/ai/production-targets", async (req: Request, res: Response) => {
     try {

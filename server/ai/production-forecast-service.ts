@@ -437,6 +437,98 @@ export class ProductionForecastService {
     return 'T3'; // Default
   }
 
+  // Diagnostica ordini: mostra tutti gli ordini con date e calcoli di allocazione
+  async getOrdersDiagnostic(): Promise<any> {
+    if (!isDbEsternoAvailable() || !dbEsterno) {
+      return { error: 'DB esterno non disponibile', ordini: [] };
+    }
+
+    try {
+      const ordini = await dbEsterno
+        .select({
+          id: ordiniCondivisi.id,
+          clienteNome: ordiniCondivisi.clienteNome,
+          quantita: ordiniCondivisi.quantita,
+          quantitaTotale: ordiniCondivisi.quantitaTotale,
+          tagliaRichiesta: ordiniCondivisi.tagliaRichiesta,
+          dataInizioConsegna: ordiniCondivisi.dataInizioConsegna,
+          dataFineConsegna: ordiniCondivisi.dataFineConsegna,
+          stato: ordiniCondivisi.stato
+        })
+        .from(ordiniCondivisi)
+        .where(
+          and(
+            not(eq(ordiniCondivisi.stato, 'Annullato')),
+            not(eq(ordiniCondivisi.cancellato, true))
+          )
+        );
+
+      const dettagliOrdini = ordini.map(o => {
+        const dataInizio = o.dataInizioConsegna ? new Date(o.dataInizioConsegna) : null;
+        const dataFine = o.dataFineConsegna ? new Date(o.dataFineConsegna) : null;
+        const quantita = o.quantitaTotale || o.quantita || 0;
+        
+        let mesiTotali = 0;
+        let annoInizio = null;
+        let annoFine = null;
+        let isMultiAnno = false;
+        
+        if (dataInizio && dataFine) {
+          annoInizio = dataInizio.getFullYear();
+          annoFine = dataFine.getFullYear();
+          isMultiAnno = annoInizio !== annoFine;
+          mesiTotali = (annoFine - annoInizio) * 12 + (dataFine.getMonth() - dataInizio.getMonth()) + 1;
+        }
+
+        return {
+          id: o.id,
+          cliente: o.clienteNome,
+          taglia: o.tagliaRichiesta,
+          categoria: this.mapTagliaToCategory(o.tagliaRichiesta),
+          quantitaTotale: quantita,
+          dataInizio: dataInizio?.toISOString().split('T')[0] || null,
+          dataFine: dataFine?.toISOString().split('T')[0] || null,
+          annoInizio,
+          annoFine,
+          isMultiAnno,
+          mesiTotali,
+          quantitaPerMese: mesiTotali > 0 ? Math.round(quantita / mesiTotali) : quantita,
+          stato: o.stato
+        };
+      });
+
+      // Riepilogo per taglia
+      const totaliPerTaglia: Record<string, number> = {};
+      const totaliPerCategoria: Record<string, number> = { T3: 0, T10: 0, ALTRO: 0 };
+      let ordiniMultiAnno = 0;
+
+      for (const o of dettagliOrdini) {
+        const taglia = o.taglia || 'SENZA_TAGLIA';
+        totaliPerTaglia[taglia] = (totaliPerTaglia[taglia] || 0) + o.quantitaTotale;
+        
+        if (o.categoria) {
+          totaliPerCategoria[o.categoria] += o.quantitaTotale;
+        } else {
+          totaliPerCategoria.ALTRO += o.quantitaTotale;
+        }
+        
+        if (o.isMultiAnno) ordiniMultiAnno++;
+      }
+
+      return {
+        totaleOrdini: ordini.length,
+        ordiniMultiAnno,
+        totaleAnimali: Object.values(totaliPerTaglia).reduce((a, b) => a + b, 0),
+        totaliPerTaglia,
+        totaliPerCategoria,
+        ordini: dettagliOrdini.slice(0, 100) // Primi 100 per non sovraccaricare
+      };
+    } catch (error) {
+      console.error('Errore diagnostica ordini:', error);
+      return { error: String(error), ordini: [] };
+    }
+  }
+
   // Recupera ordini aggregati per mese e categoria dall'anno specificato
   async getOrdersByMonthAndCategory(year: number): Promise<Record<string, Record<string, number>>> {
     // Struttura: { "1": { "T3": 1000000, "T10": 500000 }, "2": {...} }
