@@ -926,6 +926,7 @@ export function registerAIRoutes(app: Express) {
       const sgrRates = await productionForecastService.getSgrRates();
       const inventoryByCategory = await productionForecastService.getTotalInventoryByCategory();
       const sgrLookup = await productionForecastService.getSgrLookup();
+      const ordersByMonth = await productionForecastService.getOrdersByMonthAndCategory(targetYear);
       
       const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
         'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
@@ -977,14 +978,15 @@ export function registerAIRoutes(app: Express) {
         ['Legenda formule:'],
         ['- Stock Residuo = Stock precedente - Venduto + Transizioni da categoria inferiore - Mortalità'],
         ['- Venduto = MIN(Stock disponibile, Budget)'],
-        ['- Deficit = Budget - Venduto (se negativo = surplus, se positivo = manca stock)'],
+        ['- Deficit Budget = Budget - Venduto (se negativo = surplus, se positivo = manca stock)'],
+        ['- Deficit Ordini = Ordini - Venduto (confronto con ordini reali da Fatture in Cloud)'],
         ['- Sopravvivenza Cumulativa T3 = (1 - Mortalità_T1)^mesi_crescita'],
         ['- Sopravvivenza Cumulativa T10 = (1 - Mortalità_T1)^6 × (1 - Mortalità_T3)^4'],
         ['- Semina T1 = Deficit / Sopravvivenza_Cumulativa'],
         ['- Giorni Crescita = Calcolato all\'indietro usando SGR mensili reali'],
         [''],
         ['Mese', 'Taglia', 'Stock Inizio Mese', 'Transizione Entrata', 'Mortalità Applicata', 
-         'Stock Disponibile', 'Budget', 'Venduto', 'Stock Fine Mese', 'Deficit', 
+         'Stock Disponibile', 'Budget', 'Ordini', 'Venduto', 'Stock Fine Mese', 'Δ vs Budget', 'Δ vs Ordini',
          'Mesi Crescita', 'Sopravvivenza %', 'Semina T1 Richiesta', 'Mese Semina', 'Giorni Crescita', 'Stato', 'Commento Calcolo']
       ];
       
@@ -1027,6 +1029,7 @@ export function registerAIRoutes(app: Express) {
         
         for (const target of monthTargets) {
           const budgetAnimals = target.targetAnimals || 0;
+          const ordersAnimals = ordersByMonth[month.toString()]?.[target.sizeCategory] || 0;
           
           let stockInizio = 0;
           let transizione = 0;
@@ -1053,7 +1056,8 @@ export function registerAIRoutes(app: Express) {
             stockFine = stockT10;
           }
           
-          const deficit = budgetAnimals - venduto;
+          const deficitBudget = budgetAnimals - venduto;
+          const deficitOrdini = ordersAnimals - venduto;
           
           const growthMonths = target.sizeCategory === 'T3' ? 6 : 10;
           const survivalT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
@@ -1066,8 +1070,8 @@ export function registerAIRoutes(app: Express) {
           let stato = 'In linea';
           let commento = '';
           
-          if (deficit > 0) {
-            seminaT1 = Math.ceil(deficit / totalSurvival);
+          if (deficitBudget > 0) {
+            seminaT1 = Math.ceil(deficitBudget / totalSurvival);
             
             const growthCalc = productionForecastService.calculateGrowthDaysBackward(
               sgrLookup, month, targetYear, target.sizeCategory
@@ -1075,17 +1079,18 @@ export function registerAIRoutes(app: Express) {
             giorniCrescita = growthCalc.totalDays;
             meseSemina = MONTH_NAMES[growthCalc.seedingMonth - 1] + ' ' + growthCalc.seedingYear;
             
-            commento = `Deficit ${deficit.toLocaleString('it-IT')} animali. ` +
-              `Sopravvivenza: ${(totalSurvival * 100).toFixed(1)}% = ` +
-              `(1-${mortalityRates.T1*100}%)^${growthMonths}` +
-              (target.sizeCategory === 'T10' ? ` × (1-${mortalityRates.T3*100}%)^4` : '') +
-              `. Semina = ${deficit.toLocaleString('it-IT')} / ${(totalSurvival * 100).toFixed(1)}% = ${seminaT1.toLocaleString('it-IT')}`;
+            commento = `Deficit Budget ${deficitBudget.toLocaleString('it-IT')} animali. ` +
+              `Ordini: ${ordersAnimals.toLocaleString('it-IT')} (Δ ${deficitOrdini.toLocaleString('it-IT')}). ` +
+              `Sopravvivenza: ${(totalSurvival * 100).toFixed(1)}%. ` +
+              `Semina = ${deficitBudget.toLocaleString('it-IT')} / ${(totalSurvival * 100).toFixed(1)}% = ${seminaT1.toLocaleString('it-IT')}`;
             stato = 'Critico';
+          } else if (deficitOrdini > 0) {
+            // Budget coperto ma ordini no
+            commento = `Budget coperto. ATTENZIONE: ordini ${ordersAnimals.toLocaleString('it-IT')} > produzione ${venduto.toLocaleString('it-IT')} (gap: ${deficitOrdini.toLocaleString('it-IT')}).`;
+            stato = 'Attenzione';
           } else {
-            commento = `Stock sufficiente. Venduto ${venduto.toLocaleString('it-IT')} su budget ${budgetAnimals.toLocaleString('it-IT')}.`;
-            if (venduto >= budgetAnimals) {
-              stato = 'In linea';
-            }
+            commento = `Stock sufficiente. Venduto ${venduto.toLocaleString('it-IT')} su budget ${budgetAnimals.toLocaleString('it-IT')}, ordini ${ordersAnimals.toLocaleString('it-IT')}.`;
+            stato = 'In linea';
           }
           
           calcData.push([
@@ -1096,9 +1101,11 @@ export function registerAIRoutes(app: Express) {
             Math.round(mortalita),
             Math.round(stockDisponibile),
             budgetAnimals,
+            ordersAnimals,
             Math.round(venduto),
             Math.round(stockFine),
-            Math.round(deficit),
+            Math.round(deficitBudget),
+            Math.round(deficitOrdini),
             growthMonths,
             (totalSurvival * 100).toFixed(1) + '%',
             Math.round(seminaT1),
