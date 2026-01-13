@@ -121,26 +121,30 @@ export default function AnalisiScostamenti() {
     if (!data) return;
     
     const exportData = filteredData.map(row => ({
-      'Mese Target': row.monthName,
+      'Mese': row.monthName,
       'Taglia': row.sizeCategory,
-      'Giacenza Inizio': row.giacenzaInizioMese,
+      'Giacenza': row.giacenzaInizioMese,
       'Budget': row.budgetAnimals,
-      'Venduto': row.productionForecast,
-      'Δ Budget': row.varianceBudgetProduction,
-      'Stock Residuo': row.stockResiduo,
+      'Ordini': row.ordersAnimals || 0,
+      'Produzione': row.productionForecast,
+      'Δ vs Budget': row.varianceBudgetProduction,
+      'Δ vs Ordini': row.varianceOrdersProduction || 0,
+      'Stock': row.stockResiduo,
       'Semina T1': row.seminaT1Richiesta || 0,
       'Mese Semina': row.meseSeminaT1 || '-',
       'Stato': row.status === 'on_track' ? 'In linea' : row.status === 'warning' ? 'Attenzione' : 'Critico'
     }));
 
     const totals = {
-      'Mese Target': 'TOTALE',
+      'Mese': 'TOTALE',
       'Taglia': '-',
-      'Giacenza Inizio': '-',
+      'Giacenza': '-',
       'Budget': filteredData.reduce((sum, r) => sum + r.budgetAnimals, 0),
-      'Venduto': filteredData.reduce((sum, r) => sum + r.productionForecast, 0),
-      'Δ Budget': filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0),
-      'Stock Residuo': '-',
+      'Ordini': filteredData.reduce((sum, r) => sum + r.ordersAnimals, 0),
+      'Produzione': filteredData.reduce((sum, r) => sum + r.productionForecast, 0),
+      'Δ vs Budget': filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0),
+      'Δ vs Ordini': filteredData.reduce((sum, r) => sum + r.varianceOrdersProduction, 0),
+      'Stock': '-',
       'Semina T1': filteredData.reduce((sum, r) => sum + r.seminaT1Richiesta, 0),
       'Mese Semina': '-',
       'Stato': '-'
@@ -362,13 +366,13 @@ export default function AnalisiScostamenti() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ordini</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Ordini Attivi</CardTitle>
+            <Package className="h-4 w-4 text-indigo-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.totalOrders)}</div>
+            <div className="text-2xl font-bold text-indigo-600">{formatNumber(data.totalOrders)}</div>
             <p className="text-xs text-muted-foreground">
-              Da integrare nella prossima fase
+              T3: {formatNumber(data.monthlyData.filter(d => d.sizeCategory === 'T3').reduce((sum, d) => sum + d.ordersAnimals, 0))} | T10: {formatNumber(data.monthlyData.filter(d => d.sizeCategory === 'T10').reduce((sum, d) => sum + d.ordersAnimals, 0))}
             </p>
           </CardContent>
         </Card>
@@ -568,13 +572,15 @@ export default function AnalisiScostamenti() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mese Target</TableHead>
+                      <TableHead>Mese</TableHead>
                       <TableHead>Taglia</TableHead>
-                      <TableHead className="text-right">Giacenza Inizio</TableHead>
+                      <TableHead className="text-right">Giacenza</TableHead>
                       <TableHead className="text-right">Budget</TableHead>
-                      <TableHead className="text-right">Venduto</TableHead>
-                      <TableHead className="text-right">Δ Budget</TableHead>
-                      <TableHead className="text-right">Stock Residuo</TableHead>
+                      <TableHead className="text-right text-indigo-600">Ordini</TableHead>
+                      <TableHead className="text-right">Produzione</TableHead>
+                      <TableHead className="text-right">Δ vs Budget</TableHead>
+                      <TableHead className="text-right text-indigo-600">Δ vs Ordini</TableHead>
+                      <TableHead className="text-right">Stock</TableHead>
                       <TableHead className="text-right text-orange-600">Semina T1</TableHead>
                       <TableHead className="text-orange-600">Mese Semina</TableHead>
                       <TableHead>Stato</TableHead>
@@ -593,10 +599,21 @@ export default function AnalisiScostamenti() {
                           {formatNumber(row.giacenzaInizioMese)}
                         </TableCell>
                         <TableCell className="text-right">{formatNumber(row.budgetAnimals)}</TableCell>
+                        <TableCell className="text-right text-indigo-600 font-medium">
+                          {row.ordersAnimals > 0 ? formatNumber(row.ordersAnimals) : '-'}
+                        </TableCell>
                         <TableCell className="text-right">{formatNumber(row.productionForecast)}</TableCell>
                         <TableCell className={`text-right ${getVarianceColor(row.varianceBudgetProduction)}`}>
                           {row.varianceBudgetProduction >= 0 ? '+' : ''}
                           {formatNumber(row.varianceBudgetProduction)}
+                        </TableCell>
+                        <TableCell className={`text-right ${row.ordersAnimals > 0 ? getVarianceColor(row.varianceOrdersProduction) : 'text-muted-foreground'}`}>
+                          {row.ordersAnimals > 0 ? (
+                            <>
+                              {row.varianceOrdersProduction >= 0 ? '+' : ''}
+                              {formatNumber(row.varianceOrdersProduction)}
+                            </>
+                          ) : '-'}
                         </TableCell>
                         <TableCell className="text-right text-blue-600">
                           {formatNumber(row.stockResiduo)}
@@ -617,12 +634,19 @@ export default function AnalisiScostamenti() {
                       <TableCell className="text-right">
                         {formatNumber(filteredData.reduce((sum, r) => sum + r.budgetAnimals, 0))}
                       </TableCell>
+                      <TableCell className="text-right text-indigo-600">
+                        {formatNumber(filteredData.reduce((sum, r) => sum + r.ordersAnimals, 0))}
+                      </TableCell>
                       <TableCell className="text-right">
                         {formatNumber(filteredData.reduce((sum, r) => sum + r.productionForecast, 0))}
                       </TableCell>
                       <TableCell className={`text-right ${getVarianceColor(filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0))}`}>
                         {filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0) >= 0 ? '+' : ''}
                         {formatNumber(filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0))}
+                      </TableCell>
+                      <TableCell className={`text-right ${getVarianceColor(filteredData.reduce((sum, r) => sum + r.varianceOrdersProduction, 0))}`}>
+                        {filteredData.reduce((sum, r) => sum + r.varianceOrdersProduction, 0) >= 0 ? '+' : ''}
+                        {formatNumber(filteredData.reduce((sum, r) => sum + r.varianceOrdersProduction, 0))}
                       </TableCell>
                       <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right text-orange-600">

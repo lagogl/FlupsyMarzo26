@@ -473,21 +473,24 @@ export class ProductionForecastService {
 
         if (!dataInizio || !dataFine) continue;
 
-        // Verifica che l'ordine sia nell'anno richiesto
-        if (dataInizio.getFullYear() > year && dataFine.getFullYear() > year) continue;
-        if (dataInizio.getFullYear() < year && dataFine.getFullYear() < year) continue;
+        // Verifica che l'ordine tocchi l'anno richiesto
+        if (dataInizio.getFullYear() > year) continue;
+        if (dataFine.getFullYear() < year) continue;
 
-        // Calcola mesi coperti dall'ordine
-        const meseInizio = dataInizio.getFullYear() === year ? dataInizio.getMonth() + 1 : 1;
-        const meseFine = dataFine.getFullYear() === year ? dataFine.getMonth() + 1 : 12;
-        const numMesi = meseFine - meseInizio + 1;
+        // Calcola il numero TOTALE di mesi coperti dall'ordine (cross-year)
+        const mesiTotaliOrdine = (dataFine.getFullYear() - dataInizio.getFullYear()) * 12 
+          + (dataFine.getMonth() - dataInizio.getMonth()) + 1;
+        
+        if (mesiTotaliOrdine <= 0) continue;
 
-        if (numMesi <= 0) continue;
+        // Distribuisci la quantità TOTALE su tutti i mesi dell'ordine
+        const quantitaPerMese = Math.round(quantita / mesiTotaliOrdine);
 
-        // Distribuisci quantità uniformemente sui mesi
-        const quantitaPerMese = Math.round(quantita / numMesi);
+        // Alloca SOLO i mesi che cadono nell'anno richiesto
+        const meseInizioAnno = dataInizio.getFullYear() === year ? dataInizio.getMonth() + 1 : 1;
+        const meseFineAnno = dataFine.getFullYear() === year ? dataFine.getMonth() + 1 : 12;
 
-        for (let m = meseInizio; m <= meseFine; m++) {
+        for (let m = meseInizioAnno; m <= meseFineAnno; m++) {
           result[m.toString()][categoria] += quantitaPerMese;
         }
       }
