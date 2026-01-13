@@ -588,10 +588,29 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
     }
     
     for (let i = 0; i < allOrdini.length; i++) {
-      const ordineFIC = allOrdini[i];
+      let ordineFIC = allOrdini[i];
       
       // Traccia ID FIC trovato (per soft delete)
       idsFICTrovati.push(ordineFIC.id);
+      
+      // FALLBACK: Se entity è nullo nel listing, recupera i dettagli completi dall'API
+      if (!ordineFIC.entity?.id) {
+        console.log(`🔍 Ordine ${ordineFIC.id} (${ordineFIC.number}) senza entity nel listing, recupero dettagli...`);
+        try {
+          const detailedResponse = await withRetry(() => 
+            apiRequest('GET', `/issued_documents/${ordineFIC.id}?fieldset=detailed`)
+          );
+          const ordineDettagliato = detailedResponse.data.data;
+          if (ordineDettagliato?.entity?.id) {
+            ordineFIC = { ...ordineFIC, entity: ordineDettagliato.entity };
+            console.log(`✅ Entity recuperato per ordine ${ordineFIC.id}: ${ordineDettagliato.entity.name} (ID: ${ordineDettagliato.entity.id})`);
+          } else {
+            console.warn(`⚠️ Ordine ${ordineFIC.id} - anche API detailed non ha entity associato`);
+          }
+        } catch (errDetailed: any) {
+          console.error(`❌ Errore recupero dettagli ordine ${ordineFIC.id}: ${errDetailed.message}`);
+        }
+      }
       
       // Recupera cliente locale (per clienteId) - se non esiste, crealo automaticamente
       let clienteLocale = null;
