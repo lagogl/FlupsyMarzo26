@@ -522,38 +522,45 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
     });
     
     const currentYear = new Date().getFullYear();
-    console.log(`📅 Recupero ordini per anno ${currentYear}`);
+    const yearsToSync = [currentYear, currentYear - 1]; // Sincronizza anno corrente e precedente
+    console.log(`📅 Recupero ordini per anni: ${yearsToSync.join(', ')}`);
     
-    while (hasMorePages) {
-      const response = await withRetry(() => 
-        apiRequest('GET', `/issued_documents?type=order&year=${currentYear}&page=${currentPage}&per_page=${perPage}`)
-      );
+    for (const yearToSync of yearsToSync) {
+      currentPage = 1;
+      hasMorePages = true;
+      console.log(`📅 Sincronizzazione ordini anno ${yearToSync}...`);
       
-      const pageData = response.data.data || [];
-      allOrdini = allOrdini.concat(pageData);
+      while (hasMorePages) {
+        const response = await withRetry(() => 
+          apiRequest('GET', `/issued_documents?type=order&year=${yearToSync}&page=${currentPage}&per_page=${perPage}`)
+        );
       
-      const meta = response.data;
-      const lastPage = meta.last_page ?? ((meta.current_page && meta.total) ? Math.ceil(meta.total / perPage) : 1);
-      const total = meta.total ?? 0;
-      
-      console.log(`📄 Pagina ${currentPage}/${lastPage} - Recuperati ${pageData.length} ordini (Totale finora: ${allOrdini.length}${total ? `/${total}` : ''})`);
-      
-      broadcastMessage("fic_sync_progress", { 
-        message: `Recupero pagina ${currentPage}/${lastPage} - ${allOrdini.length} ordini finora...`, 
-        step: "fetch", 
-        progress: Math.round((currentPage / lastPage) * 30)
-      });
-      
-      hasMorePages = currentPage < lastPage && pageData.length === perPage;
-      currentPage++;
-      
-      if (currentPage > 1000) {
-        console.warn('⚠️ Raggiunto limite di sicurezza (1000 pagine) - interruzione sincronizzazione');
-        break;
+        const pageData = response.data.data || [];
+        allOrdini = allOrdini.concat(pageData);
+        
+        const meta = response.data;
+        const lastPage = meta.last_page ?? ((meta.current_page && meta.total) ? Math.ceil(meta.total / perPage) : 1);
+        const total = meta.total ?? 0;
+        
+        console.log(`📄 Anno ${yearToSync} - Pagina ${currentPage}/${lastPage} - Recuperati ${pageData.length} ordini (Totale finora: ${allOrdini.length}${total ? `/${total}` : ''})`);
+        
+        broadcastMessage("fic_sync_progress", { 
+          message: `Anno ${yearToSync} - Pagina ${currentPage}/${lastPage} - ${allOrdini.length} ordini finora...`, 
+          step: "fetch", 
+          progress: Math.round((currentPage / lastPage) * 30)
+        });
+        
+        hasMorePages = currentPage < lastPage && pageData.length === perPage;
+        currentPage++;
+        
+        if (currentPage > 1000) {
+          console.warn('⚠️ Raggiunto limite di sicurezza (1000 pagine) - interruzione sincronizzazione');
+          break;
+        }
       }
-    }
+    } // Fine ciclo for yearsToSync
     
-    console.log(`✅ Recuperati ${allOrdini.length} ordini totali da Fatture in Cloud`);
+    console.log(`✅ Recuperati ${allOrdini.length} ordini totali da Fatture in Cloud (anni ${yearsToSync.join(', ')})`);
     broadcastMessage("fic_sync_progress", { 
       message: `Recuperati ${allOrdini.length} ordini. Inizio sincronizzazione...`, 
       step: "sync", 
