@@ -677,9 +677,15 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         
         // Prepara dati base ordine (senza quantità, verrà calcolata dopo)
         // Usa stato intermedio 'in_sync' - sarà 'sincronizzato' solo dopo righe complete
-        // Usa fattureInCloudId del cliente come clienteId nel DB esterno
-        // Questo garantisce consistenza tra DB locale e esterno
-        const clienteIdEsterno = clienteLocale.fattureInCloudId || clienteLocale.id;
+        
+        // CRITICAL: Usa SEMPRE fattureInCloudId del cliente come chiave comune
+        // Non usare MAI clienteLocale.id perché può corrispondere a clienti diversi nel DB esterno
+        if (!clienteLocale.fattureInCloudId) {
+          console.warn(`⚠️ Ordine ${ordineFIC.id} (${ordineFIC.number}) saltato: cliente ${clienteLocale.denominazione} senza fattureInCloudId`);
+          ordiniFalliti.push({ id: ordineFIC.id, error: `Cliente ${clienteLocale.denominazione} senza ID Fatture in Cloud` });
+          continue;
+        }
+        const clienteIdEsterno = clienteLocale.fattureInCloudId;
         
         const datiOrdineEsterno = {
           numero: ordineFIC.number || null,
