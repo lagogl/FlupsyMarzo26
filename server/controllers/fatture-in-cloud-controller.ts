@@ -677,10 +677,14 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
         
         // Prepara dati base ordine (senza quantità, verrà calcolata dopo)
         // Usa stato intermedio 'in_sync' - sarà 'sincronizzato' solo dopo righe complete
+        // Usa fattureInCloudId del cliente come clienteId nel DB esterno
+        // Questo garantisce consistenza tra DB locale e esterno
+        const clienteIdEsterno = clienteLocale.fattureInCloudId || clienteLocale.id;
+        
         const datiOrdineEsterno = {
           numero: ordineFIC.number || null,
           data: ordineFIC.date || new Date().toISOString().split('T')[0],
-          clienteId: clienteLocale.id, // Garantito valido dal check precedente
+          clienteId: clienteIdEsterno, // Usa fattureInCloudId per consistenza tra DB
           clienteNome: clienteLocale.denominazione || ordineFIC.entity?.name || 'Cliente non trovato', // Usa nome dal DB locale per consistenza
           stato: statoNormalizzato,
           totale: ordineFIC.amount_net?.toString() || '0',
