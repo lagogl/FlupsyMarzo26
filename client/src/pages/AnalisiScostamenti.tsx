@@ -27,6 +27,7 @@ interface MonthlyForecast {
   seedingRequirement: number;
   seedingDeadline: string | null;
   status: 'on_track' | 'warning' | 'critical';
+  statusDescription: string;
   stockResiduo: number;
   giacenzaInizioMese: number;
   seminaT1Richiesta: number;
@@ -79,14 +80,15 @@ const formatFullNumber = (num: number): string => {
   return num.toLocaleString('it-IT');
 };
 
-const getStatusBadge = (status: string) => {
+const getStatusBadge = (status: string, description?: string) => {
+  const text = description || (status === 'on_track' ? 'Coperto' : status === 'warning' ? 'Attenzione' : 'Critico');
   switch (status) {
     case 'on_track':
-      return <Badge className="bg-green-100 text-green-800">In linea</Badge>;
+      return <Badge className="bg-green-100 text-green-800">{text}</Badge>;
     case 'warning':
-      return <Badge className="bg-yellow-100 text-yellow-800">Attenzione</Badge>;
+      return <Badge className="bg-yellow-100 text-yellow-800">{text}</Badge>;
     case 'critical':
-      return <Badge className="bg-red-100 text-red-800">Critico</Badge>;
+      return <Badge className="bg-red-100 text-red-800">{text}</Badge>;
     default:
       return <Badge>-</Badge>;
   }
@@ -132,7 +134,7 @@ export default function AnalisiScostamenti() {
       'Stock': row.stockResiduo,
       'Semina T1': row.seminaT1Richiesta || 0,
       'Mese Semina': row.meseSeminaT1 || '-',
-      'Stato': row.status === 'on_track' ? 'In linea' : row.status === 'warning' ? 'Attenzione' : 'Critico'
+      'Stato': row.statusDescription || (row.status === 'on_track' ? 'Coperto' : row.status === 'warning' ? 'Attenzione' : 'Critico')
     }));
 
     const totals = {
@@ -624,7 +626,7 @@ export default function AnalisiScostamenti() {
                         <TableCell className="text-orange-600 font-medium">
                           {row.meseSeminaT1 || '-'}
                         </TableCell>
-                        <TableCell>{getStatusBadge(row.status)}</TableCell>
+                        <TableCell>{getStatusBadge(row.status, row.statusDescription)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="bg-slate-100 font-bold border-t-2">

@@ -1067,8 +1067,32 @@ export function registerAIRoutes(app: Express) {
           let seminaT1 = 0;
           let meseSemina = '-';
           let giorniCrescita = 0;
-          let stato = 'In linea';
+          let stato = 'Coperto';
           let commento = '';
+          
+          // Calcola deficit percentuali (stessa logica del service)
+          const deficitBudgetPct = budgetAnimals > 0 ? (deficitBudget / budgetAnimals) * 100 : 0;
+          const deficitOrdiniPct = ordersAnimals > 0 ? (deficitOrdini / ordersAnimals) * 100 : 0;
+          
+          const hasBudgetCritical = deficitBudgetPct > 20;
+          const hasBudgetWarning = deficitBudgetPct > 10;
+          const hasOrdersCritical = deficitOrdiniPct > 30;
+          const hasOrdersWarning = deficitOrdini > 0;
+          
+          // Determina stato descrittivo
+          if (hasBudgetCritical && hasOrdersCritical) {
+            stato = `Budget -${Math.round(deficitBudgetPct)}% / Ordini -${Math.round(deficitOrdiniPct)}%`;
+          } else if (hasBudgetCritical) {
+            stato = `Budget -${Math.round(deficitBudgetPct)}%`;
+          } else if (hasOrdersCritical) {
+            stato = `Ordini -${Math.round(deficitOrdiniPct)}%`;
+          } else if (hasBudgetWarning && hasOrdersWarning) {
+            stato = `Budget -${Math.round(deficitBudgetPct)}% / Ordini -${deficitOrdini.toLocaleString('it-IT')}`;
+          } else if (hasBudgetWarning) {
+            stato = `Budget -${Math.round(deficitBudgetPct)}%`;
+          } else if (hasOrdersWarning) {
+            stato = `Ordini -${deficitOrdini.toLocaleString('it-IT')}`;
+          }
           
           if (deficitBudget > 0) {
             seminaT1 = Math.ceil(deficitBudget / totalSurvival);
@@ -1083,14 +1107,10 @@ export function registerAIRoutes(app: Express) {
               `Ordini: ${ordersAnimals.toLocaleString('it-IT')} (Δ ${deficitOrdini.toLocaleString('it-IT')}). ` +
               `Sopravvivenza: ${(totalSurvival * 100).toFixed(1)}%. ` +
               `Semina = ${deficitBudget.toLocaleString('it-IT')} / ${(totalSurvival * 100).toFixed(1)}% = ${seminaT1.toLocaleString('it-IT')}`;
-            stato = 'Critico';
           } else if (deficitOrdini > 0) {
-            // Budget coperto ma ordini no
             commento = `Budget coperto. ATTENZIONE: ordini ${ordersAnimals.toLocaleString('it-IT')} > produzione ${venduto.toLocaleString('it-IT')} (gap: ${deficitOrdini.toLocaleString('it-IT')}).`;
-            stato = 'Attenzione';
           } else {
             commento = `Stock sufficiente. Venduto ${venduto.toLocaleString('it-IT')} su budget ${budgetAnimals.toLocaleString('it-IT')}, ordini ${ordersAnimals.toLocaleString('it-IT')}.`;
-            stato = 'In linea';
           }
           
           calcData.push([

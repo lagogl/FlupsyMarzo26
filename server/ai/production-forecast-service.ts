@@ -22,6 +22,7 @@ interface MonthlyForecast {
   seedingRequirement: number;
   seedingDeadline: string | null;
   status: 'on_track' | 'warning' | 'critical';
+  statusDescription: string;
   stockResiduo: number;
   giacenzaInizioMese: number;
   seminaT1Richiesta: number;
@@ -81,6 +82,15 @@ const MONTH_NAMES_LOWER = [
 export class ProductionForecastService {
   
   private sgrFallback: Record<string, number> = {};
+
+  private formatNumber(num: number): string {
+    if (Math.abs(num) >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (Math.abs(num) >= 1000) {
+      return (num / 1000).toFixed(0) + 'K';
+    }
+    return num.toString();
+  }
   
   async getSgrLookup(): Promise<SgrByMonthSize> {
     const [sgrPerTagliaData, sgrFallbackData] = await Promise.all([
@@ -615,11 +625,39 @@ export class ProductionForecastService {
         const varianceBudgetProduction = productionForecast - budgetAnimals;
         const varianceOrdersProduction = productionForecast - ordersAnimals;
 
+        // Calcola deficit percentuali
+        const deficitBudgetPct = budgetAnimals > 0 ? ((budgetAnimals - productionForecast) / budgetAnimals) * 100 : 0;
+        const deficitOrdiniPct = ordersAnimals > 0 ? ((ordersAnimals - productionForecast) / ordersAnimals) * 100 : 0;
+        const deficitOrdiniAssoluto = ordersAnimals - productionForecast;
+        const deficitBudgetAssoluto = budgetAnimals - productionForecast;
+
+        // Determina status e descrizione
         let status: 'on_track' | 'warning' | 'critical' = 'on_track';
-        if (varianceBudgetProduction < -budgetAnimals * 0.2) {
+        let statusDescription = 'Coperto';
+
+        const hasBudgetCritical = deficitBudgetPct > 20;
+        const hasBudgetWarning = deficitBudgetPct > 10;
+        const hasOrdersCritical = deficitOrdiniPct > 30;
+        const hasOrdersWarning = deficitOrdiniAssoluto > 0;
+
+        if (hasBudgetCritical && hasOrdersCritical) {
           status = 'critical';
-        } else if (varianceBudgetProduction < -budgetAnimals * 0.1) {
+          statusDescription = `Budget -${Math.round(deficitBudgetPct)}% / Ordini -${Math.round(deficitOrdiniPct)}%`;
+        } else if (hasBudgetCritical) {
+          status = 'critical';
+          statusDescription = `Budget -${Math.round(deficitBudgetPct)}%`;
+        } else if (hasOrdersCritical) {
+          status = 'critical';
+          statusDescription = `Ordini -${Math.round(deficitOrdiniPct)}%`;
+        } else if (hasBudgetWarning && hasOrdersWarning) {
           status = 'warning';
+          statusDescription = `Budget -${Math.round(deficitBudgetPct)}% / Ordini -${this.formatNumber(deficitOrdiniAssoluto)}`;
+        } else if (hasBudgetWarning) {
+          status = 'warning';
+          statusDescription = `Budget -${Math.round(deficitBudgetPct)}%`;
+        } else if (hasOrdersWarning) {
+          status = 'warning';
+          statusDescription = `Ordini -${this.formatNumber(deficitOrdiniAssoluto)}`;
         }
 
         const stockResiduo = target.sizeCategory === 'T3' ? stockT3 : 
@@ -639,6 +677,7 @@ export class ProductionForecastService {
           seedingRequirement,
           seedingDeadline,
           status,
+          statusDescription,
           stockResiduo: Math.round(stockResiduo),
           giacenzaInizioMese: Math.round(giacenzaInizioMese),
           seminaT1Richiesta: Math.round(seminaT1Richiesta),
