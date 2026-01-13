@@ -69,6 +69,17 @@ function estraiDateConsegna(oggetto: string | null): { dataInizio: string | null
     }
   }
   
+  // Pattern 3: singolo mese (es. "COPEGO maggio 26") -> dal primo all'ultimo giorno del mese
+  if (!meseInizio || !meseFine) {
+    for (const [nomeMese, numeroMese] of Object.entries(MESI_ITALIANI)) {
+      if (oggettoLower.includes(nomeMese)) {
+        meseInizio = numeroMese;
+        meseFine = numeroMese;
+        break;
+      }
+    }
+  }
+  
   if (!meseInizio || !meseFine) return { dataInizio: null, dataFine: null };
   
   // Calcola primo giorno del mese inizio
