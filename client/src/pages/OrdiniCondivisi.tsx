@@ -94,7 +94,7 @@ interface EditableRow extends OrdineCondiviso {
   editedQuantita: string;
 }
 
-type SortField = 'data' | 'dataConsegna' | 'cliente' | 'quantita' | 'taglia' | 'stato' | 'sync';
+type SortField = 'data' | 'dataConsegna' | 'cliente' | 'quantita' | 'taglia' | 'stato' | 'sync' | 'numero';
 type SortDirection = 'asc' | 'desc' | null;
 
 export default function OrdiniCondivisi() {
@@ -275,6 +275,11 @@ export default function OrdiniCondivisi() {
           const syncA = a.fattureInCloudId ? 2 : a.syncStatus === 'errore' ? 0 : 1;
           const syncB = b.fattureInCloudId ? 2 : b.syncStatus === 'errore' ? 0 : 1;
           comparison = syncA - syncB;
+          break;
+        case 'numero':
+          const numA = parseInt(a.numero || '0', 10);
+          const numB = parseInt(b.numero || '0', 10);
+          comparison = numA - numB;
           break;
       }
       
@@ -1144,10 +1149,19 @@ export default function OrdiniCondivisi() {
                     </th>
                     <th 
                       className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
+                      onClick={() => handleSort('numero')}
+                    >
+                      <div className="flex items-center">
+                        N° Ordine
+                        <SortIcon field="numero" />
+                      </div>
+                    </th>
+                    <th 
+                      className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
                       onClick={() => handleSort('sync')}
                     >
                       <div className="flex items-center">
-                        Sync FIC
+                        Sync
                         <SortIcon field="sync" />
                       </div>
                     </th>
@@ -1280,6 +1294,11 @@ export default function OrdiniCondivisi() {
                             {getStatoBadge(ordine.stato, ordine)}
                           </td>
                           
+                          {/* N° Ordine */}
+                          <td className="p-2 border-r">
+                            <span className="text-sm font-semibold text-emerald-600">#{ordine.numero || '-'}</span>
+                          </td>
+                          
                           {/* Sync FIC */}
                           <td className="p-2 border-r">
                             {getSyncIcon(ordine)}
@@ -1325,7 +1344,7 @@ export default function OrdiniCondivisi() {
                         {/* Riga espansa con righe ordine */}
                         {espanso && hasDettagli && (
                           <tr className="bg-blue-50/50 dark:bg-blue-950/20 border-b">
-                            <td colSpan={10} className="p-0">
+                            <td colSpan={11} className="p-0">
                               <div className="bg-blue-100/60 dark:bg-blue-900/30 px-4 py-2 border-t border-b border-blue-200 dark:border-blue-800">
                                 <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Righe Ordine</h4>
                               </div>
@@ -1372,7 +1391,7 @@ export default function OrdiniCondivisi() {
                         {/* Riga espansa con consegne */}
                         {espanso && consegneOrdine.length > 0 && (
                           <tr className="bg-green-50/50 dark:bg-green-950/20 border-b">
-                            <td colSpan={10} className="p-0">
+                            <td colSpan={11} className="p-0">
                               <div className="bg-green-100/60 dark:bg-green-900/30 px-4 py-2 border-t border-b border-green-200 dark:border-green-800">
                                 <div className="flex items-center justify-between">
                                   <h4 className="text-sm font-semibold text-green-900 dark:text-green-100">
@@ -1454,7 +1473,7 @@ export default function OrdiniCondivisi() {
                         {/* Riga di modifica inline */}
                         {ordine.isEditing && (
                           <tr className="bg-blue-50 dark:bg-blue-950/20 border-b border-blue-200">
-                            <td colSpan={10} className="p-3">
+                            <td colSpan={11} className="p-3">
                               <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-2">
                                   <label className="text-xs font-medium text-muted-foreground min-w-[100px]">
