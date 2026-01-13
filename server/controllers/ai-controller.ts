@@ -4,6 +4,18 @@ import { db } from "../db";
 import { baskets, operations, cycles, sgrGiornalieri, sizes, basketLotComposition, lots, flupsys } from "../../shared/schema";
 import { eq, desc, and, gte, lte, sql, isNotNull } from "drizzle-orm";
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { 
+  createFormattedWorkbook, 
+  applyHeaderStyle, 
+  applyDataRowStyle, 
+  applyTotalRowStyle,
+  applyTitleStyle,
+  applySectionTitleStyle,
+  applyStatusStyle,
+  setColumnWidths,
+  applyNumberFormat
+} from '../utils/excel-formatter';
 
 /**
  * Controller per i servizi AI
@@ -908,6 +920,108 @@ export function registerAIRoutes(app: Express) {
     }
   });
 
+  // Export Excel Semplice formattato
+  app.get("/api/ai/production-forecast/export-simple", async (req: Request, res: Response) => {
+    try {
+      const { year, mortalityT1, mortalityT3, mortalityT10, category } = req.query;
+      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      
+      const mortalityRates = {
+        T1: mortalityT1 ? parseFloat(mortalityT1 as string) / 100 : 0.05,
+        T3: mortalityT3 ? parseFloat(mortalityT3 as string) / 100 : 0.03,
+        T10: mortalityT10 ? parseFloat(mortalityT10 as string) / 100 : 0.02
+      };
+      
+      const { productionForecastService } = await import('../ai/production-forecast-service');
+      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
+      
+      let monthlyData = forecast.monthlyData || [];
+      if (category && category !== 'all') {
+        monthlyData = monthlyData.filter((m: any) => m.sizeCategory === category);
+      }
+      
+      const workbook = createFormattedWorkbook();
+      const ws = workbook.addWorksheet('Scostamenti Produzione');
+      
+      const headers = ['Mese', 'Taglia', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
+                       'Δ vs Budget', 'Δ vs Ordini', 'Stock', 'Semina T1', 'Mese Semina', 'Stato'];
+      setColumnWidths(ws, [15, 10, 15, 15, 15, 15, 15, 15, 15, 15, 15, 22]);
+      
+      const titleRow = ws.addRow([`Analisi Scostamenti Produzione ${targetYear}`]);
+      applyTitleStyle(titleRow);
+      ws.mergeCells(1, 1, 1, headers.length);
+      
+      ws.addRow([`Generato il ${new Date().toLocaleDateString('it-IT')} - Mortalità T1: ${mortalityRates.T1*100}%, T3: ${mortalityRates.T3*100}%, T10: ${mortalityRates.T10*100}%`]);
+      ws.getRow(2).getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
+      ws.mergeCells(2, 1, 2, headers.length);
+      
+      ws.addRow([]);
+      
+      const headerRow = ws.addRow(headers);
+      applyHeaderStyle(headerRow);
+      
+      const statusColIndex = 11;
+      monthlyData.forEach((row: any, index: number) => {
+        const rowData = [
+          row.monthName,
+          row.sizeCategory,
+          row.giacenzaInizioMese,
+          row.budgetAnimals,
+          row.ordersAnimals || 0,
+          row.productionForecast,
+          row.varianceBudgetProduction,
+          row.varianceOrdersProduction || 0,
+          row.stockResiduo,
+          row.seminaT1Richiesta || 0,
+          row.meseSeminaT1 || '-',
+          row.statusDescription || (row.status === 'on_track' ? 'Coperto' : row.status === 'warning' ? 'Attenzione' : 'Critico')
+        ];
+        const excelRow = ws.addRow(rowData);
+        applyDataRowStyle(excelRow, index % 2 === 1);
+        
+        applyStatusStyle(excelRow.getCell(statusColIndex + 1), String(rowData[statusColIndex]));
+        
+        for (let col = 3; col <= 10; col++) {
+          if (typeof rowData[col - 1] === 'number') {
+            applyNumberFormat(excelRow.getCell(col));
+          }
+        }
+      });
+      
+      const totals = [
+        'TOTALE',
+        '-',
+        '-',
+        monthlyData.reduce((sum: number, r: any) => sum + r.budgetAnimals, 0),
+        monthlyData.reduce((sum: number, r: any) => sum + r.ordersAnimals, 0),
+        monthlyData.reduce((sum: number, r: any) => sum + r.productionForecast, 0),
+        monthlyData.reduce((sum: number, r: any) => sum + r.varianceBudgetProduction, 0),
+        monthlyData.reduce((sum: number, r: any) => sum + r.varianceOrdersProduction, 0),
+        '-',
+        monthlyData.reduce((sum: number, r: any) => sum + r.seminaT1Richiesta, 0),
+        '-',
+        '-'
+      ];
+      const totalRow = ws.addRow(totals);
+      applyTotalRowStyle(totalRow);
+      for (let col = 4; col <= 11; col++) {
+        if (typeof totals[col - 1] === 'number') {
+          applyNumberFormat(totalRow.getCell(col));
+        }
+      }
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=Scostamenti_Produzione_${targetYear}.xlsx`);
+      res.send(Buffer.from(buffer));
+      
+    } catch (error) {
+      console.error('Errore export semplice:', error);
+      res.status(500).json({ success: false, error: 'Errore generazione export' });
+    }
+  });
+
   // Export Excel Analitico con tutti i calcoli commentati
   app.get("/api/ai/production-forecast/export-analytical", async (req: Request, res: Response) => {
     try {
@@ -1209,27 +1323,105 @@ export function registerAIRoutes(app: Express) {
         }
       }
       
-      // Crea workbook
-      const wb = XLSX.utils.book_new();
+      // Crea workbook formattato con ExcelJS
+      const workbook = createFormattedWorkbook();
       
-      const ws1 = XLSX.utils.aoa_to_sheet(parametriData);
-      XLSX.utils.book_append_sheet(wb, ws1, 'Parametri e Inventario');
+      // FOGLIO 1: Parametri e Inventario
+      const ws1 = workbook.addWorksheet('Parametri e Inventario');
+      setColumnWidths(ws1, [25, 20, 50]);
       
-      const ws2 = XLSX.utils.aoa_to_sheet(sgrData);
-      XLSX.utils.book_append_sheet(wb, ws2, 'Tabella SGR');
+      let rowNum = 1;
+      for (const rowData of parametriData) {
+        const row = ws1.addRow(rowData);
+        if (rowNum === 1) {
+          applyTitleStyle(row);
+          ws1.mergeCells(rowNum, 1, rowNum, 3);
+        } else if (String(rowData[0]).startsWith('===')) {
+          applySectionTitleStyle(row);
+          ws1.mergeCells(rowNum, 1, rowNum, 3);
+        } else if (rowData[0] === 'Parametro' || rowData[0] === 'Categoria') {
+          applyHeaderStyle(row);
+        } else if (rowData[0] && rowData[0] !== '') {
+          applyDataRowStyle(row, rowNum % 2 === 0);
+        }
+        rowNum++;
+      }
       
-      const ws3 = XLSX.utils.aoa_to_sheet(calcData);
-      ws3['!cols'] = Array(17).fill({ wch: 18 });
-      XLSX.utils.book_append_sheet(wb, ws3, 'Calcoli Dettagliati');
+      // FOGLIO 2: Tabella SGR
+      const ws2 = workbook.addWorksheet('Tabella SGR');
+      setColumnWidths(ws2, [15, 10, 20, 15, 35]);
       
-      const ws4 = XLSX.utils.aoa_to_sheet(semineData);
-      XLSX.utils.book_append_sheet(wb, ws4, 'Riepilogo Semine');
+      rowNum = 1;
+      for (const rowData of sgrData) {
+        const row = ws2.addRow(rowData);
+        if (rowNum === 1) {
+          applyTitleStyle(row);
+          ws2.mergeCells(rowNum, 1, rowNum, 5);
+        } else if (rowData[0] === 'Mese') {
+          applyHeaderStyle(row);
+        } else if (rowData[0] && !String(rowData[0]).startsWith('Commento') && rowData[0] !== '' && rowData[0] !== 'I valori') {
+          applyDataRowStyle(row, rowNum % 2 === 0);
+        }
+        rowNum++;
+      }
       
-      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      // FOGLIO 3: Calcoli Dettagliati (principale)
+      const ws3 = workbook.addWorksheet('Calcoli Dettagliati');
+      setColumnWidths(ws3, [12, 8, 15, 15, 15, 15, 12, 12, 12, 15, 12, 12, 10, 12, 15, 15, 12, 18, 45]);
+      
+      rowNum = 1;
+      const statusColIndex = 17;
+      for (const rowData of calcData) {
+        const row = ws3.addRow(rowData);
+        if (rowNum === 1) {
+          applyTitleStyle(row);
+          ws3.mergeCells(rowNum, 1, rowNum, 19);
+        } else if (rowData[0] === 'Mese') {
+          applyHeaderStyle(row);
+        } else if (String(rowData[0]).startsWith('-') || String(rowData[0]).startsWith('Legenda')) {
+          row.getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
+        } else if (rowData[0] && rowData[0] !== '') {
+          applyDataRowStyle(row, rowNum % 2 === 0);
+          if (rowData[statusColIndex]) {
+            applyStatusStyle(row.getCell(statusColIndex + 1), String(rowData[statusColIndex]));
+          }
+          for (let col = 3; col <= 16; col++) {
+            if (typeof rowData[col - 1] === 'number') {
+              applyNumberFormat(row.getCell(col));
+            }
+          }
+        }
+        rowNum++;
+      }
+      
+      // FOGLIO 4: Riepilogo Semine
+      const ws4 = workbook.addWorksheet('Riepilogo Semine');
+      setColumnWidths(ws4, [20, 15, 18, 18, 18, 15, 35, 15]);
+      
+      rowNum = 1;
+      for (const rowData of semineData) {
+        const row = ws4.addRow(rowData);
+        if (rowNum === 1) {
+          applyTitleStyle(row);
+          ws4.mergeCells(rowNum, 1, rowNum, 8);
+        } else if (rowData[0] === 'Mese Target') {
+          applyHeaderStyle(row);
+        } else if (String(rowData[0]).startsWith('Questo') || String(rowData[0]).startsWith('Il mese')) {
+          row.getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
+          ws4.mergeCells(rowNum, 1, rowNum, 8);
+        } else if (rowData[0] && rowData[0] !== '') {
+          applyDataRowStyle(row, rowNum % 2 === 0);
+          if (typeof rowData[2] === 'number') applyNumberFormat(row.getCell(3));
+          if (typeof rowData[3] === 'number') applyNumberFormat(row.getCell(4));
+        }
+        rowNum++;
+      }
+      
+      const buffer = await workbook.xlsx.writeBuffer();
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename=Report_Analitico_Scostamenti_${targetYear}.xlsx`);
-      res.send(buffer);
+      res.send(Buffer.from(buffer));
       
     } catch (error) {
       console.error('Errore export analitico:', error);

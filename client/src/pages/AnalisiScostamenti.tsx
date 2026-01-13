@@ -119,44 +119,32 @@ export default function AnalisiScostamenti() {
     setAppliedMortalityT10(inputMortalityT10);
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (!data) return;
     
-    const exportData = filteredData.map(row => ({
-      'Mese': row.monthName,
-      'Taglia': row.sizeCategory,
-      'Giacenza': row.giacenzaInizioMese,
-      'Budget': row.budgetAnimals,
-      'Ordini': row.ordersAnimals || 0,
-      'Produzione': row.productionForecast,
-      'Δ vs Budget': row.varianceBudgetProduction,
-      'Δ vs Ordini': row.varianceOrdersProduction || 0,
-      'Stock': row.stockResiduo,
-      'Semina T1': row.seminaT1Richiesta || 0,
-      'Mese Semina': row.meseSeminaT1 || '-',
-      'Stato': row.statusDescription || (row.status === 'on_track' ? 'Coperto' : row.status === 'warning' ? 'Attenzione' : 'Critico')
-    }));
-
-    const totals = {
-      'Mese': 'TOTALE',
-      'Taglia': '-',
-      'Giacenza': '-',
-      'Budget': filteredData.reduce((sum, r) => sum + r.budgetAnimals, 0),
-      'Ordini': filteredData.reduce((sum, r) => sum + r.ordersAnimals, 0),
-      'Produzione': filteredData.reduce((sum, r) => sum + r.productionForecast, 0),
-      'Δ vs Budget': filteredData.reduce((sum, r) => sum + r.varianceBudgetProduction, 0),
-      'Δ vs Ordini': filteredData.reduce((sum, r) => sum + r.varianceOrdersProduction, 0),
-      'Stock': '-',
-      'Semina T1': filteredData.reduce((sum, r) => sum + r.seminaT1Richiesta, 0),
-      'Mese Semina': '-',
-      'Stato': '-'
-    };
-    exportData.push(totals);
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Scostamenti Produzione');
-    XLSX.writeFile(wb, `Scostamenti_Produzione_${selectedYear}.xlsx`);
+    const params = new URLSearchParams({
+      year: String(selectedYear),
+      mortalityT1: String(appliedMortalityT1),
+      mortalityT3: String(appliedMortalityT3),
+      mortalityT10: String(appliedMortalityT10),
+      category: selectedCategory
+    });
+    
+    const response = await fetch(`/api/ai/production-forecast/export-simple?${params}`);
+    if (!response.ok) {
+      alert('Errore durante la generazione del report');
+      return;
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Scostamenti_Produzione_${selectedYear}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
   };
 
   const exportAnalyticalReport = async () => {
