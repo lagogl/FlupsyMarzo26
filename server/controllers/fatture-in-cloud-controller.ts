@@ -29,6 +29,58 @@ const FATTURE_IN_CLOUD_API_BASE = 'https://api-v2.fattureincloud.it';
 
 // ===== UTILITY FUNCTIONS =====
 
+// Mappa mesi italiani -> numero mese (1-12)
+const MESI_ITALIANI: { [key: string]: number } = {
+  'gennaio': 1, 'febbraio': 2, 'marzo': 3, 'aprile': 4,
+  'maggio': 5, 'giugno': 6, 'luglio': 7, 'agosto': 8,
+  'settembre': 9, 'ottobre': 10, 'novembre': 11, 'dicembre': 12
+};
+
+// Estrae date di consegna dal campo oggetto dell'ordine FIC
+// Pattern supportati:
+// - "da [mese] ad [mese] [anno]" es. "COPEGO da maggio ad ottobre 26"
+// - "[mese]-[mese] [anno]" es. "SOL LEVANTE maggio-giugno 26"
+function estraiDateConsegna(oggetto: string | null): { dataInizio: string | null, dataFine: string | null } {
+  if (!oggetto) return { dataInizio: null, dataFine: null };
+  
+  const oggettoLower = oggetto.toLowerCase();
+  
+  // Estrai anno (formato 2 cifre alla fine, es. "26" -> 2026)
+  const annoMatch = oggettoLower.match(/\b(\d{2})\s*$/);
+  if (!annoMatch) return { dataInizio: null, dataFine: null };
+  const anno = 2000 + parseInt(annoMatch[1]);
+  
+  let meseInizio: number | null = null;
+  let meseFine: number | null = null;
+  
+  // Pattern 1: "da [mese] ad [mese]"
+  const pattern1 = oggettoLower.match(/da\s+(\w+)\s+ad?\s+(\w+)/);
+  if (pattern1) {
+    meseInizio = MESI_ITALIANI[pattern1[1]] || null;
+    meseFine = MESI_ITALIANI[pattern1[2]] || null;
+  }
+  
+  // Pattern 2: "[mese]-[mese]" o "[mese] - [mese]"
+  if (!meseInizio || !meseFine) {
+    const pattern2 = oggettoLower.match(/(\w+)\s*-\s*(\w+)/);
+    if (pattern2) {
+      meseInizio = MESI_ITALIANI[pattern2[1]] || null;
+      meseFine = MESI_ITALIANI[pattern2[2]] || null;
+    }
+  }
+  
+  if (!meseInizio || !meseFine) return { dataInizio: null, dataFine: null };
+  
+  // Calcola primo giorno del mese inizio
+  const dataInizio = `${anno}-${meseInizio.toString().padStart(2, '0')}-01`;
+  
+  // Calcola ultimo giorno del mese fine
+  const ultimoGiorno = new Date(anno, meseFine, 0).getDate(); // Giorno 0 del mese successivo = ultimo giorno del mese
+  const dataFine = `${anno}-${meseFine.toString().padStart(2, '0')}-${ultimoGiorno.toString().padStart(2, '0')}`;
+  
+  return { dataInizio, dataFine };
+}
+
 // Helper per recuperare valori di configurazione
 export async function getConfigValue(chiave: string): Promise<string | null> {
   try {
@@ -837,6 +889,12 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
             // Usa subject o visible_subject come OGGETTO (con fallback a stringa vuota se nessuno dei due ha valore)
             const oggetto = ordineCompleto.subject || ordineCompleto.visible_subject || null;
             
+            // Estrai date di consegna dal campo oggetto (es. "COPEGO da maggio ad ottobre 26")
+            const { dataInizio, dataFine } = estraiDateConsegna(oggetto);
+            if (dataInizio && dataFine) {
+              console.log(`📅 Date consegna estratte da oggetto: ${dataInizio} - ${dataFine}`);
+            }
+            
             await dbEsterno
               .update(ordiniCondivisi)
               .set({
@@ -844,6 +902,8 @@ router.post('/orders/sync', async (req: Request, res: Response) => {
                 quantitaTotale: Math.round(quantitaTotale),
                 tagliaRichiesta,
                 note: oggetto ? oggetto : null, // Importa OGGETTO da FIC (subject o visible_subject)
+                dataInizioConsegna: dataInizio, // Primo giorno del mese di inizio
+                dataFineConsegna: dataFine, // Ultimo giorno del mese di fine
                 syncStatus: 'sincronizzato' as const, // Ora è completamente sincronizzato
                 updatedAt: new Date()
               })
