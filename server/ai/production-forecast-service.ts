@@ -509,6 +509,9 @@ export class ProductionForecastService {
     const currentInventory = await this.getCurrentInventoryBySize();
     const sgrLookup = await this.getSgrLookup();
     
+    // Recupera ordini aggregati per mese e categoria
+    const ordersByMonth = await this.getOrdersByMonthAndCategory(year);
+    
     let basketInventory = await this.getBasketLevelInventory();
     
     const monthlyData: MonthlyForecast[] = [];
@@ -537,7 +540,8 @@ export class ProductionForecastService {
       
       for (const target of monthTargets) {
         const budgetAnimals = target.targetAnimals || 0;
-        const ordersAnimals = 0;
+        // Recupera ordini per questo mese e categoria
+        const ordersAnimals = ordersByMonth[month.toString()]?.[target.sizeCategory] || 0;
 
         let availableForSale = 0;
         let soldAnimals = 0;
