@@ -641,12 +641,22 @@ export class ProductionForecastService {
         stockT10 = newAggregated.T10;
       }
       
+      // Combina target budget con ordini per questo mese
       const monthTargets = targets.filter(t => t.month === month);
+      const monthOrders = ordersByMonth[month.toString()] || { T3: 0, T10: 0 };
       
-      for (const target of monthTargets) {
-        const budgetAnimals = target.targetAnimals || 0;
+      // Crea set di categorie da processare (target + ordini)
+      const categoriesToProcess = new Set<string>();
+      monthTargets.forEach(t => categoriesToProcess.add(t.sizeCategory));
+      Object.entries(monthOrders).forEach(([cat, qty]) => {
+        if (qty > 0 && (cat === 'T3' || cat === 'T10')) categoriesToProcess.add(cat);
+      });
+      
+      for (const sizeCategory of categoriesToProcess) {
+        const target = monthTargets.find(t => t.sizeCategory === sizeCategory);
+        const budgetAnimals = target?.targetAnimals || 0;
         // Recupera ordini per questo mese e categoria
-        const ordersAnimals = ordersByMonth[month.toString()]?.[target.sizeCategory] || 0;
+        const ordersAnimals = ordersByMonth[month.toString()]?.[sizeCategory] || 0;
 
         let availableForSale = 0;
         let soldAnimals = 0;
@@ -656,27 +666,27 @@ export class ProductionForecastService {
         let giorniCrescita = 0;
         let giacenzaInizioMese = 0;
 
-        if (target.sizeCategory === 'T3') {
+        if (sizeCategory === 'T3') {
           giacenzaInizioMese = stockT3;
           availableForSale = stockT3;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT3 = Math.max(0, stockT3 - soldAnimals);
           
-        } else if (target.sizeCategory === 'T10') {
+        } else if (sizeCategory === 'T10') {
           giacenzaInizioMese = stockT10;
           availableForSale = stockT10;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT10 = Math.max(0, stockT10 - soldAnimals);
-        } else if (target.sizeCategory === 'T1') {
+        } else if (sizeCategory === 'T1') {
           giacenzaInizioMese = stockT1;
         }
 
         const deficit = budgetAnimals - soldAnimals;
         let seminaT1Richiesta = 0;
         
-        const growthMonths = target.sizeCategory === 'T3' ? 6 : 10;
+        const growthMonths = sizeCategory === 'T3' ? 6 : 10;
         const cumulativeMortalityT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
-        const cumulativeMortalityT3 = target.sizeCategory === 'T10' 
+        const cumulativeMortalityT3 = sizeCategory === 'T10' 
           ? Math.pow(1 - mortalityRates.T3, 4) 
           : 1;
         
@@ -688,7 +698,7 @@ export class ProductionForecastService {
             sgrLookup,
             month,
             year,
-            target.sizeCategory
+            sizeCategory
           );
           
           giorniCrescita = growthCalc.totalDays;
@@ -704,7 +714,7 @@ export class ProductionForecastService {
             targetMonth: month,
             targetYear: year,
             targetMonthName: MONTH_NAMES[month - 1],
-            targetSize: target.sizeCategory,
+            targetSize: sizeCategory,
             seedT1Amount: Math.round(seminaT1Richiesta),
             growthDays: giorniCrescita
           });
@@ -752,14 +762,14 @@ export class ProductionForecastService {
           statusDescription = `Ordini -${this.formatNumber(deficitOrdiniAssoluto)}`;
         }
 
-        const stockResiduo = target.sizeCategory === 'T3' ? stockT3 : 
-                             target.sizeCategory === 'T10' ? stockT10 : stockT1;
+        const stockResiduo = sizeCategory === 'T3' ? stockT3 : 
+                             sizeCategory === 'T10' ? stockT10 : stockT1;
 
         monthlyData.push({
           year,
           month,
           monthName: MONTH_NAMES[month - 1],
-          sizeCategory: target.sizeCategory,
+          sizeCategory,
           budgetAnimals,
           ordersAnimals,
           productionForecast: Math.round(productionForecast),
