@@ -1,6 +1,8 @@
 import { db } from "../db";
+import { dbEsterno, isDbEsternoAvailable } from "../db-esterno";
+import { ordiniCondivisi, ordiniDettagli } from "../schema-esterno";
 import { productionTargets, sizes, operations, baskets, cycles, sgrPerTaglia } from "@shared/schema";
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, isNull, not } from "drizzle-orm";
 
 interface SgrByMonthSize {
   [key: string]: number; // key = "month_sizeId" e.g., "gennaio_3"
@@ -400,6 +402,101 @@ export class ProductionForecastService {
       const category = this.getCategoryFromAnimalsPerKg(basket.animalsPerKg);
       result[category] += basket.animalCount;
     }
+    return result;
+  }
+
+  // Mappa taglia richiesta ordine -> categoria (T3/T10)
+  mapTagliaToCategory(tagliaRichiesta: string | null): 'T3' | 'T10' | null {
+    if (!tagliaRichiesta) return null;
+    const taglia = tagliaRichiesta.toUpperCase();
+    // TP-2000, TP-3000, TP-3500 sono T3 (6K-30K an/kg)
+    if (taglia.includes('2000') || taglia.includes('3000') || taglia.includes('3500')) {
+      return 'T3';
+    }
+    // TP-4000, TP-5000 sono T10 (<6K an/kg)
+    if (taglia.includes('4000') || taglia.includes('5000')) {
+      return 'T10';
+    }
+    // Default basato su numeri
+    const match = taglia.match(/(\d+)/);
+    if (match) {
+      const num = parseInt(match[1]);
+      if (num >= 4000) return 'T10';
+      if (num >= 2000) return 'T3';
+    }
+    return 'T3'; // Default
+  }
+
+  // Recupera ordini aggregati per mese e categoria dall'anno specificato
+  async getOrdersByMonthAndCategory(year: number): Promise<Record<string, Record<string, number>>> {
+    // Struttura: { "1": { "T3": 1000000, "T10": 500000 }, "2": {...} }
+    const result: Record<string, Record<string, number>> = {};
+    for (let m = 1; m <= 12; m++) {
+      result[m.toString()] = { T3: 0, T10: 0 };
+    }
+
+    if (!isDbEsternoAvailable() || !dbEsterno) {
+      console.log('⚠️ DB esterno non disponibile per ordini');
+      return result;
+    }
+
+    try {
+      // Recupera ordini attivi dell'anno con date di consegna
+      const ordini = await dbEsterno
+        .select({
+          id: ordiniCondivisi.id,
+          quantita: ordiniCondivisi.quantita,
+          quantitaTotale: ordiniCondivisi.quantitaTotale,
+          tagliaRichiesta: ordiniCondivisi.tagliaRichiesta,
+          dataInizioConsegna: ordiniCondivisi.dataInizioConsegna,
+          dataFineConsegna: ordiniCondivisi.dataFineConsegna,
+          stato: ordiniCondivisi.stato
+        })
+        .from(ordiniCondivisi)
+        .where(
+          and(
+            not(eq(ordiniCondivisi.stato, 'Annullato')),
+            not(eq(ordiniCondivisi.cancellato, true))
+          )
+        );
+
+      for (const ordine of ordini) {
+        const categoria = this.mapTagliaToCategory(ordine.tagliaRichiesta);
+        if (!categoria) continue;
+
+        const quantita = ordine.quantitaTotale || ordine.quantita || 0;
+        if (quantita <= 0) continue;
+
+        // Parse date consegna
+        const dataInizio = ordine.dataInizioConsegna ? new Date(ordine.dataInizioConsegna) : null;
+        const dataFine = ordine.dataFineConsegna ? new Date(ordine.dataFineConsegna) : null;
+
+        if (!dataInizio || !dataFine) continue;
+
+        // Verifica che l'ordine sia nell'anno richiesto
+        if (dataInizio.getFullYear() > year && dataFine.getFullYear() > year) continue;
+        if (dataInizio.getFullYear() < year && dataFine.getFullYear() < year) continue;
+
+        // Calcola mesi coperti dall'ordine
+        const meseInizio = dataInizio.getFullYear() === year ? dataInizio.getMonth() + 1 : 1;
+        const meseFine = dataFine.getFullYear() === year ? dataFine.getMonth() + 1 : 12;
+        const numMesi = meseFine - meseInizio + 1;
+
+        if (numMesi <= 0) continue;
+
+        // Distribuisci quantità uniformemente sui mesi
+        const quantitaPerMese = Math.round(quantita / numMesi);
+
+        for (let m = meseInizio; m <= meseFine; m++) {
+          result[m.toString()][categoria] += quantitaPerMese;
+        }
+      }
+
+      console.log(`📊 Ordini ${year} caricati:`, JSON.stringify(result));
+    } catch (error) {
+      console.error('Errore recupero ordini per forecast:', error);
+    }
+
     return result;
   }
 
