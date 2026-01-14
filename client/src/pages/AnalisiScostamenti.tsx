@@ -75,6 +75,7 @@ interface ForecastData {
   year: number;
   totalBudget: number;
   totalOrders: number;
+  totalOrdersYearAllocated?: number;
   totalProductionForecast: number;
   overallVariance: number;
   monthlyData: MonthlyForecast[];
@@ -84,6 +85,7 @@ interface ForecastData {
   ordersBySpecificSize?: OrdersBySize[];
   budgetByCategory?: Record<string, number>;
   ordersByCategory?: Record<string, number>;
+  ordersAbsoluteBySize?: Record<string, number>;
 }
 
 const formatNumber = (num: number): string => {
@@ -452,16 +454,21 @@ export default function AnalisiScostamenti() {
             <p className="text-xs text-muted-foreground">
               T3: {formatNumber(data.ordersByCategory?.T3 || 0)} | T10: {formatNumber(data.ordersByCategory?.T10 || 0)}
             </p>
-            {data.ordersBySpecificSize && data.ordersBySpecificSize.length > 0 && (
+            {data.ordersAbsoluteBySize && Object.keys(data.ordersAbsoluteBySize).length > 0 && (
               <div className="mt-2 pt-2 border-t space-y-1">
-                {data.ordersBySpecificSize.map((size) => (
-                  <div key={size.sizeCode} className="flex justify-between text-xs">
-                    <span className={size.aggregateCategory === 'T3' ? 'text-green-700' : 'text-purple-700'}>
-                      {size.sizeCode}
-                    </span>
-                    <span className="font-medium">{formatNumber(size.totalAnimals)}</span>
-                  </div>
-                ))}
+                {SALE_SIZES.map((sizeCode) => {
+                  const qty = data.ordersAbsoluteBySize?.[sizeCode] || 0;
+                  if (qty === 0) return null;
+                  const isT3 = sizeCode.includes('2000') || sizeCode.includes('3000') || sizeCode.includes('3500');
+                  return (
+                    <div key={sizeCode} className="flex justify-between text-xs">
+                      <span className={isT3 ? 'text-green-700' : 'text-purple-700'}>
+                        {sizeCode}
+                      </span>
+                      <span className="font-medium">{formatNumber(qty)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

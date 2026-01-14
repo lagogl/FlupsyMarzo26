@@ -951,6 +951,12 @@ export class ProductionForecastService {
     const totalProductionForecast = monthlyData.reduce((sum, m) => sum + m.productionForecast, 0);
     const totalSeedingT1Required = seedingSchedule.reduce((sum, s) => sum + s.seedT1Amount, 0);
 
+    // Ottieni totale assoluto ordini (non allocato per anno) per il KPI
+    const ordersDiagnostic = await this.getOrdersDiagnostic();
+    const totalOrdersAbsolute = ordersDiagnostic.totaleAnimali || totalOrders;
+    const ordersAbsoluteByCategory = ordersDiagnostic.totaliPerCategoria || ordersByCategoryAgg;
+    const ordersAbsoluteBySize = ordersDiagnostic.totaliPerTaglia || {};
+    
     // Calcola ordini per taglia specifica (nuova funzionalità)
     const ordersBySize = await this.getOrdersByMonthAndSize(year);
     const ordersBySpecificSize: OrdersBySize[] = [];
@@ -996,7 +1002,8 @@ export class ProductionForecastService {
     return {
       year,
       totalBudget,
-      totalOrders,
+      totalOrders: totalOrdersAbsolute, // Usa totale assoluto per KPI
+      totalOrdersYearAllocated: totalOrders, // Mantieni anche quello allocato per anno
       totalProductionForecast,
       overallVariance: totalProductionForecast - totalBudget,
       monthlyData,
@@ -1006,7 +1013,8 @@ export class ProductionForecastService {
       totalSeedingT1Required,
       ordersBySpecificSize,
       budgetByCategory,
-      ordersByCategory: ordersByCategoryAgg
+      ordersByCategory: ordersAbsoluteByCategory, // Usa totali assoluti
+      ordersAbsoluteBySize
     };
   }
 
