@@ -9,9 +9,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw, Download, Save } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw, Download, Save, HelpCircle } from "lucide-react";
 import * as XLSX from 'xlsx';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 
 interface MortalityExpectation {
@@ -656,7 +657,7 @@ export default function AnalisiScostamenti() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis />
-                      <Tooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
+                      <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
                       <Legend />
                       <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
                       <Bar dataKey="ordini" name="Ordini" fill="#6366f1" />
@@ -681,7 +682,7 @@ export default function AnalisiScostamenti() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis />
-                      <Tooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
+                      <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
                       <Legend />
                       <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
                       <Bar dataKey="ordini" name="Ordini" fill="#6366f1" />
@@ -719,18 +720,150 @@ export default function AnalisiScostamenti() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mese</TableHead>
-                      <TableHead>Taglia</TableHead>
-                      <TableHead className="text-right">Giacenza</TableHead>
-                      <TableHead className="text-right">Budget</TableHead>
-                      <TableHead className="text-right text-indigo-600">Ordini</TableHead>
-                      <TableHead className="text-right">Produzione</TableHead>
-                      <TableHead className="text-right">Δ vs Budget</TableHead>
-                      <TableHead className="text-right text-indigo-600">Δ vs Ordini</TableHead>
-                      <TableHead className="text-right">Stock</TableHead>
-                      <TableHead className="text-right text-orange-600">Semina T1</TableHead>
-                      <TableHead className="text-orange-600">Mese Semina</TableHead>
-                      <TableHead>Stato</TableHead>
+                      <TableHead>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help">
+                              Mese <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Mese di riferimento per vendita/consegna degli animali</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help">
+                              Taglia <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Taglie specifiche (TP-XXX) previste per la vendita in questo mese. T3 = animali piccoli (TP-2000/3000/3500), T10 = animali grandi (TP-4000/5000)</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Giacenza <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Animali di questa taglia attualmente in allevamento all'inizio del mese</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Budget <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Animali previsti da vendere secondo il piano di vendita annuale</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right text-indigo-600">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Ordini <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Animali effettivamente ordinati dai clienti per questo mese (dato reale da ordini)</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Produzione <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Stima animali pronti per la vendita basata sulla crescita SGR della giacenza attuale</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Δ vs Budget <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Differenza Produzione - Budget. Positivo = produci più del previsto, Negativo = produci meno</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right text-indigo-600">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Δ vs Ordini <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Differenza Produzione - Ordini. Positivo = riesci a coprire gli ordini, Negativo = non li copri</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Stock <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Animali che restano dopo aver soddisfatto budget/ordini del mese</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-right text-orange-600">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help justify-end">
+                              Semina T1 <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Quanti animali piccoli (T1) devi seminare ORA per coprire la domanda futura di questo mese</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead className="text-orange-600">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help">
+                              Mese Semina <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Quando devi seminare il T1 per averlo pronto in tempo per questo mese di vendita</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1 cursor-help">
+                              Stato <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p>Indicatore di rischio: Verde = coperto, Giallo = attenzione, Rosso = critico</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
