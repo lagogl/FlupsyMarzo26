@@ -1526,11 +1526,23 @@ export function registerAIRoutes(app: Express) {
       let totalT3Ordini = 0;
       let totalT10Ordini = 0;
       
-      for (const size of ordersBySpecificSize) {
-        const description = sizeDescriptions[size.sizeCode] || `Taglia ${size.sizeCode}`;
-        ordiniTagliaData.push([size.sizeCode, size.totalAnimals, size.aggregateCategory, description]);
-        if (size.aggregateCategory === 'T3') totalT3Ordini += size.totalAnimals;
-        else totalT10Ordini += size.totalAnimals;
+      // Usa ordersAbsoluteBySize per i totali assoluti (285.5M) invece di ordersBySpecificSize (281M allocato per anno)
+      const absoluteSizes = Object.keys(ordersAbsoluteBySize)
+        .filter(s => (ordersAbsoluteBySize as Record<string, number>)[s] > 0)
+        .sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, '')) || 0;
+          const numB = parseInt(b.replace(/\D/g, '')) || 0;
+          return numA - numB;
+        });
+      
+      for (const sizeCode of absoluteSizes) {
+        const totalAnimals = (ordersAbsoluteBySize as Record<string, number>)[sizeCode] || 0;
+        const isT3 = sizeCode.includes('2000') || sizeCode.includes('3000') || sizeCode.includes('3500');
+        const category = isT3 ? 'T3' : 'T10';
+        const description = sizeDescriptions[sizeCode] || `Taglia ${sizeCode}`;
+        ordiniTagliaData.push([sizeCode, totalAnimals, category, description]);
+        if (isT3) totalT3Ordini += totalAnimals;
+        else totalT10Ordini += totalAnimals;
       }
       
       ordiniTagliaData.push(['']);
