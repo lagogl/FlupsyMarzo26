@@ -949,18 +949,34 @@ export function registerAIRoutes(app: Express) {
       
       let monthlyData = forecast.monthlyData || [];
       const ordersAbsoluteBySize = forecast.ordersAbsoluteBySize || {};
-      const totalOrdersAbsolute = Object.values(ordersAbsoluteBySize as Record<string, number>).reduce((sum, v) => sum + v, 0);
+      
+      // Calcola totale ordini assoluto in base al filtro categoria
+      let ordersAbsoluteFiltered = 0;
+      const absoluteBySizeRecord = ordersAbsoluteBySize as Record<string, number>;
       
       // Filtra per categoria o taglia specifica
       if (category && category !== 'all') {
         if (category.startsWith('TP-')) {
-          // Mappa taglia specifica a categoria
+          // Taglia specifica - usa solo quella taglia
+          ordersAbsoluteFiltered = absoluteBySizeRecord[category] || 0;
           const isT3 = category.includes('2000') || category.includes('3000') || category.includes('3500');
           const effectiveCategory = isT3 ? 'T3' : 'T10';
           monthlyData = monthlyData.filter((m: any) => m.sizeCategory === effectiveCategory);
         } else {
+          // Categoria T3 o T10
           monthlyData = monthlyData.filter((m: any) => m.sizeCategory === category);
+          if (category === 'T3') {
+            ordersAbsoluteFiltered = (absoluteBySizeRecord['TP-2000'] || 0) + 
+                                      (absoluteBySizeRecord['TP-3000'] || 0) + 
+                                      (absoluteBySizeRecord['TP-3500'] || 0);
+          } else {
+            ordersAbsoluteFiltered = (absoluteBySizeRecord['TP-4000'] || 0) + 
+                                      (absoluteBySizeRecord['TP-5000'] || 0);
+          }
         }
+      } else {
+        // Tutte le categorie
+        ordersAbsoluteFiltered = Object.values(absoluteBySizeRecord).reduce((sum, v) => sum + v, 0);
       }
       
       const workbook = createFormattedWorkbook();
@@ -1016,7 +1032,7 @@ export function registerAIRoutes(app: Express) {
         '-',
         '-',
         monthlyData.reduce((sum: number, r: any) => sum + r.budgetAnimals, 0),
-        monthlyData.reduce((sum: number, r: any) => sum + r.ordersAnimals, 0),
+        ordersAbsoluteFiltered, // Usa totale assoluto ordini filtrato per categoria
         monthlyData.reduce((sum: number, r: any) => sum + r.productionForecast, 0),
         monthlyData.reduce((sum: number, r: any) => sum + r.varianceBudgetProduction, 0),
         monthlyData.reduce((sum: number, r: any) => sum + r.varianceOrdersProduction, 0),
@@ -1036,6 +1052,9 @@ export function registerAIRoutes(app: Express) {
       // FOGLIO 2: Ordini per Taglia Specifica
       const ws2 = workbook.addWorksheet('Ordini per Taglia');
       setColumnWidths(ws2, [15, 20, 15, 20]);
+      
+      // Calcola totale assoluto ordini per il foglio 2
+      const totalOrdersAbsolute = Object.values(absoluteBySizeRecord).reduce((sum, v) => sum + v, 0);
       
       const title2 = ws2.addRow([`Ordini Assoluti per Taglia Specifica - Totale: ${(totalOrdersAbsolute / 1000000).toFixed(1)}M`]);
       applyTitleStyle(title2);
