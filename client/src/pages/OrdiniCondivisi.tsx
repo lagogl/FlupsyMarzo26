@@ -286,6 +286,25 @@ export default function OrdiniCondivisi() {
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
+  // Totali per taglia degli ordini FILTRATI (per header tabella)
+  const totaliTagliaFiltrati = ordiniFiltrati.reduce((acc: Record<string, number>, ordine) => {
+    const taglia = ordine.tagliaRichiesta || 'N/D';
+    acc[taglia] = (acc[taglia] || 0) + (ordine.quantitaTotale || 0);
+    return acc;
+  }, {});
+  
+  // Raggruppamento in categorie T3 e T10
+  const totaleT3 = Object.entries(totaliTagliaFiltrati)
+    .filter(([taglia]) => ['TP-2000', 'TP-3000', 'TP-3500'].includes(taglia))
+    .reduce((sum, [, qty]) => sum + qty, 0);
+  const totaleT10 = Object.entries(totaliTagliaFiltrati)
+    .filter(([taglia]) => ['TP-4000', 'TP-5000'].includes(taglia))
+    .reduce((sum, [, qty]) => sum + qty, 0);
+  const totaleAltro = Object.entries(totaliTagliaFiltrati)
+    .filter(([taglia]) => !['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'].includes(taglia))
+    .reduce((sum, [, qty]) => sum + qty, 0);
+  const totaleFiltrati = ordiniFiltrati.reduce((sum, o) => sum + (o.quantitaTotale || 0), 0);
+
   // Statistiche basate su TUTTI gli ordini (non filtrati)
   // Escludi ordini cancellati dalle statistiche principali
   const ordiniAttivi = ordini.filter(o => !o.cancellato);
@@ -1049,11 +1068,37 @@ export default function OrdiniCondivisi() {
       <Card className="border-0 shadow-md">
         <CardContent className="p-0">
           <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold">Lista Ordini</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {ordiniFiltrati.length} ordini trovati
-              </p>
+            <div className="flex items-center gap-6">
+              <div>
+                <h2 className="text-base font-semibold">Lista Ordini</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {ordiniFiltrati.length} ordini trovati
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md">
+                  <span className="text-blue-700 font-medium">Totale:</span>
+                  <span className="text-blue-900 font-bold">{(totaleFiltrati / 1_000_000).toFixed(1)}M</span>
+                </div>
+                {totaleT3 > 0 && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-md">
+                    <span className="text-green-700 text-xs font-medium">T3:</span>
+                    <span className="text-green-900 font-semibold text-xs">{(totaleT3 / 1_000_000).toFixed(1)}M</span>
+                  </div>
+                )}
+                {totaleT10 > 0 && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-200 rounded-md">
+                    <span className="text-purple-700 text-xs font-medium">T10:</span>
+                    <span className="text-purple-900 font-semibold text-xs">{(totaleT10 / 1_000_000).toFixed(1)}M</span>
+                  </div>
+                )}
+                {totaleAltro > 0 && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-md">
+                    <span className="text-gray-700 text-xs font-medium">Altro:</span>
+                    <span className="text-gray-900 font-semibold text-xs">{(totaleAltro / 1_000_000).toFixed(1)}M</span>
+                  </div>
+                )}
+              </div>
             </div>
             <Button
               variant="outline"
