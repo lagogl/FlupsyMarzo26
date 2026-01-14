@@ -738,9 +738,22 @@ export default function AnalisiScostamenti() {
                       <TableRow key={idx}>
                         <TableCell className="font-medium">{row.monthName}</TableCell>
                         <TableCell>
-                          <Badge variant={row.sizeCategory === 'T10' ? 'default' : 'secondary'}>
-                            {row.sizeCategory}
-                          </Badge>
+                          <div className="flex flex-col gap-0.5">
+                            {row.sizeCategory === 'T3' ? (
+                              <>
+                                <Badge variant="secondary" className="text-xs">TP-2000</Badge>
+                                <Badge variant="secondary" className="text-xs">TP-3000</Badge>
+                                <Badge variant="secondary" className="text-xs">TP-3500</Badge>
+                              </>
+                            ) : row.sizeCategory === 'T10' ? (
+                              <>
+                                <Badge variant="default" className="text-xs">TP-4000</Badge>
+                                <Badge variant="default" className="text-xs">TP-5000</Badge>
+                              </>
+                            ) : (
+                              <Badge variant="outline">{row.sizeCategory}</Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right text-purple-600 font-medium">
                           {formatNumber(row.giacenzaInizioMese)}
