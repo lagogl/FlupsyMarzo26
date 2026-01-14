@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -9,9 +9,19 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw, Download } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw, Download, Save } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
+import { useToast } from "@/hooks/use-toast";
+
+interface MortalityExpectation {
+  id: number;
+  seedSize: string;
+  saleSize: string;
+  totalMortalityPercent: number;
+  effectiveFrom: string;
+  notes: string | null;
+}
 
 interface MonthlyForecast {
   year: number;
@@ -109,10 +119,14 @@ const getVarianceColor = (variance: number) => {
   return 'text-red-600';
 };
 
+const SALE_SIZES = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'] as const;
+
 export default function AnalisiScostamenti() {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const [inputMortalityT1, setInputMortalityT1] = useState<number>(5);
   const [inputMortalityT3, setInputMortalityT3] = useState<number>(3);
@@ -121,6 +135,81 @@ export default function AnalisiScostamenti() {
   const [appliedMortalityT1, setAppliedMortalityT1] = useState<number>(5);
   const [appliedMortalityT3, setAppliedMortalityT3] = useState<number>(3);
   const [appliedMortalityT10, setAppliedMortalityT10] = useState<number>(2);
+
+  // State per mortalità per taglia di vendita
+  const [mortalityBySize, setMortalityBySize] = useState<Record<string, number>>({
+    'TP-2000': 8,
+    'TP-3000': 12,
+    'TP-3500': 15,
+    'TP-4000': 18,
+    'TP-5000': 20
+  });
+
+  // Query per caricare le aspettative di mortalità dal database
+  const { data: mortalityExpectations } = useQuery<MortalityExpectation[]>({
+    queryKey: ['/api/mortality-expectations'],
+    queryFn: async () => {
+      const response = await fetch('/api/mortality-expectations');
+      if (!response.ok) throw new Error('Errore caricamento mortalità');
+      return response.json();
+    }
+  });
+
+  // Sincronizza lo state locale quando arrivano i dati dal database
+  useEffect(() => {
+    if (mortalityExpectations && mortalityExpectations.length > 0) {
+      const newMortality: Record<string, number> = {};
+      mortalityExpectations.forEach(exp => {
+        newMortality[exp.saleSize] = exp.totalMortalityPercent;
+      });
+      setMortalityBySize(prev => ({ ...prev, ...newMortality }));
+    }
+  }, [mortalityExpectations]);
+
+  // Mutation per salvare le mortalità
+  const saveMortalityMutation = useMutation({
+    mutationFn: async (data: { saleSize: string; totalMortalityPercent: number }) => {
+      const response = await fetch('/api/mortality-expectations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seedSize: 'TP-1000',
+          saleSize: data.saleSize,
+          totalMortalityPercent: data.totalMortalityPercent
+        })
+      });
+      if (!response.ok) throw new Error('Errore salvataggio');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/mortality-expectations'] });
+    }
+  });
+
+  const handleMortalityChange = (saleSize: string, value: number) => {
+    setMortalityBySize(prev => ({ ...prev, [saleSize]: value }));
+  };
+
+  const saveAllMortalities = async () => {
+    try {
+      for (const size of SALE_SIZES) {
+        await saveMortalityMutation.mutateAsync({
+          saleSize: size,
+          totalMortalityPercent: mortalityBySize[size]
+        });
+      }
+      toast({
+        title: "Salvato",
+        description: "Mortalità attese aggiornate con successo"
+      });
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: "Impossibile salvare le mortalità",
+        variant: "destructive"
+      });
+    }
+  };
 
   const applyMortality = () => {
     setAppliedMortalityT1(inputMortalityT1);
@@ -290,61 +379,108 @@ export default function AnalisiScostamenti() {
         <CardHeader className="py-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
-            Parametri Mortalità Mensile (%)
+            Mortalità Attesa (%) - Da TP-1000 a Taglia Vendita
           </CardTitle>
+          <CardDescription className="text-xs">
+            Imposta la mortalità totale attesa dalla semina (TP-1000) fino a ciascuna taglia di vendita. Il sistema distribuirà automaticamente questa mortalità settimanalmente.
+          </CardDescription>
         </CardHeader>
         <CardContent className="py-2">
-          <div className="flex flex-wrap items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="mortalityT1" className="text-sm font-medium w-8">T1:</Label>
-              <Input
-                id="mortalityT1"
-                type="number"
-                min="0"
-                max="50"
-                step="0.5"
-                value={inputMortalityT1}
-                onChange={(e) => setInputMortalityT1(parseFloat(e.target.value) || 0)}
-                className="w-20 h-8"
-              />
-              <span className="text-xs text-muted-foreground">%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="mortalityT3" className="text-sm font-medium w-8">T3:</Label>
-              <Input
-                id="mortalityT3"
-                type="number"
-                min="0"
-                max="50"
-                step="0.5"
-                value={inputMortalityT3}
-                onChange={(e) => setInputMortalityT3(parseFloat(e.target.value) || 0)}
-                className="w-20 h-8"
-              />
-              <span className="text-xs text-muted-foreground">%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="mortalityT10" className="text-sm font-medium w-8">T10:</Label>
-              <Input
-                id="mortalityT10"
-                type="number"
-                min="0"
-                max="50"
-                step="0.5"
-                value={inputMortalityT10}
-                onChange={(e) => setInputMortalityT10(parseFloat(e.target.value) || 0)}
-                className="w-20 h-8"
-              />
-              <span className="text-xs text-muted-foreground">%</span>
-            </div>
+          <div className="flex flex-wrap items-center gap-4">
+            {SALE_SIZES.map(size => {
+              const isT3 = ['TP-2000', 'TP-3000', 'TP-3500'].includes(size);
+              return (
+                <div key={size} className="flex items-center gap-1.5">
+                  <Label 
+                    htmlFor={`mortality-${size}`} 
+                    className={`text-xs font-medium ${isT3 ? 'text-green-700' : 'text-purple-700'}`}
+                  >
+                    {size}:
+                  </Label>
+                  <Input
+                    id={`mortality-${size}`}
+                    type="number"
+                    min="0"
+                    max="50"
+                    step="0.5"
+                    value={mortalityBySize[size] || 0}
+                    onChange={(e) => handleMortalityChange(size, parseFloat(e.target.value) || 0)}
+                    className="w-16 h-7 text-sm"
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+              );
+            })}
             <Button 
-              onClick={applyMortality}
+              onClick={saveAllMortalities}
               size="sm"
-              className="h-8"
+              className="h-7"
+              disabled={saveMortalityMutation.isPending}
             >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Applica
+              {saveMortalityMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Save className="h-3 w-3 mr-1" />
+              )}
+              Salva
             </Button>
+          </div>
+          
+          <div className="mt-3 pt-3 border-t">
+            <p className="text-xs text-muted-foreground mb-2">Mortalità mensile per categoria (forecast legacy):</p>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="mortalityT1" className="text-xs font-medium">T1:</Label>
+                <Input
+                  id="mortalityT1"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.5"
+                  value={inputMortalityT1}
+                  onChange={(e) => setInputMortalityT1(parseFloat(e.target.value) || 0)}
+                  className="w-14 h-7 text-sm"
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="mortalityT3" className="text-xs font-medium">T3:</Label>
+                <Input
+                  id="mortalityT3"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.5"
+                  value={inputMortalityT3}
+                  onChange={(e) => setInputMortalityT3(parseFloat(e.target.value) || 0)}
+                  className="w-14 h-7 text-sm"
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="mortalityT10" className="text-xs font-medium">T10:</Label>
+                <Input
+                  id="mortalityT10"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.5"
+                  value={inputMortalityT10}
+                  onChange={(e) => setInputMortalityT10(parseFloat(e.target.value) || 0)}
+                  className="w-14 h-7 text-sm"
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
+              <Button 
+                onClick={applyMortality}
+                size="sm"
+                variant="outline"
+                className="h-7"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Applica
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
