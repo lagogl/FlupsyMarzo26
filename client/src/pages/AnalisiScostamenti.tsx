@@ -425,63 +425,6 @@ export default function AnalisiScostamenti() {
               Salva
             </Button>
           </div>
-          
-          <div className="mt-3 pt-3 border-t">
-            <p className="text-xs text-muted-foreground mb-2">Mortalità mensile per categoria (forecast legacy):</p>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="mortalityT1" className="text-xs font-medium">T1:</Label>
-                <Input
-                  id="mortalityT1"
-                  type="number"
-                  min="0"
-                  max="50"
-                  step="0.5"
-                  value={inputMortalityT1}
-                  onChange={(e) => setInputMortalityT1(parseFloat(e.target.value) || 0)}
-                  className="w-14 h-7 text-sm"
-                />
-                <span className="text-xs text-muted-foreground">%</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="mortalityT3" className="text-xs font-medium">T3:</Label>
-                <Input
-                  id="mortalityT3"
-                  type="number"
-                  min="0"
-                  max="50"
-                  step="0.5"
-                  value={inputMortalityT3}
-                  onChange={(e) => setInputMortalityT3(parseFloat(e.target.value) || 0)}
-                  className="w-14 h-7 text-sm"
-                />
-                <span className="text-xs text-muted-foreground">%</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="mortalityT10" className="text-xs font-medium">T10:</Label>
-                <Input
-                  id="mortalityT10"
-                  type="number"
-                  min="0"
-                  max="50"
-                  step="0.5"
-                  value={inputMortalityT10}
-                  onChange={(e) => setInputMortalityT10(parseFloat(e.target.value) || 0)}
-                  className="w-14 h-7 text-sm"
-                />
-                <span className="text-xs text-muted-foreground">%</span>
-              </div>
-              <Button 
-                onClick={applyMortality}
-                size="sm"
-                variant="outline"
-                className="h-7"
-              >
-                <RefreshCw className="h-3 w-3 mr-1" />
-                Applica
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
