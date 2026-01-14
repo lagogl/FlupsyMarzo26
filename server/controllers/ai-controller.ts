@@ -982,9 +982,15 @@ export function registerAIRoutes(app: Express) {
       const workbook = createFormattedWorkbook();
       const ws = workbook.addWorksheet('Scostamenti Produzione');
       
-      const headers = ['Mese', 'Categoria', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
+      const headers = ['Mese', 'Categoria', 'Taglie Incluse', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
                        'Δ vs Budget', 'Δ vs Ordini', 'Stock', 'Semina T1', 'Mese Semina', 'Stato'];
-      setColumnWidths(ws, [15, 10, 15, 15, 15, 15, 15, 15, 15, 15, 15, 22]);
+      setColumnWidths(ws, [15, 10, 25, 15, 15, 15, 15, 15, 15, 15, 15, 15, 22]);
+      
+      const categoryToSizes: Record<string, string> = {
+        'T3': 'TP-2000, TP-3000, TP-3500',
+        'T10': 'TP-4000, TP-5000',
+        'T1': 'Seme iniziale'
+      };
       
       const titleRow = ws.addRow([`Analisi Scostamenti Produzione ${targetYear}`]);
       applyTitleStyle(titleRow);
@@ -999,11 +1005,12 @@ export function registerAIRoutes(app: Express) {
       const headerRow = ws.addRow(headers);
       applyHeaderStyle(headerRow);
       
-      const statusColIndex = 11;
+      const statusColIndex = 12;
       monthlyData.forEach((row: any, index: number) => {
         const rowData = [
           row.monthName,
           row.sizeCategory,
+          categoryToSizes[row.sizeCategory] || '-',
           row.giacenzaInizioMese,
           row.budgetAnimals,
           row.ordersAnimals || 0,
@@ -1020,7 +1027,7 @@ export function registerAIRoutes(app: Express) {
         
         applyStatusStyle(excelRow.getCell(statusColIndex + 1), String(rowData[statusColIndex]));
         
-        for (let col = 3; col <= 10; col++) {
+        for (let col = 4; col <= 11; col++) {
           if (typeof rowData[col - 1] === 'number') {
             applyNumberFormat(excelRow.getCell(col));
           }
@@ -1030,7 +1037,8 @@ export function registerAIRoutes(app: Express) {
       const totals = [
         'TOTALE',
         '-',
-        '-',
+        '-', // Taglie Incluse
+        '-', // Giacenza
         monthlyData.reduce((sum: number, r: any) => sum + r.budgetAnimals, 0),
         ordersAbsoluteFiltered, // Usa totale assoluto ordini filtrato per categoria
         monthlyData.reduce((sum: number, r: any) => sum + r.productionForecast, 0),
@@ -1043,7 +1051,7 @@ export function registerAIRoutes(app: Express) {
       ];
       const totalRow = ws.addRow(totals);
       applyTotalRowStyle(totalRow);
-      for (let col = 4; col <= 11; col++) {
+      for (let col = 5; col <= 12; col++) {
         if (typeof totals[col - 1] === 'number') {
           applyNumberFormat(totalRow.getCell(col));
         }
