@@ -195,6 +195,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', mortalityRatesModule.mortalityRatesRoutes);
   console.log('✅ Modulo MORTALITY-RATES registrato su /api/mortality-rates*');
 
+  // API MORTALITY-EXPECTATIONS (Nuovo sistema: mortalità totale da semina a vendita)
+  app.get('/api/mortality-expectations', async (req, res) => {
+    try {
+      const expectations = await storage.getMortalityExpectations();
+      res.json(expectations);
+    } catch (error) {
+      console.error('Errore getMortalityExpectations:', error);
+      res.status(500).json({ error: 'Errore durante il recupero delle aspettative di mortalità' });
+    }
+  });
+
+  app.get('/api/mortality-expectations/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const expectation = await storage.getMortalityExpectation(id);
+      if (!expectation) {
+        return res.status(404).json({ error: 'Aspettativa di mortalità non trovata' });
+      }
+      res.json(expectation);
+    } catch (error) {
+      console.error('Errore getMortalityExpectation:', error);
+      res.status(500).json({ error: 'Errore durante il recupero' });
+    }
+  });
+
+  app.post('/api/mortality-expectations', async (req, res) => {
+    try {
+      const { seedSize, saleSize, totalMortalityPercent, notes } = req.body;
+      const expectation = await storage.upsertMortalityExpectation(
+        seedSize || 'TP-1000', 
+        saleSize, 
+        totalMortalityPercent, 
+        notes
+      );
+      res.json(expectation);
+    } catch (error) {
+      console.error('Errore createMortalityExpectation:', error);
+      res.status(500).json({ error: 'Errore durante la creazione' });
+    }
+  });
+
+  app.patch('/api/mortality-expectations/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const expectation = await storage.updateMortalityExpectation(id, req.body);
+      if (!expectation) {
+        return res.status(404).json({ error: 'Aspettativa di mortalità non trovata' });
+      }
+      res.json(expectation);
+    } catch (error) {
+      console.error('Errore updateMortalityExpectation:', error);
+      res.status(500).json({ error: 'Errore durante l\'aggiornamento' });
+    }
+  });
+
+  console.log('✅ API MORTALITY-EXPECTATIONS registrate su /api/mortality-expectations*');
+
   // Registra il modulo NOTIFICATIONS
   const notificationsModule = await import('./modules/system/notifications');
   app.use('/api', notificationsModule.notificationsRoutes);

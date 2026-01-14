@@ -11,6 +11,7 @@ import {
   SgrGiornaliero, InsertSgrGiornaliero,
   SgrPerTaglia, InsertSgrPerTaglia,
   MortalityRate, InsertMortalityRate,
+  MortalityExpectation, InsertMortalityExpectation,
   TargetSizeAnnotation, InsertTargetSizeAnnotation,
   operationTypes,
   // Importazioni per il modulo di vagliatura
@@ -177,7 +178,7 @@ export interface IStorage {
   // Le funzioni basketPositionHistory sono state rimosse per ottimizzare le performance delle API di posizionamento.
   // La gestione delle posizioni dei cestelli avviene ora direttamente tramite i campi row e position nella tabella baskets.
   
-  // Mortality Rate methods
+  // Mortality Rate methods (LEGACY)
   getMortalityRates(): Promise<MortalityRate[]>;
   getMortalityRate(id: number): Promise<MortalityRate | undefined>;
   getMortalityRatesBySize(sizeId: number): Promise<MortalityRate[]>;
@@ -185,6 +186,15 @@ export interface IStorage {
   getMortalityRateByMonthAndSize(month: string, sizeId: number): Promise<MortalityRate | undefined>;
   createMortalityRate(mortalityRate: InsertMortalityRate): Promise<MortalityRate>;
   updateMortalityRate(id: number, mortalityRate: Partial<MortalityRate>): Promise<MortalityRate | undefined>;
+  
+  // Mortality Expectations methods (Nuovo sistema: mortalità totale da semina a vendita)
+  getMortalityExpectations(): Promise<MortalityExpectation[]>;
+  getMortalityExpectation(id: number): Promise<MortalityExpectation | undefined>;
+  getMortalityExpectationBySeedAndSaleSize(seedSize: string, saleSize: string): Promise<MortalityExpectation | undefined>;
+  getMortalityExpectationsBySeedSize(seedSize: string): Promise<MortalityExpectation[]>;
+  createMortalityExpectation(data: InsertMortalityExpectation): Promise<MortalityExpectation>;
+  updateMortalityExpectation(id: number, data: Partial<MortalityExpectation>): Promise<MortalityExpectation | undefined>;
+  upsertMortalityExpectation(seedSize: string, saleSize: string, totalMortalityPercent: number, notes?: string): Promise<MortalityExpectation>;
   
   // Target Size Annotations methods
   getTargetSizeAnnotations(): Promise<TargetSizeAnnotation[]>;
@@ -1148,6 +1158,60 @@ export class MemStorage implements IStorage {
     const updatedMortalityRate = { ...currentMortalityRate, ...mortalityRateUpdate };
     this.mortalityRates.set(id, updatedMortalityRate);
     return updatedMortalityRate;
+  }
+
+  // Mortality Expectations methods (stub - using DbStorage in production)
+  private mortalityExpectations = new Map<number, MortalityExpectation>();
+  private mortalityExpectationId = 1;
+
+  async getMortalityExpectations(): Promise<MortalityExpectation[]> {
+    return Array.from(this.mortalityExpectations.values());
+  }
+
+  async getMortalityExpectation(id: number): Promise<MortalityExpectation | undefined> {
+    return this.mortalityExpectations.get(id);
+  }
+
+  async getMortalityExpectationBySeedAndSaleSize(seedSize: string, saleSize: string): Promise<MortalityExpectation | undefined> {
+    return Array.from(this.mortalityExpectations.values()).find(
+      m => m.seedSize === seedSize && m.saleSize === saleSize
+    );
+  }
+
+  async getMortalityExpectationsBySeedSize(seedSize: string): Promise<MortalityExpectation[]> {
+    return Array.from(this.mortalityExpectations.values()).filter(m => m.seedSize === seedSize);
+  }
+
+  async createMortalityExpectation(data: InsertMortalityExpectation): Promise<MortalityExpectation> {
+    const id = this.mortalityExpectationId++;
+    const expectation: MortalityExpectation = {
+      id,
+      seedSize: data.seedSize || 'TP-1000',
+      saleSize: data.saleSize,
+      totalMortalityPercent: data.totalMortalityPercent,
+      effectiveFrom: data.effectiveFrom || new Date().toISOString().split('T')[0],
+      notes: data.notes || null,
+      createdAt: new Date(),
+      updatedAt: null
+    };
+    this.mortalityExpectations.set(id, expectation);
+    return expectation;
+  }
+
+  async updateMortalityExpectation(id: number, data: Partial<MortalityExpectation>): Promise<MortalityExpectation | undefined> {
+    const current = this.mortalityExpectations.get(id);
+    if (!current) return undefined;
+    const updated = { ...current, ...data, updatedAt: new Date() };
+    this.mortalityExpectations.set(id, updated);
+    return updated;
+  }
+
+  async upsertMortalityExpectation(seedSize: string, saleSize: string, totalMortalityPercent: number, notes?: string): Promise<MortalityExpectation> {
+    const existing = await this.getMortalityExpectationBySeedAndSaleSize(seedSize, saleSize);
+    if (existing) {
+      return (await this.updateMortalityExpectation(existing.id, { totalMortalityPercent, notes }))!;
+    }
+    return await this.createMortalityExpectation({ seedSize, saleSize, totalMortalityPercent, notes });
   }
   
   // Target Size Annotations methods

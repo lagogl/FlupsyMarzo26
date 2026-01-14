@@ -10,6 +10,7 @@ import {
   SgrGiornaliero, InsertSgrGiornaliero, sgrGiornalieri,
   SgrPerTaglia, InsertSgrPerTaglia, sgrPerTaglia,
   MortalityRate, InsertMortalityRate, mortalityRates,
+  MortalityExpectation, InsertMortalityExpectation, mortalityExpectations,
   TargetSizeAnnotation, InsertTargetSizeAnnotation, targetSizeAnnotations,
   // Modulo di vagliatura
   ScreeningOperation, InsertScreeningOperation, screeningOperations,
@@ -1679,6 +1680,54 @@ export class DbStorage implements IStorage {
       .where(eq(mortalityRates.id, id))
       .returning();
     return results[0];
+  }
+
+  // MORTALITY EXPECTATIONS (Nuovo sistema: mortalità totale da semina a vendita)
+  async getMortalityExpectations(): Promise<MortalityExpectation[]> {
+    return await db.select().from(mortalityExpectations).orderBy(mortalityExpectations.saleSize);
+  }
+
+  async getMortalityExpectation(id: number): Promise<MortalityExpectation | undefined> {
+    const results = await db.select().from(mortalityExpectations).where(eq(mortalityExpectations.id, id));
+    return results[0];
+  }
+
+  async getMortalityExpectationBySeedAndSaleSize(seedSize: string, saleSize: string): Promise<MortalityExpectation | undefined> {
+    const results = await db.select().from(mortalityExpectations).where(
+      and(
+        eq(mortalityExpectations.seedSize, seedSize),
+        eq(mortalityExpectations.saleSize, saleSize)
+      )
+    );
+    return results[0];
+  }
+
+  async getMortalityExpectationsBySeedSize(seedSize: string): Promise<MortalityExpectation[]> {
+    return await db.select().from(mortalityExpectations)
+      .where(eq(mortalityExpectations.seedSize, seedSize))
+      .orderBy(mortalityExpectations.saleSize);
+  }
+
+  async createMortalityExpectation(data: InsertMortalityExpectation): Promise<MortalityExpectation> {
+    const results = await db.insert(mortalityExpectations).values(data).returning();
+    return results[0];
+  }
+
+  async updateMortalityExpectation(id: number, data: Partial<MortalityExpectation>): Promise<MortalityExpectation | undefined> {
+    const results = await db.update(mortalityExpectations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(mortalityExpectations.id, id))
+      .returning();
+    return results[0];
+  }
+
+  async upsertMortalityExpectation(seedSize: string, saleSize: string, totalMortalityPercent: number, notes?: string): Promise<MortalityExpectation> {
+    const existing = await this.getMortalityExpectationBySeedAndSaleSize(seedSize, saleSize);
+    if (existing) {
+      return (await this.updateMortalityExpectation(existing.id, { totalMortalityPercent, notes }))!;
+    } else {
+      return await this.createMortalityExpectation({ seedSize, saleSize, totalMortalityPercent, notes });
+    }
   }
   
   // TARGET SIZE ANNOTATIONS

@@ -461,13 +461,26 @@ export const lotLedger = pgTable("lot_ledger", {
 
 // Position History removed for performance optimization
 
-// Mortality Rate (Tasso di mortalità previsto per taglia e mese)
+// Mortality Rate (Tasso di mortalità previsto per taglia e mese) - LEGACY
 export const mortalityRates = pgTable("mortality_rates", {
   id: serial("id").primaryKey(),
   sizeId: integer("size_id").notNull(), // reference to the size
   month: text("month").notNull(), // e.g., gennaio, febbraio...
   percentage: real("percentage").notNull(), // percentuale di mortalità prevista per questa taglia e mese
   notes: text("notes"),
+});
+
+// Mortality Expectations (Mortalità attesa totale da taglia semina a taglia vendita)
+// Nuovo sistema: l'operatore imposta la mortalità totale % che il sistema "spalma" settimanalmente
+export const mortalityExpectations = pgTable("mortality_expectations", {
+  id: serial("id").primaryKey(),
+  seedSize: text("seed_size").notNull().default("TP-1000"), // Taglia di semina (default TP-1000, futuro: TP-300)
+  saleSize: text("sale_size").notNull(), // Taglia di vendita (TP-2000, TP-3000, TP-3500, TP-4000, TP-5000)
+  totalMortalityPercent: real("total_mortality_percent").notNull(), // Mortalità totale attesa % dalla semina alla vendita
+  effectiveFrom: date("effective_from").notNull().defaultNow(), // Data di inizio validità
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
 });
 
 // Target Size Annotations (Annotazioni per ceste che raggiungono la taglia target)
@@ -543,6 +556,12 @@ export const insertLotLedgerSchema = createInsertSchema(lotLedger).omit({
 
 export const insertMortalityRateSchema = createInsertSchema(mortalityRates).omit({
   id: true
+});
+
+export const insertMortalityExpectationSchema = createInsertSchema(mortalityExpectations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
 });
 
 export const insertTargetSizeAnnotationSchema = createInsertSchema(targetSizeAnnotations).omit({
@@ -686,6 +705,9 @@ export type InsertLotLedger = z.infer<typeof insertLotLedgerSchema>;
 
 export type MortalityRate = typeof mortalityRates.$inferSelect;
 export type InsertMortalityRate = z.infer<typeof insertMortalityRateSchema>;
+
+export type MortalityExpectation = typeof mortalityExpectations.$inferSelect;
+export type InsertMortalityExpectation = z.infer<typeof insertMortalityExpectationSchema>;
 
 export type TargetSizeAnnotation = typeof targetSizeAnnotations.$inferSelect;
 export type InsertTargetSizeAnnotation = z.infer<typeof insertTargetSizeAnnotationSchema>;
