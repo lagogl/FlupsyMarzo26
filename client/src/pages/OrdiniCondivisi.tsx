@@ -1075,23 +1075,33 @@ export default function OrdiniCondivisi() {
                   {ordiniFiltrati.length} ordini trovati
                 </p>
               </div>
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2 text-sm flex-wrap">
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md">
                   <span className="text-blue-700 font-medium">Totale:</span>
                   <span className="text-blue-900 font-bold">{(totaleFiltrati / 1_000_000).toFixed(1)}M</span>
                 </div>
-                {totaleT3 > 0 && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-md">
-                    <span className="text-green-700 text-xs font-medium">T3:</span>
-                    <span className="text-green-900 font-semibold text-xs">{(totaleT3 / 1_000_000).toFixed(1)}M</span>
-                  </div>
-                )}
-                {totaleT10 > 0 && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-200 rounded-md">
-                    <span className="text-purple-700 text-xs font-medium">T10:</span>
-                    <span className="text-purple-900 font-semibold text-xs">{(totaleT10 / 1_000_000).toFixed(1)}M</span>
-                  </div>
-                )}
+                <div className="border-l pl-2 flex items-center gap-1.5">
+                  {['TP-2000', 'TP-3000', 'TP-3500'].map(taglia => {
+                    const qty = totaliTagliaFiltrati[taglia] || 0;
+                    if (qty === 0) return null;
+                    return (
+                      <div key={taglia} className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs">
+                        <span className="text-green-700 font-medium">{taglia}:</span>
+                        <span className="text-green-900 font-semibold">{(qty / 1_000_000).toFixed(1)}M</span>
+                      </div>
+                    );
+                  })}
+                  {['TP-4000', 'TP-5000'].map(taglia => {
+                    const qty = totaliTagliaFiltrati[taglia] || 0;
+                    if (qty === 0) return null;
+                    return (
+                      <div key={taglia} className="flex items-center gap-1 px-2 py-1 bg-purple-50 border border-purple-200 rounded text-xs">
+                        <span className="text-purple-700 font-medium">{taglia}:</span>
+                        <span className="text-purple-900 font-semibold">{(qty / 1_000_000).toFixed(1)}M</span>
+                      </div>
+                    );
+                  })}
+                </div>
                 {totaleAltro > 0 && (
                   <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-md">
                     <span className="text-gray-700 text-xs font-medium">Altro:</span>
