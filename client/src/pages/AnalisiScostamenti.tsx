@@ -389,30 +389,43 @@ export default function AnalisiScostamenti() {
         </CardHeader>
         <CardContent className="py-2">
           <div className="flex flex-wrap items-center gap-4">
-            {SALE_SIZES.map(size => {
-              const isT3 = ['TP-2000', 'TP-3000', 'TP-3500'].includes(size);
-              return (
-                <div key={size} className="flex items-center gap-1.5">
-                  <Label 
-                    htmlFor={`mortality-${size}`} 
-                    className={`text-xs font-medium ${isT3 ? 'text-green-700' : 'text-purple-700'}`}
-                  >
-                    {size}:
-                  </Label>
-                  <Input
-                    id={`mortality-${size}`}
-                    type="number"
-                    min="0"
-                    max="50"
-                    step="0.5"
-                    value={mortalityBySize[size] || 0}
-                    onChange={(e) => handleMortalityChange(size, parseFloat(e.target.value) || 0)}
-                    className="w-16 h-7 text-sm"
-                  />
-                  <span className="text-xs text-muted-foreground">%</span>
-                </div>
-              );
-            })}
+            {(() => {
+              // Usa taglie dinamiche dagli ordini, fallback a SALE_SIZES
+              const dynamicSizes = data?.ordersAbsoluteBySize 
+                ? Object.keys(data.ordersAbsoluteBySize)
+                    .filter(s => (data.ordersAbsoluteBySize?.[s] || 0) > 0)
+                    .sort((a, b) => {
+                      const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                      const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                      return numA - numB;
+                    })
+                : [...SALE_SIZES];
+              
+              return dynamicSizes.map(size => {
+                const isT3 = size.includes('2000') || size.includes('3000') || size.includes('3500');
+                return (
+                  <div key={size} className="flex items-center gap-1.5">
+                    <Label 
+                      htmlFor={`mortality-${size}`} 
+                      className={`text-xs font-medium ${isT3 ? 'text-green-700' : 'text-purple-700'}`}
+                    >
+                      {size}:
+                    </Label>
+                    <Input
+                      id={`mortality-${size}`}
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="0.5"
+                      value={mortalityBySize[size] || 0}
+                      onChange={(e) => handleMortalityChange(size, parseFloat(e.target.value) || 0)}
+                      className="w-16 h-7 text-sm"
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                );
+              });
+            })()}
             <Button 
               onClick={saveAllMortalities}
               size="sm"
