@@ -948,8 +948,19 @@ export function registerAIRoutes(app: Express) {
       const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
       
       let monthlyData = forecast.monthlyData || [];
+      const ordersAbsoluteBySize = forecast.ordersAbsoluteBySize || {};
+      const totalOrdersAbsolute = Object.values(ordersAbsoluteBySize as Record<string, number>).reduce((sum, v) => sum + v, 0);
+      
+      // Filtra per categoria o taglia specifica
       if (category && category !== 'all') {
-        monthlyData = monthlyData.filter((m: any) => m.sizeCategory === category);
+        if (category.startsWith('TP-')) {
+          // Mappa taglia specifica a categoria
+          const isT3 = category.includes('2000') || category.includes('3000') || category.includes('3500');
+          const effectiveCategory = isT3 ? 'T3' : 'T10';
+          monthlyData = monthlyData.filter((m: any) => m.sizeCategory === effectiveCategory);
+        } else {
+          monthlyData = monthlyData.filter((m: any) => m.sizeCategory === category);
+        }
       }
       
       const workbook = createFormattedWorkbook();
@@ -1022,6 +1033,44 @@ export function registerAIRoutes(app: Express) {
         }
       }
       
+      // FOGLIO 2: Ordini per Taglia Specifica
+      const ws2 = workbook.addWorksheet('Ordini per Taglia');
+      setColumnWidths(ws2, [15, 20, 15, 20]);
+      
+      const title2 = ws2.addRow([`Ordini Assoluti per Taglia Specifica - Totale: ${(totalOrdersAbsolute / 1000000).toFixed(1)}M`]);
+      applyTitleStyle(title2);
+      ws2.mergeCells(1, 1, 1, 4);
+      
+      ws2.addRow([`Generato il ${new Date().toLocaleDateString('it-IT')}`]);
+      ws2.getRow(2).getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
+      ws2.mergeCells(2, 1, 2, 4);
+      
+      ws2.addRow([]);
+      
+      const header2 = ws2.addRow(['Taglia', 'Ordini Totali', 'Categoria', '% sul Totale']);
+      applyHeaderStyle(header2);
+      
+      const sortedSizes = Object.keys(ordersAbsoluteBySize)
+        .filter(s => (ordersAbsoluteBySize as Record<string, number>)[s] > 0)
+        .sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, '')) || 0;
+          const numB = parseInt(b.replace(/\D/g, '')) || 0;
+          return numA - numB;
+        });
+      
+      sortedSizes.forEach((size, index) => {
+        const value = (ordersAbsoluteBySize as Record<string, number>)[size] || 0;
+        const isT3 = size.includes('2000') || size.includes('3000') || size.includes('3500');
+        const percentage = totalOrdersAbsolute > 0 ? ((value / totalOrdersAbsolute) * 100).toFixed(1) : '0';
+        const row = ws2.addRow([size, value, isT3 ? 'T3' : 'T10', `${percentage}%`]);
+        applyDataRowStyle(row, index % 2 === 1);
+        applyNumberFormat(row.getCell(2));
+      });
+      
+      const totalRow2 = ws2.addRow(['TOTALE', totalOrdersAbsolute, '-', '100%']);
+      applyTotalRowStyle(totalRow2);
+      applyNumberFormat(totalRow2.getCell(2));
+      
       const buffer = await workbook.xlsx.writeBuffer();
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1048,18 +1097,24 @@ export function registerAIRoutes(app: Express) {
       
       const { productionForecastService } = await import('../ai/production-forecast-service');
       
+      // Recupera forecast principale (include ordersAbsoluteBySize)
+      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
+      const ordersAbsoluteBySize = forecast.ordersAbsoluteBySize || {};
+      const totalOrdersAbsolute = Object.values(ordersAbsoluteBySize as Record<string, number>).reduce((sum, v) => sum + v, 0);
+      
+      // Recupera dati aggiuntivi per fogli dettagliati
       const targets = await productionForecastService.getProductionTargets(targetYear);
       const sgrRates = await productionForecastService.getSgrRates();
       const inventoryByCategory = await productionForecastService.getTotalInventoryByCategory();
       const sgrLookup = await productionForecastService.getSgrLookup();
       const ordersByMonth = await productionForecastService.getOrdersByMonthAndCategory(targetYear);
-      const ordersBySpecificSize = await productionForecastService.getOrdersBySpecificSize(targetYear);
+      const ordersBySpecificSize = forecast.ordersBySpecificSize || [];
       
       const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
         'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
       
       // FOGLIO 1: PARAMETRI E INVENTARIO INIZIALE
-      const parametriData = [
+      const parametriData: any[] = [
         ['REPORT ANALITICO SCOSTAMENTI PRODUZIONE'],
         [''],
         ['=== PARAMETRI UTILIZZATI ==='],
@@ -1075,7 +1130,27 @@ export function registerAIRoutes(app: Express) {
         ['T3 (Seme medio)', inventoryByCategory.T3 || 0, 'Animali con min_animals_per_kg tra 6.001 e 30.000'],
         ['T10 (Seme grande)', inventoryByCategory.T10 || 0, 'Animali con min_animals_per_kg <= 6.000'],
         ['TOTALE INVENTARIO', (inventoryByCategory.T1 || 0) + (inventoryByCategory.T3 || 0) + (inventoryByCategory.T10 || 0), 'Somma di tutte le categorie'],
+        [''],
+        ['=== ORDINI TOTALI ASSOLUTI (da Fatture in Cloud) ==='],
+        ['Taglia', 'Ordini Totali', 'Categoria', '% sul Totale']
       ];
+      
+      // Aggiungi ordini per taglia specifica
+      const sortedSizes = Object.keys(ordersAbsoluteBySize)
+        .filter(s => (ordersAbsoluteBySize as Record<string, number>)[s] > 0)
+        .sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, '')) || 0;
+          const numB = parseInt(b.replace(/\D/g, '')) || 0;
+          return numA - numB;
+        });
+      
+      for (const size of sortedSizes) {
+        const value = (ordersAbsoluteBySize as Record<string, number>)[size] || 0;
+        const isT3 = size.includes('2000') || size.includes('3000') || size.includes('3500');
+        const percentage = totalOrdersAbsolute > 0 ? ((value / totalOrdersAbsolute) * 100).toFixed(1) : '0';
+        parametriData.push([size, value, isT3 ? 'T3' : 'T10', `${percentage}%`]);
+      }
+      parametriData.push(['TOTALE ORDINI', totalOrdersAbsolute, '-', '100%']);
       
       // FOGLIO 2: TABELLA SGR PER MESE
       const sgrData = [

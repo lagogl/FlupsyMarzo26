@@ -323,6 +323,10 @@ export default function AnalisiScostamenti() {
     ? data.monthlyData 
     : data.monthlyData.filter(d => d.sizeCategory === effectiveCategory);
 
+  // Grafici dinamici basati sulla selezione
+  const showT3Chart = effectiveCategory === 'all' || effectiveCategory === 'T3';
+  const showT10Chart = effectiveCategory === 'all' || effectiveCategory === 'T10';
+  
   const chartDataT3 = data.monthlyData
     .filter(d => d.sizeCategory === 'T3')
     .map(d => ({
@@ -340,7 +344,8 @@ export default function AnalisiScostamenti() {
       produzione: d.productionForecast / 1000000,
       ordini: d.ordersAnimals / 1000000
     }));
-
+    
+  
   const totalT3Budget = data.monthlyData
     .filter(d => d.sizeCategory === 'T3')
     .reduce((sum, d) => sum + d.budgetAnimals, 0);
@@ -636,46 +641,56 @@ export default function AnalisiScostamenti() {
         </TabsList>
 
         <TabsContent value="chart" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Budget vs Produzione - T3</CardTitle>
-                <CardDescription>Milioni di animali per mese</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartDataT3}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
-                    <Legend />
-                    <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
-                    <Bar dataKey="produzione" name="Produzione" fill="#22c55e" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+          <div className={`grid gap-4 ${showT3Chart && showT10Chart ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+            {showT3Chart && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    Budget vs Ordini vs Produzione - {selectedCategory.startsWith('TP-') && effectiveCategory === 'T3' ? `${selectedCategory} (T3)` : 'T3'}
+                  </CardTitle>
+                  <CardDescription>Milioni di animali per mese (verde = T3)</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartDataT3}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
+                      <Legend />
+                      <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
+                      <Bar dataKey="ordini" name="Ordini" fill="#6366f1" />
+                      <Bar dataKey="produzione" name="Produzione" fill="#22c55e" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Budget vs Produzione - T10</CardTitle>
-                <CardDescription>Milioni di animali per mese</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartDataT10}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
-                    <Legend />
-                    <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
-                    <Bar dataKey="produzione" name="Produzione" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            {showT10Chart && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    Budget vs Ordini vs Produzione - {selectedCategory.startsWith('TP-') && effectiveCategory === 'T10' ? `${selectedCategory} (T10)` : 'T10'}
+                  </CardTitle>
+                  <CardDescription>Milioni di animali per mese (blu = T10)</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartDataT10}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
+                      <Legend />
+                      <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
+                      <Bar dataKey="ordini" name="Ordini" fill="#6366f1" />
+                      <Bar dataKey="produzione" name="Produzione" fill="#3b82f6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
