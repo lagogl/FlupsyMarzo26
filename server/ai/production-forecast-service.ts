@@ -761,15 +761,24 @@ export class ProductionForecastService {
     year: number, 
     mortalityRates: { T1: number; T3: number; T10: number } = { T1: 0.05, T3: 0.03, T10: 0.02 }
   ): Promise<ForecastSummary> {
-    const targets = await this.getProductionTargets(year);
-    const sgrRates = await this.getSgrRates();
-    const currentInventory = await this.getCurrentInventoryBySize();
-    const sgrLookup = await this.getSgrLookup();
+    // Parallelizza tutte le query indipendenti per velocizzare il caricamento
+    const [
+      targets,
+      sgrRates,
+      currentInventory,
+      sgrLookup,
+      ordersByMonth,
+      basketInventory
+    ] = await Promise.all([
+      this.getProductionTargets(year),
+      this.getSgrRates(),
+      this.getCurrentInventoryBySize(),
+      this.getSgrLookup(),
+      this.getOrdersByMonthAndCategory(year),
+      this.getBasketLevelInventory()
+    ]);
     
-    // Recupera ordini aggregati per mese e categoria
-    const ordersByMonth = await this.getOrdersByMonthAndCategory(year);
-    
-    let basketInventory = await this.getBasketLevelInventory();
+    let basketInventoryMutable = [...basketInventory];
     
     const monthlyData: MonthlyForecast[] = [];
     const seedingSchedule: SeedingSchedule[] = [];
@@ -777,7 +786,7 @@ export class ProductionForecastService {
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
     
-    let currentAggregated = this.aggregateByCategory(basketInventory);
+    let currentAggregated = this.aggregateByCategory(basketInventoryMutable);
     let stockT1 = currentAggregated.T1;
     let stockT3 = currentAggregated.T3;
     let stockT10 = currentAggregated.T10;
@@ -786,8 +795,8 @@ export class ProductionForecastService {
       const monthsFromNow = month - currentMonth;
       
       if (monthsFromNow > 0) {
-        basketInventory = this.simulateMonthlyGrowth(basketInventory, sgrLookup, month - 1, mortalityRates);
-        const newAggregated = this.aggregateByCategory(basketInventory);
+        basketInventoryMutable = this.simulateMonthlyGrowth(basketInventoryMutable, sgrLookup, month - 1, mortalityRates);
+        const newAggregated = this.aggregateByCategory(basketInventoryMutable);
         stockT1 = newAggregated.T1;
         stockT3 = newAggregated.T3;
         stockT10 = newAggregated.T10;
