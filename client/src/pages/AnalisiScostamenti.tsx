@@ -308,9 +308,20 @@ export default function AnalisiScostamenti() {
     );
   }
 
-  const filteredData = selectedCategory === 'all' 
+  // Mappa taglie specifiche alle categorie
+  const mapSizeToCategory = (size: string): string => {
+    if (size.includes('2000') || size.includes('3000') || size.includes('3500')) return 'T3';
+    if (size.includes('4000') || size.includes('5000')) return 'T10';
+    return size;
+  };
+  
+  const effectiveCategory = selectedCategory.startsWith('TP-') 
+    ? mapSizeToCategory(selectedCategory) 
+    : selectedCategory;
+  
+  const filteredData = effectiveCategory === 'all' 
     ? data.monthlyData 
-    : data.monthlyData.filter(d => d.sizeCategory === selectedCategory);
+    : data.monthlyData.filter(d => d.sizeCategory === effectiveCategory);
 
   const chartDataT3 = data.monthlyData
     .filter(d => d.sizeCategory === 'T3')
@@ -365,13 +376,24 @@ export default function AnalisiScostamenti() {
             </SelectContent>
           </Select>
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-[120px]">
+            <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tutte</SelectItem>
               <SelectItem value="T3">Solo T3</SelectItem>
               <SelectItem value="T10">Solo T10</SelectItem>
+              {data?.ordersAbsoluteBySize && Object.keys(data.ordersAbsoluteBySize)
+                .filter(s => (data.ordersAbsoluteBySize?.[s] || 0) > 0)
+                .sort((a, b) => {
+                  const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                  const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                  return numA - numB;
+                })
+                .map(size => (
+                  <SelectItem key={size} value={size}>{size}</SelectItem>
+                ))
+              }
             </SelectContent>
           </Select>
         </div>
