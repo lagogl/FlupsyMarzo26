@@ -1053,6 +1053,7 @@ export function registerAIRoutes(app: Express) {
       const inventoryByCategory = await productionForecastService.getTotalInventoryByCategory();
       const sgrLookup = await productionForecastService.getSgrLookup();
       const ordersByMonth = await productionForecastService.getOrdersByMonthAndCategory(targetYear);
+      const ordersBySpecificSize = await productionForecastService.getOrdersBySpecificSize(targetYear);
       
       const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
         'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
@@ -1425,6 +1426,57 @@ export function registerAIRoutes(app: Express) {
           applyDataRowStyle(row, rowNum % 2 === 0);
           if (typeof rowData[2] === 'number') applyNumberFormat(row.getCell(3));
           if (typeof rowData[3] === 'number') applyNumberFormat(row.getCell(4));
+        }
+        rowNum++;
+      }
+      
+      // FOGLIO 5: Ordini per Taglia Specifica
+      const ws5 = workbook.addWorksheet('Ordini per Taglia');
+      setColumnWidths(ws5, [15, 20, 15, 30]);
+      
+      const ordiniTagliaData: any[] = [
+        ['ORDINI PER TAGLIA SPECIFICA'],
+        [''],
+        ['Codice Taglia', 'Animali Totali', 'Categoria', 'Commento'],
+      ];
+      
+      const sizeDescriptions: Record<string, string> = {
+        'TP-2000': 'Seme piccolo (2.000 an/kg) - Categoria T3',
+        'TP-3000': 'Seme medio (3.000 an/kg) - Categoria T3',
+        'TP-3500': 'Seme medio-grande (3.500 an/kg) - Categoria T3',
+        'TP-4000': 'Seme grande (4.000 an/kg) - Categoria T10',
+        'TP-5000': 'Seme molto grande (5.000 an/kg) - Categoria T10',
+      };
+      
+      let totalT3Ordini = 0;
+      let totalT10Ordini = 0;
+      
+      for (const size of ordersBySpecificSize) {
+        const description = sizeDescriptions[size.sizeCode] || `Taglia ${size.sizeCode}`;
+        ordiniTagliaData.push([size.sizeCode, size.totalAnimals, size.aggregateCategory, description]);
+        if (size.aggregateCategory === 'T3') totalT3Ordini += size.totalAnimals;
+        else totalT10Ordini += size.totalAnimals;
+      }
+      
+      ordiniTagliaData.push(['']);
+      ordiniTagliaData.push(['SUBTOTALE T3', totalT3Ordini, 'T3', 'Taglie TP-2000, TP-3000, TP-3500']);
+      ordiniTagliaData.push(['SUBTOTALE T10', totalT10Ordini, 'T10', 'Taglie TP-4000, TP-5000']);
+      ordiniTagliaData.push(['TOTALE ORDINI', totalT3Ordini + totalT10Ordini, '-', 'Somma di tutte le taglie']);
+      
+      rowNum = 1;
+      for (const rowData of ordiniTagliaData) {
+        const row = ws5.addRow(rowData);
+        if (rowNum === 1) {
+          applyTitleStyle(row);
+          ws5.mergeCells(rowNum, 1, rowNum, 4);
+        } else if (rowData[0] === 'Codice Taglia') {
+          applyHeaderStyle(row);
+        } else if (String(rowData[0]).startsWith('SUBTOTALE') || String(rowData[0]).startsWith('TOTALE')) {
+          applyTotalRowStyle(row);
+          if (typeof rowData[1] === 'number') applyNumberFormat(row.getCell(2));
+        } else if (rowData[0] && rowData[0] !== '') {
+          applyDataRowStyle(row, rowNum % 2 === 0);
+          if (typeof rowData[1] === 'number') applyNumberFormat(row.getCell(2));
         }
         rowNum++;
       }

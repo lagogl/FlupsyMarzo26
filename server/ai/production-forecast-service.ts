@@ -722,6 +722,41 @@ export class ProductionForecastService {
     return result;
   }
 
+  // Recupera ordini aggregati per taglia specifica per l'anno (usato nell'export Excel)
+  async getOrdersBySpecificSize(year: number): Promise<OrdersBySize[]> {
+    const ordersByMonth = await this.getOrdersByMonthAndSize(year);
+    const ordersBySpecificSize: OrdersBySize[] = [];
+    const sizeAnnualTotals: Record<string, number> = {};
+    
+    // Aggrega ordini annuali per taglia
+    for (let m = 1; m <= 12; m++) {
+      const monthData = ordersByMonth[m.toString()] || {};
+      for (const [sizeCode, qty] of Object.entries(monthData)) {
+        sizeAnnualTotals[sizeCode] = (sizeAnnualTotals[sizeCode] || 0) + qty;
+      }
+    }
+    
+    // Converti in array con categoria aggregata
+    for (const [sizeCode, totalAnimals] of Object.entries(sizeAnnualTotals)) {
+      if (totalAnimals > 0) {
+        ordersBySpecificSize.push({
+          sizeCode,
+          totalAnimals,
+          aggregateCategory: this.mapTagliaToAggregateCategory(sizeCode) || 'T3'
+        });
+      }
+    }
+    
+    // Ordina per numero taglia
+    ordersBySpecificSize.sort((a, b) => {
+      const numA = parseInt(a.sizeCode.replace(/\D/g, '')) || 0;
+      const numB = parseInt(b.sizeCode.replace(/\D/g, '')) || 0;
+      return numA - numB;
+    });
+
+    return ordersBySpecificSize;
+  }
+
   async calculateForecast(
     year: number, 
     mortalityRates: { T1: number; T3: number; T10: number } = { T1: 0.05, T3: 0.03, T10: 0.02 }
