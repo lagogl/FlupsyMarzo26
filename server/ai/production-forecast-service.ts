@@ -42,6 +42,12 @@ interface SeedingSchedule {
   growthDays: number;
 }
 
+interface OrdersBySize {
+  sizeCode: string;
+  totalAnimals: number;
+  aggregateCategory: 'T3' | 'T10';
+}
+
 interface ForecastSummary {
   year: number;
   totalBudget: number;
@@ -53,6 +59,10 @@ interface ForecastSummary {
   sgrRates: SgrRate[];
   seedingSchedule: SeedingSchedule[];
   totalSeedingT1Required: number;
+  // Nuovi campi per taglie specifiche
+  ordersBySpecificSize?: OrdersBySize[];
+  budgetByCategory?: Record<string, number>;
+  ordersByCategory?: Record<string, number>;
 }
 
 interface InventoryBySize {
@@ -415,26 +425,58 @@ export class ProductionForecastService {
     return result;
   }
 
-  // Mappa taglia richiesta ordine -> categoria (T3/T10)
-  mapTagliaToCategory(tagliaRichiesta: string | null): 'T3' | 'T10' | null {
+  // Lista delle taglie di vendita supportate
+  static SALE_SIZES = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'];
+  
+  // Mappa taglia -> categoria aggregata (per compatibilità)
+  mapTagliaToAggregateCategory(tagliaRichiesta: string | null): 'T3' | 'T10' | null {
     if (!tagliaRichiesta) return null;
     const taglia = tagliaRichiesta.toUpperCase();
-    // TP-2000, TP-3000, TP-3500 sono T3 (6K-30K an/kg)
     if (taglia.includes('2000') || taglia.includes('3000') || taglia.includes('3500')) {
       return 'T3';
     }
-    // TP-4000, TP-5000 sono T10 (<6K an/kg)
     if (taglia.includes('4000') || taglia.includes('5000')) {
       return 'T10';
     }
-    // Default basato su numeri
+    return 'T3';
+  }
+  
+  // Normalizza taglia richiesta al formato standard
+  normalizeTagliaCode(tagliaRichiesta: string | null): string | null {
+    if (!tagliaRichiesta) return null;
+    const taglia = tagliaRichiesta.toUpperCase().trim();
+    // Match standard format TP-XXXX
+    if (taglia.match(/^TP-\d+$/)) return taglia;
+    // Try to extract number
     const match = taglia.match(/(\d+)/);
     if (match) {
-      const num = parseInt(match[1]);
-      if (num >= 4000) return 'T10';
-      if (num >= 2000) return 'T3';
+      return `TP-${match[1]}`;
     }
-    return 'T3'; // Default
+    return taglia;
+  }
+  
+  // Mappa taglia richiesta ordine -> categoria (T3/T10) - legacy compatibility
+  mapTagliaToCategory(tagliaRichiesta: string | null): 'T3' | 'T10' | null {
+    return this.mapTagliaToAggregateCategory(tagliaRichiesta);
+  }
+  
+  // Mappa taglia specifica a categoria inventario per simulazione crescita
+  mapSizeToInventoryCategory(taglia: string): 'T1' | 'T3' | 'T10' {
+    const normalized = taglia.toUpperCase();
+    if (normalized.includes('4000') || normalized.includes('5000')) return 'T10';
+    if (normalized.includes('2000') || normalized.includes('3000') || normalized.includes('3500')) return 'T3';
+    return 'T3';
+  }
+  
+  // Ottieni mortalità per taglia specifica
+  getMortalityForSize(taglia: string, mortalityRates: Record<string, number>): number {
+    // Prima prova taglia esatta
+    if (mortalityRates[taglia] !== undefined) return mortalityRates[taglia];
+    // Poi categoria aggregata
+    const cat = this.mapSizeToInventoryCategory(taglia);
+    if (mortalityRates[cat] !== undefined) return mortalityRates[cat];
+    // Default
+    return cat === 'T10' ? 0.02 : 0.03;
   }
 
   // Diagnostica ordini: mostra tutti gli ordini con date e calcoli di allocazione
@@ -529,7 +571,82 @@ export class ProductionForecastService {
     }
   }
 
-  // Recupera ordini aggregati per mese e categoria dall'anno specificato
+  // Recupera ordini aggregati per mese e taglia specifica dall'anno specificato
+  async getOrdersByMonthAndSize(year: number): Promise<Record<string, Record<string, number>>> {
+    // Struttura: { "1": { "TP-2000": 1000000, "TP-3000": 500000, ... }, "2": {...} }
+    const result: Record<string, Record<string, number>> = {};
+    for (let m = 1; m <= 12; m++) {
+      result[m.toString()] = {};
+      for (const size of ProductionForecastService.SALE_SIZES) {
+        result[m.toString()][size] = 0;
+      }
+    }
+
+    if (!isDbEsternoAvailable() || !dbEsterno) {
+      console.log('⚠️ DB esterno non disponibile per ordini');
+      return result;
+    }
+
+    try {
+      const ordini = await dbEsterno
+        .select({
+          id: ordiniCondivisi.id,
+          quantita: ordiniCondivisi.quantita,
+          quantitaTotale: ordiniCondivisi.quantitaTotale,
+          tagliaRichiesta: ordiniCondivisi.tagliaRichiesta,
+          dataInizioConsegna: ordiniCondivisi.dataInizioConsegna,
+          dataFineConsegna: ordiniCondivisi.dataFineConsegna,
+          stato: ordiniCondivisi.stato
+        })
+        .from(ordiniCondivisi)
+        .where(
+          and(
+            not(eq(ordiniCondivisi.stato, 'Annullato')),
+            not(eq(ordiniCondivisi.cancellato, true))
+          )
+        );
+
+      for (const ordine of ordini) {
+        const tagliaCode = this.normalizeTagliaCode(ordine.tagliaRichiesta);
+        if (!tagliaCode || !ProductionForecastService.SALE_SIZES.includes(tagliaCode)) continue;
+
+        const quantita = ordine.quantitaTotale || ordine.quantita || 0;
+        if (quantita <= 0) continue;
+
+        const dataInizio = ordine.dataInizioConsegna ? new Date(ordine.dataInizioConsegna) : null;
+        const dataFine = ordine.dataFineConsegna ? new Date(ordine.dataFineConsegna) : null;
+
+        if (!dataInizio || !dataFine) continue;
+        if (dataInizio.getFullYear() > year) continue;
+        if (dataFine.getFullYear() < year) continue;
+
+        const mesiTotaliOrdine = (dataFine.getFullYear() - dataInizio.getFullYear()) * 12 
+          + (dataFine.getMonth() - dataInizio.getMonth()) + 1;
+        
+        if (mesiTotaliOrdine <= 0) continue;
+
+        const quantitaPerMese = Math.round(quantita / mesiTotaliOrdine);
+
+        const meseInizioAnno = dataInizio.getFullYear() === year ? dataInizio.getMonth() + 1 : 1;
+        const meseFineAnno = dataFine.getFullYear() === year ? dataFine.getMonth() + 1 : 12;
+
+        for (let m = meseInizioAnno; m <= meseFineAnno; m++) {
+          if (!result[m.toString()][tagliaCode]) {
+            result[m.toString()][tagliaCode] = 0;
+          }
+          result[m.toString()][tagliaCode] += quantitaPerMese;
+        }
+      }
+
+      console.log(`📊 Ordini per taglia ${year}:`, JSON.stringify(result));
+    } catch (error) {
+      console.error('Errore recupero ordini per forecast:', error);
+    }
+
+    return result;
+  }
+
+  // Legacy: Recupera ordini aggregati per mese e categoria (T3/T10) dall'anno specificato
   async getOrdersByMonthAndCategory(year: number): Promise<Record<string, Record<string, number>>> {
     // Struttura: { "1": { "T3": 1000000, "T10": 500000 }, "2": {...} }
     const result: Record<string, Record<string, number>> = {};
@@ -799,6 +916,48 @@ export class ProductionForecastService {
     const totalProductionForecast = monthlyData.reduce((sum, m) => sum + m.productionForecast, 0);
     const totalSeedingT1Required = seedingSchedule.reduce((sum, s) => sum + s.seedT1Amount, 0);
 
+    // Calcola ordini per taglia specifica (nuova funzionalità)
+    const ordersBySize = await this.getOrdersByMonthAndSize(year);
+    const ordersBySpecificSize: OrdersBySize[] = [];
+    const sizeAnnualTotals: Record<string, number> = {};
+    
+    // Aggrega ordini annuali per taglia
+    for (let m = 1; m <= 12; m++) {
+      const monthData = ordersBySize[m.toString()] || {};
+      for (const [sizeCode, qty] of Object.entries(monthData)) {
+        sizeAnnualTotals[sizeCode] = (sizeAnnualTotals[sizeCode] || 0) + qty;
+      }
+    }
+    
+    // Converti in array con categoria aggregata
+    for (const [sizeCode, totalAnimals] of Object.entries(sizeAnnualTotals)) {
+      if (totalAnimals > 0) {
+        ordersBySpecificSize.push({
+          sizeCode,
+          totalAnimals,
+          aggregateCategory: this.mapTagliaToAggregateCategory(sizeCode) || 'T3'
+        });
+      }
+    }
+    
+    // Ordina per numero taglia
+    ordersBySpecificSize.sort((a, b) => {
+      const numA = parseInt(a.sizeCode.replace(/\D/g, '')) || 0;
+      const numB = parseInt(b.sizeCode.replace(/\D/g, '')) || 0;
+      return numA - numB;
+    });
+
+    // Aggrega budget e ordini per categoria
+    const budgetByCategory: Record<string, number> = { T3: 0, T10: 0 };
+    const ordersByCategoryAgg: Record<string, number> = { T3: 0, T10: 0 };
+    
+    for (const m of monthlyData) {
+      if (m.sizeCategory === 'T3' || m.sizeCategory === 'T10') {
+        budgetByCategory[m.sizeCategory] += m.budgetAnimals;
+        ordersByCategoryAgg[m.sizeCategory] += m.ordersAnimals;
+      }
+    }
+
     return {
       year,
       totalBudget,
@@ -809,7 +968,10 @@ export class ProductionForecastService {
       currentInventory,
       sgrRates,
       seedingSchedule,
-      totalSeedingT1Required
+      totalSeedingT1Required,
+      ordersBySpecificSize,
+      budgetByCategory,
+      ordersByCategory: ordersByCategoryAgg
     };
   }
 

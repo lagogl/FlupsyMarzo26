@@ -54,6 +54,12 @@ interface InventoryBySize {
   animalsPerKgRange: string;
 }
 
+interface OrdersBySize {
+  sizeCode: string;
+  totalAnimals: number;
+  aggregateCategory: 'T3' | 'T10';
+}
+
 interface ForecastData {
   success: boolean;
   year: number;
@@ -65,6 +71,9 @@ interface ForecastData {
   currentInventory: InventoryBySize[];
   seedingSchedule: SeedingSchedule[];
   totalSeedingT1Required: number;
+  ordersBySpecificSize?: OrdersBySize[];
+  budgetByCategory?: Record<string, number>;
+  ordersByCategory?: Record<string, number>;
 }
 
 const formatNumber = (num: number): string => {
@@ -349,7 +358,7 @@ export default function AnalisiScostamenti() {
           <CardContent>
             <div className="text-2xl font-bold">{formatNumber(data.totalBudget)}</div>
             <p className="text-xs text-muted-foreground">
-              T3: {formatNumber(totalT3Budget)} | T10: {formatNumber(totalT10Budget)}
+              T3: {formatNumber(data.budgetByCategory?.T3 || totalT3Budget)} | T10: {formatNumber(data.budgetByCategory?.T10 || totalT10Budget)}
             </p>
           </CardContent>
         </Card>
@@ -362,8 +371,20 @@ export default function AnalisiScostamenti() {
           <CardContent>
             <div className="text-2xl font-bold text-indigo-600">{formatNumber(data.totalOrders)}</div>
             <p className="text-xs text-muted-foreground">
-              T3: {formatNumber(data.monthlyData.filter(d => d.sizeCategory === 'T3').reduce((sum, d) => sum + d.ordersAnimals, 0))} | T10: {formatNumber(data.monthlyData.filter(d => d.sizeCategory === 'T10').reduce((sum, d) => sum + d.ordersAnimals, 0))}
+              T3: {formatNumber(data.ordersByCategory?.T3 || 0)} | T10: {formatNumber(data.ordersByCategory?.T10 || 0)}
             </p>
+            {data.ordersBySpecificSize && data.ordersBySpecificSize.length > 0 && (
+              <div className="mt-2 pt-2 border-t space-y-1">
+                {data.ordersBySpecificSize.map((size) => (
+                  <div key={size.sizeCode} className="flex justify-between text-xs">
+                    <span className={size.aggregateCategory === 'T3' ? 'text-green-700' : 'text-purple-700'}>
+                      {size.sizeCode}
+                    </span>
+                    <span className="font-medium">{formatNumber(size.totalAnimals)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
