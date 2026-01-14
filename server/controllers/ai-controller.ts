@@ -982,7 +982,7 @@ export function registerAIRoutes(app: Express) {
       const workbook = createFormattedWorkbook();
       const ws = workbook.addWorksheet('Scostamenti Produzione');
       
-      const headers = ['Mese', 'Taglia', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
+      const headers = ['Mese', 'Categoria', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
                        'Δ vs Budget', 'Δ vs Ordini', 'Stock', 'Semina T1', 'Mese Semina', 'Stato'];
       setColumnWidths(ws, [15, 10, 15, 15, 15, 15, 15, 15, 15, 15, 15, 22]);
       
