@@ -47,6 +47,14 @@ export default function Sgr() {
   const [showOssigeno, setShowOssigeno] = useState(true);
   const [showSalinita, setShowSalinita] = useState(true);
   
+  // States per grafici rilevazioni
+  const [showRilTempAcqua, setShowRilTempAcqua] = useState(true);
+  const [showRilTempAriaMin, setShowRilTempAriaMin] = useState(false);
+  const [showRilTempAriaMax, setShowRilTempAriaMax] = useState(false);
+  const [showRilSecchi, setShowRilSecchi] = useState(false);
+  const [showRilMicroalghe, setShowRilMicroalghe] = useState(false);
+  const [showRilNH3, setShowRilNH3] = useState(false);
+  
   // Array dei mesi in italiano
   const monthOrder = [
     'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
@@ -435,10 +443,11 @@ export default function Sgr() {
   return (
     <div>
       <Tabs defaultValue="sgr-per-taglia" className="w-full">
-        <TabsList className="grid grid-cols-4 w-full mb-6">
+        <TabsList className="grid grid-cols-5 w-full mb-6">
           <TabsTrigger value="sgr-per-taglia">SGR Per Taglia</TabsTrigger>
           <TabsTrigger value="indici-sgr">Indici SGR</TabsTrigger>
           <TabsTrigger value="dati-giornalieri">Dati Seneye</TabsTrigger>
+          <TabsTrigger value="rilevazioni">Rilevazioni</TabsTrigger>
           <TabsTrigger value="previsioni">Previsioni</TabsTrigger>
         </TabsList>
 
@@ -1419,6 +1428,220 @@ export default function Sgr() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="rilevazioni">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-2xl font-condensed font-bold text-gray-800">Rilevazioni Giornaliere</h2>
+            <Button 
+              onClick={() => setIsCreateDailyDialogOpen(true)} 
+              variant="outline"
+            >
+              <Plus className="h-4 w-4 mr-1" /> Nuova Rilevazione
+            </Button>
+          </div>
+          
+          <div className="bg-blue-50 p-3 rounded-md mb-6 border border-blue-100">
+            <p className="text-blue-700 text-sm font-medium">
+              <span className="inline-block mr-2">ℹ️</span>
+              Dati ambientali completi con temperatura acqua/aria, disco di Secchi, microalghe e condizioni meteo
+            </p>
+          </div>
+
+          {/* Grafico dinamico rilevazioni */}
+          {sortedSgrGiornalieri && sortedSgrGiornalieri.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LineChart className="h-5 w-5" />
+                  Andamento Parametri Ambientali
+                </CardTitle>
+                <CardDescription>
+                  Seleziona i parametri da visualizzare nel grafico
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-4 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-temp-acqua" 
+                      checked={showRilTempAcqua} 
+                      onCheckedChange={(checked) => setShowRilTempAcqua(checked === true)}
+                    />
+                    <Label htmlFor="ril-temp-acqua" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                      Temp. Acqua (°C)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-temp-aria-min" 
+                      checked={showRilTempAriaMin} 
+                      onCheckedChange={(checked) => setShowRilTempAriaMin(checked === true)}
+                    />
+                    <Label htmlFor="ril-temp-aria-min" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-cyan-400"></span>
+                      Aria Min (°C)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-temp-aria-max" 
+                      checked={showRilTempAriaMax} 
+                      onCheckedChange={(checked) => setShowRilTempAriaMax(checked === true)}
+                    />
+                    <Label htmlFor="ril-temp-aria-max" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-red-400"></span>
+                      Aria Max (°C)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-secchi" 
+                      checked={showRilSecchi} 
+                      onCheckedChange={(checked) => setShowRilSecchi(checked === true)}
+                    />
+                    <Label htmlFor="ril-secchi" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-teal-500"></span>
+                      Secchi (m)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-microalghe" 
+                      checked={showRilMicroalghe} 
+                      onCheckedChange={(checked) => setShowRilMicroalghe(checked === true)}
+                    />
+                    <Label htmlFor="ril-microalghe" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                      Microalghe (cell/ml)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-nh3" 
+                      checked={showRilNH3} 
+                      onCheckedChange={(checked) => setShowRilNH3(checked === true)}
+                    />
+                    <Label htmlFor="ril-nh3" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                      NH3 (mg/L)
+                    </Label>
+                  </div>
+                </div>
+                
+                <ResponsiveContainer width="100%" height={350}>
+                  <RechartsLineChart 
+                    data={[...sortedSgrGiornalieri].reverse().map((item: any) => ({
+                      date: new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: 'short' }).format(new Date(item.recordDate)),
+                      tempAcqua: item.waterTemperature,
+                      tempAriaMin: item.airTempMin,
+                      tempAriaMax: item.airTempMax,
+                      secchi: item.secchiDisk,
+                      microalghe: item.microalgaeConcentration,
+                      nh3: item.nh3
+                    }))} 
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '11px' }} />
+                    <YAxis yAxisId="left" stroke="#6b7280" style={{ fontSize: '11px' }} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#6b7280" style={{ fontSize: '11px' }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '10px' }} iconType="line" />
+                    
+                    {showRilTempAcqua && (
+                      <Line yAxisId="left" type="monotone" dataKey="tempAcqua" stroke="#3b82f6" strokeWidth={2} dot={false} name="Temp. Acqua" connectNulls />
+                    )}
+                    {showRilTempAriaMin && (
+                      <Line yAxisId="left" type="monotone" dataKey="tempAriaMin" stroke="#22d3ee" strokeWidth={2} dot={false} name="Aria Min" connectNulls />
+                    )}
+                    {showRilTempAriaMax && (
+                      <Line yAxisId="left" type="monotone" dataKey="tempAriaMax" stroke="#f87171" strokeWidth={2} dot={false} name="Aria Max" connectNulls />
+                    )}
+                    {showRilSecchi && (
+                      <Line yAxisId="left" type="monotone" dataKey="secchi" stroke="#14b8a6" strokeWidth={2} dot={false} name="Secchi" connectNulls />
+                    )}
+                    {showRilMicroalghe && (
+                      <Line yAxisId="right" type="monotone" dataKey="microalghe" stroke="#22c55e" strokeWidth={2} dot={false} name="Microalghe" connectNulls />
+                    )}
+                    {showRilNH3 && (
+                      <Line yAxisId="left" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3" connectNulls />
+                    )}
+                    
+                    <Brush dataKey="date" height={25} stroke="#3b82f6" fill="#f0f9ff" />
+                  </RechartsLineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tabella rilevazioni stile Excel */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full divide-y divide-gray-200 text-xs">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Data</th>
+                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Sito</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">T. Acqua</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Aria Min</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Aria Max</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Secchi</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Microalghe</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">NH3</th>
+                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Meteo</th>
+                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Colore</th>
+                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Note</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {isLoadingSgrGiornalieri ? (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                        Caricamento rilevazioni...
+                      </td>
+                    </tr>
+                  ) : sortedSgrGiornalieri.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                        Nessuna rilevazione trovata. Clicca "Nuova Rilevazione" per aggiungere dati.
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedSgrGiornalieri.map((item: any, index: number) => {
+                      const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                      const recordDate = new Date(item.recordDate);
+                      const formattedDate = new Intl.DateTimeFormat('it-IT', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: '2-digit'
+                      }).format(recordDate);
+                      
+                      return (
+                        <tr key={item.id} className={`${rowBg} hover:bg-blue-50 transition-colors`}>
+                          <td className="px-2 py-2 whitespace-nowrap font-medium text-gray-900">{formattedDate}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-gray-700 truncate max-w-[80px]" title={item.site || '-'}>{item.site || '-'}</td>
+                          <td className="px-2 py-2 text-center text-blue-600 font-medium">{item.waterTemperature != null ? `${item.waterTemperature}°` : '-'}</td>
+                          <td className="px-2 py-2 text-center text-cyan-600">{item.airTempMin != null ? `${item.airTempMin}°` : '-'}</td>
+                          <td className="px-2 py-2 text-center text-red-500">{item.airTempMax != null ? `${item.airTempMax}°` : '-'}</td>
+                          <td className="px-2 py-2 text-center text-teal-600">{item.secchiDisk != null ? `${item.secchiDisk}m` : '-'}</td>
+                          <td className="px-2 py-2 text-center text-green-600">{item.microalgaeConcentration != null ? item.microalgaeConcentration.toLocaleString() : '-'}</td>
+                          <td className="px-2 py-2 text-center text-amber-600">{item.nh3 != null ? item.nh3 : '-'}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-gray-600 truncate max-w-[70px]" title={item.meteo || '-'}>{item.meteo || '-'}</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-gray-600 truncate max-w-[70px]" title={item.waterColor || '-'}>{item.waterColor || '-'}</td>
+                          <td className="px-2 py-2 text-gray-500 truncate max-w-[100px]" title={item.notes || '-'}>{item.notes || '-'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </TabsContent>
 
