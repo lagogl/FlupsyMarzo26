@@ -972,6 +972,7 @@ export default function AnalisiScostamenti() {
                 ordersAbsoluteBySize={data.ordersAbsoluteBySize}
                 currentInventory={data.currentInventory}
                 seedingSchedule={data.seedingSchedule}
+                mortalityBySize={mortalityBySize}
               />
             </CardContent>
           </Card>
@@ -987,14 +988,35 @@ interface ProductionRoadmapProps {
   ordersAbsoluteBySize: Record<string, number>;
   currentInventory: InventoryBySize[];
   seedingSchedule: SeedingSchedule[];
+  mortalityBySize: Record<string, number>;
 }
 
-function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory, seedingSchedule }: ProductionRoadmapProps) {
+function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory, seedingSchedule, mortalityBySize }: ProductionRoadmapProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [mortalityAdjustment, setMortalityAdjustment] = useState(0);
   
   // Taglie ordinate
   const sizes = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'];
+  
+  // Calcola mortalità effettiva per taglia con adjustment
+  const getEffectiveMortality = (size: string) => {
+    const baseMortality = mortalityBySize[size] || 0;
+    // Adjustment è relativo: +10% su base 25% = 25 * 1.10 = 27.5%
+    const adjusted = baseMortality * (1 + mortalityAdjustment / 100);
+    return Math.max(0, Math.min(100, adjusted));
+  };
+  
+  // Calcola giacenza proiettata con mortalità adjusted
+  const getAdjustedInventoryForSize = (size: string) => {
+    const baseInventory = currentInventory.find(i => i.sizeName === size)?.totalAnimals || 0;
+    const effectiveMortality = getEffectiveMortality(size);
+    const baseMortality = mortalityBySize[size] || 0;
+    
+    // Calcola la differenza di mortalità e applica all'inventario
+    const mortalityDelta = (effectiveMortality - baseMortality) / 100;
+    const adjustedInventory = baseInventory * (1 - mortalityDelta);
+    return Math.round(adjustedInventory);
+  };
   
   // Mesi dell'anno con mapping per nomi completi italiani
   const months = [
@@ -1112,10 +1134,14 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
           {/* Swimlanes per taglia */}
           {sizes.map((size, sizeIdx) => {
             const inventory = getInventoryForSize(size);
+            const adjustedInventory = getAdjustedInventoryForSize(size);
             const orders = getOrdersForSize(size);
             const orderMonths = getOrderMonthsForSize(size);
             const seedingReqs = getSeedingForSize(size);
             const isT10 = size.includes('4000') || size.includes('5000');
+            const effectiveMort = getEffectiveMortality(size);
+            const baseMort = mortalityBySize[size] || 0;
+            const inventoryDelta = adjustedInventory - inventory;
             
             return (
               <div 
@@ -1128,8 +1154,20 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                     {size}
                   </Badge>
                   {inventory > 0 && (
-                    <div className="text-xs text-purple-600 mt-1">
-                      📦 {formatNumber(inventory)}
+                    <div className={`text-xs mt-1 ${mortalityAdjustment !== 0 ? 'font-bold' : ''} ${
+                      mortalityAdjustment > 0 ? 'text-red-600' : mortalityAdjustment < 0 ? 'text-green-600' : 'text-purple-600'
+                    }`}>
+                      📦 {formatNumber(adjustedInventory)}
+                      {mortalityAdjustment !== 0 && inventoryDelta !== 0 && (
+                        <span className="text-xs ml-1">
+                          ({inventoryDelta > 0 ? '+' : ''}{formatNumber(inventoryDelta)})
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {mortalityAdjustment !== 0 && (
+                    <div className={`text-xs ${mortalityAdjustment > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                      ☠️ {effectiveMort.toFixed(1)}%
                     </div>
                   )}
                 </div>
@@ -1148,15 +1186,17 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                         className={`flex-1 relative border-l border-gray-200 ${isPast ? 'opacity-40' : ''}`}
                       >
                         {/* Giacenza attuale (solo mese corrente) */}
-                        {isCurrent && inventory > 0 && (
+                        {isCurrent && adjustedInventory > 0 && (
                           <div 
-                            className="absolute left-0 top-1 h-6 bg-purple-500 rounded-r-full flex items-center justify-end pr-1"
+                            className={`absolute left-0 top-1 h-6 rounded-r-full flex items-center justify-end pr-1 transition-all ${
+                              mortalityAdjustment > 0 ? 'bg-red-500' : mortalityAdjustment < 0 ? 'bg-green-500' : 'bg-purple-500'
+                            }`}
                             style={{ width: '100%', maxWidth: '100%' }}
                             onMouseEnter={() => setHoveredItem(`inv-${size}`)}
                             onMouseLeave={() => setHoveredItem(null)}
                           >
                             <span className="text-xs text-white font-bold truncate px-1">
-                              {formatNumber(inventory)}
+                              {formatNumber(adjustedInventory)}
                             </span>
                           </div>
                         )}
@@ -1359,6 +1399,11 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
           <CardTitle className="text-sm flex items-center gap-2">
             <Target className="h-4 w-4 text-indigo-500" />
             Riepilogo Ordini per Taglia
+            {mortalityAdjustment !== 0 && (
+              <Badge variant={mortalityAdjustment > 0 ? 'destructive' : 'default'} className="ml-2">
+                Scenario {mortalityAdjustment > 0 ? '+' : ''}{mortalityAdjustment}%
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1366,10 +1411,17 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
             {sizes.map(size => {
               const orders = getOrdersForSize(size);
               const inventory = getInventoryForSize(size);
-              const coverage = inventory > 0 && orders > 0 ? Math.min(100, (inventory / orders) * 100) : 0;
+              const adjustedInventory = getAdjustedInventoryForSize(size);
+              const baseCoverage = inventory > 0 && orders > 0 ? Math.min(100, (inventory / orders) * 100) : 0;
+              const adjustedCoverage = adjustedInventory > 0 && orders > 0 ? Math.min(100, (adjustedInventory / orders) * 100) : 0;
+              const coverageDelta = adjustedCoverage - baseCoverage;
               
               return (
-                <div key={size} className="text-center p-3 bg-gray-50 rounded-lg">
+                <div key={size} className={`text-center p-3 rounded-lg transition-all ${
+                  mortalityAdjustment !== 0 
+                    ? (mortalityAdjustment > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200')
+                    : 'bg-gray-50'
+                }`}>
                   <Badge variant={size.includes('4000') || size.includes('5000') ? 'default' : 'secondary'} className="mb-2">
                     {size}
                   </Badge>
@@ -1381,12 +1433,19 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                     <div className="mt-2">
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
-                          className={`h-2 rounded-full ${coverage >= 80 ? 'bg-green-500' : coverage >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                          style={{ width: `${coverage}%` }}
+                          className={`h-2 rounded-full transition-all ${
+                            adjustedCoverage >= 80 ? 'bg-green-500' : adjustedCoverage >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${adjustedCoverage}%` }}
                         />
                       </div>
-                      <div className="text-xs mt-1">
-                        {coverage.toFixed(0)}% coperto
+                      <div className={`text-xs mt-1 ${mortalityAdjustment !== 0 ? 'font-bold' : ''}`}>
+                        {adjustedCoverage.toFixed(0)}% coperto
+                        {mortalityAdjustment !== 0 && coverageDelta !== 0 && (
+                          <span className={`ml-1 ${coverageDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ({coverageDelta > 0 ? '+' : ''}{coverageDelta.toFixed(1)}%)
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1449,20 +1508,44 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                 </div>
               </div>
               
-              {mortalityAdjustment !== 0 && (
-                <Alert className={mortalityAdjustment > 0 ? 'border-red-300 bg-red-50' : 'border-green-300 bg-green-50'}>
-                  <AlertTriangle className={`h-4 w-4 ${mortalityAdjustment > 0 ? 'text-red-600' : 'text-green-600'}`} />
-                  <AlertTitle className={mortalityAdjustment > 0 ? 'text-red-800' : 'text-green-800'}>
-                    {mortalityAdjustment > 0 ? 'Scenario Pessimistico' : 'Scenario Ottimistico'}
-                  </AlertTitle>
-                  <AlertDescription className={mortalityAdjustment > 0 ? 'text-red-700' : 'text-green-700'}>
-                    {mortalityAdjustment > 0 
-                      ? `Con +${mortalityAdjustment}% mortalità, stimerai una perdita aggiuntiva di circa ${formatNumber(Math.abs(mortalityAdjustment) * 1000000)} animali. Potrebbe essere necessario aumentare le semine del ${Math.abs(mortalityAdjustment * 1.5).toFixed(0)}%.`
-                      : `Con ${mortalityAdjustment}% mortalità, risparmierai circa ${formatNumber(Math.abs(mortalityAdjustment) * 800000)} animali. Potresti ridurre le semine del ${Math.abs(mortalityAdjustment).toFixed(0)}%.`
-                    }
-                  </AlertDescription>
-                </Alert>
-              )}
+              {mortalityAdjustment !== 0 && (() => {
+                const totalBaseInventory = sizes.reduce((sum, s) => sum + getInventoryForSize(s), 0);
+                const totalAdjustedInventory = sizes.reduce((sum, s) => sum + getAdjustedInventoryForSize(s), 0);
+                const inventoryDelta = totalAdjustedInventory - totalBaseInventory;
+                const totalOrders = sizes.reduce((sum, s) => sum + getOrdersForSize(s), 0);
+                const baseCoverage = totalBaseInventory > 0 && totalOrders > 0 ? (totalBaseInventory / totalOrders) * 100 : 0;
+                const adjustedCoverage = totalAdjustedInventory > 0 && totalOrders > 0 ? (totalAdjustedInventory / totalOrders) * 100 : 0;
+                
+                return (
+                  <Alert className={mortalityAdjustment > 0 ? 'border-red-300 bg-red-50' : 'border-green-300 bg-green-50'}>
+                    <AlertTriangle className={`h-4 w-4 ${mortalityAdjustment > 0 ? 'text-red-600' : 'text-green-600'}`} />
+                    <AlertTitle className={mortalityAdjustment > 0 ? 'text-red-800' : 'text-green-800'}>
+                      {mortalityAdjustment > 0 ? 'Scenario Pessimistico' : 'Scenario Ottimistico'}
+                    </AlertTitle>
+                    <AlertDescription className={mortalityAdjustment > 0 ? 'text-red-700' : 'text-green-700'}>
+                      <div className="space-y-1">
+                        <div>
+                          {mortalityAdjustment > 0 
+                            ? `📉 Perdita stimata: ${formatNumber(Math.abs(inventoryDelta))} animali`
+                            : `📈 Animali salvati: ${formatNumber(Math.abs(inventoryDelta))} animali`
+                          }
+                        </div>
+                        <div>
+                          🎯 Copertura ordini: {baseCoverage.toFixed(0)}% → {adjustedCoverage.toFixed(0)}%
+                          <span className={`ml-1 font-bold ${adjustedCoverage > baseCoverage ? 'text-green-700' : 'text-red-700'}`}>
+                            ({adjustedCoverage > baseCoverage ? '+' : ''}{(adjustedCoverage - baseCoverage).toFixed(1)}%)
+                          </span>
+                        </div>
+                        <div className="text-xs opacity-80 mt-2">
+                          💡 {mortalityAdjustment > 0 
+                            ? 'Considera di aumentare le semine o accelerare la crescita'
+                            : 'Potresti ridurre le semine o pianificare nuovi ordini'}
+                        </div>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
             </div>
             
             {/* Suggerimenti AI */}
