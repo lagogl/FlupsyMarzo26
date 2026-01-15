@@ -876,21 +876,36 @@ export default function AnalisiScostamenti() {
                             <Tooltip>
                               <TooltipTrigger className="cursor-help">
                                 <Badge variant="outline" className="text-xs font-medium">
-                                  {row.sizeCategory}
+                                  {row.sizeCategory === 'T3' ? 'Semina Normale' : row.sizeCategory === 'T10' ? 'Semina Grossa' : row.sizeCategory}
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent side="right" className="p-2">
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-1.5">
                                   {row.sizeCategory === 'T3' ? (
                                     <>
-                                      <Badge className="text-xs bg-blue-500 text-white">TP-2000</Badge>
-                                      <Badge className="text-xs bg-green-500 text-white">TP-3000</Badge>
-                                      <Badge className="text-xs bg-teal-500 text-white">TP-3500</Badge>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <Badge className="text-xs bg-blue-500 text-white">TP-2000</Badge>
+                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-2000'))} ordini</span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <Badge className="text-xs bg-green-500 text-white">TP-3000</Badge>
+                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-3000'))} ordini</span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <Badge className="text-xs bg-teal-500 text-white">TP-3500</Badge>
+                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-3500'))} ordini</span>
+                                      </div>
                                     </>
                                   ) : row.sizeCategory === 'T10' ? (
                                     <>
-                                      <Badge className="text-xs bg-orange-500 text-white">TP-4000</Badge>
-                                      <Badge className="text-xs bg-red-500 text-white">TP-5000</Badge>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <Badge className="text-xs bg-orange-500 text-white">TP-4000</Badge>
+                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-4000'))} ordini</span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3">
+                                        <Badge className="text-xs bg-red-500 text-white">TP-5000</Badge>
+                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-5000'))} ordini</span>
+                                      </div>
                                     </>
                                   ) : (
                                     <Badge variant="outline">{row.sizeCategory}</Badge>
