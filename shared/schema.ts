@@ -384,16 +384,31 @@ export const sgr = pgTable("sgr", {
   calculatedFromReal: boolean("calculated_from_real").default(false), // Indica se è stato calcolato da dati reali
 });
 
-// SGR Giornalieri (Dati giornalieri dalla sonda Seneye)
+// SGR Giornalieri (Dati giornalieri ambientali)
 export const sgrGiornalieri = pgTable("sgr_giornalieri", {
   id: serial("id").primaryKey(),
-  recordDate: timestamp("record_date").notNull(), // Data e ora di registrazione (fissata alle 12:00)
-  temperature: real("temperature"), // Temperatura dell'acqua in °C
-  pH: real("ph"), // pH dell'acqua
-  ammonia: real("ammonia"), // Livello di ammoniaca in mg/L
-  oxygen: real("oxygen"), // Livello di ossigeno in mg/L
-  salinity: real("salinity"), // Salinità in ppt
-  notes: text("notes"), // Note aggiuntive
+  recordDate: timestamp("record_date").notNull(),
+  temperature: real("temperature"),
+  pH: real("ph"),
+  ammonia: real("ammonia"),
+  oxygen: real("oxygen"),
+  salinity: real("salinity"),
+  notes: text("notes"),
+  operatorId: text("operator_id"),
+  operatorName: text("operator_name"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  site: text("site"),
+  airTempMin: real("air_temp_min"),
+  airTempMax: real("air_temp_max"),
+  meteo: text("meteo"),
+  waterTemperature: real("water_temperature"),
+  secchiDisk: real("secchi_disk"),
+  microalgaeConcentration: real("microalgae_concentration"),
+  nh3: real("nh3"),
+  waterColor: text("water_color"),
+  microalgaeSpecies: text("microalgae_species"),
+  mortality: text("mortality"),
 });
 
 // SGR Per Taglia (SGR calcolato da dati reali specifico per mese e taglia)
