@@ -165,6 +165,7 @@ export default function SpreadsheetOperations() {
     deadCount?: number;
     totalWeight?: number;
     animalCount?: number;
+    lastAnimalCount?: number; // Nr animali precedente per calcolo mortalità (MISURA)
     notes?: string;
     date?: string;
     lotId?: number;
@@ -197,12 +198,8 @@ export default function SpreadsheetOperations() {
           }
           break;
         case 'deadCount':
+          // Per MISURA: totalWeight è read-only, vai direttamente alle note
           if (value !== null && value !== undefined && value >= 0) {
-            setTimeout(() => totalWeightRef.current?.focus(), 50);
-          }
-          break;
-        case 'totalWeight':
-          if (value && value > 0) {
             setTimeout(() => notesRef.current?.focus(), 50);
           }
           break;
@@ -299,7 +296,9 @@ export default function SpreadsheetOperations() {
     
     // Validazioni specifiche per tipo operazione
     if (selectedOperationType === 'misura') {
-      // Per misura: peso campione, animali vivi, morti, peso totale sono obbligatori
+      // Per misura: peso campione, animali vivi, morti sono obbligatori
+      // totalWeight viene pre-popolato dall'ultima operazione (non modificabile)
+      // lastAnimalCount è richiesto per il calcolo mortalità
       if (!editingForm.sampleWeight || editingForm.sampleWeight <= 0) {
         errors.push('Peso campione è obbligatorio e deve essere maggiore di 0');
       }
@@ -309,8 +308,9 @@ export default function SpreadsheetOperations() {
       if (editingForm.deadCount === null || editingForm.deadCount === undefined) {
         errors.push('Numero animali morti è obbligatorio');
       }
-      if (!editingForm.totalWeight || editingForm.totalWeight <= 0) {
-        errors.push('Peso totale è obbligatorio e deve essere maggiore di 0');
+      // Verifica che lastAnimalCount sia disponibile per il calcolo
+      if (!(editingForm as any).lastAnimalCount || (editingForm as any).lastAnimalCount <= 0) {
+        errors.push('Nessuna operazione precedente disponibile per calcolare il numero animali');
       }
     }
     
@@ -1176,6 +1176,12 @@ export default function SpreadsheetOperations() {
       initData.animalCount = row.animalCount; // Usa il valore precedente, non modificabile
     }
     
+    // Per operazioni MISURA: pre-popola totalWeight e lastAnimalCount dall'operazione precedente
+    if (selectedOperationType === 'misura') {
+      initData.totalWeight = row.lastOperation?.totalWeight || undefined; // Pre-popola peso totale (read-only)
+      initData.lastAnimalCount = row.animalCount || 0; // Nr animali precedente per calcolo mortalità
+    }
+    
     setEditingForm(initData);
   };
 
@@ -1225,23 +1231,27 @@ export default function SpreadsheetOperations() {
       const deadCount = newRow.deadCount || 0;
       const sampleWeight = newRow.sampleWeight || 0;
       const totalWeight = newRow.totalWeight || 0;
+      const lastAnimalCount = editingForm.lastAnimalCount || 0; // Nr animali precedente
       
       const totalSample = liveAnimals + deadCount;
       newRow.totalSample = totalSample;
       
-      // Calcola animalCount (OBBLIGATORIO per il server) 
-      // Per operazioni di misura, animalCount rappresenta il numero totale stimato di animali nel cestello
-      if (sampleWeight > 0 && liveAnimals > 0 && totalWeight > 0) {
-        // Stima il numero totale di animali: (animali vivi nel campione / peso campione) * peso totale cestello
-        const calculatedAnimalCount = Math.round((liveAnimals / sampleWeight) * totalWeight);
-        newRow.animalCount = calculatedAnimalCount;
-        console.log(`🧮 CALCOLO MISURA: animalCount = (${liveAnimals} / ${sampleWeight}) * ${totalWeight} = ${calculatedAnimalCount}`);
-      }
-      
+      // Calcola mortalità % dal campione
+      let mortalityRate = 0;
       if (totalSample > 0) {
-        newRow.mortalityRate = Math.round((deadCount / totalSample) * 100 * 100) / 100;
+        mortalityRate = Math.round((deadCount / totalSample) * 100 * 100) / 100;
+        newRow.mortalityRate = mortalityRate;
       }
       
+      // ✅ CALCOLO animalCount dalla formula mortalità:
+      // Nr animali = Nr animali precedente × (100 - mortalità%) / 100
+      if (lastAnimalCount > 0) {
+        const calculatedAnimalCount = Math.round(lastAnimalCount * (100 - mortalityRate) / 100);
+        newRow.animalCount = calculatedAnimalCount;
+        console.log(`🧮 CALCOLO MISURA (mortalità): animalCount = ${lastAnimalCount} × (100 - ${mortalityRate}) / 100 = ${calculatedAnimalCount}`);
+      }
+      
+      // Calcola animali/kg dal campione
       if (sampleWeight > 0 && liveAnimals > 0) {
         const animalsPerKgValue = Math.round((liveAnimals / sampleWeight) * 1000);
         newRow.animalsPerKg = animalsPerKgValue;
@@ -3165,46 +3175,39 @@ export default function SpreadsheetOperations() {
                     </div>
                     
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">Peso totale (g)</label>
-                      <input
-                        ref={totalWeightRef}
-                        type="number"
-                        value={editingForm.totalWeight || ''}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          setEditingForm({...editingForm, totalWeight: value});
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const value = Number(e.currentTarget.value);
-                            moveToNextField('totalWeight', value);
-                          }
-                        }}
-                        className="w-full h-8 px-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-yellow-50"
-                        min="1"
-                        placeholder={editingForm.suggestedTotalWeight ? editingForm.suggestedTotalWeight.toLocaleString() : "Inserisci peso totale"}
-                        required
-                      />
+                      <label className="text-xs text-gray-500 mb-1 block">Peso totale (g)</label>
+                      <div className="h-8 px-2 text-sm bg-gray-100 border rounded flex items-center text-gray-600">
+                        {editingForm.totalWeight?.toLocaleString() || '-'}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">Non modificabile</div>
                     </div>
                   </div>
 
-                  {/* Riga 3: Risultati finali */}
+                  {/* Riga 3: Risultati finali - Calcolo basato su mortalità */}
                   <div className="grid grid-cols-3 gap-3 items-end">
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Tot. Animali Calcolati</label>
                       <div className="h-8 px-2 text-sm bg-blue-50 border-2 border-blue-200 rounded flex items-center font-medium text-blue-800">
-                        {(editingForm.totalWeight && editingForm.sampleWeight && editingForm.liveAnimals && editingForm.liveAnimals > 0)
-                          ? Math.round((editingForm.totalWeight * editingForm.liveAnimals) / editingForm.sampleWeight)
-                          : '-'}
+                        {(() => {
+                          const liveAnimals = editingForm.liveAnimals || 0;
+                          const deadCount = editingForm.deadCount || 0;
+                          const totalSample = liveAnimals + deadCount;
+                          const lastAnimalCount = (editingForm as any).lastAnimalCount || 0;
+                          if (totalSample > 0 && lastAnimalCount > 0) {
+                            const mortalityRate = (deadCount / totalSample) * 100;
+                            const calculatedAnimals = Math.round(lastAnimalCount * (100 - mortalityRate) / 100);
+                            return calculatedAnimals.toLocaleString();
+                          }
+                          return '-';
+                        })()}
                       </div>
                     </div>
                     
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Animali/kg</label>
                       <div className="h-8 px-2 text-sm bg-blue-50 border-2 border-blue-200 rounded flex items-center font-medium text-blue-800">
-                        {(editingForm.totalWeight && editingForm.sampleWeight && editingForm.liveAnimals && editingForm.liveAnimals > 0)
-                          ? Math.round(((editingForm.totalWeight * editingForm.liveAnimals) / editingForm.sampleWeight) / (editingForm.totalWeight / 1000))
+                        {(editingForm.sampleWeight && editingForm.liveAnimals && editingForm.liveAnimals > 0)
+                          ? Math.round((editingForm.liveAnimals / editingForm.sampleWeight) * 1000).toLocaleString()
                           : '-'}
                       </div>
                     </div>
@@ -3212,9 +3215,9 @@ export default function SpreadsheetOperations() {
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Taglia (calcolata)</label>
                       <div className="h-8 px-2 text-sm bg-green-50 border-2 border-green-200 rounded flex items-center font-medium text-green-800">
-                        {(editingForm.totalWeight && editingForm.sampleWeight && editingForm.liveAnimals && editingForm.liveAnimals > 0)
+                        {(editingForm.sampleWeight && editingForm.liveAnimals && editingForm.liveAnimals > 0)
                           ? (() => {
-                              const animalsPerKg = Math.round(((editingForm.totalWeight * editingForm.liveAnimals) / editingForm.sampleWeight) / (editingForm.totalWeight / 1000));
+                              const animalsPerKg = Math.round((editingForm.liveAnimals / editingForm.sampleWeight) * 1000);
                               const sizesArray = Array.isArray(sizes) ? sizes : [];
                               const size = sizesArray.find((s: any) => 
                                 s.minAnimalsPerKg !== null && 
