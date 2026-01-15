@@ -1016,6 +1016,22 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
     setAiQuestion(question);
     
     try {
+      const totalBaseInventory = sizes.reduce((sum, s) => {
+        const inv = currentInventory.find(i => i.sizeName === s);
+        return sum + (inv?.totalAnimals || 0);
+      }, 0);
+      
+      const totalAdjustedInventory = sizes.reduce((sum, s) => {
+        const baseInventory = currentInventory.find(i => i.sizeName === s)?.totalAnimals || 0;
+        const baseMortality = mortalityBySize[s] || 0;
+        const effectiveMortality = baseMortality * (1 + mortalityAdjustment / 100);
+        const mortalityDelta = (effectiveMortality - baseMortality) / 100;
+        const adjusted = baseInventory * (1 - mortalityDelta);
+        return sum + Math.round(adjusted);
+      }, 0);
+      
+      const mortalityImpact = totalAdjustedInventory - totalBaseInventory;
+      
       const context = {
         currentInventory: currentInventory.map(i => ({
           sizeName: i.sizeName,
@@ -1035,7 +1051,10 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
         })),
         ordersAbsoluteBySize,
         mortalityBySize,
-        mortalityAdjustment
+        mortalityAdjustment,
+        baselineInventory: totalBaseInventory,
+        adjustedInventory: totalAdjustedInventory,
+        mortalityImpact
       };
       
       const response = await fetch('/api/ai/scenario-analysis', {
