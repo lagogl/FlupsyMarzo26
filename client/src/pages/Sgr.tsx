@@ -54,6 +54,10 @@ export default function Sgr() {
   const [showRilSecchi, setShowRilSecchi] = useState(false);
   const [showRilMicroalghe, setShowRilMicroalghe] = useState(false);
   const [showRilNH3, setShowRilNH3] = useState(false);
+  const [showRilPH, setShowRilPH] = useState(false);
+  const [showRilOxygen, setShowRilOxygen] = useState(false);
+  const [showRilSalinity, setShowRilSalinity] = useState(false);
+  const [showRilAmmonia, setShowRilAmmonia] = useState(false);
   
   // States per sorting e filtri tabella Rilevazioni
   const [rilSortColumn, setRilSortColumn] = useState<string>('date');
@@ -1591,11 +1595,55 @@ export default function Sgr() {
                       NH3 (mg/L)
                     </Label>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-ph" 
+                      checked={showRilPH} 
+                      onCheckedChange={(checked) => setShowRilPH(checked === true)}
+                    />
+                    <Label htmlFor="ril-ph" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                      pH
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-oxygen" 
+                      checked={showRilOxygen} 
+                      onCheckedChange={(checked) => setShowRilOxygen(checked === true)}
+                    />
+                    <Label htmlFor="ril-oxygen" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-sky-500"></span>
+                      Ossigeno (mg/L)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-salinity" 
+                      checked={showRilSalinity} 
+                      onCheckedChange={(checked) => setShowRilSalinity(checked === true)}
+                    />
+                    <Label htmlFor="ril-salinity" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-indigo-500"></span>
+                      Salinità (‰)
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="ril-ammonia" 
+                      checked={showRilAmmonia} 
+                      onCheckedChange={(checked) => setShowRilAmmonia(checked === true)}
+                    />
+                    <Label htmlFor="ril-ammonia" className="text-sm flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-rose-500"></span>
+                      Ammoniaca (mg/L)
+                    </Label>
+                  </div>
                 </div>
                 
                 <ResponsiveContainer width="100%" height={350}>
                   {(() => {
-                    // Prepara i dati
+                    // Prepara i dati con tutti i parametri disponibili
                     const chartData = [...filteredAndSortedSgrGiornalieri]
                       .sort((a, b) => new Date(a.recordDate).getTime() - new Date(b.recordDate).getTime())
                       .map((item: any) => ({
@@ -1605,10 +1653,14 @@ export default function Sgr() {
                         tempAriaMax: item.airTempMax,
                         secchi: item.secchiDisk,
                         microalghe: item.microalgaeConcentration,
-                        nh3: item.nh3
+                        nh3: item.nh3,
+                        ph: item.pH,
+                        oxygen: item.oxygen,
+                        salinity: item.salinity,
+                        ammonia: item.ammonia
                       }));
                     
-                    // Calcola dominio dinamico per asse LEFT (temperature + secchi + nh3)
+                    // Calcola dominio dinamico per asse LEFT (temperature + altri parametri con scala simile)
                     const leftValues: number[] = [];
                     const rightValues: number[] = [];
                     
@@ -1618,6 +1670,10 @@ export default function Sgr() {
                       if (showRilTempAriaMax && item.tempAriaMax != null) leftValues.push(item.tempAriaMax);
                       if (showRilSecchi && item.secchi != null) leftValues.push(item.secchi);
                       if (showRilNH3 && item.nh3 != null) leftValues.push(item.nh3);
+                      if (showRilPH && item.ph != null) leftValues.push(item.ph);
+                      if (showRilOxygen && item.oxygen != null) leftValues.push(item.oxygen);
+                      if (showRilSalinity && item.salinity != null) leftValues.push(item.salinity);
+                      if (showRilAmmonia && item.ammonia != null) leftValues.push(item.ammonia);
                       if (showRilMicroalghe && item.microalghe != null) rightValues.push(item.microalghe);
                     });
                     
@@ -1682,6 +1738,18 @@ export default function Sgr() {
                         )}
                         {showRilNH3 && (
                           <Line yAxisId="left" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3" connectNulls />
+                        )}
+                        {showRilPH && (
+                          <Line yAxisId="left" type="monotone" dataKey="ph" stroke="#a855f7" strokeWidth={2} dot={false} name="pH" connectNulls />
+                        )}
+                        {showRilOxygen && (
+                          <Line yAxisId="left" type="monotone" dataKey="oxygen" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Ossigeno" connectNulls />
+                        )}
+                        {showRilSalinity && (
+                          <Line yAxisId="left" type="monotone" dataKey="salinity" stroke="#6366f1" strokeWidth={2} dot={false} name="Salinità" connectNulls />
+                        )}
+                        {showRilAmmonia && (
+                          <Line yAxisId="left" type="monotone" dataKey="ammonia" stroke="#f43f5e" strokeWidth={2} dot={false} name="Ammoniaca" connectNulls />
                         )}
                         
                         <Brush dataKey="date" height={25} stroke="#3b82f6" fill="#f0f9ff" />
