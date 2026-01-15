@@ -875,14 +875,14 @@ export default function AnalisiScostamenti() {
                           <div className="flex flex-col gap-0.5">
                             {row.sizeCategory === 'T3' ? (
                               <>
-                                <Badge variant="secondary" className="text-xs">TP-2000</Badge>
-                                <Badge variant="secondary" className="text-xs">TP-3000</Badge>
-                                <Badge variant="secondary" className="text-xs">TP-3500</Badge>
+                                <Badge className="text-xs bg-blue-500 hover:bg-blue-600 text-white">TP-2000</Badge>
+                                <Badge className="text-xs bg-green-500 hover:bg-green-600 text-white">TP-3000</Badge>
+                                <Badge className="text-xs bg-teal-500 hover:bg-teal-600 text-white">TP-3500</Badge>
                               </>
                             ) : row.sizeCategory === 'T10' ? (
                               <>
-                                <Badge variant="default" className="text-xs">TP-4000</Badge>
-                                <Badge variant="default" className="text-xs">TP-5000</Badge>
+                                <Badge className="text-xs bg-orange-500 hover:bg-orange-600 text-white">TP-4000</Badge>
+                                <Badge className="text-xs bg-red-500 hover:bg-red-600 text-white">TP-5000</Badge>
                               </>
                             ) : (
                               <Badge variant="outline">{row.sizeCategory}</Badge>
