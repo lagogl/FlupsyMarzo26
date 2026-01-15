@@ -1706,16 +1706,15 @@ export default function Sgr() {
                     
                     // Funzione per calcolare dominio per valori molto piccoli (< 1)
                     const calcSmallDomain = (values: number[]): [number, number] => {
-                      if (values.length === 0) return [0, 1];
+                      if (values.length === 0) return [0, 0.1];
                       const min = Math.min(...values);
                       const max = Math.max(...values);
-                      // Per valori piccoli, usa margine proporzionale senza arrotondamenti
-                      const margin = (max - min) * 0.15 || 0.1;
+                      // Per valori piccoli, usa margine proporzionale del 20% senza limiti fissi
+                      const range = max - min || max * 0.5 || 0.01;
+                      const margin = range * 0.2;
                       const domainMin = Math.max(0, min - margin);
                       const domainMax = max + margin;
-                      // Se max è molto piccolo, assicura un dominio visibile
-                      if (domainMax < 0.5) return [0, Math.max(0.5, domainMax * 1.5)];
-                      if (domainMax < 1) return [0, 1];
+                      // Usa scala adattiva ai dati reali, non valori fissi
                       return [domainMin, domainMax];
                     };
                     
