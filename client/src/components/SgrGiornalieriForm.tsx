@@ -1,7 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { sgrGiornalieriSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -9,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -17,22 +15,31 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Schema del form con validazione
 const formSchema = sgrGiornalieriSchema.extend({
   recordDate: z.coerce.date().default(new Date()),
-  temperature: z.coerce.number().min(0).max(40).optional().nullable(),
+  temperature: z.coerce.number().min(0).max(50).optional().nullable(),
   pH: z.coerce.number().min(0).max(14).optional().nullable(),
-  ammonia: z.coerce.number().min(0).max(10).optional().nullable(), 
-  oxygen: z.coerce.number().min(0).max(20).optional().nullable(),
-  salinity: z.coerce.number().min(0).max(40).optional().nullable(),
+  ammonia: z.coerce.number().min(0).max(10).optional().nullable(),
+  oxygen: z.coerce.number().min(0).max(30).optional().nullable(),
+  salinity: z.coerce.number().min(0).max(50).optional().nullable(),
+  airTempMin: z.coerce.number().min(-20).max(50).optional().nullable(),
+  airTempMax: z.coerce.number().min(-20).max(60).optional().nullable(),
+  waterTemperature: z.coerce.number().min(0).max(50).optional().nullable(),
+  secchiDisk: z.coerce.number().min(0).max(20).optional().nullable(),
+  microalgaeConcentration: z.coerce.number().min(0).optional().nullable(),
+  nh3: z.coerce.number().min(0).max(10).optional().nullable(),
+  meteo: z.string().optional().nullable(),
+  waterColor: z.string().optional().nullable(),
+  microalgaeSpecies: z.string().optional().nullable(),
+  mortality: z.string().optional().nullable(),
+  site: z.string().optional().nullable(),
+  operatorName: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
 });
 
-// Tipo per i valori del form
 type FormValues = z.infer<typeof formSchema>;
 
-// Props del componente
 interface SgrGiornalieriFormProps {
   onSubmit: (values: FormValues) => void;
   defaultValues?: Partial<FormValues>;
@@ -42,213 +49,160 @@ interface SgrGiornalieriFormProps {
 export default function SgrGiornalieriForm({ 
   onSubmit, 
   defaultValues = {
-    recordDate: new Date(), // Default a oggi
-    temperature: null,
-    pH: null,
-    ammonia: null,
-    oxygen: null, 
-    salinity: null,
-    notes: ""
+    recordDate: new Date(),
+    temperature: null, pH: null, ammonia: null, oxygen: null, salinity: null,
+    airTempMin: null, airTempMax: null, waterTemperature: null, secchiDisk: null,
+    microalgaeConcentration: null, nh3: null, meteo: "", waterColor: "",
+    microalgaeSpecies: "", mortality: "", site: "", operatorName: "", notes: ""
   }, 
   isLoading = false 
 }: SgrGiornalieriFormProps) {
   const { toast } = useToast();
   
-  // Inizializzazione del form con il resolver di zod
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues
   });
 
-  // Handler per il submit del form
   const handleFormSubmit = (values: FormValues) => {
     try {
       onSubmit(values);
     } catch (error) {
       toast({
         title: "Errore",
-        description: "Si è verificato un errore durante il salvataggio dei dati.",
+        description: "Si è verificato un errore durante il salvataggio.",
         variant: "destructive"
       });
-      console.error(error);
     }
   };
 
+  const NumField = ({ name, label, step = "0.1", placeholder }: { name: keyof FormValues; label: string; step?: string; placeholder?: string }) => (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className="space-y-1">
+          <FormLabel className="text-xs">{label}</FormLabel>
+          <FormControl>
+            <Input 
+              type="number" 
+              step={step}
+              placeholder={placeholder}
+              className="h-8 text-sm"
+              {...field}
+              value={field.value === null || field.value === undefined ? '' : field.value}
+              onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+
+  const TextField = ({ name, label, placeholder }: { name: keyof FormValues; label: string; placeholder?: string }) => (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className="space-y-1">
+          <FormLabel className="text-xs">{label}</FormLabel>
+          <FormControl>
+            <Input 
+              placeholder={placeholder}
+              className="h-8 text-sm"
+              {...field}
+              value={field.value || ''}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+
   return (
-    <Card className="w-full max-w-lg">
-      <CardHeader>
-        <CardTitle>Registrazione parametri giornalieri</CardTitle>
-        <CardDescription>
-          Inserisci i dati registrati dalla sonda Seneye alle ore 12:00
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
+    <div className="w-full max-w-2xl">
+      <div className="mb-3">
+        <h3 className="text-lg font-semibold">Registrazione parametri giornalieri</h3>
+        <p className="text-xs text-muted-foreground">Tutti i campi sono opzionali</p>
+      </div>
+      
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
             <FormField
               control={form.control}
               name="recordDate"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data e ora rilevazione</FormLabel>
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-xs">Data e ora</FormLabel>
                   <FormControl>
                     <Input 
-                      type="datetime-local" 
-                      {...field} 
-                      value={field.value ? new Date(field.value).toISOString().slice(0, 16) : ''}
-                      onChange={e => {
-                        const date = new Date(e.target.value);
-                        // Impostiamo l'ora a 12:00
-                        date.setHours(12, 0, 0, 0);
-                        field.onChange(date);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    La data e l'ora della rilevazione (fissata alle 12:00)
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="temperature"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Temperatura (°C)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.1" 
-                        placeholder="Es. 22.5" 
-                        {...field} 
-                        value={field.value === null ? '' : field.value}
-                        onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="pH"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>pH</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.1" 
-                        placeholder="Es. 7.8" 
-                        {...field} 
-                        value={field.value === null ? '' : field.value}
-                        onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="ammonia"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ammoniaca (mg/L)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="Es. 0.03" 
-                        {...field} 
-                        value={field.value === null ? '' : field.value}
-                        onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oxygen"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ossigeno (mg/L)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.1" 
-                        placeholder="Es. 8.5" 
-                        {...field} 
-                        value={field.value === null ? '' : field.value}
-                        onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="salinity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Salinità (ppt)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.1" 
-                      placeholder="Es. 35.0" 
-                      {...field} 
-                      value={field.value === null ? '' : field.value}
-                      onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Note</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                      placeholder="Note aggiuntive sui parametri misurati..."
-                      rows={3}
+                      type="datetime-local"
+                      className="h-8 text-sm"
                       {...field}
-                      value={field.value || ''}
+                      value={field.value ? new Date(field.value).toISOString().slice(0, 16) : ''}
+                      onChange={e => field.onChange(new Date(e.target.value))}
                     />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+            <TextField name="site" label="Sito" placeholder="es. FLUPSY 1" />
+            <TextField name="operatorName" label="Operatore" placeholder="Nome" />
+          </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Salvataggio in corso..." : "Salva dati giornalieri"}
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-      <CardFooter className="flex justify-between text-xs text-muted-foreground">
-        <p>I dati vengono utilizzati per monitorare la qualità dell'acqua</p>
-      </CardFooter>
-    </Card>
+          <div className="grid grid-cols-5 gap-2">
+            <NumField name="temperature" label="Temp. Acqua (°C)" placeholder="22.5" />
+            <NumField name="waterTemperature" label="Temp. Acqua 2 (°C)" placeholder="22" />
+            <NumField name="airTempMin" label="Aria Min (°C)" placeholder="15" />
+            <NumField name="airTempMax" label="Aria Max (°C)" placeholder="28" />
+            <TextField name="meteo" label="Meteo" placeholder="Sole" />
+          </div>
+
+          <div className="grid grid-cols-5 gap-2">
+            <NumField name="salinity" label="Salinità (‰)" placeholder="35" />
+            <NumField name="pH" label="pH" placeholder="7.8" />
+            <NumField name="oxygen" label="Ossigeno (mg/L)" placeholder="8.5" />
+            <NumField name="secchiDisk" label="Secchi (m)" placeholder="2.5" />
+            <TextField name="waterColor" label="Colore Acqua" placeholder="Verde" />
+          </div>
+
+          <div className="grid grid-cols-5 gap-2">
+            <NumField name="ammonia" label="Ammoniaca (mg/L)" step="0.01" placeholder="0.03" />
+            <NumField name="nh3" label="NH3 (mg/L)" step="0.001" placeholder="0.01" />
+            <NumField name="microalgaeConcentration" label="Microalghe (cell/ml)" step="1000" placeholder="50000" />
+            <TextField name="microalgaeSpecies" label="Specie Alghe" placeholder="Diatomee" />
+            <TextField name="mortality" label="Mortalità" placeholder="Bassa" />
+          </div>
+
+          <FormField
+            control={form.control}
+            name="notes"
+            render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-xs">Note</FormLabel>
+                <FormControl>
+                  <Textarea 
+                    placeholder="Note aggiuntive..."
+                    rows={2}
+                    className="text-sm resize-none"
+                    {...field}
+                    value={field.value || ''}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Button type="submit" className="w-full h-9" disabled={isLoading}>
+            {isLoading ? "Salvataggio..." : "Salva dati giornalieri"}
+          </Button>
+        </form>
+      </Form>
+    </div>
   );
 }

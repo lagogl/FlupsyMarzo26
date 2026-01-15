@@ -2240,9 +2240,9 @@ export default function Sgr() {
 
       {/* Create SGR Giornaliero Dialog */}
       <Dialog open={isCreateDailyDialogOpen} onOpenChange={setIsCreateDailyDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Aggiungi misurazione Seneye</DialogTitle>
+            <DialogTitle>Aggiungi rilevazione giornaliera</DialogTitle>
           </DialogHeader>
           <SgrGiornalieriForm 
             onSubmit={createSgrGiornalieroMutation.mutate} 
