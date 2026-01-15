@@ -1641,7 +1641,7 @@ export default function Sgr() {
                   </div>
                 </div>
                 
-                <ResponsiveContainer width="100%" height={350}>
+                <ResponsiveContainer width="100%" height={400}>
                   {(() => {
                     // Prepara i dati con tutti i parametri disponibili
                     const chartData = [...filteredAndSortedSgrGiornalieri]
@@ -1660,96 +1660,162 @@ export default function Sgr() {
                         ammonia: item.ammonia
                       }));
                     
-                    // Calcola dominio dinamico per asse LEFT (temperature + altri parametri con scala simile)
-                    const leftValues: number[] = [];
-                    const rightValues: number[] = [];
+                    // RAGGRUPPAMENTO ASSI PER SCALE SIMILI:
+                    // Asse TEMP (blu): Temperature acqua/aria (0-40°C)
+                    // Asse SAL (indaco): Salinità (15-40‰)  
+                    // Asse CHEM (verde): pH, Ossigeno (5-15)
+                    // Asse SMALL (arancione): NH3, Ammoniaca, Secchi (0-5)
+                    // Asse MICRO (verde chiaro): Microalghe (0-migliaia)
+                    
+                    // Calcola domini dinamici per ogni gruppo di assi
+                    const tempValues: number[] = [];
+                    const salValues: number[] = [];
+                    const chemValues: number[] = [];
+                    const smallValues: number[] = [];
+                    const microValues: number[] = [];
                     
                     chartData.forEach((item: any) => {
-                      if (showRilTempAcqua && item.tempAcqua != null) leftValues.push(item.tempAcqua);
-                      if (showRilTempAriaMin && item.tempAriaMin != null) leftValues.push(item.tempAriaMin);
-                      if (showRilTempAriaMax && item.tempAriaMax != null) leftValues.push(item.tempAriaMax);
-                      if (showRilSecchi && item.secchi != null) leftValues.push(item.secchi);
-                      if (showRilNH3 && item.nh3 != null) leftValues.push(item.nh3);
-                      if (showRilPH && item.ph != null) leftValues.push(item.ph);
-                      if (showRilOxygen && item.oxygen != null) leftValues.push(item.oxygen);
-                      if (showRilSalinity && item.salinity != null) leftValues.push(item.salinity);
-                      if (showRilAmmonia && item.ammonia != null) leftValues.push(item.ammonia);
-                      if (showRilMicroalghe && item.microalghe != null) rightValues.push(item.microalghe);
+                      // Gruppo Temperature
+                      if (showRilTempAcqua && item.tempAcqua != null) tempValues.push(item.tempAcqua);
+                      if (showRilTempAriaMin && item.tempAriaMin != null) tempValues.push(item.tempAriaMin);
+                      if (showRilTempAriaMax && item.tempAriaMax != null) tempValues.push(item.tempAriaMax);
+                      // Gruppo Salinità
+                      if (showRilSalinity && item.salinity != null) salValues.push(item.salinity);
+                      // Gruppo Chimici (pH, Ossigeno)
+                      if (showRilPH && item.ph != null) chemValues.push(item.ph);
+                      if (showRilOxygen && item.oxygen != null) chemValues.push(item.oxygen);
+                      // Gruppo Valori Piccoli (NH3, Ammoniaca, Secchi)
+                      if (showRilNH3 && item.nh3 != null) smallValues.push(item.nh3);
+                      if (showRilAmmonia && item.ammonia != null) smallValues.push(item.ammonia);
+                      if (showRilSecchi && item.secchi != null) smallValues.push(item.secchi);
+                      // Gruppo Microalghe
+                      if (showRilMicroalghe && item.microalghe != null) microValues.push(item.microalghe);
                     });
                     
-                    // Calcola min/max con margine del 10%
-                    const leftMin = leftValues.length > 0 ? Math.min(...leftValues) : 0;
-                    const leftMax = leftValues.length > 0 ? Math.max(...leftValues) : 10;
-                    const leftMargin = (leftMax - leftMin) * 0.1 || 1;
-                    const leftDomain: [number, number] = [
-                      Math.max(0, Math.floor(leftMin - leftMargin)),
-                      Math.ceil(leftMax + leftMargin)
-                    ];
+                    // Funzione per calcolare dominio con margine
+                    const calcDomain = (values: number[]): [number, number] => {
+                      if (values.length === 0) return [0, 10];
+                      const min = Math.min(...values);
+                      const max = Math.max(...values);
+                      const margin = (max - min) * 0.1 || 1;
+                      return [Math.max(0, Math.floor(min - margin)), Math.ceil(max + margin)];
+                    };
                     
-                    const rightMin = rightValues.length > 0 ? Math.min(...rightValues) : 0;
-                    const rightMax = rightValues.length > 0 ? Math.max(...rightValues) : 10;
-                    const rightMargin = (rightMax - rightMin) * 0.1 || 1;
-                    const rightDomain: [number, number] = [
-                      Math.max(0, Math.floor(rightMin - rightMargin)),
-                      Math.ceil(rightMax + rightMargin)
-                    ];
+                    const tempDomain = calcDomain(tempValues);
+                    const salDomain = calcDomain(salValues);
+                    const chemDomain = calcDomain(chemValues);
+                    const smallDomain = calcDomain(smallValues);
+                    const microDomain = calcDomain(microValues);
+                    
+                    // Determina quali assi mostrare
+                    const showTempAxis = showRilTempAcqua || showRilTempAriaMin || showRilTempAriaMax;
+                    const showSalAxis = showRilSalinity;
+                    const showChemAxis = showRilPH || showRilOxygen;
+                    const showSmallAxis = showRilNH3 || showRilAmmonia || showRilSecchi;
+                    const showMicroAxis = showRilMicroalghe;
                     
                     return (
                       <RechartsLineChart 
                         data={chartData} 
-                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        margin={{ top: 5, right: showMicroAxis ? 80 : 30, left: 20, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '11px' }} />
+                        <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '10px' }} />
+                        
+                        {/* Asse Temperature (sinistra, blu) */}
                         <YAxis 
-                          yAxisId="left" 
-                          stroke="#6b7280" 
-                          style={{ fontSize: '11px' }} 
-                          domain={leftDomain}
-                          allowDataOverflow={false}
+                          yAxisId="temp" 
+                          stroke="#3b82f6" 
+                          style={{ fontSize: '10px' }} 
+                          domain={tempDomain}
+                          hide={!showTempAxis}
+                          label={{ value: '°C', angle: -90, position: 'insideLeft', style: { fontSize: '10px', fill: '#3b82f6' } }}
                         />
+                        
+                        {/* Asse Salinità (sinistra offset, indaco) */}
                         <YAxis 
-                          yAxisId="right" 
-                          orientation="right" 
+                          yAxisId="sal" 
+                          stroke="#6366f1" 
+                          style={{ fontSize: '10px' }} 
+                          domain={salDomain}
+                          hide={!showSalAxis}
+                          orientation="left"
+                          tickLine={false}
+                        />
+                        
+                        {/* Asse Chimici pH/Ossigeno (destra, viola/azzurro) */}
+                        <YAxis 
+                          yAxisId="chem" 
+                          orientation="right"
+                          stroke="#a855f7" 
+                          style={{ fontSize: '10px' }} 
+                          domain={chemDomain}
+                          hide={!showChemAxis}
+                        />
+                        
+                        {/* Asse Valori Piccoli NH3/Ammoniaca/Secchi (destra, arancione) */}
+                        <YAxis 
+                          yAxisId="small" 
+                          orientation="right"
+                          stroke="#f59e0b" 
+                          style={{ fontSize: '10px' }} 
+                          domain={smallDomain}
+                          hide={!showSmallAxis}
+                        />
+                        
+                        {/* Asse Microalghe (destra estrema, verde) */}
+                        <YAxis 
+                          yAxisId="micro" 
+                          orientation="right"
                           stroke="#22c55e" 
-                          style={{ fontSize: '11px' }} 
-                          domain={rightDomain}
-                          hide={!showRilMicroalghe}
+                          style={{ fontSize: '10px' }} 
+                          domain={microDomain}
+                          hide={!showMicroAxis}
                         />
+                        
                         <Tooltip 
                           contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
                         />
                         <Legend wrapperStyle={{ paddingTop: '10px' }} iconType="line" />
                         
+                        {/* Linee Gruppo Temperature */}
                         {showRilTempAcqua && (
-                          <Line yAxisId="left" type="monotone" dataKey="tempAcqua" stroke="#3b82f6" strokeWidth={2} dot={false} name="Temp. Acqua" connectNulls />
+                          <Line yAxisId="temp" type="monotone" dataKey="tempAcqua" stroke="#3b82f6" strokeWidth={2} dot={false} name="Temp. Acqua (°C)" connectNulls />
                         )}
                         {showRilTempAriaMin && (
-                          <Line yAxisId="left" type="monotone" dataKey="tempAriaMin" stroke="#22d3ee" strokeWidth={2} dot={false} name="Aria Min" connectNulls />
+                          <Line yAxisId="temp" type="monotone" dataKey="tempAriaMin" stroke="#22d3ee" strokeWidth={2} dot={false} name="Aria Min (°C)" connectNulls />
                         )}
                         {showRilTempAriaMax && (
-                          <Line yAxisId="left" type="monotone" dataKey="tempAriaMax" stroke="#f87171" strokeWidth={2} dot={false} name="Aria Max" connectNulls />
+                          <Line yAxisId="temp" type="monotone" dataKey="tempAriaMax" stroke="#f87171" strokeWidth={2} dot={false} name="Aria Max (°C)" connectNulls />
                         )}
-                        {showRilSecchi && (
-                          <Line yAxisId="left" type="monotone" dataKey="secchi" stroke="#14b8a6" strokeWidth={2} dot={false} name="Secchi" connectNulls />
+                        
+                        {/* Linea Salinità */}
+                        {showRilSalinity && (
+                          <Line yAxisId="sal" type="monotone" dataKey="salinity" stroke="#6366f1" strokeWidth={2} dot={false} name="Salinità (‰)" connectNulls />
                         )}
-                        {showRilMicroalghe && (
-                          <Line yAxisId="right" type="monotone" dataKey="microalghe" stroke="#22c55e" strokeWidth={2} dot={false} name="Microalghe" connectNulls />
-                        )}
-                        {showRilNH3 && (
-                          <Line yAxisId="left" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3" connectNulls />
-                        )}
+                        
+                        {/* Linee Gruppo Chimici */}
                         {showRilPH && (
-                          <Line yAxisId="left" type="monotone" dataKey="ph" stroke="#a855f7" strokeWidth={2} dot={false} name="pH" connectNulls />
+                          <Line yAxisId="chem" type="monotone" dataKey="ph" stroke="#a855f7" strokeWidth={2} dot={false} name="pH" connectNulls />
                         )}
                         {showRilOxygen && (
-                          <Line yAxisId="left" type="monotone" dataKey="oxygen" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Ossigeno" connectNulls />
+                          <Line yAxisId="chem" type="monotone" dataKey="oxygen" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Ossigeno (mg/L)" connectNulls />
                         )}
-                        {showRilSalinity && (
-                          <Line yAxisId="left" type="monotone" dataKey="salinity" stroke="#6366f1" strokeWidth={2} dot={false} name="Salinità" connectNulls />
+                        
+                        {/* Linee Gruppo Valori Piccoli */}
+                        {showRilSecchi && (
+                          <Line yAxisId="small" type="monotone" dataKey="secchi" stroke="#14b8a6" strokeWidth={2} dot={false} name="Secchi (m)" connectNulls />
+                        )}
+                        {showRilNH3 && (
+                          <Line yAxisId="small" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3 (mg/L)" connectNulls />
                         )}
                         {showRilAmmonia && (
-                          <Line yAxisId="left" type="monotone" dataKey="ammonia" stroke="#f43f5e" strokeWidth={2} dot={false} name="Ammoniaca" connectNulls />
+                          <Line yAxisId="small" type="monotone" dataKey="ammonia" stroke="#f43f5e" strokeWidth={2} dot={false} name="Ammoniaca (mg/L)" connectNulls />
+                        )}
+                        
+                        {/* Linea Microalghe */}
+                        {showRilMicroalghe && (
+                          <Line yAxisId="micro" type="monotone" dataKey="microalghe" stroke="#22c55e" strokeWidth={2} dot={false} name="Microalghe (cell/ml)" connectNulls />
                         )}
                         
                         <Brush dataKey="date" height={25} stroke="#3b82f6" fill="#f0f9ff" />
