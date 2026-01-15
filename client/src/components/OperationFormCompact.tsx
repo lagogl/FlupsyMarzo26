@@ -738,7 +738,13 @@ export default function OperationFormCompact({
   }, [watchAnimalsPerKg, sizes, form, watchManualCountAdjustment, watchType]);
   
   // Calcola il numero di animali quando cambia il peso totale o animali per kg
+  // NOTA: Per operazioni 'misura', il calcolo viene fatto separatamente dalla mortalità
   useEffect(() => {
+    // Per operazioni Misura, NON calcolare animalCount dal peso (usa formula mortalità sotto)
+    if (watchType === 'misura') {
+      return;
+    }
+    
     if (watchTotalWeight && watchAnimalsPerKg && watchAnimalsPerKg > 0) {
       // Animali per kg sono calcolati dai VIVI del campione
       // Totali proiettati = animalsPerKg × (peso totale in kg)
@@ -773,7 +779,58 @@ export default function OperationFormCompact({
         form.setValue('animalCount', calculatedAnimalCount);
       }
     }
-  }, [watchTotalWeight, watchAnimalsPerKg, watchLiveAnimals, deadCount, form, watchManualCountAdjustment]);
+  }, [watchTotalWeight, watchAnimalsPerKg, watchLiveAnimals, deadCount, form, watchManualCountAdjustment, watchType]);
+  
+  // Calcola numero animali per operazioni MISURA usando la formula mortalità
+  // Formula: Nr animali precedente * (100 - mortalità%) / 100
+  useEffect(() => {
+    if (watchType !== 'misura' || watchManualCountAdjustment) {
+      return;
+    }
+    
+    // Cerca l'ultima operazione del ciclo corrente per questo cestello
+    if (!watchBasketId || !watchCycleId || !operations || operations.length === 0) {
+      return;
+    }
+    
+    // Filtra operazioni per questo cestello e ciclo con animalCount valido
+    const basketCycleOps = operations
+      .filter((op: any) => 
+        op.basketId === watchBasketId && 
+        op.cycleId === watchCycleId && 
+        op.animalCount !== null && 
+        op.animalCount > 0
+      )
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    const lastOpWithCount = basketCycleOps[0];
+    
+    if (lastOpWithCount) {
+      const previousAnimalCount = lastOpWithCount.animalCount;
+      
+      // Calcola mortalità dal campione
+      const liveCount = watchLiveAnimals || 0;
+      const totalSample = liveCount + deadCount;
+      
+      if (totalSample > 0 && deadCount > 0) {
+        // Formula: Nr animali precedente * (100 - mortalità%) / 100
+        const mortalityPercent = (deadCount / totalSample) * 100;
+        const newAnimalCount = Math.round(previousAnimalCount * (100 - mortalityPercent) / 100);
+        form.setValue('animalCount', newAnimalCount);
+        console.log(`🧮 MISURA - Calcolo animali: ${previousAnimalCount} * (100 - ${mortalityPercent.toFixed(2)}) / 100 = ${newAnimalCount}`);
+      } else if (totalSample > 0) {
+        // Senza mortalità (deadCount = 0), mantieni il numero precedente
+        form.setValue('animalCount', previousAnimalCount);
+        console.log(`🧮 MISURA - Mortalità 0, mantengo animali: ${previousAnimalCount}`);
+      }
+      
+      // Recupera anche il peso totale dall'ultima operazione se non inserito
+      if (!watchTotalWeight && lastOpWithCount.totalWeight) {
+        form.setValue('totalWeight', lastOpWithCount.totalWeight);
+        console.log(`🧮 MISURA - Recuperato peso totale: ${lastOpWithCount.totalWeight}g`);
+      }
+    }
+  }, [watchType, watchBasketId, watchCycleId, watchLiveAnimals, deadCount, operations, form, watchManualCountAdjustment, watchTotalWeight]);
 
   // Gestisce il tipo "peso" - recupera il conteggio animali dall'ultima operazione
   useEffect(() => {
