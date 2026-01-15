@@ -1407,142 +1407,8 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
         </div>
       </div>
       
-      {/* Pannello Rischi */}
-      <div className="grid md:grid-cols-2 gap-4 mt-6">
-        <Card className="border-red-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-              Criticità da Risolvere
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {monthlyData
-                .filter(d => d.status === 'critical' || (d.varianceOrdersProduction < 0 && d.ordersAnimals > 0))
-                .slice(0, 5)
-                .map((d, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded text-sm">
-                    <div>
-                      <span className="font-medium">{d.monthName}</span>
-                      <Badge variant="secondary" className="ml-2 text-xs">
-                        {d.sizeCategory === 'T3' ? 'TP-2000/3000/3500' : 'TP-4000/5000'}
-                      </Badge>
-                    </div>
-                    <div className="text-red-600 font-bold">
-                      Gap: {formatNumber(Math.abs(d.varianceOrdersProduction))}
-                    </div>
-                  </div>
-                ))}
-              {monthlyData.filter(d => d.status === 'critical').length === 0 && (
-                <div className="text-center text-green-600 py-2">
-                  ✅ Nessuna criticità rilevata
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="border-orange-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-orange-500" />
-              Prossime Semine Richieste
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {monthlyData
-                .filter(d => d.seminaT1Richiesta > 0 && d.meseSeminaT1)
-                .sort((a, b) => {
-                  const monthOrder = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 
-                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
-                  const aIdx = monthOrder.findIndex(m => a.meseSeminaT1?.includes(m));
-                  const bIdx = monthOrder.findIndex(m => b.meseSeminaT1?.includes(m));
-                  return aIdx - bIdx;
-                })
-                .slice(0, 5)
-                .map((d, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 bg-orange-50 rounded text-sm">
-                    <div>
-                      <span className="font-medium text-orange-700">{d.meseSeminaT1}</span>
-                      <span className="text-gray-500 ml-2">→ {d.monthName}</span>
-                    </div>
-                    <div className="text-orange-600 font-bold">
-                      🌱 {formatNumber(d.seminaT1Richiesta)}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
-      {/* Riepilogo ordini per taglia */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Target className="h-4 w-4 text-indigo-500" />
-            Riepilogo Ordini per Taglia
-            {mortalityAdjustment !== 0 && (
-              <Badge variant={mortalityAdjustment > 0 ? 'destructive' : 'default'} className="ml-2">
-                Scenario {mortalityAdjustment > 0 ? '+' : ''}{mortalityAdjustment}%
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-5 gap-2">
-            {sizes.map(size => {
-              const orders = getOrdersForSize(size);
-              const inventory = getInventoryForSize(size);
-              const adjustedInventory = getAdjustedInventoryForSize(size);
-              const baseCoverage = inventory > 0 && orders > 0 ? Math.min(100, (inventory / orders) * 100) : 0;
-              const adjustedCoverage = adjustedInventory > 0 && orders > 0 ? Math.min(100, (adjustedInventory / orders) * 100) : 0;
-              const coverageDelta = adjustedCoverage - baseCoverage;
-              
-              return (
-                <div key={size} className={`text-center p-3 rounded-lg transition-all ${
-                  mortalityAdjustment !== 0 
-                    ? (mortalityAdjustment > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200')
-                    : 'bg-gray-50'
-                }`}>
-                  <Badge variant={size.includes('4000') || size.includes('5000') ? 'default' : 'secondary'} className="mb-2">
-                    {size}
-                  </Badge>
-                  <div className="text-lg font-bold text-indigo-600">
-                    {orders > 0 ? formatNumber(orders) : '-'}
-                  </div>
-                  <div className="text-xs text-gray-500">ordini</div>
-                  {orders > 0 && (
-                    <div className="mt-2">
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all ${
-                            adjustedCoverage >= 80 ? 'bg-green-500' : adjustedCoverage >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${adjustedCoverage}%` }}
-                        />
-                      </div>
-                      <div className={`text-xs mt-1 ${mortalityAdjustment !== 0 ? 'font-bold' : ''}`}>
-                        {adjustedCoverage.toFixed(0)}% coperto
-                        {mortalityAdjustment !== 0 && coverageDelta !== 0 && (
-                          <span className={`ml-1 ${coverageDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            ({coverageDelta > 0 ? '+' : ''}{coverageDelta.toFixed(1)}%)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-      
-      {/* Pannello AI Scenario Builder */}
-      <Card className="border-2 border-dashed border-purple-300 bg-gradient-to-r from-purple-50 to-indigo-50">
+      {/* Pannello AI Scenario Builder - posizionato subito dopo la roadmap */}
+      <Card className="border-2 border-dashed border-purple-300 bg-gradient-to-r from-purple-50 to-indigo-50 mt-4">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-purple-600" />
@@ -1743,6 +1609,140 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                 </div>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* Pannello Rischi */}
+      <div className="grid md:grid-cols-2 gap-4 mt-6">
+        <Card className="border-red-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+              Criticità da Risolvere
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {monthlyData
+                .filter(d => d.status === 'critical' || (d.varianceOrdersProduction < 0 && d.ordersAnimals > 0))
+                .slice(0, 5)
+                .map((d, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded text-sm">
+                    <div>
+                      <span className="font-medium">{d.monthName}</span>
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        {d.sizeCategory === 'T3' ? 'TP-2000/3000/3500' : 'TP-4000/5000'}
+                      </Badge>
+                    </div>
+                    <div className="text-red-600 font-bold">
+                      Gap: {formatNumber(Math.abs(d.varianceOrdersProduction))}
+                    </div>
+                  </div>
+                ))}
+              {monthlyData.filter(d => d.status === 'critical').length === 0 && (
+                <div className="text-center text-green-600 py-2">
+                  ✅ Nessuna criticità rilevata
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-orange-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-orange-500" />
+              Prossime Semine Richieste
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {monthlyData
+                .filter(d => d.seminaT1Richiesta > 0 && d.meseSeminaT1)
+                .sort((a, b) => {
+                  const monthOrder = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 
+                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+                  const aIdx = monthOrder.findIndex(m => a.meseSeminaT1?.includes(m));
+                  const bIdx = monthOrder.findIndex(m => b.meseSeminaT1?.includes(m));
+                  return aIdx - bIdx;
+                })
+                .slice(0, 5)
+                .map((d, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-orange-50 rounded text-sm">
+                    <div>
+                      <span className="font-medium text-orange-700">{d.meseSeminaT1}</span>
+                      <span className="text-gray-500 ml-2">→ {d.monthName}</span>
+                    </div>
+                    <div className="text-orange-600 font-bold">
+                      🌱 {formatNumber(d.seminaT1Richiesta)}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {/* Riepilogo ordini per taglia */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Target className="h-4 w-4 text-indigo-500" />
+            Riepilogo Ordini per Taglia
+            {mortalityAdjustment !== 0 && (
+              <Badge variant={mortalityAdjustment > 0 ? 'destructive' : 'default'} className="ml-2">
+                Scenario {mortalityAdjustment > 0 ? '+' : ''}{mortalityAdjustment}%
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-5 gap-2">
+            {sizes.map(size => {
+              const orders = getOrdersForSize(size);
+              const inventory = getInventoryForSize(size);
+              const adjustedInventory = getAdjustedInventoryForSize(size);
+              const baseCoverage = inventory > 0 && orders > 0 ? Math.min(100, (inventory / orders) * 100) : 0;
+              const adjustedCoverage = adjustedInventory > 0 && orders > 0 ? Math.min(100, (adjustedInventory / orders) * 100) : 0;
+              const coverageDelta = adjustedCoverage - baseCoverage;
+              
+              return (
+                <div key={size} className={`text-center p-3 rounded-lg transition-all ${
+                  mortalityAdjustment !== 0 
+                    ? (mortalityAdjustment > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200')
+                    : 'bg-gray-50'
+                }`}>
+                  <Badge variant={size.includes('4000') || size.includes('5000') ? 'default' : 'secondary'} className="mb-2">
+                    {size}
+                  </Badge>
+                  <div className="text-lg font-bold text-indigo-600">
+                    {orders > 0 ? formatNumber(orders) : '-'}
+                  </div>
+                  <div className="text-xs text-gray-500">ordini</div>
+                  {orders > 0 && (
+                    <div className="mt-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all ${
+                            adjustedCoverage >= 80 ? 'bg-green-500' : adjustedCoverage >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${adjustedCoverage}%` }}
+                        />
+                      </div>
+                      <div className={`text-xs mt-1 ${mortalityAdjustment !== 0 ? 'font-bold' : ''}`}>
+                        {adjustedCoverage.toFixed(0)}% coperto
+                        {mortalityAdjustment !== 0 && coverageDelta !== 0 && (
+                          <span className={`ml-1 ${coverageDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ({coverageDelta > 0 ? '+' : ''}{coverageDelta.toFixed(1)}%)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
