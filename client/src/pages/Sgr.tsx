@@ -1663,15 +1663,17 @@ export default function Sgr() {
                     // RAGGRUPPAMENTO ASSI PER SCALE SIMILI:
                     // Asse TEMP (blu): Temperature acqua/aria (0-40°C)
                     // Asse SAL (indaco): Salinità (15-40‰)  
-                    // Asse CHEM (verde): pH, Ossigeno (5-15)
-                    // Asse SMALL (arancione): NH3, Ammoniaca, Secchi (0-5)
-                    // Asse MICRO (verde chiaro): Microalghe (0-migliaia)
+                    // Asse CHEM (viola): pH, Ossigeno (5-15)
+                    // Asse SECCHI (teal): Secchi (0-5m)
+                    // Asse NH3 (arancione): NH3, Ammoniaca (0-1 mg/L) - SCALA DEDICATA per valori piccoli
+                    // Asse MICRO (verde): Microalghe (0-migliaia)
                     
                     // Calcola domini dinamici per ogni gruppo di assi
                     const tempValues: number[] = [];
                     const salValues: number[] = [];
                     const chemValues: number[] = [];
-                    const smallValues: number[] = [];
+                    const secchiValues: number[] = [];
+                    const nh3Values: number[] = []; // Asse dedicato per NH3/Ammoniaca
                     const microValues: number[] = [];
                     
                     chartData.forEach((item: any) => {
@@ -1684,15 +1686,16 @@ export default function Sgr() {
                       // Gruppo Chimici (pH, Ossigeno)
                       if (showRilPH && item.ph != null) chemValues.push(item.ph);
                       if (showRilOxygen && item.oxygen != null) chemValues.push(item.oxygen);
-                      // Gruppo Valori Piccoli (NH3, Ammoniaca, Secchi)
-                      if (showRilNH3 && item.nh3 != null) smallValues.push(item.nh3);
-                      if (showRilAmmonia && item.ammonia != null) smallValues.push(item.ammonia);
-                      if (showRilSecchi && item.secchi != null) smallValues.push(item.secchi);
+                      // Gruppo Secchi (separato)
+                      if (showRilSecchi && item.secchi != null) secchiValues.push(item.secchi);
+                      // Gruppo NH3/Ammoniaca (separato per valori molto piccoli)
+                      if (showRilNH3 && item.nh3 != null) nh3Values.push(item.nh3);
+                      if (showRilAmmonia && item.ammonia != null) nh3Values.push(item.ammonia);
                       // Gruppo Microalghe
                       if (showRilMicroalghe && item.microalghe != null) microValues.push(item.microalghe);
                     });
                     
-                    // Funzione per calcolare dominio con margine
+                    // Funzione per calcolare dominio con margine (valori normali)
                     const calcDomain = (values: number[]): [number, number] => {
                       if (values.length === 0) return [0, 10];
                       const min = Math.min(...values);
@@ -1701,17 +1704,34 @@ export default function Sgr() {
                       return [Math.max(0, Math.floor(min - margin)), Math.ceil(max + margin)];
                     };
                     
+                    // Funzione per calcolare dominio per valori molto piccoli (< 1)
+                    const calcSmallDomain = (values: number[]): [number, number] => {
+                      if (values.length === 0) return [0, 1];
+                      const min = Math.min(...values);
+                      const max = Math.max(...values);
+                      // Per valori piccoli, usa margine proporzionale senza arrotondamenti
+                      const margin = (max - min) * 0.15 || 0.1;
+                      const domainMin = Math.max(0, min - margin);
+                      const domainMax = max + margin;
+                      // Se max è molto piccolo, assicura un dominio visibile
+                      if (domainMax < 0.5) return [0, Math.max(0.5, domainMax * 1.5)];
+                      if (domainMax < 1) return [0, 1];
+                      return [domainMin, domainMax];
+                    };
+                    
                     const tempDomain = calcDomain(tempValues);
                     const salDomain = calcDomain(salValues);
                     const chemDomain = calcDomain(chemValues);
-                    const smallDomain = calcDomain(smallValues);
+                    const secchiDomain = calcDomain(secchiValues);
+                    const nh3Domain = calcSmallDomain(nh3Values); // Usa calcolo speciale per valori piccoli
                     const microDomain = calcDomain(microValues);
                     
                     // Determina quali assi mostrare
                     const showTempAxis = showRilTempAcqua || showRilTempAriaMin || showRilTempAriaMax;
                     const showSalAxis = showRilSalinity;
                     const showChemAxis = showRilPH || showRilOxygen;
-                    const showSmallAxis = showRilNH3 || showRilAmmonia || showRilSecchi;
+                    const showSecchiAxis = showRilSecchi;
+                    const showNh3Axis = showRilNH3 || showRilAmmonia;
                     const showMicroAxis = showRilMicroalghe;
                     
                     return (
@@ -1753,14 +1773,25 @@ export default function Sgr() {
                           hide={!showChemAxis}
                         />
                         
-                        {/* Asse Valori Piccoli NH3/Ammoniaca/Secchi (destra, arancione) */}
+                        {/* Asse Secchi (destra, teal) */}
                         <YAxis 
-                          yAxisId="small" 
+                          yAxisId="secchi" 
+                          orientation="right"
+                          stroke="#14b8a6" 
+                          style={{ fontSize: '10px' }} 
+                          domain={secchiDomain}
+                          hide={!showSecchiAxis}
+                        />
+                        
+                        {/* Asse NH3/Ammoniaca (destra, arancione) - scala dedicata per valori piccoli */}
+                        <YAxis 
+                          yAxisId="nh3" 
                           orientation="right"
                           stroke="#f59e0b" 
                           style={{ fontSize: '10px' }} 
-                          domain={smallDomain}
-                          hide={!showSmallAxis}
+                          domain={nh3Domain}
+                          hide={!showNh3Axis}
+                          tickFormatter={(value) => value < 0.1 ? value.toFixed(2) : value.toFixed(1)}
                         />
                         
                         {/* Asse Microalghe (destra estrema, verde) */}
@@ -1802,15 +1833,17 @@ export default function Sgr() {
                           <Line yAxisId="chem" type="monotone" dataKey="oxygen" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Ossigeno (mg/L)" connectNulls />
                         )}
                         
-                        {/* Linee Gruppo Valori Piccoli */}
+                        {/* Linea Secchi (asse separato) */}
                         {showRilSecchi && (
-                          <Line yAxisId="small" type="monotone" dataKey="secchi" stroke="#14b8a6" strokeWidth={2} dot={false} name="Secchi (m)" connectNulls />
+                          <Line yAxisId="secchi" type="monotone" dataKey="secchi" stroke="#14b8a6" strokeWidth={2} dot={false} name="Secchi (m)" connectNulls />
                         )}
+                        
+                        {/* Linee NH3/Ammoniaca (asse dedicato per valori piccoli) */}
                         {showRilNH3 && (
-                          <Line yAxisId="small" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3 (mg/L)" connectNulls />
+                          <Line yAxisId="nh3" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3 (mg/L)" connectNulls />
                         )}
                         {showRilAmmonia && (
-                          <Line yAxisId="small" type="monotone" dataKey="ammonia" stroke="#f43f5e" strokeWidth={2} dot={false} name="Ammoniaca (mg/L)" connectNulls />
+                          <Line yAxisId="nh3" type="monotone" dataKey="ammonia" stroke="#f43f5e" strokeWidth={2} dot={false} name="Ammoniaca (mg/L)" connectNulls />
                         )}
                         
                         {/* Linea Microalghe */}
