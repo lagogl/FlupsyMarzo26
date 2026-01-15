@@ -1594,48 +1594,100 @@ export default function Sgr() {
                 </div>
                 
                 <ResponsiveContainer width="100%" height={350}>
-                  <RechartsLineChart 
-                    data={[...filteredAndSortedSgrGiornalieri].sort((a, b) => new Date(a.recordDate).getTime() - new Date(b.recordDate).getTime()).map((item: any) => ({
-                      date: new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: 'short' }).format(new Date(item.recordDate)),
-                      tempAcqua: item.waterTemperature,
-                      tempAriaMin: item.airTempMin,
-                      tempAriaMax: item.airTempMax,
-                      secchi: item.secchiDisk,
-                      microalghe: item.microalgaeConcentration,
-                      nh3: item.nh3
-                    }))} 
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '11px' }} />
-                    <YAxis yAxisId="left" stroke="#6b7280" style={{ fontSize: '11px' }} />
-                    <YAxis yAxisId="right" orientation="right" stroke="#6b7280" style={{ fontSize: '11px' }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-                    />
-                    <Legend wrapperStyle={{ paddingTop: '10px' }} iconType="line" />
+                  {(() => {
+                    // Prepara i dati
+                    const chartData = [...filteredAndSortedSgrGiornalieri]
+                      .sort((a, b) => new Date(a.recordDate).getTime() - new Date(b.recordDate).getTime())
+                      .map((item: any) => ({
+                        date: new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: 'short' }).format(new Date(item.recordDate)),
+                        tempAcqua: item.waterTemperature,
+                        tempAriaMin: item.airTempMin,
+                        tempAriaMax: item.airTempMax,
+                        secchi: item.secchiDisk,
+                        microalghe: item.microalgaeConcentration,
+                        nh3: item.nh3
+                      }));
                     
-                    {showRilTempAcqua && (
-                      <Line yAxisId="left" type="monotone" dataKey="tempAcqua" stroke="#3b82f6" strokeWidth={2} dot={false} name="Temp. Acqua" connectNulls />
-                    )}
-                    {showRilTempAriaMin && (
-                      <Line yAxisId="left" type="monotone" dataKey="tempAriaMin" stroke="#22d3ee" strokeWidth={2} dot={false} name="Aria Min" connectNulls />
-                    )}
-                    {showRilTempAriaMax && (
-                      <Line yAxisId="left" type="monotone" dataKey="tempAriaMax" stroke="#f87171" strokeWidth={2} dot={false} name="Aria Max" connectNulls />
-                    )}
-                    {showRilSecchi && (
-                      <Line yAxisId="left" type="monotone" dataKey="secchi" stroke="#14b8a6" strokeWidth={2} dot={false} name="Secchi" connectNulls />
-                    )}
-                    {showRilMicroalghe && (
-                      <Line yAxisId="right" type="monotone" dataKey="microalghe" stroke="#22c55e" strokeWidth={2} dot={false} name="Microalghe" connectNulls />
-                    )}
-                    {showRilNH3 && (
-                      <Line yAxisId="left" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3" connectNulls />
-                    )}
+                    // Calcola dominio dinamico per asse LEFT (temperature + secchi + nh3)
+                    const leftValues: number[] = [];
+                    const rightValues: number[] = [];
                     
-                    <Brush dataKey="date" height={25} stroke="#3b82f6" fill="#f0f9ff" />
-                  </RechartsLineChart>
+                    chartData.forEach((item: any) => {
+                      if (showRilTempAcqua && item.tempAcqua != null) leftValues.push(item.tempAcqua);
+                      if (showRilTempAriaMin && item.tempAriaMin != null) leftValues.push(item.tempAriaMin);
+                      if (showRilTempAriaMax && item.tempAriaMax != null) leftValues.push(item.tempAriaMax);
+                      if (showRilSecchi && item.secchi != null) leftValues.push(item.secchi);
+                      if (showRilNH3 && item.nh3 != null) leftValues.push(item.nh3);
+                      if (showRilMicroalghe && item.microalghe != null) rightValues.push(item.microalghe);
+                    });
+                    
+                    // Calcola min/max con margine del 10%
+                    const leftMin = leftValues.length > 0 ? Math.min(...leftValues) : 0;
+                    const leftMax = leftValues.length > 0 ? Math.max(...leftValues) : 10;
+                    const leftMargin = (leftMax - leftMin) * 0.1 || 1;
+                    const leftDomain: [number, number] = [
+                      Math.max(0, Math.floor(leftMin - leftMargin)),
+                      Math.ceil(leftMax + leftMargin)
+                    ];
+                    
+                    const rightMin = rightValues.length > 0 ? Math.min(...rightValues) : 0;
+                    const rightMax = rightValues.length > 0 ? Math.max(...rightValues) : 10;
+                    const rightMargin = (rightMax - rightMin) * 0.1 || 1;
+                    const rightDomain: [number, number] = [
+                      Math.max(0, Math.floor(rightMin - rightMargin)),
+                      Math.ceil(rightMax + rightMargin)
+                    ];
+                    
+                    return (
+                      <RechartsLineChart 
+                        data={chartData} 
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '11px' }} />
+                        <YAxis 
+                          yAxisId="left" 
+                          stroke="#6b7280" 
+                          style={{ fontSize: '11px' }} 
+                          domain={leftDomain}
+                          allowDataOverflow={false}
+                        />
+                        <YAxis 
+                          yAxisId="right" 
+                          orientation="right" 
+                          stroke="#22c55e" 
+                          style={{ fontSize: '11px' }} 
+                          domain={rightDomain}
+                          hide={!showRilMicroalghe}
+                        />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                        />
+                        <Legend wrapperStyle={{ paddingTop: '10px' }} iconType="line" />
+                        
+                        {showRilTempAcqua && (
+                          <Line yAxisId="left" type="monotone" dataKey="tempAcqua" stroke="#3b82f6" strokeWidth={2} dot={false} name="Temp. Acqua" connectNulls />
+                        )}
+                        {showRilTempAriaMin && (
+                          <Line yAxisId="left" type="monotone" dataKey="tempAriaMin" stroke="#22d3ee" strokeWidth={2} dot={false} name="Aria Min" connectNulls />
+                        )}
+                        {showRilTempAriaMax && (
+                          <Line yAxisId="left" type="monotone" dataKey="tempAriaMax" stroke="#f87171" strokeWidth={2} dot={false} name="Aria Max" connectNulls />
+                        )}
+                        {showRilSecchi && (
+                          <Line yAxisId="left" type="monotone" dataKey="secchi" stroke="#14b8a6" strokeWidth={2} dot={false} name="Secchi" connectNulls />
+                        )}
+                        {showRilMicroalghe && (
+                          <Line yAxisId="right" type="monotone" dataKey="microalghe" stroke="#22c55e" strokeWidth={2} dot={false} name="Microalghe" connectNulls />
+                        )}
+                        {showRilNH3 && (
+                          <Line yAxisId="left" type="monotone" dataKey="nh3" stroke="#f59e0b" strokeWidth={2} dot={false} name="NH3" connectNulls />
+                        )}
+                        
+                        <Brush dataKey="date" height={25} stroke="#3b82f6" fill="#f0f9ff" />
+                      </RechartsLineChart>
+                    );
+                  })()}
                 </ResponsiveContainer>
               </CardContent>
             </Card>
