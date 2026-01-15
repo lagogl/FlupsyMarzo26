@@ -124,6 +124,16 @@ async function runBackgroundInitialization() {
     console.error("⚠️ Errore durante l'inizializzazione dello scheduler integrità:", error);
   }
 
+  // Inizializza lo scheduler di backup automatico giornaliero
+  console.log("💾 Inizializzazione scheduler backup automatico...");
+  try {
+    const { startBackupScheduler } = await import('./services/daily-backup-scheduler.service');
+    startBackupScheduler({ hour: 2, minute: 0, retentionDays: 7 });
+    console.log("✅ Scheduler backup attivo (esecuzione ore 02:00, retention 7 giorni)");
+  } catch (error) {
+    console.error("⚠️ Errore durante l'inizializzazione dello scheduler backup:", error);
+  }
+
   // Inizializza il modulo LCI (Life Cycle Inventory) per ECOTAPES
   console.log("🌿 Inizializzazione modulo LCI...");
   try {

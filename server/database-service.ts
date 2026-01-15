@@ -459,3 +459,20 @@ function cleanupOldBackups(daysToKeep: number): void {
     console.error('Errore durante la pulizia dei backup obsoleti:', error);
   }
 }
+
+// Alias per compatibilità con daily-backup-scheduler
+export const listDatabaseBackups = getAvailableBackups;
+
+export async function deleteDatabaseBackup(filename: string): Promise<boolean> {
+  try {
+    const filePath = path.join(BACKUP_DIR, filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Errore durante eliminazione backup:', error);
+    return false;
+  }
+}
