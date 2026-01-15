@@ -340,12 +340,12 @@ export default function SpreadsheetOperations() {
     queryKey: ['/api/baskets?includeAll=true'],
   });
 
-  // Query operazioni ottimizzata - usa cache e paginazione efficiente
+  // Query operazioni ottimizzata - carica tutte le operazioni per garantire dati completi
   const { data: operations, isLoading: operationsLoading, error: operationsError } = useQuery({
-    queryKey: ['/api/operations', 'spreadsheet'],
+    queryKey: ['/api/operations', 'spreadsheet', 'full'],
     queryFn: () => {
-      // Usa cache ottimizzata e paginazione ridotta per performance
-      return apiRequest('/api/operations?pageSize=100&sortBy=id&sortOrder=desc');
+      // Carica tutte le operazioni per garantire che i cestelli mostrino i dati corretti
+      return apiRequest('/api/operations?pageSize=500&sortBy=id&sortOrder=desc');
     },
     staleTime: 120000, // Cache for 2 minuti per performance
     refetchOnWindowFocus: false
