@@ -639,6 +639,7 @@ export default function AnalisiScostamenti() {
         <TabsList>
           <TabsTrigger value="chart">Grafici</TabsTrigger>
           <TabsTrigger value="table">Tabella Dettaglio</TabsTrigger>
+          <TabsTrigger value="roadmap">🗺️ Roadmap Produzione</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chart" className="space-y-4">
@@ -954,7 +955,552 @@ export default function AnalisiScostamenti() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="roadmap">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                🗺️ Roadmap Produzione
+              </CardTitle>
+              <CardDescription>
+                Timeline dinamica: dalla giacenza attuale agli ordini da soddisfare, passando per crescita e mortalità
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ProductionRoadmap 
+                monthlyData={data.monthlyData}
+                ordersAbsoluteBySize={data.ordersAbsoluteBySize}
+                currentInventory={data.currentInventory}
+                seedingSchedule={data.seedingSchedule}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// Componente Roadmap Produzione con Gantt dinamico
+interface ProductionRoadmapProps {
+  monthlyData: MonthlyForecast[];
+  ordersAbsoluteBySize: Record<string, number>;
+  currentInventory: InventoryBySize[];
+  seedingSchedule: SeedingSchedule[];
+}
+
+function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory, seedingSchedule }: ProductionRoadmapProps) {
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [mortalityAdjustment, setMortalityAdjustment] = useState(0);
+  
+  // Taglie ordinate
+  const sizes = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'];
+  
+  // Mesi dell'anno con mapping per nomi completi italiani
+  const months = [
+    { name: 'Gen', month: 1, fullName: 'Gennaio' }, 
+    { name: 'Feb', month: 2, fullName: 'Febbraio' }, 
+    { name: 'Mar', month: 3, fullName: 'Marzo' },
+    { name: 'Apr', month: 4, fullName: 'Aprile' }, 
+    { name: 'Mag', month: 5, fullName: 'Maggio' }, 
+    { name: 'Giu', month: 6, fullName: 'Giugno' },
+    { name: 'Lug', month: 7, fullName: 'Luglio' }, 
+    { name: 'Ago', month: 8, fullName: 'Agosto' }, 
+    { name: 'Set', month: 9, fullName: 'Settembre' },
+    { name: 'Ott', month: 10, fullName: 'Ottobre' }, 
+    { name: 'Nov', month: 11, fullName: 'Novembre' }, 
+    { name: 'Dic', month: 12, fullName: 'Dicembre' }
+  ];
+  
+  // Mappa ordini per taglia e mese
+  const getOrdersForSize = (size: string) => {
+    return ordersAbsoluteBySize[size] || 0;
+  };
+  
+  // Calcola giacenza per taglia
+  const getInventoryForSize = (size: string) => {
+    const inv = currentInventory.find(i => i.sizeName === size);
+    return inv?.totalAnimals || 0;
+  };
+  
+  // Trova mesi con ordini per una taglia
+  const getOrderMonthsForSize = (size: string) => {
+    const category = size.includes('2000') || size.includes('3000') || size.includes('3500') ? 'T3' : 'T10';
+    return monthlyData
+      .filter(d => d.sizeCategory === category && d.ordersAnimals > 0)
+      .map(d => ({ month: d.month, orders: d.ordersAnimals, variance: d.varianceOrdersProduction }));
+  };
+  
+  // Trova requisiti di semina
+  const getSeedingForSize = (size: string) => {
+    const category = size.includes('2000') || size.includes('3000') || size.includes('3500') ? 'T3' : 'T10';
+    return monthlyData
+      .filter(d => d.sizeCategory === category && d.seminaT1Richiesta > 0)
+      .map(d => ({ 
+        targetMonth: d.month, 
+        seedingMonth: d.meseSeminaT1,
+        amount: d.seminaT1Richiesta,
+        status: d.status
+      }));
+  };
+  
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(0)}K`;
+    return num.toString();
+  };
+  
+  const currentMonth = new Date().getMonth() + 1;
+  
+  // Colori per status
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'on_track': return 'bg-green-500';
+      case 'warning': return 'bg-yellow-500';
+      case 'critical': return 'bg-red-500';
+      default: return 'bg-gray-400';
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Legenda */}
+      <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-purple-500 rounded" />
+          <span>Giacenza attuale</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-500 rounded" />
+          <span>Ordine coperto</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-red-500 rounded animate-pulse" />
+          <span>Gap da coprire</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-indigo-600 rounded" />
+          <span>Ordini target</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-orange-500 rounded" />
+          <span>Semina richiesta</span>
+        </div>
+      </div>
+      
+      {/* Timeline Header */}
+      <div className="overflow-x-auto">
+        <div className="min-w-[900px]">
+          {/* Header mesi */}
+          <div className="flex border-b-2 border-gray-300 pb-2 mb-4">
+            <div className="w-24 font-bold text-sm">Taglia</div>
+            {months.map((m, idx) => (
+              <div 
+                key={m.month} 
+                className={`flex-1 text-center text-sm font-medium ${
+                  m.month === currentMonth ? 'bg-blue-100 rounded-t-lg text-blue-700 font-bold' : ''
+                }`}
+              >
+                {m.name}
+                {m.month === currentMonth && (
+                  <div className="text-xs text-blue-500">▼ OGGI</div>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          {/* Swimlanes per taglia */}
+          {sizes.map((size, sizeIdx) => {
+            const inventory = getInventoryForSize(size);
+            const orders = getOrdersForSize(size);
+            const orderMonths = getOrderMonthsForSize(size);
+            const seedingReqs = getSeedingForSize(size);
+            const isT10 = size.includes('4000') || size.includes('5000');
+            
+            return (
+              <div 
+                key={size}
+                className={`flex items-center border-b py-3 ${sizeIdx % 2 === 0 ? 'bg-gray-50' : ''}`}
+              >
+                {/* Label taglia */}
+                <div className="w-24 flex-shrink-0">
+                  <Badge variant={isT10 ? 'default' : 'secondary'} className="font-mono">
+                    {size}
+                  </Badge>
+                  {inventory > 0 && (
+                    <div className="text-xs text-purple-600 mt-1">
+                      📦 {formatNumber(inventory)}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Timeline */}
+                <div className="flex-1 flex relative h-16">
+                  {months.map((m) => {
+                    const orderInMonth = orderMonths.find(o => o.month === m.month);
+                    const seedingInMonth = seedingReqs.find(s => s.targetMonth === m.month);
+                    const isPast = m.month < currentMonth;
+                    const isCurrent = m.month === currentMonth;
+                    
+                    return (
+                      <div 
+                        key={m.month}
+                        className={`flex-1 relative border-l border-gray-200 ${isPast ? 'opacity-40' : ''}`}
+                      >
+                        {/* Giacenza attuale (solo mese corrente) */}
+                        {isCurrent && inventory > 0 && (
+                          <div 
+                            className="absolute left-0 top-1 h-6 bg-purple-500 rounded-r-full flex items-center justify-end pr-1"
+                            style={{ width: '100%', maxWidth: '100%' }}
+                            onMouseEnter={() => setHoveredItem(`inv-${size}`)}
+                            onMouseLeave={() => setHoveredItem(null)}
+                          >
+                            <span className="text-xs text-white font-bold truncate px-1">
+                              {formatNumber(inventory)}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Ordine target */}
+                        {orderInMonth && (
+                          <div 
+                            className={`absolute left-1 right-1 top-8 h-6 rounded flex items-center justify-center cursor-pointer transition-all ${
+                              orderInMonth.variance >= 0 
+                                ? 'bg-green-500 hover:bg-green-600' 
+                                : 'bg-red-500 hover:bg-red-600 animate-pulse'
+                            }`}
+                            onMouseEnter={() => setHoveredItem(`order-${size}-${m.month}`)}
+                            onMouseLeave={() => setHoveredItem(null)}
+                          >
+                            <span className="text-xs text-white font-bold">
+                              🎯 {formatNumber(orderInMonth.orders)}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Tooltip per ordine */}
+                        {hoveredItem === `order-${size}-${m.month}` && orderInMonth && (
+                          <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-900 text-white p-2 rounded shadow-lg text-xs whitespace-nowrap">
+                            <div className="font-bold">{size} - {m.name}</div>
+                            <div>Ordini: {formatNumber(orderInMonth.orders)}</div>
+                            <div className={orderInMonth.variance >= 0 ? 'text-green-400' : 'text-red-400'}>
+                              {orderInMonth.variance >= 0 ? '✅ Coperto' : '❌ Gap'}: {formatNumber(Math.abs(orderInMonth.variance))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Semina richiesta */}
+                        {seedingInMonth && (
+                          <div className="absolute left-0 right-0 -top-2 flex justify-center">
+                            <div className={`w-3 h-3 rounded-full ${getStatusColor(seedingInMonth.status)} animate-ping absolute`} />
+                            <div className={`w-3 h-3 rounded-full ${getStatusColor(seedingInMonth.status)} relative`} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          
+          {/* Riga Semina T1 */}
+          <div className="flex items-center border-b py-3 bg-orange-50">
+            <div className="w-24 flex-shrink-0">
+              <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-300">
+                🌱 SEMINA
+              </Badge>
+            </div>
+            <div className="flex-1 flex relative h-12">
+              {months.map((m) => {
+                // Trova semine richieste per questo mese (usa fullName per matching corretto)
+                const seedingsThisMonth = monthlyData.filter(d => 
+                  d.meseSeminaT1?.includes(m.fullName) && d.seminaT1Richiesta > 0
+                );
+                const totalSeeding = seedingsThisMonth.reduce((sum, s) => sum + s.seminaT1Richiesta, 0);
+                const isPast = m.month < currentMonth;
+                
+                return (
+                  <div 
+                    key={m.month}
+                    className={`flex-1 relative border-l border-gray-200 ${isPast ? 'opacity-40' : ''}`}
+                  >
+                    {totalSeeding > 0 && (
+                      <div 
+                        className="absolute left-1 right-1 top-2 h-8 bg-orange-500 rounded flex items-center justify-center"
+                        onMouseEnter={() => setHoveredItem(`seeding-${m.month}`)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                      >
+                        <span className="text-xs text-white font-bold">
+                          🌱 {formatNumber(totalSeeding)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Tooltip per semina */}
+                    {hoveredItem === `seeding-${m.month}` && totalSeeding > 0 && (
+                      <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-900 text-white p-2 rounded shadow-lg text-xs whitespace-nowrap">
+                        <div className="font-bold">Semina T1 - {m.fullName}</div>
+                        <div>Totale: {formatNumber(totalSeeding)} animali</div>
+                        <div className="text-orange-300">Per coprire ordini futuri</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Banda rischio (semafori) */}
+          <div className="flex items-center py-2 mt-2">
+            <div className="w-24 flex-shrink-0 text-xs font-medium text-gray-600">
+              RISCHIO
+            </div>
+            <div className="flex-1 flex">
+              {months.map((m) => {
+                const monthData = monthlyData.filter(d => d.month === m.month);
+                const worstStatus = monthData.some(d => d.status === 'critical') 
+                  ? 'critical' 
+                  : monthData.some(d => d.status === 'warning') 
+                    ? 'warning' 
+                    : monthData.length > 0 ? 'on_track' : null;
+                const isPast = m.month < currentMonth;
+                
+                return (
+                  <div 
+                    key={m.month}
+                    className={`flex-1 flex justify-center ${isPast ? 'opacity-40' : ''}`}
+                  >
+                    {worstStatus && (
+                      <div className={`w-4 h-4 rounded-full ${getStatusColor(worstStatus)}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Pannello Rischi */}
+      <div className="grid md:grid-cols-2 gap-4 mt-6">
+        <Card className="border-red-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+              Criticità da Risolvere
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {monthlyData
+                .filter(d => d.status === 'critical' || (d.varianceOrdersProduction < 0 && d.ordersAnimals > 0))
+                .slice(0, 5)
+                .map((d, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded text-sm">
+                    <div>
+                      <span className="font-medium">{d.monthName}</span>
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        {d.sizeCategory === 'T3' ? 'TP-2000/3000/3500' : 'TP-4000/5000'}
+                      </Badge>
+                    </div>
+                    <div className="text-red-600 font-bold">
+                      Gap: {formatNumber(Math.abs(d.varianceOrdersProduction))}
+                    </div>
+                  </div>
+                ))}
+              {monthlyData.filter(d => d.status === 'critical').length === 0 && (
+                <div className="text-center text-green-600 py-2">
+                  ✅ Nessuna criticità rilevata
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-orange-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-orange-500" />
+              Prossime Semine Richieste
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {monthlyData
+                .filter(d => d.seminaT1Richiesta > 0 && d.meseSeminaT1)
+                .sort((a, b) => {
+                  const monthOrder = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 
+                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+                  const aIdx = monthOrder.findIndex(m => a.meseSeminaT1?.includes(m));
+                  const bIdx = monthOrder.findIndex(m => b.meseSeminaT1?.includes(m));
+                  return aIdx - bIdx;
+                })
+                .slice(0, 5)
+                .map((d, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-orange-50 rounded text-sm">
+                    <div>
+                      <span className="font-medium text-orange-700">{d.meseSeminaT1}</span>
+                      <span className="text-gray-500 ml-2">→ {d.monthName}</span>
+                    </div>
+                    <div className="text-orange-600 font-bold">
+                      🌱 {formatNumber(d.seminaT1Richiesta)}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {/* Riepilogo ordini per taglia */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Target className="h-4 w-4 text-indigo-500" />
+            Riepilogo Ordini per Taglia
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-5 gap-2">
+            {sizes.map(size => {
+              const orders = getOrdersForSize(size);
+              const inventory = getInventoryForSize(size);
+              const coverage = inventory > 0 && orders > 0 ? Math.min(100, (inventory / orders) * 100) : 0;
+              
+              return (
+                <div key={size} className="text-center p-3 bg-gray-50 rounded-lg">
+                  <Badge variant={size.includes('4000') || size.includes('5000') ? 'default' : 'secondary'} className="mb-2">
+                    {size}
+                  </Badge>
+                  <div className="text-lg font-bold text-indigo-600">
+                    {orders > 0 ? formatNumber(orders) : '-'}
+                  </div>
+                  <div className="text-xs text-gray-500">ordini</div>
+                  {orders > 0 && (
+                    <div className="mt-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full ${coverage >= 80 ? 'bg-green-500' : coverage >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          style={{ width: `${coverage}%` }}
+                        />
+                      </div>
+                      <div className="text-xs mt-1">
+                        {coverage.toFixed(0)}% coperto
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* Pannello AI Scenario Builder */}
+      <Card className="border-2 border-dashed border-purple-300 bg-gradient-to-r from-purple-50 to-indigo-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-purple-600" />
+            🤖 AI Scenario Builder
+            <Badge variant="outline" className="ml-2 text-purple-600 border-purple-300">Beta</Badge>
+          </CardTitle>
+          <CardDescription>
+            Simula scenari "cosa succede se..." e analizza l'impatto sulla produzione
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Slider simulazione */}
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  Variazione Mortalità (%)
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Simula un aumento o diminuzione della mortalità rispetto al valore atteso</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <div className="flex items-center gap-4 mt-2">
+                  <input
+                    type="range"
+                    min="-20"
+                    max="20"
+                    value={mortalityAdjustment}
+                    onChange={(e) => setMortalityAdjustment(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className={`font-bold min-w-[60px] text-right ${
+                    mortalityAdjustment > 0 ? 'text-red-600' : mortalityAdjustment < 0 ? 'text-green-600' : ''
+                  }`}>
+                    {mortalityAdjustment > 0 ? '+' : ''}{mortalityAdjustment}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>-20% (migliore)</span>
+                  <span>0% (attuale)</span>
+                  <span>+20% (peggiore)</span>
+                </div>
+              </div>
+              
+              {mortalityAdjustment !== 0 && (
+                <Alert className={mortalityAdjustment > 0 ? 'border-red-300 bg-red-50' : 'border-green-300 bg-green-50'}>
+                  <AlertTriangle className={`h-4 w-4 ${mortalityAdjustment > 0 ? 'text-red-600' : 'text-green-600'}`} />
+                  <AlertTitle className={mortalityAdjustment > 0 ? 'text-red-800' : 'text-green-800'}>
+                    {mortalityAdjustment > 0 ? 'Scenario Pessimistico' : 'Scenario Ottimistico'}
+                  </AlertTitle>
+                  <AlertDescription className={mortalityAdjustment > 0 ? 'text-red-700' : 'text-green-700'}>
+                    {mortalityAdjustment > 0 
+                      ? `Con +${mortalityAdjustment}% mortalità, stimerai una perdita aggiuntiva di circa ${formatNumber(Math.abs(mortalityAdjustment) * 1000000)} animali. Potrebbe essere necessario aumentare le semine del ${Math.abs(mortalityAdjustment * 1.5).toFixed(0)}%.`
+                      : `Con ${mortalityAdjustment}% mortalità, risparmierai circa ${formatNumber(Math.abs(mortalityAdjustment) * 800000)} animali. Potresti ridurre le semine del ${Math.abs(mortalityAdjustment).toFixed(0)}%.`
+                    }
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+            
+            {/* Suggerimenti AI */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">💡 Domande Suggerite</Label>
+              <div className="space-y-2">
+                {[
+                  "Riesco a coprire gli ordini di Giugno con la giacenza attuale?",
+                  "Quanto devo seminare oggi per soddisfare il picco di Maggio?",
+                  "Qual è il mese più critico per la produzione T3?",
+                  "Come impatta un ritardo di 2 settimane nella semina?"
+                ].map((question, idx) => (
+                  <Button 
+                    key={idx}
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full justify-start text-left h-auto py-2 text-xs hover:bg-purple-50 hover:border-purple-300"
+                    onClick={() => {
+                      // Placeholder per integrazione AI futura
+                      alert(`🤖 Funzionalità AI in sviluppo!\n\nDomanda: "${question}"\n\nQuesta funzione utilizzerà GPT-4o per analizzare i dati e fornire risposte intelligenti.`);
+                    }}
+                  >
+                    <span className="mr-2">❓</span>
+                    {question}
+                  </Button>
+                ))}
+              </div>
+              
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground italic">
+                  🔮 Prossimamente: integrazione completa con AI per simulazioni avanzate, 
+                  analisi predittiva e raccomandazioni automatiche.
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
