@@ -872,22 +872,33 @@ export default function AnalisiScostamenti() {
                       <TableRow key={idx}>
                         <TableCell className="font-medium">{row.monthName}</TableCell>
                         <TableCell>
-                          <div className="flex flex-col gap-0.5">
-                            {row.sizeCategory === 'T3' ? (
-                              <>
-                                <Badge className="text-xs bg-blue-500 hover:bg-blue-600 text-white">TP-2000</Badge>
-                                <Badge className="text-xs bg-green-500 hover:bg-green-600 text-white">TP-3000</Badge>
-                                <Badge className="text-xs bg-teal-500 hover:bg-teal-600 text-white">TP-3500</Badge>
-                              </>
-                            ) : row.sizeCategory === 'T10' ? (
-                              <>
-                                <Badge className="text-xs bg-orange-500 hover:bg-orange-600 text-white">TP-4000</Badge>
-                                <Badge className="text-xs bg-red-500 hover:bg-red-600 text-white">TP-5000</Badge>
-                              </>
-                            ) : (
-                              <Badge variant="outline">{row.sizeCategory}</Badge>
-                            )}
-                          </div>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger className="cursor-help">
+                                <Badge variant="outline" className="text-xs font-medium">
+                                  {row.sizeCategory}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="p-2">
+                                <div className="flex flex-col gap-1">
+                                  {row.sizeCategory === 'T3' ? (
+                                    <>
+                                      <Badge className="text-xs bg-blue-500 text-white">TP-2000</Badge>
+                                      <Badge className="text-xs bg-green-500 text-white">TP-3000</Badge>
+                                      <Badge className="text-xs bg-teal-500 text-white">TP-3500</Badge>
+                                    </>
+                                  ) : row.sizeCategory === 'T10' ? (
+                                    <>
+                                      <Badge className="text-xs bg-orange-500 text-white">TP-4000</Badge>
+                                      <Badge className="text-xs bg-red-500 text-white">TP-5000</Badge>
+                                    </>
+                                  ) : (
+                                    <Badge variant="outline">{row.sizeCategory}</Badge>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
                         <TableCell className="text-right text-purple-600 font-medium">
                           {formatNumber(row.giacenzaInizioMese)}
