@@ -55,6 +55,12 @@ export default function Sgr() {
   const [showRilMicroalghe, setShowRilMicroalghe] = useState(false);
   const [showRilNH3, setShowRilNH3] = useState(false);
   
+  // States per sorting e filtri tabella Rilevazioni
+  const [rilSortColumn, setRilSortColumn] = useState<string>('date');
+  const [rilSortDirection, setRilSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [rilDateFrom, setRilDateFrom] = useState<string>('');
+  const [rilDateTo, setRilDateTo] = useState<string>('');
+  
   // Array dei mesi in italiano
   const monthOrder = [
     'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
@@ -379,7 +385,63 @@ export default function Sgr() {
     return monthOrder.indexOf(monthA) - monthOrder.indexOf(monthB);
   });
 
-  // Sort SGR Giornalieri by date (newest first)
+  // Funzione per gestire click su header colonna per sorting
+  const handleRilSortClick = (column: string) => {
+    if (rilSortColumn === column) {
+      setRilSortDirection(rilSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setRilSortColumn(column);
+      setRilSortDirection('desc');
+    }
+  };
+  
+  // Funzione per ottenere il valore da sortare
+  const getRilSortValue = (item: any, column: string): number | string => {
+    switch (column) {
+      case 'date': return new Date(item.recordDate).getTime();
+      case 'site': return item.site || '';
+      case 'waterTemp': return item.waterTemperature || 0;
+      case 'oxygen': return item.oxygen || 0;
+      case 'salinity': return item.salinity || 0;
+      case 'ph': return item.pH || 0;
+      case 'nh3': return item.nh3 || 0;
+      case 'secchi': return item.secchiDisk || 0;
+      case 'microalgae': return item.microalgaeConcentration || 0;
+      default: return 0;
+    }
+  };
+  
+  // Filtra e ordina SGR Giornalieri
+  const filteredAndSortedSgrGiornalieri = [...(sgrGiornalieri || [])]
+    .filter((item: any) => {
+      const recordDate = new Date(item.recordDate);
+      if (rilDateFrom) {
+        const fromDate = new Date(rilDateFrom);
+        if (recordDate < fromDate) return false;
+      }
+      if (rilDateTo) {
+        const toDate = new Date(rilDateTo);
+        toDate.setHours(23, 59, 59, 999);
+        if (recordDate > toDate) return false;
+      }
+      return true;
+    })
+    .sort((a: any, b: any) => {
+      const aValue = getRilSortValue(a, rilSortColumn);
+      const bValue = getRilSortValue(b, rilSortColumn);
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return rilSortDirection === 'asc' 
+          ? aValue.localeCompare(bValue) 
+          : bValue.localeCompare(aValue);
+      }
+      
+      return rilSortDirection === 'asc' 
+        ? (aValue as number) - (bValue as number)
+        : (bValue as number) - (aValue as number);
+    });
+  
+  // Mantieni sortedSgrGiornalieri per compatibilità (tab Seneye)
   const sortedSgrGiornalieri = [...(sgrGiornalieri || [])].sort((a, b) => {
     return new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime();
   });
@@ -1450,7 +1512,7 @@ export default function Sgr() {
           </div>
 
           {/* Grafico dinamico rilevazioni */}
-          {sortedSgrGiornalieri && sortedSgrGiornalieri.length > 0 && (
+          {filteredAndSortedSgrGiornalieri && filteredAndSortedSgrGiornalieri.length > 0 && (
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1533,7 +1595,7 @@ export default function Sgr() {
                 
                 <ResponsiveContainer width="100%" height={350}>
                   <RechartsLineChart 
-                    data={[...sortedSgrGiornalieri].reverse().map((item: any) => ({
+                    data={[...filteredAndSortedSgrGiornalieri].sort((a, b) => new Date(a.recordDate).getTime() - new Date(b.recordDate).getTime()).map((item: any) => ({
                       date: new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: 'short' }).format(new Date(item.recordDate)),
                       tempAcqua: item.waterTemperature,
                       tempAriaMin: item.airTempMin,
@@ -1579,21 +1641,131 @@ export default function Sgr() {
             </Card>
           )}
 
+          {/* Filtri data */}
+          <div className="bg-white rounded-lg shadow p-4 mb-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="rilDateFrom" className="text-sm font-medium text-gray-700">Da:</Label>
+                <Input
+                  id="rilDateFrom"
+                  type="date"
+                  value={rilDateFrom}
+                  onChange={(e) => setRilDateFrom(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="rilDateTo" className="text-sm font-medium text-gray-700">A:</Label>
+                <Input
+                  id="rilDateTo"
+                  type="date"
+                  value={rilDateTo}
+                  onChange={(e) => setRilDateTo(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              {(rilDateFrom || rilDateTo) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setRilDateFrom(''); setRilDateTo(''); }}
+                >
+                  Azzera filtri
+                </Button>
+              )}
+              <span className="text-sm text-gray-500 ml-auto">
+                {filteredAndSortedSgrGiornalieri.length} record{filteredAndSortedSgrGiornalieri.length !== (sgrGiornalieri?.length || 0) && ` (su ${sgrGiornalieri?.length || 0} totali)`}
+              </span>
+            </div>
+          </div>
+
           {/* Tabella rilevazioni stile Excel */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full divide-y divide-gray-200 text-xs">
                 <thead className="bg-gray-100">
                   <tr>
-                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Data</th>
-                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Sito</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">T. Acqua</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">O2</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Salinità</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">pH</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">NH3</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Secchi</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Microalghe</th>
+                    <th 
+                      className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('date')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Data
+                        {rilSortColumn === 'date' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('site')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Sito
+                        {rilSortColumn === 'site' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('waterTemp')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        T. Acqua
+                        {rilSortColumn === 'waterTemp' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('oxygen')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        O2
+                        {rilSortColumn === 'oxygen' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('salinity')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Salinità
+                        {rilSortColumn === 'salinity' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('ph')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        pH
+                        {rilSortColumn === 'ph' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('nh3')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        NH3
+                        {rilSortColumn === 'nh3' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('secchi')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Secchi
+                        {rilSortColumn === 'secchi' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleRilSortClick('microalgae')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Microalghe
+                        {rilSortColumn === 'microalgae' && (rilSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </th>
                     <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Note</th>
                   </tr>
                 </thead>
@@ -1605,14 +1777,14 @@ export default function Sgr() {
                         Caricamento rilevazioni...
                       </td>
                     </tr>
-                  ) : sortedSgrGiornalieri.length === 0 ? (
+                  ) : filteredAndSortedSgrGiornalieri.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
-                        Nessuna rilevazione trovata. Clicca "Nuova Rilevazione" per aggiungere dati.
+                        {rilDateFrom || rilDateTo ? 'Nessuna rilevazione trovata nel periodo selezionato.' : 'Nessuna rilevazione trovata. Clicca "Nuova Rilevazione" per aggiungere dati.'}
                       </td>
                     </tr>
                   ) : (
-                    sortedSgrGiornalieri.map((item: any, index: number) => {
+                    filteredAndSortedSgrGiornalieri.map((item: any, index: number) => {
                       const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                       const recordDate = new Date(item.recordDate);
                       const formattedDate = new Intl.DateTimeFormat('it-IT', {
