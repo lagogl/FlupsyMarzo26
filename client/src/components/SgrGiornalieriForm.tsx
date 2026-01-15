@@ -15,6 +15,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const SITI = ["Ca Pisani", "Delta Futuro"] as const;
+const METEO_OPTIONS = [
+  "Sole", "Nuvoloso", "Parzialmente nuvoloso", "Coperto", 
+  "Pioggia leggera", "Pioggia", "Temporale", "Nebbia", 
+  "Vento forte", "Neve", "Grandine"
+] as const;
 
 const formSchema = sgrGiornalieriSchema.extend({
   recordDate: z.coerce.date().default(new Date()),
@@ -150,7 +158,26 @@ export default function SgrGiornalieriForm({
                 </FormItem>
               )}
             />
-            <TextField name="site" label="Sito" placeholder="es. FLUPSY 1" />
+            <FormField
+              control={form.control}
+              name="site"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-xs">Sito</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <FormControl>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="Seleziona sito" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {SITI.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <TextField name="operatorName" label="Operatore" placeholder="Nome" />
           </div>
 
@@ -159,7 +186,26 @@ export default function SgrGiornalieriForm({
             <NumField name="waterTemperature" label="Temp. Acqua 2 (°C)" placeholder="22" />
             <NumField name="airTempMin" label="Aria Min (°C)" placeholder="15" />
             <NumField name="airTempMax" label="Aria Max (°C)" placeholder="28" />
-            <TextField name="meteo" label="Meteo" placeholder="Sole" />
+            <FormField
+              control={form.control}
+              name="meteo"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-xs">Meteo</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <FormControl>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="Condizioni" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {METEO_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           <div className="grid grid-cols-5 gap-2">
