@@ -1588,27 +1588,26 @@ export default function Sgr() {
                     <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Data</th>
                     <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Sito</th>
                     <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">T. Acqua</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Aria Min</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Aria Max</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">O2</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Salinità</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">pH</th>
+                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">NH3</th>
                     <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Secchi</th>
                     <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">Microalghe</th>
-                    <th className="px-2 py-2 text-center font-semibold text-gray-600 uppercase tracking-wide">NH3</th>
-                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Meteo</th>
-                    <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Colore</th>
                     <th className="px-2 py-2 text-left font-semibold text-gray-600 uppercase tracking-wide">Note</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {isLoadingSgrGiornalieri ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                         Caricamento rilevazioni...
                       </td>
                     </tr>
                   ) : sortedSgrGiornalieri.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                         Nessuna rilevazione trovata. Clicca "Nuova Rilevazione" per aggiungere dati.
                       </td>
                     </tr>
@@ -1626,15 +1625,14 @@ export default function Sgr() {
                         <tr key={item.id} className={`${rowBg} hover:bg-blue-50 transition-colors`}>
                           <td className="px-2 py-2 whitespace-nowrap font-medium text-gray-900">{formattedDate}</td>
                           <td className="px-2 py-2 whitespace-nowrap text-gray-700 truncate max-w-[80px]" title={item.site || '-'}>{item.site || '-'}</td>
-                          <td className="px-2 py-2 text-center text-blue-600 font-medium">{item.waterTemperature != null ? `${item.waterTemperature}°` : '-'}</td>
-                          <td className="px-2 py-2 text-center text-cyan-600">{item.airTempMin != null ? `${item.airTempMin}°` : '-'}</td>
-                          <td className="px-2 py-2 text-center text-red-500">{item.airTempMax != null ? `${item.airTempMax}°` : '-'}</td>
-                          <td className="px-2 py-2 text-center text-teal-600">{item.secchiDisk != null ? `${item.secchiDisk}m` : '-'}</td>
-                          <td className="px-2 py-2 text-center text-green-600">{item.microalgaeConcentration != null ? item.microalgaeConcentration.toLocaleString() : '-'}</td>
-                          <td className="px-2 py-2 text-center text-amber-600">{item.nh3 != null ? item.nh3 : '-'}</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-gray-600 truncate max-w-[70px]" title={item.meteo || '-'}>{item.meteo || '-'}</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-gray-600 truncate max-w-[70px]" title={item.waterColor || '-'}>{item.waterColor || '-'}</td>
-                          <td className="px-2 py-2 text-gray-500 truncate max-w-[100px]" title={item.notes || '-'}>{item.notes || '-'}</td>
+                          <td className="px-2 py-2 text-center text-blue-600 font-medium">{item.waterTemperature && item.waterTemperature > 0 ? `${item.waterTemperature}°` : '-'}</td>
+                          <td className="px-2 py-2 text-center text-sky-600">{item.oxygen && item.oxygen > 0 ? item.oxygen : '-'}</td>
+                          <td className="px-2 py-2 text-center text-purple-600">{item.salinity && item.salinity > 0 ? item.salinity : '-'}</td>
+                          <td className="px-2 py-2 text-center text-indigo-600">{item.pH && item.pH > 0 ? item.pH : '-'}</td>
+                          <td className="px-2 py-2 text-center text-amber-600">{item.nh3 && item.nh3 > 0 ? item.nh3 : '-'}</td>
+                          <td className="px-2 py-2 text-center text-teal-600">{item.secchiDisk && item.secchiDisk > 0 ? `${item.secchiDisk}m` : '-'}</td>
+                          <td className="px-2 py-2 text-center text-green-600">{item.microalgaeConcentration && item.microalgaeConcentration > 0 ? item.microalgaeConcentration.toLocaleString() : '-'}</td>
+                          <td className="px-2 py-2 text-gray-500 truncate max-w-[150px]" title={item.notes || '-'}>{item.notes || '-'}</td>
                         </tr>
                       );
                     })
