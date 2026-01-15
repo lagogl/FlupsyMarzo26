@@ -885,26 +885,26 @@ export default function AnalisiScostamenti() {
                                     <>
                                       <div className="flex items-center justify-between gap-3">
                                         <Badge className="text-xs bg-blue-500 text-white">TP-2000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-2000'))} ordini</span>
+                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-2000'] || 0)} ordini</span>
                                       </div>
                                       <div className="flex items-center justify-between gap-3">
                                         <Badge className="text-xs bg-green-500 text-white">TP-3000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-3000'))} ordini</span>
+                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-3000'] || 0)} ordini</span>
                                       </div>
                                       <div className="flex items-center justify-between gap-3">
                                         <Badge className="text-xs bg-teal-500 text-white">TP-3500</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-3500'))} ordini</span>
+                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-3500'] || 0)} ordini</span>
                                       </div>
                                     </>
                                   ) : row.sizeCategory === 'T10' ? (
                                     <>
                                       <div className="flex items-center justify-between gap-3">
                                         <Badge className="text-xs bg-orange-500 text-white">TP-4000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-4000'))} ordini</span>
+                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-4000'] || 0)} ordini</span>
                                       </div>
                                       <div className="flex items-center justify-between gap-3">
                                         <Badge className="text-xs bg-red-500 text-white">TP-5000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(getOrdersForSize('TP-5000'))} ordini</span>
+                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-5000'] || 0)} ordini</span>
                                       </div>
                                     </>
                                   ) : (
