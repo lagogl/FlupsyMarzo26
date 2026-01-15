@@ -1607,5 +1607,47 @@ export function registerAIRoutes(app: Express) {
     }
   });
 
+  // Endpoint per analisi scenario AI
+  app.post("/api/ai/scenario-analysis", async (req: Request, res: Response) => {
+    try {
+      const { question, context, year = new Date().getFullYear() } = req.body;
+      
+      if (!question) {
+        return res.status(400).json({ success: false, error: 'Domanda richiesta' });
+      }
+      
+      // Validazione e defaults per context
+      const safeContext = {
+        currentInventory: context?.currentInventory || [],
+        monthlyData: context?.monthlyData || [],
+        ordersAbsoluteBySize: context?.ordersAbsoluteBySize || {},
+        mortalityBySize: context?.mortalityBySize || {},
+        mortalityAdjustment: context?.mortalityAdjustment || 0
+      };
+      
+      console.log('🤖 AI Scenario Analysis:', { question, year, hasContext: !!context });
+      
+      const { scenarioAnalysisService } = await import('../ai/scenario-analysis-service');
+      
+      const result = await scenarioAnalysisService.analyzeScenario(question, safeContext, year);
+      
+      res.json({ 
+        success: true, 
+        ...result 
+      });
+      
+    } catch (error) {
+      console.error('Errore analisi scenario AI:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Errore durante l\'analisi AI',
+        answer: 'Si è verificato un errore. Riprova più tardi.',
+        recommendations: [],
+        dataPoints: [],
+        confidence: 0
+      });
+    }
+  });
+
   console.log('🤖 Route AI registrate con successo');
 }

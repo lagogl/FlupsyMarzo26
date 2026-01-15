@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw, Download, Save, HelpCircle } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Target, Calendar, Package, Settings2, RefreshCw, Download, Save, HelpCircle, Send, Sparkles } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -991,12 +991,78 @@ interface ProductionRoadmapProps {
   mortalityBySize: Record<string, number>;
 }
 
+interface AIAnalysisResult {
+  answer: string;
+  recommendations: string[];
+  dataPoints: Array<{ label: string; value: string; trend: 'positive' | 'negative' | 'neutral' }>;
+  confidence: number;
+}
+
 function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory, seedingSchedule, mortalityBySize }: ProductionRoadmapProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [mortalityAdjustment, setMortalityAdjustment] = useState(0);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   
   // Taglie ordinate
   const sizes = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'];
+  
+  const askAI = async (question: string) => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiResult(null);
+    setAiQuestion(question);
+    
+    try {
+      const context = {
+        currentInventory: currentInventory.map(i => ({
+          sizeName: i.sizeName,
+          totalAnimals: i.totalAnimals,
+          sizeCategory: i.sizeCategory
+        })),
+        monthlyData: monthlyData.map(m => ({
+          month: m.month,
+          monthName: m.monthName,
+          sizeCategory: m.sizeCategory,
+          ordersAnimals: m.ordersAnimals,
+          productionForecast: m.productionForecast,
+          varianceOrdersProduction: m.varianceOrdersProduction,
+          status: m.status,
+          seminaT1Richiesta: m.seminaT1Richiesta,
+          meseSeminaT1: m.meseSeminaT1
+        })),
+        ordersAbsoluteBySize,
+        mortalityBySize,
+        mortalityAdjustment
+      };
+      
+      const response = await fetch('/api/ai/scenario-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, context, year: new Date().getFullYear() })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setAiResult({
+          answer: data.answer,
+          recommendations: data.recommendations || [],
+          dataPoints: data.dataPoints || [],
+          confidence: data.confidence || 0.8
+        });
+      } else {
+        setAiError(data.error || 'Errore durante l\'analisi');
+      }
+    } catch (error) {
+      console.error('Errore AI:', error);
+      setAiError('Errore di connessione. Riprova.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
   
   // Calcola mortalità effettiva per taglia con adjustment
   const getEffectiveMortality = (size: string) => {
@@ -1548,38 +1614,115 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
               })()}
             </div>
             
-            {/* Suggerimenti AI */}
+            {/* Suggerimenti AI e Input */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">💡 Domande Suggerite</Label>
-              <div className="space-y-2">
-                {[
-                  "Riesco a coprire gli ordini di Giugno con la giacenza attuale?",
-                  "Quanto devo seminare oggi per soddisfare il picco di Maggio?",
-                  "Qual è il mese più critico per la produzione T3?",
-                  "Come impatta un ritardo di 2 settimane nella semina?"
-                ].map((question, idx) => (
-                  <Button 
-                    key={idx}
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full justify-start text-left h-auto py-2 text-xs hover:bg-purple-50 hover:border-purple-300"
-                    onClick={() => {
-                      // Placeholder per integrazione AI futura
-                      alert(`🤖 Funzionalità AI in sviluppo!\n\nDomanda: "${question}"\n\nQuesta funzione utilizzerà GPT-4o per analizzare i dati e fornire risposte intelligenti.`);
-                    }}
-                  >
-                    <span className="mr-2">❓</span>
-                    {question}
-                  </Button>
-                ))}
+              <Label className="text-sm font-medium">💡 Chiedi all'AI</Label>
+              
+              {/* Input domanda personalizzata */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Fai una domanda sulla produzione..."
+                  value={aiQuestion}
+                  onChange={(e) => setAiQuestion(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && aiQuestion.trim() && askAI(aiQuestion)}
+                  disabled={aiLoading}
+                  className="text-xs"
+                />
+                <Button 
+                  size="sm" 
+                  onClick={() => aiQuestion.trim() && askAI(aiQuestion)}
+                  disabled={aiLoading || !aiQuestion.trim()}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
               </div>
               
-              <div className="pt-2 border-t">
-                <p className="text-xs text-muted-foreground italic">
-                  🔮 Prossimamente: integrazione completa con AI per simulazioni avanzate, 
-                  analisi predittiva e raccomandazioni automatiche.
-                </p>
+              {/* Domande suggerite */}
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">Domande suggerite:</span>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    "Copro gli ordini di Giugno?",
+                    "Quanto seminare per Maggio?",
+                    "Mese più critico?",
+                    "Impatto ritardo 2 sett?"
+                  ].map((question, idx) => (
+                    <Button 
+                      key={idx}
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-auto py-1 px-2 text-xs text-purple-600 hover:bg-purple-50"
+                      onClick={() => askAI(question)}
+                      disabled={aiLoading}
+                    >
+                      {question}
+                    </Button>
+                  ))}
+                </div>
               </div>
+              
+              {/* Risultato AI */}
+              {aiLoading && (
+                <div className="flex items-center justify-center p-4 bg-purple-50 rounded-lg">
+                  <Loader2 className="h-5 w-5 animate-spin text-purple-600 mr-2" />
+                  <span className="text-sm text-purple-700">Analisi in corso...</span>
+                </div>
+              )}
+              
+              {aiError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Errore</AlertTitle>
+                  <AlertDescription>{aiError}</AlertDescription>
+                </Alert>
+              )}
+              
+              {aiResult && !aiLoading && (
+                <div className="space-y-3 p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                  {/* Risposta principale */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="h-4 w-4 text-purple-600" />
+                      <span className="text-xs font-medium text-purple-700">Risposta AI</span>
+                      <Badge variant="outline" className="text-xs">
+                        {Math.round(aiResult.confidence * 100)}% confidence
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-800">{aiResult.answer}</p>
+                  </div>
+                  
+                  {/* Dati chiave */}
+                  {aiResult.dataPoints.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {aiResult.dataPoints.map((dp, idx) => (
+                        <div key={idx} className={`px-2 py-1 rounded text-xs ${
+                          dp.trend === 'positive' ? 'bg-green-100 text-green-700' :
+                          dp.trend === 'negative' ? 'bg-red-100 text-red-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          <span className="font-medium">{dp.label}:</span> {dp.value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Raccomandazioni */}
+                  {aiResult.recommendations.length > 0 && (
+                    <div>
+                      <span className="text-xs font-medium text-purple-700">Raccomandazioni:</span>
+                      <ul className="mt-1 space-y-1">
+                        {aiResult.recommendations.map((rec, idx) => (
+                          <li key={idx} className="text-xs text-gray-600 flex items-start gap-1">
+                            <span className="text-purple-500">•</span>
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
