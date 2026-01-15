@@ -279,7 +279,12 @@ export default function OperationForm({
   
   // Fetch operations for the selected basket
   const { data: basketOperations } = useQuery({
-    queryKey: ['/api/operations', watchBasketId],
+    queryKey: ['/api/operations', 'basket', watchBasketId],
+    queryFn: async () => {
+      if (!watchBasketId) return [];
+      const res = await fetch(`/api/operations?basketId=${watchBasketId}`);
+      return res.json();
+    },
     enabled: !!watchBasketId,
   });
   
