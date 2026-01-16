@@ -64,6 +64,8 @@ export default function Sgr() {
   const [rilSortDirection, setRilSortDirection] = useState<'asc' | 'desc'>('desc');
   const [rilDateFrom, setRilDateFrom] = useState<string>('');
   const [rilDateTo, setRilDateTo] = useState<string>('');
+  const [rilSiteFilter, setRilSiteFilter] = useState<string>('all');
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   
   // Array dei mesi in italiano
   const monthOrder = [
@@ -418,6 +420,9 @@ export default function Sgr() {
   // Filtra e ordina SGR Giornalieri
   const filteredAndSortedSgrGiornalieri = [...(sgrGiornalieri || [])]
     .filter((item: any) => {
+      // Filtro sito
+      if (rilSiteFilter !== 'all' && item.site !== rilSiteFilter) return false;
+      
       const recordDate = new Date(item.recordDate);
       if (rilDateFrom) {
         const fromDate = new Date(rilDateFrom);
@@ -1859,9 +1864,22 @@ export default function Sgr() {
             </Card>
           )}
 
-          {/* Filtri data */}
+          {/* Filtri data e sito */}
           <div className="bg-white rounded-lg shadow p-4 mb-4">
             <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="rilSiteFilter" className="text-sm font-medium text-gray-700">Sito:</Label>
+                <Select value={rilSiteFilter} onValueChange={setRilSiteFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Tutti i siti" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutti i siti</SelectItem>
+                    <SelectItem value="Ca Pisani">Ca Pisani</SelectItem>
+                    <SelectItem value="Delta Futuro">Delta Futuro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex items-center gap-2">
                 <Label htmlFor="rilDateFrom" className="text-sm font-medium text-gray-700">Da:</Label>
                 <Input
@@ -1882,15 +1900,50 @@ export default function Sgr() {
                   className="w-40"
                 />
               </div>
-              {(rilDateFrom || rilDateTo) && (
+              {(rilDateFrom || rilDateTo || rilSiteFilter !== 'all') && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { setRilDateFrom(''); setRilDateTo(''); }}
+                  onClick={() => { setRilDateFrom(''); setRilDateTo(''); setRilSiteFilter('all'); }}
                 >
                   Azzera filtri
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  setIsExportingExcel(true);
+                  try {
+                    const response = await fetch('/api/sgr-giornalieri/export-excel', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        siteFilter: rilSiteFilter !== 'all' ? rilSiteFilter : null,
+                        dateFrom: rilDateFrom || null,
+                        dateTo: rilDateTo || null
+                      })
+                    });
+                    if (!response.ok) throw new Error('Export failed');
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `rilevazioni_giornaliere_${rilSiteFilter !== 'all' ? rilSiteFilter.replace(' ', '_') : 'tutti'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error('Export error:', err);
+                  } finally {
+                    setIsExportingExcel(false);
+                  }
+                }}
+                disabled={isExportingExcel}
+                className="flex items-center gap-1"
+              >
+                <Download className="h-4 w-4" />
+                {isExportingExcel ? 'Esportazione...' : 'Esporta Excel'}
+              </Button>
               <span className="text-sm text-gray-500 ml-auto">
                 {filteredAndSortedSgrGiornalieri.length} record{filteredAndSortedSgrGiornalieri.length !== (sgrGiornalieri?.length || 0) && ` (su ${sgrGiornalieri?.length || 0} totali)`}
               </span>

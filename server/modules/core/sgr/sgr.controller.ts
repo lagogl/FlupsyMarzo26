@@ -5,6 +5,7 @@ import { fromZodError } from "zod-validation-error";
 import { z } from "zod";
 import { sgrScheduler } from "./sgr-scheduler";
 import { broadcastMessage } from "../../../websocket";
+import ExcelJS from "exceljs";
 
 export class SgrController {
   // ========== SGR Mensili (Monthly) ==========
@@ -311,6 +312,132 @@ export class SgrController {
     } catch (error) {
       console.error("Error triggering SGR calculation:", error);
       res.status(500).json({ message: "Failed to trigger SGR calculation" });
+    }
+  }
+
+  /**
+   * POST /api/sgr-giornalieri/export-excel
+   * Export SGR Giornalieri to Excel with elegant formatting
+   */
+  async exportSgrGiornalieriExcel(req: Request, res: Response) {
+    try {
+      const { siteFilter, dateFrom, dateTo } = req.body;
+
+      let data = await sgrService.getAllSgrGiornalieri();
+
+      // Apply filters
+      if (siteFilter) {
+        data = data.filter((item: any) => item.site === siteFilter);
+      }
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        data = data.filter((item: any) => new Date(item.recordDate) >= fromDate);
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        data = data.filter((item: any) => new Date(item.recordDate) <= toDate);
+      }
+
+      // Sort by date descending
+      data.sort((a: any, b: any) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
+
+      // Create workbook
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'FLUPSY Management System';
+      workbook.created = new Date();
+
+      const worksheet = workbook.addWorksheet('Rilevazioni Giornaliere', {
+        views: [{ state: 'frozen', ySplit: 1 }]
+      });
+
+      // Define columns
+      worksheet.columns = [
+        { header: 'Data', key: 'date', width: 12 },
+        { header: 'Sito', key: 'site', width: 15 },
+        { header: 'T. Acqua (°C)', key: 'waterTemp', width: 14 },
+        { header: 'Aria Min (°C)', key: 'airMin', width: 13 },
+        { header: 'Aria Max (°C)', key: 'airMax', width: 13 },
+        { header: 'Meteo', key: 'meteo', width: 16 },
+        { header: 'Salinità (‰)', key: 'salinity', width: 13 },
+        { header: 'pH', key: 'ph', width: 8 },
+        { header: 'O2 (mg/L)', key: 'oxygen', width: 11 },
+        { header: 'NH3 (mg/L)', key: 'nh3', width: 12 },
+        { header: 'Ammoniaca (mg/L)', key: 'ammonia', width: 16 },
+        { header: 'Secchi (m)', key: 'secchi', width: 11 },
+        { header: 'Microalghe (cell/ml)', key: 'microalgae', width: 18 },
+        { header: 'Specie Alghe', key: 'species', width: 18 },
+        { header: 'Colore Acqua', key: 'waterColor', width: 14 },
+        { header: 'Mortalità', key: 'mortality', width: 12 },
+        { header: 'Note', key: 'notes', width: 25 }
+      ];
+
+      // Style header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF3B82F6' }
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 22;
+
+      // Add data rows
+      data.forEach((item: any, index: number) => {
+        const row = worksheet.addRow({
+          date: new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(item.recordDate)),
+          site: item.site || '-',
+          waterTemp: item.waterTemperature ?? item.temperature ?? '-',
+          airMin: item.airTempMin ?? '-',
+          airMax: item.airTempMax ?? '-',
+          meteo: item.meteo || '-',
+          salinity: item.salinity ?? '-',
+          ph: item.pH ?? '-',
+          oxygen: item.oxygen ?? '-',
+          nh3: item.nh3 ?? '-',
+          ammonia: item.ammonia ?? '-',
+          secchi: item.secchiDisk ?? '-',
+          microalgae: item.microalgaeConcentration ?? '-',
+          species: item.microalgaeSpecies || '-',
+          waterColor: item.waterColor || '-',
+          mortality: item.mortality || '-',
+          notes: item.notes || '-'
+        });
+
+        // Alternate row colors
+        if (index % 2 === 1) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF3F4F6' }
+          };
+        }
+        row.alignment = { vertical: 'middle' };
+      });
+
+      // Add borders to all cells
+      worksheet.eachRow((row, rowNumber) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+      });
+
+      // Generate buffer
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=rilevazioni_giornaliere.xlsx');
+      res.send(buffer);
+
+    } catch (error) {
+      console.error("Error exporting SGR giornalieri to Excel:", error);
+      res.status(500).json({ message: "Failed to export SGR giornalieri" });
     }
   }
 }

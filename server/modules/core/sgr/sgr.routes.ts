@@ -13,6 +13,7 @@ router.patch("/sgr/:id", (req, res) => sgrController.updateSgr(req, res));
 // IMPORTANT: Specific routes MUST come before parameterized routes
 router.get("/sgr-giornalieri/date-range", (req, res) => sgrController.getSgrGiornalieriByDateRange(req, res));
 router.get("/sgr-giornalieri/by-id/:id", (req, res) => sgrController.getSgrGiornalieroById(req, res));
+router.post("/sgr-giornalieri/export-excel", (req, res) => sgrController.exportSgrGiornalieriExcel(req, res));
 router.get("/sgr-giornalieri", (req, res) => sgrController.getAllSgrGiornalieri(req, res));
 router.post("/sgr-giornalieri", (req, res) => sgrController.createSgrGiornaliero(req, res));
 router.patch("/sgr-giornalieri/:id", (req, res) => sgrController.updateSgrGiornaliero(req, res));
