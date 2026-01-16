@@ -19,6 +19,21 @@ export const insertUserSchema = createInsertSchema(users)
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// Preferenze menu utente
+export const userMenuPreferences = pgTable("user_menu_preferences", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  menuItems: text("menu_items").array().notNull().default([]),
+  compactModeEnabled: boolean("compact_mode_enabled").notNull().default(false),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertUserMenuPreferencesSchema = createInsertSchema(userMenuPreferences)
+  .omit({ id: true, updatedAt: true });
+
+export type InsertUserMenuPreferences = z.infer<typeof insertUserMenuPreferencesSchema>;
+export type UserMenuPreferences = typeof userMenuPreferences.$inferSelect;
+
 // Configurazioni Email
 export const emailConfig = pgTable("email_config", {
   id: serial("id").primaryKey(),
