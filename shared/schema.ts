@@ -105,7 +105,16 @@ export const operationTypes = [
   "peso",
   "selezione-origine",
   "dismissione",
-  "chiusura-ciclo-vagliatura"
+  "chiusura-ciclo-vagliatura",
+  "chiusura-ciclo"
+] as const;
+
+// Closure Destination Types (Destinazioni chiusura ciclo)
+export const closureDestinationTypes = [
+  "pending",           // In attesa di destinazione
+  "altra-cesta",       // Trasferimento in altra cesta (stesso o diverso FLUPSY)
+  "sand-nursery",      // Trasferimento a Sand Nursery
+  "mortalita"          // Animali persi - aggiorna statistiche lotto
 ] as const;
 
 // Screening (Operazioni di vagliatura)
@@ -933,6 +942,38 @@ export type InsertLotInventoryTransaction = z.infer<typeof insertLotInventoryTra
 // Tipi per le registrazioni della mortalità
 export type LotMortalityRecord = typeof lotMortalityRecords.$inferSelect;
 export type InsertLotMortalityRecord = z.infer<typeof insertLotMortalityRecordSchema>;
+
+// Pending Closures (Chiusure ciclo in attesa di destinazione)
+export const pendingClosures = pgTable("pending_closures", {
+  id: serial("id").primaryKey(),
+  cycleId: integer("cycle_id").notNull(), // Riferimento al ciclo chiuso
+  basketId: integer("basket_id").notNull(), // Riferimento al cestello
+  flupsyId: integer("flupsy_id").notNull(), // Riferimento al FLUPSY
+  lotId: integer("lot_id").notNull(), // Riferimento al lotto
+  operationId: integer("operation_id").notNull(), // Riferimento all'operazione di chiusura-ciclo
+  closureDate: date("closure_date").notNull(), // Data chiusura ciclo
+  animalCount: integer("animal_count").notNull(), // Numero animali al momento della chiusura
+  totalWeight: real("total_weight"), // Peso totale in grammi
+  sizeId: integer("size_id"), // Taglia al momento della chiusura
+  destination: text("destination", { enum: closureDestinationTypes }).notNull().default("pending"), // Destinazione
+  destinationBasketId: integer("destination_basket_id"), // Se destinazione=altra-cesta, riferimento al nuovo cestello
+  destinationNotes: text("destination_notes"), // Note sulla destinazione
+  resolvedAt: timestamp("resolved_at", { mode: 'string' }), // Data/ora risoluzione (null se pending)
+  resolvedBy: text("resolved_by"), // Operatore che ha risolto
+  createdAt: timestamp("created_at").notNull().defaultNow(), // Data creazione record
+}, (table) => ({
+  cycleIdIdx: index("pending_closures_cycle_id_idx").on(table.cycleId),
+  destinationIdx: index("pending_closures_destination_idx").on(table.destination),
+}));
+
+// Schema di inserimento per pending closures
+export const insertPendingClosureSchema = createInsertSchema(pendingClosures)
+  .omit({ id: true, createdAt: true });
+
+// Tipi per pending closures
+export type ClosureDestinationType = typeof closureDestinationTypes[number];
+export type PendingClosure = typeof pendingClosures.$inferSelect;
+export type InsertPendingClosure = z.infer<typeof insertPendingClosureSchema>;
 
 // Tabelle per sincronizzazione dati esterni per report vendite
 
