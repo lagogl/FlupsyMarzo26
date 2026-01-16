@@ -7,6 +7,7 @@ import { db } from '../db.js';
 import { operations, baskets, flupsys, sizes, cycles } from '../../shared/schema.js';
 import { eq, and, gte, lte, sql, isNull, or } from 'drizzle-orm';
 import { format, parseISO, isValid } from 'date-fns';
+import ExcelJS from 'exceljs';
 
 /**
  * Endpoint principale per calcolare le giacenze tra due date
@@ -340,4 +341,157 @@ async function calculateGiacenzeForRange(startDate: Date, endDate: Date, flupsyI
       media_giornaliera: mediaGiornaliera,
     }
   };
+}
+
+/**
+ * Esporta le giacenze in formato Excel
+ * POST /api/giacenze/export-excel
+ */
+export async function exportGiacenzeExcel(req: Request, res: Response) {
+  const { dateFrom, dateTo, flupsyId } = req.body;
+
+  if (!dateFrom || !dateTo) {
+    return res.status(400).json({ 
+      success: false, 
+      error: "Parametri dateFrom e dateTo sono obbligatori" 
+    });
+  }
+
+  const startDate = parseISO(dateFrom);
+  const endDate = parseISO(dateTo);
+  
+  if (!isValid(startDate) || !isValid(endDate)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: "Formato date non valido" 
+    });
+  }
+
+  try {
+    console.log(`📊 EXPORT EXCEL GIACENZE: ${dateFrom} - ${dateTo}`);
+    
+    const giacenzeData = await calculateGiacenzeForRange(startDate, endDate, flupsyId);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'FLUPSY Management System';
+    workbook.created = new Date();
+
+    // Foglio 1: Riepilogo
+    const summarySheet = workbook.addWorksheet('Riepilogo', {
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+    
+    summarySheet.columns = [
+      { header: 'Voce', key: 'voce', width: 25 },
+      { header: 'Valore', key: 'valore', width: 20 }
+    ];
+    
+    const headerStyle = { 
+      font: { bold: true, color: { argb: 'FFFFFFFF' } },
+      fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF3B82F6' } },
+      alignment: { vertical: 'middle' as const, horizontal: 'center' as const }
+    };
+    
+    summarySheet.getRow(1).font = headerStyle.font;
+    summarySheet.getRow(1).fill = headerStyle.fill;
+    summarySheet.getRow(1).alignment = headerStyle.alignment;
+    summarySheet.getRow(1).height = 22;
+
+    summarySheet.addRow({ voce: 'Periodo', valore: `${format(startDate, 'dd/MM/yyyy')} - ${format(endDate, 'dd/MM/yyyy')}` });
+    summarySheet.addRow({ voce: 'Giacenza Totale', valore: giacenzeData.totale_giacenza.toLocaleString('it-IT') });
+    summarySheet.addRow({ voce: 'Entrate Totali', valore: giacenzeData.totale_entrate.toLocaleString('it-IT') });
+    summarySheet.addRow({ voce: 'Uscite Totali', valore: giacenzeData.totale_uscite.toLocaleString('it-IT') });
+    summarySheet.addRow({ voce: 'Numero Operazioni', valore: giacenzeData.statistiche.numero_operazioni.toString() });
+    summarySheet.addRow({ voce: 'Giorni Analizzati', valore: giacenzeData.statistiche.giorni_analizzati.toString() });
+
+    // Foglio 2: Giacenze per Taglia
+    const taglieSheet = workbook.addWorksheet('Per Taglia', {
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+    
+    taglieSheet.columns = [
+      { header: 'Taglia', key: 'taglia', width: 15 },
+      { header: 'Entrate', key: 'entrate', width: 15 },
+      { header: 'Uscite', key: 'uscite', width: 15 },
+      { header: 'Giacenza', key: 'giacenza', width: 15 }
+    ];
+    
+    taglieSheet.getRow(1).font = headerStyle.font;
+    taglieSheet.getRow(1).fill = headerStyle.fill;
+    taglieSheet.getRow(1).alignment = headerStyle.alignment;
+    taglieSheet.getRow(1).height = 22;
+
+    giacenzeData.dettaglio_taglie
+      .sort((a, b) => b.giacenza - a.giacenza)
+      .forEach((taglia, index) => {
+        const row = taglieSheet.addRow({
+          taglia: taglia.code,
+          entrate: taglia.entrate.toLocaleString('it-IT'),
+          uscite: taglia.uscite.toLocaleString('it-IT'),
+          giacenza: taglia.giacenza.toLocaleString('it-IT')
+        });
+        if (index % 2 === 1) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+        }
+      });
+
+    // Foglio 3: Giacenze per FLUPSY
+    const flupsySheet = workbook.addWorksheet('Per FLUPSY', {
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+    
+    flupsySheet.columns = [
+      { header: 'FLUPSY', key: 'flupsy', width: 25 },
+      { header: 'Entrate', key: 'entrate', width: 15 },
+      { header: 'Uscite', key: 'uscite', width: 15 },
+      { header: 'Giacenza', key: 'giacenza', width: 15 }
+    ];
+    
+    flupsySheet.getRow(1).font = headerStyle.font;
+    flupsySheet.getRow(1).fill = headerStyle.fill;
+    flupsySheet.getRow(1).alignment = headerStyle.alignment;
+    flupsySheet.getRow(1).height = 22;
+
+    giacenzeData.dettaglio_flupsys
+      .sort((a, b) => b.giacenza - a.giacenza)
+      .forEach((flupsy, index) => {
+        const row = flupsySheet.addRow({
+          flupsy: flupsy.name,
+          entrate: flupsy.entrate.toLocaleString('it-IT'),
+          uscite: flupsy.uscite.toLocaleString('it-IT'),
+          giacenza: flupsy.giacenza.toLocaleString('it-IT')
+        });
+        if (index % 2 === 1) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+        }
+      });
+
+    // Aggiungi bordi a tutti i fogli
+    [summarySheet, taglieSheet, flupsySheet].forEach(sheet => {
+      sheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fileName = `giacenze_${format(startDate, 'yyyyMMdd')}_${format(endDate, 'yyyyMMdd')}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    res.send(buffer);
+
+  } catch (error: any) {
+    console.error("❌ ERRORE EXPORT EXCEL GIACENZE:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: "Errore nell'esportazione Excel" 
+    });
+  }
 }

@@ -4,6 +4,7 @@ import * as GiacenzeController from "../../../controllers/giacenze-controller";
 export class GiacenzeControllerClass {
   getRange = GiacenzeController.getGiacenzeRange;
   getSummary = GiacenzeController.getGiacenzeSummary;
+  exportExcel = GiacenzeController.exportGiacenzeExcel;
 }
 
 export const giacenzeController = new GiacenzeControllerClass();

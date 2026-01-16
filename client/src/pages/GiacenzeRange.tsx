@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CalendarDays, TrendingUp, TrendingDown, BarChart3, Building2 } from "lucide-react";
+import { CalendarDays, TrendingUp, TrendingDown, BarChart3, Building2, Download, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
 
@@ -76,6 +76,7 @@ export default function GiacenzeRange() {
   const [dateTo, setDateTo] = useState("2025-08-31");
   const [flupsyId, setFlupsyId] = useState("");
   const [showDetails, setShowDetails] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Query per giacenze dettagliate
   const { 
@@ -138,6 +139,35 @@ export default function GiacenzeRange() {
   const handleCalculateSummary = () => {
     setShowDetails(false);
     refetchSummary();
+  };
+
+  const handleExportExcel = async () => {
+    if (!giacenzeData?.success && !summaryData?.success) return;
+    
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/giacenze/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dateFrom, dateTo, flupsyId: flupsyId || undefined })
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `giacenze_${dateFrom}_${dateTo}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Export error:', error);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const formatNumber = (num: number) => num.toLocaleString('it-IT');
@@ -209,6 +239,21 @@ export default function GiacenzeRange() {
             >
               {isLoadingDetailed ? "Calcolando..." : "Calcolo Dettagliato"}
             </Button>
+            {(giacenzeData?.success || summaryData?.success) && (
+              <Button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                variant="outline"
+                className="gap-2"
+              >
+                {isExporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Esporta Excel
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
