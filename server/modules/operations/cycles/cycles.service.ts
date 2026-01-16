@@ -320,9 +320,10 @@ class CyclesService {
   }
 
   /**
-   * Chiude un ciclo
+   * Chiude un ciclo e aggiorna il cestello associato
    */
   async closeCycle(id: number, endDate: string) {
+    // 1. Chiudi il ciclo
     const [closedCycle] = await db
       .update(cycles)
       .set({ 
@@ -331,6 +332,20 @@ class CyclesService {
       })
       .where(eq(cycles.id, id))
       .returning();
+    
+    if (closedCycle) {
+      // 2. Aggiorna il cestello: stato available, rimuovi riferimento al ciclo
+      await db
+        .update(baskets)
+        .set({ 
+          state: 'available',
+          currentCycleId: null,
+          cycleCode: null
+        })
+        .where(eq(baskets.id, closedCycle.basketId));
+      
+      console.log(`✅ Ciclo ${id} chiuso e cestello ${closedCycle.basketId} impostato come disponibile`);
+    }
     
     // Invalida cache
     cacheService.clear();
