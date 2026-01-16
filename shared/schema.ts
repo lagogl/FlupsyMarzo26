@@ -951,6 +951,7 @@ export const pendingClosures = pgTable("pending_closures", {
   flupsyId: integer("flupsy_id").notNull(), // Riferimento al FLUPSY
   lotId: integer("lot_id").notNull(), // Riferimento al lotto
   operationId: integer("operation_id").notNull(), // Riferimento all'operazione di chiusura-ciclo
+  cycleCode: text("cycle_code"), // Codice ciclo per ripristino in caso di annullamento
   closureDate: date("closure_date").notNull(), // Data chiusura ciclo
   animalCount: integer("animal_count").notNull(), // Numero animali al momento della chiusura
   totalWeight: real("total_weight"), // Peso totale in grammi

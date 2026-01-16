@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { AlertCircle, CheckCircle, Package, Waves, Skull, ArrowRight, Calendar, Hash, Scale } from "lucide-react";
+import { AlertCircle, CheckCircle, Package, Waves, Skull, ArrowRight, Calendar, Hash, Scale, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 
@@ -79,6 +79,42 @@ export default function PendingClosures() {
       });
     }
   });
+
+  const cancelMutation = useMutation({
+    mutationFn: async ({ id }: { id: number }) => {
+      return apiRequest(`/api/cycles/pending-closures/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({
+          cancelledBy: user?.username || 'Operatore',
+          reason: 'Annullamento manuale'
+        }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Chiusura annullata",
+        description: "Il ciclo è stato riaperto e il cestello ripristinato"
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/cycles/pending-closures'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cycles/pending-closures/count'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Errore annullamento",
+        description: error.message
+      });
+    }
+  });
+
+  const handleCancel = (id: number) => {
+    if (window.confirm('Sei sicuro di voler annullare questa chiusura? Il ciclo verrà riaperto.')) {
+      cancelMutation.mutate({ id });
+    }
+  };
 
   const getDestinationLabel = (dest: string) => {
     switch (dest) {
@@ -256,6 +292,19 @@ export default function PendingClosures() {
                           Questa azione aggiornerà le statistiche di mortalità del lotto
                         </p>
                       )}
+                      
+                      <div className="pt-2 border-t">
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCancel(closure.id)}
+                          disabled={cancelMutation.isPending}
+                          className="w-full text-muted-foreground hover:text-red-600 hover:border-red-300"
+                        >
+                          <Undo2 className="h-4 w-4 mr-2" />
+                          {cancelMutation.isPending ? 'Annullamento...' : 'Annulla chiusura e riapri ciclo'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

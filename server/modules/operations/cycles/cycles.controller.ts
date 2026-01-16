@@ -285,6 +285,50 @@ export class CyclesController {
       });
     }
   }
+
+  /**
+   * Annulla una chiusura pendente e ripristina lo stato precedente
+   * POST /api/cycles/pending-closures/:id/cancel
+   */
+  async cancelPendingClosure(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      const { cancelledBy, reason } = req.body;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "ID non valido" });
+      }
+      
+      if (!cancelledBy) {
+        return res.status(400).json({ message: "Nome operatore obbligatorio" });
+      }
+
+      const result = await cyclesService.cancelPendingClosure(id, cancelledBy, reason);
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error cancelling pending closure:", error);
+      const errorMessage = (error as Error).message;
+      
+      if (errorMessage.includes('non trovata')) {
+        return res.status(404).json({ 
+          message: "Chiusura pendente non trovata",
+          error: errorMessage 
+        });
+      }
+      if (errorMessage.includes('già risolta')) {
+        return res.status(409).json({ 
+          message: "Impossibile annullare - chiusura già risolta",
+          error: errorMessage 
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Errore annullamento chiusura",
+        error: errorMessage 
+      });
+    }
+  }
 }
 
 export const cyclesController = new CyclesController();

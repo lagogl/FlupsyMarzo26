@@ -22,5 +22,6 @@ router.post('/', (req, res) => cyclesController.createCycle(req, res));
 // Route di azioni specifiche
 router.post('/:id/close', (req, res) => cyclesController.closeCycle(req, res));
 router.post('/pending-closures/:id/resolve', (req, res) => cyclesController.resolvePendingClosure(req, res));
+router.post('/pending-closures/:id/cancel', (req, res) => cyclesController.cancelPendingClosure(req, res));
 
 export default router;

@@ -334,7 +334,8 @@ class CyclesService {
         id: cycles.id,
         basketId: cycles.basketId,
         lotId: cycles.lotId,
-        state: cycles.state
+        state: cycles.state,
+        cycleCode: cycles.cycleCode // Per ripristino in caso di annullamento
       })
       .from(cycles)
       .where(eq(cycles.id, id))
@@ -415,6 +416,7 @@ class CyclesService {
           flupsyId: basket.flupsyId,
           lotId: lotId || 0,
           operationId: closureOperation.id,
+          cycleCode: cycle.cycleCode, // Salva per ripristino in caso di annullamento
           closureDate: endDate,
           animalCount: animalCount,
           totalWeight: totalWeight,
@@ -599,6 +601,87 @@ class CyclesService {
     cacheService.clear();
     
     return resolved;
+  }
+
+  /**
+   * Annulla una chiusura pendente e ripristina lo stato precedente
+   * NOTA: Funziona SOLO per chiusure non ancora risolte (destination='pending')
+   * Ripristina: ciclo attivo, cestello occupato, elimina operazione e pending record
+   */
+  async cancelPendingClosure(id: number, cancelledBy: string, reason?: string) {
+    console.log(`🔄 Annullamento pending closure ${id}`);
+    
+    // 1. Recupera il record pending
+    const pendingData = await db
+      .select()
+      .from(pendingClosures)
+      .where(eq(pendingClosures.id, id))
+      .limit(1);
+    
+    if (!pendingData[0]) {
+      throw new Error(`Pending closure ${id} non trovata`);
+    }
+    
+    const pending = pendingData[0];
+    
+    if (pending.destination !== 'pending') {
+      throw new Error(`Pending closure ${id} già risolta - impossibile annullare`);
+    }
+    
+    // Esegui tutte le operazioni in transazione per atomicità
+    await db.transaction(async (tx) => {
+      // 2. Riapri il ciclo (stato active, rimuovi endDate)
+      await tx
+        .update(cycles)
+        .set({ 
+          state: 'active',
+          endDate: null
+        })
+        .where(eq(cycles.id, pending.cycleId));
+      
+      console.log(`✅ Ciclo ${pending.cycleId} riaperto`);
+      
+      // 3. Ripristina il cestello (stato occupied, riferimento al ciclo)
+      await tx
+        .update(baskets)
+        .set({ 
+          state: 'occupied',
+          currentCycleId: pending.cycleId,
+          cycleCode: pending.cycleCode
+        })
+        .where(eq(baskets.id, pending.basketId));
+      
+      console.log(`✅ Cestello ${pending.basketId} ripristinato`);
+      
+      // 4. Elimina l'operazione di chiusura-ciclo
+      await tx
+        .delete(operations)
+        .where(and(
+          eq(operations.id, pending.operationId),
+          eq(operations.type, 'chiusura-ciclo')
+        ));
+      
+      console.log(`✅ Operazione chiusura-ciclo ${pending.operationId} eliminata`);
+      
+      // 5. Elimina il record pending_closures
+      await tx
+        .delete(pendingClosures)
+        .where(eq(pendingClosures.id, id));
+      
+      console.log(`✅ Pending closure ${id} eliminata`);
+    });
+    
+    console.log(`✅ Chiusura ciclo ${pending.cycleId} annullata da ${cancelledBy}${reason ? ` - Motivo: ${reason}` : ''}`);
+    
+    // Invalida cache
+    cacheService.clear();
+    
+    return { 
+      success: true, 
+      message: `Chiusura ciclo annullata. Ciclo ${pending.cycleId} riattivato.`,
+      cycleId: pending.cycleId,
+      basketId: pending.basketId
+    };
   }
 }
 
