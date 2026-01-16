@@ -23,6 +23,13 @@ export class AuthService {
   }
 
   /**
+   * Change user password
+   */
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<{ success: boolean; message?: string }> {
+    return await storage.changeUserPassword(userId, currentPassword, newPassword);
+  }
+
+  /**
    * Sanitize user data for response (remove password)
    */
   sanitizeUser(user: any) {

@@ -127,6 +127,68 @@ export class AuthController {
       message: "Non autenticato"
     });
   }
+
+  /**
+   * POST /api/change-password
+   * Change user password - requires current password validation (self-service)
+   * Security: Current password verification prevents unauthorized changes
+   */
+  async changePassword(req: Request, res: Response) {
+    try {
+      const { userId, currentPassword, newPassword } = req.body;
+
+      if (!userId || !currentPassword || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "ID utente, password attuale e nuova password sono richiesti"
+        });
+      }
+
+      const userIdNum = parseInt(userId);
+      if (isNaN(userIdNum) || userIdNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "ID utente non valido"
+        });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "La nuova password deve essere di almeno 6 caratteri"
+        });
+      }
+
+      if (currentPassword === newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "La nuova password deve essere diversa da quella attuale"
+        });
+      }
+
+      const result = await authService.changePassword(userIdNum, currentPassword, newPassword);
+      
+      if (result.success) {
+        console.log(`✅ Password changed successfully for user ID ${userIdNum}`);
+        return res.json({
+          success: true,
+          message: "Password modificata con successo"
+        });
+      } else {
+        console.log(`❌ Password change failed for user ID ${userIdNum}: ${result.message}`);
+        return res.status(400).json({
+          success: false,
+          message: result.message || "Password attuale non corretta"
+        });
+      }
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({
+        success: false,
+        message: "Errore durante il cambio password"
+      });
+    }
+  }
 }
 
 export const authController = new AuthController();

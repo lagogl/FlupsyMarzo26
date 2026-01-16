@@ -190,6 +190,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', authModule.authRoutes);
   console.log('✅ Modulo AUTH registrato su /api/login, /api/logout, /api/register, /api/users/current');
 
+  // Registra il modulo MENU-PREFERENCES
+  const menuPreferencesModule = await import('./modules/system/menu-preferences');
+  app.use('/api', menuPreferencesModule.menuPreferencesRoutes);
+  console.log('✅ Modulo MENU-PREFERENCES registrato su /api/menu-preferences/:userId');
+
   // Registra il modulo MORTALITY-RATES
   const mortalityRatesModule = await import('./modules/core/mortality-rates');
   app.use('/api', mortalityRatesModule.mortalityRatesRoutes);

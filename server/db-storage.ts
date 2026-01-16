@@ -104,6 +104,35 @@ export class DbStorage implements IStorage {
     
     return null;
   }
+
+  async changeUserPassword(userId: number, currentPassword: string, newPassword: string): Promise<{ success: boolean; message?: string }> {
+    const user = await this.getUserById(userId);
+    if (!user) {
+      return { success: false, message: "Utente non trovato" };
+    }
+
+    let isCurrentPasswordValid = false;
+    
+    if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
+      isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    } else {
+      isCurrentPasswordValid = user.password === currentPassword;
+    }
+
+    if (!isCurrentPasswordValid) {
+      return { success: false, message: "Password attuale non corretta" };
+    }
+
+    const saltRounds = 12;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+    
+    await db.update(users)
+      .set({ password: hashedNewPassword })
+      .where(eq(users.id, userId));
+
+    console.log(`Password changed for user ID ${userId} (${user.username})`);
+    return { success: true };
+  }
   
   // MIGRATION: Hash existing plain text passwords
   async hashExistingPasswords(): Promise<{ migrated: number; alreadyHashed: number; errors: number }> {

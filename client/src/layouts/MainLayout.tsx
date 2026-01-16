@@ -1,5 +1,6 @@
 import { useState, ReactNode, useEffect } from "react";
 import { useLocation, Link } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Home, Package, FileText, RefreshCw, Package2, BarChart2, 
   Scale, TrendingUp, Settings as SettingsIcon, Menu, Bell, 
@@ -8,7 +9,7 @@ import {
   ChevronRight, LayoutDashboard, PieChart, BarChart, BarChart3, Filter,
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
-  ClipboardList, Users, FolderOpen, Sparkles, Radio, Target
+  ClipboardList, Users, FolderOpen, Sparkles, Radio, Target, Eye, EyeOff, Star
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -16,6 +17,7 @@ import NotificationBell from "@/components/NotificationBell";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "@/hooks/use-translation";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -51,8 +53,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [location, setLocation] = useLocation();
-  const { user, logout } = useAuth(); // Aggiungiamo l'hook useAuth
-  const { translations, currentLanguage, changeLanguage } = useTranslation(); // Hook per traduzioni
+  const { user, logout } = useAuth();
+  const { translations, currentLanguage, changeLanguage } = useTranslation();
+  const queryClient = useQueryClient();
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     'operational': false,
     'monitoring': false,
@@ -60,6 +63,31 @@ export default function MainLayout({ children }: MainLayoutProps) {
     'analysis': false,
     'sales': false,
     'system': false
+  });
+
+  // Carica preferenze menu dell'utente
+  const { data: menuPrefs } = useQuery({
+    queryKey: ['/api/menu-preferences', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return { data: { menuItems: [], compactModeEnabled: false } };
+      const res = await fetch(`/api/menu-preferences/${user.id}`);
+      return res.json();
+    },
+    enabled: !!user?.id,
+    staleTime: 60000
+  });
+
+  const compactMode = menuPrefs?.data?.compactModeEnabled ?? false;
+  const favoriteMenuItems: string[] = menuPrefs?.data?.menuItems ?? [];
+
+  // Toggle modalità compatta
+  const toggleCompactMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest(`/api/menu-preferences/${user?.id}/toggle-compact`, { method: 'POST' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/menu-preferences', user?.id] });
+    }
   });
 
   // Effetto per gestire la sidebar in base alla pagina e al dispositivo
@@ -273,17 +301,64 @@ export default function MainLayout({ children }: MainLayoutProps) {
           } fixed md:static h-[calc(100vh-60px)] z-40 ${!sidebarOpen ? "md:hidden" : ""}`}>
           <div className="flex justify-between items-center p-4 border-b">
             <h2 className="font-semibold text-lg">{translations.menu}</h2>
-            {isMobile && (
-              <button 
-                onClick={() => setSidebarOpen(false)}
-                className="p-1 rounded-md hover:bg-gray-100 focus:outline-none"
-              >
-                <CloseIcon className="h-5 w-5" />
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {user?.id && (
+                <button
+                  onClick={() => toggleCompactMutation.mutate()}
+                  className={`p-1.5 rounded-md transition-colors ${compactMode ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-500'}`}
+                  title={compactMode ? "Mostra tutto" : "Menu compatto"}
+                >
+                  {compactMode ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                </button>
+              )}
+              {user?.id && (
+                <button
+                  onClick={() => setLocation('/menu-settings')}
+                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500"
+                  title="Configura menu"
+                >
+                  <Star className="h-4 w-4" />
+                </button>
+              )}
+              {isMobile && (
+                <button 
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-1 rounded-md hover:bg-gray-100 focus:outline-none"
+                >
+                  <CloseIcon className="h-5 w-5" />
+                </button>
+              )}
+            </div>
           </div>
           <nav className="p-3 space-y-2">
-            {navCategories.map((category) => (
+            {/* Modalità compatta: mostra solo i preferiti */}
+            {compactMode && favoriteMenuItems.length > 0 ? (
+              <div className="space-y-1">
+                <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">I tuoi preferiti</div>
+                {navCategories.flatMap(cat => cat.items).filter(item => favoriteMenuItems.includes(item.path)).map((item) => (
+                  <a
+                    key={item.path}
+                    onClick={(e) => { e.preventDefault(); handleNavClick(item.path); }}
+                    href={item.path}
+                    className={`flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors cursor-pointer ${
+                      isActive(item.path) ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                    }`}
+                  >
+                    {item.icon}
+                    <span className="text-sm">{item.label}</span>
+                  </a>
+                ))}
+                <div className="pt-2 border-t mt-2">
+                  <button
+                    onClick={() => toggleCompactMutation.mutate()}
+                    className="w-full text-center text-xs text-blue-600 hover:text-blue-800 py-2"
+                  >
+                    Mostra tutto il menu
+                  </button>
+                </div>
+              </div>
+            ) : (
+            navCategories.map((category) => (
               <div key={category.id} className="space-y-1">
                 {/* Header della categoria */}
                 <div 
@@ -335,7 +410,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   </div>
                 )}
               </div>
-            ))}
+            ))
+            )}
           </nav>
           
           {/* Selettore di lingua in fondo alla sidebar */}

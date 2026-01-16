@@ -36,6 +36,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUserLastLogin(id: number): Promise<void>;
   validateUser(username: string, password: string): Promise<User | null>;
+  changeUserPassword(userId: number, currentPassword: string, newPassword: string): Promise<{ success: boolean; message?: string }>;
   
   // FLUPSY methods
   getFlupsys(): Promise<Flupsy[]>;
