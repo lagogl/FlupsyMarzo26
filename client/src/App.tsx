@@ -79,6 +79,8 @@ import AnalisiScostamenti from "@/pages/AnalisiScostamenti";
 import Operators from "@/pages/Operators";
 // Importazione Menu Settings (Impostazioni Personali)
 import MenuSettings from "@/pages/MenuSettings";
+// Importazione Pending Closures (Chiusure Ciclo Pendenti)
+import PendingClosures from "@/pages/PendingClosures";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
@@ -116,6 +118,7 @@ function Router() {
       <ProtectedRoute path="/spreadsheet-operations" component={SpreadsheetOperations}/>
       <ProtectedRoute path="/cycles" component={CyclesPaginated}/>
       <ProtectedRoute path="/cycles/:id" component={CycleDetail}/>
+      <ProtectedRoute path="/pending-closures" component={PendingClosures}/>
       <ProtectedRoute path="/lots" component={Lots}/>
       <ProtectedRoute path="/statistics" component={Statistics}/>
       <ProtectedRoute path="/lots-analytics" component={LotsAnalytics}/>

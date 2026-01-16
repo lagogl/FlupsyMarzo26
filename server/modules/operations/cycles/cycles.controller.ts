@@ -141,7 +141,7 @@ export class CyclesController {
 
   /**
    * POST /api/cycles/:id/close
-   * Chiude un ciclo
+   * Chiude un ciclo creando operazione e record pending
    */
   async closeCycle(req: Request, res: Response) {
     try {
@@ -151,18 +151,137 @@ export class CyclesController {
       }
 
       const endDate = req.body.endDate || new Date().toISOString().split('T')[0];
+      const notes = req.body.notes as string | undefined;
       
-      const closedCycle = await cyclesService.closeCycle(id, endDate);
-      if (!closedCycle) {
+      const result = await cyclesService.closeCycle(id, endDate, notes);
+      if (!result) {
         return res.status(404).json({ message: "Cycle not found" });
       }
 
-      res.json(closedCycle);
+      res.json({
+        message: "Ciclo chiuso con successo. Animali in attesa di destinazione.",
+        ...result
+      });
     } catch (error) {
       console.error("Error closing cycle:", error);
+      const errorMessage = (error as Error).message;
+      
+      // Gestione errori specifici
+      if (errorMessage.includes('già chiuso')) {
+        return res.status(409).json({ 
+          message: "Ciclo già chiuso",
+          error: errorMessage 
+        });
+      }
+      if (errorMessage.includes('non trovato')) {
+        return res.status(404).json({ 
+          message: "Ciclo non trovato",
+          error: errorMessage 
+        });
+      }
+      
       res.status(500).json({ 
-        message: "Failed to close cycle",
-        error: (error as Error).message 
+        message: "Errore chiusura ciclo",
+        error: errorMessage 
+      });
+    }
+  }
+
+  /**
+   * GET /api/cycles/pending-closures
+   * Ottiene chiusure in attesa di destinazione
+   */
+  async getPendingClosures(req: Request, res: Response) {
+    try {
+      const flupsyId = req.query.flupsyId ? parseInt(req.query.flupsyId as string) : undefined;
+      const pendingClosures = await cyclesService.getPendingClosures(flupsyId);
+      res.json(pendingClosures);
+    } catch (error) {
+      console.error("Error getting pending closures:", error);
+      res.status(500).json({ message: "Failed to get pending closures" });
+    }
+  }
+
+  /**
+   * GET /api/cycles/pending-closures/count
+   * Conta chiusure pendenti (per notifiche)
+   */
+  async getPendingClosuresCount(req: Request, res: Response) {
+    try {
+      const count = await cyclesService.getPendingClosuresCount();
+      res.json({ count });
+    } catch (error) {
+      console.error("Error getting pending closures count:", error);
+      res.status(500).json({ message: "Failed to get pending closures count" });
+    }
+  }
+
+  /**
+   * POST /api/cycles/pending-closures/:id/resolve
+   * Risolve una chiusura pendente assegnando la destinazione
+   */
+  async resolvePendingClosure(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid pending closure ID" });
+      }
+
+      const { destination, resolvedBy, destinationNotes, destinationBasketId } = req.body;
+      
+      if (!destination) {
+        return res.status(400).json({ message: "Destinazione obbligatoria" });
+      }
+      
+      if (!['altra-cesta', 'sand-nursery', 'mortalita'].includes(destination)) {
+        return res.status(400).json({ 
+          message: "Destinazione non valida. Opzioni: altra-cesta, sand-nursery, mortalita" 
+        });
+      }
+      
+      if (!resolvedBy) {
+        return res.status(400).json({ message: "Nome operatore obbligatorio" });
+      }
+
+      const resolved = await cyclesService.resolvePendingClosure(
+        id,
+        destination,
+        resolvedBy,
+        destinationNotes,
+        destinationBasketId ? parseInt(destinationBasketId) : undefined
+      );
+
+      const destinationLabels: Record<string, string> = {
+        'altra-cesta': 'Trasferimento in altra cesta',
+        'sand-nursery': 'Trasferimento a Sand Nursery',
+        'mortalita': 'Registrato come mortalità'
+      };
+
+      res.json({
+        message: `Destinazione assegnata: ${destinationLabels[destination]}`,
+        resolved
+      });
+    } catch (error) {
+      console.error("Error resolving pending closure:", error);
+      const errorMessage = (error as Error).message;
+      
+      // Gestione errori specifici
+      if (errorMessage.includes('già risolta')) {
+        return res.status(409).json({ 
+          message: "Chiusura già risolta",
+          error: errorMessage 
+        });
+      }
+      if (errorMessage.includes('non trovata')) {
+        return res.status(404).json({ 
+          message: "Chiusura pendente non trovata",
+          error: errorMessage 
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Errore risoluzione chiusura",
+        error: errorMessage 
       });
     }
   }

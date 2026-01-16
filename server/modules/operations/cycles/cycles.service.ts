@@ -4,8 +4,8 @@
  */
 
 import { sql, eq, and, asc, desc } from 'drizzle-orm';
-import { db } from '../../../db';
-import { cycles, baskets, flupsys, lots } from '../../../../shared/schema';
+import { db, pool } from '../../../db';
+import { cycles, baskets, flupsys, lots, operations, pendingClosures } from '../../../../shared/schema';
 
 // Cache service per cicli
 interface CacheItem {
@@ -320,37 +320,285 @@ class CyclesService {
   }
 
   /**
-   * Chiude un ciclo e aggiorna il cestello associato
+   * Chiude un ciclo con creazione operazione e record pending
+   * FASE 1: Chiusura ciclo con animali in attesa di destinazione
+   * FASE 2: Operatore assegnerà destinazione (altra-cesta, sand-nursery, mortalità)
+   * NOTA: Tutte le operazioni sono eseguite in transazione per garantire atomicità
    */
-  async closeCycle(id: number, endDate: string) {
-    // 1. Chiudi il ciclo
-    const [closedCycle] = await db
-      .update(cycles)
-      .set({ 
-        state: 'closed',
-        endDate 
-      })
-      .where(eq(cycles.id, id))
-      .returning();
+  async closeCycle(id: number, endDate: string, notes?: string) {
+    console.log(`🔄 Avvio chiusura ciclo ${id} con data ${endDate}`);
     
-    if (closedCycle) {
-      // 2. Aggiorna il cestello: stato available, rimuovi riferimento al ciclo
-      await db
+    // 1. Recupera dati del ciclo (prima della transazione per validazione)
+    const cycleData = await db
+      .select({
+        id: cycles.id,
+        basketId: cycles.basketId,
+        lotId: cycles.lotId,
+        state: cycles.state
+      })
+      .from(cycles)
+      .where(eq(cycles.id, id))
+      .limit(1);
+    
+    if (!cycleData[0]) {
+      throw new Error(`Ciclo ${id} non trovato`);
+    }
+    
+    const cycle = cycleData[0];
+    
+    if (cycle.state === 'closed') {
+      throw new Error(`Ciclo ${id} già chiuso`);
+    }
+    
+    // 2. Recupera dati del cestello per ottenere flupsyId
+    const basketData = await db
+      .select({
+        flupsyId: baskets.flupsyId,
+        physicalNumber: baskets.physicalNumber
+      })
+      .from(baskets)
+      .where(eq(baskets.id, cycle.basketId))
+      .limit(1);
+    
+    const basket = basketData[0];
+    if (!basket) {
+      throw new Error(`Cestello ${cycle.basketId} non trovato`);
+    }
+    
+    // 3. Recupera l'ultima operazione del ciclo per avere i dati attuali
+    const lastOperationData = await db
+      .select({
+        animalCount: operations.animalCount,
+        totalWeight: operations.totalWeight,
+        sizeId: operations.sizeId,
+        lotId: operations.lotId
+      })
+      .from(operations)
+      .where(eq(operations.cycleId, id))
+      .orderBy(desc(operations.date), desc(operations.id))
+      .limit(1);
+    
+    const lastOp = lastOperationData[0];
+    const animalCount = lastOp?.animalCount || 0;
+    const totalWeight = lastOp?.totalWeight || null;
+    const sizeId = lastOp?.sizeId || null; // Mantieni null se non disponibile
+    const lotId = lastOp?.lotId || cycle.lotId;
+    
+    console.log(`📊 Ultima operazione: ${animalCount} animali, ${totalWeight}g, sizeId=${sizeId}`);
+    
+    // Esegui tutte le operazioni di scrittura in transazione per atomicità
+    const result = await db.transaction(async (tx) => {
+      // 4. Crea operazione di tipo "chiusura-ciclo"
+      const [closureOperation] = await tx
+        .insert(operations)
+        .values({
+          date: endDate,
+          type: 'chiusura-ciclo',
+          basketId: cycle.basketId,
+          cycleId: id,
+          sizeId: sizeId || 1, // Default size 1 solo se necessario (schema richiede NOT NULL)
+          lotId: lotId,
+          animalCount: animalCount,
+          totalWeight: totalWeight,
+          notes: notes || 'Chiusura ciclo - animali in attesa di destinazione'
+        })
+        .returning();
+      
+      console.log(`✅ Creata operazione chiusura-ciclo ID ${closureOperation.id}`);
+      
+      // 5. Crea record pending_closures per tracciare la destinazione
+      const [pendingRecord] = await tx
+        .insert(pendingClosures)
+        .values({
+          cycleId: id,
+          basketId: cycle.basketId,
+          flupsyId: basket.flupsyId,
+          lotId: lotId || 0,
+          operationId: closureOperation.id,
+          closureDate: endDate,
+          animalCount: animalCount,
+          totalWeight: totalWeight,
+          sizeId: sizeId,
+          destination: 'pending',
+          destinationNotes: notes
+        })
+        .returning();
+      
+      console.log(`📋 Creato record pending closure ID ${pendingRecord.id}`);
+      
+      // 6. Chiudi il ciclo
+      const [closedCycle] = await tx
+        .update(cycles)
+        .set({ 
+          state: 'closed',
+          endDate 
+        })
+        .where(eq(cycles.id, id))
+        .returning();
+      
+      // 7. Aggiorna il cestello: stato available, rimuovi riferimento al ciclo
+      await tx
         .update(baskets)
         .set({ 
           state: 'available',
           currentCycleId: null,
           cycleCode: null
         })
-        .where(eq(baskets.id, closedCycle.basketId));
+        .where(eq(baskets.id, cycle.basketId));
       
-      console.log(`✅ Ciclo ${id} chiuso e cestello ${closedCycle.basketId} impostato come disponibile`);
-    }
+      return {
+        cycle: closedCycle,
+        operation: closureOperation,
+        pendingClosure: pendingRecord
+      };
+    });
+    
+    console.log(`✅ Ciclo ${id} chiuso, cestello ${cycle.basketId} disponibile, ${animalCount} animali in attesa destinazione`);
     
     // Invalida cache
     cacheService.clear();
     
-    return closedCycle;
+    return result;
+  }
+
+  /**
+   * Ottiene chiusure pendenti (animali in attesa di destinazione)
+   */
+  async getPendingClosures(flupsyId?: number) {
+    let query = db
+      .select({
+        id: pendingClosures.id,
+        cycleId: pendingClosures.cycleId,
+        basketId: pendingClosures.basketId,
+        flupsyId: pendingClosures.flupsyId,
+        lotId: pendingClosures.lotId,
+        closureDate: pendingClosures.closureDate,
+        animalCount: pendingClosures.animalCount,
+        totalWeight: pendingClosures.totalWeight,
+        destination: pendingClosures.destination,
+        createdAt: pendingClosures.createdAt,
+        basketNumber: baskets.physicalNumber,
+        flupsyName: flupsys.name,
+        lotSupplier: lots.supplier
+      })
+      .from(pendingClosures)
+      .leftJoin(baskets, eq(pendingClosures.basketId, baskets.id))
+      .leftJoin(flupsys, eq(pendingClosures.flupsyId, flupsys.id))
+      .leftJoin(lots, eq(pendingClosures.lotId, lots.id))
+      .where(eq(pendingClosures.destination, 'pending'))
+      .orderBy(desc(pendingClosures.createdAt));
+    
+    if (flupsyId) {
+      query = query.where(and(
+        eq(pendingClosures.destination, 'pending'),
+        eq(pendingClosures.flupsyId, flupsyId)
+      ));
+    }
+    
+    return await query;
+  }
+
+  /**
+   * Conta chiusure pendenti (per notifica)
+   */
+  async getPendingClosuresCount() {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(pendingClosures)
+      .where(eq(pendingClosures.destination, 'pending'));
+    
+    return result[0]?.count || 0;
+  }
+
+  /**
+   * Risolve una chiusura pendente assegnando la destinazione
+   * NOTA: Tutte le operazioni sono eseguite in transazione per garantire atomicità
+   * @param id - ID del record pending_closures
+   * @param destination - Tipo destinazione: altra-cesta, sand-nursery, mortalita
+   * @param resolvedBy - Nome operatore
+   * @param destinationNotes - Note opzionali
+   * @param destinationBasketId - ID cestello destinazione (solo per altra-cesta, opzionale)
+   */
+  async resolvePendingClosure(
+    id: number, 
+    destination: 'altra-cesta' | 'sand-nursery' | 'mortalita',
+    resolvedBy: string,
+    destinationNotes?: string,
+    destinationBasketId?: number
+  ) {
+    console.log(`🔄 Risoluzione pending closure ${id} → ${destination}`);
+    
+    // 1. Recupera il record pending (prima della transazione per validazione)
+    const pendingData = await db
+      .select()
+      .from(pendingClosures)
+      .where(eq(pendingClosures.id, id))
+      .limit(1);
+    
+    if (!pendingData[0]) {
+      throw new Error(`Pending closure ${id} non trovata`);
+    }
+    
+    const pending = pendingData[0];
+    
+    if (pending.destination !== 'pending') {
+      throw new Error(`Pending closure ${id} già risolta con destinazione: ${pending.destination}`);
+    }
+    
+    const now = new Date().toISOString();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Esegui tutte le operazioni in transazione per atomicità
+    const resolved = await db.transaction(async (tx) => {
+      // 2. Se mortalità, aggiorna statistiche lotto
+      if (destination === 'mortalita' && pending.lotId) {
+        const lotData = await tx
+          .select({
+            totalMortality: lots.totalMortality
+          })
+          .from(lots)
+          .where(eq(lots.id, pending.lotId))
+          .limit(1);
+        
+        if (lotData[0]) {
+          const currentMortality = lotData[0].totalMortality || 0;
+          const newTotalMortality = currentMortality + pending.animalCount;
+          
+          await tx
+            .update(lots)
+            .set({
+              totalMortality: newTotalMortality,
+              lastMortalityDate: today,
+              mortalityNotes: destinationNotes || 'Mortalità da chiusura ciclo'
+            })
+            .where(eq(lots.id, pending.lotId));
+          
+          console.log(`📊 Mortalità lotto ${pending.lotId} aggiornata: ${currentMortality} → ${newTotalMortality}`);
+        }
+      }
+      
+      // 3. Aggiorna il record pending_closures
+      const [resolvedRecord] = await tx
+        .update(pendingClosures)
+        .set({
+          destination,
+          destinationBasketId: destination === 'altra-cesta' ? destinationBasketId : null,
+          destinationNotes: destinationNotes || null,
+          resolvedAt: now,
+          resolvedBy
+        })
+        .where(eq(pendingClosures.id, id))
+        .returning();
+      
+      return resolvedRecord;
+    });
+    
+    console.log(`✅ Pending closure ${id} risolta: ${pending.animalCount} animali → ${destination}`);
+    
+    // Invalida cache
+    cacheService.clear();
+    
+    return resolved;
   }
 }
 

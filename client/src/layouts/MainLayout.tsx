@@ -9,7 +9,8 @@ import {
   ChevronRight, LayoutDashboard, PieChart, BarChart, BarChart3, Filter,
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
-  ClipboardList, Users, FolderOpen, Sparkles, Radio, Target, Eye, EyeOff, Star
+  ClipboardList, Users, FolderOpen, Sparkles, Radio, Target, Eye, EyeOff, Star,
+  AlertCircle
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -76,6 +77,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
     enabled: !!user?.id,
     staleTime: 60000
   });
+
+  // Conta chiusure ciclo pendenti (per notifica)
+  const { data: pendingClosuresData } = useQuery({
+    queryKey: ['/api/cycles/pending-closures/count'],
+    refetchInterval: 60000, // Aggiorna ogni minuto
+    staleTime: 30000
+  });
+  const pendingClosuresCount = (pendingClosuresData as { count?: number })?.count || 0;
 
   const compactMode = menuPrefs?.data?.compactModeEnabled ?? false;
   const favoriteMenuItems: string[] = menuPrefs?.data?.menuItems ?? [];
@@ -164,6 +173,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       color: 'text-orange-600',
       items: [
         { icon: <RefreshCw className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.productionCycles, path: "/cycles" },
+        { icon: <AlertCircle className="h-5 w-5 mr-2 text-red-600" />, label: "Chiusure Pendenti", path: "/pending-closures", badge: pendingClosuresCount > 0 ? pendingClosuresCount : undefined },
         { icon: <Scale className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.sizeTable, path: "/sizes" },
         { icon: <Boxes className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockInventory, path: "/inventory" },
         { icon: <CalendarDays className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockRangeCalculation, path: "/giacenze-range" }
