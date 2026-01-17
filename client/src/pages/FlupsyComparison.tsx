@@ -924,6 +924,107 @@ export default function FlupsyComparison() {
     );
   };
 
+  // Renderizza la tabella per la modalità Taglia Target
+  const renderTargetSizeTable = () => {
+    const rows = [...new Set(fluspyBaskets.map(b => b.row))].filter(Boolean).sort();
+    
+    return (
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fila</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cesta</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ciclo</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Giorni Stimati</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Transizione</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stato</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {fluspyBaskets.map((basket, idx) => {
+                const latestOperation = getLatestOperationForBasket(basket.id);
+                const cycle = getCycleForBasket(basket.id);
+                
+                if (!latestOperation || latestOperation.animalsPerKg === null) {
+                  return (
+                    <tr key={basket.id} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
+                      <td className="px-3 py-2 text-sm">{basket.row || '-'}</td>
+                      <td className="px-3 py-2 text-sm font-medium"># {basket.physicalNumber}</td>
+                      <td className="px-3 py-2 text-sm text-gray-500">{cycle ? `C#${cycle.id}` : '-'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-400">-</td>
+                      <td className="px-3 py-2 text-sm text-gray-400">-</td>
+                      <td className="px-3 py-2">
+                        <Badge className="bg-gray-200 text-gray-600 text-xs">Nessun dato</Badge>
+                      </td>
+                    </tr>
+                  );
+                }
+                
+                const currentWeight = 1000000 / latestOperation.animalsPerKg;
+                const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+                const daysToTarget = getDaysToReachTargetSize(basket.id, targetSizeCode);
+                const willReach = willReachTargetSize(basket.id, targetSizeCode);
+                
+                let statusBadge;
+                let statusColor;
+                if (currentSize?.code === targetSizeCode) {
+                  statusBadge = 'Raggiunta';
+                  statusColor = 'bg-green-500 text-white';
+                } else if (!willReach || daysToTarget === null) {
+                  statusBadge = 'Non raggiungibile';
+                  statusColor = 'bg-red-500 text-white';
+                } else {
+                  statusBadge = 'In crescita';
+                  statusColor = 'bg-yellow-500 text-white';
+                }
+                
+                const currentSizeDisplay = currentSize?.code?.startsWith('TP-') && parseInt(currentSize.code.replace('TP-', '')) >= 10000 
+                  ? '+TP-10000' 
+                  : (currentSize?.code || '?');
+                
+                return (
+                  <tr key={basket.id} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
+                    <td className="px-3 py-2 text-sm">{basket.row || '-'}</td>
+                    <td className="px-3 py-2 text-sm font-medium"># {basket.physicalNumber}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500">{cycle ? `C#${cycle.id}` : '-'}</td>
+                    <td className="px-3 py-2 text-sm">
+                      {currentSize?.code === targetSizeCode ? (
+                        <span className="text-green-600 font-medium">0</span>
+                      ) : daysToTarget !== null ? (
+                        <span className="font-medium flex items-center">
+                          <Clock className="h-3 w-3 mr-1 text-gray-400" />
+                          {daysToTarget}
+                        </span>
+                      ) : (
+                        <span className="text-red-500">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-sm">
+                      <div className="flex items-center">
+                        <Badge className={`${getSizeColorWithBorder(currentSizeDisplay)} text-xs mr-1`}>
+                          {currentSizeDisplay}
+                        </Badge>
+                        <ArrowRight className="h-3 w-3 mx-1 text-gray-400" />
+                        <Badge className={`${getSizeColorWithBorder(targetSizeCode)} text-xs`}>
+                          {targetSizeCode}
+                        </Badge>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge className={`${statusColor} text-xs`}>{statusBadge}</Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   // Funzione per generare e scaricare il report Excel
   const generateExcelReport = () => {
     if (!fluspyBaskets || fluspyBaskets.length === 0 || !selectedFlupsy) {
@@ -1449,56 +1550,57 @@ export default function FlupsyComparison() {
                     </div>
                   </div>
                   
-                  {/* Estrai le righe (es. SX, DX) disponibili */}
-                  {(() => {
-                    // Converti i cestelli in una matrice per riga/posizione
-                    const rows = [...new Set(fluspyBaskets.map(b => b.row))].filter(Boolean).sort();
-                    
-                    // Calcola il numero massimo di posizioni tra tutte le righe
-                    const maxPosition = Math.max(
-                      ...fluspyBaskets.map(b => b.position || 0), 
-                      8 // Minimo 8 posizioni per visualizzazione
-                    );
-                    
-                    // Crea una matrice di cestelli
-                    const basketMatrix = {};
-                    rows.forEach(row => {
-                      basketMatrix[row] = Array(maxPosition).fill(null);
-                    });
-                    
-                    // Riempi la matrice con i cestelli
-                    fluspyBaskets.forEach(basket => {
-                      if (basket.row && basket.position !== null) {
-                        basketMatrix[basket.row][basket.position - 1] = basket;
-                      }
-                    });
-                    
-                    return (
-                      <div className="space-y-6">
-                        {rows.map(row => (
-                          <div key={row} className="rounded-md">
-                            <div className="flex items-center mb-2">
-                              <div className="text-sm font-medium bg-gray-100 px-2 py-1 rounded">
-                                Fila {row}
+                  {/* Visualizzazione: Tabella per Taglia Target, Cards per Data Futura */}
+                  {currentTabId === 'taglia-target' ? (
+                    renderTargetSizeTable()
+                  ) : (
+                    (() => {
+                      // Converti i cestelli in una matrice per riga/posizione
+                      const rows = [...new Set(fluspyBaskets.map(b => b.row))].filter(Boolean).sort();
+                      
+                      // Calcola il numero massimo di posizioni tra tutte le righe
+                      const maxPosition = Math.max(
+                        ...fluspyBaskets.map(b => b.position || 0), 
+                        8 // Minimo 8 posizioni per visualizzazione
+                      );
+                      
+                      // Crea una matrice di cestelli
+                      const basketMatrix = {};
+                      rows.forEach(row => {
+                        basketMatrix[row] = Array(maxPosition).fill(null);
+                      });
+                      
+                      // Riempi la matrice con i cestelli
+                      fluspyBaskets.forEach(basket => {
+                        if (basket.row && basket.position !== null) {
+                          basketMatrix[basket.row][basket.position - 1] = basket;
+                        }
+                      });
+                      
+                      return (
+                        <div className="space-y-6">
+                          {rows.map(row => (
+                            <div key={row} className="rounded-md">
+                              <div className="flex items-center mb-2">
+                                <div className="text-sm font-medium bg-gray-100 px-2 py-1 rounded">
+                                  Fila {row}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {basketMatrix[row].map((basket, position) => (
+                                  <div key={position}>
+                                    {renderFutureBasket(basket)}
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                              {basketMatrix[row].map((basket, position) => (
-                                <div key={position}>
-                                  {currentTabId === 'data-futuro' ? 
-                                    renderFutureBasket(basket) : 
-                                    renderTargetSizeBasket(basket)
-                                  }
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                        
-                        {/* Sezione cestelli senza posizione rimossa per evitare confusione nel modulo di confronto */}
-                      </div>
-                    );
-                  })()}
+                          ))}
+                          
+                          {/* Sezione cestelli senza posizione rimossa per evitare confusione nel modulo di confronto */}
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
               )}
             </div>
