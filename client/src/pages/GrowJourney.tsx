@@ -102,8 +102,15 @@ export default function GrowJourney() {
   const sgrs = sgrsData as any[] || [];
   const flupsys = flupsysData as any[] || [];
 
-  // Filtra i cicli attivi
-  const activeCycles = cycles.filter((cycle: any) => cycle.state === 'active');
+  // Filtra i cicli in base allo stato selezionato
+  const filteredCycles = cycles.filter((cycle: any) => {
+    if (cycleStateFilter === 'active') return cycle.state === 'active';
+    if (cycleStateFilter === 'closed') return cycle.state === 'closed';
+    return true; // 'all'
+  });
+  
+  // Manteniamo activeCycles per compatibilità con il resto del codice
+  const activeCycles = filteredCycles;
 
   // Effetto per impostare il ciclo selezionato di default
   useEffect(() => {
@@ -266,15 +273,16 @@ export default function GrowJourney() {
               }
             }}
           >
-            <SelectTrigger className="w-[420px]">
+            <SelectTrigger className="w-[450px]">
               <SelectValue placeholder="Seleziona un ciclo" />
             </SelectTrigger>
             <SelectContent>
               {activeCycles.map((cycle: any) => {
-                const cycleBasket = baskets.find((b: any) => b.id === cycle.basketId);
-                // Trova il flupsy dal basket
-                const flupsy = flupsys.find((f: any) => f.id === cycleBasket?.flupsyId);
-                // Trova l'ultima operazione di misura per ottenere la taglia attuale (case-insensitive)
+                // Usa i dati direttamente dal ciclo (già arricchiti dall'API)
+                const basketNumber = cycle.basketPhysicalNumber || '?';
+                const flupsyName = cycle.flupsyName || '-';
+                
+                // Trova l'ultima operazione di misura per ottenere la taglia attuale
                 const cycleOps = operations.filter((op: any) => 
                   op.cycleId === cycle.id && 
                   (op.type === 'Misura' || op.type === 'misura') && 
@@ -288,15 +296,14 @@ export default function GrowJourney() {
                   const size = getTargetSizeForWeight(weight, sizes);
                   currentSize = size?.code || '';
                 }
-                const flupsyName = flupsy?.name || cycleBasket?.flupsyName || '';
                 return (
                   <SelectItem key={cycle.id} value={cycle.id.toString()}>
                     <span className="flex items-center gap-2 text-sm">
                       <span className="font-semibold">C{cycle.id}</span>
                       <span className="text-muted-foreground">|</span>
-                      <span>#{cycleBasket?.physicalNumber || '?'}</span>
+                      <span>#{basketNumber}</span>
                       <span className="text-muted-foreground">|</span>
-                      <span className="truncate max-w-[100px]">{flupsyName || '-'}</span>
+                      <span className="truncate max-w-[120px]">{flupsyName}</span>
                       {currentSize && (
                         <>
                           <span className="text-muted-foreground">|</span>
@@ -325,6 +332,21 @@ export default function GrowJourney() {
             <PopoverContent className="w-80">
               <div className="space-y-4">
                 <h4 className="font-medium">Opzioni di visualizzazione</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm">Stato cicli</label>
+                  </div>
+                  <Select value={cycleStateFilter} onValueChange={(v: 'active' | 'closed' | 'all') => setCycleStateFilter(v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Solo attivi</SelectItem>
+                      <SelectItem value="closed">Solo chiusi</SelectItem>
+                      <SelectItem value="all">Tutti</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm">Giorni di proiezione</label>
