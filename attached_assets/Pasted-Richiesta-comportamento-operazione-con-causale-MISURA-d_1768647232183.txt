@@ -1,0 +1,84 @@
+Richiesta: comportamento operazione con causale MISURA (diversa da NUOVA ATTIVAZIONE)
+Scopo dell’operazione MISURA
+
+L’operazione MISURA deve servire esclusivamente a:
+
+Ricalcolare i parametri (pz/kg, peso medio, ecc.) sulla base del campione
+e/o
+
+Registrare la mortalità nella cesta, aggiornando correttamente il numero animali.
+
+⚠️ MISURA non deve comportarsi come NUOVA ATTIVAZIONE.
+
+Regole fondamentali
+1) Campo “Peso totale”
+
+In MISURA il campo Peso Totale NON deve essere richiesto.
+
+Deve restare invariato rispetto al valore impostato in Prima Attivazione.
+
+In UI: il campo dovrebbe essere non obbligatorio e idealmente bloccato/readonly in MISURA.
+
+2) Mortalità
+
+La mortalità (%) deve essere calcolata come:
+
+Mortalità % = (N morti / (N vivi + N morti)) × 100
+
+La mortalità va detratta dal numero animali precedente (ultima operazione valida della stessa cesta).
+
+3) Aggiornamento “Numero animali”
+
+In MISURA, il nuovo numero animali deve essere calcolato automaticamente:
+
+N_animali_nuovo = N_animali_ultima_operazione × (100 − Mortalità%) / 100
+
+L’utente non deve essere costretto a modificare manualmente N animali.
+
+4) Calcolo pz/kg (animali per kg)
+
+Deve essere calcolato dal campione:
+
+pz/kg = (N vivi / grammi campione) × 1000
+
+Esempio: 300 vivi con campione 10 g → (300/10)*1000 = 30.000 pz/kg ✅
+
+Test case di verifica (riproducibile)
+
+Percorso: Operazioni → seleziona una cesta già attiva → MISURA
+
+Inserire:
+
+Grammi campione: 10 g
+
+Numero animali vivi: 300
+
+Numero animali morti: 5
+
+Peso totale: NON compilare (deve restare quello della prima attivazione, senza obbligo)
+
+Atteso:
+
+Mortalità % = 5 / (300+5) × 100 = 1,639…% ≈ 1,64%
+
+pz/kg = (300 / 10) × 1000 = 30.000 ✅
+
+Peso medio: coerente con pz/kg ✅
+
+Numero animali: aggiornato automaticamente con formula:
+
+N nuovo = N ultima operazione × (100 − 1,64) / 100
+
+Problema attuale (bug)
+
+Attualmente l’app non consente di registrare MISURA se:
+
+non viene inserito il Peso totale, oppure
+
+non si forza manualmente la modifica del Numero animali.
+
+➡️ Correzione richiesta:
+
+In causale MISURA, consentire il salvataggio senza Peso totale, e calcolare automaticamente Numero animali e gli altri valori derivati.
+
+Se vuoi, posso anche riscriverlo come criteri di accettazione (stile QA) o come pseudo-specifica per AppSheet (valid_if, required_if, app formula, actions).
