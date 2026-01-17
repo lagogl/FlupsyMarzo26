@@ -111,56 +111,80 @@ export async function getGiacenzeSummary(req: Request, res: Response) {
     
     const startTime = Date.now();
     
-    // Costruisci condizioni per la query
-    let whereConditions = and(
-      gte(operations.date, dateFrom as string),
-      lte(operations.date, dateTo as string)
-    );
+    // Costruisci filtro FLUPSY opzionale
+    const flupsyFilter = flupsyId 
+      ? sql`AND b.flupsy_id = ${parseInt(flupsyId as string)}` 
+      : sql``;
     
-    // Se è specificato un FLUPSY, filtra anche per quello
-    if (flupsyId) {
-      whereConditions = and(
-        whereConditions,
-        eq(baskets.flupsyId, parseInt(flupsyId as string))
-      );
-    }
+    // Query CORRETTA: prende l'ULTIMA operazione di ogni cestello attivo
+    // invece di sommare tutte le operazioni (che era sbagliato)
+    const giacenzaResult = await db.execute(sql`
+      WITH latest_ops AS (
+        SELECT DISTINCT ON (o.basket_id) 
+          o.basket_id,
+          o.animal_count,
+          o.date,
+          o.type,
+          b.flupsy_id
+        FROM operations o
+        JOIN baskets b ON b.id = o.basket_id
+        WHERE b.state = 'active'
+          AND o.type IN ('misura', 'peso', 'prima-attivazione')
+          AND o.animal_count > 0
+          AND o.date <= ${dateTo as string}
+          ${flupsyFilter}
+        ORDER BY o.basket_id, o.date DESC, o.id DESC
+      )
+      SELECT 
+        COALESCE(SUM(animal_count), 0) as totale_giacenza,
+        COUNT(*) as cestelli_coinvolti,
+        COUNT(DISTINCT flupsy_id) as flupsys_coinvolti
+      FROM latest_ops
+    `);
     
-    // Query per statistiche aggregate
-    const stats = await db.select({
-      totale_entrate: sql<number>`COALESCE(SUM(CASE 
-        WHEN ${operations.type} IN ('prima-attivazione', 'misura', 'peso', 'pulizia') 
-        THEN COALESCE(${operations.animalCount}, 0) 
-        ELSE 0 
-      END), 0)`,
-      totale_uscite: sql<number>`COALESCE(SUM(CASE 
-        WHEN ${operations.type} = 'vendita' 
-        THEN COALESCE(${operations.animalCount}, 0) 
-        ELSE 0 
-      END), 0)`,
-      numero_operazioni: sql<number>`COUNT(*)`,
-      cestelli_coinvolti: sql<number>`COUNT(DISTINCT ${operations.basketId})`,
-      flupsys_coinvolti: sql<number>`COUNT(DISTINCT ${baskets.flupsyId})`
-    })
-    .from(operations)
-    .leftJoin(baskets, eq(operations.basketId, baskets.id))
-    .where(whereConditions);
+    // Query per entrate totali (prima-attivazione) nel periodo
+    const entrateResult = await db.execute(sql`
+      SELECT COALESCE(SUM(o.animal_count), 0) as totale_entrate
+      FROM operations o
+      JOIN baskets b ON b.id = o.basket_id
+      WHERE o.type = 'prima-attivazione'
+        AND o.date >= ${dateFrom as string}
+        AND o.date <= ${dateTo as string}
+        ${flupsyFilter}
+    `);
+    
+    // Query per uscite totali (vendita) nel periodo
+    const usciteResult = await db.execute(sql`
+      SELECT COALESCE(SUM(o.animal_count), 0) as totale_uscite
+      FROM operations o
+      JOIN baskets b ON b.id = o.basket_id
+      WHERE o.type = 'vendita'
+        AND o.date >= ${dateFrom as string}
+        AND o.date <= ${dateTo as string}
+        ${flupsyFilter}
+    `);
+    
+    // Query per conteggio operazioni nel periodo
+    const operazioniResult = await db.execute(sql`
+      SELECT COUNT(*) as numero_operazioni
+      FROM operations o
+      JOIN baskets b ON b.id = o.basket_id
+      WHERE o.date >= ${dateFrom as string}
+        AND o.date <= ${dateTo as string}
+        ${flupsyFilter}
+    `);
 
-    const result = stats[0] || {
-      totale_entrate: 0,
-      totale_uscite: 0,
-      numero_operazioni: 0,
-      cestelli_coinvolti: 0,
-      flupsys_coinvolti: 0
-    };
+    const giacenzaRow = giacenzaResult.rows[0] as any;
+    const entrateRow = entrateResult.rows[0] as any;
+    const usciteRow = usciteResult.rows[0] as any;
+    const operazioniRow = operazioniResult.rows[0] as any;
 
-    // Converti stringhe in numeri (PostgreSQL restituisce SUM come numeric/string)
-    const totale_entrate = Number(result.totale_entrate) || 0;
-    const totale_uscite = Number(result.totale_uscite) || 0;
-    const numero_operazioni = Number(result.numero_operazioni) || 0;
-    const cestelli_coinvolti = Number(result.cestelli_coinvolti) || 0;
-    const flupsys_coinvolti = Number(result.flupsys_coinvolti) || 0;
-    
-    const totale_giacenza = totale_entrate - totale_uscite;
+    const totale_giacenza = parseInt(giacenzaRow?.totale_giacenza) || 0;
+    const totale_entrate = parseInt(entrateRow?.totale_entrate) || 0;
+    const totale_uscite = parseInt(usciteRow?.totale_uscite) || 0;
+    const numero_operazioni = parseInt(operazioniRow?.numero_operazioni) || 0;
+    const cestelli_coinvolti = parseInt(giacenzaRow?.cestelli_coinvolti) || 0;
+    const flupsys_coinvolti = parseInt(giacenzaRow?.flupsys_coinvolti) || 0;
     
     const duration = Date.now() - startTime;
     console.log(`✅ RIEPILOGO COMPLETATO: ${duration}ms - Giacenza: ${totale_giacenza} animali`);
@@ -191,154 +215,133 @@ export async function getGiacenzeSummary(req: Request, res: Response) {
 
 /**
  * Calcola le giacenze esatte per un range di date
+ * NOTA: Giacenza = somma dell'ULTIMA operazione di ogni cestello attivo (non somma tutte le operazioni)
  */
 async function calculateGiacenzeForRange(startDate: Date, endDate: Date, flupsyId?: string) {
   const dateFromStr = format(startDate, 'yyyy-MM-dd');
   const dateToStr = format(endDate, 'yyyy-MM-dd');
 
-  // Costruisci condizioni per la query
-  let whereConditions = and(
-    gte(operations.date, dateFromStr),
-    lte(operations.date, dateToStr)
-  );
+  // Filtro FLUPSY opzionale
+  const flupsyFilter = flupsyId 
+    ? sql`AND b.flupsy_id = ${parseInt(flupsyId)}` 
+    : sql``;
 
-  // Se è specificato un FLUPSY, filtra anche per quello
-  if (flupsyId) {
-    whereConditions = and(
-      whereConditions,
-      eq(baskets.flupsyId, parseInt(flupsyId))
-    );
-  }
+  // Query CORRETTA per giacenza: ultima operazione di ogni cestello attivo
+  const giacenzaResult = await db.execute(sql`
+    WITH latest_ops AS (
+      SELECT DISTINCT ON (o.basket_id) 
+        o.basket_id,
+        o.animal_count,
+        o.date,
+        o.type,
+        o.size_id,
+        b.flupsy_id,
+        f.name as flupsy_name,
+        s.code as size_code
+      FROM operations o
+      JOIN baskets b ON b.id = o.basket_id
+      LEFT JOIN flupsys f ON b.flupsy_id = f.id
+      LEFT JOIN sizes s ON o.size_id = s.id
+      WHERE b.state = 'active'
+        AND o.type IN ('misura', 'peso', 'prima-attivazione')
+        AND o.animal_count > 0
+        AND o.date <= ${dateToStr}
+        ${flupsyFilter}
+      ORDER BY o.basket_id, o.date DESC, o.id DESC
+    )
+    SELECT 
+      basket_id,
+      animal_count,
+      flupsy_id,
+      flupsy_name,
+      size_code
+    FROM latest_ops
+  `);
 
-  // Query principale con tutte le operazioni del periodo
-  const operationsData = await db.select({
-    id: operations.id,
-    date: operations.date,
-    type: operations.type,
-    animalCount: operations.animalCount,
-    basketId: operations.basketId,
-    basketNumber: baskets.physicalNumber,
-    sizeCode: sizes.code,
-    flupsyId: baskets.flupsyId,
-    flupsyName: flupsys.name,
-  })
-  .from(operations)
-  .leftJoin(baskets, eq(operations.basketId, baskets.id))
-  .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
-  .leftJoin(sizes, eq(operations.sizeId, sizes.id))
-  .where(whereConditions)
-  .orderBy(operations.date);
+  // Query per entrate (prima-attivazione) nel periodo
+  const entrateResult = await db.execute(sql`
+    SELECT COALESCE(SUM(o.animal_count), 0) as totale
+    FROM operations o
+    JOIN baskets b ON b.id = o.basket_id
+    WHERE o.type = 'prima-attivazione'
+      AND o.date >= ${dateFromStr}
+      AND o.date <= ${dateToStr}
+      ${flupsyFilter}
+  `);
 
-  // Calcola totali e dettagli
-  let totale_entrate = 0;
-  let totale_uscite = 0;
-  const dettaglio_operazioni = {
-    'prima-attivazione': 0,
-    'ripopolamento': 0,
-    'cessazione': 0,
-    'vendita': 0,
-  };
+  // Query per uscite (vendita) nel periodo
+  const usciteResult = await db.execute(sql`
+    SELECT COALESCE(SUM(o.animal_count), 0) as totale
+    FROM operations o
+    JOIN baskets b ON b.id = o.basket_id
+    WHERE o.type = 'vendita'
+      AND o.date >= ${dateFromStr}
+      AND o.date <= ${dateToStr}
+      ${flupsyFilter}
+  `);
 
-  // Mappa per dettagli per taglia
-  const taglieMap = new Map<string, { entrate: number; uscite: number }>();
-  
-  // Mappa per dettagli per FLUPSY
-  const flupsysMap = new Map<number, { name: string; entrate: number; uscite: number }>();
+  // Calcola totale giacenza dall'ultima operazione di ogni cestello
+  let totale_giacenza = 0;
+  const taglieMap = new Map<string, number>();
+  const flupsysMap = new Map<number, { name: string; giacenza: number }>();
 
-  // Mappa per operazioni per data
-  const operationsByDate: Record<string, Array<any>> = {};
-
-  // Processa ogni operazione
-  for (const op of operationsData) {
-    const animalCount = op.animalCount || 0;
-    
-    // Classifica entrate e uscite
-    const isEntrata = ['prima-attivazione', 'ripopolamento'].includes(op.type);
-    const isUscita = ['vendita', 'cessazione'].includes(op.type);
-
-    if (isEntrata) {
-      totale_entrate += animalCount;
-      if (op.type in dettaglio_operazioni) {
-        dettaglio_operazioni[op.type as keyof typeof dettaglio_operazioni] += animalCount;
-      }
-    } else if (isUscita) {
-      totale_uscite += animalCount;
-      if (op.type in dettaglio_operazioni) {
-        dettaglio_operazioni[op.type as keyof typeof dettaglio_operazioni] += animalCount;
-      }
-    }
+  for (const row of giacenzaResult.rows as any[]) {
+    const animalCount = parseInt(row.animal_count) || 0;
+    totale_giacenza += animalCount;
 
     // Aggrega per taglia
-    if (op.sizeCode) {
-      if (!taglieMap.has(op.sizeCode)) {
-        taglieMap.set(op.sizeCode, { entrate: 0, uscite: 0 });
-      }
-      const taglia = taglieMap.get(op.sizeCode)!;
-      if (isEntrata) taglia.entrate += animalCount;
-      if (isUscita) taglia.uscite += animalCount;
-    }
+    const sizeCode = row.size_code || 'N/A';
+    taglieMap.set(sizeCode, (taglieMap.get(sizeCode) || 0) + animalCount);
 
     // Aggrega per FLUPSY
-    if (op.flupsyId && op.flupsyName) {
-      if (!flupsysMap.has(op.flupsyId)) {
-        flupsysMap.set(op.flupsyId, { name: op.flupsyName, entrate: 0, uscite: 0 });
-      }
-      const flupsy = flupsysMap.get(op.flupsyId)!;
-      if (isEntrata) flupsy.entrate += animalCount;
-      if (isUscita) flupsy.uscite += animalCount;
+    if (row.flupsy_id) {
+      const existing = flupsysMap.get(row.flupsy_id) || { name: row.flupsy_name || 'N/A', giacenza: 0 };
+      existing.giacenza += animalCount;
+      flupsysMap.set(row.flupsy_id, existing);
     }
-
-    // Aggrega per data
-    const dateKey = op.date;
-    if (!operationsByDate[dateKey]) {
-      operationsByDate[dateKey] = [];
-    }
-    operationsByDate[dateKey].push({
-      id: op.id,
-      type: op.type,
-      animalCount: animalCount,
-      basketNumber: op.basketNumber,
-      flupsyName: op.flupsyName || 'N/A',
-      sizeCode: op.sizeCode || 'N/A'
-    });
   }
 
+  const totale_entrate = parseInt((entrateResult.rows[0] as any)?.totale) || 0;
+  const totale_uscite = parseInt((usciteResult.rows[0] as any)?.totale) || 0;
+
   // Costruisci array dettaglio taglie
-  const dettaglio_taglie = Array.from(taglieMap.entries()).map(([code, data]) => ({
+  const dettaglio_taglie = Array.from(taglieMap.entries()).map(([code, giacenza]) => ({
     code,
-    name: code, // Il nome coincide con il codice
-    entrate: data.entrate,
-    uscite: data.uscite,
-    giacenza: data.entrate - data.uscite
+    name: code,
+    giacenza,
+    entrate: 0, // Non più calcolato per taglia (metrica storica)
+    uscite: 0
   }));
 
   // Costruisci array dettaglio FLUPSY
   const dettaglio_flupsys = Array.from(flupsysMap.entries()).map(([id, data]) => ({
     id,
     name: data.name,
-    entrate: data.entrate,
-    uscite: data.uscite,
-    giacenza: data.entrate - data.uscite
+    giacenza: data.giacenza,
+    entrate: 0, // Non più calcolato per FLUPSY (metrica storica)
+    uscite: 0
   }));
 
-  // Calcola statistiche
-  const totale_giacenza = totale_entrate - totale_uscite;
-  const numeroOperazioni = operationsData.length;
   const giorniAnalizzati = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  const mediaGiornaliera = giorniAnalizzati > 0 ? Math.round(numeroOperazioni / giorniAnalizzati) : 0;
 
   return {
     totale_giacenza,
     totale_entrate,
     totale_uscite,
-    dettaglio_operazioni,
+    dettaglio_operazioni: {
+      'prima-attivazione': totale_entrate,
+      'ripopolamento': 0,
+      'cessazione': 0,
+      'vendita': totale_uscite,
+    },
     dettaglio_taglie,
     dettaglio_flupsys,
-    operations_by_date: operationsByDate,
+    operations_by_date: {}, // Rimosso per performance
     statistiche: {
-      numero_operazioni: numeroOperazioni,
+      numero_operazioni: giacenzaResult.rows.length,
       giorni_analizzati: giorniAnalizzati,
-      media_giornaliera: mediaGiornaliera,
+      media_giornaliera: 0,
+      cestelli_attivi: giacenzaResult.rows.length,
     }
   };
 }
