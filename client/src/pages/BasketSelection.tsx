@@ -69,7 +69,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useWebSocketMessage } from '@/lib/websocket';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
-import { ArrowUpDown, Fan, Filter, Download, Trash, Info, Activity, Check, Share2, ClipboardCheck, LucideIcon, StickyNote } from 'lucide-react';
+import { ArrowUpDown, Fan, Filter, Download, Trash, Info, Activity, Check, Share2, ClipboardCheck, LucideIcon, StickyNote, Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useForm } from 'react-hook-form';
@@ -229,6 +229,7 @@ export default function BasketSelection() {
   // Stati per filtro note operative (prevalente su FLUPSY e taglie)
   const [notePositionFilter, setNotePositionFilter] = useState<'sopra' | 'sotto' | null>(null);
   const [noteQualityFilter, setNoteQualityFilter] = useState<'medi' | 'code' | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Stati per indicatori visivi dei filtri
   
@@ -1006,8 +1007,8 @@ export default function BasketSelection() {
     });
   };
   
-  // Gestione esportazione dati
-  const exportData = () => {
+  // Gestione esportazione dati in formato Excel moderno
+  const exportData = async () => {
     const selectedData = filteredBaskets.filter(basket => selectedBaskets.has(basket.id));
     
     // Controlla se ci sono ceste selezionate
@@ -1020,53 +1021,56 @@ export default function BasketSelection() {
       return;
     }
     
-    // Crea un array di oggetti con le proprietà che vogliamo esportare
-    const exportData = selectedData.map(basket => ({
-      'Numero': basket.physicalNumber,
-      'FLUPSY': basket.flupsy.name,
-      'Posizione': `${basket.row}-${basket.position}`,
-      'Taglia': basket.size?.code || 'N/D',
-      'Animali': basket.animalCount,
-      'pz / Kg': basket.lastOperation?.animalsPerKg ? Math.round(basket.lastOperation.animalsPerKg).toLocaleString('it-IT') : 'N/D',
-      'Peso cesta (Kg)': basket.lastOperation?.totalWeight ? (basket.lastOperation.totalWeight / 1000).toFixed(2) : 'N/D',
-      'Peso medio (g)': basket.lastOperation?.averageWeight?.toFixed(2) || 'N/D',
-      'Età ciclo (giorni)': basket.cycleDuration || 'N/D',
-      'Ultima operazione': basket.lastOperation ? format(new Date(basket.lastOperation.date), 'dd/MM/yyyy') : 'N/D',
-      'SGR (%/giorno)': basket.growthRate?.toFixed(2) || 'N/D',
-      'Mortalità (%)': basket.mortalityRate?.mortalityPercent.toFixed(1) || 'N/D',
-    }));
-    
-    // Converti in CSV
-    const headers = Object.keys(exportData[0]);
-    const csvRows = [
-      headers.join(','),
-      ...exportData.map(row => {
-        return headers.map(header => {
-          const cell = row[header as keyof typeof row];
-          // Gestisci le stringhe con virgole
-          return typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell;
-        }).join(',');
-      })
-    ];
-    
-    const csvString = csvRows.join('\n');
-    
-    // Crea un blob e un URL per il download
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    
-    // Crea un link e simula il click
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `selezione-ceste-${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast({
-      title: "Esportazione completata",
-      description: `Esportati i dati di ${selectedData.length} ceste selezionate.`,
-    });
+    setIsExporting(true);
+    try {
+      // Prepara i dati per l'esportazione
+      const basketsData = selectedData.map(basket => ({
+        physicalNumber: basket.physicalNumber,
+        flupsyName: basket.flupsy.name,
+        position: `${basket.row}-${basket.position}`,
+        sizeCode: basket.size?.code || 'N/D',
+        animalCount: basket.animalCount,
+        animalsPerKg: basket.lastOperation?.animalsPerKg ? Math.round(basket.lastOperation.animalsPerKg) : null,
+        totalWeightKg: basket.lastOperation?.totalWeight ? (basket.lastOperation.totalWeight / 1000) : null,
+        avgWeightG: basket.lastOperation?.averageWeight || null,
+        cycleDuration: basket.cycleDuration || null,
+        lastOperationDate: basket.lastOperation?.date || null,
+        sgrPercent: basket.growthRate || null,
+        mortalityPercent: basket.mortalityRate?.mortalityPercent || null,
+      }));
+      
+      const response = await fetch('/api/basket-selection/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baskets: basketsData })
+      });
+      
+      if (!response.ok) throw new Error('Errore esportazione');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `selezione-ceste-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Esportazione completata",
+        description: `Esportati i dati di ${selectedData.length} ceste selezionate in formato Excel.`,
+      });
+    } catch (error) {
+      console.error('Errore durante esportazione:', error);
+      toast({
+        title: "Errore",
+        description: "Si è verificato un errore durante l'esportazione.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
   
   // Tipi di attività possibili per le ceste
@@ -1750,12 +1754,16 @@ export default function BasketSelection() {
             
             <div className="flex space-x-2">
               <Button 
-                variant="outline" 
                 onClick={exportData}
-                disabled={selectedBaskets.size === 0}
+                disabled={selectedBaskets.size === 0 || isExporting}
+                className="bg-green-600 hover:bg-green-700 text-white"
               >
-                <Download className="mr-2 h-4 w-4" />
-                Esporta selezione
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Esporta Excel
               </Button>
               
               <Popover>
@@ -1777,7 +1785,7 @@ export default function BasketSelection() {
                     }</p>
                     <Separator />
                     <p className="text-xs text-muted-foreground">
-                      Puoi esportare questi dati in formato CSV utilizzando il pulsante "Esporta selezione"
+                      Puoi esportare questi dati in formato Excel utilizzando il pulsante "Esporta Excel"
                     </p>
                   </div>
                 </PopoverContent>

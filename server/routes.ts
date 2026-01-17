@@ -4690,6 +4690,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Basket Selection Excel Export
+  app.post("/api/basket-selection/export-excel", async (req, res) => {
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new (ExcelJS.default || ExcelJS).Workbook();
+      const sheet = workbook.addWorksheet('Selezione Ceste');
+      
+      const { baskets } = req.body as { baskets: any[] };
+      
+      // Headers
+      const headers = ['Numero', 'FLUPSY', 'Posizione', 'Taglia', 'Animali', 'pz/Kg', 'Peso (Kg)', 'Peso medio (g)', 'Età ciclo (gg)', 'Ultima operazione', 'SGR (%/giorno)', 'Mortalità (%)'];
+      const headerRow = sheet.addRow(headers);
+      
+      // Blue header style
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+        };
+      });
+      headerRow.height = 25;
+      
+      // Data rows
+      baskets.forEach((b, idx) => {
+        const row = sheet.addRow([
+          b.physicalNumber || '',
+          b.flupsyName || '',
+          b.position || '',
+          b.sizeCode || 'N/D',
+          b.animalCount ? b.animalCount.toLocaleString('it-IT') : '',
+          b.animalsPerKg ? b.animalsPerKg.toLocaleString('it-IT') : 'N/D',
+          b.totalWeightKg ? b.totalWeightKg.toFixed(2) : 'N/D',
+          b.avgWeightG ? b.avgWeightG.toFixed(2) : 'N/D',
+          b.cycleDuration || 'N/D',
+          b.lastOperationDate ? new Date(b.lastOperationDate).toLocaleDateString('it-IT') : 'N/D',
+          b.sgrPercent ? b.sgrPercent.toFixed(2) + '%' : '',
+          b.mortalityPercent !== null ? b.mortalityPercent.toFixed(1) + '%' : ''
+        ]);
+        
+        // Alternating rows
+        const bgColor = idx % 2 === 0 ? 'FFFFFFFF' : 'FFF3F4F6';
+        row.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+        
+        // Color mortality based on value
+        if (b.mortalityPercent !== null && b.mortalityPercent > 5) {
+          row.getCell(12).font = { color: { argb: 'FFDC2626' } };
+        }
+      });
+      
+      // Column widths
+      sheet.columns = [
+        { width: 18 }, { width: 14 }, { width: 12 }, { width: 10 },
+        { width: 14 }, { width: 10 }, { width: 12 }, { width: 14 },
+        { width: 12 }, { width: 16 }, { width: 14 }, { width: 12 }
+      ];
+      
+      // Auto-filter
+      const lastRow = sheet.rowCount;
+      sheet.autoFilter = { from: 'A1', to: `L${lastRow}` };
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=selezione_ceste.xlsx');
+      res.send(buffer);
+    } catch (error) {
+      console.error('Error exporting basket selection to Excel:', error);
+      res.status(500).json({ message: 'Errore durante esportazione Excel' });
+    }
+  });
+  
   app.get("/api/basket-groups", async (req, res) => {
     try {
       const groups = await storage.getBasketGroups();
