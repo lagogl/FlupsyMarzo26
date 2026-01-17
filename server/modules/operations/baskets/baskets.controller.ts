@@ -561,6 +561,125 @@ export class BasketsController {
       });
     }
   }
+
+  /**
+   * POST /api/baskets/export-excel
+   * Esporta cestelli in Excel con formattazione moderna
+   */
+  async exportToExcel(req: Request, res: Response) {
+    try {
+      const { baskets } = req.body;
+      
+      if (!baskets || !Array.isArray(baskets)) {
+        return res.status(400).json({ success: false, message: 'Dati cestelli mancanti' });
+      }
+      
+      const ExcelJS = (await import('exceljs')).default || await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      
+      const sheet = workbook.addWorksheet('Gestione Ceste', {
+        views: [{ state: 'frozen', ySplit: 1 }]
+      });
+      
+      sheet.columns = [
+        { header: 'ID Cesta', key: 'physicalNumber', width: 12 },
+        { header: 'FLUPSY', key: 'flupsyName', width: 18 },
+        { header: 'Sito Produttivo', key: 'sitoProduttivo', width: 18 },
+        { header: 'Data Attivazione', key: 'activationDate', width: 15 },
+        { header: 'Data Ult. Operazione', key: 'lastOperationDate', width: 18 },
+        { header: 'Peso Cesta (Kg)', key: 'pesoCesta', width: 14 },
+        { header: 'Taglia', key: 'calculatedSize', width: 12 },
+        { header: 'pz / Kg', key: 'animalsPerKg', width: 12 },
+        { header: 'N° Animali', key: 'animalCount', width: 14 },
+        { header: 'Mortalità %', key: 'mortalityPercent', width: 12 },
+        { header: 'Posizione', key: 'position', width: 10 },
+        { header: 'Lotto', key: 'lotId', width: 10 },
+        { header: 'Fornitore', key: 'supplier', width: 18 },
+        { header: 'Codice Ciclo', key: 'cycleCode', width: 14 },
+        { header: 'Ultima Operazione', key: 'lastOperationType', width: 16 },
+        { header: 'Stato', key: 'state', width: 10 }
+      ];
+      
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 24;
+      
+      const operationTypeLabels: Record<string, string> = {
+        'prima-attivazione': 'Prima Attivazione',
+        'misura': 'Misura/Campionamento',
+        'peso': 'Peso',
+        'pulizia': 'Pulizia',
+        'raccolta': 'Raccolta',
+        'vendita': 'Vendita',
+        'mortalita': 'Mortalità'
+      };
+      
+      baskets.forEach((basket: any, index: number) => {
+        const row = sheet.addRow({
+          physicalNumber: `#${basket.physicalNumber}`,
+          flupsyName: basket.flupsyName,
+          sitoProduttivo: basket.sitoProduttivo,
+          activationDate: basket.activationDate ? new Date(basket.activationDate).toLocaleDateString('it-IT') : '-',
+          lastOperationDate: basket.lastOperationDate ? new Date(basket.lastOperationDate).toLocaleDateString('it-IT') : '-',
+          pesoCesta: basket.pesoCesta ? parseFloat(basket.pesoCesta).toFixed(2) : '-',
+          calculatedSize: basket.calculatedSize,
+          animalsPerKg: basket.animalsPerKg ? Math.round(basket.animalsPerKg).toLocaleString('it-IT') : '-',
+          animalCount: basket.animalCount ? basket.animalCount.toLocaleString('it-IT') : '0',
+          mortalityPercent: basket.mortalityPercent !== null && basket.mortalityPercent !== undefined ? `${basket.mortalityPercent}%` : '-',
+          position: basket.position,
+          lotId: basket.lotId ? `#${basket.lotId}` : '-',
+          supplier: basket.supplier,
+          cycleCode: basket.cycleCode,
+          lastOperationType: operationTypeLabels[basket.lastOperationType] || basket.lastOperationType || '-',
+          state: basket.state === 'active' ? 'Attivo' : basket.state === 'inactive' ? 'Inattivo' : basket.state || '-'
+        });
+        
+        if (index % 2 === 1) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+        }
+        
+        const stateCell = row.getCell('state');
+        if (basket.state === 'active') {
+          stateCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+        } else {
+          stateCell.font = { color: { argb: 'FF6B7280' } };
+        }
+        
+        const mortCell = row.getCell('mortalityPercent');
+        if (basket.mortalityPercent !== null && basket.mortalityPercent !== undefined) {
+          if (parseFloat(basket.mortalityPercent) > 5) {
+            mortCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+          } else if (parseFloat(basket.mortalityPercent) > 2) {
+            mortCell.font = { color: { argb: 'FFF97316' } };
+          }
+        }
+      });
+      
+      sheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+      });
+      
+      sheet.autoFilter = { from: 'A1', to: `P${baskets.length + 1}` };
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=gestione_ceste.xlsx');
+      res.send(buffer);
+    } catch (error) {
+      console.error('Error exporting baskets to Excel:', error);
+      res.status(500).json({ success: false, message: 'Errore durante l\'esportazione Excel' });
+    }
+  }
 }
 
 // Export singleton instance

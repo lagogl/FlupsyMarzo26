@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { 
   Eye, Copy, Download, Plus, Filter, Upload, Pencil, Search, Waves,
-  Trash2, AlertTriangle, History, MapPin, Info
+  Trash2, AlertTriangle, History, MapPin, Info, Loader2
 } from 'lucide-react';
 import { getSizeBadgeStyle, getSizeColor } from '@/lib/sizeUtils';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,7 @@ export default function Baskets() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedBasket, setSelectedBasket] = useState<any>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [location] = useLocation();
   const [urlParamsLoaded, setUrlParamsLoaded] = useState(false);
 
@@ -235,75 +236,58 @@ export default function Baskets() {
     });
   });
 
-  // Export to Excel function
-  const exportToExcel = () => {
+  // Export to Excel function with modern formatting
+  const exportToExcel = async () => {
+    setIsExporting(true);
     try {
       // Prepara i dati per l'esportazione
       const exportData = filteredBaskets.map(basket => {
         const lot = lots.find((l: any) => l.id === basket.lotId);
         
         return {
-          'Numero Cestello': `#${basket.physicalNumber}`,
-          'FLUPSY': basket.flupsyName || `FLUPSY #${basket.flupsyId}`,
-          'Sito Produttivo': basket.sitoProduttivo || '-',
-          'Data Attivazione': basket.activationDate ? new Date(basket.activationDate).toLocaleDateString('it-IT') : '-',
-          'Data Ultima Operazione': basket.lastOperationDate ? new Date(basket.lastOperationDate).toLocaleDateString('it-IT') : '-',
-          'Peso Cesta (Kg)': basket.pesoCesta ? basket.pesoCesta.toFixed(2) : '-',
-          'Taglia': basket.calculatedSize || '-',
-          'pz / Kg': basket.animalsPerKg ? Math.round(basket.animalsPerKg).toLocaleString('it-IT') : '-',
-          'Numero Animali': basket.animalCount ? basket.animalCount.toLocaleString('it-IT') : 0,
-          'Mortalità %': basket.mortalityPercent !== null ? `${basket.mortalityPercent}%` : '-',
-          'Posizione': basket.row && basket.position ? `${basket.row}-${basket.position}` : '-',
-          'Lotto': basket.lotId ? `Lotto #${basket.lotId}` : '-',
-          'Fornitore': lot?.supplier || '-',
-          'Codice Ciclo': basket.cycleCode || '-',
-          'Ultima Operazione': basket.lastOperationType || '-',
-          'Stato': basket.state === 'active' ? 'Attivo' : basket.state === 'inactive' ? 'Inattivo' : basket.state || '-',
-          'NFC': basket.nfcData || '-'
+          physicalNumber: basket.physicalNumber,
+          flupsyName: basket.flupsyName || `FLUPSY #${basket.flupsyId}`,
+          sitoProduttivo: basket.sitoProduttivo || '-',
+          activationDate: basket.activationDate,
+          lastOperationDate: basket.lastOperationDate,
+          pesoCesta: basket.pesoCesta,
+          calculatedSize: basket.calculatedSize || '-',
+          animalsPerKg: basket.animalsPerKg,
+          animalCount: basket.animalCount || 0,
+          mortalityPercent: basket.mortalityPercent,
+          position: basket.row && basket.position ? `${basket.row}-${basket.position}` : '-',
+          lotId: basket.lotId,
+          supplier: lot?.supplier || '-',
+          cycleCode: basket.cycleCode || '-',
+          lastOperationType: basket.lastOperationType || '-',
+          state: basket.state
         };
       });
 
-      // Crea il workbook
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(exportData);
-
-      // Imposta la larghezza delle colonne
-      const colWidths = [
-        { wch: 15 }, // Numero Cestello
-        { wch: 25 }, // FLUPSY
-        { wch: 20 }, // Sito Produttivo
-        { wch: 15 }, // Data Attivazione
-        { wch: 18 }, // Data Ultima Operazione
-        { wch: 14 }, // Peso Cesta (Kg)
-        { wch: 12 }, // Taglia
-        { wch: 12 }, // pz / Kg
-        { wch: 15 }, // Numero Animali
-        { wch: 12 }, // Mortalità %
-        { wch: 12 }, // Posizione
-        { wch: 12 }, // Lotto
-        { wch: 20 }, // Fornitore
-        { wch: 15 }, // Codice Ciclo
-        { wch: 18 }, // Ultima Operazione
-        { wch: 10 }, // Stato
-        { wch: 20 }  // NFC
-      ];
-      ws['!cols'] = colWidths;
-
-      // Aggiungi il foglio al workbook
-      XLSX.utils.book_append_sheet(wb, ws, 'Gestione Ceste');
-
-      // Genera il nome del file con data e ora
+      const response = await fetch('/api/baskets/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baskets: exportData })
+      });
+      
+      if (!response.ok) throw new Error('Errore esportazione');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
       const now = new Date();
       const dateStr = now.toLocaleDateString('it-IT').replace(/\//g, '-');
       const timeStr = now.toLocaleTimeString('it-IT').replace(/:/g, '-');
-      const filename = `gestione-ceste_${dateStr}_${timeStr}.xlsx`;
-
-      // Scarica il file
-      XLSX.writeFile(wb, filename);
+      a.download = `gestione-ceste_${dateStr}_${timeStr}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
 
       toast({
         title: "Esportazione completata",
-        description: `File Excel scaricato: ${filename}`,
+        description: "File Excel scaricato con formattazione moderna",
         variant: "success",
       });
     } catch (error) {
@@ -313,6 +297,8 @@ export default function Baskets() {
         description: "Si è verificato un errore durante l'esportazione del file Excel",
         variant: "destructive",
       });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -656,8 +642,17 @@ export default function Baskets() {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-condensed font-bold text-gray-800">Gestione Ceste</h2>
         <div className="flex space-x-3">
-          <Button variant="outline" size="sm" onClick={exportToExcel}>
-            <Download className="h-4 w-4 mr-1" />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={exportToExcel}
+            disabled={isExporting || filteredBaskets.length === 0}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-1" />
+            )}
             Esporta
           </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>

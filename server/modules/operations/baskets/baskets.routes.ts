@@ -7,6 +7,9 @@ import { basketsController } from './baskets.controller';
 
 const router = Router();
 
+// Route esportazione
+router.post('/export-excel', (req, res) => basketsController.exportToExcel(req, res));
+
 // Route di ricerca e query
 router.get('/find-by-nfc', (req, res) => basketsController.findByNfc(req, res));
 router.get('/with-flupsy-details', (req, res) => basketsController.getBasketsWithFlupsyDetails(req, res));
