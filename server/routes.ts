@@ -4578,12 +4578,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           where: eq(schema.baskets.groupId, group.id)
         });
         
-        // Enrich with FLUPSY name
+        // Enrich with FLUPSY name and latest operation data (size, animalCount)
         const baskets = await Promise.all(basketsResult.map(async (basket: any) => {
           const flupsy = await storage.getFlupsy(basket.flupsyId);
+          
+          // Get latest operation for this basket to get current size and animal count
+          let latestOp: any = null;
+          if (basket.currentCycleId) {
+            const ops = await storage.getOperationsByCycle(basket.currentCycleId);
+            if (ops && ops.length > 0) {
+              // Sort by date descending and get the first
+              latestOp = ops.sort((a: any, b: any) => 
+                new Date(b.date).getTime() - new Date(a.date).getTime()
+              )[0];
+            }
+          }
+          
+          // Get size code from latest operation's animalsPerKg
+          let sizeCode = '-';
+          if (latestOp?.animalsPerKg) {
+            const apkg = latestOp.animalsPerKg;
+            if (apkg >= 30000) sizeCode = 'TP-30000+';
+            else if (apkg >= 10000) sizeCode = `TP-${Math.round(apkg/1000)*1000}`;
+            else if (apkg >= 1000) sizeCode = `TP-${Math.round(apkg/500)*500}`;
+            else sizeCode = `TP-${Math.round(apkg/100)*100}`;
+          }
+          
           return {
             ...basket,
-            flupsyName: flupsy?.name || '-'
+            flupsyName: flupsy?.name || '-',
+            calculatedSize: sizeCode,
+            animalCount: latestOp?.animalCount || 0
           };
         }));
         
