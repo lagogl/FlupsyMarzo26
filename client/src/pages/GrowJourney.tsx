@@ -70,7 +70,8 @@ export default function GrowJourney() {
   });
 
   const { data: cyclesData, isLoading: cyclesLoading } = useQuery({
-    queryKey: ['/api/cycles'],
+    queryKey: ['/api/cycles', { includeAll: true }],
+    queryFn: () => fetch('/api/cycles?includeAll=true').then(res => res.json()),
     refetchOnWindowFocus: false,
   });
 
@@ -260,6 +261,17 @@ export default function GrowJourney() {
         <h1 className="text-3xl font-bold tracking-tight">Percorso di Crescita</h1>
         
         <div className="flex items-center space-x-2">
+          <Select value={cycleStateFilter} onValueChange={(v: 'active' | 'closed' | 'all') => setCycleStateFilter(v)}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Attivi</SelectItem>
+              <SelectItem value="closed">Chiusi</SelectItem>
+              <SelectItem value="all">Tutti</SelectItem>
+            </SelectContent>
+          </Select>
+          
           <Select
             value={selectedCycle?.toString()}
             onValueChange={(value: string) => {
@@ -273,7 +285,7 @@ export default function GrowJourney() {
               }
             }}
           >
-            <SelectTrigger className="w-[450px]">
+            <SelectTrigger className="w-[420px]">
               <SelectValue placeholder="Seleziona un ciclo" />
             </SelectTrigger>
             <SelectContent>
@@ -332,21 +344,6 @@ export default function GrowJourney() {
             <PopoverContent className="w-80">
               <div className="space-y-4">
                 <h4 className="font-medium">Opzioni di visualizzazione</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm">Stato cicli</label>
-                  </div>
-                  <Select value={cycleStateFilter} onValueChange={(v: 'active' | 'closed' | 'all') => setCycleStateFilter(v)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Solo attivi</SelectItem>
-                      <SelectItem value="closed">Solo chiusi</SelectItem>
-                      <SelectItem value="all">Tutti</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm">Giorni di proiezione</label>
