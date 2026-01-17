@@ -425,11 +425,11 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
     headerRow.alignment = headerStyle.alignment;
     headerRow.height = 22;
 
-    summarySheet.addRow({ voce: 'Giacenza Totale', valore: giacenzeData.totale_giacenza.toLocaleString('it-IT') });
-    summarySheet.addRow({ voce: 'Entrate Totali', valore: giacenzeData.totale_entrate.toLocaleString('it-IT') });
-    summarySheet.addRow({ voce: 'Uscite Totali', valore: giacenzeData.totale_uscite.toLocaleString('it-IT') });
-    summarySheet.addRow({ voce: 'Cestelli Attivi', valore: (giacenzeData.statistiche.cestelli_attivi || 0).toString() });
-    summarySheet.addRow({ voce: 'Giorni Analizzati', valore: giacenzeData.statistiche.giorni_analizzati.toString() });
+    summarySheet.addRow({ voce: 'Giacenza Totale', valore: giacenzeData.totale_giacenza || 0 });
+    summarySheet.addRow({ voce: 'Entrate Totali', valore: giacenzeData.totale_entrate || 0 });
+    summarySheet.addRow({ voce: 'Uscite Totali', valore: giacenzeData.totale_uscite || 0 });
+    summarySheet.addRow({ voce: 'Cestelli Attivi', valore: giacenzeData.statistiche.cestelli_attivi || 0 });
+    summarySheet.addRow({ voce: 'Giorni Analizzati', valore: giacenzeData.statistiche.giorni_analizzati || 0 });
 
     // Foglio 2: Giacenze per Taglia
     const taglieSheet = workbook.addWorksheet('Per Taglia', {
@@ -461,9 +461,9 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
       .forEach((taglia, index) => {
         const row = taglieSheet.addRow({
           taglia: taglia.code,
-          entrate: taglia.entrate.toLocaleString('it-IT'),
-          uscite: taglia.uscite.toLocaleString('it-IT'),
-          giacenza: taglia.giacenza.toLocaleString('it-IT')
+          entrate: taglia.entrate || 0,
+          uscite: taglia.uscite || 0,
+          giacenza: taglia.giacenza || 0
         });
         if (index % 2 === 1) {
           row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
@@ -500,9 +500,9 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
       .forEach((flupsy, index) => {
         const row = flupsySheet.addRow({
           flupsy: flupsy.name,
-          entrate: flupsy.entrate.toLocaleString('it-IT'),
-          uscite: flupsy.uscite.toLocaleString('it-IT'),
-          giacenza: flupsy.giacenza.toLocaleString('it-IT')
+          entrate: flupsy.entrate || 0,
+          uscite: flupsy.uscite || 0,
+          giacenza: flupsy.giacenza || 0
         });
         if (index % 2 === 1) {
           row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };

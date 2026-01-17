@@ -4650,10 +4650,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             purpose: '',
             color: '',
             basketCount: '',
-            basketId: `#${basket.physicalNumber || basket.id}`,
+            basketId: basket.physicalNumber || basket.id || null,
             flupsyName: basket.flupsyName || '-',
             size: basket.calculatedSize || basket.sizeCode || '-',
-            animalCount: basket.animalCount?.toLocaleString('it-IT') || '-',
+            animalCount: basket.animalCount || null,
             basketState: basket.state === 'active' ? 'Attivo' : basket.state || '-'
           });
           
@@ -4732,21 +4732,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       headerRow.height = 25;
       
-      // Data rows
+      // Data rows - use numeric values for proper sorting
       baskets.forEach((b, idx) => {
         const row = sheet.addRow([
-          b.physicalNumber || '',
+          b.physicalNumber || null,
           b.flupsyName || '',
           b.position || '',
-          b.sizeCode || 'N/D',
-          b.animalCount ? b.animalCount.toLocaleString('it-IT') : '',
-          b.animalsPerKg ? b.animalsPerKg.toLocaleString('it-IT') : 'N/D',
-          b.totalWeightKg ? b.totalWeightKg.toFixed(2) : 'N/D',
-          b.avgWeightG ? b.avgWeightG.toFixed(2) : 'N/D',
-          b.cycleDuration || 'N/D',
-          b.lastOperationDate ? new Date(b.lastOperationDate).toLocaleDateString('it-IT') : 'N/D',
-          b.sgrPercent ? b.sgrPercent.toFixed(2) + '%' : '',
-          b.mortalityPercent !== null ? b.mortalityPercent.toFixed(1) + '%' : ''
+          b.sizeCode || '',
+          b.animalCount || null,
+          b.animalsPerKg || null,
+          b.totalWeightKg ? parseFloat(b.totalWeightKg.toFixed(2)) : null,
+          b.avgWeightG ? parseFloat(b.avgWeightG.toFixed(2)) : null,
+          b.cycleDuration || null,
+          b.lastOperationDate ? new Date(b.lastOperationDate).toLocaleDateString('it-IT') : '',
+          b.sgrPercent ? parseFloat(b.sgrPercent.toFixed(2)) : null,
+          b.mortalityPercent !== null ? parseFloat(b.mortalityPercent.toFixed(1)) : null
         ]);
         
         // Alternating rows

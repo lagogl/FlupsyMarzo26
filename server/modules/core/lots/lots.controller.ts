@@ -339,12 +339,12 @@ export class LotsController {
           supplierLotNumber: lot.supplierLotNumber || '-',
           quality: qualityLabels[lot.quality] || lot.quality || '-',
           sizeCode: lot.sizeCode || lot.size?.code || '-',
-          ageDays: lot.ageDays || '-',
-          initialCount: lot.animalCount?.toLocaleString('it-IT') || '0',
-          currentCount: lot.currentCount?.toLocaleString('it-IT') || lot.animalCount?.toLocaleString('it-IT') || '0',
-          soldCount: lot.soldCount?.toLocaleString('it-IT') || '0',
-          totalMortality: lot.totalMortality?.toLocaleString('it-IT') || '0',
-          mortalityRate: mortalityRate,
+          ageDays: lot.ageDays || null,
+          initialCount: lot.animalCount || null,
+          currentCount: lot.currentCount || lot.animalCount || null,
+          soldCount: lot.soldCount || null,
+          totalMortality: lot.totalMortality || null,
+          mortalityRate: parseFloat(mortalityRate),
           state: lot.state === 'active' ? 'Attivo' : 'Esaurito',
           notes: lot.notes || ''
         });

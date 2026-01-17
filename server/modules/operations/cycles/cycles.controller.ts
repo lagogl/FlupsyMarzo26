@@ -391,8 +391,8 @@ export class CyclesController {
           endDate: cycle.endDate ? new Date(cycle.endDate).toLocaleDateString('it-IT') : '-',
           state: cycle.state === 'active' ? 'Attivo' : 'Chiuso',
           sizeCode: cycle.sizeCode,
-          sgr: cycle.sgr ? `${cycle.sgr.toFixed(2)}%` : '-',
-          animalCount: cycle.animalCount?.toLocaleString('it-IT') || '0'
+          sgr: cycle.sgr ? parseFloat(cycle.sgr.toFixed(2)) : null,
+          animalCount: cycle.animalCount || null
         });
         
         if (index % 2 === 1) {
@@ -481,10 +481,10 @@ export class CyclesController {
             type: `📊 GIACENZA (${cycleOps.length} operazioni)`,
             date: latestOp.date ? new Date(latestOp.date).toLocaleDateString('it-IT') : '-',
             sizeCode: latestOp.sizeCode || '-',
-            animalCount: latestOp.animalCount?.toLocaleString('it-IT') || '-',
-            totalWeight: latestOp.totalWeight?.toLocaleString('it-IT') || '-',
-            animalsPerKg: latestOp.animalsPerKg?.toLocaleString('it-IT') || '-',
-            deadCount: '-',
+            animalCount: latestOp.animalCount || null,
+            totalWeight: latestOp.totalWeight || null,
+            animalsPerKg: latestOp.animalsPerKg || null,
+            deadCount: null,
             notes: ''
           });
           
@@ -502,10 +502,10 @@ export class CyclesController {
               type: operationTypeLabels[op.type] || op.type,
               date: op.date ? new Date(op.date).toLocaleDateString('it-IT') : '-',
               sizeCode: op.sizeCode || '-',
-              animalCount: op.animalCount?.toLocaleString('it-IT') || '-',
-              totalWeight: op.totalWeight?.toLocaleString('it-IT') || '-',
-              animalsPerKg: op.animalsPerKg?.toLocaleString('it-IT') || '-',
-              deadCount: op.deadCount?.toLocaleString('it-IT') || '-',
+              animalCount: op.animalCount || null,
+              totalWeight: op.totalWeight || null,
+              animalsPerKg: op.animalsPerKg || null,
+              deadCount: op.deadCount || null,
               notes: op.notes || ''
             });
             
