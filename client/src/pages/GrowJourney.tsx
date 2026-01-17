@@ -259,15 +259,38 @@ export default function GrowJourney() {
               }
             }}
           >
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-[350px]">
               <SelectValue placeholder="Seleziona un ciclo" />
             </SelectTrigger>
             <SelectContent>
               {activeCycles.map((cycle: any) => {
                 const cycleBasket = baskets.find((b: any) => b.id === cycle.basketId);
+                // Trova l'ultima operazione di misura per ottenere la taglia attuale
+                const cycleOps = operations.filter((op: any) => 
+                  op.cycleId === cycle.id && op.type === 'Misura' && op.animalsPerKg
+                ).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                const latestOp = cycleOps[0];
+                let currentSize = '';
+                if (latestOp?.animalsPerKg) {
+                  const weight = 1000000 / latestOp.animalsPerKg;
+                  const size = getTargetSizeForWeight(weight, sizes);
+                  currentSize = size?.code || '';
+                }
+                const flupsyName = cycleBasket?.flupsyName || '';
                 return (
                   <SelectItem key={cycle.id} value={cycle.id.toString()}>
-                    Ciclo {cycleBasket ? `Cesta #${cycleBasket.physicalNumber}` : cycle.id}
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">#{cycleBasket?.physicalNumber || cycle.id}</span>
+                      <span className="text-muted-foreground">|</span>
+                      <span>{flupsyName || 'FLUPSY'}</span>
+                      {currentSize && (
+                        <>
+                          <span className="text-muted-foreground">|</span>
+                          <span className="text-blue-600 font-medium">{currentSize}</span>
+                        </>
+                      )}
+                      <span className="text-muted-foreground text-xs">(C{cycle.id})</span>
+                    </span>
                   </SelectItem>
                 );
               })}
