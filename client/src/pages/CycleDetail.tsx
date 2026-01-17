@@ -980,14 +980,17 @@ export default function CycleDetail() {
           </DialogHeader>
           
           <div className="py-4">
-            <div className="bg-red-50 border border-red-200 rounded-md p-4">
-              <h4 className="font-medium text-red-900 mb-2">⚠️ Attenzione</h4>
-              <ul className="text-sm text-red-800 space-y-1">
-                <li>• Questa operazione è <strong>irreversibile</strong></li>
-                <li>• Il ciclo verrà contrassegnato come completato</li>
-                <li>• Non sarà più possibile aggiungere operazioni</li>
-                <li>• La data di chiusura sarà impostata a oggi</li>
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
+              <h4 className="font-medium text-amber-900 mb-2">📋 Cosa succede</h4>
+              <ul className="text-sm text-amber-800 space-y-1">
+                <li>• Il ciclo verrà contrassegnato come <strong>chiuso</strong></li>
+                <li>• Il cestello tornerà <strong>disponibile</strong></li>
+                <li>• Gli animali appariranno in <strong>Chiusure Pendenti</strong></li>
+                <li>• Dovrai assegnare la destinazione degli animali</li>
               </ul>
+              <p className="text-xs text-amber-700 mt-3 pt-2 border-t border-amber-200">
+                Potrai annullare la chiusura dalla pagina "Chiusure Pendenti" finché non assegni la destinazione.
+              </p>
             </div>
           </div>
           
