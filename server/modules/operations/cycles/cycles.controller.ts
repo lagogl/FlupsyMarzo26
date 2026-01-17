@@ -514,6 +514,10 @@ export class CyclesController {
             };
           });
         });
+        
+        // Abilita filtro automatico sul foglio operazioni
+        const lastRow = opsSheet.rowCount;
+        opsSheet.autoFilter = { from: 'A1', to: `K${lastRow}` };
       }
       
       const buffer = await workbook.xlsx.writeBuffer();
