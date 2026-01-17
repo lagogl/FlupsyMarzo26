@@ -381,13 +381,34 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
 
     // Foglio 1: Riepilogo
     const summarySheet = workbook.addWorksheet('Riepilogo', {
-      views: [{ state: 'frozen', ySplit: 1 }]
+      views: [{ state: 'frozen', ySplit: 4 }]
     });
     
     summarySheet.columns = [
-      { header: 'Voce', key: 'voce', width: 25 },
-      { header: 'Valore', key: 'valore', width: 20 }
+      { header: '', key: 'voce', width: 25 },
+      { header: '', key: 'valore', width: 25 }
     ];
+    
+    // Riga 1: Titolo
+    summarySheet.mergeCells('A1:B1');
+    const titleRow = summarySheet.getRow(1);
+    titleRow.getCell(1).value = 'REPORT GIACENZE PERSONALIZZATE';
+    titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF1F2937' } };
+    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    titleRow.height = 28;
+    
+    // Riga 2: Data Inizio
+    summarySheet.getRow(2).getCell(1).value = 'Data Inizio:';
+    summarySheet.getRow(2).getCell(1).font = { bold: true };
+    summarySheet.getRow(2).getCell(2).value = format(startDate, 'dd/MM/yyyy');
+    
+    // Riga 3: Data Fine
+    summarySheet.getRow(3).getCell(1).value = 'Data Fine:';
+    summarySheet.getRow(3).getCell(1).font = { bold: true };
+    summarySheet.getRow(3).getCell(2).value = format(endDate, 'dd/MM/yyyy');
+    
+    // Riga 4: vuota per separazione
+    summarySheet.getRow(4).height = 10;
     
     const headerStyle = { 
       font: { bold: true, color: { argb: 'FFFFFFFF' } },
@@ -395,16 +416,19 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
       alignment: { vertical: 'middle' as const, horizontal: 'center' as const }
     };
     
-    summarySheet.getRow(1).font = headerStyle.font;
-    summarySheet.getRow(1).fill = headerStyle.fill;
-    summarySheet.getRow(1).alignment = headerStyle.alignment;
-    summarySheet.getRow(1).height = 22;
+    // Riga 5: Intestazione tabella
+    const headerRow = summarySheet.getRow(5);
+    headerRow.getCell(1).value = 'Voce';
+    headerRow.getCell(2).value = 'Valore';
+    headerRow.font = headerStyle.font;
+    headerRow.fill = headerStyle.fill;
+    headerRow.alignment = headerStyle.alignment;
+    headerRow.height = 22;
 
-    summarySheet.addRow({ voce: 'Periodo', valore: `${format(startDate, 'dd/MM/yyyy')} - ${format(endDate, 'dd/MM/yyyy')}` });
     summarySheet.addRow({ voce: 'Giacenza Totale', valore: giacenzeData.totale_giacenza.toLocaleString('it-IT') });
     summarySheet.addRow({ voce: 'Entrate Totali', valore: giacenzeData.totale_entrate.toLocaleString('it-IT') });
     summarySheet.addRow({ voce: 'Uscite Totali', valore: giacenzeData.totale_uscite.toLocaleString('it-IT') });
-    summarySheet.addRow({ voce: 'Numero Operazioni', valore: giacenzeData.statistiche.numero_operazioni.toString() });
+    summarySheet.addRow({ voce: 'Cestelli Attivi', valore: (giacenzeData.statistiche.cestelli_attivi || 0).toString() });
     summarySheet.addRow({ voce: 'Giorni Analizzati', valore: giacenzeData.statistiche.giorni_analizzati.toString() });
 
     // Foglio 2: Giacenze per Taglia
