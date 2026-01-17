@@ -578,29 +578,36 @@ export class BasketsController {
       const workbook = new ExcelJS.Workbook();
       
       const sheet = workbook.addWorksheet('Gestione Ceste', {
-        views: [{ state: 'frozen', ySplit: 1 }]
+        views: [{ state: 'frozen', ySplit: 2 }]
       });
       
+      // Riga titolo
+      const titleRow = sheet.addRow(['GESTIONE CESTE - Elenco completo cestelli con dati operativi, lotti, taglie e stato attuale']);
+      sheet.mergeCells('A1:P1');
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleRow.height = 30;
+      titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+      
       sheet.columns = [
-        { header: 'ID Cesta', key: 'physicalNumber', width: 12 },
-        { header: 'FLUPSY', key: 'flupsyName', width: 18 },
-        { header: 'Sito Produttivo', key: 'sitoProduttivo', width: 18 },
-        { header: 'Data Attivazione', key: 'activationDate', width: 15 },
-        { header: 'Data Ult. Operazione', key: 'lastOperationDate', width: 18 },
-        { header: 'Peso Cesta (Kg)', key: 'pesoCesta', width: 14 },
-        { header: 'Taglia', key: 'calculatedSize', width: 12 },
-        { header: 'pz / Kg', key: 'animalsPerKg', width: 12 },
-        { header: 'N° Animali', key: 'animalCount', width: 14 },
-        { header: 'Mortalità %', key: 'mortalityPercent', width: 12 },
-        { header: 'Posizione', key: 'position', width: 10 },
-        { header: 'Lotto', key: 'lotId', width: 10 },
-        { header: 'Fornitore', key: 'supplier', width: 18 },
-        { header: 'Codice Ciclo', key: 'cycleCode', width: 14 },
-        { header: 'Ultima Operazione', key: 'lastOperationType', width: 16 },
-        { header: 'Stato', key: 'state', width: 10 }
+        { key: 'physicalNumber', width: 12 },
+        { key: 'flupsyName', width: 18 },
+        { key: 'sitoProduttivo', width: 18 },
+        { key: 'activationDate', width: 15 },
+        { key: 'lastOperationDate', width: 18 },
+        { key: 'pesoCesta', width: 14 },
+        { key: 'calculatedSize', width: 12 },
+        { key: 'animalsPerKg', width: 12 },
+        { key: 'animalCount', width: 14 },
+        { key: 'mortalityPercent', width: 12 },
+        { key: 'position', width: 10 },
+        { key: 'lotId', width: 10 },
+        { key: 'supplier', width: 18 },
+        { key: 'cycleCode', width: 14 },
+        { key: 'lastOperationType', width: 16 },
+        { key: 'state', width: 10 }
       ];
       
-      const headerRow = sheet.getRow(1);
+      const headerRow = sheet.addRow(['ID Cesta', 'FLUPSY', 'Sito Produttivo', 'Data Attivazione', 'Data Ult. Operazione', 'Peso Cesta (Kg)', 'Taglia', 'pz / Kg', 'N° Animali', 'Mortalità %', 'Posizione', 'Lotto', 'Fornitore', 'Codice Ciclo', 'Ultima Operazione', 'Stato']);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };

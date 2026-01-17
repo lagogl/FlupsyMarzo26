@@ -282,31 +282,38 @@ export class LotsController {
       workbook.created = new Date();
       
       const sheet = workbook.addWorksheet('Lotti', {
-        views: [{ state: 'frozen', ySplit: 1 }]
+        views: [{ state: 'frozen', ySplit: 2 }]
       });
+      
+      // Riga titolo
+      const titleRow = sheet.addRow(['GESTIONE LOTTI - Inventario completo lotti con quantità iniziali, vendite, mortalità e stato']);
+      sheet.mergeCells('A1:N1');
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleRow.height = 30;
+      titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
       
       // Colonne base + dettagliate
       const columns = [
-        { header: 'ID', key: 'id', width: 6 },
-        { header: 'Data Arrivo', key: 'arrivalDate', width: 12 },
-        { header: 'Fornitore', key: 'supplier', width: 18 },
-        { header: 'N. Lotto Forn.', key: 'supplierLotNumber', width: 14 },
-        { header: 'Qualità', key: 'quality', width: 10 },
-        { header: 'Taglia', key: 'sizeCode', width: 10 },
-        { header: 'Età (gg)', key: 'ageDays', width: 10 },
-        { header: 'Q.tà Iniziale', key: 'initialCount', width: 14 },
-        { header: 'Q.tà Attuale', key: 'currentCount', width: 14 },
-        { header: 'Venduti', key: 'soldCount', width: 12 },
-        { header: 'Mortalità', key: 'totalMortality', width: 12 },
-        { header: '% Mortalità', key: 'mortalityRate', width: 12 },
-        { header: 'Stato', key: 'state', width: 10 },
-        { header: 'Note', key: 'notes', width: 25 }
+        { key: 'id', width: 6 },
+        { key: 'arrivalDate', width: 12 },
+        { key: 'supplier', width: 18 },
+        { key: 'supplierLotNumber', width: 14 },
+        { key: 'quality', width: 10 },
+        { key: 'sizeCode', width: 10 },
+        { key: 'ageDays', width: 10 },
+        { key: 'initialCount', width: 14 },
+        { key: 'currentCount', width: 14 },
+        { key: 'soldCount', width: 12 },
+        { key: 'totalMortality', width: 12 },
+        { key: 'mortalityRate', width: 12 },
+        { key: 'state', width: 10 },
+        { key: 'notes', width: 25 }
       ];
       
       sheet.columns = columns;
       
       // Stile intestazione
-      const headerRow = sheet.getRow(1);
+      const headerRow = sheet.addRow(['ID', 'Data Arrivo', 'Fornitore', 'N. Lotto Forn.', 'Qualità', 'Taglia', 'Età (gg)', 'Q.tà Iniziale', 'Q.tà Attuale', 'Venduti', 'Mortalità', '% Mortalità', 'Stato', 'Note']);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };

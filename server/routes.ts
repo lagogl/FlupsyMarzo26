@@ -4549,23 +4549,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const workbook = new ExcelJS.Workbook();
       
       const sheet = workbook.addWorksheet('Gruppi Ceste', {
-        views: [{ state: 'frozen', ySplit: 1 }],
+        views: [{ state: 'frozen', ySplit: 2 }],
         properties: { outlineLevelRow: 1 }
       });
       
+      // Riga titolo
+      const titleRow = sheet.addRow(['GRUPPI CESTE - Esportazione dettagliata con ceste associate, taglie e conteggi animali']);
+      sheet.mergeCells('A1:I1');
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleRow.height = 30;
+      titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+      
       sheet.columns = [
-        { header: 'Gruppo', key: 'groupName', width: 30 },
-        { header: 'Descrizione', key: 'purpose', width: 40 },
-        { header: 'Colore', key: 'color', width: 12 },
-        { header: 'N° Ceste', key: 'basketCount', width: 12 },
-        { header: 'ID Cesta', key: 'basketId', width: 10 },
-        { header: 'FLUPSY', key: 'flupsyName', width: 18 },
-        { header: 'Taglia', key: 'size', width: 12 },
-        { header: 'N° Animali', key: 'animalCount', width: 14 },
-        { header: 'Stato Cesta', key: 'basketState', width: 12 }
+        { key: 'groupName', width: 30 },
+        { key: 'purpose', width: 40 },
+        { key: 'color', width: 12 },
+        { key: 'basketCount', width: 12 },
+        { key: 'basketId', width: 10 },
+        { key: 'flupsyName', width: 18 },
+        { key: 'size', width: 12 },
+        { key: 'animalCount', width: 14 },
+        { key: 'basketState', width: 12 }
       ];
       
-      const headerRow = sheet.getRow(1);
+      // Riga intestazioni
+      const headerRow = sheet.addRow(['Gruppo', 'Descrizione', 'Colore', 'N° Ceste', 'ID Cesta', 'FLUPSY', 'Taglia', 'N° Animali', 'Stato Cesta']);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -4699,6 +4707,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { baskets } = req.body as { baskets: any[] };
       
+      // Riga titolo
+      const titleRow = sheet.addRow(['SELEZIONE CESTE - Elenco ceste selezionate con dati operativi, SGR e mortalità']);
+      sheet.mergeCells('A1:L1');
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleRow.height = 30;
+      titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+      
       // Headers
       const headers = ['Numero', 'FLUPSY', 'Posizione', 'Taglia', 'Animali', 'pz/Kg', 'Peso (Kg)', 'Peso medio (g)', 'Età ciclo (gg)', 'Ultima operazione', 'SGR (%/giorno)', 'Mortalità (%)'];
       const headerRow = sheet.addRow(headers);
@@ -4781,6 +4796,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sheet = workbook.addWorksheet('Operazioni');
       
       const { operations } = req.body as { operations: any[] };
+      
+      // Riga titolo
+      const titleRow = sheet.addRow(['REGISTRO OPERAZIONI - Storico movimenti produttivi: attivazioni, misure, vendite e chiusure cicli']);
+      sheet.mergeCells('A1:L1');
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleRow.height = 30;
+      titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
       
       // Headers
       const headers = ['Data', 'Tipo', 'Cesta', 'FLUPSY', 'Ciclo', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)'];

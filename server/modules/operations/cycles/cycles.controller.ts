@@ -350,24 +350,31 @@ export class CyclesController {
       
       // ========== FOGLIO 1: CICLI PRODUTTIVI ==========
       const sheet = workbook.addWorksheet('Cicli Produttivi', {
-        views: [{ state: 'frozen', ySplit: 1 }]
+        views: [{ state: 'frozen', ySplit: 2 }]
       });
       
+      // Riga titolo
+      const titleRow = sheet.addRow(['CICLI PRODUTTIVI - Elenco completo cicli con stato, date, lotti e performance SGR']);
+      sheet.mergeCells('A1:K1');
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleRow.height = 30;
+      titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+      
       sheet.columns = [
-        { header: 'ID', key: 'id', width: 8 },
-        { header: 'Nr. Ciclo', key: 'cycleCode', width: 12 },
-        { header: 'Cestello', key: 'basketNumber', width: 10 },
-        { header: 'FLUPSY', key: 'flupsyName', width: 18 },
-        { header: 'Lotto', key: 'lotSupplier', width: 20 },
-        { header: 'Data Inizio', key: 'startDate', width: 14 },
-        { header: 'Data Fine', key: 'endDate', width: 14 },
-        { header: 'Stato', key: 'state', width: 10 },
-        { header: 'Taglia', key: 'sizeCode', width: 10 },
-        { header: 'SGR', key: 'sgr', width: 8 },
-        { header: 'Nr. Animali', key: 'animalCount', width: 15 }
+        { key: 'id', width: 8 },
+        { key: 'cycleCode', width: 12 },
+        { key: 'basketNumber', width: 10 },
+        { key: 'flupsyName', width: 18 },
+        { key: 'lotSupplier', width: 20 },
+        { key: 'startDate', width: 14 },
+        { key: 'endDate', width: 14 },
+        { key: 'state', width: 10 },
+        { key: 'sizeCode', width: 10 },
+        { key: 'sgr', width: 8 },
+        { key: 'animalCount', width: 15 }
       ];
       
-      const headerRow = sheet.getRow(1);
+      const headerRow = sheet.addRow(['ID', 'Nr. Ciclo', 'Cestello', 'FLUPSY', 'Lotto', 'Data Inizio', 'Data Fine', 'Stato', 'Taglia', 'SGR', 'Nr. Animali']);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -416,25 +423,32 @@ export class CyclesController {
       // ========== FOGLIO 2: OPERAZIONI PER CICLO (con righe collassabili) ==========
       if (operations && Array.isArray(operations) && operations.length > 0) {
         const opsSheet = workbook.addWorksheet('Operazioni per Ciclo', {
-          views: [{ state: 'frozen', ySplit: 1 }],
+          views: [{ state: 'frozen', ySplit: 2 }],
           properties: { outlineLevelRow: 1 }
         });
         
+        // Riga titolo
+        const opsTitleRow = opsSheet.addRow(['OPERAZIONI PER CICLO - Dettaglio completo operazioni raggruppate per ciclo produttivo']);
+        opsSheet.mergeCells('A1:K1');
+        opsTitleRow.font = { bold: true, size: 14, color: { argb: 'FF065F46' } };
+        opsTitleRow.height = 30;
+        opsTitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+        
         opsSheet.columns = [
-          { header: 'Ciclo', key: 'cycleCode', width: 12 },
-          { header: 'Cestello', key: 'basketNumber', width: 10 },
-          { header: 'FLUPSY', key: 'flupsyName', width: 16 },
-          { header: 'Tipo', key: 'type', width: 16 },
-          { header: 'Data', key: 'date', width: 12 },
-          { header: 'Taglia', key: 'sizeCode', width: 10 },
-          { header: 'Nr. Animali', key: 'animalCount', width: 14 },
-          { header: 'Peso Tot (g)', key: 'totalWeight', width: 12 },
-          { header: 'An/Kg', key: 'animalsPerKg', width: 10 },
-          { header: 'Mortalità', key: 'deadCount', width: 10 },
-          { header: 'Note', key: 'notes', width: 25 }
+          { key: 'cycleCode', width: 12 },
+          { key: 'basketNumber', width: 10 },
+          { key: 'flupsyName', width: 16 },
+          { key: 'type', width: 16 },
+          { key: 'date', width: 12 },
+          { key: 'sizeCode', width: 10 },
+          { key: 'animalCount', width: 14 },
+          { key: 'totalWeight', width: 12 },
+          { key: 'animalsPerKg', width: 10 },
+          { key: 'deadCount', width: 10 },
+          { key: 'notes', width: 25 }
         ];
         
-        const opsHeaderRow = opsSheet.getRow(1);
+        const opsHeaderRow = opsSheet.addRow(['Ciclo', 'Cestello', 'FLUPSY', 'Tipo', 'Data', 'Taglia', 'Nr. Animali', 'Peso Tot (g)', 'An/Kg', 'Mortalità', 'Note']);
         opsHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         opsHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
         opsHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };

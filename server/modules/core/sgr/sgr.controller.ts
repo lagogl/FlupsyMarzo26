@@ -348,32 +348,39 @@ export class SgrController {
       workbook.created = new Date();
 
       const worksheet = workbook.addWorksheet('Rilevazioni Giornaliere', {
-        views: [{ state: 'frozen', ySplit: 1 }]
+        views: [{ state: 'frozen', ySplit: 2 }]
       });
+
+      // Riga titolo
+      const titleRow = worksheet.addRow(['RILEVAZIONI SGR GIORNALIERE - Parametri ambientali, qualità acqua e condizioni operative per sito']);
+      worksheet.mergeCells('A1:Q1');
+      titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleRow.height = 30;
+      titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
 
       // Define columns
       worksheet.columns = [
-        { header: 'Data', key: 'date', width: 12 },
-        { header: 'Sito', key: 'site', width: 15 },
-        { header: 'T. Acqua (°C)', key: 'waterTemp', width: 14 },
-        { header: 'Aria Min (°C)', key: 'airMin', width: 13 },
-        { header: 'Aria Max (°C)', key: 'airMax', width: 13 },
-        { header: 'Meteo', key: 'meteo', width: 16 },
-        { header: 'Salinità (‰)', key: 'salinity', width: 13 },
-        { header: 'pH', key: 'ph', width: 8 },
-        { header: 'O2 (mg/L)', key: 'oxygen', width: 11 },
-        { header: 'NH3 (mg/L)', key: 'nh3', width: 12 },
-        { header: 'Ammoniaca (mg/L)', key: 'ammonia', width: 16 },
-        { header: 'Secchi (m)', key: 'secchi', width: 11 },
-        { header: 'Microalghe (cell/ml)', key: 'microalgae', width: 18 },
-        { header: 'Specie Alghe', key: 'species', width: 18 },
-        { header: 'Colore Acqua', key: 'waterColor', width: 14 },
-        { header: 'Mortalità', key: 'mortality', width: 12 },
-        { header: 'Note', key: 'notes', width: 25 }
+        { key: 'date', width: 12 },
+        { key: 'site', width: 15 },
+        { key: 'waterTemp', width: 14 },
+        { key: 'airMin', width: 13 },
+        { key: 'airMax', width: 13 },
+        { key: 'meteo', width: 16 },
+        { key: 'salinity', width: 13 },
+        { key: 'ph', width: 8 },
+        { key: 'oxygen', width: 11 },
+        { key: 'nh3', width: 12 },
+        { key: 'ammonia', width: 16 },
+        { key: 'secchi', width: 11 },
+        { key: 'microalgae', width: 18 },
+        { key: 'species', width: 18 },
+        { key: 'waterColor', width: 14 },
+        { key: 'mortality', width: 12 },
+        { key: 'notes', width: 25 }
       ];
 
       // Style header row
-      const headerRow = worksheet.getRow(1);
+      const headerRow = worksheet.addRow(['Data', 'Sito', 'T. Acqua (°C)', 'Aria Min (°C)', 'Aria Max (°C)', 'Meteo', 'Salinità (‰)', 'pH', 'O2 (mg/L)', 'NH3 (mg/L)', 'Ammoniaca (mg/L)', 'Secchi (m)', 'Microalghe (cell/ml)', 'Specie Alghe', 'Colore Acqua', 'Mortalità', 'Note']);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = {
         type: 'pattern',

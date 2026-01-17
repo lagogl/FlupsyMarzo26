@@ -433,20 +433,28 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
 
     // Foglio 2: Giacenze per Taglia
     const taglieSheet = workbook.addWorksheet('Per Taglia', {
-      views: [{ state: 'frozen', ySplit: 1 }]
+      views: [{ state: 'frozen', ySplit: 2 }]
     });
     
+    // Riga titolo
+    const taglieTitleRow = taglieSheet.addRow(['GIACENZE PER TAGLIA - Dettaglio entrate, uscite e giacenza per ciascuna taglia']);
+    taglieSheet.mergeCells('A1:D1');
+    taglieTitleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+    taglieTitleRow.height = 30;
+    taglieTitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+    
     taglieSheet.columns = [
-      { header: 'Taglia', key: 'taglia', width: 15 },
-      { header: 'Entrate', key: 'entrate', width: 15 },
-      { header: 'Uscite', key: 'uscite', width: 15 },
-      { header: 'Giacenza', key: 'giacenza', width: 15 }
+      { key: 'taglia', width: 15 },
+      { key: 'entrate', width: 15 },
+      { key: 'uscite', width: 15 },
+      { key: 'giacenza', width: 15 }
     ];
     
-    taglieSheet.getRow(1).font = headerStyle.font;
-    taglieSheet.getRow(1).fill = headerStyle.fill;
-    taglieSheet.getRow(1).alignment = headerStyle.alignment;
-    taglieSheet.getRow(1).height = 22;
+    const taglieHeaderRow = taglieSheet.addRow(['Taglia', 'Entrate', 'Uscite', 'Giacenza']);
+    taglieHeaderRow.font = headerStyle.font;
+    taglieHeaderRow.fill = headerStyle.fill;
+    taglieHeaderRow.alignment = headerStyle.alignment;
+    taglieHeaderRow.height = 22;
 
     giacenzeData.dettaglio_taglie
       .sort((a, b) => b.giacenza - a.giacenza)
@@ -464,20 +472,28 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
 
     // Foglio 3: Giacenze per FLUPSY
     const flupsySheet = workbook.addWorksheet('Per FLUPSY', {
-      views: [{ state: 'frozen', ySplit: 1 }]
+      views: [{ state: 'frozen', ySplit: 2 }]
     });
     
+    // Riga titolo
+    const flupsyTitleRow = flupsySheet.addRow(['GIACENZE PER FLUPSY - Dettaglio entrate, uscite e giacenza per ciascun FLUPSY']);
+    flupsySheet.mergeCells('A1:D1');
+    flupsyTitleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+    flupsyTitleRow.height = 30;
+    flupsyTitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+    
     flupsySheet.columns = [
-      { header: 'FLUPSY', key: 'flupsy', width: 25 },
-      { header: 'Entrate', key: 'entrate', width: 15 },
-      { header: 'Uscite', key: 'uscite', width: 15 },
-      { header: 'Giacenza', key: 'giacenza', width: 15 }
+      { key: 'flupsy', width: 25 },
+      { key: 'entrate', width: 15 },
+      { key: 'uscite', width: 15 },
+      { key: 'giacenza', width: 15 }
     ];
     
-    flupsySheet.getRow(1).font = headerStyle.font;
-    flupsySheet.getRow(1).fill = headerStyle.fill;
-    flupsySheet.getRow(1).alignment = headerStyle.alignment;
-    flupsySheet.getRow(1).height = 22;
+    const flupsyHeaderRow = flupsySheet.addRow(['FLUPSY', 'Entrate', 'Uscite', 'Giacenza']);
+    flupsyHeaderRow.font = headerStyle.font;
+    flupsyHeaderRow.fill = headerStyle.fill;
+    flupsyHeaderRow.alignment = headerStyle.alignment;
+    flupsyHeaderRow.height = 22;
 
     giacenzeData.dettaglio_flupsys
       .sort((a, b) => b.giacenza - a.giacenza)
