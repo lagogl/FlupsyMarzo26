@@ -336,7 +336,7 @@ export class CyclesController {
    */
   async exportCyclesExcel(req: Request, res: Response) {
     try {
-      const { cycles } = req.body;
+      const { cycles, operations } = req.body;
       
       if (!cycles || !Array.isArray(cycles)) {
         return res.status(400).json({ message: "Dati cicli mancanti" });
@@ -348,11 +348,11 @@ export class CyclesController {
       workbook.creator = 'FLUPSY Management System';
       workbook.created = new Date();
       
+      // ========== FOGLIO 1: CICLI PRODUTTIVI ==========
       const sheet = workbook.addWorksheet('Cicli Produttivi', {
         views: [{ state: 'frozen', ySplit: 1 }]
       });
       
-      // Definisci colonne con filtri abilitati
       sheet.columns = [
         { header: 'ID', key: 'id', width: 8 },
         { header: 'Nr. Ciclo', key: 'cycleCode', width: 12 },
@@ -367,18 +367,12 @@ export class CyclesController {
         { header: 'Nr. Animali', key: 'animalCount', width: 15 }
       ];
       
-      // Stile intestazione
       const headerRow = sheet.getRow(1);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { 
-        type: 'pattern', 
-        pattern: 'solid', 
-        fgColor: { argb: 'FF3B82F6' } 
-      };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
       headerRow.height = 24;
       
-      // Aggiungi dati con righe alternate
       cycles.forEach((cycle: any, index: number) => {
         const row = sheet.addRow({
           id: cycle.id,
@@ -394,16 +388,10 @@ export class CyclesController {
           animalCount: cycle.animalCount?.toLocaleString('it-IT') || '0'
         });
         
-        // Colora righe alternate
         if (index % 2 === 1) {
-          row.fill = { 
-            type: 'pattern', 
-            pattern: 'solid', 
-            fgColor: { argb: 'FFF3F4F6' } 
-          };
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
         }
         
-        // Colora stato
         const stateCell = row.getCell('state');
         if (cycle.state === 'active') {
           stateCell.font = { color: { argb: 'FF16A34A' }, bold: true };
@@ -412,7 +400,6 @@ export class CyclesController {
         }
       });
       
-      // Aggiungi bordi
       sheet.eachRow((row) => {
         row.eachCell((cell) => {
           cell.border = {
@@ -424,13 +411,111 @@ export class CyclesController {
         });
       });
       
-      // Abilita filtro automatico
-      sheet.autoFilter = {
-        from: 'A1',
-        to: `K${cycles.length + 1}`
-      };
+      sheet.autoFilter = { from: 'A1', to: `K${cycles.length + 1}` };
       
-      // Genera buffer e invia risposta
+      // ========== FOGLIO 2: OPERAZIONI PER CICLO (con righe collassabili) ==========
+      if (operations && Array.isArray(operations) && operations.length > 0) {
+        const opsSheet = workbook.addWorksheet('Operazioni per Ciclo', {
+          views: [{ state: 'frozen', ySplit: 1 }],
+          properties: { outlineLevelRow: 1 }
+        });
+        
+        opsSheet.columns = [
+          { header: 'Ciclo', key: 'cycleCode', width: 12 },
+          { header: 'Cestello', key: 'basketNumber', width: 10 },
+          { header: 'FLUPSY', key: 'flupsyName', width: 16 },
+          { header: 'Tipo', key: 'type', width: 16 },
+          { header: 'Data', key: 'date', width: 12 },
+          { header: 'Taglia', key: 'sizeCode', width: 10 },
+          { header: 'Nr. Animali', key: 'animalCount', width: 14 },
+          { header: 'Peso Tot (g)', key: 'totalWeight', width: 12 },
+          { header: 'An/Kg', key: 'animalsPerKg', width: 10 },
+          { header: 'Mortalità', key: 'deadCount', width: 10 },
+          { header: 'Note', key: 'notes', width: 25 }
+        ];
+        
+        const opsHeaderRow = opsSheet.getRow(1);
+        opsHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        opsHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+        opsHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+        opsHeaderRow.height = 24;
+        
+        const operationTypeLabels: Record<string, string> = {
+          'prima-attivazione': 'Prima Attivazione',
+          'misura': 'Misura/Campionamento',
+          'peso': 'Peso',
+          'pulizia': 'Pulizia',
+          'raccolta': 'Raccolta',
+          'vendita': 'Vendita',
+          'mortalita': 'Mortalità'
+        };
+        
+        const cycleIds = cycles.map((c: any) => c.id);
+        
+        cycles.forEach((cycle: any) => {
+          const cycleOps = operations
+            .filter((op: any) => op.cycleId === cycle.id)
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          
+          if (cycleOps.length === 0) return;
+          
+          const latestOp = cycleOps[0];
+          const summaryRow = opsSheet.addRow({
+            cycleCode: cycle.cycleCode,
+            basketNumber: cycle.basketNumber,
+            flupsyName: cycle.flupsyName,
+            type: `📊 GIACENZA (${cycleOps.length} operazioni)`,
+            date: latestOp.date ? new Date(latestOp.date).toLocaleDateString('it-IT') : '-',
+            sizeCode: latestOp.sizeCode || '-',
+            animalCount: latestOp.animalCount?.toLocaleString('it-IT') || '-',
+            totalWeight: latestOp.totalWeight?.toLocaleString('it-IT') || '-',
+            animalsPerKg: latestOp.animalsPerKg?.toLocaleString('it-IT') || '-',
+            deadCount: '-',
+            notes: ''
+          });
+          
+          summaryRow.font = { bold: true };
+          summaryRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } };
+          summaryRow.outlineLevel = 0;
+          
+          const summaryRowNum = summaryRow.number;
+          
+          cycleOps.forEach((op: any, opIndex: number) => {
+            const opRow = opsSheet.addRow({
+              cycleCode: '',
+              basketNumber: '',
+              flupsyName: '',
+              type: operationTypeLabels[op.type] || op.type,
+              date: op.date ? new Date(op.date).toLocaleDateString('it-IT') : '-',
+              sizeCode: op.sizeCode || '-',
+              animalCount: op.animalCount?.toLocaleString('it-IT') || '-',
+              totalWeight: op.totalWeight?.toLocaleString('it-IT') || '-',
+              animalsPerKg: op.animalsPerKg?.toLocaleString('it-IT') || '-',
+              deadCount: op.deadCount?.toLocaleString('it-IT') || '-',
+              notes: op.notes || ''
+            });
+            
+            opRow.outlineLevel = 1;
+            opRow.hidden = true;
+            
+            if (opIndex % 2 === 1) {
+              opRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+            }
+          });
+        });
+        
+        opsSheet.eachRow((row) => {
+          row.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+              left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+              bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+              right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+            };
+          });
+        });
+      }
+      
       const buffer = await workbook.xlsx.writeBuffer();
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
