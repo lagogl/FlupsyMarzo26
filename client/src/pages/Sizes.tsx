@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Plus, Pencil } from 'lucide-react';
+import { Search, Plus, Pencil, Download, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ export default function Sizes() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingSize, setEditingSize] = useState<any>(null);
   const [editError, setEditError] = useState<string>('');
+  const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
   const [sortConfig, setSortConfig] = useState<{
     key: string;
@@ -44,6 +45,104 @@ export default function Sizes() {
     queryKey: ['/api/sizes'],
   });
 
+  // Export to Excel
+  const handleExportExcel = async () => {
+    if (!filteredAndSortedSizes || filteredAndSortedSizes.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nessun dato',
+        description: 'Non ci sono taglie da esportare'
+      });
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const ExcelJS = await import('exceljs');
+      const ExcelModule = (ExcelJS as any).default || ExcelJS;
+      const workbook = new ExcelModule.Workbook();
+      const worksheet = workbook.addWorksheet('Tabella Taglie');
+
+      // Row 1: Title
+      const today = new Date().toLocaleDateString('it-IT');
+      worksheet.mergeCells('A1:F1');
+      const titleCell = worksheet.getCell('A1');
+      titleCell.value = `Tabella Taglie - Esportato il ${today}`;
+      titleCell.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getRow(1).height = 28;
+
+      // Row 2: Headers
+      const headers = ['Codice', 'Nome', 'Misura (mm)', 'Min Animali/Kg', 'Max Animali/Kg', 'Note'];
+      const headerRow = worksheet.addRow(headers);
+      headerRow.eachCell((cell: any) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+
+      // Data rows (numeric values as raw numbers)
+      filteredAndSortedSizes.forEach((size: any, index: number) => {
+        const row = worksheet.addRow([
+          size.code || '',
+          size.name || '',
+          size.sizeMm ?? '',
+          size.minAnimalsPerKg ?? '',
+          size.maxAnimalsPerKg ?? '',
+          size.notes || ''
+        ]);
+        
+        if (index % 2 === 1) {
+          row.eachCell((cell: any) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+          });
+        }
+      });
+
+      // Column widths
+      worksheet.columns = [
+        { width: 12 },
+        { width: 15 },
+        { width: 14 },
+        { width: 18 },
+        { width: 18 },
+        { width: 50 }
+      ];
+
+      // Auto filter
+      worksheet.autoFilter = { from: 'A2', to: 'F2' };
+
+      // Download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `tabella_taglie_${today.replace(/\//g, '-')}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: 'Export completato',
+        description: `Esportate ${filteredAndSortedSizes.length} taglie`
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Errore export',
+        description: 'Si è verificato un errore durante l\'esportazione'
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Create mutation
   const createSizeMutation = useMutation({
@@ -149,6 +248,18 @@ export default function Sizes() {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-condensed font-bold text-gray-800">Tabella Taglie</h2>
         <div className="flex space-x-3">
+          <Button 
+            onClick={handleExportExcel}
+            disabled={isExporting || isLoading}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-1" />
+            )}
+            Esporta Excel
+          </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-1" />
             Nuova Taglia
