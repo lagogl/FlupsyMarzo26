@@ -4832,21 +4832,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'chiusura-ciclo-vagliatura': 'Chiusura Vagliatura'
       };
       
-      // Data rows
+      // Data rows - use numeric values for Cesta and Ciclo to enable proper sorting
       operations.forEach((op, idx) => {
         const row = sheet.addRow([
           op.date ? new Date(op.date).toLocaleDateString('it-IT') : '',
           typeLabels[op.type] || op.type || '',
-          op.basketNumber ? `#${op.basketNumber}` : '',
+          op.basketNumber || null, // Numeric value for sorting
           op.flupsyName || '',
-          op.cycleId ? `#${op.cycleId}` : '',
+          op.cycleId || null, // Numeric value for sorting
           op.lotName || '',
           op.lotArrivalDate ? new Date(op.lotArrivalDate).toLocaleDateString('it-IT') : '',
           op.lotSupplier || '',
           op.sizeCode || '',
-          op.animalCount ? op.animalCount.toLocaleString('it-IT') : '',
-          op.totalWeightKg ? op.totalWeightKg.toFixed(2) : '',
-          op.avgWeightMg ? Math.round(op.avgWeightMg).toLocaleString('it-IT') : ''
+          op.animalCount || null, // Numeric value
+          op.totalWeightKg ? parseFloat(op.totalWeightKg.toFixed(2)) : null, // Numeric value
+          op.avgWeightMg ? Math.round(op.avgWeightMg) : null // Numeric value
         ]);
         
         // Alternating rows
@@ -4877,9 +4877,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { width: 10 }, { width: 14 }, { width: 12 }, { width: 12 }
       ];
       
-      // Auto-filter
+      // Auto-filter (start from row 2 because row 1 is title)
       const lastRow = sheet.rowCount;
-      sheet.autoFilter = { from: 'A1', to: `L${lastRow}` };
+      sheet.autoFilter = { from: 'A2', to: `L${lastRow}` };
       
       const buffer = await workbook.xlsx.writeBuffer();
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
