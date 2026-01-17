@@ -4535,6 +4535,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
   FINE BLOCCO DEPRECATO */
 
   // === Basket Groups Endpoints ===
+  
+  // Export to Excel with collapsible basket details
+  app.post("/api/basket-groups/export-excel", async (req, res) => {
+    try {
+      const { groups } = req.body;
+      
+      if (!groups || !Array.isArray(groups)) {
+        return res.status(400).json({ message: 'Dati gruppi mancanti' });
+      }
+      
+      const ExcelJS = (await import('exceljs')).default || await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      
+      const sheet = workbook.addWorksheet('Gruppi Ceste', {
+        views: [{ state: 'frozen', ySplit: 1 }],
+        properties: { outlineLevelRow: 1 }
+      });
+      
+      sheet.columns = [
+        { header: 'Gruppo', key: 'groupName', width: 30 },
+        { header: 'Descrizione', key: 'purpose', width: 40 },
+        { header: 'Colore', key: 'color', width: 12 },
+        { header: 'N° Ceste', key: 'basketCount', width: 12 },
+        { header: 'ID Cesta', key: 'basketId', width: 10 },
+        { header: 'FLUPSY', key: 'flupsyName', width: 18 },
+        { header: 'Taglia', key: 'size', width: 12 },
+        { header: 'N° Animali', key: 'animalCount', width: 14 },
+        { header: 'Stato Cesta', key: 'basketState', width: 12 }
+      ];
+      
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 24;
+      
+      // Fetch baskets for each group
+      for (const group of groups) {
+        // Query baskets with this groupId directly from database
+        const basketsResult = await db.query.baskets.findMany({
+          where: eq(schema.baskets.groupId, group.id)
+        });
+        
+        // Enrich with FLUPSY name
+        const baskets = await Promise.all(basketsResult.map(async (basket: any) => {
+          const flupsy = await storage.getFlupsy(basket.flupsyId);
+          return {
+            ...basket,
+            flupsyName: flupsy?.name || '-'
+          };
+        }));
+        
+        // Add group summary row
+        const summaryRow = sheet.addRow({
+          groupName: group.name,
+          purpose: group.purpose || '-',
+          color: group.color || '-',
+          basketCount: `📦 ${group.basketCount || baskets.length} ceste`,
+          basketId: '',
+          flupsyName: '',
+          size: '',
+          animalCount: '',
+          basketState: ''
+        });
+        
+        summaryRow.font = { bold: true };
+        summaryRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } };
+        summaryRow.outlineLevel = 0;
+        
+        // Color indicator cell
+        if (group.color) {
+          const colorCell = summaryRow.getCell('color');
+          colorCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: group.color.replace('#', 'FF') } };
+        }
+        
+        // Add basket detail rows (collapsible)
+        baskets.forEach((basket: any, idx: number) => {
+          const basketRow = sheet.addRow({
+            groupName: '',
+            purpose: '',
+            color: '',
+            basketCount: '',
+            basketId: `#${basket.physicalNumber || basket.id}`,
+            flupsyName: basket.flupsyName || '-',
+            size: basket.calculatedSize || basket.sizeCode || '-',
+            animalCount: basket.animalCount?.toLocaleString('it-IT') || '-',
+            basketState: basket.state === 'active' ? 'Attivo' : basket.state || '-'
+          });
+          
+          basketRow.outlineLevel = 1;
+          basketRow.hidden = true;
+          
+          if (idx % 2 === 1) {
+            basketRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+          }
+          
+          const stateCell = basketRow.getCell('basketState');
+          if (basket.state === 'active') {
+            stateCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+          }
+        });
+      }
+      
+      // Add borders to all cells
+      sheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+      });
+      
+      // Enable auto-filter
+      const lastRow = sheet.rowCount;
+      sheet.autoFilter = { from: 'A1', to: `I${lastRow}` };
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=gruppi_ceste.xlsx');
+      res.send(buffer);
+    } catch (error) {
+      console.error('Error exporting basket groups to Excel:', error);
+      res.status(500).json({ message: 'Errore durante esportazione Excel' });
+    }
+  });
+  
   app.get("/api/basket-groups", async (req, res) => {
     try {
       const groups = await storage.getBasketGroups();

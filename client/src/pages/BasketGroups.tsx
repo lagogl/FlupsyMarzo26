@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, Trash2, FolderOpen, Palette } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderOpen, Palette, Download, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const formSchema = insertBasketGroupSchema.extend({
@@ -33,6 +33,7 @@ interface BasketGroupWithCount extends BasketGroup {
 export default function BasketGroups() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<BasketGroupWithCount | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
   const { data: groups, isLoading } = useQuery<BasketGroupWithCount[]>({
@@ -158,6 +159,45 @@ export default function BasketGroups() {
     deleteMutation.mutate(id);
   };
 
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/basket-groups/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groups })
+      });
+      
+      if (!response.ok) throw new Error('Errore esportazione');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('it-IT').replace(/\//g, '-');
+      a.download = `gruppi_ceste_${dateStr}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Esportazione completata",
+        description: "File Excel scaricato con gruppi e ceste dettagliate"
+      });
+    } catch (error) {
+      console.error('Errore durante esportazione:', error);
+      toast({
+        title: "Errore",
+        description: "Si è verificato un errore durante l'esportazione",
+        variant: "destructive"
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="flex justify-between items-center mb-6">
@@ -167,10 +207,24 @@ export default function BasketGroups() {
             Organizza le ceste in gruppi per esigenze operative specifiche
           </p>
         </div>
-        <Button onClick={handleCreate} data-testid="button-create-group">
-          <Plus className="w-4 h-4 mr-2" />
-          Nuovo Gruppo
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={exportToExcel}
+            disabled={isExporting || !groups || groups.length === 0}
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Esporta
+          </Button>
+          <Button onClick={handleCreate} data-testid="button-create-group">
+            <Plus className="w-4 h-4 mr-2" />
+            Nuovo Gruppo
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
