@@ -47,7 +47,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Calendar as CalendarIcon2,
-  Filter,
+  SlidersHorizontal,
   ChevronDown,
   Maximize2,
   SlackIcon
@@ -339,8 +339,8 @@ export default function GrowJourney() {
           
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="icon">
-                <Filter className="h-4 w-4" />
+              <Button variant="outline" size="icon" title="Opzioni di visualizzazione">
+                <SlidersHorizontal className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80">
