@@ -61,6 +61,7 @@ export default function GrowJourney() {
   const [selectedCycle, setSelectedCycle] = useState<number | null>(null);
   const [projectionDays, setProjectionDays] = useState(90);
   const [activeTab, setActiveTab] = useState('growth-curve');
+  const [cycleStateFilter, setCycleStateFilter] = useState<'active' | 'closed' | 'all'>('active');
 
   // Query per recuperare i dati necessari
   const { data: basketsData, isLoading: basketsLoading } = useQuery({
