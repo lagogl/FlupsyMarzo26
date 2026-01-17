@@ -529,7 +529,7 @@ export default function Sgr() {
               <Button 
                 onClick={exportToExcel} 
                 disabled={!sgrPerTaglia || sgrPerTaglia.length === 0}
-                variant="outline"
+                className="bg-green-600 hover:bg-green-700 text-white"
                 data-testid="button-export-excel"
               >
                 <Download className="h-4 w-4 mr-1" /> Esporta Excel
@@ -1910,7 +1910,6 @@ export default function Sgr() {
                 </Button>
               )}
               <Button
-                variant="outline"
                 size="sm"
                 onClick={async () => {
                   setIsExportingExcel(true);
@@ -1939,7 +1938,7 @@ export default function Sgr() {
                   }
                 }}
                 disabled={isExportingExcel}
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white"
               >
                 <Download className="h-4 w-4" />
                 {isExportingExcel ? 'Esportazione...' : 'Esporta Excel'}

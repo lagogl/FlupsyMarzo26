@@ -901,9 +901,9 @@ export default function OrdiniCondivisi() {
             <RefreshCw className={`w-4 h-4 mr-2 ${sincronizzaConFIC.isPending ? 'animate-spin' : ''}`} />
             {sincronizzaConFIC.isPending ? 'Sincronizzazione...' : 'Sincronizza con FIC'}
           </Button>
-          <Button variant="outline" size="sm" onClick={esportaOrdini} data-testid="button-esporta">
+          <Button size="sm" onClick={esportaOrdini} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-esporta">
             <Download className="w-4 h-4 mr-2" />
-            Esporta
+            Esporta Excel
           </Button>
         </div>
       </div>

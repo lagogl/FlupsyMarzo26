@@ -559,9 +559,9 @@ export default function CyclesPaginated() {
         <h1 className="text-3xl font-bold">Cicli Produttivi</h1>
         <div className="flex gap-2">
           <Button 
-            variant="outline"
             onClick={handleExportExcel}
             disabled={isExporting || sortedCycles.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
             {isExporting ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

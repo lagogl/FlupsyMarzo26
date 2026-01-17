@@ -1173,7 +1173,7 @@ export default function Settings() {
                       Esporta un backup completo del database in formato SQL.
                     </p>
                   </div>
-                  <Button variant="outline" className="whitespace-nowrap ml-4">
+                  <Button className="whitespace-nowrap ml-4 bg-green-600 hover:bg-green-700 text-white">
                     <DatabaseBackup className="h-4 w-4 mr-2" />
                     Esporta Backup
                   </Button>

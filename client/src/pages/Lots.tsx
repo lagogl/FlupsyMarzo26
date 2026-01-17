@@ -453,17 +453,17 @@ export default function Lots() {
             )}
           </Button>
           <Button 
-            variant="outline" 
             size="sm"
             onClick={exportToExcel}
             disabled={isExporting || sortedLots.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
             {isExporting ? (
               <Loader2 className="h-4 w-4 mr-1 animate-spin" />
             ) : (
               <FileDown className="h-4 w-4 mr-1" />
             )}
-            Esporta
+            Esporta Excel
           </Button>
           <Button 
             variant="outline" 

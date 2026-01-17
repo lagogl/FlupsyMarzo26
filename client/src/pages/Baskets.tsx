@@ -643,17 +643,17 @@ export default function Baskets() {
         <h2 className="text-2xl font-condensed font-bold text-gray-800">Gestione Ceste</h2>
         <div className="flex space-x-3">
           <Button 
-            variant="outline" 
             size="sm" 
             onClick={exportToExcel}
             disabled={isExporting || filteredBaskets.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
             {isExporting ? (
               <Loader2 className="h-4 w-4 mr-1 animate-spin" />
             ) : (
               <Download className="h-4 w-4 mr-1" />
             )}
-            Esporta
+            Esporta Excel
           </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-1" />

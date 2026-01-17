@@ -209,16 +209,16 @@ export default function BasketGroups() {
         </div>
         <div className="flex gap-2">
           <Button 
-            variant="outline" 
             onClick={exportToExcel}
             disabled={isExporting || !groups || groups.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
             {isExporting ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               <Download className="w-4 h-4 mr-2" />
             )}
-            Esporta
+            Esporta Excel
           </Button>
           <Button onClick={handleCreate} data-testid="button-create-group">
             <Plus className="w-4 h-4 mr-2" />

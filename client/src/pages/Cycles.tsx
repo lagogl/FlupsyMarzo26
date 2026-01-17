@@ -525,10 +525,10 @@ export default function Cycles() {
         <h2 className="text-2xl font-condensed font-bold text-gray-800">Cicli Produttivi</h2>
         <div className="flex space-x-3">
           <Button 
-            variant="outline" 
             size="sm" 
             onClick={handleExportExcel}
             disabled={isExporting || sortedCycles.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
             {isExporting ? (
               <Loader2 className="h-4 w-4 mr-1 animate-spin" />

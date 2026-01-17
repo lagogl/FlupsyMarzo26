@@ -233,7 +233,7 @@ export default function LotsAnalytics() {
           </div>
           
           <div className="mt-4 flex justify-end">
-            <Button onClick={handleExport} variant="outline" className="flex items-center gap-2">
+            <Button onClick={handleExport} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white">
               <FileDown className="w-4 h-4" />
               Esporta CSV
             </Button>

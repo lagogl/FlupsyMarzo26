@@ -243,8 +243,7 @@ export default function GiacenzeRange() {
               <Button
                 onClick={handleExportExcel}
                 disabled={isExporting}
-                variant="outline"
-                className="gap-2"
+                className="gap-2 bg-green-600 hover:bg-green-700 text-white"
               >
                 {isExporting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

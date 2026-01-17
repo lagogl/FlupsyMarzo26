@@ -706,7 +706,7 @@ export default function AnalisiScostamenti() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <Button onClick={exportToExcel} variant="outline" size="sm">
+                <Button onClick={exportToExcel} size="sm" className="bg-green-600 hover:bg-green-700 text-white">
                   <Download className="h-4 w-4 mr-2" />
                   Esporta Excel
                 </Button>
