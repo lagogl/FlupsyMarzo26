@@ -16,7 +16,7 @@ import { format, addDays, differenceInWeeks } from 'date-fns';
 import { Calendar, Clock, ArrowRight, Info, ZoomIn, ZoomOut, RefreshCw, Fan, Download } from 'lucide-react';
 import { getTargetSizeForWeight, getFutureWeightAtDate, getSizeColor } from '@/lib/utils';
 import SizeGrowthTimeline from '@/components/SizeGrowthTimeline';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 
 // Componente personalizzato per il tooltip che garantisce alta leggibilità
 const HighContrastTooltip = ({ children, className = "" }) => (
@@ -1121,75 +1121,85 @@ export default function FlupsyComparison() {
     );
   };
 
-  // Funzione per generare e scaricare il report Excel
-  const generateExcelReport = () => {
+  // Funzione per generare e scaricare il report Excel con formato standard
+  const generateExcelReport = async () => {
     if (!fluspyBaskets || fluspyBaskets.length === 0 || !selectedFlupsy) {
       return;
     }
 
-    // Prepara i dati per il foglio "Totalizzazioni"
-    const totalData = [
-      {
-        'Metrica': 'Animali che centrano target (qualsiasi data)',
-        'Valore': totals.targetReached.toLocaleString('it-IT'),
-        'Cestelli': totals.targetReachedCount
-      },
-      {
-        'Metrica': `Animali che centrano target entro ${daysInFuture} giorni`,
-        'Valore': totals.targetByDate.toLocaleString('it-IT'),
-        'Cestelli': totals.targetByDateCount
-      },
-      {
-        'Metrica': 'Animali fuori target',
-        'Valore': totals.outOfTarget.toLocaleString('it-IT'),
-        'Cestelli': totals.outOfTargetCount
-      },
-      {
-        'Metrica': 'Totale animali',
-        'Valore': totals.total.toLocaleString('it-IT'),
-        'Cestelli': totals.totalCount
-      },
-      {},
-      {
-        'Metrica': 'FLUPSY',
-        'Valore': selectedFlupsy.name,
-        'Cestelli': '-'
-      },
-      {
-        'Metrica': 'Target Taglia',
-        'Valore': targetSizeCode,
-        'Cestelli': '-'
-      },
-      {
-        'Metrica': 'Giorni Proiezione',
-        'Valore': daysInFuture,
-        'Cestelli': '-'
-      },
-      {
-        'Metrica': 'Modalità',
-        'Valore': currentTabId === 'data-futuro' ? 'Data Futura' : 'Taglia Target',
-        'Cestelli': '-'
-      },
-      {
-        'Metrica': 'Data Report',
-        'Valore': format(new Date(), 'dd/MM/yyyy HH:mm'),
-        'Cestelli': '-'
-      }
-    ];
+    const ExcelModule = (ExcelJS as any).default || ExcelJS;
+    const workbook = new ExcelModule.Workbook();
+    const reportDate = format(new Date(), 'dd/MM/yyyy HH:mm');
+    const modalita = currentTabId === 'data-futuro' ? 'Data Futura' : 'Taglia Target';
 
-    // Prepara i dati per il foglio "Data Futura"
-    const futureData = fluspyBaskets.map(basket => {
+    // Helper per applicare stile header blu
+    const applyHeaderStyle = (row: any) => {
+      row.eachCell((cell: any) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+      });
+    };
+
+    // Helper per applicare stile alternato righe
+    const applyAlternatingRows = (worksheet: any, startRow: number, endRow: number) => {
+      for (let i = startRow; i <= endRow; i++) {
+        const row = worksheet.getRow(i);
+        if ((i - startRow) % 2 === 1) {
+          row.eachCell((cell: any) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+          });
+        }
+      }
+    };
+
+    // ===== FOGLIO 1: Riepilogo =====
+    const wsRiepilogo = workbook.addWorksheet('Riepilogo');
+    wsRiepilogo.mergeCells('A1:C1');
+    const titleCell1 = wsRiepilogo.getCell('A1');
+    titleCell1.value = `Confronto FLUPSY - ${selectedFlupsy.name} - ${reportDate}`;
+    titleCell1.font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } };
+    titleCell1.alignment = { horizontal: 'left' };
+
+    wsRiepilogo.addRow(['Metrica', 'Valore', 'Cestelli']);
+    applyHeaderStyle(wsRiepilogo.getRow(2));
+    
+    wsRiepilogo.addRow(['Target Raggiunto', totals.targetReached, totals.targetReachedCount]);
+    wsRiepilogo.addRow([`Target Entro ${daysInFuture}g`, totals.targetByDate, totals.targetByDateCount]);
+    wsRiepilogo.addRow(['Fuori Target', totals.outOfTarget, totals.outOfTargetCount]);
+    wsRiepilogo.addRow(['Totale Animali', totals.total, totals.totalCount]);
+    wsRiepilogo.addRow([]);
+    wsRiepilogo.addRow(['FLUPSY', selectedFlupsy.name, '']);
+    wsRiepilogo.addRow(['Target Taglia', targetSizeCode, '']);
+    wsRiepilogo.addRow(['Giorni Proiezione', daysInFuture, '']);
+    wsRiepilogo.addRow(['Modalità', modalita, '']);
+    
+    wsRiepilogo.columns = [{ width: 30 }, { width: 20 }, { width: 15 }];
+    wsRiepilogo.autoFilter = { from: 'A2', to: 'C2' };
+
+    // ===== FOGLIO 2: Dettaglio Cestelli =====
+    const wsDettaglio = workbook.addWorksheet('Dettaglio Cestelli');
+    wsDettaglio.mergeCells('A1:J1');
+    const titleCell2 = wsDettaglio.getCell('A1');
+    titleCell2.value = `Dettaglio Cestelli - ${selectedFlupsy.name} - ${modalita}`;
+    titleCell2.font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } };
+
+    const headers2 = ['Fila', 'Cesta', 'Ciclo', 'N° Animali', 'Taglia Attuale', 'Peso (mg)', 'Taglia Prevista', 'Peso Prev (mg)', 'An/kg', 'Crescita %'];
+    wsDettaglio.addRow(headers2);
+    applyHeaderStyle(wsDettaglio.getRow(2));
+
+    fluspyBaskets.forEach(basket => {
       const latestOperation = getLatestOperationForBasket(basket.id);
       const cycle = getCycleForBasket(basket.id);
       
       if (!latestOperation || !latestOperation.animalsPerKg) {
-        return {
-          'Cestello': basket.physicalNumber,
-          'Riga': basket.row || 'N/A',
-          'Posizione': basket.position || 'N/A',
-          'Ciclo': cycle?.id || 'N/A',
-          'Stato': 'Nessun dato disponibile'
-        };
+        wsDettaglio.addRow([basket.row || '', basket.physicalNumber, cycle?.id || '', '', '', '', '', '', '', '']);
+        return;
       }
 
       const currentWeight = 1000000 / latestOperation.animalsPerKg;
@@ -1197,159 +1207,87 @@ export default function FlupsyComparison() {
       const futureWeight = calculateFutureWeight(basket.id, daysInFuture);
       const futureSize = futureWeight ? getTargetSizeForWeight(futureWeight, sizes) : null;
       const futureAnimalsPerKg = futureWeight ? Math.round(1000000 / futureWeight) : null;
-      const growthPercentage = futureWeight && currentWeight > 0 
-        ? Math.round((futureWeight / currentWeight - 1) * 100) 
-        : 0;
+      const growthPct = futureWeight && currentWeight > 0 ? Math.round((futureWeight / currentWeight - 1) * 100) : 0;
 
-      return {
-        'Cestello': basket.physicalNumber,
-        'Riga': basket.row || 'N/A',
-        'Posizione': basket.position || 'N/A',
-        'Ciclo': cycle?.id || 'N/A',
-        'Taglia Attuale': currentSize?.code || 'N/A',
-        'Peso Attuale (mg)': Math.round(currentWeight),
-        'Animali/kg Attuali': latestOperation.animalsPerKg.toFixed(2),
-        'N° Animali': latestOperation.animalCount?.toLocaleString('it-IT') || 'N/A',
-        'Taglia Futura': futureSize?.code || 'N/A',
-        'Peso Futuro (mg)': futureWeight ? futureWeight.toFixed(2) : 'N/A',
-        'Animali/kg Futuri': futureAnimalsPerKg ? futureAnimalsPerKg.toFixed(2) : 'N/A',
-        'Crescita %': `${growthPercentage >= 0 ? '+' : ''}${growthPercentage}%`,
-        'Data Previsione': format(addDays(new Date(), daysInFuture), 'dd/MM/yyyy')
-      };
+      wsDettaglio.addRow([
+        basket.row || '',
+        basket.physicalNumber,
+        cycle?.id || '',
+        latestOperation.animalCount || '',
+        currentSize?.code || '',
+        Math.round(currentWeight),
+        futureSize?.code || '',
+        futureWeight ? Math.round(futureWeight) : '',
+        futureAnimalsPerKg || '',
+        growthPct
+      ]);
     });
 
-    // Prepara i dati per il foglio "Taglia Target"
-    const targetData = fluspyBaskets.map(basket => {
+    wsDettaglio.columns = [{ width: 8 }, { width: 8 }, { width: 8 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 14 }, { width: 10 }, { width: 10 }];
+    wsDettaglio.autoFilter = { from: 'A2', to: 'J2' };
+    applyAlternatingRows(wsDettaglio, 3, wsDettaglio.rowCount);
+
+    // ===== FOGLIO 3: Taglia Target =====
+    const wsTarget = workbook.addWorksheet(`Taglia ${targetSizeCode}`);
+    wsTarget.mergeCells('A1:H1');
+    const titleCell3 = wsTarget.getCell('A1');
+    titleCell3.value = `Analisi Taglia Target ${targetSizeCode} - ${selectedFlupsy.name}`;
+    titleCell3.font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } };
+
+    const headers3 = ['Fila', 'Cesta', 'Ciclo', 'Taglia Attuale', 'Peso (mg)', 'Giorni Stimati', 'Data Raggiungimento', 'Stato'];
+    wsTarget.addRow(headers3);
+    applyHeaderStyle(wsTarget.getRow(2));
+
+    fluspyBaskets.forEach(basket => {
       const latestOperation = getLatestOperationForBasket(basket.id);
       const cycle = getCycleForBasket(basket.id);
       
       if (!latestOperation || !latestOperation.animalsPerKg) {
-        return {
-          'Cestello': basket.physicalNumber,
-          'Riga': basket.row || 'N/A',
-          'Posizione': basket.position || 'N/A',
-          'Ciclo': cycle?.id || 'N/A',
-          'Stato': 'Nessun dato disponibile'
-        };
+        wsTarget.addRow([basket.row || '', basket.physicalNumber, cycle?.id || '', '', '', '', '', 'Nessun dato']);
+        return;
       }
 
       const currentWeight = 1000000 / latestOperation.animalsPerKg;
       const currentSize = getTargetSizeForWeight(currentWeight, sizes);
       const daysToTarget = getDaysToReachTargetSize(basket.id, targetSizeCode);
-      const targetSize = sizes?.find(s => s.code === targetSizeCode);
       
       let stato = '';
-      let dataRaggiungimento = '';
+      let dataRagg = '';
       
       if (currentSize?.code === targetSizeCode) {
-        stato = 'Taglia già raggiunta';
+        stato = 'Raggiunta';
       } else if (daysToTarget === null) {
-        stato = 'Non raggiungibile entro 365 giorni';
+        stato = 'Non raggiungibile';
       } else {
-        stato = `${daysToTarget} giorni`;
-        dataRaggiungimento = format(addDays(new Date(), daysToTarget), 'dd/MM/yyyy');
+        stato = 'In corso';
+        dataRagg = format(addDays(new Date(), daysToTarget), 'dd/MM/yyyy');
       }
 
-      return {
-        'Cestello': basket.physicalNumber,
-        'Riga': basket.row || 'N/A',
-        'Posizione': basket.position || 'N/A',
-        'Ciclo': cycle?.id || 'N/A',
-        'Taglia Attuale': currentSize?.code || 'N/A',
-        'Peso Attuale (mg)': Math.round(currentWeight),
-        'Animali/kg': latestOperation.animalsPerKg.toFixed(2),
-        'Taglia Target': targetSizeCode,
-        'Nome Taglia Target': targetSize?.name || 'N/A',
-        'Giorni Necessari': stato,
-        'Data Raggiungimento': dataRaggiungimento || 'N/A'
-      };
+      wsTarget.addRow([
+        basket.row || '',
+        basket.physicalNumber,
+        cycle?.id || '',
+        currentSize?.code || '',
+        Math.round(currentWeight),
+        daysToTarget !== null ? daysToTarget : '',
+        dataRagg,
+        stato
+      ]);
     });
 
-    // Crea il workbook
-    const wb = XLSX.utils.book_new();
-    
-    // Crea il foglio "Totalizzazioni" (primo foglio)
-    const wsTotal = XLSX.utils.json_to_sheet(totalData);
-    XLSX.utils.book_append_sheet(wb, wsTotal, 'Totalizzazioni');
-    
-    // Crea il foglio "Dettaglio Cestelli"
-    const detailData = fluspyBaskets.map(basket => {
-      const latestOperation = getLatestOperationForBasket(basket.id);
-      const cycle = getCycleForBasket(basket.id);
-      
-      if (!latestOperation || !latestOperation.animalsPerKg) {
-        return {
-          'Cestello': basket.physicalNumber,
-          'Animali': 'N/A',
-          'Peso Attuale': 'N/A',
-          'Taglia Attuale': 'N/A',
-          'Peso Previsto': 'N/A',
-          'Taglia Prevista': 'N/A',
-          'Giorni Target': 'N/A',
-          'Raggiunge Target': 'N/A',
-          'Note': 'Nessun dato disponibile'
-        };
-      }
+    wsTarget.columns = [{ width: 8 }, { width: 8 }, { width: 8 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 18 }, { width: 16 }];
+    wsTarget.autoFilter = { from: 'A2', to: 'H2' };
+    applyAlternatingRows(wsTarget, 3, wsTarget.rowCount);
 
-      const currentWeight = 1000000 / latestOperation.animalsPerKg;
-      const currentSize = getTargetSizeForWeight(currentWeight, sizes);
-      const futureWeight = calculateFutureWeight(basket.id, daysInFuture);
-      const futureSize = futureWeight ? getTargetSizeForWeight(futureWeight, sizes) : null;
-      const daysToTarget = getDaysToReachTargetSize(basket.id, targetSizeCode);
-      
-      let raggiungeTarget = 'No';
-      let note = 'Fuori target';
-      
-      if (currentTabId === 'data-futuro') {
-        const targetSize = sizes?.find(s => s.code === targetSizeCode);
-        if (futureWeight && targetSize) {
-          // Calcola il peso minimo della taglia target
-          const targetMaxApk = targetSize.maxAnimalsPerKg !== undefined ? targetSize.maxAnimalsPerKg : targetSize.max_animals_per_kg;
-          const targetMinWeight = targetMaxApk ? 1000000 / targetMaxApk : 0;
-          
-          // Raggiungi il target se il peso futuro >= peso minimo target
-          if (futureWeight >= targetMinWeight) {
-            raggiungeTarget = 'Sì';
-            note = 'Target centrato';
-          }
-        }
-      } else {
-        if (currentSize?.code === targetSizeCode) {
-          raggiungeTarget = 'Sì (già raggiunta)';
-          note = 'Taglia già raggiunta';
-        } else if (daysToTarget !== null) {
-          raggiungeTarget = 'Sì';
-          note = `Raggiungerà il target in ${daysToTarget} giorni`;
-        }
-      }
-
-      return {
-        'Cestello': basket.physicalNumber,
-        'Animali': latestOperation.animalCount?.toLocaleString('it-IT') || 'N/A',
-        'Peso Attuale': `${Math.round(currentWeight)} mg`,
-        'Taglia Attuale': currentSize?.code || 'N/A',
-        'Peso Previsto': futureWeight ? `${Math.round(futureWeight)} mg` : 'N/A',
-        'Taglia Prevista': futureSize?.code || 'N/A',
-        'Giorni Target': daysToTarget !== null ? daysToTarget : '-',
-        'Raggiunge Target': raggiungeTarget,
-        'Note': note
-      };
-    });
-    
-    const wsDetail = XLSX.utils.json_to_sheet(detailData);
-    XLSX.utils.book_append_sheet(wb, wsDetail, 'Dettaglio Cestelli');
-    
-    // Crea il foglio "Data Futura"
-    const wsFuture = XLSX.utils.json_to_sheet(futureData);
-    XLSX.utils.book_append_sheet(wb, wsFuture, `Previsione ${daysInFuture} giorni`);
-    
-    // Crea il foglio "Taglia Target"
-    const wsTarget = XLSX.utils.json_to_sheet(targetData);
-    XLSX.utils.book_append_sheet(wb, wsTarget, `Taglia ${targetSizeCode}`);
-
-    // Genera il file e scaricalo
-    const fileName = `Confronto-Flupsy_${selectedFlupsy.name}_${format(new Date(), 'dd-MM-yyyy_HH-mm')}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    // Genera e scarica il file
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Confronto-Flupsy_${selectedFlupsy.name}_${format(new Date(), 'dd-MM-yyyy_HH-mm')}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   // Render principale del componente
@@ -1405,8 +1343,7 @@ export default function FlupsyComparison() {
               </Button>
               <Button
                 size="sm"
-                variant="default"
-                className="h-7 px-3"
+                className="h-7 px-3 bg-green-600 hover:bg-green-700 text-white"
                 onClick={generateExcelReport}
                 disabled={!selectedFlupsyId || !fluspyBaskets || fluspyBaskets.length === 0}
                 data-testid="button-download-excel-report"
