@@ -608,10 +608,18 @@ export class BasketsController {
       ];
       
       const headerRow = sheet.addRow(['ID Cesta', 'FLUPSY', 'Sito Produttivo', 'Data Attivazione', 'Data Ult. Operazione', 'Peso Cesta (Kg)', 'Taglia', 'pz / Kg', 'N° Animali', 'Mortalità %', 'Posizione', 'Lotto', 'Fornitore', 'Codice Ciclo', 'Ultima Operazione', 'Stato']);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-      headerRow.height = 24;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+        };
+      });
+      headerRow.height = 25;
       
       const operationTypeLabels: Record<string, string> = {
         'prima-attivazione': 'Prima Attivazione',

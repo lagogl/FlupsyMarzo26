@@ -4572,12 +4572,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { key: 'basketState', width: 12 }
       ];
       
-      // Riga intestazioni
+      // Riga intestazioni con stile applicato a ogni cella
       const headerRow = sheet.addRow(['Gruppo', 'Descrizione', 'Colore', 'N° Ceste', 'ID Cesta', 'FLUPSY', 'Taglia', 'N° Animali', 'Stato Cesta']);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-      headerRow.height = 24;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+        };
+      });
+      headerRow.height = 25;
       
       // Fetch baskets for each group
       for (const group of groups) {

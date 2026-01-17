@@ -312,12 +312,20 @@ export class LotsController {
       
       sheet.columns = columns;
       
-      // Stile intestazione
+      // Stile intestazione con eachCell per applicazione corretta
       const headerRow = sheet.addRow(['ID', 'Data Arrivo', 'Fornitore', 'N. Lotto Forn.', 'Qualità', 'Taglia', 'Età (gg)', 'Q.tà Iniziale', 'Q.tà Attuale', 'Venduti', 'Mortalità', '% Mortalità', 'Stato', 'Note']);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-      headerRow.height = 24;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+        };
+      });
+      headerRow.height = 25;
       
       // Mappa qualità con stelle
       const qualityLabels: Record<string, string> = {

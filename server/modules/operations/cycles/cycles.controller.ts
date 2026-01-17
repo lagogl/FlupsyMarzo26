@@ -375,10 +375,18 @@ export class CyclesController {
       ];
       
       const headerRow = sheet.addRow(['ID', 'Nr. Ciclo', 'Cestello', 'FLUPSY', 'Lotto', 'Data Inizio', 'Data Fine', 'Stato', 'Taglia', 'SGR', 'Nr. Animali']);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-      headerRow.height = 24;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+        };
+      });
+      headerRow.height = 25;
       
       cycles.forEach((cycle: any, index: number) => {
         const row = sheet.addRow({
@@ -449,10 +457,18 @@ export class CyclesController {
         ];
         
         const opsHeaderRow = opsSheet.addRow(['Ciclo', 'Cestello', 'FLUPSY', 'Tipo', 'Data', 'Taglia', 'Nr. Animali', 'Peso Tot (g)', 'An/Kg', 'Mortalità', 'Note']);
-        opsHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        opsHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
-        opsHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
-        opsHeaderRow.height = 24;
+        opsHeaderRow.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF059669' } },
+            left: { style: 'thin', color: { argb: 'FF059669' } },
+            bottom: { style: 'thin', color: { argb: 'FF059669' } },
+            right: { style: 'thin', color: { argb: 'FF059669' } }
+          };
+        });
+        opsHeaderRow.height = 25;
         
         const operationTypeLabels: Record<string, string> = {
           'prima-attivazione': 'Prima Attivazione',

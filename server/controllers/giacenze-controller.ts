@@ -416,14 +416,22 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
       alignment: { vertical: 'middle' as const, horizontal: 'center' as const }
     };
     
-    // Riga 5: Intestazione tabella
+    // Riga 5: Intestazione tabella con stile applicato a ogni cella
     const headerRow = summarySheet.getRow(5);
     headerRow.getCell(1).value = 'Voce';
     headerRow.getCell(2).value = 'Valore';
-    headerRow.font = headerStyle.font;
-    headerRow.fill = headerStyle.fill;
-    headerRow.alignment = headerStyle.alignment;
-    headerRow.height = 22;
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+      };
+    });
+    headerRow.height = 25;
 
     summarySheet.addRow({ voce: 'Giacenza Totale', valore: giacenzeData.totale_giacenza || 0 });
     summarySheet.addRow({ voce: 'Entrate Totali', valore: giacenzeData.totale_entrate || 0 });
@@ -451,10 +459,18 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
     ];
     
     const taglieHeaderRow = taglieSheet.addRow(['Taglia', 'Entrate', 'Uscite', 'Giacenza']);
-    taglieHeaderRow.font = headerStyle.font;
-    taglieHeaderRow.fill = headerStyle.fill;
-    taglieHeaderRow.alignment = headerStyle.alignment;
-    taglieHeaderRow.height = 22;
+    taglieHeaderRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+      };
+    });
+    taglieHeaderRow.height = 25;
 
     giacenzeData.dettaglio_taglie
       .sort((a, b) => b.giacenza - a.giacenza)
@@ -490,10 +506,18 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
     ];
     
     const flupsyHeaderRow = flupsySheet.addRow(['FLUPSY', 'Entrate', 'Uscite', 'Giacenza']);
-    flupsyHeaderRow.font = headerStyle.font;
-    flupsyHeaderRow.fill = headerStyle.fill;
-    flupsyHeaderRow.alignment = headerStyle.alignment;
-    flupsyHeaderRow.height = 22;
+    flupsyHeaderRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+        right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+      };
+    });
+    flupsyHeaderRow.height = 25;
 
     giacenzeData.dettaglio_flupsys
       .sort((a, b) => b.giacenza - a.giacenza)
