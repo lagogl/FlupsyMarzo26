@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { format, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Eye, Search, Filter, Plus, Package2, Edit, Trash2, AlertCircle, BarChart, ArrowUpDown, Layers, Table2, FileDown, RefreshCw, X } from 'lucide-react';
+import { Eye, Search, Filter, Plus, Package2, Edit, Trash2, AlertCircle, BarChart, ArrowUpDown, Layers, Table2, FileDown, RefreshCw, X, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -39,6 +39,7 @@ export default function Lots() {
   const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Filtri avanzati
   const [filterValues, setFilterValues] = useState({
@@ -361,49 +362,55 @@ export default function Lots() {
     setIsViewDialogOpen(true);
   };
   
-  // Funzione per esportare i dati in CSV
-  const exportToCSV = () => {
+  // Funzione per esportare i dati in Excel
+  const exportToExcel = async () => {
+    setIsExporting(true);
     try {
-      // Definiamo le intestazioni
-      const headers = [
-        'ID', 'Data Arrivo', 'Fornitore', 'Numero Lotto Fornitore', 
-        'Qualità', 'Note', 'Stato', 'Numero Animali'
-      ];
+      // Prepara i dati con inventario e mortalità
+      const lotsData = sortedLots.map((lot: any) => {
+        const ageDays = lot.arrivalDate 
+          ? differenceInDays(new Date(), new Date(lot.arrivalDate))
+          : 0;
+        
+        return {
+          id: lot.id,
+          arrivalDate: lot.arrivalDate,
+          supplier: lot.supplier,
+          supplierLotNumber: lot.supplierLotNumber,
+          quality: lot.quality,
+          sizeCode: lot.size?.code || '-',
+          ageDays: ageDays,
+          animalCount: lot.animalCount || 0,
+          initialCount: lot.animalCount || 0,
+          currentCount: lot.currentCount || lot.animalCount || 0,
+          soldCount: lot.soldCount || 0,
+          totalMortality: lot.totalMortality || 0,
+          state: lot.state,
+          notes: lot.notes
+        };
+      });
       
-      // Prepariamo i dati
-      const csvData = sortedLots.map(lot => [
-        lot.id,
-        lot.arrivalDate,
-        lot.supplier,
-        lot.supplierLotNumber || '',
-        lot.quality || '',
-        lot.notes || '',
-        lot.state,
-        lot.animalCount || 0
-      ]);
+      const response = await fetch('/api/lots/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lots: lotsData, viewMode })
+      });
       
-      // Aggiungiamo le intestazioni all'inizio
-      csvData.unshift(headers);
+      if (!response.ok) throw new Error('Errore esportazione');
       
-      // Convertiamo in stringhe CSV (con virgole come separatori)
-      const csvContent = csvData.map(row => row.join(',')).join('\n');
-      
-      // Creiamo un blob e un link per il download
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `lotti_export_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      
-      // Aggiungiamo il link, clicchiamo, e rimuoviamo
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lotti_export_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
       
       toast({
         title: "Esportazione completata",
-        description: "I dati sono stati esportati con successo in formato CSV",
+        description: "I dati sono stati esportati con successo in formato Excel",
       });
     } catch (error) {
       console.error('Errore durante l\'esportazione:', error);
@@ -412,6 +419,8 @@ export default function Lots() {
         description: "Si è verificato un errore durante l'esportazione dei dati",
         variant: "destructive",
       });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -446,9 +455,14 @@ export default function Lots() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={exportToCSV}
+            onClick={exportToExcel}
+            disabled={isExporting || sortedLots.length === 0}
           >
-            <FileDown className="h-4 w-4 mr-1" />
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4 mr-1" />
+            )}
             Esporta
           </Button>
           <Button 

@@ -14,6 +14,7 @@ router.get("/:id/stats", (req, res) => lotsController.getStats(req, res));
 // POST routes
 router.post("/", (req, res) => lotsController.create(req, res));
 router.post("/refresh-cache", (req, res) => lotsController.refreshCache(req, res));
+router.post("/export-excel", (req, res) => lotsController.exportExcel(req, res));
 
 // PATCH routes
 router.patch("/:id", (req, res) => lotsController.update(req, res));

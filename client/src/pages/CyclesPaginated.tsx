@@ -509,10 +509,30 @@ export default function CyclesPaginated() {
         };
       });
       
+      // Prepara le operazioni per l'export
+      const cycleIds = cyclesData.map(c => c.id);
+      const operationsData = operations
+        .filter(op => cycleIds.includes(op.cycleId))
+        .map(op => {
+          const size = sizes.find(s => s.id === op.sizeId);
+          return {
+            id: op.id,
+            cycleId: op.cycleId,
+            type: op.type,
+            date: op.date,
+            sizeCode: size?.code || op.size?.code || '-',
+            animalCount: op.animalCount,
+            totalWeight: op.totalWeight,
+            animalsPerKg: op.animalsPerKg,
+            deadCount: op.deadCount,
+            notes: op.notes
+          };
+        });
+      
       const response = await fetch('/api/cycles/export-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cycles: cyclesData })
+        body: JSON.stringify({ cycles: cyclesData, operations: operationsData })
       });
       
       if (!response.ok) throw new Error('Errore esportazione');

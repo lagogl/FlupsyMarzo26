@@ -262,6 +262,138 @@ export class LotsController {
       res.status(500).json({ message: "Failed to refresh cache" });
     }
   }
+
+  /**
+   * POST /api/lots/export-excel
+   * Export lots to Excel with inventory and mortality data
+   */
+  async exportExcel(req: Request, res: Response) {
+    try {
+      const { lots, viewMode } = req.body;
+      
+      if (!lots || !Array.isArray(lots)) {
+        return res.status(400).json({ message: "Dati lotti mancanti" });
+      }
+      
+      const ExcelJSModule = await import('exceljs');
+      const ExcelJS = ExcelJSModule.default || ExcelJSModule;
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'FLUPSY Management System';
+      workbook.created = new Date();
+      
+      const sheet = workbook.addWorksheet('Lotti', {
+        views: [{ state: 'frozen', ySplit: 1 }]
+      });
+      
+      // Colonne base + dettagliate
+      const columns = [
+        { header: 'ID', key: 'id', width: 6 },
+        { header: 'Data Arrivo', key: 'arrivalDate', width: 12 },
+        { header: 'Fornitore', key: 'supplier', width: 18 },
+        { header: 'N. Lotto Forn.', key: 'supplierLotNumber', width: 14 },
+        { header: 'Qualità', key: 'quality', width: 10 },
+        { header: 'Taglia', key: 'sizeCode', width: 10 },
+        { header: 'Età (gg)', key: 'ageDays', width: 10 },
+        { header: 'Q.tà Iniziale', key: 'initialCount', width: 14 },
+        { header: 'Q.tà Attuale', key: 'currentCount', width: 14 },
+        { header: 'Venduti', key: 'soldCount', width: 12 },
+        { header: 'Mortalità', key: 'totalMortality', width: 12 },
+        { header: '% Mortalità', key: 'mortalityRate', width: 12 },
+        { header: 'Stato', key: 'state', width: 10 },
+        { header: 'Note', key: 'notes', width: 25 }
+      ];
+      
+      sheet.columns = columns;
+      
+      // Stile intestazione
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 24;
+      
+      // Mappa qualità con stelle
+      const qualityLabels: Record<string, string> = {
+        'teste': 'Teste ★★★',
+        'normali': 'Normali ★★',
+        'code': 'Code ★'
+      };
+      
+      // Aggiungi dati
+      lots.forEach((lot: any, index: number) => {
+        const mortalityRate = lot.initialCount > 0 
+          ? ((lot.totalMortality || 0) / lot.initialCount * 100).toFixed(2) + '%'
+          : '0.00%';
+        
+        const row = sheet.addRow({
+          id: lot.id,
+          arrivalDate: lot.arrivalDate ? new Date(lot.arrivalDate).toLocaleDateString('it-IT') : '-',
+          supplier: lot.supplier || '-',
+          supplierLotNumber: lot.supplierLotNumber || '-',
+          quality: qualityLabels[lot.quality] || lot.quality || '-',
+          sizeCode: lot.sizeCode || lot.size?.code || '-',
+          ageDays: lot.ageDays || '-',
+          initialCount: lot.animalCount?.toLocaleString('it-IT') || '0',
+          currentCount: lot.currentCount?.toLocaleString('it-IT') || lot.animalCount?.toLocaleString('it-IT') || '0',
+          soldCount: lot.soldCount?.toLocaleString('it-IT') || '0',
+          totalMortality: lot.totalMortality?.toLocaleString('it-IT') || '0',
+          mortalityRate: mortalityRate,
+          state: lot.state === 'active' ? 'Attivo' : 'Esaurito',
+          notes: lot.notes || ''
+        });
+        
+        // Righe alternate
+        if (index % 2 === 1) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+        }
+        
+        // Colora stato
+        const stateCell = row.getCell('state');
+        if (lot.state === 'active') {
+          stateCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+        } else {
+          stateCell.font = { color: { argb: 'FF9CA3AF' } };
+        }
+        
+        // Colora mortalità alta
+        const mortCell = row.getCell('mortalityRate');
+        const mortValue = parseFloat(mortalityRate);
+        if (mortValue > 5) {
+          mortCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+        } else if (mortValue > 2) {
+          mortCell.font = { color: { argb: 'FFF59E0B' } };
+        }
+      });
+      
+      // Bordi
+      sheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+      });
+      
+      // Filtro automatico
+      sheet.autoFilter = { from: 'A1', to: `N${lots.length + 1}` };
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=lotti_export.xlsx');
+      res.send(buffer);
+      
+    } catch (error) {
+      console.error("Error exporting lots to Excel:", error);
+      res.status(500).json({ 
+        message: "Errore esportazione Excel",
+        error: (error as Error).message 
+      });
+    }
+  }
 }
 
 export const lotsController = new LotsController();
