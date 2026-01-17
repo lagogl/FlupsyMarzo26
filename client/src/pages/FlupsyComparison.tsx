@@ -924,6 +924,102 @@ export default function FlupsyComparison() {
     );
   };
 
+  // Renderizza la tabella per la modalità Data Futura
+  const renderFutureDateTable = () => {
+    return (
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fila</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cesta</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ciclo</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">N° Animali</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Taglia Attuale</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Taglia Prevista</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Peso (mg)</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">An/kg</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Crescita</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {fluspyBaskets.map((basket, idx) => {
+                const latestOperation = getLatestOperationForBasket(basket.id);
+                const cycle = getCycleForBasket(basket.id);
+                
+                if (!latestOperation || latestOperation.animalsPerKg === null) {
+                  return (
+                    <tr key={basket.id} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
+                      <td className="px-3 py-2 text-sm">{basket.row || '-'}</td>
+                      <td className="px-3 py-2 text-sm font-medium"># {basket.physicalNumber}</td>
+                      <td className="px-3 py-2 text-sm text-gray-500">{cycle ? `C#${cycle.id}` : '-'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-400 text-right">-</td>
+                      <td className="px-3 py-2 text-sm text-gray-400">-</td>
+                      <td className="px-3 py-2 text-sm text-gray-400">-</td>
+                      <td className="px-3 py-2 text-sm text-gray-400 text-right">-</td>
+                      <td className="px-3 py-2 text-sm text-gray-400 text-right">-</td>
+                      <td className="px-3 py-2 text-sm text-gray-400 text-right">-</td>
+                    </tr>
+                  );
+                }
+                
+                const currentWeight = 1000000 / latestOperation.animalsPerKg;
+                const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+                const futureWeight = calculateFutureWeight(basket.id, daysInFuture);
+                const futureSize = futureWeight ? getTargetSizeForWeight(futureWeight, sizes) : null;
+                const futureAnimalsPerKg = futureWeight ? Math.round(1000000 / futureWeight) : null;
+                const growthPercentage = futureWeight && currentWeight > 0 
+                  ? Math.round((futureWeight / currentWeight - 1) * 100) 
+                  : 0;
+                
+                const currentSizeDisplay = currentSize?.code?.startsWith('TP-') && parseInt(currentSize.code.replace('TP-', '')) >= 10000 
+                  ? '+TP-10000' 
+                  : (currentSize?.code || '-');
+                
+                const futureSizeDisplay = futureSize?.code?.startsWith('TP-') && parseInt(futureSize.code.replace('TP-', '')) >= 10000 
+                  ? '+TP-10000' 
+                  : (futureSize?.code || '-');
+                
+                return (
+                  <tr key={basket.id} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
+                    <td className="px-3 py-2 text-sm">{basket.row || '-'}</td>
+                    <td className="px-3 py-2 text-sm font-medium"># {basket.physicalNumber}</td>
+                    <td className="px-3 py-2 text-sm text-gray-500">{cycle ? `C#${cycle.id}` : '-'}</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium">
+                      {latestOperation.animalCount?.toLocaleString('it-IT') || '-'}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge className={`${getSizeColorWithBorder(currentSizeDisplay)} text-xs`}>
+                        {currentSizeDisplay}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge className={`${getSizeColorWithBorder(futureSizeDisplay)} text-xs`}>
+                        {futureSizeDisplay}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-sm text-right">
+                      {futureWeight ? futureWeight.toFixed(1) : '-'}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-right">
+                      {futureAnimalsPerKg?.toLocaleString('it-IT') || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Badge className={`text-xs ${growthPercentage >= 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                        {growthPercentage >= 0 ? '+' : ''}{growthPercentage}%
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   // Renderizza la tabella per la modalità Taglia Target
   const renderTargetSizeTable = () => {
     const rows = [...new Set(fluspyBaskets.map(b => b.row))].filter(Boolean).sort();
@@ -1550,57 +1646,8 @@ export default function FlupsyComparison() {
                     </div>
                   </div>
                   
-                  {/* Visualizzazione: Tabella per Taglia Target, Cards per Data Futura */}
-                  {currentTabId === 'taglia-target' ? (
-                    renderTargetSizeTable()
-                  ) : (
-                    (() => {
-                      // Converti i cestelli in una matrice per riga/posizione
-                      const rows = [...new Set(fluspyBaskets.map(b => b.row))].filter(Boolean).sort();
-                      
-                      // Calcola il numero massimo di posizioni tra tutte le righe
-                      const maxPosition = Math.max(
-                        ...fluspyBaskets.map(b => b.position || 0), 
-                        8 // Minimo 8 posizioni per visualizzazione
-                      );
-                      
-                      // Crea una matrice di cestelli
-                      const basketMatrix = {};
-                      rows.forEach(row => {
-                        basketMatrix[row] = Array(maxPosition).fill(null);
-                      });
-                      
-                      // Riempi la matrice con i cestelli
-                      fluspyBaskets.forEach(basket => {
-                        if (basket.row && basket.position !== null) {
-                          basketMatrix[basket.row][basket.position - 1] = basket;
-                        }
-                      });
-                      
-                      return (
-                        <div className="space-y-6">
-                          {rows.map(row => (
-                            <div key={row} className="rounded-md">
-                              <div className="flex items-center mb-2">
-                                <div className="text-sm font-medium bg-gray-100 px-2 py-1 rounded">
-                                  Fila {row}
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {basketMatrix[row].map((basket, position) => (
-                                  <div key={position}>
-                                    {renderFutureBasket(basket)}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                          
-                          {/* Sezione cestelli senza posizione rimossa per evitare confusione nel modulo di confronto */}
-                        </div>
-                      );
-                    })()
-                  )}
+                  {/* Visualizzazione: Tabella per entrambe le modalità */}
+                  {currentTabId === 'taglia-target' ? renderTargetSizeTable() : renderFutureDateTable()}
                 </div>
               )}
             </div>
