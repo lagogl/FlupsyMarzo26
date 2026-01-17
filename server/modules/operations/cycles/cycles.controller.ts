@@ -329,6 +329,121 @@ export class CyclesController {
       });
     }
   }
+
+  /**
+   * Esporta i cicli in formato Excel
+   * POST /api/cycles/export-excel
+   */
+  async exportCyclesExcel(req: Request, res: Response) {
+    try {
+      const { cycles } = req.body;
+      
+      if (!cycles || !Array.isArray(cycles)) {
+        return res.status(400).json({ message: "Dati cicli mancanti" });
+      }
+      
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'FLUPSY Management System';
+      workbook.created = new Date();
+      
+      const sheet = workbook.addWorksheet('Cicli Produttivi', {
+        views: [{ state: 'frozen', ySplit: 1 }]
+      });
+      
+      // Definisci colonne con filtri abilitati
+      sheet.columns = [
+        { header: 'ID', key: 'id', width: 8 },
+        { header: 'Nr. Ciclo', key: 'cycleCode', width: 12 },
+        { header: 'Cestello', key: 'basketNumber', width: 10 },
+        { header: 'FLUPSY', key: 'flupsyName', width: 18 },
+        { header: 'Lotto', key: 'lotSupplier', width: 20 },
+        { header: 'Data Inizio', key: 'startDate', width: 14 },
+        { header: 'Data Fine', key: 'endDate', width: 14 },
+        { header: 'Stato', key: 'state', width: 10 },
+        { header: 'Taglia', key: 'sizeCode', width: 10 },
+        { header: 'SGR', key: 'sgr', width: 8 },
+        { header: 'Nr. Animali', key: 'animalCount', width: 15 }
+      ];
+      
+      // Stile intestazione
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { 
+        type: 'pattern', 
+        pattern: 'solid', 
+        fgColor: { argb: 'FF3B82F6' } 
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 24;
+      
+      // Aggiungi dati con righe alternate
+      cycles.forEach((cycle: any, index: number) => {
+        const row = sheet.addRow({
+          id: cycle.id,
+          cycleCode: cycle.cycleCode,
+          basketNumber: cycle.basketNumber,
+          flupsyName: cycle.flupsyName,
+          lotSupplier: cycle.lotSupplier,
+          startDate: cycle.startDate ? new Date(cycle.startDate).toLocaleDateString('it-IT') : '-',
+          endDate: cycle.endDate ? new Date(cycle.endDate).toLocaleDateString('it-IT') : '-',
+          state: cycle.state === 'active' ? 'Attivo' : 'Chiuso',
+          sizeCode: cycle.sizeCode,
+          sgr: cycle.sgr ? `${cycle.sgr.toFixed(2)}%` : '-',
+          animalCount: cycle.animalCount?.toLocaleString('it-IT') || '0'
+        });
+        
+        // Colora righe alternate
+        if (index % 2 === 1) {
+          row.fill = { 
+            type: 'pattern', 
+            pattern: 'solid', 
+            fgColor: { argb: 'FFF3F4F6' } 
+          };
+        }
+        
+        // Colora stato
+        const stateCell = row.getCell('state');
+        if (cycle.state === 'active') {
+          stateCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+        } else {
+          stateCell.font = { color: { argb: 'FF6B7280' } };
+        }
+      });
+      
+      // Aggiungi bordi
+      sheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+      });
+      
+      // Abilita filtro automatico
+      sheet.autoFilter = {
+        from: 'A1',
+        to: `K${cycles.length + 1}`
+      };
+      
+      // Genera buffer e invia risposta
+      const buffer = await workbook.xlsx.writeBuffer();
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=cicli_produttivi.xlsx');
+      res.send(buffer);
+      
+    } catch (error) {
+      console.error("Error exporting cycles to Excel:", error);
+      res.status(500).json({ 
+        message: "Errore esportazione Excel",
+        error: (error as Error).message 
+      });
+    }
+  }
 }
 
 export const cyclesController = new CyclesController();

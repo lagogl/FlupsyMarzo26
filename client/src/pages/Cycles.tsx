@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { getSizeColor } from '@/lib/sizeUtils';
-import { Eye, Search, Filter, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Eye, Search, Filter, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Download, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -99,6 +99,9 @@ export default function Cycles() {
     start: null,
     end: null
   });
+  
+  // Stato per esportazione Excel
+  const [isExporting, setIsExporting] = useState(false);
   
   // Paginazione
   const [currentPage, setCurrentPage] = useState(1);
@@ -463,11 +466,77 @@ export default function Cycles() {
   
   // Queste funzioni sono già definite sopra tramite useMemo
 
+  // Funzione per esportare i cicli in Excel
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      // Prepara i dati da esportare (cicli filtrati, non paginati)
+      const cyclesData = sortedCycles.map(cycle => {
+        const basket = baskets.find(b => b.id === cycle.basketId);
+        const flupsy = basket ? flupsys.find(f => f.id === basket.flupsyId) : null;
+        const firstOp = operations.find(op => op.cycleId === cycle.id && op.type === 'prima-attivazione');
+        const lot = firstOp?.lotId ? lots.find(l => l.id === firstOp.lotId) : null;
+        const latestOp = operations
+          .filter(op => op.cycleId === cycle.id && ['misura', 'peso', 'prima-attivazione'].includes(op.type))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        
+        return {
+          id: cycle.id,
+          cycleCode: `C-${cycle.id}`,
+          basketNumber: basket?.physicalNumber || '-',
+          flupsyName: flupsy?.name || '-',
+          lotSupplier: lot?.supplier || '-',
+          startDate: cycle.startDate,
+          endDate: cycle.endDate,
+          state: cycle.state,
+          sizeCode: cycle.currentSize?.code || latestOp?.size?.code || '-',
+          sgr: cycle.currentSgr?.percentage || latestOp?.sgr?.percentage || null,
+          animalCount: latestOp?.animalCount || 0
+        };
+      });
+      
+      const response = await fetch('/api/cycles/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cycles: cyclesData })
+      });
+      
+      if (!response.ok) throw new Error('Errore esportazione');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cicli_produttivi_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Errore export Excel:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-condensed font-bold text-gray-800">Cicli Produttivi</h2>
         <div className="flex space-x-3">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleExportExcel}
+            disabled={isExporting || sortedCycles.length === 0}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-1" />
+            )}
+            Esporta Excel
+          </Button>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm">
