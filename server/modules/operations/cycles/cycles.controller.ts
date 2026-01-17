@@ -342,7 +342,8 @@ export class CyclesController {
         return res.status(400).json({ message: "Dati cicli mancanti" });
       }
       
-      const ExcelJS = await import('exceljs');
+      const ExcelJSModule = await import('exceljs');
+      const ExcelJS = ExcelJSModule.default || ExcelJSModule;
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'FLUPSY Management System';
       workbook.created = new Date();
