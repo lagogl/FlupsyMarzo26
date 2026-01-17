@@ -334,8 +334,7 @@ class CyclesService {
         id: cycles.id,
         basketId: cycles.basketId,
         lotId: cycles.lotId,
-        state: cycles.state,
-        cycleCode: cycles.cycleCode // Per ripristino in caso di annullamento
+        state: cycles.state
       })
       .from(cycles)
       .where(eq(cycles.id, id))
@@ -351,11 +350,12 @@ class CyclesService {
       throw new Error(`Ciclo ${id} già chiuso`);
     }
     
-    // 2. Recupera dati del cestello per ottenere flupsyId
+    // 2. Recupera dati del cestello per ottenere flupsyId e cycleCode
     const basketData = await db
       .select({
         flupsyId: baskets.flupsyId,
-        physicalNumber: baskets.physicalNumber
+        physicalNumber: baskets.physicalNumber,
+        cycleCode: baskets.cycleCode // Per ripristino in caso di annullamento
       })
       .from(baskets)
       .where(eq(baskets.id, cycle.basketId))
@@ -416,7 +416,7 @@ class CyclesService {
           flupsyId: basket.flupsyId,
           lotId: lotId || 0,
           operationId: closureOperation.id,
-          cycleCode: cycle.cycleCode, // Salva per ripristino in caso di annullamento
+          cycleCode: basket.cycleCode, // Salva per ripristino in caso di annullamento
           closureDate: endDate,
           animalCount: animalCount,
           totalWeight: totalWeight,
