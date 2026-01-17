@@ -76,7 +76,8 @@ export default function GrowJourney() {
   });
 
   const { data: operationsData, isLoading: operationsLoading } = useQuery({
-    queryKey: ['/api/operations'],
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 1000 }],
+    queryFn: () => fetch('/api/operations?includeAll=true&pageSize=1000').then(res => res.json()),
     refetchOnWindowFocus: false,
   });
 
@@ -98,7 +99,8 @@ export default function GrowJourney() {
   // Conversione di tipi
   const baskets = basketsData as any[] || [];
   const cycles = (cyclesData as any)?.cycles || [];
-  const operations = operationsData as any[] || [];
+  // L'API operations restituisce {operations: [], pagination: {}} quando usa includeAll
+  const operations = Array.isArray(operationsData) ? operationsData : (operationsData as any)?.operations || [];
   const sizes = sizesData as any[] || [];
   const sgrs = sgrsData as any[] || [];
   const flupsys = flupsysData as any[] || [];
