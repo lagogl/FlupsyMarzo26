@@ -88,12 +88,18 @@ export default function GrowJourney() {
     refetchOnWindowFocus: false,
   });
 
+  const { data: flupsysData } = useQuery({
+    queryKey: ['/api/flupsys'],
+    refetchOnWindowFocus: false,
+  });
+
   // Conversione di tipi
   const baskets = basketsData as any[] || [];
   const cycles = (cyclesData as any)?.cycles || [];
   const operations = operationsData as any[] || [];
   const sizes = sizesData as any[] || [];
   const sgrs = sgrsData as any[] || [];
+  const flupsys = flupsysData as any[] || [];
 
   // Filtra i cicli attivi
   const activeCycles = cycles.filter((cycle: any) => cycle.state === 'active');
@@ -259,37 +265,49 @@ export default function GrowJourney() {
               }
             }}
           >
-            <SelectTrigger className="w-[350px]">
+            <SelectTrigger className="w-[420px]">
               <SelectValue placeholder="Seleziona un ciclo" />
             </SelectTrigger>
             <SelectContent>
               {activeCycles.map((cycle: any) => {
                 const cycleBasket = baskets.find((b: any) => b.id === cycle.basketId);
-                // Trova l'ultima operazione di misura per ottenere la taglia attuale
+                // Trova il flupsy dal basket
+                const flupsy = flupsys.find((f: any) => f.id === cycleBasket?.flupsyId);
+                // Trova l'ultima operazione di misura per ottenere la taglia attuale (case-insensitive)
                 const cycleOps = operations.filter((op: any) => 
-                  op.cycleId === cycle.id && op.type === 'Misura' && op.animalsPerKg
+                  op.cycleId === cycle.id && 
+                  (op.type === 'Misura' || op.type === 'misura') && 
+                  op.animalsPerKg
                 ).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 const latestOp = cycleOps[0];
                 let currentSize = '';
+                let animalCount = latestOp?.animalCount || 0;
                 if (latestOp?.animalsPerKg) {
                   const weight = 1000000 / latestOp.animalsPerKg;
                   const size = getTargetSizeForWeight(weight, sizes);
                   currentSize = size?.code || '';
                 }
-                const flupsyName = cycleBasket?.flupsyName || '';
+                const flupsyName = flupsy?.name || cycleBasket?.flupsyName || '';
                 return (
                   <SelectItem key={cycle.id} value={cycle.id.toString()}>
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium">#{cycleBasket?.physicalNumber || cycle.id}</span>
+                    <span className="flex items-center gap-2 text-sm">
+                      <span className="font-semibold">C{cycle.id}</span>
                       <span className="text-muted-foreground">|</span>
-                      <span>{flupsyName || 'FLUPSY'}</span>
+                      <span>#{cycleBasket?.physicalNumber || '?'}</span>
+                      <span className="text-muted-foreground">|</span>
+                      <span className="truncate max-w-[100px]">{flupsyName || '-'}</span>
                       {currentSize && (
                         <>
                           <span className="text-muted-foreground">|</span>
                           <span className="text-blue-600 font-medium">{currentSize}</span>
                         </>
                       )}
-                      <span className="text-muted-foreground text-xs">(C{cycle.id})</span>
+                      {animalCount > 0 && (
+                        <>
+                          <span className="text-muted-foreground">|</span>
+                          <span className="text-green-600">{animalCount.toLocaleString('it-IT')} an</span>
+                        </>
+                      )}
                     </span>
                   </SelectItem>
                 );
