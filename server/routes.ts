@@ -4773,6 +4773,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Operations Excel Export
+  app.post("/api/operations/export-excel", async (req, res) => {
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new (ExcelJS.default || ExcelJS).Workbook();
+      const sheet = workbook.addWorksheet('Operazioni');
+      
+      const { operations } = req.body as { operations: any[] };
+      
+      // Headers
+      const headers = ['Data', 'Tipo', 'Cesta', 'FLUPSY', 'Ciclo', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)'];
+      const headerRow = sheet.addRow(headers);
+      
+      // Blue header style
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          left: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          bottom: { style: 'thin', color: { argb: 'FF1E40AF' } },
+          right: { style: 'thin', color: { argb: 'FF1E40AF' } }
+        };
+      });
+      headerRow.height = 25;
+      
+      // Type translation
+      const typeLabels: Record<string, string> = {
+        'prima-attivazione': 'Prima Attivazione',
+        'misura': 'Misura',
+        'peso': 'Peso',
+        'vendita': 'Vendita',
+        'chiusura-ciclo': 'Chiusura Ciclo',
+        'chiusura-ciclo-vagliatura': 'Chiusura Vagliatura'
+      };
+      
+      // Data rows
+      operations.forEach((op, idx) => {
+        const row = sheet.addRow([
+          op.date ? new Date(op.date).toLocaleDateString('it-IT') : '',
+          typeLabels[op.type] || op.type || '',
+          op.basketNumber ? `#${op.basketNumber}` : '',
+          op.flupsyName || '',
+          op.cycleId ? `#${op.cycleId}` : '',
+          op.lotName || '',
+          op.lotArrivalDate ? new Date(op.lotArrivalDate).toLocaleDateString('it-IT') : '',
+          op.lotSupplier || '',
+          op.sizeCode || '',
+          op.animalCount ? op.animalCount.toLocaleString('it-IT') : '',
+          op.totalWeightKg ? op.totalWeightKg.toFixed(2) : '',
+          op.avgWeightMg ? Math.round(op.avgWeightMg).toLocaleString('it-IT') : ''
+        ]);
+        
+        // Alternating rows
+        const bgColor = idx % 2 === 0 ? 'FFFFFFFF' : 'FFF3F4F6';
+        row.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+        
+        // Color type cell based on operation type
+        const typeCell = row.getCell(2);
+        if (op.type === 'vendita') {
+          typeCell.font = { color: { argb: 'FF059669' } }; // Green for sales
+        } else if (op.type === 'chiusura-ciclo' || op.type === 'chiusura-ciclo-vagliatura') {
+          typeCell.font = { color: { argb: 'FF6B7280' } }; // Gray for closures
+        }
+      });
+      
+      // Column widths
+      sheet.columns = [
+        { width: 12 }, { width: 18 }, { width: 10 }, { width: 20 },
+        { width: 8 }, { width: 18 }, { width: 12 }, { width: 18 },
+        { width: 10 }, { width: 14 }, { width: 12 }, { width: 12 }
+      ];
+      
+      // Auto-filter
+      const lastRow = sheet.rowCount;
+      sheet.autoFilter = { from: 'A1', to: `L${lastRow}` };
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=operazioni.xlsx');
+      res.send(buffer);
+    } catch (error) {
+      console.error('Error exporting operations to Excel:', error);
+      res.status(500).json({ message: 'Errore durante esportazione Excel' });
+    }
+  });
+  
   app.get("/api/basket-groups", async (req, res) => {
     try {
       const groups = await storage.getBasketGroups();

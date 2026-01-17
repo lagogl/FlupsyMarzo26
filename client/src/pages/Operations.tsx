@@ -122,7 +122,8 @@ import {
   ArrowDown, ArrowUp, RotateCw, Calendar, Box, Target, Check,
   ArrowUpDown, ArrowDownUp, MoreVertical, MapPin, ArrowRightCircle,
   BarChart3, Hash, Ruler, Activity, Edit, Trash, Info, FileText, 
-  ChevronDown, ChevronUp, Beaker, ShoppingCart, Scissors, Smartphone, Monitor, User
+  ChevronDown, ChevronUp, Beaker, ShoppingCart, Scissors, Smartphone, Monitor, User,
+  Download, Loader2
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
@@ -556,6 +557,7 @@ export default function Operations() {
   const [redirectToBasketAfterCreate, setRedirectToBasketAfterCreate] = useState<number | null>(null);
   const [initialCycleId, setInitialCycleId] = useState<number | null>(null);
   const [isRefreshingData, setIsRefreshingData] = useState<boolean>(false);
+  const [isExportingOperations, setIsExportingOperations] = useState<boolean>(false);
   const [initialFlupsyId, setInitialFlupsyId] = useState<number | null>(null);
   const [initialBasketId, setInitialBasketId] = useState<number | null>(null);
   
@@ -1668,6 +1670,68 @@ export default function Operations() {
     }
   };
 
+  // Esportazione operazioni filtrate in Excel
+  const exportOperationsToExcel = async () => {
+    if (!filteredOperations || filteredOperations.length === 0) {
+      toast({
+        title: "Nessuna operazione",
+        description: "Non ci sono operazioni da esportare.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsExportingOperations(true);
+    try {
+      const operationsData = filteredOperations.map((op: any) => ({
+        date: op.date,
+        type: op.type,
+        basketNumber: op.basket?.physicalNumber || op.basketNumber || '',
+        flupsyName: op.basket?.flupsy?.name || '',
+        cycleId: op.cycleId,
+        lotName: op.lot?.name || '',
+        lotArrivalDate: op.lot?.arrivalDate || null,
+        lotSupplier: op.lot?.supplier || '',
+        sizeCode: op.size?.code || (op.animalsPerKg ? determineSizeFromAnimalsPerKg(op.animalsPerKg)?.code : null) || '',
+        animalCount: op.animalCount,
+        totalWeightKg: op.totalWeight ? op.totalWeight / 1000 : null,
+        avgWeightMg: op.averageWeight ? op.averageWeight * 1000 : null,
+      }));
+      
+      const response = await fetch('/api/operations/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operations: operationsData })
+      });
+      
+      if (!response.ok) throw new Error('Errore esportazione');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `operazioni-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Esportazione completata",
+        description: `Esportate ${filteredOperations.length} operazioni in formato Excel.`,
+      });
+    } catch (error) {
+      console.error('Errore durante esportazione:', error);
+      toast({
+        title: "Errore",
+        description: "Si è verificato un errore durante l'esportazione.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExportingOperations(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -1756,6 +1820,18 @@ export default function Operations() {
         
         
         <div className="flex space-x-3">
+          <Button 
+            onClick={exportOperationsToExcel}
+            disabled={isExportingOperations || !filteredOperations || filteredOperations.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            {isExportingOperations ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Esporta Excel
+          </Button>
           <Button onClick={() => {
             // Resetta qualsiasi operazione precedentemente selezionata
             setSelectedOperation(null);
