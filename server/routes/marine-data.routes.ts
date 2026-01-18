@@ -29,6 +29,7 @@ router.get('/latest', async (req: Request, res: Response) => {
           sourceUrl: realData.sourceUrl,
           note: realData.note,
           isRealData: true,
+          locations: realData.locations || [],
         }
       });
     } else {
