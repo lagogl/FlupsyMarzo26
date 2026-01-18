@@ -88,7 +88,14 @@ export default function RFIDUHFTagManager() {
     isLoading: basketsLoading,
     refetch: refetchBaskets
   } = useQuery<Basket[]>({
-    queryKey: ['/api/baskets?includeAll=true'],
+    queryKey: ['/api/baskets', { includeAll: true, force_refresh: true }],
+    queryFn: async () => {
+      // Forza refresh per bypassare cache server su questa pagina
+      const response = await fetch('/api/baskets?includeAll=true&force_refresh=true');
+      if (!response.ok) throw new Error('Failed to fetch baskets');
+      return response.json();
+    },
+    staleTime: 0, // Dati sempre considerati stale
   });
 
   const unlinkRfidMutation = useMutation({
