@@ -93,8 +93,7 @@ export default function RFIDUHFTagManager() {
 
   const unlinkRfidMutation = useMutation({
     mutationFn: async (basketId: number) => {
-      const response = await apiRequest('DELETE', `/api/baskets/${basketId}/rfid-uhf`);
-      return response.json();
+      return await apiRequest(`/api/baskets/${basketId}/rfid-uhf`, 'DELETE');
     },
     onSuccess: () => {
       toast({
