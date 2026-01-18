@@ -1544,3 +1544,29 @@ export const insertProductionTargetSchema = createInsertSchema(productionTargets
 
 export type ProductionTarget = typeof productionTargets.$inferSelect;
 export type InsertProductionTarget = z.infer<typeof insertProductionTargetSchema>;
+
+// ===== MODULO DATI MARINI (Copernicus/Open-Meteo) =====
+
+// Storico dati marini per la zona Delta Po/Adriatico
+export const marineData = pgTable("marine_data", {
+  id: serial("id").primaryKey(),
+  recordedAt: timestamp("recorded_at").notNull(), // Data e ora della rilevazione
+  latitude: real("latitude").notNull(), // Latitudine (es. 44.93)
+  longitude: real("longitude").notNull(), // Longitudine (es. 12.27)
+  chlorophyllA: real("chlorophyll_a"), // Clorofilla-a in µg/L
+  seaSurfaceTemperature: real("sea_surface_temperature"), // SST in °C
+  salinity: real("salinity"), // Salinità in PSU/‰
+  waveHeight: real("wave_height"), // Altezza onde in m
+  currentSpeed: real("current_speed"), // Velocità corrente m/s
+  source: text("source").notNull().default("open-meteo"), // Fonte dati
+  rawData: jsonb("raw_data"), // Dati grezzi JSON
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  recordedAtIdx: index("marine_data_recorded_at_idx").on(table.recordedAt),
+}));
+
+export const insertMarineDataSchema = createInsertSchema(marineData)
+  .omit({ id: true, createdAt: true });
+
+export type MarineData = typeof marineData.$inferSelect;
+export type InsertMarineData = z.infer<typeof insertMarineDataSchema>;
