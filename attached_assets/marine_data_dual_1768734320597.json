@@ -1,0 +1,16 @@
+[
+  {
+    "timestamp": "2026-01-18T11:03:27.099943+00:00",
+    "locationName": "Ca' Pisani",
+    "sst": 9.11,
+    "chlorophyll": 1.238,
+    "salinity": 36.87
+  },
+  {
+    "timestamp": "2026-01-18T11:03:54.178720+00:00",
+    "locationName": "Delta Futuro",
+    "sst": 8.88,
+    "chlorophyll": 1.347,
+    "salinity": 35.72
+  }
+]
