@@ -96,9 +96,9 @@ export function TargetSizePredictions() {
   };
 
   const getBadgeStyle = (daysRemaining: number) => {
-    if (daysRemaining <= 3) return "bg-red-500 hover:bg-red-600";
-    if (daysRemaining <= 7) return "bg-amber-500 hover:bg-amber-600";
-    return "bg-emerald-500 hover:bg-emerald-600";
+    if (daysRemaining <= 3) return "bg-emerald-500 hover:bg-emerald-600"; // Verde = pronto
+    if (daysRemaining <= 7) return "bg-amber-500 hover:bg-amber-600"; // Ambra = in arrivo
+    return "bg-red-500 hover:bg-red-600"; // Rosso = lontano
   };
   
   const getDaysMessage = (daysRemaining: number) => {
