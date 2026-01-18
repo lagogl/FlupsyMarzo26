@@ -102,37 +102,62 @@ export default function ChlorophyllIndicator() {
   const chlQuality = getChlorophyllQuality(chl);
   const isCopernicus = source.includes('copernicus') || (chl !== null && salinity !== null);
 
+  const LocationBadge = ({ loc, short }: { loc: LocationData; short: string }) => {
+    const locChlQuality = getChlorophyllQuality(loc.chlorophyll);
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white border border-slate-200">
+        <span className="text-[9px] font-semibold text-gray-500">{short}</span>
+        <span className="text-xs font-bold text-orange-600">{loc.sst?.toFixed(1) ?? 'N/D'}°</span>
+        <span className={`text-xs font-bold ${locChlQuality.color}`}>{loc.chlorophyll?.toFixed(2) ?? 'N/D'}</span>
+        <span className="text-xs font-bold text-cyan-600">{loc.salinity?.toFixed(1) ?? 'N/D'}‰</span>
+      </div>
+    );
+  };
+
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <div 
-            className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors"
             onClick={handleClick}
           >
-            {chl !== null && (
+            {locations.length > 0 ? (
               <>
-                <div className="flex items-center gap-1">
-                  <Leaf className={`w-3.5 h-3.5 ${chlQuality.color}`} />
-                  <span className="text-[10px] text-gray-500">Chl-a</span>
-                  <span className={`text-xs font-bold ${chlQuality.color}`}>{chl.toFixed(2)}</span>
-                </div>
-                <div className="h-4 w-px bg-slate-200" />
+                {locations.map((loc, idx) => (
+                  <LocationBadge 
+                    key={idx} 
+                    loc={loc} 
+                    short={loc.locationName === "Ca' Pisani" ? "CP" : "DF"} 
+                  />
+                ))}
               </>
-            )}
-            <div className="flex items-center gap-1">
-              <Thermometer className="w-3.5 h-3.5 text-orange-500" />
-              <span className="text-[10px] text-gray-500">SST</span>
-              <span className="text-xs font-bold text-orange-600">{sst !== null ? `${sst.toFixed(1)}°C` : 'N/D'}</span>
-              {history && history.length > 1 && <MiniSparkline data={history} color="#f97316" />}
-            </div>
-            {salinity !== null && (
+            ) : (
               <>
-                <div className="h-4 w-px bg-slate-200" />
+                {chl !== null && (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <Leaf className={`w-3.5 h-3.5 ${chlQuality.color}`} />
+                      <span className="text-[10px] text-gray-500">Chl-a</span>
+                      <span className={`text-xs font-bold ${chlQuality.color}`}>{chl.toFixed(2)}</span>
+                    </div>
+                    <div className="h-4 w-px bg-slate-200" />
+                  </>
+                )}
                 <div className="flex items-center gap-1">
-                  <Droplets className="w-3 h-3 text-cyan-500" />
-                  <span className="text-xs font-medium">{salinity.toFixed(1)}‰</span>
+                  <Thermometer className="w-3.5 h-3.5 text-orange-500" />
+                  <span className="text-[10px] text-gray-500">SST</span>
+                  <span className="text-xs font-bold text-orange-600">{sst !== null ? `${sst.toFixed(1)}°C` : 'N/D'}</span>
                 </div>
+                {salinity !== null && (
+                  <>
+                    <div className="h-4 w-px bg-slate-200" />
+                    <div className="flex items-center gap-1">
+                      <Droplets className="w-3 h-3 text-cyan-500" />
+                      <span className="text-xs font-medium">{salinity.toFixed(1)}‰</span>
+                    </div>
+                  </>
+                )}
               </>
             )}
             {waveHeight !== null && (
