@@ -332,6 +332,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Registra route per ordini condivisi (database esterno)
   app.use('/api/ordini-condivisi', ordiniCondivisiRouter);
   console.log("✅ Modulo ORDINI CONDIVISI registrato su /api/ordini-condivisi*");
+
+  // Registra il modulo MARINE DATA (dati mare Delta Po/Adriatico)
+  const marineDataRoutes = await import('./routes/marine-data.routes');
+  app.use('/api/marine-data', marineDataRoutes.default);
+  console.log("✅ Modulo MARINE DATA registrato su /api/marine-data/*");
   
   // === Autenticazione routes ===
   // 🔄 MIGRATO AL MODULO: server/modules/system/auth

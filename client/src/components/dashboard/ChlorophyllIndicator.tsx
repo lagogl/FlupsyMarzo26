@@ -1,14 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import { Waves, TrendingUp, TrendingDown, Minus, Thermometer, Wind } from 'lucide-react';
+import { Waves, TrendingUp, TrendingDown, Minus, Thermometer, Wind, ExternalLink } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface MarineData {
   chl: number;
   sst: number;
   salinity: number;
+  waveHeight?: number;
   trend: 'up' | 'down' | 'stable';
   quality: 'ottima' | 'buona' | 'media' | 'scarsa';
   history: number[];
+  recordedAt: string;
+  sourceUrl: string;
 }
 
 const getQualityColor = (quality: string) => {
@@ -19,13 +22,6 @@ const getQualityColor = (quality: string) => {
     case 'scarsa': return 'text-red-600';
     default: return 'text-gray-600';
   }
-};
-
-const getChlQuality = (chl: number): 'ottima' | 'buona' | 'media' | 'scarsa' => {
-  if (chl < 2) return 'ottima';
-  if (chl < 5) return 'buona';
-  if (chl < 10) return 'media';
-  return 'scarsa';
 };
 
 const MiniSparkline = ({ data, color = '#3b82f6' }: { data: number[], color?: string }) => {
@@ -56,31 +52,17 @@ const MiniSparkline = ({ data, color = '#3b82f6' }: { data: number[], color?: st
 };
 
 export default function ChlorophyllIndicator() {
-  const { data, isLoading } = useQuery<MarineData>({
-    queryKey: ['marine-data'],
-    queryFn: async () => {
-      const baseChl = 3.2;
-      const history = Array.from({ length: 7 }, (_, i) => 
-        Math.round((baseChl + Math.sin(i * 0.8) * 1.5 + (Math.random() - 0.5)) * 10) / 10
-      );
-      const chlValue = history[history.length - 1];
-      const prevValue = history[history.length - 2];
-      let trend: 'up' | 'down' | 'stable' = 'stable';
-      if (chlValue > prevValue + 0.3) trend = 'up';
-      else if (chlValue < prevValue - 0.3) trend = 'down';
-      
-      return {
-        chl: chlValue,
-        sst: 9 + Math.random() * 2,
-        salinity: 33 + Math.random() * 2,
-        trend,
-        quality: getChlQuality(chlValue),
-        history
-      };
-    },
+  const { data, isLoading } = useQuery<{ success: boolean; data: MarineData }>({
+    queryKey: ['/api/marine-data/latest'],
     staleTime: 1000 * 60 * 30,
     refetchOnWindowFocus: false,
   });
+
+  const handleClick = () => {
+    if (data?.data?.sourceUrl) {
+      window.open(data.data.sourceUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -91,14 +73,26 @@ export default function ChlorophyllIndicator() {
     );
   }
 
-  const { chl, sst, salinity, trend, quality, history } = data!;
+  if (!data?.success || !data?.data) {
+    return (
+      <div className="flex items-center gap-1 text-xs text-gray-400">
+        <Waves className="w-3 h-3" />
+        <span>N/D</span>
+      </div>
+    );
+  }
+
+  const { chl, sst, salinity, trend, quality, history, recordedAt, sourceUrl } = data.data;
   const trendColor = trend === 'up' ? '#ef4444' : trend === 'down' ? '#22c55e' : '#6b7280';
 
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 cursor-default">
+          <div 
+            className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors"
+            onClick={handleClick}
+          >
             <div className="flex items-center gap-1">
               <Waves className={`w-3.5 h-3.5 ${getQualityColor(quality)}`} />
               <span className="text-[10px] text-gray-500">Chl-a</span>
@@ -122,7 +116,10 @@ export default function ChlorophyllIndicator() {
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-sm p-3">
           <div className="text-xs space-y-2">
-            <p className="font-semibold text-sm">Dati Mare - Delta Po/Adriatico</p>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm">Dati Mare - Delta Po/Adriatico</p>
+              <ExternalLink className="w-3 h-3 text-blue-500" />
+            </div>
             <div className="grid grid-cols-3 gap-3 py-2 border-y border-gray-100">
               <div className="text-center">
                 <p className="text-gray-500">Clorofilla-a</p>
@@ -143,9 +140,10 @@ export default function ChlorophyllIndicator() {
             <p className="text-gray-500">
               Clorofilla-a indica produttività fitoplanctonica. Valori bassi = oligotrofia, alti = possibile bloom.
             </p>
-            <p className="text-[10px] text-gray-400">
-              Fonte: Copernicus Marine Service • Aggiornato ogni 6h
-            </p>
+            <div className="flex items-center justify-between text-[10px] text-gray-400">
+              <span>Rilevato: {new Date(recordedAt).toLocaleString('it-IT')}</span>
+              <span className="text-blue-500">Clicca per fonte dati ↗</span>
+            </div>
           </div>
         </TooltipContent>
       </Tooltip>
