@@ -95,12 +95,13 @@ export default function RFIDUHFTagManager() {
     mutationFn: async (basketId: number) => {
       return await apiRequest(`/api/baskets/${basketId}/rfid-uhf`, 'DELETE');
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Tag RFID scollegato",
         description: "Il tag RFID UHF è stato scollegato dalla cesta con successo.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/baskets?includeAll=true'] });
+      // Forza ricaricamento immediato della lista
+      await refetchBaskets();
     },
     onError: (error: Error) => {
       toast({
