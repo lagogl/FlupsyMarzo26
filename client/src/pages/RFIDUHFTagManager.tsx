@@ -34,8 +34,22 @@ import {
   ArrowUp,
   ArrowDown,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Unlink
 } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -75,6 +89,27 @@ export default function RFIDUHFTagManager() {
     refetch: refetchBaskets
   } = useQuery<Basket[]>({
     queryKey: ['/api/baskets?includeAll=true'],
+  });
+
+  const unlinkRfidMutation = useMutation({
+    mutationFn: async (basketId: number) => {
+      const response = await apiRequest('DELETE', `/api/baskets/${basketId}/rfid-uhf`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Tag RFID scollegato",
+        description: "Il tag RFID UHF è stato scollegato dalla cesta con successo.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/baskets?includeAll=true'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Errore",
+        description: error.message || "Impossibile scollegare il tag RFID UHF",
+        variant: "destructive",
+      });
+    },
   });
 
   const {
@@ -363,19 +398,20 @@ export default function RFIDUHFTagManager() {
                       </div>
                     </TableHead>
                     <TableHead>Tag</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {basketsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
+                      <TableCell colSpan={8} className="text-center py-8">
                         <RefreshCwIcon className="h-6 w-6 animate-spin mx-auto mb-2" />
                         Caricamento...
                       </TableCell>
                     </TableRow>
                   ) : filteredAndSortedBaskets.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         Nessun cestello trovato con i filtri selezionati
                       </TableCell>
                     </TableRow>
@@ -399,6 +435,45 @@ export default function RFIDUHFTagManager() {
                             <CheckCircle2 className="h-5 w-5 text-green-600" />
                           ) : (
                             <XCircle className="h-5 w-5 text-orange-400" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {basket.rfidUhfEpc && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  disabled={unlinkRfidMutation.isPending}
+                                >
+                                  <Unlink className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Scollega Tag RFID UHF</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Vuoi scollegare il tag RFID UHF dalla cesta #{basket.physicalNumber}?
+                                    <br /><br />
+                                    <strong>EPC:</strong> {basket.rfidUhfEpc}
+                                    <br />
+                                    <strong>Codice:</strong> {basket.rfidUhfUserData || '-'}
+                                    <br /><br />
+                                    Dopo lo scollegamento, la cesta potrà essere associata a un nuovo tag.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Annulla</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => unlinkRfidMutation.mutate(basket.id)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Scollega
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           )}
                         </TableCell>
                       </TableRow>
