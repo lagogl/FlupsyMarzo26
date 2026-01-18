@@ -6,7 +6,7 @@ interface MarineData {
   sst: number | null;
   waveHeight: number | null;
   wavePeriod: number | null;
-  chlorophyll: number | null;
+  chl: number | null;
   salinity: number | null;
   history: number[];
   recordedAt: string;
@@ -82,8 +82,14 @@ export default function ChlorophyllIndicator() {
     );
   }
 
-  const { sst, waveHeight, chlorophyll, salinity, history, source } = data.data;
-  const chlQuality = getChlorophyllQuality(chlorophyll);
+  const marineData = data.data;
+  const sst = marineData.sst ?? null;
+  const waveHeight = marineData.waveHeight ?? null;
+  const chl = marineData.chl ?? null;
+  const salinity = marineData.salinity ?? null;
+  const history = marineData.history ?? [];
+  const source = marineData.source ?? 'unknown';
+  const chlQuality = getChlorophyllQuality(chl);
   const isCopernicus = source === 'copernicus-marine';
 
   return (
@@ -94,12 +100,12 @@ export default function ChlorophyllIndicator() {
             className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors"
             onClick={handleClick}
           >
-            {chlorophyll !== null && (
+            {chl !== null && (
               <>
                 <div className="flex items-center gap-1">
                   <Leaf className={`w-3.5 h-3.5 ${chlQuality.color}`} />
                   <span className="text-[10px] text-gray-500">Chl-a</span>
-                  <span className={`text-xs font-bold ${chlQuality.color}`}>{chlorophyll.toFixed(2)}</span>
+                  <span className={`text-xs font-bold ${chlQuality.color}`}>{chl.toFixed(2)}</span>
                 </div>
                 <div className="h-4 w-px bg-slate-200" />
               </>
@@ -144,7 +150,7 @@ export default function ChlorophyllIndicator() {
               <div className="text-center">
                 <p className="text-gray-500">Clorofilla-a</p>
                 <p className={`font-bold text-lg ${chlQuality.color}`}>
-                  {chlorophyll !== null ? chlorophyll.toFixed(2) : 'N/D'} 
+                  {chl !== null ? chl.toFixed(2) : 'N/D'} 
                   <span className="text-xs font-normal"> µg/L</span>
                 </p>
                 <p className="text-[10px] text-gray-400 capitalize">Qualità: {chlQuality.label}</p>
