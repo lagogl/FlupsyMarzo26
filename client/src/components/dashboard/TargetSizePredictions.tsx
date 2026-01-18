@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getQueryFn } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2Icon, CalendarIcon, AlertCircleIcon } from "lucide-react";
-import { format, addDays } from "date-fns";
+import { CheckCircle2Icon, AlertCircleIcon, Download } from "lucide-react";
+import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Link } from "wouter";
+import * as ExcelJS from 'exceljs';
 
 interface TargetSizePrediction {
   id: number;
@@ -53,61 +53,133 @@ interface Size {
 }
 
 export function TargetSizePredictions() {
-  const [days, setDays] = useState(14); // Default: 2 settimane
-  const [targetSize, setTargetSize] = useState("TP-3000"); // Default: TP-3000
+  const [days, setDays] = useState(14);
+  const [targetSize, setTargetSize] = useState("TP-3000");
   
-  // Recupera tutte le taglie disponibili
   const { data: sizes } = useQuery({
     queryKey: ['/api/sizes'],
     queryFn: getQueryFn<Size[]>({ on401: "throw" }),
   });
   
-  // Recupera i FLUPSY per avere i nomi
   const { data: flupsys } = useQuery({
     queryKey: ['/api/flupsys'],
     queryFn: getQueryFn<Flupsy[]>({ on401: "throw" }),
   });
   
-  // Mappa flupsyId -> nome
   const flupsyNameMap = flupsys?.reduce((acc, f) => {
     acc[f.id] = f.name;
     return acc;
   }, {} as Record<number, string>) || {};
   
-  // Recupera le previsioni usando il nuovo endpoint che supporta diverse taglie
-  const { data: predictions, isLoading, isError, refetch } = useQuery({
+  const { data: predictions, isLoading, isError } = useQuery({
     queryKey: [`/api/size-predictions?size=${targetSize}&days=${days}`, targetSize, days],
     queryFn: getQueryFn<TargetSizePrediction[]>({ on401: "throw" }),
   });
   
-  // Calcola il totale degli animali dalle previsioni
   const totalAnimals = predictions?.reduce((sum, p) => {
     const count = p.animalCount || p.lastOperation?.animalCount || 0;
     return sum + count;
   }, 0) || 0;
 
-  // Funzione per formattare la data in italiano
+  const totalBaskets = predictions?.length || 0;
+
+  const avgWeight = predictions && predictions.length > 0
+    ? Math.round(predictions.reduce((sum, p) => sum + (p.currentWeight || 0), 0) / predictions.length)
+    : 0;
+
   const formatDateIT = (dateStr: string) => {
     try {
-      const date = new Date(dateStr);
-      return format(date, "d MMMM yyyy", { locale: it });
-    } catch (e) {
+      return format(new Date(dateStr), "dd/MM/yyyy", { locale: it });
+    } catch {
       return dateStr;
     }
   };
 
-  // Funzione per determinare lo stile del badge in base ai giorni rimanenti
   const getBadgeStyle = (daysRemaining: number) => {
-    if (daysRemaining <= 3) return "bg-red-500 hover:bg-red-600"; // Urgente
-    if (daysRemaining <= 7) return "bg-amber-500 hover:bg-amber-600"; // Attenzione
-    return "bg-emerald-500 hover:bg-emerald-600"; // Normale
+    if (daysRemaining <= 3) return "bg-red-500 hover:bg-red-600";
+    if (daysRemaining <= 7) return "bg-amber-500 hover:bg-amber-600";
+    return "bg-emerald-500 hover:bg-emerald-600";
   };
   
-  // Funzione per il messaggio sui giorni rimanenti
   const getDaysMessage = (daysRemaining: number) => {
     if (daysRemaining === 0) return "Oggi";
     if (daysRemaining === 1) return "Domani";
     return `Tra ${daysRemaining} giorni`;
+  };
+
+  const exportToExcel = async () => {
+    if (!predictions || predictions.length === 0) return;
+
+    const ExcelModule = (ExcelJS as any).default || ExcelJS;
+    const workbook = new ExcelModule.Workbook();
+    const ws = workbook.addWorksheet('Ceste in Arrivo');
+
+    const titleRow = ws.addRow([`Ceste in arrivo a ${targetSize} - Prossimi ${days} giorni - ${format(new Date(), 'dd/MM/yyyy HH:mm')}`]);
+    titleRow.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+    ws.mergeCells(1, 1, 1, 11);
+    titleRow.alignment = { horizontal: 'center' };
+
+    const headers = ['Cesta', 'FLUPSY', 'Posizione', 'Animali', 'An/kg', 'Peso Medio (mg)', 'Attuale (mg)', 'Target (mg)', 'Incremento %', 'Data Arrivo', 'Giorni'];
+    const headerRow = ws.addRow(headers);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+    headerRow.alignment = { horizontal: 'center' };
+    ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 11 } };
+
+    ws.columns = [
+      { width: 10 }, { width: 15 }, { width: 12 }, { width: 14 },
+      { width: 12 }, { width: 16 }, { width: 14 }, { width: 14 },
+      { width: 14 }, { width: 14 }, { width: 12 }
+    ];
+
+    predictions.forEach((p, idx) => {
+      const animalCount = p.animalCount || p.lastOperation?.animalCount || 0;
+      const animalsPerKg = p.lastOperation?.animalsPerKg || 0;
+      const avgWt = p.lastOperation?.averageWeight || 0;
+      const currentWt = p.currentWeight || 0;
+      const targetWt = p.targetWeight || 0;
+      const increment = currentWt > 0 ? Math.round((targetWt / currentWt - 1) * 100) : 0;
+      const position = p.basket.row && p.basket.position ? `${p.basket.row}-${p.basket.position}` : '';
+
+      const row = ws.addRow([
+        p.basket.physicalNumber,
+        flupsyNameMap[p.basket.flupsyId] || '',
+        position,
+        animalCount,
+        animalsPerKg,
+        Math.round(avgWt),
+        Math.round(currentWt),
+        Math.round(targetWt),
+        increment,
+        formatDateIT(p.predictedDate),
+        p.daysRemaining
+      ]);
+
+      if (idx % 2 === 1) {
+        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+      }
+      row.getCell(4).numFmt = '#,##0';
+      row.getCell(5).numFmt = '#,##0';
+      row.getCell(6).numFmt = '#,##0';
+      row.getCell(7).numFmt = '#,##0';
+      row.getCell(8).numFmt = '#,##0';
+      row.getCell(9).numFmt = '0"%"';
+    });
+
+    const totalsRow = ws.addRow(['TOTALE', '', '', totalAnimals, '', '', '', '', '', `${totalBaskets} ceste`, '']);
+    totalsRow.font = { bold: true };
+    totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+    totalsRow.getCell(4).numFmt = '#,##0';
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Ceste-Arrivo-${targetSize}_${format(new Date(), 'dd-MM-yyyy')}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -115,7 +187,6 @@ export function TargetSizePredictions() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
-            {/* Totale animali in grande */}
             {totalAnimals > 0 && (
               <div className="flex flex-col items-center justify-center bg-primary/10 rounded-lg px-4 py-2">
                 <span className="text-3xl font-bold text-primary">
@@ -133,12 +204,8 @@ export function TargetSizePredictions() {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            {/* Selezione della taglia target */}
             <div className="w-40">
-              <Select
-                value={targetSize}
-                onValueChange={setTargetSize}
-              >
+              <Select value={targetSize} onValueChange={setTargetSize}>
                 <SelectTrigger>
                   <SelectValue placeholder="Taglia target" />
                 </SelectTrigger>
@@ -152,37 +219,28 @@ export function TargetSizePredictions() {
               </Select>
             </div>
             
-            {/* Pulsanti per la durata */}
             <div className="space-x-2">
-              <Button 
-                variant={days === 7 ? "default" : "outline"} 
-                size="sm" 
-                onClick={() => setDays(7)}
-              >
-                7 giorni
-              </Button>
-              <Button 
-                variant={days === 14 ? "default" : "outline"} 
-                size="sm" 
-                onClick={() => setDays(14)}
-              >
-                14 giorni
-              </Button>
-              <Button 
-                variant={days === 30 ? "default" : "outline"} 
-                size="sm" 
-                onClick={() => setDays(30)}
-              >
-                30 giorni
-              </Button>
-              <Button 
-                variant={days === 90 ? "default" : "outline"} 
-                size="sm" 
-                onClick={() => setDays(90)}
-              >
-                90 giorni
-              </Button>
+              {[7, 14, 30, 90].map(d => (
+                <Button 
+                  key={d}
+                  variant={days === d ? "default" : "outline"} 
+                  size="sm" 
+                  onClick={() => setDays(d)}
+                >
+                  {d} giorni
+                </Button>
+              ))}
             </div>
+
+            <Button
+              size="sm"
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={exportToExcel}
+              disabled={!predictions || predictions.length === 0}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -202,94 +260,73 @@ export function TargetSizePredictions() {
             <p className="text-center">Nessuna cesta raggiungerà la taglia {targetSize} nei prossimi {days} giorni</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {predictions?.map((prediction) => (
-              <div key={prediction.id} className="p-2 border rounded-lg hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Link to={`/operazioni/cestello/${prediction.basketId}`}>
-                      <h3 className="text-base font-medium hover:underline">
-                        Cesta #{prediction.basket.physicalNumber}
-                      </h3>
-                    </Link>
-                    {prediction.basket.row && prediction.basket.position && (
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        {prediction.basket.row}-{prediction.basket.position}
-                      </Badge>
-                    )}
-                    {/* Nome FLUPSY */}
-                    {flupsyNameMap[prediction.basket.flupsyId] && (
-                      <Badge variant="secondary" className="ml-2 text-xs bg-slate-100">
-                        {flupsyNameMap[prediction.basket.flupsyId]}
-                      </Badge>
-                    )}
-                    
-                    {/* Badge per taglia superiore */}
-                    {prediction.actualSize && prediction.requestedSize && 
-                     prediction.actualSize.id !== prediction.requestedSize.id && (
-                      <Badge variant="secondary" className="ml-2 text-xs bg-blue-100 text-blue-800">
-                        → {prediction.actualSize.code}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="text-xs text-gray-600 flex items-center">
-                      <CalendarIcon size={12} className="mr-1" />
-                      <span>{formatDateIT(prediction.predictedDate)}</span>
-                    </div>
-                    <Badge className={`text-xs ${getBadgeStyle(prediction.daysRemaining)}`}>
-                      {getDaysMessage(prediction.daysRemaining)}
-                    </Badge>
-                  </div>
-                </div>
-                
-                {prediction.lastOperation && (
-                  <div className="mt-1 text-xs">
-                    <div className="flex flex-wrap gap-x-4 mt-1">
-                      {/* Prima riga di informazioni */}
-                      <div className="flex items-center gap-x-4">
-                        <div>
-                          <span className="text-gray-500">Ultima: </span>
-                          <span>{formatDateIT(prediction.lastOperation.date)}</span>
-                        </div>
-                        
-                        {prediction.lastOperation.animalsPerKg && (
-                          <div>
-                            <span className="text-gray-500">Animali/kg: </span>
-                            <span>{prediction.lastOperation.animalsPerKg.toLocaleString('it-IT')}</span>
-                          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-100 text-left">
+                  <th className="px-3 py-2 font-semibold">Cesta</th>
+                  <th className="px-3 py-2 font-semibold">FLUPSY</th>
+                  <th className="px-3 py-2 font-semibold text-right">Animali</th>
+                  <th className="px-3 py-2 font-semibold text-right">An/kg</th>
+                  <th className="px-3 py-2 font-semibold text-right">Peso Medio</th>
+                  <th className="px-3 py-2 font-semibold text-right">Attuale</th>
+                  <th className="px-3 py-2 font-semibold text-right">Target</th>
+                  <th className="px-3 py-2 font-semibold text-right">Incr. %</th>
+                  <th className="px-3 py-2 font-semibold">Data Arrivo</th>
+                  <th className="px-3 py-2 font-semibold text-center">Stato</th>
+                </tr>
+              </thead>
+              <tbody>
+                {predictions?.map((p, idx) => {
+                  const animalCount = p.animalCount || p.lastOperation?.animalCount || 0;
+                  const animalsPerKg = p.lastOperation?.animalsPerKg || 0;
+                  const avgWt = p.lastOperation?.averageWeight || 0;
+                  const currentWt = p.currentWeight || 0;
+                  const targetWt = p.targetWeight || 0;
+                  const increment = currentWt > 0 ? Math.round((targetWt / currentWt - 1) * 100) : 0;
+
+                  return (
+                    <tr key={p.id} className={idx % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="px-3 py-2">
+                        <Link to={`/operazioni/cestello/${p.basketId}`}>
+                          <span className="font-medium text-blue-600 hover:underline">#{p.basket.physicalNumber}</span>
+                        </Link>
+                        {p.basket.row && p.basket.position && (
+                          <span className="ml-1 text-xs text-gray-500">{p.basket.row}-{p.basket.position}</span>
                         )}
-                        
-                        {prediction.lastOperation.averageWeight && (
-                          <div>
-                            <span className="text-gray-500">Peso medio: </span>
-                            <span>{prediction.lastOperation.averageWeight.toLocaleString('it-IT')} mg</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Seconda riga con i dati di crescita */}
-                      {prediction.currentWeight && prediction.targetWeight && (
-                        <div className="flex items-center gap-x-4 mt-1">
-                          <div>
-                            <span className="text-gray-500">Attuale: </span>
-                            <span>{Math.round(prediction.currentWeight).toLocaleString('it-IT')} mg</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">Target: </span>
-                            <span>{Math.round(prediction.targetWeight).toLocaleString('it-IT')} mg</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">Incremento: </span>
-                            <span>{Math.round((prediction.targetWeight / prediction.currentWeight - 1) * 100)}%</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">{flupsyNameMap[p.basket.flupsyId] || '-'}</td>
+                      <td className="px-3 py-2 text-right font-medium">{animalCount.toLocaleString('it-IT')}</td>
+                      <td className="px-3 py-2 text-right">{animalsPerKg.toLocaleString('it-IT')}</td>
+                      <td className="px-3 py-2 text-right">{Math.round(avgWt).toLocaleString('it-IT')} mg</td>
+                      <td className="px-3 py-2 text-right">{Math.round(currentWt).toLocaleString('it-IT')} mg</td>
+                      <td className="px-3 py-2 text-right">{Math.round(targetWt).toLocaleString('it-IT')} mg</td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={increment > 50 ? 'text-amber-600' : increment > 20 ? 'text-blue-600' : 'text-green-600'}>
+                          {increment}%
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{formatDateIT(p.predictedDate)}</td>
+                      <td className="px-3 py-2 text-center">
+                        <Badge className={`text-xs ${getBadgeStyle(p.daysRemaining)}`}>
+                          {getDaysMessage(p.daysRemaining)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-200 font-semibold">
+                  <td className="px-3 py-2">TOTALE</td>
+                  <td className="px-3 py-2">{totalBaskets} ceste</td>
+                  <td className="px-3 py-2 text-right">{totalAnimals.toLocaleString('it-IT')}</td>
+                  <td className="px-3 py-2 text-right">-</td>
+                  <td className="px-3 py-2 text-right">{avgWeight.toLocaleString('it-IT')} mg</td>
+                  <td className="px-3 py-2" colSpan={5}></td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         )}
       </CardContent>
