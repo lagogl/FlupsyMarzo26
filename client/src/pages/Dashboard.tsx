@@ -8,7 +8,6 @@ import ActiveCycles from '@/components/dashboard/ActiveCycles';
 import FlupsyVisualizer from '@/components/dashboard/SimpleFlupsyVisualizer';
 import NewFlupsyVisualizer from '@/components/dashboard/NewFlupsyVisualizer';
 import FlupsyCenterFilter from '@/components/dashboard/FlupsyCenterFilter';
-import WeatherForecast from '@/components/dashboard/WeatherForecast';
 import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
 import InfoTicker from '@/components/dashboard/InfoTicker';
@@ -374,16 +373,13 @@ export default function Dashboard() {
       
       {/* Filtri per la dashboard */}
       <div className="space-y-4">
-        {/* Filtro per centro di produzione + Previsioni Meteo */}
-        <div className="flex items-center justify-between gap-4">
-          <FlupsyCenterFilter 
-            onFilterChange={(center, flupsyIds) => {
-              setSelectedCenter(center);
-              setSelectedFlupsyIds(flupsyIds);
-            }} 
-          />
-          <WeatherForecast />
-        </div>
+        {/* Filtro per centro di produzione (include previsioni meteo) */}
+        <FlupsyCenterFilter 
+          onFilterChange={(center, flupsyIds) => {
+            setSelectedCenter(center);
+            setSelectedFlupsyIds(flupsyIds);
+          }} 
+        />
         
         {/* Filtro per FLUPSY specifici */}
         <FlupsySelector
