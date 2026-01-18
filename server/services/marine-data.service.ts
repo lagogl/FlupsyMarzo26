@@ -115,7 +115,8 @@ export class MarineDataService {
   
   private async fetchFromOpenMeteo(location: { name: string; latitude: number; longitude: number }): Promise<OpenMeteoResult | null> {
     try {
-      const { latitude, longitude } = location;
+      if (!location) return null;
+      const { latitude, longitude, name } = location;
       const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${latitude}&longitude=${longitude}&current=wave_height,wave_period&hourly=sea_surface_temperature&timezone=Europe/Rome`;
       
       const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
@@ -131,7 +132,7 @@ export class MarineDataService {
         wavePeriod: data.current?.wave_period ?? null,
       };
     } catch (error) {
-      console.warn(`[MarineData] Open-Meteo fetch failed for ${location.name}:`, error);
+      console.warn(`[MarineData] Open-Meteo fetch failed for ${location?.name || 'unknown'}:`, error);
       return null;
     }
   }
