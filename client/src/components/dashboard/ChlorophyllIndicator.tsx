@@ -106,9 +106,12 @@ export default function ChlorophyllIndicator() {
     const locChlQuality = getChlorophyllQuality(loc.chlorophyll);
     return (
       <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white border border-slate-200">
-        <span className="text-[9px] font-semibold text-gray-500">{short}</span>
+        <span className="text-[9px] font-semibold text-gray-500 bg-slate-100 px-1 rounded">{short}</span>
+        <Thermometer className="w-3 h-3 text-orange-500" />
         <span className="text-xs font-bold text-orange-600">{loc.sst?.toFixed(1) ?? 'N/D'}°</span>
+        <Leaf className={`w-3 h-3 ${locChlQuality.color}`} />
         <span className={`text-xs font-bold ${locChlQuality.color}`}>{loc.chlorophyll?.toFixed(2) ?? 'N/D'}</span>
+        <Droplets className="w-3 h-3 text-cyan-500" />
         <span className="text-xs font-bold text-cyan-600">{loc.salinity?.toFixed(1) ?? 'N/D'}‰</span>
       </div>
     );
