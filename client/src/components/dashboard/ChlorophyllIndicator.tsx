@@ -90,7 +90,7 @@ export default function ChlorophyllIndicator() {
   const history = marineData.history ?? [];
   const source = marineData.source ?? 'unknown';
   const chlQuality = getChlorophyllQuality(chl);
-  const isCopernicus = source === 'copernicus-marine';
+  const isCopernicus = source.includes('copernicus') || (chl !== null && salinity !== null);
 
   return (
     <TooltipProvider>
