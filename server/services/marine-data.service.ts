@@ -286,6 +286,41 @@ export class MarineDataService {
     return filepath;
   }
   
+  async importCopernicusData(data: {
+    sst: number | null;
+    chlorophyll: number | null;
+    salinity: number | null;
+    timestamp: string;
+  }): Promise<{ success: boolean; message: string; id?: number }> {
+    try {
+      const [record] = await db.insert(marineData).values({
+        latitude: DELTA_PO_COORDS.latitude,
+        longitude: DELTA_PO_COORDS.longitude,
+        seaSurfaceTemperature: data.sst,
+        chlorophyllA: data.chlorophyll,
+        salinity: data.salinity,
+        waveHeight: null,
+        wavePeriod: null,
+        waveDirection: null,
+        currentVelocity: null,
+        currentDirection: null,
+        source: 'copernicus-manual',
+        recordedAt: new Date(data.timestamp),
+      }).returning();
+      
+      console.log(`[MarineData] COPERNICUS IMPORT: SST=${data.sst}°C, Chl=${data.chlorophyll}µg/L, Sal=${data.salinity}PSU`);
+      
+      return {
+        success: true,
+        message: `Dati Copernicus importati: SST=${data.sst}°C, Clorofilla=${data.chlorophyll}µg/L, Salinità=${data.salinity}PSU`,
+        id: record.id
+      };
+    } catch (error) {
+      console.error('[MarineData] Import error:', error);
+      return { success: false, message: String(error) };
+    }
+  }
+  
   getSourceUrl(): string {
     return COPERNICUS_URL;
   }

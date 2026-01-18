@@ -83,4 +83,25 @@ router.get('/source-url', (req: Request, res: Response) => {
   res.json({ url: marineDataService.getSourceUrl() });
 });
 
+router.post('/import-copernicus', async (req: Request, res: Response) => {
+  try {
+    const { sst, chlorophyll, salinity, timestamp } = req.body;
+    
+    if (sst === undefined && chlorophyll === undefined && salinity === undefined) {
+      return res.status(400).json({ success: false, error: 'No data provided' });
+    }
+    
+    const result = await marineDataService.importCopernicusData({
+      sst: sst ?? null,
+      chlorophyll: chlorophyll ?? null,
+      salinity: salinity ?? null,
+      timestamp: timestamp ?? new Date().toISOString()
+    });
+    
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
 export default router;
