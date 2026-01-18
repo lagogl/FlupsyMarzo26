@@ -6,9 +6,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
-const DELTA_PO_COORDS = {
-  latitude: 44.93,
-  longitude: 12.27,
+const LOCATIONS = {
+  CA_PISANI: {
+    name: "Ca' Pisani",
+    latitude: 45.02194,
+    longitude: 12.38010,
+  },
+  DELTA_FUTURO: {
+    name: "Delta Futuro",
+    latitude: 44.81887,
+    longitude: 12.30900,
+  }
 };
 
 const COPERNICUS_URL = 'https://marine.copernicus.eu/access-data';
@@ -105,9 +113,9 @@ export class MarineDataService {
     });
   }
   
-  private async fetchFromOpenMeteo(): Promise<OpenMeteoResult | null> {
+  private async fetchFromOpenMeteo(location: { name: string; latitude: number; longitude: number }): Promise<OpenMeteoResult | null> {
     try {
-      const { latitude, longitude } = DELTA_PO_COORDS;
+      const { latitude, longitude } = location;
       const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${latitude}&longitude=${longitude}&current=wave_height,wave_period&hourly=sea_surface_temperature&timezone=Europe/Rome`;
       
       const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
@@ -123,48 +131,57 @@ export class MarineDataService {
         wavePeriod: data.current?.wave_period ?? null,
       };
     } catch (error) {
-      console.warn('[MarineData] Open-Meteo fetch failed:', error);
+      console.warn(`[MarineData] Open-Meteo fetch failed for ${location.name}:`, error);
       return null;
     }
   }
   
   async fetchAndStoreData(): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
-      console.log('[MarineData] Fetching marine data for Delta Po area...');
+      console.log('[MarineData] Fetching marine data for both locations...');
       
-      const { latitude, longitude } = DELTA_PO_COORDS;
+      const results: any[] = [];
       
-      // Fetch from Copernicus (primary source)
-      const copernicusData = await this.fetchFromCopernicus();
+      // Fetch for both locations
+      for (const [key, location] of Object.entries(LOCATIONS)) {
+        console.log(`[MarineData] Fetching data for ${location.name}...`);
+        
+        // Fetch wave data from Open-Meteo
+        const openMeteoData = await this.fetchFromOpenMeteo(location);
+        
+        if (!openMeteoData) {
+          console.warn(`[MarineData] No data available for ${location.name}`);
+          continue;
+        }
+        
+        const record = {
+          recordedAt: new Date(),
+          locationName: location.name,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          chlorophyllA: null, // Copernicus data imported manually
+          seaSurfaceTemperature: openMeteoData?.seaSurfaceTemperature ?? null,
+          salinity: null, // Copernicus data imported manually
+          waveHeight: openMeteoData?.waveHeight ? Math.round(openMeteoData.waveHeight * 100) / 100 : null,
+          currentSpeed: null,
+          source: 'open-meteo-real',
+          rawData: { openMeteo: openMeteoData },
+        };
+        
+        const [inserted] = await db.insert(marineData).values(record).returning();
+        
+        console.log(`[MarineData] ${location.name}: ID=${inserted.id}, SST=${record.seaSurfaceTemperature}°C`);
+        results.push(inserted);
+      }
       
-      // Fetch wave data from Open-Meteo
-      const openMeteoData = await this.fetchFromOpenMeteo();
-      
-      if (!copernicusData?.success && !openMeteoData) {
+      if (results.length === 0) {
         return { 
           success: false, 
-          error: 'Impossibile ottenere dati reali. Verifica le credenziali Copernicus.' 
+          error: 'Impossibile ottenere dati per nessuna località.' 
         };
       }
       
-      const record = {
-        recordedAt: new Date(),
-        latitude,
-        longitude,
-        chlorophyllA: copernicusData?.data?.chlorophyllA ?? null,
-        seaSurfaceTemperature: copernicusData?.data?.sst ?? openMeteoData?.seaSurfaceTemperature ?? null,
-        salinity: copernicusData?.data?.salinity ?? null,
-        waveHeight: openMeteoData?.waveHeight ? Math.round(openMeteoData.waveHeight * 100) / 100 : null,
-        currentSpeed: null,
-        source: copernicusData?.success ? 'copernicus-marine' : 'open-meteo-fallback',
-        rawData: { copernicus: copernicusData, openMeteo: openMeteoData },
-      };
-      
-      const [inserted] = await db.insert(marineData).values(record).returning();
-      
-      console.log(`[MarineData] Data stored: ID=${inserted.id}, SST=${record.seaSurfaceTemperature}°C, Chl-a=${record.chlorophyllA}µg/L, Source=${record.source}`);
-      
-      return { success: true, data: inserted };
+      return { success: true, data: results };
     } catch (error) {
       console.error('[MarineData] Error fetching/storing data:', error);
       return { success: false, error: String(error) };
@@ -181,35 +198,66 @@ export class MarineDataService {
     return latest || null;
   }
   
-  async getLatestRealData(): Promise<any> {
-    // Fetch fresh data from Copernicus
-    const copernicusData = await this.fetchFromCopernicus();
-    const openMeteoData = await this.fetchFromOpenMeteo();
+  async getLatestRealData(locationName?: string): Promise<any> {
+    const locationsList = Object.values(LOCATIONS);
+    const results: any[] = [];
     
-    if (!copernicusData?.success && !openMeteoData) {
-      return null;
+    for (const location of locationsList) {
+      if (locationName && location.name !== locationName) continue;
+      
+      const openMeteoData = await this.fetchFromOpenMeteo(location);
+      
+      // Get latest Copernicus data from database for this location
+      const [latestCopernicus] = await db
+        .select()
+        .from(marineData)
+        .where(gte(marineData.recordedAt, new Date(Date.now() - 24 * 60 * 60 * 1000)))
+        .orderBy(desc(marineData.recordedAt))
+        .limit(1);
+      
+      const history = await this.getHistoricalData(2);
+      const sstHistory = history
+        .filter(r => r.seaSurfaceTemperature !== null && r.locationName === location.name)
+        .slice(0, 6)
+        .map(r => r.seaSurfaceTemperature);
+      
+      results.push({
+        locationName: location.name,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        sst: openMeteoData?.seaSurfaceTemperature ?? latestCopernicus?.seaSurfaceTemperature ?? null,
+        chlorophyll: latestCopernicus?.chlorophyllA ?? null,
+        salinity: latestCopernicus?.salinity ?? null,
+        waveHeight: openMeteoData?.waveHeight ?? null,
+        wavePeriod: openMeteoData?.wavePeriod ?? null,
+        history: sstHistory,
+        source: latestCopernicus?.chlorophyllA ? 'copernicus+open-meteo' : 'open-meteo',
+        sourceUrl: COPERNICUS_URL,
+        recordedAt: new Date(),
+        isRealData: true,
+        note: latestCopernicus?.chlorophyllA 
+          ? 'Dati reali combinati (Copernicus + Open-Meteo)' 
+          : 'Dati Open-Meteo (temperatura, onde)',
+      });
     }
     
-    const history = await this.getHistoricalData(2);
-    const sstHistory = history
-      .filter(r => r.seaSurfaceTemperature !== null)
-      .slice(0, 6)
-      .map(r => r.seaSurfaceTemperature);
+    if (results.length === 0) return null;
+    if (locationName) return results[0];
     
+    // Return combined view with both locations
     return {
-      sst: copernicusData?.data?.sst ?? openMeteoData?.seaSurfaceTemperature ?? null,
-      chlorophyll: copernicusData?.data?.chlorophyllA ?? null,
-      salinity: copernicusData?.data?.salinity ?? null,
-      waveHeight: openMeteoData?.waveHeight ?? null,
-      wavePeriod: openMeteoData?.wavePeriod ?? null,
-      history: sstHistory,
-      source: copernicusData?.success ? 'copernicus-marine' : 'open-meteo',
+      locations: results,
+      sst: results[0]?.sst ?? null,
+      chlorophyll: results[0]?.chlorophyll ?? null,
+      salinity: results[0]?.salinity ?? null,
+      waveHeight: results[0]?.waveHeight ?? null,
+      wavePeriod: results[0]?.wavePeriod ?? null,
+      history: results[0]?.history ?? [],
+      source: results[0]?.source ?? 'open-meteo',
       sourceUrl: COPERNICUS_URL,
       recordedAt: new Date(),
       isRealData: true,
-      note: copernicusData?.success 
-        ? 'Dati reali da Copernicus Marine Data Store' 
-        : 'Dati parziali - verifica credenziali Copernicus',
+      note: `Dati per ${results.length} località: ${results.map(r => r.locationName).join(', ')}`,
     };
   }
   
@@ -291,29 +339,41 @@ export class MarineDataService {
     chlorophyll: number | null;
     salinity: number | null;
     timestamp: string;
-  }): Promise<{ success: boolean; message: string; id?: number }> {
+    locationName?: string;
+  }): Promise<{ success: boolean; message: string; ids?: number[] }> {
     try {
-      const [record] = await db.insert(marineData).values({
-        latitude: DELTA_PO_COORDS.latitude,
-        longitude: DELTA_PO_COORDS.longitude,
-        seaSurfaceTemperature: data.sst,
-        chlorophyllA: data.chlorophyll,
-        salinity: data.salinity,
-        waveHeight: null,
-        wavePeriod: null,
-        waveDirection: null,
-        currentVelocity: null,
-        currentDirection: null,
-        source: 'copernicus-manual',
-        recordedAt: new Date(data.timestamp),
-      }).returning();
+      const ids: number[] = [];
       
-      console.log(`[MarineData] COPERNICUS IMPORT: SST=${data.sst}°C, Chl=${data.chlorophyll}µg/L, Sal=${data.salinity}PSU`);
+      // If locationName specified, import for that location only
+      // Otherwise, import for all locations (assume same values for nearby area)
+      const locationsToImport = data.locationName 
+        ? [Object.values(LOCATIONS).find(l => l.name === data.locationName)!]
+        : Object.values(LOCATIONS);
+      
+      for (const location of locationsToImport) {
+        if (!location) continue;
+        
+        const [record] = await db.insert(marineData).values({
+          locationName: location.name,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          seaSurfaceTemperature: data.sst,
+          chlorophyllA: data.chlorophyll,
+          salinity: data.salinity,
+          waveHeight: null,
+          currentSpeed: null,
+          source: 'copernicus-manual',
+          recordedAt: new Date(data.timestamp),
+        }).returning();
+        
+        ids.push(record.id);
+        console.log(`[MarineData] COPERNICUS IMPORT ${location.name}: SST=${data.sst}°C, Chl=${data.chlorophyll}µg/L, Sal=${data.salinity}PSU`);
+      }
       
       return {
         success: true,
-        message: `Dati Copernicus importati: SST=${data.sst}°C, Clorofilla=${data.chlorophyll}µg/L, Salinità=${data.salinity}PSU`,
-        id: record.id
+        message: `Dati Copernicus importati per ${locationsToImport.map(l => l.name).join(', ')}: SST=${data.sst}°C, Clorofilla=${data.chlorophyll}µg/L, Salinità=${data.salinity}PSU`,
+        ids
       };
     } catch (error) {
       console.error('[MarineData] Import error:', error);

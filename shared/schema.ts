@@ -1551,6 +1551,7 @@ export type InsertProductionTarget = z.infer<typeof insertProductionTargetSchema
 export const marineData = pgTable("marine_data", {
   id: serial("id").primaryKey(),
   recordedAt: timestamp("recorded_at").notNull(), // Data e ora della rilevazione
+  locationName: text("location_name"), // Nome località (Ca' Pisani, Delta Futuro)
   latitude: real("latitude").notNull(), // Latitudine (es. 44.93)
   longitude: real("longitude").notNull(), // Longitudine (es. 12.27)
   chlorophyllA: real("chlorophyll_a"), // Clorofilla-a in µg/L
@@ -1563,6 +1564,7 @@ export const marineData = pgTable("marine_data", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   recordedAtIdx: index("marine_data_recorded_at_idx").on(table.recordedAt),
+  locationNameIdx: index("marine_data_location_name_idx").on(table.locationName),
 }));
 
 export const insertMarineDataSchema = createInsertSchema(marineData)

@@ -85,7 +85,7 @@ router.get('/source-url', (req: Request, res: Response) => {
 
 router.post('/import-copernicus', async (req: Request, res: Response) => {
   try {
-    const { sst, chlorophyll, salinity, timestamp } = req.body;
+    const { sst, chlorophyll, salinity, timestamp, locationName } = req.body;
     
     if (sst === undefined && chlorophyll === undefined && salinity === undefined) {
       return res.status(400).json({ success: false, error: 'No data provided' });
@@ -95,13 +95,24 @@ router.post('/import-copernicus', async (req: Request, res: Response) => {
       sst: sst ?? null,
       chlorophyll: chlorophyll ?? null,
       salinity: salinity ?? null,
-      timestamp: timestamp ?? new Date().toISOString()
+      timestamp: timestamp ?? new Date().toISOString(),
+      locationName: locationName ?? undefined
     });
     
     res.json(result);
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
   }
+});
+
+router.get('/locations', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    locations: [
+      { name: "Ca' Pisani", latitude: 45.02194, longitude: 12.38010 },
+      { name: "Delta Futuro", latitude: 44.81887, longitude: 12.30900 }
+    ]
+  });
 });
 
 export default router;
