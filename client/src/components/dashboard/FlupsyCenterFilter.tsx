@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import WeatherForecast from "./WeatherForecast";
+import ChlorophyllIndicator from "./ChlorophyllIndicator";
 
 interface FlupsyCenterFilterProps {
   onFilterChange: (selectedCenter: string, selectedFlupsyIds: number[]) => void;
@@ -221,8 +222,12 @@ export default function FlupsyCenterFilter({ onFilterChange }: FlupsyCenterFilte
             )}
           </div>
           
-          {/* Previsioni Meteo */}
-          <WeatherForecast />
+          {/* Indicatore Clorofilla + Previsioni Meteo */}
+          <div className="flex items-center gap-3">
+            <ChlorophyllIndicator />
+            <div className="h-6 w-px bg-gray-200" />
+            <WeatherForecast />
+          </div>
         </div>
       </CardContent>
     </Card>
