@@ -1,0 +1,196 @@
+Capito: per dati marini + clorofilla la strada più diretta è il Copernicus Marine Data Store (ex CMEMS) usando il Copernicus Marine Toolbox (copernicusmarine).
+
+⚠️ Nota importante: nel messaggio precedente hai incollato credenziali. Cambia subito la password e non riutilizzarla altrove.
+
+1) “API key” o accesso? (qui è diverso da CDS)
+
+Nel Copernicus Marine Data Store non usi una “API key” tipo CDS, ma fai login con il tuo account Copernicus Marine: il comando login ti crea un file locale di credenziali chiamato .copernicusmarine-credentials (salvato nella tua home, sotto ~/.copernicusmarine).
+
+2) Installazione
+
+Nel terminale:
+
+pip install copernicusmarine
+
+3) Login (crea automaticamente il file credenziali)
+
+Metodo consigliato (interattivo):
+
+copernicusmarine login
+
+
+Questo crea la configurazione locale e poi non devi reinserire le credenziali ogni volta.
+
+In alternativa puoi passare user/pass o usare variabili d’ambiente (utile in server/CI, ma evita di scriverle “in chiaro” in script).
+
+4) Trovare il dataset giusto per “chlorophyll / chl”
+
+Per cercare nel catalogo usa describe con filtro --contains (puoi cercare “chlorophyll”, “chl”, “ocean colour”, ecc.).
+
+Esempi:
+
+# Mostra solo i dataset che matchano la parola chiave
+copernicusmarine describe --return-fields datasets --contains chlorophyll
+
+
+Oppure:
+
+copernicusmarine describe --return-fields datasets --contains chl
+
+
+Il comando describe di default mostra soprattutto i prodotti; con --return-fields datasets includi anche i dataset_id che ti servono per scaricare/subsettare.
+
+5) Scaricare la clorofilla: due modi (SUBSET o GET)
+A) subset (consigliato): scarichi solo area/periodo/variabili che ti servono
+
+subset ti permette di scegliere variabile, bounding box, profondità e intervallo temporale.
+
+Schema (sostituisci <DATASET_ID> con quello trovato al punto 4):
+
+copernicusmarine subset \
+  --dataset-id <DATASET_ID> \
+  --variable CHL \
+  --minimum-longitude 12 --maximum-longitude 13 \
+  --minimum-latitude 44 --maximum-latitude 45 \
+  --minimum-depth 0 --maximum-depth 0 \
+  --start-datetime "2025-01-01 00:00:00" \
+  --end-datetime "2025-01-31 23:59:59"
+
+
+Le opzioni (lon/lat/depth/time/variable) sono quelle ufficiali del CLI.
+
+Nota: la variabile può chiamarsi CHL o chl a seconda del dataset. Se CHL fallisce, prova chl oppure guarda i metadati del dataset (sempre via describe).
+
+B) get: scarichi i file originali “così come sono”
+
+Se vuoi i NetCDF originali senza ritagliare:
+
+copernicusmarine get --dataset-id <DATASET_ID>
+
+
+(Anche qui il dataset_id lo trovi con describe).
+
+6) Se invece ti serve clorofilla “da Sentinel” direttamente (opzionale)
+
+Se stai puntando a prodotti del Copernicus Data Space Ecosystem (catalogo Sentinel-3/OLCI ecc.), lì l’accesso è tramite access token ottenuto con la procedura “Token Generation” (non è la stessa cosa del Marine Data Store).
+
+Dimmi SOLO questo (senza credenziali) e ti do il comando finale già pronto
+
+area: bounding box (minLon, maxLon, minLat, maxLat) oppure “Adriatico nord / Delta del Po”
+
+periodo: date inizio/fine
+
+preferisci: satellite ocean colour o modello biogeochimico?
+
+Con queste 3 info ti preparo la riga copernicusmarine subset ... completa e “a prova di errore”.
+
+Adriatico nord / Delta del Po, in tempo reale
+Ragionato per 2m 35s
+
+Per clorofilla “in tempo reale” (NRT) sul Nord Adriatico / Delta del Po, in Copernicus non ti serve una “API key” stile CDS: si usa il Copernicus Marine Data Store con il tool copernicusmarine, e l’accesso avviene con login (ti crea un file credenziali locale .copernicusmarine-credentials).
+
+Dataset consigliati (NRT)
+
+Per la clorofilla da satellite nel Mediterraneo:
+
+L4 NRT (gap-free, griglia pronta, daily): OCEANCOLOUR_MED_BGC_L4_NRT_009_142 (1 km) — aggiornamento giornaliero (indicata anche una fascia “Daily – 20:00”).
+
+L3 NRT (più “grezzo”, può avere buchi per nuvole, daily): OCEANCOLOUR_MED_BGC_L3_NRT_009_141 (daily; include anche prodotti più costieri tipo OLCI a risoluzione più fine).
+
+Se vuoi davvero “oggi/ieri” con meno problemi di nuvole, in genere parti dal L4 NRT; se ti serve più dettaglio costiero e accetti buchi, vai di L3 NRT.
+
+Procedura pratica (CLI) per scaricare gli ultimi dati disponibili sul Delta del Po
+1) Installa e fai login
+pip install copernicusmarine
+copernicusmarine login
+
+
+Questo crea .copernicusmarine-credentials nella tua home.
+
+2) Trova il dataset_id interno (serve per subset)
+
+Il comando subset vuole un dataset_id (non sempre coincide col “product id”). Il modo più semplice è usare describe filtrando per “contains”.
+
+Esempio per il L4 NRT:
+
+copernicusmarine describe --contains OCEANCOLOUR_MED_BGC_L4_NRT_009_142 --return-fields datasets
+
+
+Dentro l’output JSON cerca dataset_id (copialo: lo userai al punto 3).
+
+Se hai jq, puoi estrarlo al volo:
+
+copernicusmarine describe --contains OCEANCOLOUR_MED_BGC_L4_NRT_009_142 --return-fields datasets | jq -r '..|.dataset_id? // empty'
+
+3) Scarica la clorofilla “NRT” sul Nord Adriatico / Po Delta (bounding box)
+
+Userò una bbox sensata per Nord Adriatico/Delta del Po:
+
+lon 11.6 → 13.6
+
+lat 44.0 → 45.8
+
+profondità: superficie (0 m)
+
+Poi fai un subset sugli ultimi 3 giorni (così prendi l’ultimo aggiornamento disponibile).
+
+Linux
+
+DATASET="<INCOLLA_QUI_IL_DATASET_ID>"
+START="$(date -u -d '3 days ago' '+%Y-%m-%d %H:%M:%S')"
+END="$(date -u '+%Y-%m-%d %H:%M:%S')"
+
+copernicusmarine subset -i "$DATASET" \
+  -v CHL \
+  -x 11.6 -X 13.6 -y 44.0 -Y 45.8 \
+  --minimum-depth 0 --maximum-depth 0 \
+  -t "$START" -T "$END"
+
+
+macOS
+
+DATASET="<INCOLLA_QUI_IL_DATASET_ID>"
+START="$(date -u -v-3d '+%Y-%m-%d %H:%M:%S')"
+END="$(date -u '+%Y-%m-%d %H:%M:%S')"
+
+copernicusmarine subset -i "$DATASET" \
+  -v CHL \
+  -x 11.6 -X 13.6 -y 44.0 -Y 45.8 \
+  --minimum-depth 0 --maximum-depth 0 \
+  -t "$START" -T "$END"
+
+
+Il comando subset è quello ufficiale (dataset-id, variabile, bbox, time range).
+
+Se CHL desse errore (dipende dal dataset), prova chl oppure lancia prima un --dry-run per vedere cosa sta selezionando senza scaricare.
+
+copernicusmarine subset ... --dry-run
+
+Se preferisci Python (più comodo per “sempre gli ultimi X giorni”)
+from datetime import datetime, timedelta, timezone
+import copernicusmarine as cm
+
+dataset_id = "<INCOLLA_QUI_IL_DATASET_ID>"
+
+end = datetime.now(timezone.utc)
+start = end - timedelta(days=3)
+
+cm.subset(
+    dataset_id=dataset_id,
+    variables=["CHL"],          # se non va, prova ["chl"]
+    minimum_longitude=11.6,
+    maximum_longitude=13.6,
+    minimum_latitude=44.0,
+    maximum_latitude=45.8,
+    minimum_depth=0,
+    maximum_depth=0,
+    start_datetime=start.isoformat(timespec="seconds"),
+    end_datetime=end.isoformat(timespec="seconds"),
+)
+
+
+(Il concetto è lo stesso del CLI: subset su bbox + intervallo temporale).
+
+Nota “tempo reale”
+
+Nel Copernicus Marine la clorofilla satellite è Near Real Time (NRT): tipicamente arriva con un piccolo ritardo operativo (ore / 1 giorno). Per il prodotto L4 NRT Mediterraneo l’update è indicato come daily.
