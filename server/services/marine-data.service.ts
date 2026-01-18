@@ -203,22 +203,28 @@ export class MarineDataService {
     const locationsList = Object.values(LOCATIONS);
     const results: any[] = [];
     
+    // Get all recent records with Copernicus data (chlorophyll not null)
+    const recentCopernicusData = await db
+      .select()
+      .from(marineData)
+      .where(gte(marineData.recordedAt, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)))
+      .orderBy(desc(marineData.recordedAt));
+    
     for (const location of locationsList) {
       if (locationName && location.name !== locationName) continue;
       
       const openMeteoData = await this.fetchFromOpenMeteo(location);
       
-      // Get latest Copernicus data from database for this location
-      const [latestCopernicus] = await db
-        .select()
-        .from(marineData)
-        .where(gte(marineData.recordedAt, new Date(Date.now() - 24 * 60 * 60 * 1000)))
-        .orderBy(desc(marineData.recordedAt))
-        .limit(1);
+      // Find latest Copernicus data for THIS location (with chlorophyll data)
+      const latestCopernicus = recentCopernicusData.find(
+        r => r.locationName === location.name && r.chlorophyllA !== null
+      ) || recentCopernicusData.find(
+        r => r.chlorophyllA !== null
+      );
       
       const history = await this.getHistoricalData(2);
       const sstHistory = history
-        .filter(r => r.seaSurfaceTemperature !== null && r.locationName === location.name)
+        .filter(r => r.seaSurfaceTemperature !== null)
         .slice(0, 6)
         .map(r => r.seaSurfaceTemperature);
       
@@ -237,7 +243,7 @@ export class MarineDataService {
         recordedAt: new Date(),
         isRealData: true,
         note: latestCopernicus?.chlorophyllA 
-          ? 'Dati reali combinati (Copernicus + Open-Meteo)' 
+          ? `Dati Copernicus per ${latestCopernicus.locationName || location.name}` 
           : 'Dati Open-Meteo (temperatura, onde)',
       });
     }
@@ -245,16 +251,18 @@ export class MarineDataService {
     if (results.length === 0) return null;
     if (locationName) return results[0];
     
-    // Return combined view with both locations
+    // Return combined view - prioritize location with Copernicus data
+    const locationWithCopernicus = results.find(r => r.chlorophyll !== null) || results[0];
+    
     return {
       locations: results,
-      sst: results[0]?.sst ?? null,
-      chlorophyll: results[0]?.chlorophyll ?? null,
-      salinity: results[0]?.salinity ?? null,
-      waveHeight: results[0]?.waveHeight ?? null,
-      wavePeriod: results[0]?.wavePeriod ?? null,
-      history: results[0]?.history ?? [],
-      source: results[0]?.source ?? 'open-meteo',
+      sst: locationWithCopernicus?.sst ?? null,
+      chlorophyll: locationWithCopernicus?.chlorophyll ?? null,
+      salinity: locationWithCopernicus?.salinity ?? null,
+      waveHeight: locationWithCopernicus?.waveHeight ?? null,
+      wavePeriod: locationWithCopernicus?.wavePeriod ?? null,
+      history: locationWithCopernicus?.history ?? [],
+      source: locationWithCopernicus?.source ?? 'open-meteo',
       sourceUrl: COPERNICUS_URL,
       recordedAt: new Date(),
       isRealData: true,
