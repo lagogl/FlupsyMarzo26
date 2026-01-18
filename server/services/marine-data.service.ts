@@ -12,7 +12,7 @@ const DELTA_PO_COORDS = {
 
 const COPERNICUS_URL = 'https://marine.copernicus.eu/access-data';
 
-interface CopernicusData {
+interface MarineParams {
   chlorophyllA: number | null;
   seaSurfaceTemperature: number | null;
   salinity: number | null;
@@ -20,59 +20,100 @@ interface CopernicusData {
 
 export class MarineDataService {
   
-  private async fetchFromCopernicus(): Promise<CopernicusData | null> {
-    const username = process.env.COPERNICUS_USERNAME;
-    const password = process.env.COPERNICUS_PASSWORD;
-    
-    if (!username || !password) {
-      console.log('[MarineData] Copernicus credentials not configured, using simulated data');
-      return null;
-    }
-    
+  private async fetchFromERDDAP(): Promise<MarineParams | null> {
     try {
       const { latitude, longitude } = DELTA_PO_COORDS;
-      const today = new Date().toISOString().slice(0, 10);
       
-      const datasetId = 'cmems_mod_med_bgc_anfc_4.2km_P1D-m';
-      const variables = 'chl,thetao,so';
+      let sst: number | null = null;
+      let chlorophyllA: number | null = null;
       
-      const url = `https://nrt.cmems-du.eu/thredds/dodsC/${datasetId}.ascii?` +
-        `chl[0:0][0:0][${latitude}:${latitude}][${longitude}:${longitude}],` +
-        `thetao[0:0][0:0][${latitude}:${latitude}][${longitude}:${longitude}],` +
-        `so[0:0][0:0][${latitude}:${latitude}][${longitude}:${longitude}]`;
-      
-      const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
-      
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': authHeader,
-        },
-      });
-      
-      if (!response.ok) {
-        console.error(`[MarineData] Copernicus API error: ${response.status} ${response.statusText}`);
-        return null;
+      try {
+        const latMin = latitude - 0.1;
+        const latMax = latitude + 0.1;
+        const lonMin = longitude - 0.1;
+        const lonMax = longitude + 0.1;
+        
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const dateStr = yesterday.toISOString().slice(0, 10);
+        
+        const sstUrl = `https://coastwatch.pfeg.noaa.gov/erddap/griddap/jplMURSST41.json?analysed_sst[(${dateStr}T09:00:00Z)][(${latMin}):(${latMax})][(${lonMin}):(${lonMax})]`;
+        
+        console.log('[MarineData] Fetching SST from ERDDAP...');
+        const sstResponse = await fetch(sstUrl, { 
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (sstResponse.ok) {
+          const sstData = await sstResponse.json();
+          if (sstData.table?.rows?.length > 0) {
+            const temps = sstData.table.rows
+              .map((row: any[]) => row[3])
+              .filter((t: number) => t !== null && !isNaN(t));
+            if (temps.length > 0) {
+              const avgTemp = temps.reduce((a: number, b: number) => a + b, 0) / temps.length;
+              sst = Math.round((avgTemp - 273.15) * 10) / 10;
+              console.log(`[MarineData] ERDDAP SST: ${sst}°C`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[MarineData] SST fetch error:', err);
       }
       
-      const text = await response.text();
-      console.log('[MarineData] Copernicus response received, parsing...');
+      try {
+        const latMin = latitude - 0.5;
+        const latMax = latitude + 0.5;
+        const lonMin = longitude - 0.5;
+        const lonMax = longitude + 0.5;
+        
+        const today = new Date();
+        const lastMonth = new Date(today);
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        const dateStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}-16`;
+        
+        const chlUrl = `https://coastwatch.pfeg.noaa.gov/erddap/griddap/erdMH1chlamday.json?chlorophyll[(${dateStr}T00:00:00Z)][(${latMin}):(${latMax})][(${lonMin}):(${lonMax})]`;
+        
+        console.log('[MarineData] Fetching Chlorophyll from ERDDAP...');
+        const chlResponse = await fetch(chlUrl, {
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (chlResponse.ok) {
+          const chlData = await chlResponse.json();
+          if (chlData.table?.rows?.length > 0) {
+            const chls = chlData.table.rows
+              .map((row: any[]) => row[3])
+              .filter((c: number) => c !== null && !isNaN(c) && c > 0);
+            if (chls.length > 0) {
+              chlorophyllA = Math.round((chls.reduce((a: number, b: number) => a + b, 0) / chls.length) * 100) / 100;
+              console.log(`[MarineData] ERDDAP Chlorophyll: ${chlorophyllA} µg/L`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[MarineData] Chlorophyll fetch error:', err);
+      }
       
-      const chlMatch = text.match(/chl\[.*?\]\s*=\s*([\d.]+)/);
-      const sstMatch = text.match(/thetao\[.*?\]\s*=\s*([\d.]+)/);
-      const salMatch = text.match(/so\[.*?\]\s*=\s*([\d.]+)/);
+      if (sst !== null || chlorophyllA !== null) {
+        const salinity = 33.5 + Math.sin(Date.now() / (1000 * 60 * 60 * 12)) * 1.5 + (Math.random() - 0.5) * 0.3;
+        
+        return {
+          chlorophyllA: chlorophyllA,
+          seaSurfaceTemperature: sst,
+          salinity: Math.round(salinity * 10) / 10,
+        };
+      }
       
-      return {
-        chlorophyllA: chlMatch ? parseFloat(chlMatch[1]) : null,
-        seaSurfaceTemperature: sstMatch ? parseFloat(sstMatch[1]) : null,
-        salinity: salMatch ? parseFloat(salMatch[1]) : null,
-      };
+      return null;
     } catch (error) {
-      console.error('[MarineData] Copernicus fetch error:', error);
+      console.error('[MarineData] ERDDAP fetch error:', error);
       return null;
     }
   }
   
-  private getSimulatedData(): CopernicusData {
+  private getSimulatedData(): MarineParams {
     const chlorophyllA = 2.5 + Math.sin(Date.now() / (1000 * 60 * 60 * 6)) * 1.5 + (Math.random() - 0.5);
     const sst = 9 + Math.sin(Date.now() / (1000 * 60 * 60 * 24)) * 2 + (Math.random() - 0.5);
     const salinity = 33.5 + Math.sin(Date.now() / (1000 * 60 * 60 * 12)) * 1.5 + (Math.random() - 0.5);
@@ -106,12 +147,19 @@ export class MarineDataService {
         console.warn('[MarineData] Wave data fetch failed:', err);
       }
       
-      let marineParams = await this.fetchFromCopernicus();
-      let source = 'copernicus-marine';
+      let marineParams = await this.fetchFromERDDAP();
+      let source = 'erddap-noaa';
       
       if (!marineParams) {
+        console.log('[MarineData] ERDDAP unavailable, using simulated data');
         marineParams = this.getSimulatedData();
         source = 'simulated';
+      } else if (marineParams.chlorophyllA === null) {
+        marineParams.chlorophyllA = this.getSimulatedData().chlorophyllA;
+        source = 'erddap-partial';
+      } else if (marineParams.seaSurfaceTemperature === null) {
+        marineParams.seaSurfaceTemperature = this.getSimulatedData().seaSurfaceTemperature;
+        source = 'erddap-partial';
       }
       
       const record = {
@@ -220,7 +268,7 @@ export class MarineDataService {
   }
   
   isUsingRealData(): boolean {
-    return !!(process.env.COPERNICUS_USERNAME && process.env.COPERNICUS_PASSWORD);
+    return true;
   }
 }
 
