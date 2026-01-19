@@ -13,6 +13,7 @@ export const NOTIFICATION_TYPES = {
   POSITION_UPDATED: 'position_updated',
   CYCLE_UPDATED: 'cycle_updated',
   SCREENING_UPDATE: 'screening_update',
+  TASK_UPDATED: 'task_updated',
   ERROR: 'error'
 };
 

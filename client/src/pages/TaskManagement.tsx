@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CheckCircle, Clock, AlertCircle, Users, Package, User, Inbox, Calendar, Hash, Trash2, CheckCheck } from "lucide-react";
 import { format } from "date-fns";
+import { useWebSocketMessage } from "@/lib/websocket";
 
 const priorityColors = {
   low: "bg-slate-500",
@@ -55,8 +56,18 @@ export default function TaskManagement() {
   });
 
   // Query tasks
-  const { data: tasks, isLoading: loadingTasks } = useQuery({
+  const { data: tasks, isLoading: loadingTasks, refetch: refetchTasks } = useQuery({
     queryKey: ['/api/tasks'],
+  });
+
+  // Listener WebSocket per aggiornamenti real-time delle attività
+  useWebSocketMessage('task_updated', async () => {
+    console.log('📡 WebSocket: ricevuto task_updated, aggiornamento lista attività...');
+    await refetchTasks();
+    toast({
+      title: "Lista aggiornata",
+      description: "I dati sono stati ricaricati dal server.",
+    });
   });
 
   // Mutation per cancellare attività

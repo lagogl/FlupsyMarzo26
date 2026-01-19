@@ -15,6 +15,7 @@ import {
   type InsertSelectionTaskBasket,
   type InsertSelectionTaskAssignment
 } from "@shared/schema";
+import { broadcastMessage, NOTIFICATION_TYPES } from "../../../websocket";
 
 export class TasksService {
   /**
@@ -281,6 +282,16 @@ export class TasksService {
         .where(eq(selectionTasks.id, assignment.taskId));
       console.log(`📋 Task ${assignment.taskId} aggiornato a in_progress`);
     }
+
+    // Notifica WebSocket per aggiornamento real-time delle pagine
+    broadcastMessage(NOTIFICATION_TYPES.TASK_UPDATED, {
+      taskId: assignment.taskId,
+      assignmentId: assignment.id,
+      status: status,
+      operatorId: operatorId,
+      message: `Attività ${assignment.taskId} aggiornata a ${status}`
+    });
+    console.log(`📡 WebSocket broadcast: task_updated per task ${assignment.taskId}`);
 
     // Check if all assignments are completed, then update task status
     if (status === 'completed') {

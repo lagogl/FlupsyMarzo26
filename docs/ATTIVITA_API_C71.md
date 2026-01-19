@@ -322,9 +322,34 @@ Content-Type: application/json
 
 ---
 
+## WebSocket Real-Time Updates
+
+Quando l'app C71 aggiorna lo stato di un'attività tramite `PATCH /api/tasks/:taskId/assignments/:assignmentId`, il server invia automaticamente una notifica WebSocket a tutti i client connessi.
+
+**Tipo notifica:** `task_updated`
+
+**Payload:**
+```json
+{
+  "type": "task_updated",
+  "data": {
+    "taskId": 21,
+    "assignmentId": 36,
+    "status": "in_progress",
+    "operatorId": 10,
+    "message": "Attività 21 aggiornata a in_progress"
+  }
+}
+```
+
+Questo permette alla dashboard web di aggiornarsi automaticamente senza refresh manuale.
+
+---
+
 ## Note Tecniche
 
 - Tutti i timestamp sono in formato ISO 8601 (UTC)
 - Le date (`dueDate`) sono in formato `YYYY-MM-DD`
 - Gli ID sono sempre numeri interi
 - Il campo `rfidUhfEpc` nei cestelli contiene il codice EPC del tag RFID UHF per la scansione
+- Gli aggiornamenti di stato attivano notifiche WebSocket per sync real-time
