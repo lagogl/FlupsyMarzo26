@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CheckCircle, Clock, AlertCircle, Users, Package, User, Inbox, Calendar, Hash, Trash2, CheckCheck } from "lucide-react";
+import { CheckCircle, Clock, AlertCircle, Users, Package, User, Inbox, Calendar, Hash, Trash2, CheckCheck, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useWebSocketMessage } from "@/lib/websocket";
 
@@ -130,11 +130,27 @@ export default function TaskManagement() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Monitoraggio Attività</h1>
-        <p className="text-muted-foreground">
-          Monitora lo stato delle attività assegnate agli operatori. Le attività vengono create dalla pagina Selezione Avanzata.
-        </p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold">Monitoraggio Attività</h1>
+          <p className="text-muted-foreground">
+            Monitora lo stato delle attività assegnate agli operatori. Le attività vengono create dalla pagina Selezione Avanzata.
+          </p>
+        </div>
+        <Button 
+          onClick={() => {
+            refetchTasks();
+            toast({
+              title: "Lista aggiornata",
+              description: "I dati sono stati ricaricati dal server.",
+            });
+          }}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Aggiorna
+        </Button>
       </div>
 
       {loadingTasks ? (
