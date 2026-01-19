@@ -270,6 +270,18 @@ export class TasksService {
       .where(eq(selectionTaskAssignments.id, assignmentId))
       .returning();
 
+    // Aggiorna lo stato del task principale in base allo stato dell'assegnazione
+    if (status === 'in_progress') {
+      // Quando almeno un operatore inizia, il task passa a "in_corso"
+      await db.update(selectionTasks)
+        .set({ 
+          status: 'in_progress',
+          updatedAt: new Date()
+        })
+        .where(eq(selectionTasks.id, assignment.taskId));
+      console.log(`📋 Task ${assignment.taskId} aggiornato a in_progress`);
+    }
+
     // Check if all assignments are completed, then update task status
     if (status === 'completed') {
       await this.checkAndUpdateTaskCompletion(assignment.taskId);
