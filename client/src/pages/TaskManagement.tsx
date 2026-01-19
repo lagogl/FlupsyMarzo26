@@ -186,10 +186,16 @@ export default function TaskManagement() {
               <TableBody>
                 {tasks && tasks.length > 0 ? (
                   tasks.map((task: any) => {
-                    const isCompleted = task.status === 'completed';
                     const assignedOperators = task.assignments || [];
                     const completedCount = assignedOperators.filter((a: any) => a.status === 'completed').length;
+                    const inProgressCount = assignedOperators.filter((a: any) => a.status === 'in_progress').length;
                     const baskets = task.baskets || [];
+                    
+                    // Calcola stato effettivo basato sugli assignment
+                    const effectiveStatus = task.status === 'completed' ? 'completed' :
+                      completedCount === assignedOperators.length && assignedOperators.length > 0 ? 'completed' :
+                      inProgressCount > 0 ? 'in_progress' : task.status;
+                    const isCompleted = effectiveStatus === 'completed';
                     
                     return (
                       <TableRow 
@@ -254,7 +260,12 @@ export default function TaskManagement() {
                                     <div className="flex items-center gap-2 mt-1">
                                       <Badge 
                                         variant="outline" 
-                                        className={`text-xs ${a.status === 'completed' ? 'bg-green-100 text-green-800 border-green-300' : ''}`}
+                                        className={`text-xs ${
+                                          a.status === 'completed' ? 'bg-green-100 text-green-800 border-green-300' : 
+                                          a.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 
+                                          a.status === 'accepted' ? 'bg-blue-100 text-blue-800 border-blue-300' : 
+                                          'bg-gray-100 text-gray-700 border-gray-300'
+                                        }`}
                                       >
                                         {statusLabels[a.status as keyof typeof statusLabels]}
                                       </Badge>
@@ -319,8 +330,8 @@ export default function TaskManagement() {
                         {/* Stato */}
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            <Badge className={statusColors[task.status as keyof typeof statusColors]}>
-                              {statusLabels[task.status as keyof typeof statusLabels]}
+                            <Badge className={statusColors[effectiveStatus as keyof typeof statusColors]}>
+                              {statusLabels[effectiveStatus as keyof typeof statusLabels]}
                             </Badge>
                             {task.completedAt && (
                               <span className="text-xs text-green-600 font-medium">
