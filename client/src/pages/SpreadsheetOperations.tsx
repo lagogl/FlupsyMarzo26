@@ -3017,26 +3017,25 @@ export default function SpreadsheetOperations() {
       {/* Form popup stile Excel per editing inline */}
       {editingRow !== null && editingForm && editingPosition && (
         <div>
-          {/* Overlay molto trasparente per mantenere visibilità */}
+          {/* Overlay trasparente con centering */}
           <div 
-            className="fixed inset-0 bg-black bg-opacity-5 z-40"
+            className="fixed inset-0 bg-black bg-opacity-20 z-40 flex items-center justify-center"
             onClick={closeEditingForm}
           />
           
-          {/* Form popup responsive - desktop a lato, mobile fullscreen */}
+          {/* Form popup centrato - sempre al centro della videata */}
           <div 
             className="fixed z-50 rounded border shadow-2xl 
                        md:max-w-[600px] md:min-w-[500px]
                        max-md:inset-x-2 max-md:w-auto max-md:max-w-none max-md:min-w-0
-                       max-md:top-4 max-md:bottom-4 max-md:overflow-y-auto"
+                       max-md:top-auto max-md:bottom-auto max-md:overflow-y-auto
+                       left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
             style={{ 
-              // Desktop: posizionato a lato destro
-              top: window.innerWidth >= 768 ? Math.max(10, editingPosition.top - 20) : undefined,
-              right: window.innerWidth >= 768 ? Math.max(10, 50) : undefined,
-              
               backgroundColor: 'rgba(255, 255, 255, 0.98)',
               backdropFilter: 'blur(3px)',
-              border: '2px solid #3b82f6'
+              border: '2px solid #3b82f6',
+              maxHeight: '90vh',
+              overflowY: 'auto'
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
