@@ -487,7 +487,14 @@ export default function SpreadsheetOperations() {
           activationOperation: activationOp
         };
       })
-      .sort((a, b) => a.physicalNumber - b.physicalNumber);
+      .sort((a, b) => {
+        // Quando si visualizzano tutti i FLUPSY, raggruppa prima per FLUPSY poi per numero fisico
+        if (selectedFlupsyId === "all") {
+          const flupsyDiff = (a.flupsyId || 0) - (b.flupsyId || 0);
+          if (flupsyDiff !== 0) return flupsyDiff;
+        }
+        return a.physicalNumber - b.physicalNumber;
+      });
 
     // Debug dettagliato per capire il problema dei cestelli mancanti
     console.log(`🔍 DEBUG FILTRO: FLUPSY selezionato=${selectedFlupsyId}`);
@@ -2125,6 +2132,9 @@ export default function SpreadsheetOperations() {
                 {/* Header tabella compatto con larghezze esatte per allineamento perfetto */}
                 <div className="flex border-b bg-gray-100 text-xs font-medium text-gray-700 sticky top-0 z-10" style={{fontSize: '10px'}}>
                   <div style={{width: '70px'}} className="px-2 py-1.5 border-r bg-white sticky left-0 z-20 shadow-r">Cesta</div>
+                  {selectedFlupsyId === "all" && (
+                    <div style={{width: '70px'}} className="px-1 py-1.5 border-r bg-blue-50">FLUPSY</div>
+                  )}
                   <div style={{width: '40px'}} className="px-1 py-1.5 border-r text-center">Stato</div>
 
                   <div style={{width: '80px'}} className="px-1 py-1.5 border-r">Taglia</div>
@@ -2155,7 +2165,7 @@ export default function SpreadsheetOperations() {
                   {selectedOperationType === 'misura' && (
                     <div style={{width: '65px'}} className="px-1 py-1.5 border-r">Mortalità%</div>
                   )}
-                  <div className="flex-1 px-1 py-1.5 border-r" style={{minWidth: '120px'}}>Note</div>
+                  <div style={{width: selectedFlupsyId === "all" ? '50px' : '120px'}} className="px-1 py-1.5 border-r">Note</div>
                   <div style={{width: '70px'}} className="px-1 py-1.5 text-center">Azioni</div>
                 </div>
 
@@ -2420,6 +2430,15 @@ export default function SpreadsheetOperations() {
                         })()}
                       </div>
                     </div>
+                    
+                    {/* FLUPSY - solo quando si visualizzano tutti */}
+                    {selectedFlupsyId === "all" && (
+                      <div style={{width: '70px'}} className="px-1 py-1 border-r bg-blue-50 flex items-center">
+                        <span className="text-xs truncate font-medium text-blue-700" title={(row as any).flupsyName || ''}>
+                          {(row as any).flupsyName || '-'}
+                        </span>
+                      </div>
+                    )}
                     
                     {/* Stato */}
                     <div style={{width: '40px'}} className="px-1 py-1 border-r flex items-center justify-center">
@@ -2897,16 +2916,30 @@ export default function SpreadsheetOperations() {
                       </div>
                     )}
 
-                    <div className="flex-1 px-1 py-1 border-r" style={{minWidth: '120px'}}>
-                      <input
-                        value={row.notes}
-                        onChange={(e) => updateCell(row.basketId, 'notes', e.target.value)}
-                        className={`w-full h-6 px-1 text-xs border-0 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded ${
-                          (row as any).isNewRow ? 'bg-white' : 'bg-gray-100 cursor-not-allowed'
-                        }`}
-                        disabled={!(row as any).isNewRow}
-                        placeholder="Note..."
-                      />
+                    <div style={{width: selectedFlupsyId === "all" ? '50px' : '120px'}} className="px-1 py-1 border-r">
+                      {(row as any).isNewRow ? (
+                        <input
+                          value={row.notes}
+                          onChange={(e) => updateCell(row.basketId, 'notes', e.target.value)}
+                          className="w-full h-6 px-1 text-xs border-0 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-white"
+                          placeholder="Note..."
+                        />
+                      ) : (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="w-full h-6 px-1 text-xs rounded bg-gray-100 cursor-help flex items-center overflow-hidden">
+                                <span className="truncate">{row.notes || '-'}</span>
+                              </div>
+                            </TooltipTrigger>
+                            {row.notes && (
+                              <TooltipContent side="left" className="max-w-xs">
+                                <p className="text-xs">{row.notes}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
 
                     <div style={{width: '70px'}} className="px-1 py-1 border-r flex items-center justify-center gap-1 min-h-[28px]">
