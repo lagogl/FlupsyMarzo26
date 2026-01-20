@@ -57,6 +57,7 @@ interface OperationRowData {
   averageWeight?: number;
   lastOperationDate?: string;
   lastOperationType?: string;
+  flupsyName?: string;
 }
 
 // Tipi operazione per il modulo Spreadsheet (SOLO Misura e Peso)
@@ -611,7 +612,9 @@ export default function SpreadsheetOperations() {
           lastOperationDate: lastOp?.date,
           lastOperationType: lastOp?.type,
           // ✅ IMPORTANTE: Aggiungi il campo lastOperation per l'inizializzazione del form
-          lastOperation: lastOp
+          lastOperation: lastOp,
+          // Nome FLUPSY per visualizzazione quando "TUTTI" selezionato
+          flupsyName: basket.flupsyName
         };
       });
       
@@ -2165,7 +2168,7 @@ export default function SpreadsheetOperations() {
                   {selectedOperationType === 'misura' && (
                     <div style={{width: '65px'}} className="px-1 py-1.5 border-r">Mortalità%</div>
                   )}
-                  <div style={{width: selectedFlupsyId === "all" ? '50px' : '120px'}} className="px-1 py-1.5 border-r">Note</div>
+                  <div style={{width: selectedFlupsyId === "all" ? '80px' : '120px'}} className="px-1 py-1.5 border-r">Note</div>
                   <div style={{width: '70px'}} className="px-1 py-1.5 text-center">Azioni</div>
                 </div>
 
@@ -2434,8 +2437,8 @@ export default function SpreadsheetOperations() {
                     {/* FLUPSY - solo quando si visualizzano tutti */}
                     {selectedFlupsyId === "all" && (
                       <div style={{width: '70px'}} className="px-1 py-1 border-r bg-blue-50 flex items-center">
-                        <span className="text-xs truncate font-medium text-blue-700" title={(row as any).flupsyName || ''}>
-                          {(row as any).flupsyName || '-'}
+                        <span className="text-xs truncate font-medium text-blue-700" title={row.flupsyName || ''}>
+                          {row.flupsyName || '-'}
                         </span>
                       </div>
                     )}
@@ -2916,7 +2919,7 @@ export default function SpreadsheetOperations() {
                       </div>
                     )}
 
-                    <div style={{width: selectedFlupsyId === "all" ? '50px' : '120px'}} className="px-1 py-1 border-r">
+                    <div style={{width: selectedFlupsyId === "all" ? '80px' : '120px'}} className="px-1 py-1 border-r">
                       {(row as any).isNewRow ? (
                         <input
                           value={row.notes}
