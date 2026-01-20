@@ -2168,8 +2168,8 @@ export default function SpreadsheetOperations() {
                   {selectedOperationType === 'misura' && (
                     <div style={{width: '65px'}} className="px-1 py-1.5 border-r">Mortalità%</div>
                   )}
-                  <div style={{width: selectedFlupsyId === "all" ? '80px' : '120px'}} className="px-1 py-1.5 border-r">Note</div>
-                  <div style={{width: '70px'}} className="px-1 py-1.5 text-center">Azioni</div>
+                  <div className="flex-1 px-1 py-1.5 border-r" style={{minWidth: '100px'}}>Note</div>
+                  <div style={{width: '70px'}} className="px-1 py-1.5 text-center flex-shrink-0">Azioni</div>
                 </div>
 
               {/* Righe dati compatte */}
@@ -2919,7 +2919,7 @@ export default function SpreadsheetOperations() {
                       </div>
                     )}
 
-                    <div style={{width: selectedFlupsyId === "all" ? '80px' : '120px'}} className="px-1 py-1 border-r">
+                    <div className="flex-1 px-1 py-1 border-r" style={{minWidth: '100px'}}>
                       {(row as any).isNewRow ? (
                         <input
                           value={row.notes}
@@ -2945,7 +2945,7 @@ export default function SpreadsheetOperations() {
                       )}
                     </div>
 
-                    <div style={{width: '70px'}} className="px-1 py-1 border-r flex items-center justify-center gap-1 min-h-[28px]">
+                    <div style={{width: '70px'}} className="px-1 py-1 flex items-center justify-center gap-1 min-h-[28px] flex-shrink-0">
                       {/* Pulsanti Salva e Undo solo per righe create (nuove) */}
                       {(row as any).isNewRow ? (
                         <div className="contents">
