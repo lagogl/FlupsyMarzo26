@@ -618,16 +618,16 @@ export default function SpreadsheetOperations() {
         };
       });
       
-      // **ORDINAMENTO INTELLIGENTE** - Le migliori performance in alto
+      // **ORDINAMENTO** - Quando TUTTI selezionato raggruppa per FLUPSY, poi per numero cesta
       const sortedRows = newRows.sort((a, b) => {
-        // Score di performance (0-100, più alto = migliore)
-        const scoreA = calculatePerformanceScore(a);
-        const scoreB = calculatePerformanceScore(b);
-        
-
-        
-        // Ordine decrescente: migliori performance prima
-        return scoreB - scoreA;
+        // Quando si visualizzano tutti i FLUPSY, raggruppa prima per nome FLUPSY poi per numero cesta
+        if (selectedFlupsyId === "all") {
+          const flupsyCompare = (a.flupsyName || '').localeCompare(b.flupsyName || '');
+          if (flupsyCompare !== 0) return flupsyCompare;
+          return a.physicalNumber - b.physicalNumber;
+        }
+        // Per singolo FLUPSY, ordina solo per numero cesta
+        return a.physicalNumber - b.physicalNumber;
       });
 
       setOperationRows(sortedRows);
@@ -2136,7 +2136,7 @@ export default function SpreadsheetOperations() {
                 <div className="flex border-b bg-gray-100 text-xs font-medium text-gray-700 sticky top-0 z-10" style={{fontSize: '10px'}}>
                   <div style={{width: '70px'}} className="px-2 py-1.5 border-r bg-white sticky left-0 z-20 shadow-r">Cesta</div>
                   {selectedFlupsyId === "all" && (
-                    <div style={{width: '70px'}} className="px-1 py-1.5 border-r bg-blue-50">FLUPSY</div>
+                    <div style={{width: '100px'}} className="px-1 py-1.5 border-r bg-blue-50">FLUPSY</div>
                   )}
                   <div style={{width: '40px'}} className="px-1 py-1.5 border-r text-center">Stato</div>
 
@@ -2436,7 +2436,7 @@ export default function SpreadsheetOperations() {
                     
                     {/* FLUPSY - solo quando si visualizzano tutti */}
                     {selectedFlupsyId === "all" && (
-                      <div style={{width: '70px'}} className="px-1 py-1 border-r bg-blue-50 flex items-center">
+                      <div style={{width: '100px'}} className="px-1 py-1 border-r bg-blue-50 flex items-center">
                         <span className="text-xs truncate font-medium text-blue-700" title={row.flupsyName || ''}>
                           {row.flupsyName || '-'}
                         </span>
