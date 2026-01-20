@@ -132,7 +132,7 @@ export default function SpreadsheetOperations() {
     return 'bg-gray-100 text-gray-800'; // Default per taglie non TP-XXX
   };
   
-  const [selectedFlupsyId, setSelectedFlupsyId] = useState<number | null>(null);
+  const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
   const [selectedOperationType, setSelectedOperationType] = useState<string>('peso');
   const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0]);
   const [operationRows, setOperationRows] = useState<OperationRowData[]>([]);
@@ -371,31 +371,7 @@ export default function SpreadsheetOperations() {
     queryKey: ['/api/sgr'],
   });
 
-  // Auto-selezione FLUPSY con cestelli attivi
-  useEffect(() => {
-    if (!selectedFlupsyId && baskets && flupsys && Array.isArray(baskets) && Array.isArray(flupsys)) {
-      // Trova il FLUPSY che ha cestelli attivi
-      const flupsyWithActiveBaskets = (flupsys as any[]).find((flupsy: any) => 
-        (baskets as any[]).some((basket: any) => 
-          basket.flupsyId === flupsy.id && 
-          basket.state === 'active' && 
-          basket.currentCycleId
-        )
-      );
-      
-      if (flupsyWithActiveBaskets) {
-        setSelectedFlupsyId(flupsyWithActiveBaskets.id);
-      } else {
-        // Se non ci sono cestelli attivi, prendi il primo FLUPSY con cestelli
-        const flupsyWithBaskets = (flupsys as any[]).find((flupsy: any) => 
-          (baskets as any[]).some((basket: any) => basket.flupsyId === flupsy.id)
-        );
-        if (flupsyWithBaskets) {
-          setSelectedFlupsyId(flupsyWithBaskets.id);
-        }
-      }
-    }
-  }, [baskets, flupsys, selectedFlupsyId]);
+  // Auto-selezione FLUPSY rimossa - default è "all" (TUTTI)
 
   // Mutation per salvare operazioni - USA LA STESSA LOGICA DEL MODULO OPERATIONS STANDARD
   const saveOperationMutation = useMutation({
@@ -467,8 +443,8 @@ export default function SpreadsheetOperations() {
     // Include SOLO i cestelli con cicli attivi dal FLUPSY selezionato
     const eligibleBaskets: BasketData[] = ((baskets as any[]) || [])
       .filter((basket: any) => {
-        // Il cestello deve appartenere al FLUPSY selezionato
-        if (basket.flupsyId !== selectedFlupsyId) return false;
+        // Il cestello deve appartenere al FLUPSY selezionato (oppure TUTTI)
+        if (selectedFlupsyId !== "all" && basket.flupsyId !== parseInt(selectedFlupsyId)) return false;
         
         // Il cestello deve avere uno stato attivo
         if (basket.state !== 'active') return false;
@@ -521,7 +497,7 @@ export default function SpreadsheetOperations() {
     // Log dei cestelli che non passano il filtro
     if (baskets && Array.isArray(baskets)) {
       const skippedBaskets = (baskets as any[]).filter((basket: any) => {
-        const flupsyMatch = basket.flupsyId === selectedFlupsyId;
+        const flupsyMatch = selectedFlupsyId === "all" || basket.flupsyId === parseInt(selectedFlupsyId);
         const stateMatch = basket.state === 'active';
         const cycleMatch = basket.currentCycleId !== null;
         
@@ -1963,11 +1939,12 @@ export default function SpreadsheetOperations() {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
             <label className="text-xs font-medium text-gray-600 whitespace-nowrap">FLUPSY</label>
-            <Select value={selectedFlupsyId?.toString() || ""} onValueChange={(value) => setSelectedFlupsyId(Number(value))}>
+            <Select value={selectedFlupsyId} onValueChange={setSelectedFlupsyId}>
               <SelectTrigger className="w-40 h-8 text-xs">
                 <SelectValue placeholder="Seleziona FLUPSY" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">TUTTI</SelectItem>
                 {((flupsys as any[]) || []).map((flupsy: any) => (
                   <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                     {flupsy.name}
@@ -2127,7 +2104,7 @@ export default function SpreadsheetOperations() {
           {/* Header compatto */}
           <div className="bg-gray-50 border-b px-3 py-2">
             <h3 className="font-medium text-sm">
-              {((flupsys as any[]) || []).find((f: any) => f.id === selectedFlupsyId)?.name} - {operationTypeOptions.find(opt => opt.value === selectedOperationType)?.label}
+              {selectedFlupsyId === "all" ? "TUTTI I FLUPSY" : ((flupsys as any[]) || []).find((f: any) => f.id === parseInt(selectedFlupsyId))?.name} - {operationTypeOptions.find(opt => opt.value === selectedOperationType)?.label}
             </h3>
           </div>
           
