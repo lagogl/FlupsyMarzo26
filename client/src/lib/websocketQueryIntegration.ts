@@ -101,7 +101,18 @@ export function useWebSocketQueryIntegration() {
       console.log(`WebSocket trigger: invalidando query per "${messageType}"`, queriesToInvalidate);
       
       queriesToInvalidate.forEach(queryKey => {
-        queryClient.invalidateQueries({ queryKey: [queryKey] });
+        // CRITICAL FIX: Usa predicate per invalidare TUTTE le query che iniziano con questo path
+        // Questo copre query come ['/api/operations', cycleId] e ['/api/operations?pageSize=500']
+        queryClient.invalidateQueries({ 
+          predicate: (query) => {
+            const key = query.queryKey;
+            if (Array.isArray(key) && key.length > 0) {
+              // Controlla se il primo elemento inizia con il queryKey
+              return typeof key[0] === 'string' && key[0].startsWith(queryKey);
+            }
+            return false;
+          }
+        });
       });
     };
   }, []);
