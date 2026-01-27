@@ -307,10 +307,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   </svg>
                 </div>
               )}
-              {/* Mortality indicator - small skull icon in bottom-left corner */}
+              {/* Mortality indicator - skull icon in top-left corner */}
               {latestOperation?.lastMortalityCount && latestOperation.lastMortalityCount > 0 && (
-                <div className="absolute bottom-1 left-1" title={`Mortalità: ${latestOperation.lastMortalityCount} animali`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <div className="absolute -top-1 -left-1" title={`Mortalità: ${latestOperation.lastMortalityCount} animali`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="10" r="7"/>
                     <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
                     <circle cx="15" cy="9" r="1.5" fill="currentColor"/>
