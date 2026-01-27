@@ -500,6 +500,7 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                   <th className="px-3 py-2 text-right font-semibold border border-gray-300">Animali/Kg</th>
                   <th className="px-3 py-2 text-right font-semibold border border-gray-300">N° Animali</th>
                   <th className="px-3 py-2 text-right font-semibold border border-gray-300">Peso (g)</th>
+                  <th className="px-3 py-2 text-right font-semibold border border-gray-300">Peso Medio (mg)</th>
                   <th className="px-3 py-2 text-center font-semibold border border-gray-300">Taglia</th>
                   <th className="px-3 py-2 text-right font-semibold border border-gray-300 text-red-700">Mortalità</th>
                   <th className="px-3 py-2 text-left font-semibold border border-gray-300">Note</th>
@@ -525,6 +526,9 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-right font-mono">
                       {op.totalWeight ? op.totalWeight.toLocaleString('it-IT', { maximumFractionDigits: 0 }) : '-'}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-right font-mono text-blue-700 font-semibold">
+                      {op.averageWeight ? parseFloat(op.averageWeight).toFixed(2) : (op.animalsPerKg ? (1000000 / op.animalsPerKg).toFixed(2) : '-')}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-center font-medium">
                       {op.size ? (typeof op.size === 'object' ? op.size.code : op.size) : '-'}
