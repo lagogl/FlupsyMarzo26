@@ -635,7 +635,11 @@ export class BasketsService {
         SELECT 
           o.basket_id,
           o.dead_count,
-          o.mortality_rate,
+          CASE 
+            WHEN o.animal_count > 0 AND o.dead_count > 0 
+            THEN (o.dead_count::numeric / o.animal_count::numeric * 100)
+            ELSE o.mortality_rate
+          END as calculated_mortality_rate,
           o.date as mortality_date,
           o.type as mortality_op_type,
           ROW_NUMBER() OVER (
@@ -664,7 +668,7 @@ export class BasketsService {
         ro.size_id as "sizeId",
         ro.notes,
         lm.dead_count as "lastMortalityCount",
-        lm.mortality_rate as "lastMortalityRate",
+        lm.calculated_mortality_rate as "lastMortalityRate",
         lm.mortality_date as "lastMortalityDate",
         lm.mortality_op_type as "lastMortalityOpType"
       FROM ranked_operations ro

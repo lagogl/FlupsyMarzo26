@@ -354,7 +354,7 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
                     <span className="font-medium">Ultima mortalità:</span>
                     <span>
                       {latestOperation.lastMortalityCount} animali 
-                      {latestOperation.lastMortalityRate && ` (${latestOperation.lastMortalityRate.toFixed(1).replace('.', ',')}%)`}
+                      {latestOperation.lastMortalityRate != null && ` (${latestOperation.lastMortalityRate < 0.01 ? '<0,01' : latestOperation.lastMortalityRate.toFixed(2).replace('.', ',')}%)`}
                       {latestOperation.lastMortalityDate && ` - ${format(new Date(latestOperation.lastMortalityDate), 'dd/MM/yy')}`}
                     </span>
                   </div>
