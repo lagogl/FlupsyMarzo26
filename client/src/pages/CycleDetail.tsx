@@ -632,13 +632,13 @@ export default function CycleDetail() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center mb-6">
           <Link href="/">
-            <Button variant="ghost" className="mr-2">
+            <Button variant="outline" className="mr-2 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
               <Home className="mr-2 h-4 w-4" />
               Dashboard
             </Button>
           </Link>
           <Link href="/cycles">
-            <Button variant="ghost" className="mr-4">
+            <Button variant="outline" className="mr-4 bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Cicli
             </Button>
@@ -725,13 +725,13 @@ export default function CycleDetail() {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
         <div className="flex items-center mb-4 md:mb-0">
           <Link href="/">
-            <Button variant="ghost" className="mr-2">
+            <Button variant="outline" className="mr-2 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
               <Home className="mr-2 h-4 w-4" />
               Dashboard
             </Button>
           </Link>
           <Link href="/cycles">
-            <Button variant="ghost" className="mr-4">
+            <Button variant="outline" className="mr-4 bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Cicli
             </Button>
