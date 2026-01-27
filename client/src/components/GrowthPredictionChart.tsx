@@ -152,7 +152,7 @@ export default function GrowthPredictionChart({
       <CardContent>
         <div className="flex flex-col my-1 text-sm">
           <div className="flex justify-between">
-            <span>Peso iniziale: <strong>{formatNumberWithCommas(currentWeight)} mg</strong></span>
+            <span>Peso iniziale: <strong>{Math.round(currentWeight)} mg</strong></span>
             <span>Data: <strong>{formatDate(measurementDate)}</strong></span>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
@@ -181,12 +181,13 @@ export default function GrowthPredictionChart({
               />
               <YAxis
                 tickFormatter={(value) => {
-                  // Gestisci sia valori grandi che piccoli
+                  // Gestisci sia valori grandi che piccoli - NO decimali inutili
                   if (value === 0) return '0';
-                  if (value < 0.01) return value.toExponential(2); // notazione scientifica per valori molto piccoli
-                  if (value < 1) return value.toFixed(4);
-                  if (value < 10) return value.toFixed(2);
-                  return formatNumberWithCommas(Math.round(value));
+                  if (value < 0.01) return value.toExponential(2);
+                  if (value < 1) return value.toFixed(2);
+                  if (value < 100) return Math.round(value).toString();
+                  // Solo per valori grandi usa il separatore migliaia
+                  return Math.round(value).toLocaleString('it-IT');
                 }}
                 label={{ 
                   value: 'Peso (mg)',
