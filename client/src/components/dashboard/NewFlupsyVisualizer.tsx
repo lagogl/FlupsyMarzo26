@@ -402,6 +402,17 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   </>
                 )}
                 
+                {latestOperation.lastMortalityCount && latestOperation.lastMortalityCount > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span className="font-medium">Ultima mortalità:</span>
+                    <span>
+                      {latestOperation.lastMortalityCount} animali 
+                      {latestOperation.lastMortalityRate && ` (${latestOperation.lastMortalityRate.toFixed(1).replace('.', ',')}%)`}
+                      {latestOperation.lastMortalityDate && ` - ${format(new Date(latestOperation.lastMortalityDate), 'dd/MM/yy')}`}
+                    </span>
+                  </div>
+                )}
+                
                 {latestOperation.notes && (
                   <div className="mt-1 pt-1 border-t">
                     <span className="font-medium">Note:</span>
