@@ -410,6 +410,17 @@ export default function SpreadsheetOperations() {
         title: "Operazione completata",
         description: `Operazione registrata per cestello #${basket?.physicalNumber || basketId}`,
       });
+      
+      // Mostra messaggio informativo sulla taglia per operazioni peso (se presente)
+      if (data && data._infoMessage) {
+        setTimeout(() => {
+          toast({
+            title: "Info taglia",
+            description: data._infoMessage,
+            duration: 5000,
+          });
+        }, 500);
+      }
     },
     onError: (error: any, variables) => {
       console.error('❌ Spreadsheet: Error callback:', error.message);

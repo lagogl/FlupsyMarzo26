@@ -4,7 +4,7 @@
 import type { Express } from "express";
 import { db } from './db';
 import { operations, cycles, baskets, lots, lotLedger } from '../shared/schema';
-import { sql, eq, and, between } from 'drizzle-orm';
+import { sql, eq, and, between, not, isNull } from 'drizzle-orm';
 import { broadcastMessage } from './websocket';
 import { invalidateAllCaches } from './services/operations-lifecycle.service.js';
 import { LotAutoStatsService } from './services/lot-auto-stats-service.js';
@@ -768,23 +768,122 @@ export function implementDirectOperationRoute(app: Express) {
         }
         
         // 5. CALCOLO AUTOMATICO TAGLIA PER OPERAZIONI PESO (prima dell'inserimento)
+        // NUOVA LOGICA: Se mortalità cumulativa >= 5%, NON modificare la taglia (eredita ultima misura)
+        let pesoTagliaMessage: string | null = null;
+        
         if (operationData.type === 'peso' && operationData.totalWeight && operationData.animalCount && operationData.animalCount > 0) {
-          // Calcola il peso medio per animale in grammi
-          const averageWeightGrams = operationData.totalWeight / operationData.animalCount;
-          // Converte in animali per kg (1000g = 1kg)
-          const calculatedAnimalsPerKg = Math.round(1000 / averageWeightGrams);
+          const effectiveCycleId = operationData.cycleId || basket.currentCycleId;
+          let cumulativeMortalityRate = 0;
+          let shouldCalculateSize = true;
           
-          console.log(`PESO: Calcolo taglia automatica - ${operationData.totalWeight}g / ${operationData.animalCount} animali = ${averageWeightGrams}g/animale = ${calculatedAnimalsPerKg} animali/kg`);
+          if (effectiveCycleId) {
+            // Recupera prima attivazione per calcolare mortalità cumulativa
+            const primaAttivazioneResult = await db
+              .select({ animalCount: operations.animalCount })
+              .from(operations)
+              .where(
+                and(
+                  eq(operations.cycleId, effectiveCycleId),
+                  eq(operations.type, 'prima-attivazione')
+                )
+              )
+              .orderBy(sql`${operations.id} ASC`)
+              .limit(1);
+            
+            const originalCount = primaAttivazioneResult.length > 0 ? primaAttivazioneResult[0].animalCount || 0 : 0;
+            
+            if (originalCount > 0) {
+              cumulativeMortalityRate = 1 - (operationData.animalCount / originalCount);
+              console.log(`⚖️ PESO: Mortalità cumulativa = ${(cumulativeMortalityRate * 100).toFixed(2)}% (${operationData.animalCount}/${originalCount})`);
+              
+              // Se mortalità >= 5%, NON calcolare la taglia, eredita dall'ultima misura
+              if (cumulativeMortalityRate >= 0.05) {
+                shouldCalculateSize = false;
+                
+                // Recupera l'ultima misura per ereditare la taglia
+                const lastMisuraResult = await db
+                  .select({ sizeId: operations.sizeId })
+                  .from(operations)
+                  .where(
+                    and(
+                      eq(operations.cycleId, effectiveCycleId),
+                      eq(operations.type, 'misura')
+                    )
+                  )
+                  .orderBy(sql`${operations.id} DESC`)
+                  .limit(1);
+                
+                if (lastMisuraResult.length > 0 && lastMisuraResult[0].sizeId) {
+                  operationData.sizeId = lastMisuraResult[0].sizeId;
+                  pesoTagliaMessage = `Mortalità ${(cumulativeMortalityRate * 100).toFixed(1)}%: taglia ereditata dall'ultima misura`;
+                  console.log(`⚠️ PESO: ${pesoTagliaMessage}`);
+                } else {
+                  // Fallback: eredita dalla prima attivazione
+                  const primaAttSizeResult = await db
+                    .select({ sizeId: operations.sizeId })
+                    .from(operations)
+                    .where(
+                      and(
+                        eq(operations.cycleId, effectiveCycleId),
+                        eq(operations.type, 'prima-attivazione')
+                      )
+                    )
+                    .orderBy(sql`${operations.id} ASC`)
+                    .limit(1);
+                  
+                  if (primaAttSizeResult.length > 0 && primaAttSizeResult[0].sizeId) {
+                    operationData.sizeId = primaAttSizeResult[0].sizeId;
+                    pesoTagliaMessage = `Mortalità ${(cumulativeMortalityRate * 100).toFixed(1)}%: taglia ereditata dalla prima attivazione`;
+                    console.log(`⚠️ PESO: ${pesoTagliaMessage}`);
+                  }
+                }
+              }
+              // Se mortalità < 5%, shouldCalculateSize rimane true (default)
+            } else {
+              // Nessuna prima attivazione trovata: eredita taglia dall'ultima operazione per sicurezza
+              console.warn(`⚠️ PESO: Prima attivazione non trovata per ciclo ${effectiveCycleId}, eredito taglia dall'ultima operazione`);
+              shouldCalculateSize = false;
+              
+              // Recupera l'ultima operazione con taglia
+              const lastOpWithSizeResult = await db
+                .select({ sizeId: operations.sizeId })
+                .from(operations)
+                .where(
+                  and(
+                    eq(operations.cycleId, effectiveCycleId),
+                    not(isNull(operations.sizeId))
+                  )
+                )
+                .orderBy(sql`${operations.id} DESC`)
+                .limit(1);
+              
+              if (lastOpWithSizeResult.length > 0 && lastOpWithSizeResult[0].sizeId) {
+                operationData.sizeId = lastOpWithSizeResult[0].sizeId;
+                pesoTagliaMessage = `Taglia ereditata (dati baseline non disponibili)`;
+              }
+            }
+          }
           
-          // Trova la taglia appropriata
-          const appropriateSizeId = await findSizeIdByAnimalsPerKg(calculatedAnimalsPerKg);
-          
-          if (appropriateSizeId) {
-            operationData.sizeId = appropriateSizeId;
-            operationData.animalsPerKg = calculatedAnimalsPerKg;
-            console.log(`PESO: Taglia automatica assegnata: ID ${appropriateSizeId} (${calculatedAnimalsPerKg} animali/kg)`);
-          } else {
-            console.warn(`PESO: Impossibile trovare taglia appropriata per ${calculatedAnimalsPerKg} animali/kg`);
+          // Calcola taglia normalmente solo se mortalità < 5%
+          if (shouldCalculateSize) {
+            // Calcola il peso medio per animale in grammi
+            const averageWeightGrams = operationData.totalWeight / operationData.animalCount;
+            // Converte in animali per kg (1000g = 1kg)
+            const calculatedAnimalsPerKg = Math.round(1000 / averageWeightGrams);
+            
+            console.log(`PESO: Calcolo taglia automatica - ${operationData.totalWeight}g / ${operationData.animalCount} animali = ${averageWeightGrams}g/animale = ${calculatedAnimalsPerKg} animali/kg`);
+            
+            // Trova la taglia appropriata
+            const appropriateSizeId = await findSizeIdByAnimalsPerKg(calculatedAnimalsPerKg);
+            
+            if (appropriateSizeId) {
+              operationData.sizeId = appropriateSizeId;
+              operationData.animalsPerKg = calculatedAnimalsPerKg;
+              pesoTagliaMessage = `Taglia calcolata dal peso: ${calculatedAnimalsPerKg.toLocaleString('it-IT')} animali/kg`;
+              console.log(`PESO: Taglia automatica assegnata: ID ${appropriateSizeId} (${calculatedAnimalsPerKg} animali/kg)`);
+            } else {
+              console.warn(`PESO: Impossibile trovare taglia appropriata per ${calculatedAnimalsPerKg} animali/kg`);
+            }
           }
         }
         
@@ -829,9 +928,12 @@ export function implementDirectOperationRoute(app: Express) {
           }
         }
         
-        // 6. Restituisci la risposta
+        // 6. Restituisci la risposta con eventuale messaggio informativo
         console.log("============= DIRECT OPERATION ROUTE END =============");
-        return res.status(201).json(createdOperation);
+        return res.status(201).json({
+          ...createdOperation,
+          _infoMessage: pesoTagliaMessage || null
+        });
       }
       
     } catch (error) {

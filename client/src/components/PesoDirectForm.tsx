@@ -232,14 +232,25 @@ export default function PesoDirectForm({
       
       // Invia al server usando la route diretta per bypassare i controlli di una operazione al giorno
       // Questo evita l'errore "Per ogni cesta è consentita una sola operazione al giorno"
-      await createDirectOperation(operationData);
+      const response = await createDirectOperation(operationData);
       
-      // Mostra notifica
+      // Mostra notifica principale
       toast({
         variant: "success",
         title: "Operazione registrata",
         description: `Operazione di peso registrata per la cesta #${basketNumber}`,
       });
+      
+      // Mostra messaggio informativo sulla taglia (se presente)
+      if (response && response._infoMessage) {
+        setTimeout(() => {
+          toast({
+            title: "Info taglia",
+            description: response._infoMessage,
+            duration: 5000,
+          });
+        }, 500);
+      }
       
       // Callback di successo
       onSuccess();
