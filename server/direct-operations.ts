@@ -395,21 +395,74 @@ export function implementDirectOperationRoute(app: Express) {
           console.log(`FALLBACK: Per operazione 'peso', si utilizza il conteggio animali fornito dal client:`, operationData.animalCount);
         }
       } 
-      // Per operazioni di tipo 'misura', considera la mortalità come prima
-      else if (operationData.type === 'misura' && hasAnimalCount) {
-        const hasMortality = operationData.deadCount && operationData.deadCount > 0;
-        const isSpreadsheetMode = (req.body as any)?._spreadsheetMode === true;
+      // ===== NUOVA LOGICA MORTALITÀ CUMULATIVA PER OPERAZIONI MISURA =====
+      // Regole:
+      // 1. Mortalità sempre calcolata sulla PRIMA ATTIVAZIONE
+      // 2. animalCount = originalCount - (originalCount × mortalità%)
+      // 3. VINCOLO: animalCount non può MAI superare l'ultimo valore (i morti non risorgono)
+      // 4. Se mortalità = 0%, mantieni l'ultimo animalCount
+      else if (operationData.type === 'misura') {
+        console.log(`🔄 NUOVA LOGICA MORTALITÀ CUMULATIVA per operazione misura`);
         
-        if (hasMortality) {
-          // Se c'è mortalità, utilizziamo il nuovo valore calcolato di animalCount (già presente in operationData)
-          console.log(`IMPORTANTE: Per operazione 'misura' CON MORTALITÀ (${operationData.deadCount} animali), utilizziamo il conteggio animali aggiornato:`, operationData.animalCount);
-        } else if (isSpreadsheetMode) {
-          // Se è in modalità Spreadsheet, NON sovrascrivere i valori calcolati
-          console.log(`🟢 SPREADSHEET MODE: Mantengo i valori calcolati - animalCount: ${operationData.animalCount}, totalWeight: ${operationData.totalWeight}`);
+        // Trova il cycleId (già calcolato o da basket)
+        const effectiveCycleId = operationData.cycleId || basket.currentCycleId;
+        
+        if (effectiveCycleId) {
+          // 1. Recupera la prima attivazione del ciclo (ordinata per ID per determinismo)
+          const primaAttivazioneResult = await db
+            .select({ animalCount: operations.animalCount })
+            .from(operations)
+            .where(
+              and(
+                eq(operations.cycleId, effectiveCycleId),
+                eq(operations.type, 'prima-attivazione')
+              )
+            )
+            .orderBy(sql`${operations.id} ASC`) // Prima attivazione = ID più basso
+            .limit(1);
+          
+          // 2. Recupera l'ultima operazione del ciclo (per il vincolo)
+          const lastOperationResult = await db
+            .select({ animalCount: operations.animalCount })
+            .from(operations)
+            .where(eq(operations.cycleId, effectiveCycleId))
+            .orderBy(sql`${operations.id} DESC`)
+            .limit(1);
+          
+          const originalCount = primaAttivazioneResult.length > 0 ? primaAttivazioneResult[0].animalCount || 0 : 0;
+          const lastCount = lastOperationResult.length > 0 ? lastOperationResult[0].animalCount || 0 : originalCount;
+          
+          console.log(`📊 Prima attivazione: ${originalCount} animali, Ultima operazione: ${lastCount} animali`);
+          
+          // Mortalità presente se deadCount > 0 (liveAnimals può essere 0 o assente)
+          const hasMortality = operationData.deadCount && operationData.deadCount > 0;
+          const liveAnimals = operationData.liveAnimals || 0;
+          const deadCount = operationData.deadCount || 0;
+          const totalSample = liveAnimals + deadCount;
+          
+          if (hasMortality && totalSample > 0) {
+            // Calcola mortalità cumulativa
+            const mortalityRate = deadCount / totalSample;
+            const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
+            
+            // Applica vincolo: non può mai aumentare (i morti non risorgono)
+            const finalCount = Math.min(calculatedCount, lastCount);
+            
+            console.log(`🔴 MORTALITÀ RILEVATA: ${(mortalityRate * 100).toFixed(2)}%`);
+            console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
+            console.log(`   Vincolo (min con ${lastCount}): ${finalCount}`);
+            
+            operationData.animalCount = finalCount;
+            operationData.mortalityRate = mortalityRate * 100; // Salva la percentuale
+          } else {
+            // Nessun morto → mantieni ultimo valore
+            console.log(`🟢 NESSUNA MORTALITÀ: Mantengo ultimo animalCount = ${lastCount}`);
+            operationData.animalCount = lastCount;
+            operationData.mortalityRate = 0;
+          }
         } else {
-          // Se non c'è mortalità e non è Spreadsheet Mode, preserviamo il conteggio animali originale
-          console.log(`IMPORTANTE: Per operazione 'misura' SENZA MORTALITÀ, preservato conteggio animali originale:`, originalAnimalCount);
-          operationData.animalCount = originalAnimalCount;
+          console.warn(`⚠️ Impossibile applicare logica mortalità cumulativa: cycleId non disponibile`);
+          // Fallback: mantieni il valore calcolato precedentemente
         }
       }
       
