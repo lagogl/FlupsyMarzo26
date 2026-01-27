@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { getOperationTypeLabel, getOperationTypeColor, formatNumberWithCommas } from "@/lib/utils";
-import { ArrowLeft, Calendar, Info, FileText, Tag, Scale, Package, Users, Droplets } from "lucide-react";
+import { ArrowLeft, Calendar, Info, FileText, Tag, Scale, Package, Users, Droplets, Home } from "lucide-react";
 
 export default function OperationDetail() {
   const [, params] = useRoute('/operations/:id');
@@ -62,10 +62,10 @@ export default function OperationDetail() {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center mb-6">
-          <Link href="/operations">
-            <Button variant="ghost" className="mr-4">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna alle operazioni
+          <Link href="/">
+            <Button variant="outline" className="mr-4 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
+              <Home className="mr-2 h-4 w-4" />
+              Dashboard
             </Button>
           </Link>
           <h1 className="text-2xl font-bold">Caricamento dettagli operazione...</h1>
@@ -111,10 +111,10 @@ export default function OperationDetail() {
       {/* Header with navigation */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
         <div className="flex items-center mb-4 md:mb-0">
-          <Link href="/operations">
-            <Button variant="ghost" className="mr-4">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna alle operazioni
+          <Link href="/">
+            <Button variant="outline" className="mr-4 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
+              <Home className="mr-2 h-4 w-4" />
+              Dashboard
             </Button>
           </Link>
           <div>

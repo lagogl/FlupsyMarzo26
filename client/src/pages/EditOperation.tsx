@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Home } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiRequest } from '@/lib/queryClient';
@@ -94,10 +94,10 @@ export default function EditOperation() {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center mb-6">
-          <Link href="/operations">
-            <Button variant="ghost" className="mr-4">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna alle operazioni
+          <Link href="/">
+            <Button variant="outline" className="mr-4 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100">
+              <Home className="mr-2 h-4 w-4" />
+              Dashboard
             </Button>
           </Link>
           <h1 className="text-2xl font-bold">Errore</h1>
