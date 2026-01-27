@@ -1066,11 +1066,11 @@ export default function CycleDetail() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Peso iniziale</span>
-                  <span className="font-bold">{Math.round(growthRate.startWeight)} mg</span>
+                  <span className="font-bold">{growthRate.startWeight < 10 ? growthRate.startWeight.toFixed(2) : Math.round(growthRate.startWeight)} mg</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Peso attuale</span>
-                  <span className="font-bold">{Math.round(growthRate.endWeight)} mg</span>
+                  <span className="font-bold">{growthRate.endWeight < 10 ? growthRate.endWeight.toFixed(2) : Math.round(growthRate.endWeight)} mg</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm font-medium text-muted-foreground">Crescita totale</span>
