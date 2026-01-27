@@ -425,24 +425,147 @@ interface OperationsListProps {
   onDeleteOperation?: (operationId: number) => void;
 }
 
+// Funzione per ottenere il colore di sfondo per tipo operazione
+function getOperationTypeBgColor(type: string): string {
+  switch (type) {
+    case 'prima-attivazione':
+      return 'bg-purple-100 text-purple-800';
+    case 'misurazione':
+    case 'misura':
+      return 'bg-blue-100 text-blue-800';
+    case 'peso':
+      return 'bg-green-100 text-green-800';
+    case 'vagliatura':
+      return 'bg-orange-100 text-orange-800';
+    case 'mortalita':
+      return 'bg-red-100 text-red-800';
+    case 'vendita':
+      return 'bg-amber-100 text-amber-800';
+    case 'pulizia':
+      return 'bg-cyan-100 text-cyan-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+}
+
 // Componente per la lista delle operazioni
 function OperationsList({ operations, formatDate, onDeleteOperation }: OperationsListProps) {
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
+  
   const sortedOperations = operations
     ? [...operations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     : [];
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Cronologia Operazioni</CardTitle>
-        <CardDescription>
-          Tutte le operazioni effettuate durante questo ciclo
-        </CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>Cronologia Operazioni</CardTitle>
+          <CardDescription>
+            Tutte le operazioni effettuate durante questo ciclo
+          </CardDescription>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant={viewMode === 'table' ? 'default' : 'outline'} 
+            size="sm"
+            onClick={() => setViewMode('table')}
+          >
+            <List className="h-4 w-4 mr-1" />
+            Tabella
+          </Button>
+          <Button 
+            variant={viewMode === 'cards' ? 'default' : 'outline'} 
+            size="sm"
+            onClick={() => setViewMode('cards')}
+          >
+            <Box className="h-4 w-4 mr-1" />
+            Schede
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {sortedOperations.length === 0 ? (
           <div className="text-center py-6 text-muted-foreground">
             Nessuna operazione registrata per questo ciclo
+          </div>
+        ) : viewMode === 'table' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                  <th className="px-3 py-2 text-left font-semibold border border-gray-300">Data</th>
+                  <th className="px-3 py-2 text-left font-semibold border border-gray-300">Tipo</th>
+                  <th className="px-3 py-2 text-right font-semibold border border-gray-300">Animali/Kg</th>
+                  <th className="px-3 py-2 text-right font-semibold border border-gray-300">N° Animali</th>
+                  <th className="px-3 py-2 text-right font-semibold border border-gray-300">Peso (g)</th>
+                  <th className="px-3 py-2 text-center font-semibold border border-gray-300">Taglia</th>
+                  <th className="px-3 py-2 text-right font-semibold border border-gray-300 text-red-700">Mortalità</th>
+                  <th className="px-3 py-2 text-left font-semibold border border-gray-300">Note</th>
+                  <th className="px-3 py-2 text-center font-semibold border border-gray-300">Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedOperations.map((op, index) => (
+                  <tr key={op.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="px-3 py-2 border border-gray-200 whitespace-nowrap">
+                      {formatDate(op.date)}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getOperationTypeBgColor(op.type)}`}>
+                        {getOperationTypeLabel(op.type)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-right font-mono">
+                      {op.animalsPerKg ? op.animalsPerKg.toLocaleString('it-IT') : '-'}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-right font-mono">
+                      {op.animalCount ? op.animalCount.toLocaleString('it-IT') : '-'}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-right font-mono">
+                      {op.totalWeight ? op.totalWeight.toLocaleString('it-IT', { maximumFractionDigits: 0 }) : '-'}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-center font-medium">
+                      {op.size ? (typeof op.size === 'object' ? op.size.code : op.size) : '-'}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-right font-mono">
+                      {op.deadCount && op.deadCount > 0 ? (
+                        <span className="text-red-600 font-semibold">
+                          {op.deadCount.toLocaleString('it-IT')}
+                          {op.mortalityRate && ` (${op.mortalityRate.toFixed(1)}%)`}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-xs max-w-[200px] truncate" title={op.notes || ''}>
+                      {op.notes || '-'}
+                    </td>
+                    <td className="px-3 py-2 border border-gray-200 text-center">
+                      <div className="flex justify-center gap-1">
+                        <Link href={`/operations/${op.id}`}>
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
+                            Dettagli
+                          </Button>
+                        </Link>
+                        {onDeleteOperation && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
+                            onClick={() => {
+                              if (window.confirm('Sei sicuro di voler eliminare questa operazione?')) {
+                                onDeleteOperation(op.id);
+                              }
+                            }}
+                          >
+                            Elimina
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="space-y-6">
@@ -492,6 +615,16 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                             {typeof op.size === 'object' 
                               ? `${op.size.code} (${op.size.name})`
                               : op.size}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {op.deadCount && op.deadCount > 0 && (
+                        <div>
+                          <div className="text-sm font-medium text-red-600">Mortalità</div>
+                          <div className="font-medium text-red-600">
+                            {op.deadCount.toLocaleString('it-IT')} animali
+                            {op.mortalityRate && ` (${op.mortalityRate.toFixed(1)}%)`}
                           </div>
                         </div>
                       )}
