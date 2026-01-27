@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useRoute, Link } from 'wouter';
 import { format, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { ArrowLeft, ChevronRight, Calendar, Droplets, List, Box, LineChart, BarChart, RefreshCw, Home } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Calendar, Droplets, List, Box, LineChart as LineChartIcon, BarChart, RefreshCw, Home } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -835,6 +836,17 @@ export default function CycleDetail() {
     };
   }
   
+  // Prepare chart data from operations with weight measurements
+  const growthChartData = sortedOperations
+    .filter((op: any) => op.averageWeight && parseFloat(op.averageWeight) > 0)
+    .map((op: any) => ({
+      date: format(new Date(op.date), 'dd/MM', { locale: it }),
+      fullDate: format(new Date(op.date), 'dd MMM yyyy', { locale: it }),
+      peso: Math.round(parseFloat(op.averageWeight)),
+      type: op.type
+    }))
+    .reverse(); // chronological order
+  
   // Helper function to format dates
   const formatDate = (dateString: string) => {
     try {
@@ -1067,13 +1079,43 @@ export default function CycleDetail() {
               </div>
               
               <div className="md:col-span-2">
-                <div className="h-4 mb-2">
-                  <Progress value={growthRate.growthPercentage > 100 ? 100 : growthRate.growthPercentage} className="h-2" />
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{formatDate(firstOp.date)}</span>
-                  <span>{formatDate(lastOp.date)}</span>
-                </div>
+                {growthChartData.length >= 2 ? (
+                  <div className="h-[120px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={growthChartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{ fontSize: 11 }} 
+                          stroke="#6b7280"
+                        />
+                        <YAxis 
+                          tick={{ fontSize: 11 }} 
+                          stroke="#6b7280"
+                          tickFormatter={(value) => `${value}`}
+                          domain={['dataMin - 1', 'dataMax + 1']}
+                        />
+                        <Tooltip 
+                          formatter={(value: number) => [`${value} mg`, 'Peso medio']}
+                          labelFormatter={(label, payload) => payload?.[0]?.payload?.fullDate || label}
+                          contentStyle={{ fontSize: 12 }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="peso" 
+                          stroke="#10b981" 
+                          strokeWidth={2}
+                          dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                          activeDot={{ r: 6, fill: '#059669' }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-[80px] flex items-center justify-center text-sm text-muted-foreground bg-gray-50 rounded-lg">
+                    Servono almeno 2 misurazioni per visualizzare il grafico
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
