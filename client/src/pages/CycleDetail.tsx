@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRoute, Link } from 'wouter';
 import { format, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { ArrowLeft, ChevronRight, Calendar, Droplets, List, Box, LineChart, BarChart, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Calendar, Droplets, List, Box, LineChart, BarChart, RefreshCw, Home } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -631,10 +631,16 @@ export default function CycleDetail() {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center mb-6">
+          <Link href="/">
+            <Button variant="ghost" className="mr-2">
+              <Home className="mr-2 h-4 w-4" />
+              Dashboard
+            </Button>
+          </Link>
           <Link href="/cycles">
             <Button variant="ghost" className="mr-4">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna ai cicli
+              Cicli
             </Button>
           </Link>
           <h1 className="text-2xl font-bold">Caricamento dettagli ciclo...</h1>
@@ -718,10 +724,16 @@ export default function CycleDetail() {
       {/* Header with navigation */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
         <div className="flex items-center mb-4 md:mb-0">
+          <Link href="/">
+            <Button variant="ghost" className="mr-2">
+              <Home className="mr-2 h-4 w-4" />
+              Dashboard
+            </Button>
+          </Link>
           <Link href="/cycles">
             <Button variant="ghost" className="mr-4">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna ai cicli
+              Cicli
             </Button>
           </Link>
           <div>
