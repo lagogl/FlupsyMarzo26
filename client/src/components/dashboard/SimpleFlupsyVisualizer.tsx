@@ -349,10 +349,14 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
                   </>
                 )}
                 
-                {latestOperation.deadCount !== null && (
-                  <div className="flex justify-between">
-                    <span className="font-medium">Mortalità:</span>
-                    <span>{latestOperation.deadCount} animali ({latestOperation.mortalityRate?.toFixed(1).replace('.', ',')}%)</span>
+                {latestOperation.lastMortalityCount && latestOperation.lastMortalityCount > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span className="font-medium">Ultima mortalità:</span>
+                    <span>
+                      {latestOperation.lastMortalityCount} animali 
+                      {latestOperation.lastMortalityRate && ` (${latestOperation.lastMortalityRate.toFixed(1).replace('.', ',')}%)`}
+                      {latestOperation.lastMortalityDate && ` - ${format(new Date(latestOperation.lastMortalityDate), 'dd/MM/yy')}`}
+                    </span>
                   </div>
                 )}
                 

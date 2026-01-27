@@ -618,7 +618,7 @@ export class BasketsService {
     const startTime = Date.now();
     
     // Query ottimizzata con window function per ottenere l'ultima operazione per ogni cesta
-    // Nomi colonne: total_weight, animal_count, animals_per_kg, mortality_rate, lot_id, size_id
+    // Include anche l'ultima operazione con mortalità > 0
     const result = await db.execute(sql`
       WITH ranked_operations AS (
         SELECT 
@@ -630,25 +630,47 @@ export class BasketsService {
         FROM operations o
         INNER JOIN baskets b ON o.basket_id = b.id
         WHERE b.current_cycle_id IS NOT NULL
+      ),
+      last_mortality AS (
+        SELECT 
+          o.basket_id,
+          o.dead_count,
+          o.mortality_rate,
+          o.date as mortality_date,
+          o.type as mortality_op_type,
+          ROW_NUMBER() OVER (
+            PARTITION BY o.basket_id 
+            ORDER BY o.date DESC, o.id DESC
+          ) as rn
+        FROM operations o
+        INNER JOIN baskets b ON o.basket_id = b.id
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.dead_count IS NOT NULL 
+          AND o.dead_count > 0
       )
       SELECT 
-        id,
-        basket_id as "basketId",
-        cycle_id as "cycleId",
-        type,
-        date,
-        total_weight as "totalWeight",
-        animal_count as "animalCount",
-        animals_per_kg as "animalsPerKg",
-        average_weight as "averageWeight",
-        dead_count as "deadCount",
-        mortality_rate as "mortalityRate",
-        lot_id as "lotId",
-        size_id as "sizeId",
-        notes
-      FROM ranked_operations
-      WHERE rn = 1
-      ORDER BY basket_id
+        ro.id,
+        ro.basket_id as "basketId",
+        ro.cycle_id as "cycleId",
+        ro.type,
+        ro.date,
+        ro.total_weight as "totalWeight",
+        ro.animal_count as "animalCount",
+        ro.animals_per_kg as "animalsPerKg",
+        ro.average_weight as "averageWeight",
+        ro.dead_count as "deadCount",
+        ro.mortality_rate as "mortalityRate",
+        ro.lot_id as "lotId",
+        ro.size_id as "sizeId",
+        ro.notes,
+        lm.dead_count as "lastMortalityCount",
+        lm.mortality_rate as "lastMortalityRate",
+        lm.mortality_date as "lastMortalityDate",
+        lm.mortality_op_type as "lastMortalityOpType"
+      FROM ranked_operations ro
+      LEFT JOIN last_mortality lm ON ro.basket_id = lm.basket_id AND lm.rn = 1
+      WHERE ro.rn = 1
+      ORDER BY ro.basket_id
     `);
     
     // Converti il risultato in una mappa basketId -> operazione
@@ -668,7 +690,11 @@ export class BasketsService {
         mortalityRate: row.mortalityRate ? parseFloat(row.mortalityRate) : null,
         lotId: row.lotId,
         sizeId: row.sizeId,
-        notes: row.notes
+        notes: row.notes,
+        lastMortalityCount: row.lastMortalityCount,
+        lastMortalityRate: row.lastMortalityRate ? parseFloat(row.lastMortalityRate) : null,
+        lastMortalityDate: row.lastMortalityDate,
+        lastMortalityOpType: row.lastMortalityOpType
       };
     }
     
