@@ -2399,15 +2399,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("===== INIZIO ENDPOINT POST /api/operations =====");
       console.log("POST /api/operations - Request Body:", JSON.stringify(req.body, null, 2));
 
-      // BLOCCO OPERAZIONI "PESO" - Deprecate dal Gennaio 2026
+      // OPERAZIONE PESO - Copia dati dall'ultima operazione, registra solo peso totale
       if (req.body.type === 'peso') {
-        clearTimeout(timeoutId);
-        console.log("⛔ OPERAZIONE PESO BLOCCATA - Tipo non più attivo");
-        return res.status(400).json({
-          success: false,
-          message: "La causale 'Peso' non è più attiva. Utilizzare 'Misura' per registrare peso e taglia, oppure 'Pulizia' per operazioni di manutenzione.",
-          code: "PESO_OPERATION_DEPRECATED"
-        });
+        console.log("📊 OPERAZIONE PESO - Recupero dati dall'ultima operazione del ciclo");
+        
+        if (!req.body.cycleId) {
+          clearTimeout(timeoutId);
+          return res.status(400).json({
+            success: false,
+            message: "cycleId è obbligatorio per l'operazione peso"
+          });
+        }
+        
+        // Formatta la data dell'operazione per il confronto
+        const pesoDate = req.body.date ? format(new Date(req.body.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        
+        // Recupera l'ultima operazione del ciclo CON DATA <= data peso per evitare copia da operazioni future
+        const lastOperations = await db
+          .select()
+          .from(operations)
+          .where(and(
+            eq(operations.cycleId, req.body.cycleId),
+            sql`${operations.date} <= ${pesoDate}`
+          ))
+          .orderBy(sql`${operations.date} DESC, ${operations.id} DESC`)
+          .limit(1);
+        
+        if (lastOperations.length === 0) {
+          clearTimeout(timeoutId);
+          return res.status(400).json({
+            success: false,
+            message: "Nessuna operazione precedente trovata per questo ciclo alla data specificata. L'operazione peso richiede almeno una prima-attivazione."
+          });
+        }
+        
+        const lastOp = lastOperations[0];
+        console.log(`📊 PESO: Copio dati da operazione #${lastOp.id} (${lastOp.type}) del ${lastOp.date}`);
+        
+        // Copia tutti i campi dall'ultima operazione tranne totalWeight che viene dall'input
+        req.body.sizeId = lastOp.sizeId;
+        req.body.sgrId = lastOp.sgrId;
+        req.body.lotId = lastOp.lotId;
+        req.body.animalCount = lastOp.animalCount;
+        req.body.animalsPerKg = lastOp.animalsPerKg;
+        req.body.averageWeight = lastOp.averageWeight;
+        req.body.deadCount = 0;
+        req.body.mortalityRate = 0;
+        
+        console.log(`📊 PESO: Dati copiati - sizeId=${req.body.sizeId}, animalCount=${req.body.animalCount}, totalWeight=${req.body.totalWeight}`);
       }
 
       // Prima verifica se si tratta di un'operazione prima-attivazione che non richiede un cycleId

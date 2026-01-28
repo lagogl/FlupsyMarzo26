@@ -74,9 +74,9 @@ export async function generateOperatorGuidePDF(): Promise<Buffer> {
       
       doc.font('Helvetica')
          .fontSize(10)
-         .text('1. L\'operazione "PESO" non si fa piu\' - usa invece "MISURA"', 60, boxY + 18);
-      doc.text('2. Nuovo concetto di "TAGLIA ATTESA" per prevedere quando misurare', 60, boxY + 32);
-      doc.text('3. La mortalita\' viene calcolata automaticamente dal sistema', 60, boxY + 46);
+         .text('1. L\'operazione "PESO" ora registra SOLO il peso (no cambio taglia)', 60, boxY + 18);
+      doc.text('2. Nuovo "SGR-Peso" per monitorare il trend di crescita', 60, boxY + 32);
+      doc.text('3. "TAGLIA ATTESA" prevede quando fare una MISURA', 60, boxY + 46);
       doc.text('4. Le ceste che richiedono misura lampeggiano in blu', 60, boxY + 60);
 
       doc.y = boxY + 100;
@@ -100,27 +100,27 @@ export async function generateOperatorGuidePDF(): Promise<Buffer> {
           example: 'Esempio: Cesta #15, 500.000 animali, 2.5 kg, Taglia T1'
         },
         {
-          title: 'MISURA (ex Campionamento)',
+          title: 'MISURA (Campionamento)',
           color: successColor,
           isNew: true,
           content: [
-            'Operazione PRINCIPALE per registrare la crescita',
+            'Operazione PRINCIPALE per determinare la TAGLIA',
             'Preleva un campione, pesalo e conta gli animali',
             'Il sistema calcola la taglia (animali/kg) e aggiorna i dati',
-            'Questa operazione SOSTITUISCE la vecchia operazione Peso'
+            'Usa questa operazione quando vuoi aggiornare taglia e numero animali'
           ],
           example: 'Esempio: Campione di 150g con 4.500 animali = 30.000 an/kg'
         },
         {
-          title: 'PESO (DEPRECATO)',
-          color: dangerColor,
-          isDeprecated: true,
+          title: 'PESO (Trend Crescita)',
+          color: '#8b5cf6',
           content: [
-            'QUESTA OPERAZIONE NON SI USA PIU\'',
-            'Non e\' piu\' possibile registrare nuove operazioni Peso',
-            'Le vecchie operazioni Peso sono conservate ma non influenzano la taglia',
-            'Usa sempre MISURA per aggiornare peso e taglia'
-          ]
+            'Registra SOLO il peso totale della cesta',
+            'NON modifica taglia, numero animali o peso medio',
+            'Genera un SGR-Peso per monitorare il trend di crescita',
+            'Utile per verificare la crescita senza fare un campionamento completo'
+          ],
+          example: 'Esempio: Peso totale 15kg - il sistema calcola SGR-Peso'
         },
         {
           title: 'PULIZIA',
@@ -315,8 +315,8 @@ export async function generateOperatorGuidePDF(): Promise<Buffer> {
       doc.fontSize(10)
          .font('Helvetica')
          .text('1. Quando vedi una cesta lampeggiare in blu, fai una MISURA', 60, tipY + 20);
-      doc.text('2. Non usare piu\' l\'operazione PESO - usa sempre MISURA', 60, tipY + 35);
-      doc.text('3. Registra sempre gli animali morti durante le operazioni', 60, tipY + 50);
+      doc.text('2. Usa PESO per registrare solo il peso (trend SGR-Peso)', 60, tipY + 35);
+      doc.text('3. Usa MISURA per aggiornare taglia e numero animali', 60, tipY + 50);
       doc.text('4. Il sistema calcolera\' automaticamente la mortalita\'', 60, tipY + 65);
 
       doc.moveDown(6);
@@ -329,10 +329,10 @@ export async function generateOperatorGuidePDF(): Promise<Buffer> {
       doc.moveDown(1);
 
       const changes = [
-        { status: 'RIMOSSO', color: dangerColor, text: 'Operazione PESO - non piu\' disponibile' },
+        { status: 'MODIFICATO', color: warningColor, text: 'Operazione PESO - ora registra solo peso (no cambio taglia)' },
+        { status: 'NUOVO', color: newFeatureColor, text: 'SGR-Peso - trend crescita basato su operazioni peso' },
         { status: 'NUOVO', color: newFeatureColor, text: 'Taglia Attesa - calcolo automatico crescita' },
         { status: 'NUOVO', color: newFeatureColor, text: 'Lampeggio blu per ceste da misurare' },
-        { status: 'MIGLIORATO', color: successColor, text: 'Mortalita\' calcolata automaticamente' },
         { status: 'MIGLIORATO', color: successColor, text: 'Tracciabilita\' lotto in tutte le transazioni' }
       ];
 

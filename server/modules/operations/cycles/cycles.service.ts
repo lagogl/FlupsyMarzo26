@@ -699,6 +699,125 @@ class CyclesService {
       basketId: pending.basketId
     };
   }
+
+  /**
+   * Calcola SGR-Peso per un ciclo
+   * SGR = (ln(peso_finale) - ln(peso_iniziale)) / giorni * 100
+   * Considera solo operazioni peso e prima-attivazione
+   */
+  async calculateSgrPeso(cycleId: number): Promise<{
+    cycleId: number;
+    sgrPesoMedio: number | null;
+    sgrPesoIntermedi: Array<{
+      fromOperationId: number;
+      toOperationId: number;
+      fromDate: string;
+      toDate: string;
+      fromType: string;
+      toType: string;
+      fromWeight: number;
+      toWeight: number;
+      days: number;
+      sgr: number;
+    }>;
+    totalDays: number;
+    startWeight: number | null;
+    endWeight: number | null;
+  }> {
+    console.log(`📊 SGR-PESO: Calcolo per ciclo ${cycleId}`);
+    
+    // Recupera operazioni peso e prima-attivazione ordinate per data
+    const relevantOps = await db
+      .select()
+      .from(operations)
+      .where(and(
+        eq(operations.cycleId, cycleId),
+        sql`${operations.type} IN ('peso', 'prima-attivazione')`
+      ))
+      .orderBy(asc(operations.date), asc(operations.id));
+    
+    console.log(`📊 SGR-PESO: Trovate ${relevantOps.length} operazioni rilevanti`);
+    
+    if (relevantOps.length < 2) {
+      return {
+        cycleId,
+        sgrPesoMedio: null,
+        sgrPesoIntermedi: [],
+        totalDays: 0,
+        startWeight: relevantOps.length > 0 ? relevantOps[0].totalWeight : null,
+        endWeight: relevantOps.length > 0 ? relevantOps[relevantOps.length - 1].totalWeight : null
+      };
+    }
+    
+    const sgrPesoIntermedi: Array<{
+      fromOperationId: number;
+      toOperationId: number;
+      fromDate: string;
+      toDate: string;
+      fromType: string;
+      toType: string;
+      fromWeight: number;
+      toWeight: number;
+      days: number;
+      sgr: number;
+    }> = [];
+    
+    // Calcola SGR tra coppie consecutive
+    for (let i = 0; i < relevantOps.length - 1; i++) {
+      const op1 = relevantOps[i];
+      const op2 = relevantOps[i + 1];
+      
+      if (!op1.totalWeight || !op2.totalWeight || op1.totalWeight <= 0 || op2.totalWeight <= 0) {
+        continue;
+      }
+      
+      const date1 = new Date(op1.date);
+      const date2 = new Date(op2.date);
+      const days = Math.max(1, Math.round((date2.getTime() - date1.getTime()) / (1000 * 60 * 60 * 24)));
+      
+      // SGR = (ln(W2) - ln(W1)) / t * 100
+      const sgr = ((Math.log(op2.totalWeight) - Math.log(op1.totalWeight)) / days) * 100;
+      
+      sgrPesoIntermedi.push({
+        fromOperationId: op1.id,
+        toOperationId: op2.id,
+        fromDate: op1.date,
+        toDate: op2.date,
+        fromType: op1.type,
+        toType: op2.type,
+        fromWeight: op1.totalWeight,
+        toWeight: op2.totalWeight,
+        days,
+        sgr: Math.round(sgr * 100) / 100
+      });
+    }
+    
+    // Calcola SGR medio pesato sui giorni
+    let totalWeightedSgr = 0;
+    let totalDaysSum = 0;
+    
+    for (const segment of sgrPesoIntermedi) {
+      totalWeightedSgr += segment.sgr * segment.days;
+      totalDaysSum += segment.days;
+    }
+    
+    const sgrPesoMedio = totalDaysSum > 0 ? Math.round((totalWeightedSgr / totalDaysSum) * 100) / 100 : null;
+    
+    const firstOp = relevantOps[0];
+    const lastOp = relevantOps[relevantOps.length - 1];
+    const totalDays = Math.round((new Date(lastOp.date).getTime() - new Date(firstOp.date).getTime()) / (1000 * 60 * 60 * 24));
+    
+    console.log(`📊 SGR-PESO: Completato - SGR medio=${sgrPesoMedio}, ${sgrPesoIntermedi.length} segmenti`);
+    
+    return {
+      cycleId,
+      sgrPesoMedio,
+      sgrPesoIntermedi,
+      totalDays,
+      startWeight: firstOp.totalWeight,
+      endWeight: lastOp.totalWeight
+    };
+  }
 }
 
 export const cyclesService = new CyclesService();

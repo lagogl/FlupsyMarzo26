@@ -564,6 +564,31 @@ export class CyclesController {
       });
     }
   }
+
+  /**
+   * GET /api/cycles/:id/sgr-peso
+   * Calcola SGR-Peso per un ciclo basandosi sulle operazioni peso e prima-attivazione
+   * SGR = (ln(peso_finale) - ln(peso_iniziale)) / giorni * 100
+   */
+  async getSgrPeso(req: Request, res: Response) {
+    try {
+      const cycleId = parseInt(req.params.id);
+      
+      if (isNaN(cycleId)) {
+        return res.status(400).json({ message: "ID ciclo non valido" });
+      }
+      
+      const result = await cyclesService.calculateSgrPeso(cycleId);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error calculating SGR-Peso:", error);
+      res.status(500).json({ 
+        message: "Errore nel calcolo SGR-Peso",
+        error: (error as Error).message 
+      });
+    }
+  }
 }
 
 export const cyclesController = new CyclesController();

@@ -6,6 +6,7 @@ import { db } from './db';
 import { operations, cycles, baskets, lots, lotLedger } from '../shared/schema';
 import { sql, eq, and, between, not, isNull } from 'drizzle-orm';
 import { broadcastMessage } from './websocket';
+import { format } from 'date-fns';
 import { invalidateAllCaches } from './services/operations-lifecycle.service.js';
 import { LotAutoStatsService } from './services/lot-auto-stats-service.js';
 import { determineSizeByAnimalsPerKg } from './utils/size-determination.js';
@@ -130,14 +131,54 @@ export function implementDirectOperationRoute(app: Express) {
         throw new Error("Il tipo di operazione è obbligatorio");
       }
       
-      // BLOCCO OPERAZIONI "PESO" - Deprecate dal Gennaio 2026
+      // OPERAZIONE PESO - Copia dati dall'ultima operazione, registra solo peso totale
       if (operationData.type === 'peso') {
-        console.log("⛔ OPERAZIONE PESO BLOCCATA - Tipo non più attivo");
-        return res.status(400).json({
-          success: false,
-          error: "La causale 'Peso' non è più attiva. Utilizzare 'Misura' per registrare peso e taglia, oppure 'Pulizia' per operazioni di manutenzione.",
-          code: "PESO_OPERATION_DEPRECATED"
-        });
+        console.log("📊 OPERAZIONE PESO - Recupero dati dall'ultima operazione del ciclo");
+        
+        if (!operationData.cycleId) {
+          return res.status(400).json({
+            success: false,
+            error: "cycleId è obbligatorio per l'operazione peso"
+          });
+        }
+        
+        // Formatta la data dell'operazione per il confronto
+        const pesoDate = operationData.date ? 
+          (typeof operationData.date === 'string' ? operationData.date.substring(0, 10) : format(new Date(operationData.date), 'yyyy-MM-dd')) 
+          : format(new Date(), 'yyyy-MM-dd');
+        
+        // Recupera l'ultima operazione del ciclo CON DATA <= data peso per evitare copia da operazioni future
+        const lastOperations = await db
+          .select()
+          .from(operations)
+          .where(and(
+            eq(operations.cycleId, operationData.cycleId),
+            sql`${operations.date} <= ${pesoDate}`
+          ))
+          .orderBy(sql`${operations.date} DESC, ${operations.id} DESC`)
+          .limit(1);
+        
+        if (lastOperations.length === 0) {
+          return res.status(400).json({
+            success: false,
+            error: "Nessuna operazione precedente trovata per questo ciclo alla data specificata. L'operazione peso richiede almeno una prima-attivazione."
+          });
+        }
+        
+        const lastOp = lastOperations[0];
+        console.log(`📊 PESO: Copio dati da operazione #${lastOp.id} (${lastOp.type}) del ${lastOp.date}`);
+        
+        // Copia tutti i campi dall'ultima operazione tranne totalWeight che viene dall'input
+        operationData.sizeId = lastOp.sizeId;
+        operationData.sgrId = lastOp.sgrId;
+        operationData.lotId = lastOp.lotId;
+        operationData.animalCount = lastOp.animalCount;
+        operationData.animalsPerKg = lastOp.animalsPerKg;
+        operationData.averageWeight = lastOp.averageWeight;
+        operationData.deadCount = 0;
+        operationData.mortalityRate = 0;
+        
+        console.log(`📊 PESO: Dati copiati - sizeId=${operationData.sizeId}, animalCount=${operationData.animalCount}, totalWeight=${operationData.totalWeight}`);
       }
       
       if (!operationData.basketId) {
