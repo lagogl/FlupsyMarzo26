@@ -279,16 +279,31 @@ class CyclesService {
   }
 
   /**
-   * Ottiene singolo ciclo per ID
+   * Ottiene singolo ciclo per ID con dati basket
    */
   async getCycleById(id: number) {
-    const cycle = await db
-      .select()
+    const result = await db
+      .select({
+        id: cycles.id,
+        basketId: cycles.basketId,
+        lotId: cycles.lotId,
+        startDate: cycles.startDate,
+        endDate: cycles.endDate,
+        state: cycles.state,
+        cycleCode: cycles.cycleCode,
+        basket: {
+          id: baskets.id,
+          physicalNumber: baskets.physicalNumber,
+          flupsyId: baskets.flupsyId,
+          state: baskets.state,
+        }
+      })
       .from(cycles)
+      .leftJoin(baskets, eq(cycles.basketId, baskets.id))
       .where(eq(cycles.id, id))
       .limit(1);
     
-    return cycle[0] || null;
+    return result[0] || null;
   }
 
   /**
