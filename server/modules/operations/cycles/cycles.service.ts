@@ -291,19 +291,33 @@ class CyclesService {
         endDate: cycles.endDate,
         state: cycles.state,
         cycleCode: cycles.cycleCode,
-        basket: {
-          id: baskets.id,
-          physicalNumber: baskets.physicalNumber,
-          flupsyId: baskets.flupsyId,
-          state: baskets.state,
-        }
+        basketPhysicalNumber: baskets.physicalNumber,
+        basketFlupsyId: baskets.flupsyId,
+        basketState: baskets.state,
       })
       .from(cycles)
       .leftJoin(baskets, eq(cycles.basketId, baskets.id))
       .where(eq(cycles.id, id))
       .limit(1);
     
-    return result[0] || null;
+    if (!result[0]) return null;
+    
+    const row = result[0];
+    return {
+      id: row.id,
+      basketId: row.basketId,
+      lotId: row.lotId,
+      startDate: row.startDate,
+      endDate: row.endDate,
+      state: row.state,
+      cycleCode: row.cycleCode,
+      basket: {
+        id: row.basketId,
+        physicalNumber: row.basketPhysicalNumber,
+        flupsyId: row.basketFlupsyId,
+        state: row.basketState,
+      }
+    };
   }
 
   /**
