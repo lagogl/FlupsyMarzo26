@@ -1523,10 +1523,11 @@ export default function SpreadsheetOperations() {
       date: row.date,                                           // date NOT NULL (formato YYYY-MM-DD)
       
       // CAMPI OPZIONALI secondo lo schema operations  
-      sizeId: row.type === 'misura' ? row.sizeId : null,       // integer size_id (nullable)
-      sgrId: null,                                              // integer sgr_id (nullable)
-      // lotId è sempre richiesto per operazioni su ceste attive - USA IL LOTTO DAL CICLO ATTIVO!
-      lotId: row.lotId || (() => {
+      // Per PESO: non passare sizeId, sgrId - il backend li copia dall'ultima operazione
+      sizeId: row.type === 'peso' ? undefined : (row.type === 'misura' ? row.sizeId : null),
+      sgrId: row.type === 'peso' ? undefined : null,
+      // lotId: Per PESO il backend lo copia dall'ultima operazione, altrimenti cerca dal ciclo attivo
+      lotId: row.type === 'peso' ? undefined : (row.lotId || (() => {
         console.log(`🔍 LOTTO DEBUG - Cestello ${row.basketId}: Ricerca lotto in corso...`);
         
         // PRIORITÀ 1: Cerca il lotto dal ciclo ATTIVO del cestello (più affidabile)
@@ -1570,12 +1571,14 @@ export default function SpreadsheetOperations() {
           basketCurrentCycleId: basket.currentCycleId
         });
         throw new Error(`Impossibile determinare il lotto per il cestello ${row.basketId}. Verifica che il cestello abbia un ciclo attivo.`);
-      })(), // integer lot_id (obbligatorio per operazioni normali)
-      animalCount: row.animalCount || null,                     // integer animal_count (nullable)
-      totalWeight: row.totalWeight || null,                     // real total_weight (nullable, in grams)
-      animalsPerKg: row.animalsPerKg || null,                  // integer animals_per_kg (nullable)
-      deadCount: row.deadCount !== null && row.deadCount !== undefined ? row.deadCount : 0, // integer dead_count (default 0)
-      mortalityRate: row.mortalityRate || null,                 // real mortality_rate (nullable) - calcolato automaticamente o inserito manualmente
+      })()), // integer lot_id (obbligatorio per operazioni normali, copiato per peso)
+      // Per PESO: animalCount, animalsPerKg copiati dal backend dall'ultima operazione
+      animalCount: row.type === 'peso' ? undefined : (row.animalCount || null),
+      totalWeight: row.totalWeight || null,                     // real total_weight (nullable, in grams) - SEMPRE passato
+      animalsPerKg: row.type === 'peso' ? undefined : (row.animalsPerKg || null),
+      // Per PESO: deadCount=0 e mortalityRate=0 impostati dal backend
+      deadCount: row.type === 'peso' ? undefined : (row.deadCount !== null && row.deadCount !== undefined ? row.deadCount : 0),
+      mortalityRate: row.type === 'peso' ? undefined : (row.mortalityRate || null),
       notes: row.notes || null,                                 // text notes (nullable)
       
       // CAMPI NON INCLUSI (gestiti dal backend o omessi per insert)
