@@ -1774,6 +1774,8 @@ export default function SpreadsheetOperations() {
       // Definisci le colonne
       const columns = [
         { header: 'Cesta', key: 'cesta', width: 10 },
+        { header: 'Performance', key: 'performance', width: 12 },
+        { header: 'Trend AI', key: 'trend', width: 14 },
         { header: 'FLUPSY', key: 'flupsy', width: 15 },
         { header: 'Taglia', key: 'taglia', width: 12 },
         { header: 'P.Med(mg)', key: 'pesoMedio', width: 12 },
@@ -1787,6 +1789,9 @@ export default function SpreadsheetOperations() {
         { header: 'Morti', key: 'morti', width: 8 },
         { header: 'Tot.Camp.', key: 'totCampione', width: 10 },
         { header: 'Mortalità%', key: 'mortalita', width: 12 },
+        { header: 'Urgenza', key: 'urgenza', width: 12 },
+        { header: 'Problemi Rilevati', key: 'problemi', width: 45 },
+        { header: 'Raccomandazioni', key: 'raccomandazioni', width: 50 },
         { header: 'Note', key: 'note', width: 30 }
       ];
 
@@ -1820,8 +1825,20 @@ export default function SpreadsheetOperations() {
         const lot = ((lots as any[]) || []).find((l: any) => l.id === (row.lotId || 1));
         const lotDisplay = lot ? `${lot.id} | ${lot.supplier}` : `L${row.lotId || '1'}`;
         
+        // Calcola performance e analisi per questa riga
+        const perfScore = calculatePerformanceScore(row);
+        const trendData = analyzeTrendPrediction(row);
+        const analysis = generateCriticalAnalysis(row);
+        
+        // Formatta il livello performance
+        const performanceLevel = perfScore >= 80 ? 'Eccellente' : 
+                                 perfScore >= 60 ? 'Buona' : 
+                                 perfScore >= 40 ? 'Media' : 'Attenzione';
+        
         const dataRow = worksheet.addRow({
           cesta: `#${row.physicalNumber}`,
+          performance: `${perfScore.toFixed(1)}/100 (${performanceLevel})`,
+          trend: `${trendData.trend.toUpperCase()} (${(trendData.multiplier * 100).toFixed(0)}%)`,
           flupsy: row.flupsyName || '-',
           taglia: row.currentSize || '-',
           pesoMedio: row.averageWeight ? Math.round(row.averageWeight * 100) / 100 : '-',
@@ -1835,6 +1852,9 @@ export default function SpreadsheetOperations() {
           morti: row.deadCount || '-',
           totCampione: row.totalSample || '-',
           mortalita: row.mortalityRate ? `${(row.mortalityRate * 100).toFixed(2)}%` : '-',
+          urgenza: analysis.urgency,
+          problemi: analysis.issues.join('; '),
+          raccomandazioni: analysis.recommendations.join('; '),
           note: row.notes || ''
         });
 
