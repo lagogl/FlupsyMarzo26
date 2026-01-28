@@ -27,6 +27,7 @@ export default function Baskets() {
     searchTerm: '',
     stateFilter: 'all',
     flupsyFilter: 'all',
+    expectedSizeFilter: 'all',
     sortConfig: {
       key: 'size.code',
       direction: 'asc' as 'asc' | 'desc'
@@ -40,12 +41,14 @@ export default function Baskets() {
   const searchTerm = filters.searchTerm;
   const stateFilter = filters.stateFilter;
   const flupsyFilter = filters.flupsyFilter;
+  const expectedSizeFilter = filters.expectedSizeFilter || 'all';
   const sortConfig = filters.sortConfig as {key: string, direction: 'asc' | 'desc'};
 
   // Funzioni per aggiornare i filtri
   const setSearchTerm = (value: string) => setFilters(prev => ({ ...prev, searchTerm: value }));
   const setStateFilter = (value: string) => setFilters(prev => ({ ...prev, stateFilter: value }));
   const setFlupsyFilter = (value: string) => setFilters(prev => ({ ...prev, flupsyFilter: value }));
+  const setExpectedSizeFilter = (value: string) => setFilters(prev => ({ ...prev, expectedSizeFilter: value }));
   const setSortConfig = (value: {key: string, direction: 'asc' | 'desc'}) => 
     setFilters(prev => ({ ...prev, sortConfig: value }));
 
@@ -264,6 +267,7 @@ export default function Baskets() {
       // Prepara i dati per l'esportazione
       const exportData = filteredBaskets.map(basket => {
         const lot = lots.find((l: any) => l.id === basket.lotId);
+        const expectedInfo = getExpectedSizeInfo(basket.id);
         
         return {
           physicalNumber: basket.physicalNumber,
@@ -273,6 +277,8 @@ export default function Baskets() {
           lastOperationDate: basket.lastOperationDate,
           pesoCesta: basket.pesoCesta,
           calculatedSize: basket.calculatedSize || '-',
+          expectedSize: expectedInfo?.expectedSize || '-',
+          hasExpectedSizeChange: !!expectedInfo,
           animalsPerKg: basket.animalsPerKg,
           animalCount: basket.animalCount || 0,
           mortalityPercent: basket.mortalityPercent,
@@ -650,9 +656,12 @@ export default function Baskets() {
     const matchesFlupsy = flupsyFilter === 'all' || 
       String(basket.flupsyId) === flupsyFilter;
 
+    // Filter by expected size difference
+    const hasExpectedChange = basketsWithExpectedSizeChange.has(basket.id);
+    const matchesExpectedSize = expectedSizeFilter === 'all' || 
+      (expectedSizeFilter === 'different' && hasExpectedChange);
 
-
-    return matchesSearch && matchesState && matchesFlupsy;
+    return matchesSearch && matchesState && matchesFlupsy && matchesExpectedSize;
   });
 
   // Applichiamo l'ordinamento
@@ -759,6 +768,15 @@ export default function Baskets() {
                   ))}
                 </SelectContent>
               </Select>
+            <Select value={expectedSizeFilter} onValueChange={setExpectedSizeFilter}>
+              <SelectTrigger className={`w-[200px] ${expectedSizeFilter === 'different' ? 'border-blue-500 bg-blue-50' : ''}`}>
+                <SelectValue placeholder="Taglia attesa" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutte le taglie</SelectItem>
+                <SelectItem value="different">Solo taglia attesa diversa</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -849,6 +867,9 @@ export default function Baskets() {
                     )}
                   </div>
                 </th>
+                <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-blue-600 uppercase tracking-wider">
+                  TAGLIA<br/>ATTESA
+                </th>
                 <th scope="col" className="px-2 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   pz / Kg
                 </th>
@@ -887,13 +908,13 @@ export default function Baskets() {
             <tbody className="bg-white">
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
                     Caricamento ceste...
                   </td>
                 </tr>
               ) : filteredBaskets.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
                     Nessuna cesta trovata
                   </td>
                 </tr>
@@ -953,12 +974,16 @@ export default function Baskets() {
                             ) : (
                               <span className="text-gray-400 text-xs">N/D</span>
                             )}
-                            {expectedInfo && (
-                              <span className="text-blue-600 text-xs font-medium">
-                                → {expectedInfo.expectedSize}
-                              </span>
-                            )}
                           </div>
+                        </td>
+                        <td className="px-2 py-2">
+                          {expectedInfo ? (
+                            <span className="text-blue-600 text-sm font-medium">
+                              {expectedInfo.expectedSize}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">-</span>
+                          )}
                         </td>
                         <td className="px-2 py-2 text-sm text-gray-700">
                           {basket.animalsPerKg ? (

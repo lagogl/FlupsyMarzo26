@@ -583,7 +583,7 @@ export class BasketsController {
       
       // Riga titolo
       const titleRow = sheet.addRow(['GESTIONE CESTE - Elenco completo cestelli con dati operativi, lotti, taglie e stato attuale']);
-      sheet.mergeCells('A1:P1');
+      sheet.mergeCells('A1:R1');
       titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
       titleRow.height = 30;
       titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
@@ -596,6 +596,8 @@ export class BasketsController {
         { key: 'lastOperationDate', width: 18 },
         { key: 'pesoCesta', width: 14 },
         { key: 'calculatedSize', width: 12 },
+        { key: 'expectedSize', width: 14 },
+        { key: 'hasExpectedSizeChange', width: 16 },
         { key: 'animalsPerKg', width: 12 },
         { key: 'animalCount', width: 14 },
         { key: 'mortalityPercent', width: 12 },
@@ -607,7 +609,7 @@ export class BasketsController {
         { key: 'state', width: 10 }
       ];
       
-      const headerRow = sheet.addRow(['ID Cesta', 'FLUPSY', 'Sito Produttivo', 'Data Attivazione', 'Data Ult. Operazione', 'Peso Cesta (Kg)', 'Taglia', 'pz / Kg', 'N° Animali', 'Mortalità %', 'Posizione', 'Lotto', 'Fornitore', 'Codice Ciclo', 'Ultima Operazione', 'Stato']);
+      const headerRow = sheet.addRow(['ID Cesta', 'FLUPSY', 'Sito Produttivo', 'Data Attivazione', 'Data Ult. Operazione', 'Peso Cesta (Kg)', 'Taglia', 'Taglia Attesa', 'Taglia Diversa?', 'pz / Kg', 'N° Animali', 'Mortalità %', 'Posizione', 'Lotto', 'Fornitore', 'Codice Ciclo', 'Ultima Operazione', 'Stato']);
       headerRow.eachCell((cell) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
@@ -640,6 +642,8 @@ export class BasketsController {
           lastOperationDate: basket.lastOperationDate ? new Date(basket.lastOperationDate).toLocaleDateString('it-IT') : '-',
           pesoCesta: basket.pesoCesta ? parseFloat(basket.pesoCesta) : null,
           calculatedSize: basket.calculatedSize,
+          expectedSize: basket.expectedSize || '-',
+          hasExpectedSizeChange: basket.hasExpectedSizeChange ? 'SÌ' : 'NO',
           animalsPerKg: basket.animalsPerKg ? Math.round(basket.animalsPerKg) : null,
           animalCount: basket.animalCount || null,
           mortalityPercent: basket.mortalityPercent !== null && basket.mortalityPercent !== undefined ? parseFloat(basket.mortalityPercent) : null,
@@ -653,6 +657,15 @@ export class BasketsController {
         
         if (index % 2 === 1) {
           row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+        }
+        
+        // Evidenzia righe con taglia attesa diversa in blu chiaro
+        if (basket.hasExpectedSizeChange) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+          const expectedSizeCell = row.getCell('expectedSize');
+          expectedSizeCell.font = { color: { argb: 'FF2563EB' }, bold: true };
+          const flagCell = row.getCell('hasExpectedSizeChange');
+          flagCell.font = { color: { argb: 'FF2563EB' }, bold: true };
         }
         
         const stateCell = row.getCell('state');
