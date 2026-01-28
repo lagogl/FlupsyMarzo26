@@ -134,6 +134,9 @@ export default function SpreadsheetOperations() {
   };
   
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
+  const [selectedSizeFilter, setSelectedSizeFilter] = useState<string>("all");
+  const [sortColumn, setSortColumn] = useState<string>("physicalNumber");
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedOperationType, setSelectedOperationType] = useState<string>('misura');
   const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0]);
   const [operationRows, setOperationRows] = useState<OperationRowData[]>([]);
@@ -1979,6 +1982,23 @@ export default function SpreadsheetOperations() {
           </div>
 
           <div className="flex items-center gap-2 min-w-0">
+            <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Taglia</label>
+            <Select value={selectedSizeFilter} onValueChange={setSelectedSizeFilter}>
+              <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectValue placeholder="Tutte" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">TUTTE</SelectItem>
+                {((sizes as any[]) || []).map((size: any) => (
+                  <SelectItem key={size.id} value={size.id.toString()}>
+                    {size.code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2 min-w-0">
             <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Tipo Operazione</label>
             <div className="flex gap-1">
               {operationTypeOptions.map((option) => (
@@ -2154,7 +2174,23 @@ export default function SpreadsheetOperations() {
                   )}
                   <div style={{width: '40px'}} className="px-1 py-1.5 border-r text-center">Stato</div>
 
-                  <div style={{width: '80px'}} className="px-1 py-1.5 border-r">Taglia</div>
+                  <div 
+                    style={{width: '80px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'size') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('size');
+                        setSortDirection('asc');
+                      }
+                    }}
+                  >
+                    Taglia
+                    {sortColumn === 'size' && (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    )}
+                  </div>
                   <div style={{width: '60px'}} className="px-1 py-1.5 border-r">P.Med(mg)</div>
                   <div style={{width: '50px'}} className="px-1 py-1.5 border-r">Ult.Op</div>
                   {/* COLONNA LOTTO - OBBLIGATORIO */}
@@ -2187,7 +2223,34 @@ export default function SpreadsheetOperations() {
                 </div>
 
               {/* Righe dati compatte */}
-              {operationRows.map((row, index) => {
+              {operationRows
+                // Filtro per taglia
+                .filter((row) => {
+                  if (selectedSizeFilter === "all") return true;
+                  // Cerca la taglia corrente della riga
+                  const sizesArray = Array.isArray(sizes) ? sizes : [];
+                  const selectedSize = sizesArray.find((s: any) => s.id === parseInt(selectedSizeFilter));
+                  if (!selectedSize) return true;
+                  return row.currentSize === selectedSize.code;
+                })
+                // Sorting
+                .sort((a, b) => {
+                  if (sortColumn === 'size') {
+                    // Estrae il numero dalla taglia (es: TP-2500 -> 2500)
+                    const getSizeNum = (size: string | undefined) => {
+                      if (!size || !size.startsWith('TP-')) return 999999;
+                      return parseInt(size.substring(3)) || 999999;
+                    };
+                    const numA = getSizeNum(a.currentSize);
+                    const numB = getSizeNum(b.currentSize);
+                    return sortDirection === 'asc' ? numA - numB : numB - numA;
+                  }
+                  // Default: ordina per numero fisico
+                  return sortDirection === 'asc' 
+                    ? a.physicalNumber - b.physicalNumber 
+                    : b.physicalNumber - a.physicalNumber;
+                })
+                .map((row, index) => {
                 // Calcola previsione di crescita per questa cesta (solo se abilitato)
                 const growthPrediction = targetSizeId && targetDate && predictionsEnabled ? 
                   calculateGrowthPrediction(row.basketId, targetSizeId, targetDate) : 
@@ -2676,7 +2739,7 @@ export default function SpreadsheetOperations() {
                                       </span>
                                     )}
                                     <span className="truncate">
-                                      {lot ? lot.supplier : `L${row.lotId || '1'}`}
+                                      {lot ? `${lot.id} | ${lot.supplier}` : `L${row.lotId || '1'}`}
                                     </span>
                                   </>
                                 );
