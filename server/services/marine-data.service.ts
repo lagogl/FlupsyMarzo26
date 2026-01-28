@@ -141,6 +141,14 @@ export class MarineDataService {
     try {
       console.log('[MarineData] Fetching marine data for both locations...');
       
+      // Fetch Copernicus data first (includes chlorophyll and salinity)
+      const copernicusData = await this.fetchFromCopernicus();
+      if (copernicusData?.success) {
+        console.log(`[MarineData] Copernicus data retrieved: SST=${copernicusData.data.sst}°C, Chl-a=${copernicusData.data.chlorophyllA}µg/L, Sal=${copernicusData.data.salinity}PSU`);
+      } else {
+        console.warn('[MarineData] Copernicus data not available, using Open-Meteo only');
+      }
+      
       const results: any[] = [];
       
       // Fetch for both locations
@@ -155,23 +163,27 @@ export class MarineDataService {
           continue;
         }
         
+        // Use Copernicus SST if available and matches location, otherwise use Open-Meteo
+        const usesCopernicusSst = copernicusData?.success && copernicusData.data.sst != null;
+        const sst = usesCopernicusSst ? copernicusData.data.sst : (openMeteoData?.seaSurfaceTemperature ?? null);
+        
         const record = {
           recordedAt: new Date(),
           locationName: location.name,
           latitude: location.latitude,
           longitude: location.longitude,
-          chlorophyllA: null, // Copernicus data imported manually
-          seaSurfaceTemperature: openMeteoData?.seaSurfaceTemperature ?? null,
-          salinity: null, // Copernicus data imported manually
+          chlorophyllA: copernicusData?.success ? copernicusData.data.chlorophyllA : null,
+          seaSurfaceTemperature: sst,
+          salinity: copernicusData?.success ? copernicusData.data.salinity : null,
           waveHeight: openMeteoData?.waveHeight ? Math.round(openMeteoData.waveHeight * 100) / 100 : null,
           currentSpeed: null,
-          source: 'open-meteo-real',
-          rawData: { openMeteo: openMeteoData },
+          source: copernicusData?.success ? 'copernicus+open-meteo' : 'open-meteo-real',
+          rawData: { openMeteo: openMeteoData, copernicus: copernicusData?.data || null },
         };
         
         const [inserted] = await db.insert(marineData).values(record).returning();
         
-        console.log(`[MarineData] ${location.name}: ID=${inserted.id}, SST=${record.seaSurfaceTemperature}°C`);
+        console.log(`[MarineData] ${location.name}: ID=${inserted.id}, SST=${record.seaSurfaceTemperature}°C, Chl-a=${record.chlorophyllA}µg/L, Sal=${record.salinity}PSU`);
         results.push(inserted);
       }
       
