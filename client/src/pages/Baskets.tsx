@@ -422,15 +422,18 @@ export default function Baskets() {
     // Prendi l'operazione più recente per i dati principali
     const latestOperation = basketOperations[0];
     
-    // Calcola la taglia usando il campo animals_per_kg dalle operazioni
+    // Calcola la taglia usando SOLO operazioni misura/prima-attivazione (logica allineata al backend)
     let calculatedSize = null;
     
-    // Cerca operazioni che hanno il campo animals_per_kg
-    const operationsWithAnimalsPerKg = basketOperations.filter(op => op.animalsPerKg && op.animalsPerKg > 0);
+    // Cerca operazioni misura/prima-attivazione che hanno il campo animals_per_kg
+    const measurementOps = basketOperations.filter(op => 
+      (op.type === 'misura' || op.type === 'prima-attivazione') && 
+      op.animalsPerKg && op.animalsPerKg > 0
+    );
     
-    if (operationsWithAnimalsPerKg.length > 0) {
-      // Usa l'operazione più recente con animals_per_kg
-      const operation = operationsWithAnimalsPerKg[0];
+    if (measurementOps.length > 0) {
+      // Usa l'operazione misura/prima-attivazione più recente
+      const operation = measurementOps[0];
       calculatedSize = getSizeCodeFromAnimalsPerKg(operation.animalsPerKg);
     }
 
@@ -442,8 +445,8 @@ export default function Baskets() {
     const operationWithWeight = basketOperations.find(op => op.totalWeight && op.totalWeight > 0);
     const pesoCesta = operationWithWeight?.totalWeight ? operationWithWeight.totalWeight / 1000 : null;
 
-    // pz/Kg: dall'ultima operazione con animalsPerKg
-    const animalsPerKg = operationsWithAnimalsPerKg.length > 0 ? operationsWithAnimalsPerKg[0].animalsPerKg : null;
+    // pz/Kg: dall'ultima operazione misura/prima-attivazione
+    const animalsPerKg = measurementOps.length > 0 ? measurementOps[0].animalsPerKg : null;
 
     // Mortalità: dall'ultima operazione con mortality
     const operationWithMortality = basketOperations.find(op => op.mortality !== null && op.mortality !== undefined);
