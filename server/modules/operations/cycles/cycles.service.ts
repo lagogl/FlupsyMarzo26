@@ -282,41 +282,28 @@ class CyclesService {
    * Ottiene singolo ciclo per ID con dati basket
    */
   async getCycleById(id: number) {
-    const result = await db
-      .select({
-        id: cycles.id,
-        basketId: cycles.basketId,
-        lotId: cycles.lotId,
-        startDate: cycles.startDate,
-        endDate: cycles.endDate,
-        state: cycles.state,
-        cycleCode: cycles.cycleCode,
-        basketPhysicalNumber: baskets.physicalNumber,
-        basketFlupsyId: baskets.flupsyId,
-        basketState: baskets.state,
-      })
+    const cycle = await db
+      .select()
       .from(cycles)
-      .leftJoin(baskets, eq(cycles.basketId, baskets.id))
       .where(eq(cycles.id, id))
       .limit(1);
     
-    if (!result[0]) return null;
+    if (!cycle[0]) return null;
     
-    const row = result[0];
+    const basket = await db
+      .select()
+      .from(baskets)
+      .where(eq(baskets.id, cycle[0].basketId))
+      .limit(1);
+    
     return {
-      id: row.id,
-      basketId: row.basketId,
-      lotId: row.lotId,
-      startDate: row.startDate,
-      endDate: row.endDate,
-      state: row.state,
-      cycleCode: row.cycleCode,
-      basket: {
-        id: row.basketId,
-        physicalNumber: row.basketPhysicalNumber,
-        flupsyId: row.basketFlupsyId,
-        state: row.basketState,
-      }
+      ...cycle[0],
+      basket: basket[0] ? {
+        id: basket[0].id,
+        physicalNumber: basket[0].physicalNumber,
+        flupsyId: basket[0].flupsyId,
+        state: basket[0].state,
+      } : null
     };
   }
 
