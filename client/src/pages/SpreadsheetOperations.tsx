@@ -60,9 +60,10 @@ interface OperationRowData {
   flupsyName?: string;
 }
 
-// Tipi operazione per il modulo Spreadsheet (SOLO Misura - peso deprecato Gennaio 2026)
+// Tipi operazione per il modulo Spreadsheet
 const operationTypeOptions = [
-  { value: 'misura', label: 'Misura', color: 'blue', icon: '📏' }
+  { value: 'misura', label: 'Misura', color: 'blue', icon: '📏' },
+  { value: 'peso', label: 'Peso', color: 'green', icon: '⚖️' }
 ];
 
 export default function SpreadsheetOperations() {
