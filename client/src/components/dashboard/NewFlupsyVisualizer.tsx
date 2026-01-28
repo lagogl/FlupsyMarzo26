@@ -86,6 +86,44 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     staleTime: 3600000, // 1 hour - le taglie cambiano raramente
   });
 
+  // Fetch expected sizes for blink animation
+  const { data: expectedSizesData } = useQuery<Array<{
+    basketId: number;
+    registeredSize: string;
+    expectedSize: string;
+    hasExpectedSizeChange: boolean;
+    daysSinceLastMeasurement: number;
+  }>>({
+    queryKey: ['/api/baskets/expected-sizes'],
+    staleTime: 120000, // 2 minutes
+  });
+
+  // Create a map for quick lookup of expected size changes
+  const expectedSizesMap = useMemo(() => {
+    const map = new Map<number, { expectedSize: string; daysSince: number }>();
+    if (expectedSizesData) {
+      for (const item of expectedSizesData) {
+        if (item.hasExpectedSizeChange) {
+          map.set(item.basketId, {
+            expectedSize: item.expectedSize,
+            daysSince: item.daysSinceLastMeasurement
+          });
+        }
+      }
+    }
+    return map;
+  }, [expectedSizesData]);
+
+  // Helper to check if basket has expected size change
+  const hasExpectedSizeChange = (basketId: number): boolean => {
+    return expectedSizesMap.has(basketId);
+  };
+
+  // Helper to get expected size info
+  const getExpectedSizeInfo = (basketId: number) => {
+    return expectedSizesMap.get(basketId);
+  };
+
   // Helper function to get the latest operation for a basket (usa la mappa ottimizzata)
   const getLatestOperation = (basketId: number) => {
     if (!latestOperationsMap) return null;
@@ -265,7 +303,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Render a basket position within a FLUPSY
-  const renderBasketPosition = (flupsy: any, basket: any, highlightLargeSizes: boolean = false) => {
+  const renderBasketPosition = (flupsy: any, basket: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false) => {
     if (!basket) return null;
     
     // Get the latest operation for tooltip info
@@ -273,6 +311,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     
     // Check if this basket has a sellable size (TP-3000+)
     const isSellableSize = latestOperation?.animalsPerKg && latestOperation.animalsPerKg <= 29000;
+    
+    // Check if basket has expected size change
+    const expectedSizeInfo = getExpectedSizeInfo(basket.id);
+    const hasExpectedChange = !!expectedSizeInfo;
     
     // Additional styling for "Con taglie grandi" mode
     let highlightClasses = '';
@@ -288,6 +330,18 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       }
     }
     
+    // Expected size change mode: blink effect
+    if (highlightExpectedSizes) {
+      if (hasExpectedChange) {
+        highlightClasses = 'animate-expected-size-blink';
+      } else {
+        opacityClasses = 'opacity-40';
+      }
+    }
+    
+    // Apply blink even in normal mode if basket has expected size change
+    const blinkClass = hasExpectedChange && !highlightLargeSizes && !highlightExpectedSizes ? 'animate-expected-size-blink' : '';
+    
     // Formato della cesta secondo l'immagine di riferimento
     return (
       <TooltipProvider key={`basket-${basket.id}`}>
@@ -297,7 +351,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               onClick={() => handleBasketClick(basket)}
               className={`border rounded-md p-2 min-w-[140px] ${
                 getBasketColorClass(basket)
-              } ${highlightClasses} ${opacityClasses} cursor-pointer hover:shadow-md transition-all relative`}
+              } ${highlightClasses} ${opacityClasses} ${blinkClass} cursor-pointer hover:shadow-md transition-all relative`}
             >
               {/* Star badge for sellable baskets in highlight mode */}
               {highlightLargeSizes && isSellableSize && (
@@ -322,9 +376,14 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               
               {latestOperation && (
                 <>
-                  {/* Taglia come nell'immagine di riferimento */}
+                  {/* Taglia registrata + taglia attesa se diversa */}
                   <div className="font-bold text-sm text-center mt-1">
                     {latestOperation.animalsPerKg && getSizeCodeFromAnimalsPerKg(latestOperation.animalsPerKg)}
+                    {hasExpectedChange && (
+                      <span className="text-orange-600 ml-1">
+                        → {expectedSizeInfo?.expectedSize}
+                      </span>
+                    )}
                   </div>
                   
                   {/* Peso totale e densità */}
@@ -439,7 +498,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Function to render a single FLUPSY
-  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false) => {
+  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false) => {
     // Estrai il valore max_positions dal database (accettando varie possibili denominazioni)
     const maxPositionsFromDB = flupsy.max_positions || flupsy.maxPositions || flupsy.maxPosition || flupsy["max-positions"];
     const maxPositions = maxPositionsFromDB || 10; // Fallback se il valore non è presente
@@ -518,7 +577,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste DX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {dxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes) : (
                     <div 
                       key={`empty-dx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -553,7 +612,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste SX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {sxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes) : (
                     <div 
                       key={`empty-sx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -674,6 +733,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TabsTrigger value="all">Tutti i FLUPSY</TabsTrigger>
               <TabsTrigger value="active">Con cestelli attivi</TabsTrigger>
               <TabsTrigger value="large">Con taglie grandi</TabsTrigger>
+              <TabsTrigger value="expected">Con taglie attese</TabsTrigger>
             </TabsList>
             
             <TabsContent value="all" className="space-y-4">
@@ -692,6 +752,13 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasLargeSize(b));
               }).map((flupsy: any) => renderFlupsy(flupsy, true))}
+            </TabsContent>
+            
+            <TabsContent value="expected" className="space-y-4">
+              {flupsys?.filter((flupsy: any) => {
+                const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
+                return flupsyBaskets?.some((b: any) => hasExpectedSizeChange(b.id));
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, true))}
             </TabsContent>
           </Tabs>
         </>

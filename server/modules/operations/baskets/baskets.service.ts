@@ -854,6 +854,144 @@ export class BasketsService {
       message: `Associazione RFID UHF rimossa (era ${oldCode})`
     };
   }
+
+  /**
+   * Calcola le taglie attese per i cestelli attivi basandosi su SGR
+   * Confronta taglia registrata vs taglia prevista dalla crescita
+   */
+  async getExpectedSizes() {
+    const startTime = Date.now();
+    console.log("📊 EXPECTED SIZES: Calcolo taglie attese in corso...");
+
+    const activeBaskets = await db
+      .select()
+      .from(baskets)
+      .where(eq(baskets.state, 'active'));
+
+    if (activeBaskets.length === 0) {
+      return [];
+    }
+
+    const basketIds = activeBaskets.map(b => b.id);
+    const cycleIds = activeBaskets.map(b => b.currentCycleId).filter(Boolean) as number[];
+
+    const allOperations = await db
+      .select()
+      .from(operations)
+      .where(inArray(operations.basketId, basketIds))
+      .orderBy(desc(operations.date));
+
+    const allSizes = await storage.getAllSizes();
+    const allSgrs = await storage.getSgrs();
+    const sgrGiornalieri = await storage.getSgrGiornalieri();
+
+    const today = new Date();
+    const currentMonth = today.toLocaleString('it-IT', { month: 'long' }).toLowerCase();
+
+    const results: Array<{
+      basketId: number;
+      physicalNumber: number;
+      flupsyId: number;
+      cycleCode: string | null;
+      registeredSize: string;
+      registeredAnimalsPerKg: number;
+      expectedSize: string;
+      expectedAnimalsPerKg: number;
+      hasExpectedSizeChange: boolean;
+      daysSinceLastMeasurement: number;
+      lastMeasurementDate: string | null;
+      lastOperationType: string | null;
+    }> = [];
+
+    for (const basket of activeBaskets) {
+      const basketOps = allOperations.filter(op => op.basketId === basket.id);
+      
+      const lastMeasurementOp = basketOps.find(op => 
+        (op.type === 'misura' || op.type === 'prima-attivazione') && 
+        op.animalsPerKg && op.animalsPerKg > 0
+      );
+
+      if (!lastMeasurementOp || !lastMeasurementOp.animalsPerKg) {
+        continue;
+      }
+
+      const registeredAnimalsPerKg = lastMeasurementOp.animalsPerKg;
+      const registeredSize = this.getSizeCodeFromAnimalsPerKg(allSizes, registeredAnimalsPerKg);
+
+      const opDate = new Date(lastMeasurementOp.date);
+      const daysSince = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysSince < 3) {
+        continue;
+      }
+
+      const avgWeightGrams = 1000 / registeredAnimalsPerKg;
+      const sgr = this.findBestSgr(registeredSize, currentMonth, allSgrs, sgrGiornalieri);
+      
+      if (!sgr || sgr <= 0) {
+        continue;
+      }
+
+      const expectedWeightGrams = avgWeightGrams * Math.exp((sgr / 100) * daysSince);
+      const expectedAnimalsPerKg = Math.round(1000 / expectedWeightGrams);
+      const expectedSize = this.getSizeCodeFromAnimalsPerKg(allSizes, expectedAnimalsPerKg);
+
+      const hasExpectedSizeChange = registeredSize !== expectedSize;
+
+      results.push({
+        basketId: basket.id,
+        physicalNumber: basket.physicalNumber,
+        flupsyId: basket.flupsyId,
+        cycleCode: basket.cycleCode,
+        registeredSize,
+        registeredAnimalsPerKg,
+        expectedSize,
+        expectedAnimalsPerKg,
+        hasExpectedSizeChange,
+        daysSinceLastMeasurement: daysSince,
+        lastMeasurementDate: opDate.toISOString().split('T')[0],
+        lastOperationType: lastMeasurementOp.type
+      });
+    }
+
+    const elapsed = Date.now() - startTime;
+    const changed = results.filter(r => r.hasExpectedSizeChange).length;
+    console.log(`📊 EXPECTED SIZES: Completato in ${elapsed}ms - ${results.length} ceste analizzate, ${changed} con taglia attesa diversa`);
+
+    return results;
+  }
+
+  private getSizeCodeFromAnimalsPerKg(sizes: any[], animalsPerKg: number): string {
+    const matchingSize = sizes.find((size: any) => {
+      const min = size.minAnimalsPerKg || 0;
+      const max = size.maxAnimalsPerKg || Infinity;
+      return animalsPerKg >= min && animalsPerKg <= max;
+    });
+
+    if (matchingSize) {
+      return matchingSize.code;
+    }
+    return `TP-${Math.round(animalsPerKg/1000)*1000}`;
+  }
+
+  private findBestSgr(sizeCode: string, month: string, sgrs: any[], sgrGiornalieri: any[]): number | null {
+    const sizeSgr = sgrGiornalieri.find((s: any) => 
+      s.sizeCode?.toLowerCase() === sizeCode.toLowerCase()
+    );
+    if (sizeSgr && sizeSgr.sgrValue > 0) {
+      return sizeSgr.sgrValue;
+    }
+
+    const monthSgr = sgrs.find((s: any) => 
+      s.month?.toLowerCase() === month.toLowerCase()
+    );
+    if (monthSgr && monthSgr.sgrRate > 0) {
+      return monthSgr.sgrRate;
+    }
+
+    const avgSgr = sgrs.reduce((sum: number, s: any) => sum + (s.sgrRate || 0), 0) / sgrs.length;
+    return avgSgr > 0 ? avgSgr : 2.5;
+  }
 }
 
 // Export singleton instance

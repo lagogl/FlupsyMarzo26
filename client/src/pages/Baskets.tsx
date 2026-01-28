@@ -117,6 +117,27 @@ export default function Baskets() {
     queryKey: ['/api/lots'],
   }) as { data: any[] };
 
+  // Query expected sizes for blink animation
+  const { data: expectedSizesData } = useQuery<Array<{
+    basketId: number;
+    hasExpectedSizeChange: boolean;
+    expectedSize: string;
+    daysSinceLastMeasurement: number;
+  }>>({
+    queryKey: ['/api/baskets/expected-sizes'],
+    staleTime: 120000, // 2 minutes
+  });
+
+  // Create a Set for quick lookup of baskets with expected size changes
+  const basketsWithExpectedSizeChange = new Set(
+    expectedSizesData?.filter(item => item.hasExpectedSizeChange).map(item => item.basketId) || []
+  );
+
+  // Helper to get expected size info for a basket
+  const getExpectedSizeInfo = (basketId: number) => {
+    return expectedSizesData?.find(item => item.basketId === basketId && item.hasExpectedSizeChange);
+  };
+
   // Create mutation
   const createBasketMutation = useMutation({
     mutationFn: (newBasket: any) => apiRequest({
@@ -888,8 +909,11 @@ export default function Baskets() {
                       statusBadge = <Badge className="bg-gray-100 text-gray-700 border-gray-200 text-xs">Disponibile</Badge>;
                     }
 
+                    const hasExpectedChange = basketsWithExpectedSizeChange.has(basket.id);
+                    const expectedInfo = hasExpectedChange ? getExpectedSizeInfo(basket.id) : null;
+
                     return (
-                      <tr key={basket.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                      <tr key={basket.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} ${hasExpectedChange ? 'animate-expected-size-blink' : ''}`}>
                         <td className="px-2 py-2 text-sm font-semibold text-gray-900">
                           #{basket.physicalNumber}
                         </td>
@@ -913,21 +937,28 @@ export default function Baskets() {
                           )}
                         </td>
                         <td className="px-2 py-2">
-                          {basket.calculatedSize ? (
-                            <Badge 
-                              className={`text-xs ${basket.calculatedSize === preferredSize ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
-                              style={{
-                                ...getSizeBadgeStyle(basket.calculatedSize),
-                                transition: 'all 0.3s ease-in-out',
-                                transform: basket.calculatedSize === preferredSize ? 'scale(1.05)' : 'scale(1)',
-                                fontWeight: basket.calculatedSize === preferredSize ? 'bold' : 'normal'
-                              }}
-                            >
-                              {basket.calculatedSize}
-                            </Badge>
-                          ) : (
-                            <span className="text-gray-400 text-xs">N/D</span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {basket.calculatedSize ? (
+                              <Badge 
+                                className={`text-xs ${basket.calculatedSize === preferredSize ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
+                                style={{
+                                  ...getSizeBadgeStyle(basket.calculatedSize),
+                                  transition: 'all 0.3s ease-in-out',
+                                  transform: basket.calculatedSize === preferredSize ? 'scale(1.05)' : 'scale(1)',
+                                  fontWeight: basket.calculatedSize === preferredSize ? 'bold' : 'normal'
+                                }}
+                              >
+                                {basket.calculatedSize}
+                              </Badge>
+                            ) : (
+                              <span className="text-gray-400 text-xs">N/D</span>
+                            )}
+                            {expectedInfo && (
+                              <span className="text-orange-600 text-xs font-medium">
+                                → {expectedInfo.expectedSize}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-2 py-2 text-sm text-gray-700">
                           {basket.animalsPerKg ? (

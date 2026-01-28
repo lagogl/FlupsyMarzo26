@@ -695,6 +695,25 @@ export class BasketsController {
       res.status(500).json({ success: false, message: 'Errore durante l\'esportazione Excel' });
     }
   }
+
+  /**
+   * GET /api/baskets/expected-sizes
+   * Calcola e restituisce le taglie attese per i cestelli attivi
+   */
+  async getExpectedSizes(req: Request, res: Response) {
+    try {
+      forceNoCacheHeaders(res);
+      const results = await basketsService.getExpectedSizes();
+      res.json(results);
+    } catch (error) {
+      console.error('Error getting expected sizes:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Errore durante il calcolo delle taglie attese',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 }
 
 // Export singleton instance

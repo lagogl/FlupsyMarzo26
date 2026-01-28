@@ -21,6 +21,7 @@ router.get('/next-position/:flupsyId', (req, res) => basketsController.getNextPo
 router.get('/available', (req, res) => basketsController.getAvailable(req, res));
 router.get('/latest-operations', (req, res) => basketsController.getLatestOperations(req, res));
 router.get('/next-rfid-uhf-code', (req, res) => basketsController.getNextRfidUhfCode(req, res));
+router.get('/expected-sizes', (req, res) => basketsController.getExpectedSizes(req, res));
 
 // Route CRUD principali
 router.get('/', (req, res) => basketsController.getBaskets(req, res));
