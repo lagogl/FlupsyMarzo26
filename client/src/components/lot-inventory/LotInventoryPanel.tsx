@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { ExternalLink } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -48,6 +50,11 @@ interface InventoryTransaction {
   animalCount: number;
   notes: string | null;
   referenceOperationId: number | null;
+  basketId: number | null;
+  basketPhysicalNumber: number | null;
+  flupsyId: number | null;
+  flupsyName: string | null;
+  selectionId: number | null;
   createdAt: string;
 }
 
@@ -96,6 +103,7 @@ interface InventoryData {
 export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const [notes, setNotes] = useState("");
 
   // Query per ottenere i dati dell'inventario corrente
@@ -368,7 +376,9 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
                     <TableHead>Data</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead className="text-right">Quantità</TableHead>
+                    <TableHead>Cesta</TableHead>
                     <TableHead>Note</TableHead>
+                    <TableHead className="text-center">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -394,8 +404,32 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
                         {transaction.animalCount > 0 ? "+" : ""}
                         {formatNumber(transaction.animalCount)}
                       </TableCell>
+                      <TableCell>
+                        {transaction.basketId && transaction.basketPhysicalNumber ? (
+                          <div className="text-sm">
+                            <span className="font-medium">#{transaction.basketPhysicalNumber}</span>
+                            {transaction.flupsyName && (
+                              <span className="text-muted-foreground ml-1 text-xs">
+                                ({transaction.flupsyName})
+                              </span>
+                            )}
+                          </div>
+                        ) : "-"}
+                      </TableCell>
                       <TableCell className="max-w-xs truncate">
                         {transaction.notes || "-"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {transaction.basketId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/operations?basketId=${transaction.basketId}`)}
+                            title="Vedi operazioni cesta"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

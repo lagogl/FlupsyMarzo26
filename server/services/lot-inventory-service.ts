@@ -188,23 +188,30 @@ export class LotInventoryService {
   }
 
   /**
-   * Ottiene le transazioni di un lotto
+   * Ottiene le transazioni di un lotto con dati della cesta e operazione
    * @param lotId - ID del lotto
-   * @returns Lista delle transazioni
+   * @returns Lista delle transazioni arricchite
    */
   async getLotTransactions(lotId: number) {
     try {
-      // Ottieni le transazioni dal ledger ordinate per data
+      // Ottieni le transazioni dal ledger con JOIN su baskets e flupsys per info cesta
       const resultsData = await db.execute(
-        sql`SELECT id, date, lot_id, type, quantity, notes
-            FROM lot_ledger 
-            WHERE lot_id = ${lotId} 
-            ORDER BY date DESC`
+        sql`SELECT 
+              l.id, l.date, l.lot_id, l.type, l.quantity, l.notes,
+              l.basket_id, l.operation_id, l.selection_id,
+              b.physical_number as basket_physical_number,
+              f.id as flupsy_id,
+              f.name as flupsy_name
+            FROM lot_ledger l
+            LEFT JOIN baskets b ON l.basket_id = b.id
+            LEFT JOIN flupsys f ON b.flupsy_id = f.id
+            WHERE l.lot_id = ${lotId} 
+            ORDER BY l.date DESC`
       );
       
       const results = resultsData.rows || resultsData || [];
       
-      // Trasforma i dati per il frontend
+      // Trasforma i dati per il frontend con info cesta
       return results.map((row: any) => ({
         id: row.id,
         date: row.date,
@@ -213,7 +220,12 @@ export class LotInventoryService {
         animalCount: parseFloat(row.quantity || 0),
         notes: row.notes,
         createdAt: row.date,
-        referenceOperationId: null
+        referenceOperationId: row.operation_id,
+        basketId: row.basket_id,
+        basketPhysicalNumber: row.basket_physical_number,
+        flupsyId: row.flupsy_id,
+        flupsyName: row.flupsy_name,
+        selectionId: row.selection_id
       }));
     } catch (error) {
       console.error("Errore durante il recupero delle transazioni del lotto:", error);
