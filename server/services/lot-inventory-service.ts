@@ -194,24 +194,26 @@ export class LotInventoryService {
    */
   async getLotTransactions(lotId: number) {
     try {
-      // Ottieni le transazioni dal ledger con JOIN su baskets e flupsys per info cesta
+      // Ottieni le transazioni dal ledger con JOIN su baskets, flupsys e operations per info complete
       const resultsData = await db.execute(
         sql`SELECT 
               l.id, l.date, l.lot_id, l.type, l.quantity, l.notes,
               l.basket_id, l.operation_id, l.selection_id,
               b.physical_number as basket_physical_number,
               f.id as flupsy_id,
-              f.name as flupsy_name
+              f.name as flupsy_name,
+              o.cycle_id
             FROM lot_ledger l
             LEFT JOIN baskets b ON l.basket_id = b.id
             LEFT JOIN flupsys f ON b.flupsy_id = f.id
+            LEFT JOIN operations o ON l.operation_id = o.id
             WHERE l.lot_id = ${lotId} 
             ORDER BY l.date DESC`
       );
       
       const results = resultsData.rows || resultsData || [];
       
-      // Trasforma i dati per il frontend con info cesta
+      // Trasforma i dati per il frontend con info cesta e ciclo
       return results.map((row: any) => ({
         id: row.id,
         date: row.date,
@@ -225,7 +227,8 @@ export class LotInventoryService {
         basketPhysicalNumber: row.basket_physical_number,
         flupsyId: row.flupsy_id,
         flupsyName: row.flupsy_name,
-        selectionId: row.selection_id
+        selectionId: row.selection_id,
+        cycleId: row.cycle_id
       }));
     } catch (error) {
       console.error("Errore durante il recupero delle transazioni del lotto:", error);

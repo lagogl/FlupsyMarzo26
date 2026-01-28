@@ -55,6 +55,7 @@ interface InventoryTransaction {
   flupsyId: number | null;
   flupsyName: string | null;
   selectionId: number | null;
+  cycleId: number | null;
   createdAt: string;
 }
 
@@ -420,12 +421,12 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
                         {transaction.notes || "-"}
                       </TableCell>
                       <TableCell className="text-center">
-                        {transaction.basketId && (
+                        {transaction.cycleId && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigate(`/operations?basketId=${transaction.basketId}`)}
-                            title="Vedi operazioni cesta"
+                            onClick={() => navigate(`/cycles/${transaction.cycleId}`)}
+                            title="Vedi dettagli ciclo e operazioni"
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Button>
