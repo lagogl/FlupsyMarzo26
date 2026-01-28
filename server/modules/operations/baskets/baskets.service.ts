@@ -907,7 +907,7 @@ export class BasketsService {
       const basketOps = allOperations.filter(op => op.basketId === basket.id);
       
       const lastMeasurementOp = basketOps.find(op => 
-        (op.type === 'misura' || op.type === 'prima-attivazione') && 
+        (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'peso') && 
         op.animalsPerKg && op.animalsPerKg > 0
       );
 
