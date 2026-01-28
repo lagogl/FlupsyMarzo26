@@ -319,7 +319,7 @@ export async function generateOperatorGuidePDF(): Promise<Buffer> {
       doc.text('3. Usa MISURA per aggiornare taglia e numero animali', 60, tipY + 50);
       doc.text('4. Il sistema calcolera\' automaticamente la mortalita\'', 60, tipY + 65);
 
-      doc.moveDown(6);
+      doc.moveDown(2);
 
       doc.fontSize(14)
          .fillColor(primaryColor)
@@ -350,6 +350,251 @@ export async function generateOperatorGuidePDF(): Promise<Buffer> {
            .text(ch.text, 115, chY + 2);
         doc.y = chY + 20;
       }
+
+      // =============== NUOVA PAGINA: SPREADSHEET OPERATIONS ===============
+      doc.addPage();
+
+      doc.rect(0, 0, doc.page.width, 60).fill('#10b981');
+      doc.fontSize(20)
+         .fillColor('white')
+         .font('Helvetica-Bold')
+         .text('FOGLIO ELETTRONICO - Spreadsheet Operations', 50, 20, { align: 'center' });
+
+      doc.y = 80;
+
+      doc.fontSize(11)
+         .fillColor('#1f2937')
+         .font('Helvetica')
+         .text('Il modulo Spreadsheet Operations offre una vista tabellare completa di tutte le ceste con le operazioni piu\' recenti. E\' progettato per:', 50, doc.y, { width: doc.page.width - 100 });
+      
+      doc.moveDown(1);
+      
+      const spreadsheetFeatures = [
+        { icon: '📋', text: 'Visualizzazione compatta di tutti i dati in formato tabella' },
+        { icon: '🔍', text: 'Filtri rapidi per FLUPSY e Taglia' },
+        { icon: '↕️', text: 'Ordinamento cliccando sulle intestazioni colonne' },
+        { icon: '📊', text: 'Indicatori di performance con punteggio AI' },
+        { icon: '💾', text: 'Export Excel professionale con tutti i dati' }
+      ];
+      
+      for (const f of spreadsheetFeatures) {
+        doc.fontSize(10)
+           .text(`${f.icon}  ${f.text}`, 60, doc.y);
+        doc.moveDown(0.5);
+      }
+
+      doc.moveDown(1);
+
+      // Sezione Colonne della Tabella
+      doc.fontSize(14)
+         .fillColor(primaryColor)
+         .font('Helvetica-Bold')
+         .text('COLONNE DELLA TABELLA', 50, doc.y);
+      
+      doc.moveDown(0.8);
+
+      const tableColumns = [
+        { col: 'Cesta', desc: 'Numero fisico della cesta (es. #15)' },
+        { col: 'Performance', desc: 'Punteggio 0-100 calcolato da AI (crescita, mortalita\', attivita\')' },
+        { col: 'Trend AI', desc: 'Previsione crescita: STABILE, CRESCITA o CALO' },
+        { col: 'FLUPSY', desc: 'Nome dell\'impianto FLUPSY' },
+        { col: 'Taglia', desc: 'Categoria taglia attuale (T1, T3, T10, ecc.)' },
+        { col: 'P.Med (mg)', desc: 'Peso medio per animale in milligrammi' },
+        { col: 'Ult.Op', desc: 'Data dell\'ultima operazione (gg/mm)' },
+        { col: 'Lotto', desc: 'ID e nome del lotto (es. "5 | Fornitore ABC")' },
+        { col: 'Animali', desc: 'Numero totale di animali nella cesta' },
+        { col: 'Peso Tot', desc: 'Peso totale in grammi' },
+        { col: 'Anim/kg', desc: 'Animali per chilogrammo (indicatore taglia)' },
+        { col: 'Mortalita\' %', desc: 'Percentuale mortalita\' dall\'ultima operazione' }
+      ];
+
+      for (const tc of tableColumns) {
+        if (doc.y > 700) {
+          doc.addPage();
+          doc.y = 50;
+        }
+        doc.fontSize(9)
+           .fillColor(primaryColor)
+           .font('Helvetica-Bold')
+           .text(tc.col + ': ', 60, doc.y, { continued: true });
+        doc.fillColor('#374151')
+           .font('Helvetica')
+           .text(tc.desc);
+        doc.moveDown(0.3);
+      }
+
+      doc.moveDown(1);
+
+      // Sezione Performance Score
+      doc.fontSize(14)
+         .fillColor(primaryColor)
+         .font('Helvetica-Bold')
+         .text('PUNTEGGIO PERFORMANCE', 50, doc.y);
+      
+      doc.moveDown(0.8);
+
+      const perfLevels = [
+        { range: '80-100', level: 'Eccellente', color: successColor, desc: 'Crescita ottimale, mortalita\' bassa' },
+        { range: '60-79', level: 'Buona', color: '#22c55e', desc: 'Andamento positivo' },
+        { range: '40-59', level: 'Media', color: warningColor, desc: 'Monitoraggio consigliato' },
+        { range: '0-39', level: 'Attenzione', color: dangerColor, desc: 'Richiede intervento' }
+      ];
+
+      for (const pl of perfLevels) {
+        const plY = doc.y;
+        doc.rect(60, plY, 50, 16).fill(pl.color);
+        doc.fontSize(8)
+           .fillColor('white')
+           .font('Helvetica-Bold')
+           .text(pl.range, 65, plY + 4);
+        doc.fontSize(10)
+           .fillColor('#1f2937')
+           .font('Helvetica-Bold')
+           .text(pl.level, 120, plY + 3);
+        doc.fontSize(9)
+           .font('Helvetica')
+           .fillColor('#6b7280')
+           .text('- ' + pl.desc, 190, plY + 3);
+        doc.y = plY + 22;
+      }
+
+      // =============== NUOVA PAGINA: EXPORT EXCEL ===============
+      doc.addPage();
+
+      doc.rect(0, 0, doc.page.width, 60).fill('#22c55e');
+      doc.fontSize(20)
+         .fillColor('white')
+         .font('Helvetica-Bold')
+         .text('EXPORT EXCEL - Esportazione Dati', 50, 20, { align: 'center' });
+
+      doc.y = 80;
+
+      doc.fontSize(11)
+         .fillColor('#1f2937')
+         .font('Helvetica')
+         .text('Il pulsante verde "Esporta Excel" nella pagina Spreadsheet Operations permette di scaricare un file Excel professionale con tutti i dati visibili.', 50, doc.y, { width: doc.page.width - 100 });
+      
+      doc.moveDown(1.5);
+
+      doc.fontSize(14)
+         .fillColor(primaryColor)
+         .font('Helvetica-Bold')
+         .text('COME USARE L\'EXPORT', 50, doc.y);
+      
+      doc.moveDown(0.8);
+
+      const exportSteps = [
+        '1. Vai alla pagina "Spreadsheet Operations"',
+        '2. Usa i filtri per selezionare FLUPSY e/o Taglia desiderata',
+        '3. Clicca sull\'intestazione colonna per ordinare (freccia su/giu\')',
+        '4. Clicca il pulsante verde "Esporta Excel"',
+        '5. Il file viene scaricato automaticamente con nome: Spreadsheet_[FLUPSY]_[data].xlsx'
+      ];
+
+      for (const step of exportSteps) {
+        doc.fontSize(10)
+           .fillColor('#374151')
+           .font('Helvetica')
+           .text(step, 60, doc.y);
+        doc.moveDown(0.5);
+      }
+
+      doc.moveDown(1);
+
+      doc.fontSize(14)
+         .fillColor(primaryColor)
+         .font('Helvetica-Bold')
+         .text('COLONNE NEL FILE EXCEL', 50, doc.y);
+      
+      doc.moveDown(0.8);
+
+      const excelColumns = [
+        { col: 'Cesta', desc: 'Numero fisico cesta' },
+        { col: 'Performance', desc: 'Punteggio/100 con livello (es. "75.5/100 (Buona)")' },
+        { col: 'Trend AI', desc: 'Direzione trend con percentuale (es. "CRESCITA (115%)")' },
+        { col: 'FLUPSY', desc: 'Nome impianto' },
+        { col: 'Taglia', desc: 'Categoria taglia' },
+        { col: 'P.Med(mg)', desc: 'Peso medio in mg' },
+        { col: 'Ult.Op', desc: 'Data ultima operazione' },
+        { col: 'Lotto', desc: 'ID | Nome fornitore' },
+        { col: 'Animali', desc: 'Conteggio animali' },
+        { col: 'Peso Tot (g)', desc: 'Peso totale grammi' },
+        { col: 'Anim/kg', desc: 'Animali per kg' },
+        { col: 'P.Camp', desc: 'Peso campione' },
+        { col: 'Vivi', desc: 'Animali vivi nel campione' },
+        { col: 'Morti', desc: 'Animali morti' },
+        { col: 'Tot.Camp.', desc: 'Totale campione' },
+        { col: 'Mortalita\' %', desc: 'Percentuale mortalita\'' },
+        { col: 'Urgenza', desc: 'Livello urgenza: Normale, Media, Alta, CRITICA' },
+        { col: 'Problemi Rilevati', desc: 'Elenco problemi identificati dall\'AI' },
+        { col: 'Raccomandazioni', desc: 'Azioni consigliate dall\'AI' },
+        { col: 'Note', desc: 'Note operatore' }
+      ];
+
+      for (const ec of excelColumns) {
+        if (doc.y > 720) {
+          doc.addPage();
+          doc.y = 50;
+        }
+        doc.fontSize(9)
+           .fillColor('#166534')
+           .font('Helvetica-Bold')
+           .text(ec.col + ': ', 60, doc.y, { continued: true });
+        doc.fillColor('#374151')
+           .font('Helvetica')
+           .text(ec.desc);
+        doc.moveDown(0.25);
+      }
+
+      doc.moveDown(1);
+
+      // Box informativo sui livelli di urgenza
+      doc.rect(50, doc.y, doc.page.width - 100, 85)
+         .fillAndStroke('#fef3c7', warningColor);
+      
+      const urgencyBoxY = doc.y + 10;
+      doc.fontSize(11)
+         .fillColor('#92400e')
+         .font('Helvetica-Bold')
+         .text('LIVELLI DI URGENZA', 60, urgencyBoxY);
+      
+      doc.fontSize(9)
+         .font('Helvetica')
+         .text('CRITICA: Mortalita\' >20% - Intervento immediato richiesto', 60, urgencyBoxY + 18);
+      doc.text('Alta: Mortalita\' 10-20% o perdita popolazione anomala', 60, urgencyBoxY + 32);
+      doc.text('Media: Crescita lenta o assenza operazioni da >14 giorni', 60, urgencyBoxY + 46);
+      doc.text('Normale: Monitoraggio standard', 60, urgencyBoxY + 60);
+
+      doc.y = urgencyBoxY + 100;
+
+      // Sezione filtri e ordinamento
+      doc.fontSize(14)
+         .fillColor(primaryColor)
+         .font('Helvetica-Bold')
+         .text('FILTRI E ORDINAMENTO', 50, doc.y);
+      
+      doc.moveDown(0.8);
+
+      doc.rect(50, doc.y, doc.page.width - 100, 70)
+         .fillAndStroke('#dbeafe', newFeatureColor);
+      
+      const filterBoxY = doc.y + 10;
+      doc.fontSize(10)
+         .fillColor('#1e40af')
+         .font('Helvetica-Bold')
+         .text('Filtro FLUPSY:', 60, filterBoxY);
+      doc.font('Helvetica')
+         .text('Seleziona un impianto specifico o "Tutti"', 150, filterBoxY);
+      
+      doc.font('Helvetica-Bold')
+         .text('Filtro Taglia:', 60, filterBoxY + 18);
+      doc.font('Helvetica')
+         .text('Filtra per categoria taglia (T1, T3, T10, ecc.)', 150, filterBoxY + 18);
+      
+      doc.font('Helvetica-Bold')
+         .text('Ordinamento:', 60, filterBoxY + 36);
+      doc.font('Helvetica')
+         .text('Clicca intestazione colonna (freccia indica direzione)', 150, filterBoxY + 36);
 
       doc.end();
     } catch (error) {
