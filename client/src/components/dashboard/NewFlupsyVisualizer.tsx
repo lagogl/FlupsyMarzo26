@@ -148,7 +148,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   // Helper function to check if a basket has a large size (TP-3000 or higher = sellable)
   // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per allineamento con expected-sizes
   const hasLargeSize = (basket: any): boolean => {
-    if (!basket || basket.state !== 'active') return false;
+    if (!basket || (basket.state !== 'active' && basket.state !== 'occupied')) return false;
     
     const latestOperation = getLatestOperation(basket.id);
     // Usa measurementAnimalsPerKg (da misura/prima-attivazione) con fallback su animalsPerKg
@@ -189,8 +189,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   const getBasketColorClass = (basket: any) => {
     if (!basket) return 'bg-gray-100 border-dashed border-gray-300';
     
-    // If basket is not active or has no current cycle, return a neutral color
-    if (basket.state !== 'active' || !basket.currentCycleId) {
+    // If basket is not active/occupied or has no current cycle, return a neutral color
+    if ((basket.state !== 'active' && basket.state !== 'occupied') || !basket.currentCycleId) {
       return 'bg-gray-100 border-gray-300';
     }
     
