@@ -888,6 +888,9 @@ export default function CycleDetail() {
           <div>
             <h1 className="text-2xl font-bold flex items-center">
               Ciclo #{cycle.id}
+              <span className="ml-3 text-red-600 font-bold">
+                Cesta #{cycle.basket?.physicalNumber}
+              </span>
               {isSoldCycle && (
                 <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 border border-red-300">
                   Venduto
