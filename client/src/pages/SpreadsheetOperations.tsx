@@ -59,6 +59,11 @@ interface OperationRowData {
   lastOperationDate?: string;
   lastOperationType?: string;
   flupsyName?: string;
+  // Dati SGR (Specific Growth Rate)
+  currentCycleId?: number;
+  sgrPeso?: number | null;        // SGR calcolato da operazioni PESO
+  sgrMedio?: number | null;       // SGR medio (media pesata)
+  sgrMisura?: number | null;      // SGR calcolato da operazioni MISURA
 }
 
 // Tipi operazione per il modulo Spreadsheet
@@ -374,6 +379,11 @@ export default function SpreadsheetOperations() {
   // Query per dati SGR per calcoli previsioni
   const { data: sgrData } = useQuery({
     queryKey: ['/api/sgr'],
+  });
+
+  // Query per SGR-Peso batch (tutti i cicli attivi)
+  const { data: sgrPesoBatch } = useQuery({
+    queryKey: ['/api/cycles/batch/sgr-peso'],
   });
 
   // Auto-selezione FLUPSY rimossa - default è "all" (TUTTI)
@@ -1784,6 +1794,9 @@ export default function SpreadsheetOperations() {
         { header: 'Animali', key: 'animali', width: 12 },
         { header: 'Peso Tot (g)', key: 'pesoTot', width: 14 },
         { header: 'Anim/kg', key: 'animKg', width: 12 },
+        { header: 'SGR-Peso', key: 'sgrPeso', width: 10 },
+        { header: 'SGR Medio', key: 'sgrMedio', width: 10 },
+        { header: 'SGR', key: 'sgrMisura', width: 10 },
         { header: 'P.Camp', key: 'pesoCampione', width: 10 },
         { header: 'Vivi', key: 'vivi', width: 8 },
         { header: 'Morti', key: 'morti', width: 8 },
@@ -1834,6 +1847,35 @@ export default function SpreadsheetOperations() {
         const performanceLevel = perfScore >= 80 ? 'Eccellente' : 
                                  perfScore >= 60 ? 'Buona' : 
                                  perfScore >= 40 ? 'Media' : 'Attenzione';
+
+        // Calcola SGR per l'export
+        const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
+        const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
+        
+        // Calcola SGR da misure
+        const basketOps = ((operations as any[]) || [])
+          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.totalWeight)
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        let sgrMisuraValue = null;
+        if (basketOps.length >= 2) {
+          const latest = basketOps[0];
+          const previous = basketOps[1];
+          const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
+          if (latest.totalWeight > 0 && previous.totalWeight > 0) {
+            sgrMisuraValue = ((Math.log(latest.totalWeight) - Math.log(previous.totalWeight)) / days) * 100;
+          }
+        }
+        
+        // SGR Medio
+        let sgrMedioValue = null;
+        if (sgrPesoValue != null && sgrMisuraValue != null) {
+          sgrMedioValue = (sgrPesoValue + sgrMisuraValue) / 2;
+        } else if (sgrPesoValue != null) {
+          sgrMedioValue = sgrPesoValue;
+        } else if (sgrMisuraValue != null) {
+          sgrMedioValue = sgrMisuraValue;
+        }
         
         const dataRow = worksheet.addRow({
           cesta: `#${row.physicalNumber}`,
@@ -1847,6 +1889,9 @@ export default function SpreadsheetOperations() {
           animali: row.animalCount ? row.animalCount.toLocaleString('it-IT') : '-',
           pesoTot: row.totalWeight ? row.totalWeight.toLocaleString('it-IT') : '-',
           animKg: row.animalsPerKg ? row.animalsPerKg.toLocaleString('it-IT') : '-',
+          sgrPeso: sgrPesoValue != null ? sgrPesoValue.toFixed(2) : '-',
+          sgrMedio: sgrMedioValue != null ? sgrMedioValue.toFixed(2) : '-',
+          sgrMisura: sgrMisuraValue != null ? sgrMisuraValue.toFixed(2) : '-',
           pesoCampione: row.sampleWeight || '-',
           vivi: row.liveAnimals || '-',
           morti: row.deadCount || '-',
@@ -2385,6 +2430,10 @@ export default function SpreadsheetOperations() {
                   <div style={{width: '70px'}} className="px-1 py-1.5 border-r">Animali</div>
                   <div style={{width: '80px'}} className="px-1 py-1.5 border-r">Peso Tot (g)</div>
                   <div style={{width: '65px'}} className="px-1 py-1.5 border-r">Anim/kg</div>
+                  {/* COLONNE SGR */}
+                  <div style={{width: '55px'}} className="px-1 py-1.5 border-r bg-purple-50 text-purple-700" title="SGR calcolato da operazioni PESO">SGR-P</div>
+                  <div style={{width: '55px'}} className="px-1 py-1.5 border-r bg-blue-50 text-blue-700" title="SGR medio pesato">SGR-M</div>
+                  <div style={{width: '55px'}} className="px-1 py-1.5 border-r bg-green-50 text-green-700" title="SGR calcolato da operazioni MISURA">SGR</div>
                   {/* PESO CAMPIONE per operazioni peso e misura */}
                   {(selectedOperationType === 'peso' || selectedOperationType === 'misura') && (
                     <div style={{width: '60px'}} className="px-1 py-1.5 border-r bg-yellow-50">P.Camp*</div>
@@ -3092,6 +3141,71 @@ export default function SpreadsheetOperations() {
                           {row.animalsPerKg ? formatNumberWithSeparators(row.animalsPerKg) : '0'}
                         </div>
                       )}
+                    </div>
+
+                    {/* SGR-PESO - Calcolato da operazioni PESO */}
+                    <div style={{width: '55px'}} className="px-1 py-1 border-r bg-purple-50">
+                      {(() => {
+                        const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
+                        const sgrValue = sgrPesoData?.sgrPesoMedio;
+                        return (
+                          <div className={`w-full h-6 px-1 text-xs rounded flex items-center justify-end font-medium ${sgrValue ? 'text-purple-700' : 'text-gray-400'}`}>
+                            {sgrValue != null ? sgrValue.toFixed(2) : '-'}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* SGR MEDIO - Media pesata degli SGR */}
+                    <div style={{width: '55px'}} className="px-1 py-1 border-r bg-blue-50">
+                      {(() => {
+                        // SGR medio: combina SGR-Peso e SGR da misure se disponibili
+                        const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
+                        const sgrPeso = sgrPesoData?.sgrPesoMedio;
+                        const sgrMisura = row.sgrMisura;
+                        let sgrMedio = null;
+                        if (sgrPeso != null && sgrMisura != null) {
+                          sgrMedio = (sgrPeso + sgrMisura) / 2;
+                        } else if (sgrPeso != null) {
+                          sgrMedio = sgrPeso;
+                        } else if (sgrMisura != null) {
+                          sgrMedio = sgrMisura;
+                        }
+                        return (
+                          <div className={`w-full h-6 px-1 text-xs rounded flex items-center justify-end font-medium ${sgrMedio != null ? 'text-blue-700' : 'text-gray-400'}`}>
+                            {sgrMedio != null ? sgrMedio.toFixed(2) : '-'}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* SGR (MISURA) - Calcolato da operazioni MISURA */}
+                    <div style={{width: '55px'}} className="px-1 py-1 border-r bg-green-50">
+                      {(() => {
+                        // Calcola SGR da ultime 2 misure per questa cesta
+                        const basketOps = ((operations as any[]) || [])
+                          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.totalWeight)
+                          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        
+                        if (basketOps.length >= 2) {
+                          const latest = basketOps[0];
+                          const previous = basketOps[1];
+                          const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
+                          if (latest.totalWeight > 0 && previous.totalWeight > 0) {
+                            const sgr = ((Math.log(latest.totalWeight) - Math.log(previous.totalWeight)) / days) * 100;
+                            return (
+                              <div className={`w-full h-6 px-1 text-xs rounded flex items-center justify-end font-medium ${sgr >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                {sgr.toFixed(2)}
+                              </div>
+                            );
+                          }
+                        }
+                        return (
+                          <div className="w-full h-6 px-1 text-xs rounded flex items-center justify-end text-gray-400">
+                            -
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* PESO CAMPIONE per operazioni peso e misura */}

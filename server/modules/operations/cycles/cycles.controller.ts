@@ -589,6 +589,48 @@ export class CyclesController {
       });
     }
   }
+
+  /**
+   * GET /api/cycles/batch/sgr-peso
+   * Calcola SGR-Peso per tutti i cicli attivi (batch)
+   * Usato da Spreadsheet Operations per mostrare tutti i dati
+   */
+  async getBatchSgrPeso(req: Request, res: Response) {
+    try {
+      // Ottieni tutti i cicli attivi
+      const activeCycles = await cyclesService.getActiveCycles();
+      
+      // Calcola SGR-Peso per ogni ciclo in parallelo
+      const results = await Promise.all(
+        activeCycles.map(async (cycle: any) => {
+          try {
+            const sgrPesoData = await cyclesService.calculateSgrPeso(cycle.id);
+            return {
+              cycleId: cycle.id,
+              basketId: cycle.basketId,
+              ...sgrPesoData
+            };
+          } catch (err) {
+            return {
+              cycleId: cycle.id,
+              basketId: cycle.basketId,
+              sgrPesoMedio: null,
+              sgrPesoIntermedi: [],
+              error: (err as Error).message
+            };
+          }
+        })
+      );
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error calculating batch SGR-Peso:", error);
+      res.status(500).json({ 
+        message: "Errore nel calcolo batch SGR-Peso",
+        error: (error as Error).message 
+      });
+    }
+  }
 }
 
 export const cyclesController = new CyclesController();

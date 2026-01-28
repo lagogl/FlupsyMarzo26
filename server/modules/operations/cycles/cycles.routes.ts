@@ -24,6 +24,9 @@ router.post('/:id/close', (req, res) => cyclesController.closeCycle(req, res));
 router.post('/pending-closures/:id/resolve', (req, res) => cyclesController.resolvePendingClosure(req, res));
 router.post('/pending-closures/:id/cancel', (req, res) => cyclesController.cancelPendingClosure(req, res));
 
+// SGR-Peso batch per tutti i cicli attivi (usato da Spreadsheet) - PRIMA della route parametrica!
+router.get('/batch/sgr-peso', (req, res) => cyclesController.getBatchSgrPeso(req, res));
+
 // SGR-Peso (calcolo tasso di crescita basato su peso)
 router.get('/:id/sgr-peso', (req, res) => cyclesController.getSgrPeso(req, res));
 
