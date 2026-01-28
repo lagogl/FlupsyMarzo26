@@ -2497,7 +2497,7 @@ export default function SpreadsheetOperations() {
                   <div
                     onMouseEnter={() => setHoveredBasketGroup(row.basketId)}
                     onMouseLeave={() => setHoveredBasketGroup(null)}
-                    className={`relative flex border-b text-xs hover:bg-gray-50 items-center ${
+                    className={`relative flex border-b text-xs hover:bg-gray-50 items-center h-8 min-h-[32px] max-h-[32px] ${
                       row.status === 'error' ? 'bg-red-50' : 
                       row.status === 'saved' ? 'bg-green-50' : 
                       row.status === 'saving' ? 'bg-yellow-50' : 'bg-white'
@@ -2957,11 +2957,11 @@ export default function SpreadsheetOperations() {
                     </div>
 
                     {/* CAMPO LOTTO - NON MODIFICABILE */}
-                    <div style={{width: '120px'}} className="px-1 py-1 border-r bg-gray-100">
+                    <div style={{width: '120px'}} className="px-1 py-1 border-r bg-gray-100 overflow-hidden">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="w-full h-6 px-1 text-xs text-gray-600 rounded flex items-center gap-1 cursor-help">
+                            <div className="w-full h-6 px-1 text-xs text-gray-600 rounded flex items-center gap-1 cursor-help overflow-hidden whitespace-nowrap">
                               {(() => {
                                 const lot = ((lots as any[]) || []).find((l: any) => l.id === (row.lotId || 1));
                                 // Verifica lotti misti dai dati lotComposition (più affidabile delle note)
@@ -2974,7 +2974,7 @@ export default function SpreadsheetOperations() {
                                         ⚠
                                       </span>
                                     )}
-                                    <span className="truncate">
+                                    <span className="truncate text-ellipsis overflow-hidden">
                                       {lot ? `${lot.id} | ${lot.supplier}` : `L${row.lotId || '1'}`}
                                     </span>
                                   </>
