@@ -608,13 +608,13 @@ export default function Operations() {
   
   const cycles = cyclesData?.cycles || [];
 
-  // Query non essenziali - caricate on-demand con real-time updates
+  // Query lotti - necessaria per il filtro lotti
   const { data: lots = [] } = useQuery({
     queryKey: ['/api/lots'],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    enabled: false, // Caricata solo quando serve
+    refetchOnMount: true,
+    enabled: true, // Necessaria per il filtro
   });
 
   const { data: sizes = [] } = useQuery({
@@ -1484,7 +1484,7 @@ export default function Operations() {
       }
 
       // Filtro per lotto
-      if (filters.lotFilter !== 'all') {
+      if (filters.lotFilter && filters.lotFilter !== 'all') {
         const selectedLotId = parseInt(filters.lotFilter);
         if (op.lotId !== selectedLotId) {
           return false;
