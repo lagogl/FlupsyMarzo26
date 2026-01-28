@@ -8195,6 +8195,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/ddt/:ddtId/pdf", AdvancedSalesController.generateDDTPDF);
   app.post("/api/ddt/:ddtId/send-to-fic", AdvancedSalesController.sendDDTToFIC);
 
+  // Guida operatori PDF
+  const { generateOperatorGuidePDF } = await import('./services/operator-guide-pdf.service');
+  app.get("/api/guides/operator-guide.pdf", async (req, res) => {
+    try {
+      const pdfBuffer = await generateOperatorGuidePDF();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="Guida_Operativa_FLUPSY_2026.pdf"');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Errore generazione guida operatori:', error);
+      res.status(500).json({ error: 'Errore nella generazione del PDF' });
+    }
+  });
+
   // Route per eliminare tutti i dati relativi ai lotti
   app.post("/api/reset-lots", async (req, res) => {
     try {
