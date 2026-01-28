@@ -523,6 +523,7 @@ export default function Operations() {
     dateFilter: '',
     flupsyFilter: 'all',
     cycleFilter: 'all',
+    lotFilter: 'all',
     cycleStateFilter: 'active', // Ripristinato - mostra solo cicli attivi
     viewMode: 'cycles' as 'table' | 'cycles'
   });
@@ -538,6 +539,7 @@ export default function Operations() {
   const setDateFilter = (value: string) => setFilters(prev => ({ ...prev, dateFilter: value }));
   const setFlupsyFilter = (value: string) => setFilters(prev => ({ ...prev, flupsyFilter: value }));
   const setCycleFilter = (value: string) => setFilters(prev => ({ ...prev, cycleFilter: value }));
+  const setLotFilter = (value: string) => setFilters(prev => ({ ...prev, lotFilter: value }));
   const setCycleStateFilter = (value: string) => setFilters(prev => ({ ...prev, cycleStateFilter: value }));
   const setViewMode = (value: 'table' | 'cycles') => setFilters(prev => ({ ...prev, viewMode: value }));
   
@@ -1481,6 +1483,14 @@ export default function Operations() {
         // Se il ciclo non è trovato, passa comunque (non escludere)
       }
 
+      // Filtro per lotto
+      if (filters.lotFilter !== 'all') {
+        const selectedLotId = parseInt(filters.lotFilter);
+        if (op.lotId !== selectedLotId) {
+          return false;
+        }
+      }
+
       return true;
     });
     
@@ -1493,12 +1503,13 @@ export default function Operations() {
         typeFilter: filters.typeFilter, 
         flupsyFilter: filters.flupsyFilter, 
         cycleFilter: filters.cycleFilter, 
-        cycleStateFilter: filters.cycleStateFilter 
+        cycleStateFilter: filters.cycleStateFilter,
+        lotFilter: filters.lotFilter
       });
     }
     return sorted;
     
-  }, [operations, cycles, baskets, lots, sizes, flupsys, filters.searchTerm, filters.typeFilter, filters.dateFilter, filters.flupsyFilter, filters.cycleFilter, filters.cycleStateFilter, sortConfig]);
+  }, [operations, cycles, baskets, lots, sizes, flupsys, filters.searchTerm, filters.typeFilter, filters.dateFilter, filters.flupsyFilter, filters.cycleFilter, filters.cycleStateFilter, filters.lotFilter, sortConfig]);
   
   // Get filtered cycles based on selected filters
   const filteredCycleIds = useMemo(() => {
@@ -2156,6 +2167,21 @@ export default function Operations() {
                       </SelectItem>
                     );
                   })}
+                </SelectContent>
+              </Select>
+              
+              {/* Filtro per Lotto */}
+              <Select value={filters.lotFilter || 'all'} onValueChange={setLotFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filtra per Lotto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti i Lotti</SelectItem>
+                  {lots?.map((lot: any) => (
+                    <SelectItem key={lot.id} value={lot.id.toString()}>
+                      Lotto #{lot.id} - {lot.supplier}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               
