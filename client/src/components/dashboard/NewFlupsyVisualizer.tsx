@@ -380,7 +380,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   <div className="font-bold text-sm text-center mt-1">
                     {latestOperation.animalsPerKg && getSizeCodeFromAnimalsPerKg(latestOperation.animalsPerKg)}
                     {hasExpectedChange && (
-                      <span className="text-orange-600 ml-1">
+                      <span className="text-blue-600 ml-1">
                         → {expectedSizeInfo?.expectedSize}
                       </span>
                     )}

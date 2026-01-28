@@ -954,7 +954,7 @@ export default function Baskets() {
                               <span className="text-gray-400 text-xs">N/D</span>
                             )}
                             {expectedInfo && (
-                              <span className="text-orange-600 text-xs font-medium">
+                              <span className="text-blue-600 text-xs font-medium">
                                 → {expectedInfo.expectedSize}
                               </span>
                             )}

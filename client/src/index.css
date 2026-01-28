@@ -101,10 +101,10 @@
 /* Animazione blink per taglie attese diverse */
 @keyframes expected-size-blink {
   0%, 100% {
-    box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.9);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.9);
   }
   50% {
-    box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.2);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
   }
 }
 
