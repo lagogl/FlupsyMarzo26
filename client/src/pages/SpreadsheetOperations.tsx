@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
+import ExcelJS from 'exceljs';
 import "../styles/spreadsheet.css";
 
 interface BasketData {
@@ -1735,6 +1736,164 @@ export default function SpreadsheetOperations() {
     });
   };
 
+  // Esporta la tabella in Excel con formattazione professionale
+  const exportToExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'FLUPSY Management System';
+      workbook.created = new Date();
+      
+      const worksheet = workbook.addWorksheet('Spreadsheet Operazioni', {
+        views: [{ state: 'frozen', xSplit: 1, ySplit: 1 }]
+      });
+
+      // Prepara i dati filtrati e ordinati (stessa logica della visualizzazione)
+      const filteredRows = operationRows
+        .filter((row) => {
+          if (selectedSizeFilter === "all") return true;
+          const sizesArray = Array.isArray(sizes) ? sizes : [];
+          const selectedSize = sizesArray.find((s: any) => s.id === parseInt(selectedSizeFilter));
+          if (!selectedSize) return true;
+          return row.currentSize === selectedSize.code;
+        })
+        .sort((a, b) => {
+          if (sortColumn === 'size') {
+            const getSizeNum = (size: string | undefined) => {
+              if (!size || !size.startsWith('TP-')) return 999999;
+              return parseInt(size.substring(3)) || 999999;
+            };
+            const numA = getSizeNum(a.currentSize);
+            const numB = getSizeNum(b.currentSize);
+            return sortDirection === 'asc' ? numA - numB : numB - numA;
+          }
+          return sortDirection === 'asc' 
+            ? a.physicalNumber - b.physicalNumber 
+            : b.physicalNumber - a.physicalNumber;
+        });
+
+      // Definisci le colonne
+      const columns = [
+        { header: 'Cesta', key: 'cesta', width: 10 },
+        { header: 'FLUPSY', key: 'flupsy', width: 15 },
+        { header: 'Taglia', key: 'taglia', width: 12 },
+        { header: 'P.Med(mg)', key: 'pesoMedio', width: 12 },
+        { header: 'Ult.Op', key: 'ultOp', width: 12 },
+        { header: 'Lotto', key: 'lotto', width: 18 },
+        { header: 'Animali', key: 'animali', width: 12 },
+        { header: 'Peso Tot (g)', key: 'pesoTot', width: 14 },
+        { header: 'Anim/kg', key: 'animKg', width: 12 },
+        { header: 'P.Camp', key: 'pesoCampione', width: 10 },
+        { header: 'Vivi', key: 'vivi', width: 8 },
+        { header: 'Morti', key: 'morti', width: 8 },
+        { header: 'Tot.Camp.', key: 'totCampione', width: 10 },
+        { header: 'Mortalità%', key: 'mortalita', width: 12 },
+        { header: 'Note', key: 'note', width: 30 }
+      ];
+
+      worksheet.columns = columns;
+
+      // Stile header - sfondo blu scuro con testo bianco
+      const headerRow = worksheet.getRow(1);
+      headerRow.height = 22;
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1E3A5F' }
+        };
+        cell.font = {
+          bold: true,
+          color: { argb: 'FFFFFFFF' },
+          size: 11
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+      });
+
+      // Aggiungi i dati
+      filteredRows.forEach((row, index) => {
+        const lot = ((lots as any[]) || []).find((l: any) => l.id === (row.lotId || 1));
+        const lotDisplay = lot ? `${lot.id} | ${lot.supplier}` : `L${row.lotId || '1'}`;
+        
+        const dataRow = worksheet.addRow({
+          cesta: `#${row.physicalNumber}`,
+          flupsy: row.flupsyName || '-',
+          taglia: row.currentSize || '-',
+          pesoMedio: row.averageWeight ? Math.round(row.averageWeight * 100) / 100 : '-',
+          ultOp: row.lastOperationDate ? new Date(row.lastOperationDate).toLocaleDateString('it-IT', {month: '2-digit', day: '2-digit'}) : '-',
+          lotto: lotDisplay,
+          animali: row.animalCount ? row.animalCount.toLocaleString('it-IT') : '-',
+          pesoTot: row.totalWeight ? row.totalWeight.toLocaleString('it-IT') : '-',
+          animKg: row.animalsPerKg ? row.animalsPerKg.toLocaleString('it-IT') : '-',
+          pesoCampione: row.sampleWeight || '-',
+          vivi: row.liveAnimals || '-',
+          morti: row.deadCount || '-',
+          totCampione: row.totalSample || '-',
+          mortalita: row.mortalityRate ? `${(row.mortalityRate * 100).toFixed(2)}%` : '-',
+          note: row.notes || ''
+        });
+
+        // Righe alternate con sfondo grigio chiaro
+        if (index % 2 === 1) {
+          dataRow.eachCell((cell) => {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF5F5F5' }
+            };
+          });
+        }
+
+        // Bordi e allineamento per tutte le celle
+        dataRow.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+          };
+          cell.alignment = { vertical: 'middle' };
+        });
+      });
+
+      // Abilita AutoFilter per tutte le colonne
+      worksheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: filteredRows.length + 1, column: columns.length }
+      };
+
+      // Genera e scarica il file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const flupsyName = selectedFlupsyId === "all" 
+        ? "TUTTI" 
+        : ((flupsys as any[]) || []).find((f: any) => f.id === parseInt(selectedFlupsyId))?.name || 'FLUPSY';
+      a.download = `Spreadsheet_${flupsyName}_${operationDate}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export completato",
+        description: `Esportate ${filteredRows.length} righe in Excel`,
+      });
+    } catch (error) {
+      console.error('Errore export Excel:', error);
+      toast({
+        title: "Errore export",
+        description: "Si è verificato un errore durante l'esportazione",
+        variant: "destructive"
+      });
+    }
+  };
+
   // Salva SOLO le nuove operazioni create nella sessione corrente (esclude righe originali)
   const saveAllRows = async () => {
     console.log('🔄 Spreadsheet: Inizio salvataggio SOLO nuove operazioni della sessione');
@@ -1862,8 +2021,8 @@ export default function SpreadsheetOperations() {
     setPredictionSummary(summary);
   };
 
-  // Esporta dati in Excel
-  const exportToExcel = () => {
+  // Esporta previsioni in CSV
+  const exportPredictionsToCSV = () => {
     if (!predictionSummary) return;
 
     const data = [
@@ -2044,6 +2203,14 @@ export default function SpreadsheetOperations() {
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={exportToExcel}
+              className="h-8 px-3 text-xs bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-1 transition-colors"
+              title="Esporta i dati visibili in Excel"
+            >
+              <Download className="h-3 w-3" />
+              Esporta Excel
+            </button>
             <button
               onClick={saveAllRows}
               className="h-8 px-3 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1 transition-colors"
@@ -3511,10 +3678,10 @@ export default function SpreadsheetOperations() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={exportToExcel}
+                  onClick={exportPredictionsToCSV}
                   className="px-3 py-1 bg-green-500 hover:bg-green-600 rounded text-sm font-medium transition-colors"
                 >
-                  📄 Esporta Excel
+                  📄 Esporta CSV
                 </button>
                 <button
                   onClick={() => setShowPredictionPopup(false)}
