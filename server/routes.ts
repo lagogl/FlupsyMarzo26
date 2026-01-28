@@ -6608,6 +6608,316 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', dbManagementModule.databaseManagementRoutes);
   console.log('✅ Modulo DATABASE MANAGEMENT registrato su /api/export/giacenze, /api/database/backup, /api/database/backups, /api/database/restore');
   
+  // ========================================
+  // REPORT ANALISI OPERAZIONI PESO (Gennaio 2026)
+  // Genera Excel con analisi comparativa operazioni
+  // ========================================
+  app.get("/api/export/analisi-operazioni-peso", async (req, res) => {
+    console.log("📊 EXPORT ANALISI OPERAZIONI PESO - Generazione report...");
+    
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.default.Workbook();
+      
+      // Recupera tutti i dati necessari
+      const allOperations = await db
+        .select({
+          id: operations.id,
+          date: operations.date,
+          type: operations.type,
+          basketId: operations.basketId,
+          cycleId: operations.cycleId,
+          sizeId: operations.sizeId,
+          lotId: operations.lotId,
+          animalCount: operations.animalCount,
+          totalWeight: operations.totalWeight,
+          animalsPerKg: operations.animalsPerKg,
+          averageWeight: operations.averageWeight,
+          deadCount: operations.deadCount,
+          mortalityRate: operations.mortalityRate,
+          notes: operations.notes
+        })
+        .from(operations)
+        .orderBy(operations.basketId, desc(operations.date));
+      
+      const allBaskets = await db
+        .select({
+          id: baskets.id,
+          physicalNumber: baskets.physicalNumber,
+          flupsyId: baskets.flupsyId,
+          cycleCode: baskets.cycleCode,
+          state: baskets.state,
+          currentCycleId: baskets.currentCycleId
+        })
+        .from(baskets);
+      
+      const allFlupsys = await db.select().from(flupsys);
+      const allSizes = await db.select().from(sizes);
+      const allLots = await db.select().from(lots);
+      
+      // Funzione per determinare taglia da animali/kg
+      const getSizeCodeFromAnimalsPerKg = (animalsPerKg: number): string => {
+        const matchingSize = allSizes.find((size: any) => {
+          const min = size.minAnimalsPerKg || 0;
+          const max = size.maxAnimalsPerKg || Infinity;
+          return animalsPerKg >= min && animalsPerKg <= max;
+        });
+        return matchingSize ? matchingSize.code : `TP-${Math.round(animalsPerKg/1000)*1000}`;
+      };
+      
+      // FOGLIO 1: Tutte le operazioni con dettaglio
+      const sheetOperazioni = workbook.addWorksheet('Tutte le Operazioni');
+      sheetOperazioni.columns = [
+        { header: 'ID Op', key: 'opId', width: 8 },
+        { header: 'Data', key: 'date', width: 12 },
+        { header: 'Tipo', key: 'type', width: 18 },
+        { header: 'ID Cesta', key: 'basketId', width: 10 },
+        { header: 'Nr Fisico', key: 'physicalNumber', width: 10 },
+        { header: 'FLUPSY', key: 'flupsyName', width: 20 },
+        { header: 'Ciclo', key: 'cycleCode', width: 15 },
+        { header: 'Lotto', key: 'lotSupplier', width: 20 },
+        { header: 'Peso Tot (g)', key: 'totalWeight', width: 12 },
+        { header: 'Animali/kg', key: 'animalsPerKg', width: 12 },
+        { header: 'Nr Animali', key: 'animalCount', width: 12 },
+        { header: 'Morti', key: 'deadCount', width: 8 },
+        { header: 'Mortalità %', key: 'mortalityRate', width: 12 },
+        { header: 'Taglia DB', key: 'sizeFromDb', width: 12 },
+        { header: 'Taglia Calc', key: 'sizeCalc', width: 12 },
+        { header: 'Note', key: 'notes', width: 30 }
+      ];
+      
+      // Header style
+      sheetOperazioni.getRow(1).font = { bold: true };
+      sheetOperazioni.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+      sheetOperazioni.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      
+      for (const op of allOperations) {
+        const basket = allBaskets.find(b => b.id === op.basketId);
+        const flupsy = allFlupsys.find(f => f.id === basket?.flupsyId);
+        const size = allSizes.find(s => s.id === op.sizeId);
+        const lot = allLots.find(l => l.id === op.lotId);
+        const calcSize = op.animalsPerKg ? getSizeCodeFromAnimalsPerKg(op.animalsPerKg) : null;
+        
+        const row = sheetOperazioni.addRow({
+          opId: op.id,
+          date: op.date ? new Date(op.date).toLocaleDateString('it-IT') : '',
+          type: op.type,
+          basketId: op.basketId,
+          physicalNumber: basket?.physicalNumber || '',
+          flupsyName: flupsy?.name || '',
+          cycleCode: basket?.cycleCode || '',
+          lotSupplier: lot?.supplier || '',
+          totalWeight: op.totalWeight,
+          animalsPerKg: op.animalsPerKg ? Math.round(op.animalsPerKg) : null,
+          animalCount: op.animalCount,
+          deadCount: op.deadCount,
+          mortalityRate: op.mortalityRate ? parseFloat(String(op.mortalityRate)).toFixed(2) : null,
+          sizeFromDb: size?.code || '',
+          sizeCalc: calcSize || '',
+          notes: op.notes
+        });
+        
+        // Colora le righe delle operazioni peso in giallo
+        if (op.type === 'peso') {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+        }
+      }
+      
+      // FOGLIO 2: Analisi per Cesta - Situazione Attuale vs Nuova Logica
+      const sheetAnalisi = workbook.addWorksheet('Analisi Ceste');
+      sheetAnalisi.columns = [
+        { header: 'ID Cesta', key: 'basketId', width: 10 },
+        { header: 'Nr Fisico', key: 'physicalNumber', width: 10 },
+        { header: 'FLUPSY', key: 'flupsyName', width: 20 },
+        { header: 'Stato', key: 'state', width: 12 },
+        { header: 'Ciclo', key: 'cycleCode', width: 15 },
+        { header: '--- ATTUALE ---', key: 'sep1', width: 2 },
+        { header: 'Taglia Att.', key: 'currentSize', width: 12 },
+        { header: 'Animali/kg Att.', key: 'currentAnimalsPerKg', width: 14 },
+        { header: 'Nr Animali Att.', key: 'currentAnimalCount', width: 14 },
+        { header: 'Ultima Op.', key: 'lastOpType', width: 15 },
+        { header: 'Data Ultima Op.', key: 'lastOpDate', width: 14 },
+        { header: '--- NUOVA LOGICA ---', key: 'sep2', width: 2 },
+        { header: 'Taglia Nuova', key: 'newSize', width: 12 },
+        { header: 'Animali/kg Nuova', key: 'newAnimalsPerKg', width: 14 },
+        { header: 'Nr Animali Nuova', key: 'newAnimalCount', width: 14 },
+        { header: 'Op. Riferim.', key: 'refOpType', width: 15 },
+        { header: 'Data Riferim.', key: 'refOpDate', width: 14 },
+        { header: '--- DIFFERENZE ---', key: 'sep3', width: 2 },
+        { header: 'Diff Animali', key: 'diffAnimals', width: 12 },
+        { header: 'Taglia Cambia?', key: 'sizeChanged', width: 14 },
+        { header: 'Num Op. Peso', key: 'numPesoOps', width: 12 }
+      ];
+      
+      sheetAnalisi.getRow(1).font = { bold: true };
+      sheetAnalisi.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+      sheetAnalisi.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      
+      for (const basket of allBaskets) {
+        const flupsy = allFlupsys.find(f => f.id === basket.flupsyId);
+        const basketOps = allOperations
+          .filter(op => op.basketId === basket.id)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        if (basketOps.length === 0) continue;
+        
+        // SITUAZIONE ATTUALE: ultima operazione con animalsPerKg
+        const lastOpWithAnimals = basketOps.find(op => op.animalsPerKg && op.animalsPerKg > 0);
+        const currentAnimalsPerKg = lastOpWithAnimals?.animalsPerKg || null;
+        const currentSize = currentAnimalsPerKg ? getSizeCodeFromAnimalsPerKg(currentAnimalsPerKg) : null;
+        const currentAnimalCount = lastOpWithAnimals?.animalCount || null;
+        
+        // NUOVA LOGICA: solo misura e prima-attivazione determinano taglia
+        const lastMeasurementOp = basketOps.find(op => 
+          (op.type === 'misura' || op.type === 'prima-attivazione') && 
+          op.animalsPerKg && op.animalsPerKg > 0
+        );
+        const newAnimalsPerKg = lastMeasurementOp?.animalsPerKg || null;
+        const newSize = newAnimalsPerKg ? getSizeCodeFromAnimalsPerKg(newAnimalsPerKg) : null;
+        const newAnimalCount = lastMeasurementOp?.animalCount || null;
+        
+        // Conta operazioni peso
+        const numPesoOps = basketOps.filter(op => op.type === 'peso').length;
+        
+        // Calcola differenze
+        const diffAnimals = (currentAnimalCount && newAnimalCount) ? currentAnimalCount - newAnimalCount : null;
+        const sizeChanged = currentSize !== newSize;
+        
+        const row = sheetAnalisi.addRow({
+          basketId: basket.id,
+          physicalNumber: basket.physicalNumber,
+          flupsyName: flupsy?.name || '',
+          state: basket.state,
+          cycleCode: basket.cycleCode || '',
+          sep1: '',
+          currentSize: currentSize || 'N/D',
+          currentAnimalsPerKg: currentAnimalsPerKg ? Math.round(currentAnimalsPerKg) : null,
+          currentAnimalCount: currentAnimalCount,
+          lastOpType: lastOpWithAnimals?.type || '',
+          lastOpDate: lastOpWithAnimals?.date ? new Date(lastOpWithAnimals.date).toLocaleDateString('it-IT') : '',
+          sep2: '',
+          newSize: newSize || 'N/D',
+          newAnimalsPerKg: newAnimalsPerKg ? Math.round(newAnimalsPerKg) : null,
+          newAnimalCount: newAnimalCount,
+          refOpType: lastMeasurementOp?.type || '',
+          refOpDate: lastMeasurementOp?.date ? new Date(lastMeasurementOp.date).toLocaleDateString('it-IT') : '',
+          sep3: '',
+          diffAnimals: diffAnimals,
+          sizeChanged: sizeChanged ? 'SI' : 'NO',
+          numPesoOps: numPesoOps
+        });
+        
+        // Evidenzia righe con differenze
+        if (sizeChanged) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4D6' } }; // arancione chiaro
+        }
+      }
+      
+      // FOGLIO 3: Solo operazioni PESO
+      const sheetPeso = workbook.addWorksheet('Operazioni Peso');
+      sheetPeso.columns = [
+        { header: 'ID Op', key: 'opId', width: 8 },
+        { header: 'Data', key: 'date', width: 12 },
+        { header: 'ID Cesta', key: 'basketId', width: 10 },
+        { header: 'Nr Fisico', key: 'physicalNumber', width: 10 },
+        { header: 'FLUPSY', key: 'flupsyName', width: 20 },
+        { header: 'Peso Tot (g)', key: 'totalWeight', width: 12 },
+        { header: 'Animali/kg', key: 'animalsPerKg', width: 12 },
+        { header: 'Nr Animali', key: 'animalCount', width: 12 },
+        { header: 'Morti', key: 'deadCount', width: 8 },
+        { header: 'Mortalità %', key: 'mortalityRate', width: 12 },
+        { header: 'Taglia Registrata', key: 'sizeFromDb', width: 15 },
+        { header: 'Note', key: 'notes', width: 30 }
+      ];
+      
+      sheetPeso.getRow(1).font = { bold: true };
+      sheetPeso.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+      
+      const pesoOps = allOperations.filter(op => op.type === 'peso');
+      for (const op of pesoOps) {
+        const basket = allBaskets.find(b => b.id === op.basketId);
+        const flupsy = allFlupsys.find(f => f.id === basket?.flupsyId);
+        const size = allSizes.find(s => s.id === op.sizeId);
+        
+        sheetPeso.addRow({
+          opId: op.id,
+          date: op.date ? new Date(op.date).toLocaleDateString('it-IT') : '',
+          basketId: op.basketId,
+          physicalNumber: basket?.physicalNumber || '',
+          flupsyName: flupsy?.name || '',
+          totalWeight: op.totalWeight,
+          animalsPerKg: op.animalsPerKg ? Math.round(op.animalsPerKg) : null,
+          animalCount: op.animalCount,
+          deadCount: op.deadCount,
+          mortalityRate: op.mortalityRate ? parseFloat(String(op.mortalityRate)).toFixed(2) : null,
+          sizeFromDb: size?.code || '',
+          notes: op.notes
+        });
+      }
+      
+      // FOGLIO 4: Riepilogo statistiche
+      const sheetRiepilogo = workbook.addWorksheet('Riepilogo');
+      sheetRiepilogo.columns = [
+        { header: 'Descrizione', key: 'desc', width: 50 },
+        { header: 'Valore', key: 'value', width: 15 }
+      ];
+      
+      sheetRiepilogo.getRow(1).font = { bold: true };
+      sheetRiepilogo.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+      sheetRiepilogo.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      
+      const totalOps = allOperations.length;
+      const totalPesoOps = pesoOps.length;
+      const totalMisuraOps = allOperations.filter(op => op.type === 'misura').length;
+      const totalPrimaAttOps = allOperations.filter(op => op.type === 'prima-attivazione').length;
+      
+      // Conta ceste con differenze
+      let cesteDifferenti = 0;
+      for (const basket of allBaskets) {
+        const basketOps = allOperations.filter(op => op.basketId === basket.id);
+        const lastOpWithAnimals = basketOps.find(op => op.animalsPerKg && op.animalsPerKg > 0);
+        const lastMeasurementOp = basketOps.find(op => 
+          (op.type === 'misura' || op.type === 'prima-attivazione') && op.animalsPerKg && op.animalsPerKg > 0
+        );
+        if (lastOpWithAnimals && lastMeasurementOp) {
+          const current = getSizeCodeFromAnimalsPerKg(lastOpWithAnimals.animalsPerKg!);
+          const newCalc = getSizeCodeFromAnimalsPerKg(lastMeasurementOp.animalsPerKg!);
+          if (current !== newCalc) cesteDifferenti++;
+        }
+      }
+      
+      sheetRiepilogo.addRow({ desc: 'Data generazione report', value: new Date().toLocaleString('it-IT') });
+      sheetRiepilogo.addRow({ desc: '', value: '' });
+      sheetRiepilogo.addRow({ desc: 'TOTALE OPERAZIONI', value: totalOps });
+      sheetRiepilogo.addRow({ desc: '- Operazioni Prima Attivazione', value: totalPrimaAttOps });
+      sheetRiepilogo.addRow({ desc: '- Operazioni Misura', value: totalMisuraOps });
+      sheetRiepilogo.addRow({ desc: '- Operazioni Peso (DEPRECATE)', value: totalPesoOps });
+      sheetRiepilogo.addRow({ desc: '', value: '' });
+      sheetRiepilogo.addRow({ desc: 'CESTE CON TAGLIA DIVERSA (attuale vs nuova logica)', value: cesteDifferenti });
+      sheetRiepilogo.addRow({ desc: '', value: '' });
+      sheetRiepilogo.addRow({ desc: 'NOTE:', value: '' });
+      sheetRiepilogo.addRow({ desc: 'La nuova logica considera solo operazioni "misura" e "prima-attivazione" per determinare la taglia.', value: '' });
+      sheetRiepilogo.addRow({ desc: 'Le operazioni "peso" non modificano più la taglia (deprecate dal Gennaio 2026).', value: '' });
+      
+      // Genera file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const filename = `analisi_operazioni_peso_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(buffer);
+      
+      console.log(`📊 EXPORT ANALISI OPERAZIONI PESO - Report generato: ${filename}`);
+      
+    } catch (error) {
+      console.error("❌ Errore generazione report analisi operazioni peso:", error);
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Errore sconosciuto' 
+      });
+    }
+  });
+  console.log('✅ Endpoint ANALISI OPERAZIONI PESO registrato su /api/export/analisi-operazioni-peso');
   
   // Scarica un backup
   // Endpoint proxy per i dati delle maree di Venezia (livello attuale)
