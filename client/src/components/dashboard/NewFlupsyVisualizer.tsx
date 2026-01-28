@@ -146,15 +146,18 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
   
   // Helper function to check if a basket has a large size (TP-3000 or higher = sellable)
+  // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per allineamento con expected-sizes
   const hasLargeSize = (basket: any): boolean => {
     if (!basket || basket.state !== 'active') return false;
     
     const latestOperation = getLatestOperation(basket.id);
-    if (!latestOperation?.animalsPerKg) return false;
+    // Usa measurementAnimalsPerKg (da misura/prima-attivazione) con fallback su animalsPerKg
+    const animalsPerKg = latestOperation?.measurementAnimalsPerKg || latestOperation?.animalsPerKg;
+    if (!animalsPerKg) return false;
     
     // SOGLIA VENDITA: TP-3000 = max 29000 animali/kg
     // animalsPerKg <= 29000 significa taglia vendibile (animali grandi)
-    return latestOperation.animalsPerKg <= 29000;
+    return animalsPerKg <= 29000;
   };
   
   // Helper function to get size code from the sizes table based on animalsPerKg
@@ -198,8 +201,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       return 'bg-blue-50 border-blue-300';
     }
     
-    // Check if we have a valid animalsPerKg value
-    const animalsPerKg = latestOperation.animalsPerKg;
+    // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per allineamento con expected-sizes
+    const animalsPerKg = latestOperation.measurementAnimalsPerKg || latestOperation.animalsPerKg;
     if (!animalsPerKg) {
       return 'bg-blue-50 border-blue-300';
     }
@@ -309,8 +312,11 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     // Get the latest operation for tooltip info
     const latestOperation = getLatestOperation(basket.id);
     
+    // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per taglia
+    const measurementAnimalsPerKg = latestOperation?.measurementAnimalsPerKg || latestOperation?.animalsPerKg;
+    
     // Check if this basket has a sellable size (TP-3000+)
-    const isSellableSize = latestOperation?.animalsPerKg && latestOperation.animalsPerKg <= 29000;
+    const isSellableSize = measurementAnimalsPerKg && measurementAnimalsPerKg <= 29000;
     
     // Check if basket has expected size change
     const expectedSizeInfo = getExpectedSizeInfo(basket.id);
@@ -376,9 +382,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               
               {latestOperation && (
                 <>
-                  {/* Taglia registrata + taglia attesa se diversa */}
+                  {/* Taglia registrata + taglia attesa se diversa - usa measurementAnimalsPerKg */}
                   <div className="font-bold text-sm text-center mt-1">
-                    {latestOperation.animalsPerKg && getSizeCodeFromAnimalsPerKg(latestOperation.animalsPerKg)}
+                    {measurementAnimalsPerKg && getSizeCodeFromAnimalsPerKg(measurementAnimalsPerKg)}
                     {hasExpectedChange && (
                       <span className="text-blue-600 ml-1">
                         → {expectedSizeInfo?.expectedSize}
@@ -445,15 +451,15 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 <div className="flex justify-between">
                   <span className="font-medium">Taglia:</span>
                   <span className="font-semibold">
-                    {latestOperation.animalsPerKg ? 
-                      getSizeCodeFromAnimalsPerKg(latestOperation.animalsPerKg) : 'N/D'}
+                    {measurementAnimalsPerKg ? 
+                      getSizeCodeFromAnimalsPerKg(measurementAnimalsPerKg) : 'N/D'}
                   </span>
                 </div>
                 
-                {latestOperation.animalsPerKg && (
+                {measurementAnimalsPerKg && (
                   <div className="flex justify-between">
                     <span className="font-medium">Densità:</span>
-                    <span>{latestOperation.animalsPerKg.toLocaleString('it-IT')} animali/kg</span>
+                    <span>{measurementAnimalsPerKg.toLocaleString('it-IT')} animali/kg</span>
                   </div>
                 )}
                 

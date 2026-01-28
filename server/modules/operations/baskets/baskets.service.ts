@@ -619,6 +619,7 @@ export class BasketsService {
     
     // Query ottimizzata con window function per ottenere l'ultima operazione per ogni cesta
     // Include anche l'ultima operazione con mortalità > 0
+    // IMPORTANTE: include measurementAnimalsPerKg da operazioni misura/prima-attivazione per allineamento con expected-sizes
     const result = await db.execute(sql`
       WITH ranked_operations AS (
         SELECT 
@@ -630,6 +631,23 @@ export class BasketsService {
         FROM operations o
         INNER JOIN baskets b ON o.basket_id = b.id
         WHERE b.current_cycle_id IS NOT NULL
+      ),
+      last_measurement AS (
+        SELECT 
+          o.basket_id,
+          o.animals_per_kg as measurement_animals_per_kg,
+          o.date as measurement_date,
+          o.type as measurement_type,
+          ROW_NUMBER() OVER (
+            PARTITION BY o.basket_id 
+            ORDER BY o.date DESC, o.id DESC
+          ) as rn
+        FROM operations o
+        INNER JOIN baskets b ON o.basket_id = b.id
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.type IN ('misura', 'prima-attivazione')
+          AND o.animals_per_kg IS NOT NULL
+          AND o.animals_per_kg > 0
       ),
       last_mortality AS (
         SELECT 
@@ -667,11 +685,15 @@ export class BasketsService {
         ro.lot_id as "lotId",
         ro.size_id as "sizeId",
         ro.notes,
+        lmeas.measurement_animals_per_kg as "measurementAnimalsPerKg",
+        lmeas.measurement_date as "measurementDate",
+        lmeas.measurement_type as "measurementType",
         lm.dead_count as "lastMortalityCount",
         lm.calculated_mortality_rate as "lastMortalityRate",
         lm.mortality_date as "lastMortalityDate",
         lm.mortality_op_type as "lastMortalityOpType"
       FROM ranked_operations ro
+      LEFT JOIN last_measurement lmeas ON ro.basket_id = lmeas.basket_id AND lmeas.rn = 1
       LEFT JOIN last_mortality lm ON ro.basket_id = lm.basket_id AND lm.rn = 1
       WHERE ro.rn = 1
       ORDER BY ro.basket_id
@@ -695,6 +717,10 @@ export class BasketsService {
         lotId: row.lotId,
         sizeId: row.sizeId,
         notes: row.notes,
+        // Campi da ultima operazione misura/prima-attivazione (allineati a expected-sizes)
+        measurementAnimalsPerKg: row.measurementAnimalsPerKg,
+        measurementDate: row.measurementDate,
+        measurementType: row.measurementType,
         lastMortalityCount: row.lastMortalityCount,
         lastMortalityRate: row.lastMortalityRate ? parseFloat(row.lastMortalityRate) : null,
         lastMortalityDate: row.lastMortalityDate,
