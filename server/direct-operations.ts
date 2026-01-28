@@ -852,11 +852,13 @@ export function implementDirectOperationRoute(app: Express) {
           }
         }
         
-        // 5. CALCOLO AUTOMATICO TAGLIA PER OPERAZIONI PESO (prima dell'inserimento)
-        // NUOVA LOGICA: Se mortalità cumulativa >= 5%, NON modificare la taglia (eredita ultima misura)
+        // 5. CALCOLO AUTOMATICO TAGLIA PER OPERAZIONI PESO (DISABILITATO - Gennaio 2026)
+        // La taglia viene ORA copiata dall'ultima operazione all'inizio del metodo (linee 136-182)
+        // NON ricalcolare per evitare sovrascrittura dei valori copiati
         let pesoTagliaMessage: string | null = null;
         
-        if (operationData.type === 'peso' && operationData.totalWeight && operationData.animalCount && operationData.animalCount > 0) {
+        // SKIP: Per peso i dati (sizeId, animalsPerKg, averageWeight) sono già stati copiati all'inizio
+        if (false && operationData.type === 'peso' && operationData.totalWeight && operationData.animalCount && operationData.animalCount > 0) {
           const effectiveCycleId = operationData.cycleId || basket.currentCycleId;
           let cumulativeMortalityRate = 0;
           let shouldCalculateSize = true;
