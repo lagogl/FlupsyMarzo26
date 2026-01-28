@@ -249,11 +249,10 @@ export default function OperationForm({
       let availableOperations = [];
       
       if (hasCycle) {
-        // Cestello con ciclo attivo
+        // Cestello con ciclo attivo (peso deprecato Gennaio 2026)
         availableOperations = [
           { value: 'pulizia', label: 'Pulizia' },
           { value: 'misura', label: 'Misura' },
-          { value: 'peso', label: 'Peso' },
           { value: 'vagliatura', label: 'Vagliatura' },
           { value: 'trattamento', label: 'Trattamento' },
           { value: 'vendita', label: 'Vendita' },

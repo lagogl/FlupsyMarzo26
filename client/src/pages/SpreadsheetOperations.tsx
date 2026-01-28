@@ -60,10 +60,9 @@ interface OperationRowData {
   flupsyName?: string;
 }
 
-// Tipi operazione per il modulo Spreadsheet (SOLO Misura e Peso)
+// Tipi operazione per il modulo Spreadsheet (SOLO Misura - peso deprecato Gennaio 2026)
 const operationTypeOptions = [
-  { value: 'misura', label: 'Misura', color: 'blue', icon: '📏' },
-  { value: 'peso', label: 'Peso', color: 'green', icon: '⚖️' }
+  { value: 'misura', label: 'Misura', color: 'blue', icon: '📏' }
 ];
 
 export default function SpreadsheetOperations() {
@@ -134,7 +133,7 @@ export default function SpreadsheetOperations() {
   };
   
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
-  const [selectedOperationType, setSelectedOperationType] = useState<string>('peso');
+  const [selectedOperationType, setSelectedOperationType] = useState<string>('misura');
   const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0]);
   const [operationRows, setOperationRows] = useState<OperationRowData[]>([]);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);

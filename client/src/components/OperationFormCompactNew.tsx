@@ -133,11 +133,10 @@ export default function OperationFormCompact({
     }
   }, [selectedBasket, watchType, form]);
 
-  // Tipi di operazione filtrati
+  // Tipi di operazione filtrati (peso deprecato Gennaio 2026)
   const operationTypes = [
     { value: 'prima-attivazione', label: 'Prima Attivazione' },
     { value: 'misura', label: 'Misurazione' },
-    { value: 'peso', label: 'Peso' },
     { value: 'trasferimento', label: 'Trasferimento' },
     { value: 'pulizia', label: 'Pulizia' },
     { value: 'vendita', label: 'Vendita' },

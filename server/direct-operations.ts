@@ -130,6 +130,16 @@ export function implementDirectOperationRoute(app: Express) {
         throw new Error("Il tipo di operazione è obbligatorio");
       }
       
+      // BLOCCO OPERAZIONI "PESO" - Deprecate dal Gennaio 2026
+      if (operationData.type === 'peso') {
+        console.log("⛔ OPERAZIONE PESO BLOCCATA - Tipo non più attivo");
+        return res.status(400).json({
+          success: false,
+          error: "La causale 'Peso' non è più attiva. Utilizzare 'Misura' per registrare peso e taglia, oppure 'Pulizia' per operazioni di manutenzione.",
+          code: "PESO_OPERATION_DEPRECATED"
+        });
+      }
+      
       if (!operationData.basketId) {
         throw new Error("L'ID del cestello è obbligatorio");
       }

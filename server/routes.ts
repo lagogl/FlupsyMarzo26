@@ -2399,6 +2399,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("===== INIZIO ENDPOINT POST /api/operations =====");
       console.log("POST /api/operations - Request Body:", JSON.stringify(req.body, null, 2));
 
+      // BLOCCO OPERAZIONI "PESO" - Deprecate dal Gennaio 2026
+      if (req.body.type === 'peso') {
+        clearTimeout(timeoutId);
+        console.log("⛔ OPERAZIONE PESO BLOCCATA - Tipo non più attivo");
+        return res.status(400).json({
+          success: false,
+          message: "La causale 'Peso' non è più attiva. Utilizzare 'Misura' per registrare peso e taglia, oppure 'Pulizia' per operazioni di manutenzione.",
+          code: "PESO_OPERATION_DEPRECATED"
+        });
+      }
+
       // Prima verifica se si tratta di un'operazione prima-attivazione che non richiede un cycleId
       if (req.body.type === 'prima-attivazione') {
         console.log("Elaborazione prima-attivazione");

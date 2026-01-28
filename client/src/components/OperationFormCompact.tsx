@@ -558,7 +558,6 @@ export default function OperationFormCompact({
       console.log('✅ Cestello con ciclo attivo - mostro operazioni normali');
       return [
         { value: 'misura', label: 'Misura' },
-        { value: 'peso', label: 'Peso' },
         { value: 'vendita', label: 'Vendita' }
       ];
     } else {
@@ -567,7 +566,6 @@ export default function OperationFormCompact({
       return [
         { value: 'prima-attivazione', label: 'Prima Attivazione' },
         { value: 'misura', label: 'Misura' },
-        { value: 'peso', label: 'Peso' },
         { value: 'vendita', label: 'Vendita' }
       ];
     }

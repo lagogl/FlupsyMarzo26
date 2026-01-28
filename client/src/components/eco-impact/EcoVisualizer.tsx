@@ -654,7 +654,6 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
                               <SelectItem value="vagliatura">Vagliatura</SelectItem>
                               <SelectItem value="trattamento">Trattamento</SelectItem>
                               <SelectItem value="misura">Misura</SelectItem>
-                              <SelectItem value="peso">Peso</SelectItem>
                               <SelectItem value="vendita">Vendita</SelectItem>
                               <SelectItem value="selezione-vendita">Selezione Vendita</SelectItem>
                               <SelectItem value="cessazione">Cessazione</SelectItem>
