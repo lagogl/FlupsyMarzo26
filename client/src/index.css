@@ -98,7 +98,7 @@
   }
 }
 
-/* Animazione blink per taglie attese diverse */
+/* Animazione blink per taglie attese diverse - contorno (usata in dashboard) */
 @keyframes expected-size-blink {
   0%, 100% {
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.9);
@@ -108,8 +108,21 @@
   }
 }
 
+/* Animazione blink per taglie attese diverse - sfondo cella (usata in tabella ceste) */
+@keyframes expected-size-blink-bg {
+  0%, 100% {
+    background-color: rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+}
+
 @layer utilities {
   .animate-expected-size-blink {
     animation: expected-size-blink 1.5s ease-in-out infinite;
+  }
+  .animate-expected-size-blink-bg {
+    animation: expected-size-blink-bg 1.5s ease-in-out infinite;
   }
 }

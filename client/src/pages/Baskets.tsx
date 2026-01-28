@@ -937,11 +937,11 @@ export default function Baskets() {
                     const expectedInfo = hasExpectedChange ? getExpectedSizeInfo(basket.id) : null;
 
                     return (
-                      <tr key={basket.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} ${hasExpectedChange ? 'animate-expected-size-blink' : ''}`}>
-                        <td className="px-2 py-2 text-sm font-semibold text-gray-900">
+                      <tr key={basket.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                        <td className={`px-2 py-2 text-sm font-semibold text-gray-900 ${hasExpectedChange ? 'animate-expected-size-blink-bg' : ''}`}>
                           #{basket.physicalNumber}
                         </td>
-                        <td className="px-2 py-2 text-sm text-gray-700">
+                        <td className={`px-2 py-2 text-sm text-gray-700 ${hasExpectedChange ? 'animate-expected-size-blink-bg' : ''}`}>
                           <span className="font-medium">{basket.flupsyName || `FLUPSY #${basket.flupsyId}`}</span>
                         </td>
                         <td className="px-2 py-2 text-sm text-gray-600">
