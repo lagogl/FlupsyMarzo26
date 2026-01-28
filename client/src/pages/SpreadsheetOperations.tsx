@@ -2400,7 +2400,26 @@ export default function SpreadsheetOperations() {
               <div className="min-w-[1200px]">
                 {/* Header tabella compatto con larghezze esatte per allineamento perfetto */}
                 <div className="flex border-b bg-gray-100 text-xs font-medium text-gray-700 sticky top-0 z-10" style={{fontSize: '10px'}}>
-                  <div style={{width: '70px'}} className="px-2 py-1.5 border-r bg-white sticky left-0 z-20 shadow-r">Cesta</div>
+                  <div 
+                    style={{width: '70px'}} 
+                    className="px-2 py-1.5 border-r bg-white sticky left-0 z-20 shadow-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'basket') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('basket');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per numero cesta"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Cesta</span>
+                    {sortColumn === 'basket' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
                   {selectedFlupsyId === "all" && (
                     <div style={{width: '100px'}} className="px-1 py-1.5 border-r bg-blue-50">FLUPSY</div>
                   )}
@@ -2417,10 +2436,13 @@ export default function SpreadsheetOperations() {
                         setSortDirection('asc');
                       }
                     }}
+                    title="Clicca per ordinare per taglia"
                   >
-                    Taglia
-                    {sortColumn === 'size' && (
+                    <span className="underline decoration-dotted underline-offset-2">Taglia</span>
+                    {sortColumn === 'size' ? (
                       <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
                     )}
                   </div>
                   <div style={{width: '60px'}} className="px-1 py-1.5 border-r">P.Med(mg)</div>
@@ -2481,10 +2503,14 @@ export default function SpreadsheetOperations() {
                     const numB = getSizeNum(b.currentSize);
                     return sortDirection === 'asc' ? numA - numB : numB - numA;
                   }
-                  // Default: ordina per numero fisico
-                  return sortDirection === 'asc' 
-                    ? a.physicalNumber - b.physicalNumber 
-                    : b.physicalNumber - a.physicalNumber;
+                  // Ordina per numero cesta (basket)
+                  if (sortColumn === 'basket') {
+                    return sortDirection === 'asc' 
+                      ? a.physicalNumber - b.physicalNumber 
+                      : b.physicalNumber - a.physicalNumber;
+                  }
+                  // Default: ordina per numero fisico crescente
+                  return a.physicalNumber - b.physicalNumber;
                 })
                 .map((row, index) => {
                 // Calcola previsione di crescita per questa cesta (solo se abilitato)
