@@ -455,10 +455,44 @@ export function implementDirectOperationRoute(app: Express) {
             operationData.animalCount = finalCount;
             operationData.mortalityRate = mortalityRate * 100; // Salva la percentuale
           } else {
-            // Nessun morto → mantieni ultimo valore
-            console.log(`🟢 NESSUNA MORTALITÀ: Mantengo ultimo animalCount = ${lastCount}`);
-            operationData.animalCount = lastCount;
-            operationData.mortalityRate = 0;
+            // Nessun morto dichiarato → usa liveAnimals dal campione se disponibile
+            // liveAnimals = (totalWeight / 1000) * animalsPerKg
+            const calculatedLiveAnimals = operationData.animalsPerKg && operationData.totalWeight
+              ? Math.round((operationData.totalWeight / 1000) * operationData.animalsPerKg)
+              : liveAnimals;
+            
+            if (calculatedLiveAnimals > 0 && calculatedLiveAnimals < lastCount) {
+              // Riduzione rilevata senza morti dichiarati
+              const unexplainedDifference = lastCount - calculatedLiveAnimals;
+              const unexplainedPercent = ((unexplainedDifference / lastCount) * 100).toFixed(1);
+              
+              console.log(`🟡 MISURA SENZA MORTI DICHIARATI:`);
+              console.log(`   Ultimo conteggio: ${lastCount}`);
+              console.log(`   Animali rilevati dal campione: ${calculatedLiveAnimals}`);
+              console.log(`   Differenza non spiegata: -${unexplainedDifference} (${unexplainedPercent}%)`);
+              
+              // Usa il valore dal campione
+              operationData.animalCount = calculatedLiveAnimals;
+              operationData.mortalityRate = 0;
+              
+              // Aggiungi nota automatica per tracciabilità
+              const autoNote = `[Auto] Differenza non spiegata: -${unexplainedDifference.toLocaleString('it-IT')} animali (${unexplainedPercent}%) rispetto all'ultimo conteggio`;
+              operationData.notes = operationData.notes 
+                ? `${operationData.notes} | ${autoNote}`
+                : autoNote;
+              
+              console.log(`📝 Nota aggiunta: ${autoNote}`);
+            } else if (calculatedLiveAnimals > 0 && calculatedLiveAnimals >= lastCount) {
+              // Campione indica stesso numero o più animali → mantieni ultimo (no resurrezione)
+              console.log(`🟢 NESSUNA RIDUZIONE: Campione=${calculatedLiveAnimals}, Mantiene=${lastCount}`);
+              operationData.animalCount = lastCount;
+              operationData.mortalityRate = 0;
+            } else {
+              // Fallback: mantieni ultimo valore se non abbiamo dati campione
+              console.log(`🟢 NESSUN DATO CAMPIONE: Mantengo ultimo animalCount = ${lastCount}`);
+              operationData.animalCount = lastCount;
+              operationData.mortalityRate = 0;
+            }
           }
         } else {
           console.warn(`⚠️ Impossibile applicare logica mortalità cumulativa: cycleId non disponibile`);
