@@ -16,6 +16,7 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         critical: 0,
         warning: 0,
         healthy: 0,
+        avgSgr: null,
         avgMortality: null,
         noRecentOps: 0,
         avgDaysSinceMeasure: null,
@@ -45,13 +46,31 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
     let healthy = 0;
     let totalMortality = 0;
     let mortalityCount = 0;
+    let totalSgr = 0;
+    let sgrCount = 0;
     let noRecentOps = 0;
     
     const daysSinceLastMeasure: number[] = [];
     const today = new Date();
 
+    // Raggruppa operazioni per cesta e ordina per data
+    const opsByBasket = new Map<number, any[]>();
+    relevantOps.forEach((op: any) => {
+      if (op.basketId) {
+        const ops = opsByBasket.get(op.basketId) || [];
+        ops.push(op);
+        opsByBasket.set(op.basketId, ops);
+      }
+    });
+
+    // Ordina le operazioni di ogni cesta per data (più recente prima)
+    opsByBasket.forEach((ops, basketId) => {
+      ops.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    });
+
     activeBaskets.forEach((basket: any) => {
-      const latestOp = latestOpsByBasket.get(basket.id);
+      const basketOps = opsByBasket.get(basket.id) || [];
+      const latestOp = basketOps[0];
       
       if (!latestOp) {
         noRecentOps++;
@@ -72,9 +91,30 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         mortalityCount++;
       }
 
+      // Calcolo SGR tra le ultime 2 operazioni
+      if (basketOps.length >= 2) {
+        const op1 = basketOps[0]; // più recente
+        const op2 = basketOps[1]; // precedente
+        
+        // Serve peso in entrambe le operazioni per calcolare SGR
+        if (op1.totalWeight && op2.totalWeight && op1.totalWeight > 0 && op2.totalWeight > 0) {
+          const date1 = new Date(op1.date);
+          const date2 = new Date(op2.date);
+          const days = Math.max(1, Math.floor((date1.getTime() - date2.getTime()) / (1000 * 60 * 60 * 24)));
+          
+          // SGR = ((ln(peso2) - ln(peso1)) / giorni) * 100
+          const sgr = ((Math.log(op1.totalWeight) - Math.log(op2.totalWeight)) / days) * 100;
+          
+          if (sgr > -50 && sgr < 50) { // Filtro valori anomali
+            totalSgr += sgr;
+            sgrCount++;
+          }
+        }
+      }
+
       const mortality = latestOp.mortalityRate || 0;
 
-      // Classificazione basata solo su mortalità (SGR non disponibile nelle operazioni)
+      // Classificazione basata su mortalità
       if (mortality > 10) {
         critical++;
       } else if (mortality > 5) {
@@ -93,11 +133,13 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       : null;
 
     const avgMortality = mortalityCount > 0 ? totalMortality / mortalityCount : null;
+    const avgSgr = sgrCount > 0 ? totalSgr / sgrCount : null;
 
     return {
       critical,
       warning,
       healthy,
+      avgSgr,
       avgMortality,
       noRecentOps,
       avgDaysSinceMeasure,
@@ -146,6 +188,17 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
 
         <div className="flex-1 flex flex-col justify-between">
           <div className="space-y-1 text-xs">
+            <div className="flex justify-between items-center bg-white rounded px-2 py-1">
+              <span className="text-gray-600">SGR Medio</span>
+              <span className={`font-semibold ${
+                stats.avgSgr !== null && stats.avgSgr > 0 
+                  ? 'text-blue-600' 
+                  : 'text-gray-600'
+              }`}>
+                {stats.avgSgr !== null ? `${stats.avgSgr.toFixed(2)}%` : 'N/D'}
+              </span>
+            </div>
+            
             <div className="flex justify-between items-center bg-white rounded px-2 py-1">
               <span className="text-gray-600">Mortalità Media</span>
               <span className={`font-semibold ${
