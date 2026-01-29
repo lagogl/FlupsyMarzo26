@@ -131,9 +131,10 @@ export function implementDirectOperationRoute(app: Express) {
         throw new Error("Il tipo di operazione è obbligatorio");
       }
       
-      // OPERAZIONE PESO - Copia dati dall'ultima operazione, registra solo peso totale
+      // OPERAZIONE PESO - Copia dati dall'ultima operazione MISURA o PRIMA-ATTIVAZIONE
+      // Le operazioni peso NON cambiano taglia/animalsPerKg, copiano sempre dall'ultima misura/prima-attivazione
       if (operationData.type === 'peso') {
-        console.log("📊 OPERAZIONE PESO - Recupero dati dall'ultima operazione del ciclo");
+        console.log("📊 OPERAZIONE PESO - Recupero dati dall'ultima operazione MISURA o PRIMA-ATTIVAZIONE del ciclo");
         
         if (!operationData.cycleId) {
           return res.status(400).json({
@@ -147,38 +148,39 @@ export function implementDirectOperationRoute(app: Express) {
           (typeof operationData.date === 'string' ? operationData.date.substring(0, 10) : format(new Date(operationData.date), 'yyyy-MM-dd')) 
           : format(new Date(), 'yyyy-MM-dd');
         
-        // Recupera l'ultima operazione del ciclo CON DATA <= data peso per evitare copia da operazioni future
-        const lastOperations = await db
+        // Recupera l'ultima operazione MISURA o PRIMA-ATTIVAZIONE del ciclo (per sizeId, animalsPerKg, ecc.)
+        const lastMeasureOperations = await db
           .select()
           .from(operations)
           .where(and(
             eq(operations.cycleId, operationData.cycleId),
-            sql`${operations.date} <= ${pesoDate}`
+            sql`${operations.date} <= ${pesoDate}`,
+            sql`${operations.type} IN ('misura', 'prima-attivazione')` // SOLO misura o prima-attivazione
           ))
           .orderBy(sql`${operations.date} DESC, ${operations.id} DESC`)
           .limit(1);
         
-        if (lastOperations.length === 0) {
+        if (lastMeasureOperations.length === 0) {
           return res.status(400).json({
             success: false,
-            error: "Nessuna operazione precedente trovata per questo ciclo alla data specificata. L'operazione peso richiede almeno una prima-attivazione."
+            error: "Nessuna operazione di misura o prima-attivazione trovata per questo ciclo. L'operazione peso richiede almeno una prima-attivazione."
           });
         }
         
-        const lastOp = lastOperations[0];
-        console.log(`📊 PESO: Copio dati da operazione #${lastOp.id} (${lastOp.type}) del ${lastOp.date}`);
+        const lastMeasureOp = lastMeasureOperations[0];
+        console.log(`📊 PESO: Copio dati da operazione #${lastMeasureOp.id} (${lastMeasureOp.type}) del ${lastMeasureOp.date}`);
         
-        // Copia tutti i campi dall'ultima operazione tranne totalWeight che viene dall'input
-        operationData.sizeId = lastOp.sizeId;
-        operationData.sgrId = lastOp.sgrId;
-        operationData.lotId = lastOp.lotId;
-        operationData.animalCount = lastOp.animalCount;
-        operationData.animalsPerKg = lastOp.animalsPerKg;
-        operationData.averageWeight = lastOp.averageWeight;
+        // Copia tutti i campi dall'ultima MISURA/PRIMA-ATTIVAZIONE tranne totalWeight che viene dall'input
+        operationData.sizeId = lastMeasureOp.sizeId;
+        operationData.sgrId = lastMeasureOp.sgrId;
+        operationData.lotId = lastMeasureOp.lotId;
+        operationData.animalCount = lastMeasureOp.animalCount;
+        operationData.animalsPerKg = lastMeasureOp.animalsPerKg;
+        operationData.averageWeight = lastMeasureOp.averageWeight;
         operationData.deadCount = 0;
         operationData.mortalityRate = 0;
         
-        console.log(`📊 PESO: Dati copiati - sizeId=${operationData.sizeId}, animalCount=${operationData.animalCount}, totalWeight=${operationData.totalWeight}`);
+        console.log(`📊 PESO: Dati copiati da ${lastMeasureOp.type} - sizeId=${operationData.sizeId}, animalsPerKg=${operationData.animalsPerKg}, animalCount=${operationData.animalCount}, totalWeight=${operationData.totalWeight}`);
       }
       
       if (!operationData.basketId) {
