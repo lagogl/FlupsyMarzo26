@@ -2444,7 +2444,26 @@ export default function SpreadsheetOperations() {
                     )}
                   </div>
                   {selectedFlupsyId === "all" && (
-                    <div style={{width: '100px'}} className="px-1 py-1.5 border-r bg-blue-50">FLUPSY</div>
+                    <div 
+                      style={{width: '100px'}} 
+                      className="px-1 py-1.5 border-r bg-blue-50 cursor-pointer hover:bg-blue-100 flex items-center gap-1"
+                      onClick={() => {
+                        if (sortColumn === 'flupsy') {
+                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('flupsy');
+                          setSortDirection('asc');
+                        }
+                      }}
+                      title="Clicca per ordinare per FLUPSY"
+                    >
+                      <span className="underline decoration-dotted underline-offset-2">FLUPSY</span>
+                      {sortColumn === 'flupsy' ? (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[8px]">⇅</span>
+                      )}
+                    </div>
                   )}
                   <div style={{width: '40px'}} className="px-1 py-1.5 border-r text-center">Stato</div>
 
@@ -2468,17 +2487,188 @@ export default function SpreadsheetOperations() {
                       <span className="text-gray-400 text-[8px]">⇅</span>
                     )}
                   </div>
-                  <div style={{width: '60px'}} className="px-1 py-1.5 border-r">P.Med(mg)</div>
-                  <div style={{width: '50px'}} className="px-1 py-1.5 border-r">Ult.Op</div>
+                  <div 
+                    style={{width: '60px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'avgWeight') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('avgWeight');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per peso medio"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">P.Med</span>
+                    {sortColumn === 'avgWeight' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '50px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'lastOpDate') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('lastOpDate');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per data ultima operazione"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Ult.Op</span>
+                    {sortColumn === 'lastOpDate' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
                   {/* COLONNA LOTTO - OBBLIGATORIO */}
-                  <div style={{width: '120px'}} className="px-1 py-1.5 border-r bg-yellow-50 truncate">Lotto*</div>
-                  <div style={{width: '70px'}} className="px-1 py-1.5 border-r">Animali</div>
-                  <div style={{width: '80px'}} className="px-1 py-1.5 border-r">Peso Tot (g)</div>
-                  <div style={{width: '65px'}} className="px-1 py-1.5 border-r">Anim/kg</div>
+                  <div 
+                    style={{width: '120px'}} 
+                    className="px-1 py-1.5 border-r bg-yellow-50 truncate cursor-pointer hover:bg-yellow-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'lot') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('lot');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per lotto"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Lotto*</span>
+                    {sortColumn === 'lot' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '70px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'animals') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('animals');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per numero animali"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Animali</span>
+                    {sortColumn === 'animals' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '80px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'totalWeight') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('totalWeight');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per peso totale"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Peso Tot</span>
+                    {sortColumn === 'totalWeight' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '65px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'animalsPerKg') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('animalsPerKg');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per animali/kg"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">An/kg</span>
+                    {sortColumn === 'animalsPerKg' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
                   {/* COLONNE SGR */}
-                  <div style={{width: '55px'}} className="px-1 py-1.5 border-r bg-purple-50 text-purple-700" title="SGR calcolato da operazioni PESO">SGR-P</div>
-                  <div style={{width: '55px'}} className="px-1 py-1.5 border-r bg-blue-50 text-blue-700" title="SGR medio pesato">SGR-M</div>
-                  <div style={{width: '55px'}} className="px-1 py-1.5 border-r bg-green-50 text-green-700" title="SGR calcolato da operazioni MISURA">SGR</div>
+                  <div 
+                    style={{width: '55px'}} 
+                    className="px-1 py-1.5 border-r bg-purple-50 text-purple-700 cursor-pointer hover:bg-purple-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'sgrPeso') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('sgrPeso');
+                        setSortDirection('desc');
+                      }
+                    }}
+                    title="Clicca per ordinare per SGR-Peso"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">SGR-P</span>
+                    {sortColumn === 'sgrPeso' ? (
+                      <span className="text-purple-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-purple-300 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '55px'}} 
+                    className="px-1 py-1.5 border-r bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'sgrMedio') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('sgrMedio');
+                        setSortDirection('desc');
+                      }
+                    }}
+                    title="Clicca per ordinare per SGR medio"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">SGR-M</span>
+                    {sortColumn === 'sgrMedio' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-blue-300 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '55px'}} 
+                    className="px-1 py-1.5 border-r bg-green-50 text-green-700 cursor-pointer hover:bg-green-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'sgrMisura') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('sgrMisura');
+                        setSortDirection('desc');
+                      }
+                    }}
+                    title="Clicca per ordinare per SGR misura"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">SGR</span>
+                    {sortColumn === 'sgrMisura' ? (
+                      <span className="text-green-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-green-300 text-[8px]">⇅</span>
+                    )}
+                  </div>
                   {/* PESO CAMPIONE per operazioni peso e misura */}
                   {(selectedOperationType === 'peso' || selectedOperationType === 'misura') && (
                     <div style={{width: '60px'}} className="px-1 py-1.5 border-r bg-yellow-50">P.Camp*</div>
@@ -2497,9 +2687,47 @@ export default function SpreadsheetOperations() {
                   )}
                   {/* MORTALITÀ PERCENTUALE per misura */}
                   {selectedOperationType === 'misura' && (
-                    <div style={{width: '65px'}} className="px-1 py-1.5 border-r">Mortalità%</div>
+                    <div 
+                      style={{width: '65px'}} 
+                      className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                      onClick={() => {
+                        if (sortColumn === 'mortality') {
+                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('mortality');
+                          setSortDirection('desc');
+                        }
+                      }}
+                      title="Clicca per ordinare per mortalità"
+                    >
+                      <span className="underline decoration-dotted underline-offset-2">Mort.%</span>
+                      {sortColumn === 'mortality' ? (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[8px]">⇅</span>
+                      )}
+                    </div>
                   )}
-                  <div className="flex-1 px-1 py-1.5 border-r" style={{minWidth: '100px'}}>Note</div>
+                  <div 
+                    className="flex-1 px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1" 
+                    style={{minWidth: '100px'}}
+                    onClick={() => {
+                      if (sortColumn === 'notes') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('notes');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per note"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Note</span>
+                    {sortColumn === 'notes' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
                   <div style={{width: '70px'}} className="px-1 py-1.5 text-center flex-shrink-0">Azioni</div>
                 </div>
 
@@ -2516,8 +2744,20 @@ export default function SpreadsheetOperations() {
                 })
                 // Sorting
                 .sort((a, b) => {
+                  // Helper per ordinamento numerico con null handling
+                  const compareNum = (valA: number | null | undefined, valB: number | null | undefined) => {
+                    const numA = valA ?? -Infinity;
+                    const numB = valB ?? -Infinity;
+                    return sortDirection === 'asc' ? numA - numB : numB - numA;
+                  };
+                  // Helper per ordinamento stringa
+                  const compareStr = (strA: string | undefined, strB: string | undefined) => {
+                    const a = strA || '';
+                    const b = strB || '';
+                    return sortDirection === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+                  };
+
                   if (sortColumn === 'size') {
-                    // Estrae il numero dalla taglia (es: TP-2500 -> 2500)
                     const getSizeNum = (size: string | undefined) => {
                       if (!size || !size.startsWith('TP-')) return 999999;
                       return parseInt(size.substring(3)) || 999999;
@@ -2526,11 +2766,48 @@ export default function SpreadsheetOperations() {
                     const numB = getSizeNum(b.currentSize);
                     return sortDirection === 'asc' ? numA - numB : numB - numA;
                   }
-                  // Ordina per numero cesta (basket)
                   if (sortColumn === 'basket') {
                     return sortDirection === 'asc' 
                       ? a.physicalNumber - b.physicalNumber 
                       : b.physicalNumber - a.physicalNumber;
+                  }
+                  if (sortColumn === 'flupsy') {
+                    return compareStr(a.flupsyName, b.flupsyName);
+                  }
+                  if (sortColumn === 'avgWeight') {
+                    return compareNum(a.averageWeight, b.averageWeight);
+                  }
+                  if (sortColumn === 'lastOpDate') {
+                    const dateA = a.lastOperationDate ? new Date(a.lastOperationDate).getTime() : 0;
+                    const dateB = b.lastOperationDate ? new Date(b.lastOperationDate).getTime() : 0;
+                    return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+                  }
+                  if (sortColumn === 'lot') {
+                    return compareNum(a.lotId, b.lotId);
+                  }
+                  if (sortColumn === 'animals') {
+                    return compareNum(a.animalCount, b.animalCount);
+                  }
+                  if (sortColumn === 'totalWeight') {
+                    return compareNum(a.totalWeight, b.totalWeight);
+                  }
+                  if (sortColumn === 'animalsPerKg') {
+                    return compareNum(a.animalsPerKg, b.animalsPerKg);
+                  }
+                  if (sortColumn === 'sgrPeso') {
+                    return compareNum(a.sgrPeso, b.sgrPeso);
+                  }
+                  if (sortColumn === 'sgrMedio') {
+                    return compareNum(a.sgrMedio, b.sgrMedio);
+                  }
+                  if (sortColumn === 'sgrMisura') {
+                    return compareNum(a.sgrMisura, b.sgrMisura);
+                  }
+                  if (sortColumn === 'mortality') {
+                    return compareNum(a.mortalityRate, b.mortalityRate);
+                  }
+                  if (sortColumn === 'notes') {
+                    return compareStr(a.notes, b.notes);
                   }
                   // Default: ordina per numero fisico crescente
                   return a.physicalNumber - b.physicalNumber;
@@ -3362,9 +3639,19 @@ export default function SpreadsheetOperations() {
                                 <span className="truncate">{row.notes || '-'}</span>
                               </div>
                             </TooltipTrigger>
-                            {row.notes && (
-                              <TooltipContent side="left" className="max-w-xs">
-                                <p className="text-xs">{row.notes}</p>
+                            {(row.allCycleNotes && row.allCycleNotes.length > 0) && (
+                              <TooltipContent side="left" className="max-w-md p-3">
+                                <div className="text-xs font-semibold mb-2 border-b pb-1">Storico Note Ciclo</div>
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                  {row.allCycleNotes.map((noteItem, idx) => (
+                                    <div key={idx} className="text-xs border-l-2 border-blue-400 pl-2">
+                                      <div className="font-medium text-gray-700">
+                                        {new Date(noteItem.date).toLocaleDateString('it-IT')} - {noteItem.type}
+                                      </div>
+                                      <div className="text-gray-600 mt-0.5">{noteItem.note}</div>
+                                    </div>
+                                  ))}
+                                </div>
                               </TooltipContent>
                             )}
                           </Tooltip>
