@@ -789,9 +789,43 @@ export default function Baskets() {
       {/* Totali */}
       {filteredBaskets.length > 0 && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg shadow-sm mb-4 p-4">
-          <div className="flex justify-between items-center">
-            <div className="text-lg font-semibold text-gray-800">
-              Totale:
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-gray-800 mb-2">Totale:</div>
+              {/* Breakdown per Taglia */}
+              <div className="flex flex-wrap gap-1.5">
+                {(() => {
+                  const sizeBreakdown: Record<string, { count: number; totalAnimals: number }> = {};
+                  filteredBaskets.forEach((basket: any) => {
+                    const size = basket.sizeCode || basket.size?.code || 'N/A';
+                    if (!sizeBreakdown[size]) {
+                      sizeBreakdown[size] = { count: 0, totalAnimals: 0 };
+                    }
+                    sizeBreakdown[size].count++;
+                    sizeBreakdown[size].totalAnimals += basket.animalCount || 0;
+                  });
+                  
+                  return Object.entries(sizeBreakdown)
+                    .sort(([a], [b]) => {
+                      const getNum = (s: string) => s.startsWith('TP-') ? parseInt(s.substring(3)) : 999999;
+                      return getNum(a) - getNum(b);
+                    })
+                    .map(([size, data]) => (
+                      <div 
+                        key={size} 
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                          size.startsWith('TP-') 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        <span className="font-bold">{size}</span>
+                        <span className="text-[10px] opacity-75">({data.count})</span>
+                        <span className="font-semibold">{data.totalAnimals.toLocaleString()}</span>
+                      </div>
+                    ));
+                })()}
+              </div>
             </div>
             <div className="flex space-x-6">
               <div className="text-center">
