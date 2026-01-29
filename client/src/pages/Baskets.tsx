@@ -793,7 +793,7 @@ export default function Baskets() {
             <div className="flex-1">
               <div className="text-sm font-semibold text-gray-800 mb-2">Totale:</div>
               {/* Breakdown per Taglia */}
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 mb-2">
                 {(() => {
                   const sizeBreakdown: Record<string, { count: number; totalAnimals: number }> = {};
                   filteredBaskets.forEach((basket: any) => {
@@ -824,6 +824,34 @@ export default function Baskets() {
                         <span className="font-semibold">{data.totalAnimals.toLocaleString()}</span>
                       </div>
                     ));
+                })()}
+              </div>
+              {/* Statistiche Min/Max */}
+              <div className="flex flex-wrap gap-3 text-xs">
+                {(() => {
+                  const animalCounts = filteredBaskets.map((b: any) => b.animalCount).filter((v: any) => v !== null && v !== undefined && v > 0);
+                  const weights = filteredBaskets.map((b: any) => b.weight).filter((v: any) => v !== null && v !== undefined && v > 0);
+                  
+                  return (
+                    <>
+                      {animalCounts.length > 0 && (
+                        <div className="bg-white rounded px-2 py-1 border">
+                          <span className="text-gray-500">Animali: </span>
+                          <span className="text-green-600 font-medium">Min {Math.min(...animalCounts).toLocaleString()}</span>
+                          <span className="text-gray-400 mx-1">|</span>
+                          <span className="text-red-600 font-medium">Max {Math.max(...animalCounts).toLocaleString()}</span>
+                        </div>
+                      )}
+                      {weights.length > 0 && (
+                        <div className="bg-white rounded px-2 py-1 border">
+                          <span className="text-gray-500">Peso (Kg): </span>
+                          <span className="text-green-600 font-medium">Min {Math.min(...weights).toLocaleString()}</span>
+                          <span className="text-gray-400 mx-1">|</span>
+                          <span className="text-red-600 font-medium">Max {Math.max(...weights).toLocaleString()}</span>
+                        </div>
+                      )}
+                    </>
+                  );
                 })()}
               </div>
             </div>
