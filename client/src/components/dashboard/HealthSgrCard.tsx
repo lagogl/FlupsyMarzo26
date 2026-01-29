@@ -221,7 +221,7 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
             <div className="flex justify-between items-center bg-white rounded px-2 py-1">
               <span className="text-gray-600">Giorni da ultima misura</span>
               <span className="font-semibold text-gray-700">
-                {stats.avgDaysSinceMeasure !== null 
+                {stats.avgDaysSinceMeasure !== null && stats.maxDaysSinceMeasure !== null
                   ? `${stats.avgDaysSinceMeasure.toFixed(0)} med / ${stats.maxDaysSinceMeasure} max`
                   : 'N/D'}
               </span>
