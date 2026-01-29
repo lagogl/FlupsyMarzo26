@@ -11,8 +11,7 @@ import FlupsyCenterFilter from '@/components/dashboard/FlupsyCenterFilter';
 import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
 import InfoTicker from '@/components/dashboard/InfoTicker';
-import HealthStatusCard from '@/components/dashboard/HealthStatusCard';
-import SgrTrendChart from '@/components/dashboard/SgrTrendChart';
+import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
 import { Basket, Cycle, Operation, Lot } from '@shared/schema';
 import { TooltipTrigger } from '@/components/ui/tooltip-trigger';
 import { useTooltip } from '@/contexts/TooltipContext';
@@ -480,18 +479,11 @@ export default function Dashboard() {
             />
           </div>
         </TooltipTrigger>
-      </div>
 
-      {/* Health Status e SGR Trend */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <HealthStatusCard 
+        <HealthSgrCard 
           operations={filteredOperations} 
           activeCycles={activeCycles} 
           activeBaskets={activeBaskets} 
-        />
-        <SgrTrendChart 
-          operations={filteredOperations} 
-          activeCycles={activeCycles} 
         />
       </div>
 
