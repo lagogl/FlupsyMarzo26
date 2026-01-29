@@ -1201,6 +1201,26 @@ export default function Lots() {
                       <div className="mt-1">{selectedLot.weight ? selectedLot.weight.toLocaleString() : '-'}</div>
                     </div>
                     <div>
+                      <h4 className="font-medium text-sm text-gray-500">Pezzi/Kg</h4>
+                      <div className="mt-1 font-semibold text-blue-700">
+                        {selectedLot.animalCount && selectedLot.weight && selectedLot.weight > 0 
+                          ? Math.round(selectedLot.animalCount / (selectedLot.weight / 1000)).toLocaleString()
+                          : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-sm text-gray-500">Peso Medio (mg)</h4>
+                      <div className="mt-1">
+                        {selectedLot.animalCount && selectedLot.weight && selectedLot.animalCount > 0 
+                          ? ((selectedLot.weight / selectedLot.animalCount) * 1000).toFixed(3)
+                          : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-sm text-gray-500">Lotto Fornitore</h4>
+                      <div className="mt-1">{selectedLot.supplierLotNumber || '-'}</div>
+                    </div>
+                    <div>
                       <h4 className="font-medium text-sm text-gray-500">Stato</h4>
                       <div className="mt-1">
                         <Badge className={`${
