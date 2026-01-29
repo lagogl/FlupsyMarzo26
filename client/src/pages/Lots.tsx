@@ -741,6 +741,12 @@ export default function Lots() {
                 </th>
                 <th 
                   scope="col" 
+                  className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20"
+                >
+                  Pezzi/Kg
+                </th>
+                <th 
+                  scope="col" 
                   className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer w-16"
                   onClick={() => handleSortClick('state')}
                 >
@@ -857,6 +863,11 @@ export default function Lots() {
                       </td>
                       <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-500">
                         {lot.weight ? lot.weight.toLocaleString() : '-'}
+                      </td>
+                      <td className="px-2 py-3 whitespace-nowrap text-sm font-semibold text-blue-700">
+                        {lot.animalCount && lot.weight && lot.weight > 0 
+                          ? Math.round(lot.animalCount / (lot.weight / 1000)).toLocaleString()
+                          : '-'}
                       </td>
                       <td className="px-2 py-3 whitespace-nowrap">
                         <Badge className={`text-xs ${
