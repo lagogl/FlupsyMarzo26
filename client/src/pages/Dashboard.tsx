@@ -11,6 +11,8 @@ import FlupsyCenterFilter from '@/components/dashboard/FlupsyCenterFilter';
 import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
 import InfoTicker from '@/components/dashboard/InfoTicker';
+import HealthStatusCard from '@/components/dashboard/HealthStatusCard';
+import SgrTrendChart from '@/components/dashboard/SgrTrendChart';
 import { Basket, Cycle, Operation, Lot } from '@shared/schema';
 import { TooltipTrigger } from '@/components/ui/tooltip-trigger';
 import { useTooltip } from '@/contexts/TooltipContext';
@@ -455,33 +457,6 @@ export default function Dashboard() {
 
         <TooltipTrigger 
           tooltip={{
-            id: 'operations-card',
-            content: 'Le operazioni effettuate oggi. Clicca per registrare nuove operazioni.',
-            position: 'top'
-          }}
-          showOnMount={isFirstTimeUser}
-          onlyFirstTime={true}
-        >
-          <div ref={operationsCardRef}>
-            <StatCard 
-              title="Operazioni Oggi" 
-              value={todayOperations.length} 
-              secondaryInfo={operationStats.totalAnimalsProcessed > 0 ? `${operationStats.totalAnimalsProcessed.toLocaleString()} animali` : "Nessuna operazione"}
-              icon={<div className="h-12 w-12 rounded-full bg-purple-500/20 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-              </div>}
-              changeText={todayOperations.length > 0 ? `Peso: ${(operationStats.totalWeight / 1000).toFixed(1)}kg • Più comune: ${operationStats.mostCommonOperation || 'N/D'} • Tipi: ${Object.keys(operationStats.operationTypes).length}` : "Nessuna operazione oggi"}
-              changeType={todayOperations.length > 0 ? "success" : "info"}
-              linkTo="/operations"
-              cardColor="from-purple-50 to-purple-100 border-l-4 border-purple-500"
-            />
-          </div>
-        </TooltipTrigger>
-
-        <TooltipTrigger 
-          tooltip={{
             id: 'lots-card',
             content: 'I lotti rappresentano gruppi di animali. Clicca per gestire i lotti.',
             position: 'top'
@@ -508,7 +483,18 @@ export default function Dashboard() {
         </TooltipTrigger>
       </div>
 
-      {/* I riquadri "Operazioni recenti" e "Andamento crescita" sono stati rimossi per semplificare l'interfaccia */}
+      {/* Health Status e SGR Trend */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <HealthStatusCard 
+          operations={operations || []} 
+          cycles={cycles || []} 
+          baskets={baskets || []} 
+        />
+        <SgrTrendChart 
+          operations={operations || []} 
+          cycles={cycles || []} 
+        />
+      </div>
 
       {/* FLUPSY Visualizer */}
       <div className="mb-8">
