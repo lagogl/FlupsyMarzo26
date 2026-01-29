@@ -11,128 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download, GripVertical } from "lucide-react";
+import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
 import ExcelJS from 'exceljs';
 import "../styles/spreadsheet.css";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-
-// Configurazione colonne per drag & drop
-interface ColumnConfig {
-  id: string;
-  label: string;
-  width: string;
-  sortKey?: string;
-  bgColor?: string;
-  textColor?: string;
-  sortable?: boolean;
-  fixed?: boolean; // Colonne fisse non riordinabili
-  visibleFor?: 'all' | 'misura' | 'peso'; // Visibilità per tipo operazione
-}
-
-// Colonne fisse (non riordinabili)
-const FIXED_COLUMNS: ColumnConfig[] = [
-  { id: 'basket', label: 'Cesta', width: '70px', sortKey: 'basket', sortable: true, fixed: true },
-  { id: 'stato', label: 'Stato', width: '40px', fixed: true }
-];
-
-// Colonne riordinabili (default order)
-const DEFAULT_DRAGGABLE_COLUMNS: ColumnConfig[] = [
-  { id: 'size', label: 'Taglia', width: '80px', sortKey: 'size', sortable: true },
-  { id: 'avgWeight', label: 'P.Med', width: '60px', sortKey: 'avgWeight', sortable: true },
-  { id: 'lastOpDate', label: 'Ult.Op', width: '50px', sortKey: 'lastOpDate', sortable: true },
-  { id: 'lot', label: 'Lotto*', width: '120px', sortKey: 'lot', sortable: true, bgColor: 'bg-yellow-50' },
-  { id: 'animals', label: 'Animali', width: '70px', sortKey: 'animals', sortable: true },
-  { id: 'totalWeight', label: 'Peso Tot', width: '80px', sortKey: 'totalWeight', sortable: true },
-  { id: 'animalsPerKg', label: 'An/kg', width: '65px', sortKey: 'animalsPerKg', sortable: true },
-  { id: 'sgrPeso', label: 'SGR-P', width: '55px', sortKey: 'sgrPeso', sortable: true, bgColor: 'bg-purple-50', textColor: 'text-purple-700' },
-  { id: 'sgrMedio', label: 'SGR-M', width: '55px', sortKey: 'sgrMedio', sortable: true, bgColor: 'bg-blue-50', textColor: 'text-blue-700' },
-  { id: 'sgrMisura', label: 'SGR', width: '55px', sortKey: 'sgrMisura', sortable: true, bgColor: 'bg-green-50', textColor: 'text-green-700' },
-  { id: 'sampleWeight', label: 'P.Camp*', width: '60px', bgColor: 'bg-yellow-50', visibleFor: 'all' },
-  { id: 'liveAnimals', label: 'Vivi*', width: '50px', bgColor: 'bg-yellow-50', visibleFor: 'misura' },
-  { id: 'deadCount', label: 'Morti*', width: '50px', bgColor: 'bg-yellow-50', visibleFor: 'misura' },
-  { id: 'totalSample', label: 'Tot.Camp.', width: '60px', visibleFor: 'misura' },
-  { id: 'mortality', label: 'Mort.%', width: '65px', sortKey: 'mortality', sortable: true, visibleFor: 'misura' },
-  { id: 'notes', label: 'Note', width: 'flex-1', sortKey: 'notes', sortable: true }
-];
-
-// LocalStorage key per persistenza ordine colonne
-const COLUMN_ORDER_STORAGE_KEY = 'spreadsheet_column_order';
-
-// Funzione per caricare ordine colonne da localStorage
-const loadColumnOrder = (): string[] => {
-  try {
-    const saved = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error('Errore caricamento ordine colonne:', e);
-  }
-  return DEFAULT_DRAGGABLE_COLUMNS.map(c => c.id);
-};
-
-// Funzione per salvare ordine colonne in localStorage
-const saveColumnOrder = (order: string[]) => {
-  try {
-    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(order));
-  } catch (e) {
-    console.error('Errore salvataggio ordine colonne:', e);
-  }
-};
-
-// Componente header colonna sortabile/draggable
-interface SortableHeaderProps {
-  column: ColumnConfig;
-  sortColumn: string;
-  sortDirection: 'asc' | 'desc';
-  onSort: (key: string) => void;
-}
-
-function SortableHeader({ column, sortColumn, sortDirection, onSort }: SortableHeaderProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: column.id });
-  
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    width: column.width === 'flex-1' ? undefined : column.width,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 100 : 'auto'
-  };
-  
-  const isActive = column.sortKey && sortColumn === column.sortKey;
-  const bgClass = column.bgColor || '';
-  const textClass = column.textColor || '';
-  
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`px-1 py-1.5 border-r flex items-center gap-0.5 ${bgClass} ${textClass} ${column.width === 'flex-1' ? 'flex-1 min-w-[100px]' : ''} ${isDragging ? 'bg-blue-200' : ''}`}
-    >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-0.5 hover:bg-gray-200 rounded">
-        <GripVertical className="h-3 w-3 text-gray-400" />
-      </div>
-      {column.sortable && column.sortKey ? (
-        <div 
-          className="flex-1 cursor-pointer hover:bg-gray-200 rounded px-0.5 flex items-center gap-0.5"
-          onClick={() => onSort(column.sortKey!)}
-          title={`Clicca per ordinare per ${column.label}`}
-        >
-          <span className="underline decoration-dotted underline-offset-2 truncate">{column.label}</span>
-          {isActive ? (
-            <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-          ) : (
-            <span className="text-gray-400 text-[8px]">⇅</span>
-          )}
-        </div>
-      ) : (
-        <span className="truncate">{column.label}</span>
-      )}
-    </div>
-  );
-}
 
 interface BasketData {
   id: number;
@@ -302,50 +183,6 @@ export default function SpreadsheetOperations() {
     lotId?: number;
   } | null>(null);
   const [editingPosition, setEditingPosition] = useState<{top: number, left: number} | null>(null);
-  
-  // Stato per ordine colonne riordinabili (drag & drop)
-  const [columnOrder, setColumnOrder] = useState<string[]>(() => loadColumnOrder());
-  
-  // Sensori per drag & drop
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-  
-  // Handler drag end per riordino colonne
-  const handleColumnDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setColumnOrder((items) => {
-        const oldIndex = items.indexOf(active.id as string);
-        const newIndex = items.indexOf(over.id as string);
-        const newOrder = arrayMove(items, oldIndex, newIndex);
-        saveColumnOrder(newOrder);
-        return newOrder;
-      });
-    }
-  };
-  
-  // Ottieni colonne ordinate e filtrate per tipo operazione
-  const getOrderedColumns = (): ColumnConfig[] => {
-    return columnOrder
-      .map(id => DEFAULT_DRAGGABLE_COLUMNS.find(c => c.id === id))
-      .filter((c): c is ColumnConfig => c !== undefined)
-      .filter(c => {
-        if (!c.visibleFor || c.visibleFor === 'all') return true;
-        return c.visibleFor === selectedOperationType;
-      });
-  };
-  
-  // Handler per sorting
-  const handleSort = (key: string) => {
-    if (sortColumn === key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(key);
-      setSortDirection(key.startsWith('sgr') ? 'desc' : 'asc');
-    }
-  };
 
   // Refs per i campi del form per la navigazione automatica
   const sampleWeightRef = useRef<HTMLInputElement>(null);
@@ -2584,14 +2421,19 @@ export default function SpreadsheetOperations() {
               scrollbarWidth: 'thin' 
             }}>
               <div className="min-w-[1200px]">
-                {/* Header tabella compatto con drag & drop per riordino colonne */}
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
+                {/* Header tabella compatto con larghezze esatte per allineamento perfetto */}
                 <div className="flex border-b bg-gray-100 text-xs font-medium text-gray-700 sticky top-0 z-10" style={{fontSize: '10px'}}>
-                  {/* Colonne fisse - Cesta (non riordinabile) */}
                   <div 
                     style={{width: '70px'}} 
                     className="px-2 py-1.5 border-r bg-white sticky left-0 z-20 shadow-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
-                    onClick={() => handleSort('basket')}
+                    onClick={() => {
+                      if (sortColumn === 'basket') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('basket');
+                        setSortDirection('asc');
+                      }
+                    }}
                     title="Clicca per ordinare per numero cesta"
                   >
                     <span className="underline decoration-dotted underline-offset-2">Cesta</span>
@@ -2601,12 +2443,18 @@ export default function SpreadsheetOperations() {
                       <span className="text-gray-400 text-[8px]">⇅</span>
                     )}
                   </div>
-                  {/* FLUPSY (fisso quando visibile) */}
                   {selectedFlupsyId === "all" && (
                     <div 
                       style={{width: '100px'}} 
                       className="px-1 py-1.5 border-r bg-blue-50 cursor-pointer hover:bg-blue-100 flex items-center gap-1"
-                      onClick={() => handleSort('flupsy')}
+                      onClick={() => {
+                        if (sortColumn === 'flupsy') {
+                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('flupsy');
+                          setSortDirection('asc');
+                        }
+                      }}
                       title="Clicca per ordinare per FLUPSY"
                     >
                       <span className="underline decoration-dotted underline-offset-2">FLUPSY</span>
@@ -2617,26 +2465,271 @@ export default function SpreadsheetOperations() {
                       )}
                     </div>
                   )}
-                  {/* Stato (fisso) */}
                   <div style={{width: '40px'}} className="px-1 py-1.5 border-r text-center">Stato</div>
 
-                  {/* Colonne riordinabili con drag & drop */}
-                  <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
-                    {getOrderedColumns().map((column) => (
-                      <SortableHeader 
-                        key={column.id}
-                        column={column}
-                        sortColumn={sortColumn}
-                        sortDirection={sortDirection}
-                        onSort={handleSort}
-                      />
-                    ))}
-                  </SortableContext>
-
-                  {/* Azioni (fisso) */}
+                  <div 
+                    style={{width: '80px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'size') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('size');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per taglia"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Taglia</span>
+                    {sortColumn === 'size' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '60px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'avgWeight') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('avgWeight');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per peso medio"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">P.Med</span>
+                    {sortColumn === 'avgWeight' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '50px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'lastOpDate') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('lastOpDate');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per data ultima operazione"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Ult.Op</span>
+                    {sortColumn === 'lastOpDate' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  {/* COLONNA LOTTO - OBBLIGATORIO */}
+                  <div 
+                    style={{width: '120px'}} 
+                    className="px-1 py-1.5 border-r bg-yellow-50 truncate cursor-pointer hover:bg-yellow-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'lot') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('lot');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per lotto"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Lotto*</span>
+                    {sortColumn === 'lot' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '70px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'animals') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('animals');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per numero animali"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Animali</span>
+                    {sortColumn === 'animals' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '80px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'totalWeight') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('totalWeight');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per peso totale"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Peso Tot</span>
+                    {sortColumn === 'totalWeight' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '65px'}} 
+                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'animalsPerKg') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('animalsPerKg');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per animali/kg"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">An/kg</span>
+                    {sortColumn === 'animalsPerKg' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  {/* COLONNE SGR */}
+                  <div 
+                    style={{width: '55px'}} 
+                    className="px-1 py-1.5 border-r bg-purple-50 text-purple-700 cursor-pointer hover:bg-purple-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'sgrPeso') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('sgrPeso');
+                        setSortDirection('desc');
+                      }
+                    }}
+                    title="Clicca per ordinare per SGR-Peso"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">SGR-P</span>
+                    {sortColumn === 'sgrPeso' ? (
+                      <span className="text-purple-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-purple-300 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '55px'}} 
+                    className="px-1 py-1.5 border-r bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'sgrMedio') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('sgrMedio');
+                        setSortDirection('desc');
+                      }
+                    }}
+                    title="Clicca per ordinare per SGR medio"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">SGR-M</span>
+                    {sortColumn === 'sgrMedio' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-blue-300 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  <div 
+                    style={{width: '55px'}} 
+                    className="px-1 py-1.5 border-r bg-green-50 text-green-700 cursor-pointer hover:bg-green-100 flex items-center gap-1"
+                    onClick={() => {
+                      if (sortColumn === 'sgrMisura') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('sgrMisura');
+                        setSortDirection('desc');
+                      }
+                    }}
+                    title="Clicca per ordinare per SGR misura"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">SGR</span>
+                    {sortColumn === 'sgrMisura' ? (
+                      <span className="text-green-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-green-300 text-[8px]">⇅</span>
+                    )}
+                  </div>
+                  {/* PESO CAMPIONE per operazioni peso e misura */}
+                  {(selectedOperationType === 'peso' || selectedOperationType === 'misura') && (
+                    <div style={{width: '60px'}} className="px-1 py-1.5 border-r bg-yellow-50">P.Camp*</div>
+                  )}
+                  {/* ANIMALI VIVI solo per misura */}
+                  {selectedOperationType === 'misura' && (
+                    <div style={{width: '50px'}} className="px-1 py-1.5 border-r bg-yellow-50">Vivi*</div>
+                  )}
+                  {/* ANIMALI MORTI per misura */}
+                  {selectedOperationType === 'misura' && (
+                    <div style={{width: '50px'}} className="px-1 py-1.5 border-r bg-yellow-50">Morti*</div>
+                  )}
+                  {/* TOTALE CAMPIONE per misura */}
+                  {selectedOperationType === 'misura' && (
+                    <div style={{width: '60px'}} className="px-1 py-1.5 border-r">Tot.Camp.</div>
+                  )}
+                  {/* MORTALITÀ PERCENTUALE per misura */}
+                  {selectedOperationType === 'misura' && (
+                    <div 
+                      style={{width: '65px'}} 
+                      className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
+                      onClick={() => {
+                        if (sortColumn === 'mortality') {
+                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('mortality');
+                          setSortDirection('desc');
+                        }
+                      }}
+                      title="Clicca per ordinare per mortalità"
+                    >
+                      <span className="underline decoration-dotted underline-offset-2">Mort.%</span>
+                      {sortColumn === 'mortality' ? (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[8px]">⇅</span>
+                      )}
+                    </div>
+                  )}
+                  <div 
+                    className="flex-1 px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1" 
+                    style={{minWidth: '100px'}}
+                    onClick={() => {
+                      if (sortColumn === 'notes') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortColumn('notes');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    title="Clicca per ordinare per note"
+                  >
+                    <span className="underline decoration-dotted underline-offset-2">Note</span>
+                    {sortColumn === 'notes' ? (
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-gray-400 text-[8px]">⇅</span>
+                    )}
+                  </div>
                   <div style={{width: '70px'}} className="px-1 py-1.5 text-center flex-shrink-0">Azioni</div>
                 </div>
-                </DndContext>
 
               {/* Righe dati compatte */}
               {operationRows
