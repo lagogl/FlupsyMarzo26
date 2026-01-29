@@ -657,11 +657,11 @@ class CyclesService {
       
       console.log(`✅ Ciclo ${pending.cycleId} riaperto`);
       
-      // 3. Ripristina il cestello (stato occupied, riferimento al ciclo)
+      // 3. Ripristina il cestello (stato active, riferimento al ciclo)
       await tx
         .update(baskets)
         .set({ 
-          state: 'occupied',
+          state: 'active',
           currentCycleId: pending.cycleId,
           cycleCode: pending.cycleCode
         })
