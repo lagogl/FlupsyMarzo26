@@ -474,8 +474,8 @@ export default function SpreadsheetOperations() {
         // Il cestello deve appartenere al FLUPSY selezionato (oppure TUTTI)
         if (selectedFlupsyId !== "all" && basket.flupsyId !== parseInt(selectedFlupsyId)) return false;
         
-        // Il cestello deve avere uno stato attivo
-        if (basket.state !== 'active') return false;
+        // Il cestello deve avere uno stato attivo o occupato (entrambi indicano un ciclo in corso)
+        if (basket.state !== 'active' && basket.state !== 'occupied') return false;
         
         // Il cestello deve avere un ciclo attivo (currentCycleId non null)
         return basket.currentCycleId !== null;
@@ -533,7 +533,7 @@ export default function SpreadsheetOperations() {
     if (baskets && Array.isArray(baskets)) {
       const skippedBaskets = (baskets as any[]).filter((basket: any) => {
         const flupsyMatch = selectedFlupsyId === "all" || basket.flupsyId === parseInt(selectedFlupsyId);
-        const stateMatch = basket.state === 'active';
+        const stateMatch = basket.state === 'active' || basket.state === 'occupied';
         const cycleMatch = basket.currentCycleId !== null;
         
         if (!flupsyMatch || !stateMatch || !cycleMatch) {
