@@ -797,12 +797,12 @@ export default function Baskets() {
                 {(() => {
                   const sizeBreakdown: Record<string, { count: number; totalAnimals: number }> = {};
                   filteredBaskets.forEach((basket: any) => {
-                    const size = basket.sizeCode || basket.size?.code || 'N/A';
+                    const size = basket.calculatedSize || basket.size?.code || 'N/A';
                     if (!sizeBreakdown[size]) {
                       sizeBreakdown[size] = { count: 0, totalAnimals: 0 };
                     }
                     sizeBreakdown[size].count++;
-                    sizeBreakdown[size].totalAnimals += basket.animalCount || 0;
+                    sizeBreakdown[size].totalAnimals += basket.calculatedAnimalCount || basket.animalCount || 0;
                   });
                   
                   return Object.entries(sizeBreakdown)
@@ -829,8 +829,8 @@ export default function Baskets() {
               {/* Statistiche Min/Max */}
               <div className="flex flex-wrap gap-3 text-xs">
                 {(() => {
-                  const animalCounts = filteredBaskets.map((b: any) => b.animalCount).filter((v: any) => v !== null && v !== undefined && v > 0);
-                  const weights = filteredBaskets.map((b: any) => b.weight).filter((v: any) => v !== null && v !== undefined && v > 0);
+                  const animalCounts = filteredBaskets.map((b: any) => b.calculatedAnimalCount || b.animalCount).filter((v: any) => v !== null && v !== undefined && v > 0);
+                  const weights = filteredBaskets.map((b: any) => b.pesoCesta).filter((v: any) => v !== null && v !== undefined && v > 0);
                   
                   return (
                     <>
