@@ -64,6 +64,8 @@ interface OperationRowData {
   sgrPeso?: number | null;        // SGR calcolato da operazioni PESO
   sgrMedio?: number | null;       // SGR medio (media pesata)
   sgrMisura?: number | null;      // SGR calcolato da operazioni MISURA
+  // Storico note del ciclo per tooltip
+  allCycleNotes?: { date: string; note: string; type: string }[];
 }
 
 // Tipi operazione per il modulo Spreadsheet
@@ -597,6 +599,20 @@ export default function SpreadsheetOperations() {
         // Cast lastOp per accedere a tutte le proprietà
         const fullOp = lastOp as any;
         
+        // Recupera tutte le note del ciclo ordinate per data (dalla più vecchia alla più recente)
+        const cycleNotes = ((operations as any[]) || [])
+          .filter((op: any) => 
+            op.basketId === basket.id && 
+            op.cycleId === basket.currentCycleId &&
+            op.notes && op.notes.trim() !== ''
+          )
+          .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .map((op: any) => ({
+            date: op.date,
+            note: op.notes,
+            type: op.type
+          }));
+        
         return {
           basketId: basket.id,
           physicalNumber: basket.physicalNumber,
@@ -644,7 +660,9 @@ export default function SpreadsheetOperations() {
           // ✅ IMPORTANTE: Aggiungi il campo lastOperation per l'inizializzazione del form
           lastOperation: lastOp,
           // Nome FLUPSY per visualizzazione quando "TUTTI" selezionato
-          flupsyName: basket.flupsyName
+          flupsyName: basket.flupsyName,
+          // Storico note del ciclo per tooltip
+          allCycleNotes: cycleNotes
         };
       });
       
