@@ -2497,6 +2497,18 @@ export default function SpreadsheetOperations() {
                   </div>
                 </div>
 
+                {/* Statistiche Peso Totale */}
+                <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
+                  <div className="text-[10px] text-gray-500 uppercase mb-0.5">Peso (g)</div>
+                  <div className="flex gap-2 text-xs">
+                    <span className="text-gray-600">Media: <span className="font-semibold text-amber-700">{advancedStats.totalWeight.avg ? Math.round(advancedStats.totalWeight.avg).toLocaleString() : '-'}</span></span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600">Min: <span className="font-medium text-green-600">{advancedStats.totalWeight.min?.toLocaleString() || '-'}</span></span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600">Max: <span className="font-medium text-red-600">{advancedStats.totalWeight.max?.toLocaleString() || '-'}</span></span>
+                  </div>
+                </div>
+
                 {/* Statistiche SGR */}
                 {(advancedStats.sgrPeso.avg || advancedStats.sgrMedio.avg) && (
                   <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
