@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'wouter';
-import { AlertTriangle, AlertCircle, CheckCircle, Activity, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle, Activity, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface HealthSgrCardProps {
@@ -16,13 +16,10 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         critical: 0,
         warning: 0,
         healthy: 0,
-        avgSgr: null,
         avgMortality: null,
         noRecentOps: 0,
         avgDaysSinceMeasure: null,
-        maxDaysSinceMeasure: null,
-        trend: 'stable' as const,
-        weeklyData: [] as { week: string; avgSgr: number }[]
+        maxDaysSinceMeasure: null
       };
     }
 
@@ -46,16 +43,12 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
     let critical = 0;
     let warning = 0;
     let healthy = 0;
-    let totalSgr = 0;
-    let sgrCount = 0;
     let totalMortality = 0;
     let mortalityCount = 0;
     let noRecentOps = 0;
     
     const daysSinceLastMeasure: number[] = [];
     const today = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     activeBaskets.forEach((basket: any) => {
       const latestOp = latestOpsByBasket.get(basket.id);
@@ -74,22 +67,17 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         noRecentOps++;
       }
 
-      if (latestOp.sgrPeso !== null && latestOp.sgrPeso !== undefined && latestOp.sgrPeso > 0) {
-        totalSgr += latestOp.sgrPeso;
-        sgrCount++;
-      }
-
-      if (latestOp.mortality !== null && latestOp.mortality !== undefined) {
-        totalMortality += latestOp.mortality;
+      if (latestOp.mortalityRate !== null && latestOp.mortalityRate !== undefined) {
+        totalMortality += latestOp.mortalityRate;
         mortalityCount++;
       }
 
-      const performance = latestOp.sgrPeso || 0;
-      const mortality = latestOp.mortality || 0;
+      const mortality = latestOp.mortalityRate || 0;
 
-      if (performance < 0.5 || mortality > 10) {
+      // Classificazione basata solo su mortalità (SGR non disponibile nelle operazioni)
+      if (mortality > 10) {
         critical++;
-      } else if (performance < 1.0 || mortality > 5) {
+      } else if (mortality > 5) {
         warning++;
       } else {
         healthy++;
@@ -104,57 +92,18 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       ? Math.max(...validDays) 
       : null;
 
-    const avgSgr = sgrCount > 0 ? totalSgr / sgrCount : null;
     const avgMortality = mortalityCount > 0 ? totalMortality / mortalityCount : null;
-
-    const opsWithSgr = relevantOps
-      .filter((op: any) => op.sgrPeso && op.sgrPeso > 0)
-      .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    const weeklyMap = new Map<string, { total: number; count: number }>();
-    opsWithSgr.forEach((op: any) => {
-      const date = new Date(op.date);
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay());
-      const weekKey = weekStart.toISOString().split('T')[0];
-      
-      const existing = weeklyMap.get(weekKey) || { total: 0, count: 0 };
-      existing.total += op.sgrPeso;
-      existing.count += 1;
-      weeklyMap.set(weekKey, existing);
-    });
-
-    const weeklyData = Array.from(weeklyMap.entries())
-      .map(([key, data]) => ({
-        week: key,
-        avgSgr: data.total / data.count
-      }))
-      .sort((a, b) => a.week.localeCompare(b.week))
-      .slice(-6);
-
-    let trend: 'up' | 'down' | 'stable' = 'stable';
-    if (weeklyData.length >= 2) {
-      const current = weeklyData[weeklyData.length - 1].avgSgr;
-      const previous = weeklyData[weeklyData.length - 2].avgSgr;
-      if (current > previous * 1.05) trend = 'up';
-      else if (current < previous * 0.95) trend = 'down';
-    }
 
     return {
       critical,
       warning,
       healthy,
-      avgSgr,
       avgMortality,
       noRecentOps,
       avgDaysSinceMeasure,
-      maxDaysSinceMeasure,
-      trend,
-      weeklyData
+      maxDaysSinceMeasure
     };
   }, [operations, activeCycles, activeBaskets]);
-
-  const maxSgr = Math.max(...stats.weeklyData.map(d => d.avgSgr), 1);
 
   return (
     <Card className="bg-gradient-to-br from-slate-50 to-purple-100 border-l-4 border-purple-500 h-full">
@@ -198,18 +147,6 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         <div className="flex-1 flex flex-col justify-between">
           <div className="space-y-1 text-xs">
             <div className="flex justify-between items-center bg-white rounded px-2 py-1">
-              <span className="text-gray-600">SGR Medio</span>
-              <div className="flex items-center gap-1">
-                <span className="font-semibold text-blue-600">
-                  {stats.avgSgr !== null ? stats.avgSgr.toFixed(2) : 'N/D'}
-                </span>
-                {stats.trend === 'up' && <TrendingUp className="h-3 w-3 text-green-500" />}
-                {stats.trend === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
-                {stats.trend === 'stable' && <Minus className="h-3 w-3 text-gray-400" />}
-              </div>
-            </div>
-            
-            <div className="flex justify-between items-center bg-white rounded px-2 py-1">
               <span className="text-gray-600">Mortalità Media</span>
               <span className={`font-semibold ${
                 stats.avgMortality !== null && stats.avgMortality > 5 
@@ -239,21 +176,6 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
               </span>
             </div>
           </div>
-
-          {stats.weeklyData.length > 0 && (
-            <div className="mt-2">
-              <div className="flex items-end justify-between h-8 gap-0.5">
-                {stats.weeklyData.map((week, idx) => (
-                  <div 
-                    key={week.week} 
-                    className="flex-1 bg-purple-400 rounded-t opacity-70 hover:opacity-100 transition-opacity"
-                    style={{ height: `${Math.max(15, (week.avgSgr / maxSgr) * 100)}%` }}
-                    title={`SGR: ${week.avgSgr.toFixed(2)}`}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
 
           <Link href="/spreadsheet-operations" className="block mt-2">
             <div className="text-[10px] text-center text-purple-600 hover:text-purple-800">
