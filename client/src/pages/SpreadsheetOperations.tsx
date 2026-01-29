@@ -558,10 +558,15 @@ export default function SpreadsheetOperations() {
         const lastOp = basket.lastOperation;
         const sizesArray = Array.isArray(sizes) ? sizes : [];
         
-        // Calcola taglia corrente basandosi sulla logica del modulo Inventory
+        // Calcola taglia corrente basandosi SOLO su operazioni misura o prima-attivazione
+        // Le operazioni di tipo "peso" NON incidono sulla determinazione della taglia
         const basketOperationsForSize = ((operations as any[]) || []).filter((op: any) => op.basketId === basket.id);
         const lastOperationWithAnimalsPerKg = basketOperationsForSize
-          .filter((op: any) => op.animalsPerKg && op.animalsPerKg > 0)
+          .filter((op: any) => 
+            op.animalsPerKg && 
+            op.animalsPerKg > 0 && 
+            (op.type === 'misura' || op.type === 'prima-attivazione') // Solo misura e prima-attivazione
+          )
           .sort((a: any, b: any) => {
             // Prima ordina per ID (più recente = ID più alto)
             const idDiff = b.id - a.id;
