@@ -300,6 +300,7 @@ export class LotsController {
         { key: 'supplierLotNumber', width: 14 },
         { key: 'quality', width: 10 },
         { key: 'sizeCode', width: 10 },
+        { key: 'animalsPerKg', width: 12 },
         { key: 'ageDays', width: 10 },
         { key: 'initialCount', width: 14 },
         { key: 'currentCount', width: 14 },
@@ -313,7 +314,7 @@ export class LotsController {
       sheet.columns = columns;
       
       // Stile intestazione con eachCell per applicazione corretta
-      const headerRow = sheet.addRow(['ID', 'Data Arrivo', 'Fornitore', 'N. Lotto Forn.', 'Qualità', 'Taglia', 'Età (gg)', 'Q.tà Iniziale', 'Q.tà Attuale', 'Venduti', 'Mortalità', '% Mortalità', 'Stato', 'Note']);
+      const headerRow = sheet.addRow(['ID', 'Data Arrivo', 'Fornitore', 'N. Lotto Forn.', 'Qualità', 'Taglia', 'Pezzi/Kg', 'Età (gg)', 'Q.tà Iniziale', 'Q.tà Attuale', 'Venduti', 'Mortalità', '% Mortalità', 'Stato', 'Note']);
       headerRow.eachCell((cell) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
@@ -340,6 +341,11 @@ export class LotsController {
           ? ((lot.totalMortality || 0) / lot.initialCount * 100).toFixed(2) + '%'
           : '0.00%';
         
+        // Calcola Pezzi/Kg
+        const animalsPerKg = lot.animalCount && lot.weight && lot.weight > 0 
+          ? Math.round(lot.animalCount / (lot.weight / 1000))
+          : null;
+        
         const row = sheet.addRow({
           id: lot.id,
           arrivalDate: lot.arrivalDate ? new Date(lot.arrivalDate).toLocaleDateString('it-IT') : '-',
@@ -347,6 +353,7 @@ export class LotsController {
           supplierLotNumber: lot.supplierLotNumber || '-',
           quality: qualityLabels[lot.quality] || lot.quality || '-',
           sizeCode: lot.sizeCode || lot.size?.code || '-',
+          animalsPerKg: animalsPerKg,
           ageDays: lot.ageDays || null,
           initialCount: lot.animalCount || null,
           currentCount: lot.currentCount || lot.animalCount || null,

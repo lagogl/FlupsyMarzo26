@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
 import { 
   Eye, Copy, Download, Plus, Filter, Upload, Pencil, Search, Waves,
-  Trash2, AlertTriangle, History, MapPin, Info, Loader2
+  Trash2, AlertTriangle, History, MapPin, Info, Loader2, ClipboardList
 } from 'lucide-react';
 import { getSizeBadgeStyle, getSizeColor } from '@/lib/sizeUtils';
 import { Button } from '@/components/ui/button';
@@ -1120,10 +1122,14 @@ export default function Baskets() {
           </DialogHeader>
           {selectedBasket && (
             <Tabs defaultValue="info">
-              <TabsList className="grid w-full grid-cols-1">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="info" className="flex items-center gap-1">
                   <Info className="h-4 w-4" />
                   <span>Informazioni</span>
+                </TabsTrigger>
+                <TabsTrigger value="operations" className="flex items-center gap-1">
+                  <ClipboardList className="h-4 w-4" />
+                  <span>Operazioni</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -1210,6 +1216,73 @@ export default function Baskets() {
                         </p>
                       </div>
                     )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="operations" className="mt-4">
+                <div className="rounded-lg bg-card border">
+                  <div className="p-4 border-b bg-muted/30">
+                    <h3 className="text-lg font-semibold flex items-center">
+                      <ClipboardList className="h-5 w-5 mr-2" />
+                      Storico Operazioni
+                    </h3>
+                  </div>
+                  <div className="p-4">
+                    {(() => {
+                      const basketOps = (operations as any[])
+                        .filter((op: any) => op.basketId === selectedBasket.id)
+                        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                      
+                      if (basketOps.length === 0) {
+                        return (
+                          <p className="text-muted-foreground text-center py-4">
+                            Nessuna operazione registrata per questa cesta
+                          </p>
+                        );
+                      }
+                      
+                      return (
+                        <div className="max-h-[300px] overflow-y-auto">
+                          <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-muted">
+                              <tr>
+                                <th className="text-left p-2 font-medium">Data</th>
+                                <th className="text-left p-2 font-medium">Tipo</th>
+                                <th className="text-right p-2 font-medium">Pz/Kg</th>
+                                <th className="text-right p-2 font-medium">Animali</th>
+                                <th className="text-right p-2 font-medium">Peso (g)</th>
+                                <th className="text-left p-2 font-medium">Note</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {basketOps.map((op: any) => (
+                                <tr key={op.id} className="hover:bg-muted/50">
+                                  <td className="p-2">{format(new Date(op.date), 'dd/MM/yy', { locale: it })}</td>
+                                  <td className="p-2">
+                                    <Badge variant={
+                                      op.type === 'misura' ? 'default' : 
+                                      op.type === 'peso' ? 'secondary' : 
+                                      op.type === 'prima-attivazione' ? 'outline' : 'destructive'
+                                    } className="text-xs">
+                                      {op.type}
+                                    </Badge>
+                                  </td>
+                                  <td className="p-2 text-right font-semibold text-blue-700">
+                                    {op.animalsPerKg ? Math.round(op.animalsPerKg).toLocaleString() : '-'}
+                                  </td>
+                                  <td className="p-2 text-right">{op.animalCount ? op.animalCount.toLocaleString() : '-'}</td>
+                                  <td className="p-2 text-right">{op.totalWeight ? op.totalWeight.toLocaleString() : '-'}</td>
+                                  <td className="p-2 max-w-[150px] truncate text-muted-foreground" title={op.notes || ''}>
+                                    {op.notes || '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </TabsContent>

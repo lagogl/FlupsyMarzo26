@@ -767,13 +767,13 @@ export default function Lots() {
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 whitespace-nowrap text-center text-gray-500">
+                  <td colSpan={10} className="px-6 py-4 whitespace-nowrap text-center text-gray-500">
                     Caricamento lotti...
                   </td>
                 </tr>
               ) : sortedLots.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 whitespace-nowrap text-center text-gray-500">
+                  <td colSpan={10} className="px-6 py-4 whitespace-nowrap text-center text-gray-500">
                     Nessun lotto trovato
                   </td>
                 </tr>
