@@ -2164,6 +2164,64 @@ export default function SpreadsheetOperations() {
     errors: operationRows.filter(r => r.status === 'error').length
   };
 
+  // Calcola statistiche avanzate dalle righe filtrate
+  const getFilteredRows = () => {
+    return operationRows.filter((row) => {
+      if (selectedSizeFilter === "all") return true;
+      const sizesArray = Array.isArray(sizes) ? sizes : [];
+      const selectedSize = sizesArray.find((s: any) => s.id === parseInt(selectedSizeFilter));
+      if (!selectedSize) return true;
+      return row.currentSize === selectedSize.code;
+    });
+  };
+
+  const advancedStats = (() => {
+    const filteredRows = getFilteredRows();
+    if (filteredRows.length === 0) return null;
+
+    // Raccogli valori numerici validi
+    const animalsPerKgValues = filteredRows.map(r => r.animalsPerKg).filter((v): v is number => v !== null && v !== undefined && v > 0);
+    const animalCountValues = filteredRows.map(r => r.animalCount).filter((v): v is number => v !== null && v !== undefined && v > 0);
+    const totalWeightValues = filteredRows.map(r => r.totalWeight).filter((v): v is number => v !== null && v !== undefined && v > 0);
+    const sgrPesoValues = filteredRows.map(r => r.sgrPeso).filter((v): v is number => v !== null && v !== undefined && v > 0);
+    const sgrMedioValues = filteredRows.map(r => r.sgrMedio).filter((v): v is number => v !== null && v !== undefined && v > 0);
+    const deadCountValues = filteredRows.map(r => r.deadCount).filter((v): v is number => v !== null && v !== undefined && v > 0);
+
+    // Calcola statistiche per colonna
+    const calcStats = (values: number[]) => {
+      if (values.length === 0) return { avg: null, min: null, max: null, sum: null };
+      const sum = values.reduce((a, b) => a + b, 0);
+      return {
+        avg: sum / values.length,
+        min: Math.min(...values),
+        max: Math.max(...values),
+        sum
+      };
+    };
+
+    // Totali per taglia
+    const sizeBreakdown: Record<string, { count: number; totalAnimals: number }> = {};
+    filteredRows.forEach(row => {
+      const size = row.currentSize || 'N/A';
+      if (!sizeBreakdown[size]) {
+        sizeBreakdown[size] = { count: 0, totalAnimals: 0 };
+      }
+      sizeBreakdown[size].count++;
+      sizeBreakdown[size].totalAnimals += row.animalCount || 0;
+    });
+
+    return {
+      rowCount: filteredRows.length,
+      animalsPerKg: calcStats(animalsPerKgValues),
+      animalCount: calcStats(animalCountValues),
+      totalWeight: calcStats(totalWeightValues),
+      sgrPeso: calcStats(sgrPesoValues),
+      sgrMedio: calcStats(sgrMedioValues),
+      deadCount: calcStats(deadCountValues),
+      sizeBreakdown
+    };
+  })();
+
   return (
     <div className="container mx-auto py-2 space-y-2">
       <div className="flex items-center justify-between">
@@ -2406,6 +2464,92 @@ export default function SpreadsheetOperations() {
               {selectedFlupsyId === "all" ? "TUTTI I FLUPSY" : ((flupsys as any[]) || []).find((f: any) => f.id === parseInt(selectedFlupsyId))?.name} - {operationTypeOptions.find(opt => opt.value === selectedOperationType)?.label}
             </h3>
           </div>
+
+          {/* Barra Statistiche Avanzate */}
+          {advancedStats && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b px-3 py-2">
+              <div className="flex flex-wrap gap-4 items-start">
+                {/* Riepilogo Generale */}
+                <div className="flex items-center gap-3">
+                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
+                    <div className="text-[10px] text-gray-500 uppercase">Ceste</div>
+                    <div className="text-lg font-bold text-blue-700">{advancedStats.rowCount}</div>
+                  </div>
+                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
+                    <div className="text-[10px] text-gray-500 uppercase">Tot. Animali</div>
+                    <div className="text-lg font-bold text-green-700">{advancedStats.animalCount.sum?.toLocaleString() || '-'}</div>
+                  </div>
+                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
+                    <div className="text-[10px] text-gray-500 uppercase">Tot. Peso (g)</div>
+                    <div className="text-lg font-bold text-amber-700">{advancedStats.totalWeight.sum?.toLocaleString() || '-'}</div>
+                  </div>
+                </div>
+
+                {/* Statistiche Pz/Kg */}
+                <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
+                  <div className="text-[10px] text-gray-500 uppercase mb-0.5">Pz/Kg</div>
+                  <div className="flex gap-2 text-xs">
+                    <span className="text-gray-600">Media: <span className="font-semibold text-blue-700">{advancedStats.animalsPerKg.avg ? Math.round(advancedStats.animalsPerKg.avg).toLocaleString() : '-'}</span></span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600">Min: <span className="font-medium text-green-600">{advancedStats.animalsPerKg.min?.toLocaleString() || '-'}</span></span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600">Max: <span className="font-medium text-red-600">{advancedStats.animalsPerKg.max?.toLocaleString() || '-'}</span></span>
+                  </div>
+                </div>
+
+                {/* Statistiche SGR */}
+                {(advancedStats.sgrPeso.avg || advancedStats.sgrMedio.avg) && (
+                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
+                    <div className="text-[10px] text-gray-500 uppercase mb-0.5">SGR (%)</div>
+                    <div className="flex gap-2 text-xs">
+                      {advancedStats.sgrPeso.avg && (
+                        <>
+                          <span className="text-gray-600">Media: <span className="font-semibold text-purple-700">{advancedStats.sgrPeso.avg.toFixed(2)}</span></span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-gray-600">Min: <span className="font-medium text-green-600">{advancedStats.sgrPeso.min?.toFixed(2) || '-'}</span></span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-gray-600">Max: <span className="font-medium text-red-600">{advancedStats.sgrPeso.max?.toFixed(2) || '-'}</span></span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Totale Morti */}
+                {advancedStats.deadCount.sum && advancedStats.deadCount.sum > 0 && (
+                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border border-red-200">
+                    <div className="text-[10px] text-gray-500 uppercase">Tot. Morti</div>
+                    <div className="text-lg font-bold text-red-600">{advancedStats.deadCount.sum.toLocaleString()}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Breakdown per Taglia */}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="text-[10px] text-gray-500 uppercase self-center mr-1">Per Taglia:</span>
+                {Object.entries(advancedStats.sizeBreakdown)
+                  .sort(([a], [b]) => {
+                    const getNum = (s: string) => s.startsWith('TP-') ? parseInt(s.substring(3)) : 999999;
+                    return getNum(a) - getNum(b);
+                  })
+                  .map(([size, data]) => (
+                    <div 
+                      key={size} 
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        size.startsWith('TP-') 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <span className="font-bold">{size}</span>
+                      <span className="text-[10px] opacity-75">({data.count} ceste)</span>
+                      <span className="font-semibold">{data.totalAnimals.toLocaleString()}</span>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
           
           <div className="relative">
             {/* Indicatore scroll mobile */}
