@@ -2186,6 +2186,7 @@ export default function SpreadsheetOperations() {
     const sgrPesoValues = filteredRows.map(r => r.sgrPeso).filter((v): v is number => v !== null && v !== undefined && v > 0);
     const sgrMedioValues = filteredRows.map(r => r.sgrMedio).filter((v): v is number => v !== null && v !== undefined && v > 0);
     const deadCountValues = filteredRows.map(r => r.deadCount).filter((v): v is number => v !== null && v !== undefined && v > 0);
+    const mortalityRateValues = filteredRows.map(r => r.mortalityRate).filter((v): v is number => v !== null && v !== undefined && v > 0);
 
     // Calcola statistiche per colonna
     const calcStats = (values: number[]) => {
@@ -2218,6 +2219,7 @@ export default function SpreadsheetOperations() {
       sgrPeso: calcStats(sgrPesoValues),
       sgrMedio: calcStats(sgrMedioValues),
       deadCount: calcStats(deadCountValues),
+      mortalityRate: calcStats(mortalityRateValues),
       sizeBreakdown
     };
   })();
@@ -2527,11 +2529,11 @@ export default function SpreadsheetOperations() {
                   </div>
                 )}
 
-                {/* Totale Morti */}
-                {advancedStats.deadCount.sum && advancedStats.deadCount.sum > 0 && (
-                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border border-red-200">
-                    <div className="text-[10px] text-gray-500 uppercase">Tot. Morti</div>
-                    <div className="text-lg font-bold text-red-600">{advancedStats.deadCount.sum.toLocaleString()}</div>
+                {/* Media Mortalità % */}
+                {advancedStats.mortalityRate.avg && (
+                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border border-orange-200">
+                    <div className="text-[10px] text-gray-500 uppercase">Media Mort. %</div>
+                    <div className="text-lg font-bold text-orange-600">{advancedStats.mortalityRate.avg.toFixed(2)}%</div>
                   </div>
                 )}
               </div>
