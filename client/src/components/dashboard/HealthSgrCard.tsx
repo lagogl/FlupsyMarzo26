@@ -49,7 +49,9 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
     let totalMortality = 0;
     let mortalityCount = 0;
     let noRecentOps = 0;
-
+    
+    const daysSinceLastMeasure: number[] = [];
+    const today = new Date();
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -58,11 +60,15 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       
       if (!latestOp) {
         noRecentOps++;
+        daysSinceLastMeasure.push(999);
         return;
       }
 
       const opDate = new Date(latestOp.date);
-      if (opDate < sevenDaysAgo) {
+      const daysDiff = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
+      daysSinceLastMeasure.push(daysDiff);
+      
+      if (daysDiff > 7) {
         noRecentOps++;
       }
 
@@ -87,6 +93,14 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         healthy++;
       }
     });
+
+    const validDays = daysSinceLastMeasure.filter(d => d < 999);
+    const avgDaysSinceMeasure = validDays.length > 0 
+      ? validDays.reduce((a, b) => a + b, 0) / validDays.length 
+      : null;
+    const maxDaysSinceMeasure = validDays.length > 0 
+      ? Math.max(...validDays) 
+      : null;
 
     const avgSgr = sgrCount > 0 ? totalSgr / sgrCount : null;
     const avgMortality = mortalityCount > 0 ? totalMortality / mortalityCount : null;
@@ -131,6 +145,8 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       avgSgr,
       avgMortality,
       noRecentOps,
+      avgDaysSinceMeasure,
+      maxDaysSinceMeasure,
       trend,
       weeklyData
     };
@@ -202,15 +218,24 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
               </span>
             </div>
 
-            {stats.noRecentOps > 0 && (
-              <div className="flex justify-between items-center bg-amber-50 rounded px-2 py-1">
-                <span className="text-gray-600 flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Senza op. {">"}7gg
-                </span>
-                <span className="font-semibold text-amber-600">{stats.noRecentOps}</span>
-              </div>
-            )}
+            <div className="flex justify-between items-center bg-white rounded px-2 py-1">
+              <span className="text-gray-600">Giorni da ultima misura</span>
+              <span className="font-semibold text-gray-700">
+                {stats.avgDaysSinceMeasure !== null 
+                  ? `${stats.avgDaysSinceMeasure.toFixed(0)} med / ${stats.maxDaysSinceMeasure} max`
+                  : 'N/D'}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center bg-amber-50 rounded px-2 py-1">
+              <span className="text-gray-600 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Ceste senza misura {">"}7gg
+              </span>
+              <span className={`font-semibold ${stats.noRecentOps > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                {stats.noRecentOps}
+              </span>
+            </div>
           </div>
 
           {stats.weeklyData.length > 0 && (
