@@ -19,6 +19,8 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         avgSgr: null,
         avgMortality: null,
         noRecentOps: 0,
+        avgDaysSinceMeasure: null,
+        maxDaysSinceMeasure: null,
         trend: 'stable' as const,
         weeklyData: [] as { week: string; avgSgr: number }[]
       };
