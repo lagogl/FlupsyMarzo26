@@ -116,7 +116,7 @@ export default function HealthStatusCard({ operations, activeCycles, activeBaske
       noRecentOps,
       trend
     };
-  }, [operations, cycles, baskets]);
+  }, [operations, activeCycles, activeBaskets]);
 
   const total = healthStats.critical + healthStats.warning + healthStats.healthy;
 

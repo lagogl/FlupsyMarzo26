@@ -60,7 +60,7 @@ export default function SgrTrendChart({ operations, activeCycles }: SgrTrendChar
     }
 
     return { weeklyData, trend, currentAvg, previousAvg };
-  }, [operations, cycles]);
+  }, [operations, activeCycles]);
 
   function formatWeekLabel(date: Date): string {
     const day = date.getDate();
