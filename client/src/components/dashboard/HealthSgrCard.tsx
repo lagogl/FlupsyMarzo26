@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'wouter';
-import { AlertTriangle, AlertCircle, CheckCircle, Activity, Clock } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle, Activity, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface HealthSgrCardProps {
@@ -18,6 +18,8 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         healthy: 0,
         avgSgr: null,
         avgMortality: null,
+        sgrTrend: 'stable' as const,
+        mortalityTrend: 'stable' as const,
         noRecentOps: 0,
         avgDaysSinceMeasure: null,
         maxDaysSinceMeasure: null
@@ -46,8 +48,12 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
     let healthy = 0;
     let totalMortality = 0;
     let mortalityCount = 0;
+    let totalPrevMortality = 0;
+    let prevMortalityCount = 0;
     let totalSgr = 0;
     let sgrCount = 0;
+    let totalPrevSgr = 0;
+    let prevSgrCount = 0;
     let noRecentOps = 0;
     
     const daysSinceLastMeasure: number[] = [];
@@ -86,28 +92,50 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         noRecentOps++;
       }
 
+      // Mortalità attuale (ultima operazione)
       if (latestOp.mortalityRate !== null && latestOp.mortalityRate !== undefined) {
         totalMortality += latestOp.mortalityRate;
         mortalityCount++;
       }
 
-      // Calcolo SGR tra le ultime 2 operazioni
+      // Mortalità precedente (penultima operazione) per trend
+      if (basketOps.length >= 2 && basketOps[1].mortalityRate !== null && basketOps[1].mortalityRate !== undefined) {
+        totalPrevMortality += basketOps[1].mortalityRate;
+        prevMortalityCount++;
+      }
+
+      // Calcolo SGR attuale tra le ultime 2 operazioni
       if (basketOps.length >= 2) {
-        const op1 = basketOps[0]; // più recente
-        const op2 = basketOps[1]; // precedente
+        const op1 = basketOps[0];
+        const op2 = basketOps[1];
         
-        // Serve peso in entrambe le operazioni per calcolare SGR
         if (op1.totalWeight && op2.totalWeight && op1.totalWeight > 0 && op2.totalWeight > 0) {
           const date1 = new Date(op1.date);
           const date2 = new Date(op2.date);
           const days = Math.max(1, Math.floor((date1.getTime() - date2.getTime()) / (1000 * 60 * 60 * 24)));
-          
-          // SGR = ((ln(peso2) - ln(peso1)) / giorni) * 100
           const sgr = ((Math.log(op1.totalWeight) - Math.log(op2.totalWeight)) / days) * 100;
           
-          if (sgr > -50 && sgr < 50) { // Filtro valori anomali
+          if (sgr > -50 && sgr < 50) {
             totalSgr += sgr;
             sgrCount++;
+          }
+        }
+      }
+
+      // Calcolo SGR precedente tra 3a e 4a operazione per trend
+      if (basketOps.length >= 4) {
+        const op3 = basketOps[2];
+        const op4 = basketOps[3];
+        
+        if (op3.totalWeight && op4.totalWeight && op3.totalWeight > 0 && op4.totalWeight > 0) {
+          const date3 = new Date(op3.date);
+          const date4 = new Date(op4.date);
+          const days = Math.max(1, Math.floor((date3.getTime() - date4.getTime()) / (1000 * 60 * 60 * 24)));
+          const prevSgr = ((Math.log(op3.totalWeight) - Math.log(op4.totalWeight)) / days) * 100;
+          
+          if (prevSgr > -50 && prevSgr < 50) {
+            totalPrevSgr += prevSgr;
+            prevSgrCount++;
           }
         }
       }
@@ -133,7 +161,24 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       : null;
 
     const avgMortality = mortalityCount > 0 ? totalMortality / mortalityCount : null;
+    const avgPrevMortality = prevMortalityCount > 0 ? totalPrevMortality / prevMortalityCount : null;
     const avgSgr = sgrCount > 0 ? totalSgr / sgrCount : null;
+    const avgPrevSgr = prevSgrCount > 0 ? totalPrevSgr / prevSgrCount : null;
+
+    // Calcolo trend (soglia 5% per considerare variazione significativa)
+    let sgrTrend: 'up' | 'down' | 'stable' = 'stable';
+    if (avgSgr !== null && avgPrevSgr !== null) {
+      const sgrChange = ((avgSgr - avgPrevSgr) / Math.abs(avgPrevSgr)) * 100;
+      if (sgrChange > 5) sgrTrend = 'up';
+      else if (sgrChange < -5) sgrTrend = 'down';
+    }
+
+    let mortalityTrend: 'up' | 'down' | 'stable' = 'stable';
+    if (avgMortality !== null && avgPrevMortality !== null) {
+      const mortChange = ((avgMortality - avgPrevMortality) / Math.abs(avgPrevMortality || 1)) * 100;
+      if (mortChange > 5) mortalityTrend = 'up'; // mortalità aumenta = negativo
+      else if (mortChange < -5) mortalityTrend = 'down'; // mortalità diminuisce = positivo
+    }
 
     return {
       critical,
@@ -141,6 +186,8 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       healthy,
       avgSgr,
       avgMortality,
+      sgrTrend,
+      mortalityTrend,
       noRecentOps,
       avgDaysSinceMeasure,
       maxDaysSinceMeasure
@@ -190,24 +237,34 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
           <div className="space-y-1 text-xs">
             <div className="flex justify-between items-center bg-white rounded px-2 py-1">
               <span className="text-gray-600">SGR Medio</span>
-              <span className={`font-semibold ${
-                stats.avgSgr !== null && stats.avgSgr > 0 
-                  ? 'text-blue-600' 
-                  : 'text-gray-600'
-              }`}>
-                {stats.avgSgr !== null ? `${stats.avgSgr.toFixed(2)}%` : 'N/D'}
-              </span>
+              <div className="flex items-center gap-1">
+                <span className={`font-semibold ${
+                  stats.avgSgr !== null && stats.avgSgr > 0 
+                    ? 'text-blue-600' 
+                    : 'text-gray-600'
+                }`}>
+                  {stats.avgSgr !== null ? `${stats.avgSgr.toFixed(2)}%` : 'N/D'}
+                </span>
+                {stats.sgrTrend === 'up' && <TrendingUp className="h-3 w-3 text-green-500" />}
+                {stats.sgrTrend === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
+                {stats.sgrTrend === 'stable' && stats.avgSgr !== null && <Minus className="h-3 w-3 text-gray-400" />}
+              </div>
             </div>
             
             <div className="flex justify-between items-center bg-white rounded px-2 py-1">
               <span className="text-gray-600">Mortalità Media</span>
-              <span className={`font-semibold ${
-                stats.avgMortality !== null && stats.avgMortality > 5 
-                  ? 'text-red-600' 
-                  : 'text-green-600'
-              }`}>
-                {stats.avgMortality !== null ? `${stats.avgMortality.toFixed(1)}%` : 'N/D'}
-              </span>
+              <div className="flex items-center gap-1">
+                <span className={`font-semibold ${
+                  stats.avgMortality !== null && stats.avgMortality > 5 
+                    ? 'text-red-600' 
+                    : 'text-green-600'
+                }`}>
+                  {stats.avgMortality !== null ? `${stats.avgMortality.toFixed(1)}%` : 'N/D'}
+                </span>
+                {stats.mortalityTrend === 'up' && <TrendingUp className="h-3 w-3 text-red-500" />}
+                {stats.mortalityTrend === 'down' && <TrendingDown className="h-3 w-3 text-green-500" />}
+                {stats.mortalityTrend === 'stable' && stats.avgMortality !== null && <Minus className="h-3 w-3 text-gray-400" />}
+              </div>
             </div>
 
             <div className="flex justify-between items-center bg-white rounded px-2 py-1">
