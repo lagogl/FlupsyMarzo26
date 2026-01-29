@@ -54,7 +54,6 @@ export default function Dashboard() {
   const dashboardTitleRef = useRef<HTMLHeadingElement>(null);
   const basketsCardRef = useRef<HTMLDivElement>(null);
   const cyclesCardRef = useRef<HTMLDivElement>(null);
-  const operationsCardRef = useRef<HTMLDivElement>(null);
   const lotsCardRef = useRef<HTMLDivElement>(null);
   const recentOperationsRef = useRef<HTMLDivElement>(null);
   const growthChartRef = useRef<HTMLDivElement>(null);
@@ -486,13 +485,13 @@ export default function Dashboard() {
       {/* Health Status e SGR Trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <HealthStatusCard 
-          operations={operations || []} 
-          cycles={cycles || []} 
-          baskets={baskets || []} 
+          operations={filteredOperations} 
+          activeCycles={activeCycles} 
+          activeBaskets={activeBaskets} 
         />
         <SgrTrendChart 
-          operations={operations || []} 
-          cycles={cycles || []} 
+          operations={filteredOperations} 
+          activeCycles={activeCycles} 
         />
       </div>
 

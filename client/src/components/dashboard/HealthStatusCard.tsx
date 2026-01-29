@@ -5,13 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface HealthStatusCardProps {
   operations: any[];
-  cycles: any[];
-  baskets: any[];
+  activeCycles: any[];
+  activeBaskets: any[];
 }
 
-export default function HealthStatusCard({ operations, cycles, baskets }: HealthStatusCardProps) {
+export default function HealthStatusCard({ operations, activeCycles, activeBaskets }: HealthStatusCardProps) {
   const healthStats = useMemo(() => {
-    if (!operations || !cycles || !baskets) {
+    if (!operations || !activeCycles || !activeBaskets) {
       return {
         critical: 0,
         warning: 0,
@@ -23,7 +23,7 @@ export default function HealthStatusCard({ operations, cycles, baskets }: Health
       };
     }
 
-    const activeCycleIds = new Set(cycles.filter((c: any) => c.status === 'active').map((c: any) => c.id));
+    const activeCycleIds = new Set(activeCycles.map((c: any) => c.id));
     
     const relevantOps = operations.filter((op: any) => 
       op.cycleId && activeCycleIds.has(op.cycleId) && 
@@ -51,10 +51,6 @@ export default function HealthStatusCard({ operations, cycles, baskets }: Health
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const activeBaskets = baskets.filter((b: any) => 
-      b.state === 'active' || b.state === 'occupied'
-    );
 
     activeBaskets.forEach((basket: any) => {
       const latestOp = latestOpsByBasket.get(basket.id);

@@ -4,16 +4,16 @@ import { TrendingUp, TrendingDown, Minus, Activity } from 'lucide-react';
 
 interface SgrTrendChartProps {
   operations: any[];
-  cycles: any[];
+  activeCycles: any[];
 }
 
-export default function SgrTrendChart({ operations, cycles }: SgrTrendChartProps) {
+export default function SgrTrendChart({ operations, activeCycles }: SgrTrendChartProps) {
   const chartData = useMemo(() => {
-    if (!operations || !cycles) {
+    if (!operations || !activeCycles) {
       return { weeklyData: [], trend: 'stable' as const, currentAvg: null, previousAvg: null };
     }
 
-    const activeCycleIds = new Set(cycles.filter((c: any) => c.status === 'active').map((c: any) => c.id));
+    const activeCycleIds = new Set(activeCycles.map((c: any) => c.id));
     
     const relevantOps = operations.filter((op: any) => 
       op.cycleId && activeCycleIds.has(op.cycleId) && 
