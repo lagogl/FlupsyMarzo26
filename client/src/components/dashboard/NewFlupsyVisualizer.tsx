@@ -553,7 +553,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Function to render a single FLUPSY
-  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false) => {
+  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, basketFilter?: (basket: any) => boolean) => {
     // Estrai il valore max_positions dal database (accettando varie possibili denominazioni)
     const maxPositionsFromDB = flupsy.max_positions || flupsy.maxPositions || flupsy.maxPosition || flupsy["max-positions"];
     const maxPositions = maxPositionsFromDB || 10; // Fallback se il valore non è presente
@@ -567,13 +567,19 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     
     // Trova i cestelli per questo FLUPSY
     // Mostra solo i cestelli con ciclo attivo
-    const dxBaskets = allBaskets
+    let dxBaskets = allBaskets
       ?.filter((b: any) => b.flupsyId === flupsy.id && b.row === 'DX' && b.currentCycleId)
       .sort((a: any, b: any) => a.position - b.position) || [];
       
-    const sxBaskets = allBaskets
+    let sxBaskets = allBaskets
       ?.filter((b: any) => b.flupsyId === flupsy.id && b.row === 'SX' && b.currentCycleId)
       .sort((a: any, b: any) => a.position - b.position) || [];
+
+    // Applica filtro aggiuntivo se specificato
+    if (basketFilter) {
+      dxBaskets = dxBaskets.filter(basketFilter);
+      sxBaskets = sxBaskets.filter(basketFilter);
+    }
     
     // Prepara gli array per contenere tutte le posizioni, incluse quelle vuote
     const dxPositionsArray = Array(dxPositions).fill(null);
@@ -758,21 +764,21 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasHighMortality(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, hasHighMortality))}
             </TabsContent>
 
             <TabsContent value="needsMeasure" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => needsMeasurement(b.id));
-              }).map((flupsy: any) => renderFlupsy(flupsy))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, (b: any) => needsMeasurement(b.id)))}
             </TabsContent>
 
             <TabsContent value="readyHarvest" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => isReadyForHarvest(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, isReadyForHarvest))}
             </TabsContent>
           </Tabs>
         </>
