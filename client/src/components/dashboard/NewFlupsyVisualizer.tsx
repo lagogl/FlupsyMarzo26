@@ -3,12 +3,14 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from '@tanstack/react-query';
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus, Download } from 'lucide-react';
 import { getOperationTypeLabel } from '@/lib/utils';
+import * as ExcelJS from 'exceljs';
 
 interface NewFlupsyVisualizerProps {
   selectedFlupsyIds?: number[];
@@ -725,6 +727,221 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     );
   };
 
+  // Get filter label name for export
+  const getFilterLabel = (tab: string): string => {
+    const labels: Record<string, string> = {
+      all: 'Tutti i FLUPSY',
+      active: 'Con cestelli attivi',
+      large: 'Con taglie grandi',
+      expected: 'Con taglie attese',
+      highMortality: 'Con mortalità alta',
+      needsMeasure: 'Da misurare',
+      readyHarvest: 'Pronte raccolta',
+      heavyWeight: 'Peso elevato'
+    };
+    return labels[tab] || tab;
+  };
+
+  // Get filtered baskets based on current tab
+  const getFilteredBasketsForExport = (): { basket: any; flupsy: any; latestOp: any }[] => {
+    const result: { basket: any; flupsy: any; latestOp: any }[] = [];
+    
+    flupsys?.forEach((flupsy: any) => {
+      const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id) || [];
+      
+      flupsyBaskets.forEach((basket: any) => {
+        const latestOp = getLatestOperation(basket.id);
+        let include = false;
+        
+        switch (selectedTab) {
+          case 'all':
+            include = true;
+            break;
+          case 'active':
+            include = basket.state === 'active';
+            break;
+          case 'large':
+            include = hasLargeSize(basket);
+            break;
+          case 'expected':
+            include = hasExpectedSizeChange(basket.id);
+            break;
+          case 'highMortality':
+            include = hasHighMortality(basket);
+            break;
+          case 'needsMeasure':
+            include = needsMeasurement(basket.id);
+            break;
+          case 'readyHarvest':
+            include = isReadyForHarvest(basket);
+            break;
+          case 'heavyWeight':
+            include = hasHeavyWeight(basket);
+            break;
+        }
+        
+        if (include) {
+          result.push({ basket, flupsy, latestOp });
+        }
+      });
+    });
+    
+    return result;
+  };
+
+  // Export to Excel
+  const handleExportExcel = async () => {
+    const filteredData = getFilteredBasketsForExport();
+    if (filteredData.length === 0) return;
+
+    const ExcelModule = (ExcelJS as any).default || ExcelJS;
+    const workbook = new ExcelModule.Workbook();
+    const reportDate = format(new Date(), 'dd/MM/yyyy HH:mm');
+    const filterLabel = getFilterLabel(selectedTab);
+
+    const worksheet = workbook.addWorksheet('Ceste Filtrate');
+
+    // Title row
+    worksheet.mergeCells('A1:I1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = `Export Ceste - Filtro: ${filterLabel} - ${reportDate}`;
+    titleCell.font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } };
+    titleCell.alignment = { horizontal: 'left' };
+
+    // Header row
+    const headers = ['FLUPSY', 'Fila', 'Cesta', 'Stato', 'Taglia', 'An/kg', 'Peso (kg)', 'Mortalità %', 'Ultima misura'];
+    worksheet.addRow(headers);
+    const headerRow = worksheet.getRow(2);
+    headerRow.eachCell((cell: any) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
+      cell.alignment = { horizontal: 'center' };
+    });
+
+    // Group by FLUPSY and add data rows
+    const groupedByFlupsy = new Map<string, typeof filteredData>();
+    filteredData.forEach(item => {
+      const flupsyName = item.flupsy?.name || 'Sconosciuto';
+      if (!groupedByFlupsy.has(flupsyName)) {
+        groupedByFlupsy.set(flupsyName, []);
+      }
+      groupedByFlupsy.get(flupsyName)!.push(item);
+    });
+
+    let currentRow = 3;
+    let totalAnimals = 0;
+    let totalWeight = 0;
+    let totalMortality = 0;
+    let mortalityCount = 0;
+    let basketCount = 0;
+
+    groupedByFlupsy.forEach((items, flupsyName) => {
+      // FLUPSY group header
+      worksheet.mergeCells(`A${currentRow}:I${currentRow}`);
+      const groupCell = worksheet.getCell(`A${currentRow}`);
+      groupCell.value = flupsyName;
+      groupCell.font = { bold: true, size: 11, color: { argb: 'FF1E40AF' } };
+      groupCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+      currentRow++;
+
+      items.forEach((item, idx) => {
+        const { basket, latestOp } = item;
+        const animalsPerKg = latestOp?.measurementAnimalsPerKg || latestOp?.animalsPerKg;
+        const sizeCode = animalsPerKg ? getSizeCodeFromAnimalsPerKg(animalsPerKg) : 'N/D';
+        const weightKg = latestOp?.totalWeight ? (latestOp.totalWeight / 1000).toFixed(2) : '';
+        const mortality = latestOp?.mortalityRate;
+        const lastDate = latestOp?.date ? format(new Date(latestOp.date), 'dd/MM/yyyy') : '';
+
+        worksheet.addRow([
+          '',
+          basket.row || 'N/D',
+          basket.physicalNumber || basket.id,
+          basket.state || 'N/D',
+          sizeCode,
+          animalsPerKg || '',
+          weightKg,
+          mortality !== null && mortality !== undefined ? mortality.toFixed(2) : '',
+          lastDate
+        ]);
+
+        // Alternating row colors
+        const row = worksheet.getRow(currentRow);
+        if (idx % 2 === 1) {
+          row.eachCell((cell: any) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+          });
+        }
+
+        // Accumulate totals
+        if (animalsPerKg) totalAnimals += animalsPerKg;
+        if (latestOp?.totalWeight) totalWeight += latestOp.totalWeight;
+        if (mortality !== null && mortality !== undefined) {
+          totalMortality += mortality;
+          mortalityCount++;
+        }
+        basketCount++;
+        currentRow++;
+      });
+    });
+
+    // Totals row
+    worksheet.addRow([]);
+    currentRow++;
+    const totalsRow = worksheet.addRow([
+      'TOTALE',
+      '',
+      basketCount + ' ceste',
+      '',
+      '',
+      '',
+      (totalWeight / 1000).toFixed(2) + ' kg',
+      mortalityCount > 0 ? (totalMortality / mortalityCount).toFixed(2) + '% media' : '',
+      ''
+    ]);
+    totalsRow.eachCell((cell: any) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
+    });
+
+    // Column widths
+    worksheet.columns = [
+      { width: 18 }, // FLUPSY
+      { width: 8 },  // Fila
+      { width: 10 }, // Cesta
+      { width: 12 }, // Stato
+      { width: 12 }, // Taglia
+      { width: 12 }, // An/kg
+      { width: 12 }, // Peso
+      { width: 14 }, // Mortalità
+      { width: 14 }, // Ultima misura
+    ];
+
+    // Auto filter
+    worksheet.autoFilter = { from: 'A2', to: 'I2' };
+
+    // Download file
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ceste_${selectedTab}_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Function to render a single FLUPSY
   const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, basketFilter?: (basket: any) => boolean) => {
     // Estrai il valore max_positions dal database (accettando varie possibili denominazioni)
@@ -1026,7 +1243,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             onValueChange={setSelectedTab}
             className="w-full"
           >
-            <TabsList className="mb-4 flex-wrap h-auto gap-1">
+            <div className="flex items-center justify-between mb-4 gap-2">
+            <TabsList className="flex-wrap h-auto gap-1">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1092,6 +1310,24 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 </Tooltip>
               </TooltipProvider>
             </TabsList>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportExcel}
+                    className="flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <Download className="h-4 w-4" />
+                    Esporta Excel
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Esporta le ceste del filtro attivo in Excel</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            </div>
             
             <TabsContent value="all" className="space-y-4">
               {flupsys?.map((flupsy: any) => renderFlupsy(flupsy))}
