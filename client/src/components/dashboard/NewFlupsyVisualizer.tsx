@@ -108,6 +108,12 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     staleTime: 120000, // 2 minutes
   });
 
+  // Fetch all operations for SGR and trend calculations
+  const { data: allOperations } = useQuery<any[]>({
+    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
+    staleTime: 60000, // 1 minute
+  });
+
   // Create a map for quick lookup of expected size changes
   const expectedSizesMap = useMemo(() => {
     const map = new Map<number, { expectedSize: string; daysSince: number }>();
@@ -178,22 +184,52 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return expectedSizesMap.get(basketId);
   };
 
-  // Helper to calculate FLUPSY-specific statistics
+  // Helper to calculate FLUPSY-specific statistics with SGR and trends
   const getFlupsyStats = (flupsyId: number) => {
     const flupsyBaskets = filteredBaskets?.filter((b: any) => 
       b.flupsyId === flupsyId && b.currentCycleId && (b.state === 'active' || b.state === 'occupied')
     ) || [];
     
     if (flupsyBaskets.length === 0) {
-      return { critical: 0, warning: 0, healthy: 0, noMeasure: 0, avgSgr: null, avgMortality: null, activeCount: 0 };
+      return { 
+        critical: 0, warning: 0, healthy: 0, noMeasure: 0, 
+        avgSgr: null, avgMortality: null, activeCount: 0,
+        sgrTrend: 'stable' as const, mortalityTrend: 'stable' as const
+      };
     }
 
     let critical = 0, warning = 0, healthy = 0, noMeasure = 0;
     let totalMortality = 0, mortalityCount = 0;
+    let totalPrevMortality = 0, prevMortalityCount = 0;
+    let totalSgr = 0, sgrCount = 0;
+    let totalPrevSgr = 0, prevSgrCount = 0;
     const today = new Date();
 
+    // Get operations grouped by basket for this FLUPSY
+    const activeCycleIds = new Set(flupsyBaskets.map((b: any) => b.currentCycleId));
+    const flupsyOps = (allOperations || []).filter((op: any) => 
+      op.cycleId && activeCycleIds.has(op.cycleId) && 
+      (op.type === 'misura' || op.type === 'prima-attivazione')
+    );
+
+    // Group operations by basket
+    const opsByBasket = new Map<number, any[]>();
+    flupsyOps.forEach((op: any) => {
+      if (op.basketId) {
+        const ops = opsByBasket.get(op.basketId) || [];
+        ops.push(op);
+        opsByBasket.set(op.basketId, ops);
+      }
+    });
+
+    // Sort operations by date (most recent first)
+    opsByBasket.forEach((ops) => {
+      ops.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    });
+
     flupsyBaskets.forEach((basket: any) => {
-      const latestOp = getLatestOperation(basket.id);
+      const basketOps = opsByBasket.get(basket.id) || [];
+      const latestOp = basketOps[0];
       
       if (!latestOp) {
         noMeasure++;
@@ -205,7 +241,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       const daysDiff = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
       if (daysDiff > 7) noMeasure++;
 
-      // Mortality classification
+      // Mortality classification (current)
       const mortality = latestOp.mortalityRate;
       if (mortality !== null && mortality !== undefined) {
         totalMortality += mortality;
@@ -215,20 +251,90 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
         else if (mortality >= 5) warning++;
         else healthy++;
       } else {
-        healthy++; // No mortality data = assume healthy
+        healthy++;
+      }
+
+      // Mortality trend (previous operation)
+      if (basketOps.length >= 2 && basketOps[1].mortalityRate !== null && basketOps[1].mortalityRate !== undefined) {
+        totalPrevMortality += basketOps[1].mortalityRate;
+        prevMortalityCount++;
+      }
+
+      // SGR calculation between last 2 operations
+      if (basketOps.length >= 2) {
+        const op1 = basketOps[0];
+        const op2 = basketOps[1];
+        const apk1 = op1.measurementAnimalsPerKg || op1.animalsPerKg;
+        const apk2 = op2.measurementAnimalsPerKg || op2.animalsPerKg;
+        
+        if (apk1 && apk2 && apk1 > 0 && apk2 > 0) {
+          const weight1 = 1000000 / apk1; // mg
+          const weight2 = 1000000 / apk2; // mg
+          const days = Math.max(1, Math.floor((new Date(op1.date).getTime() - new Date(op2.date).getTime()) / (1000 * 60 * 60 * 24)));
+          
+          if (weight1 > 0 && weight2 > 0) {
+            const sgr = ((Math.log(weight1) - Math.log(weight2)) / days) * 100;
+            if (sgr > -50 && sgr < 50) { // Filter outliers
+              totalSgr += sgr;
+              sgrCount++;
+            }
+          }
+        }
+
+        // Previous SGR (between 2nd and 3rd operation) for trend
+        if (basketOps.length >= 3) {
+          const op2b = basketOps[1];
+          const op3 = basketOps[2];
+          const apk2b = op2b.measurementAnimalsPerKg || op2b.animalsPerKg;
+          const apk3 = op3.measurementAnimalsPerKg || op3.animalsPerKg;
+          
+          if (apk2b && apk3 && apk2b > 0 && apk3 > 0) {
+            const weight2b = 1000000 / apk2b;
+            const weight3 = 1000000 / apk3;
+            const days2 = Math.max(1, Math.floor((new Date(op2b.date).getTime() - new Date(op3.date).getTime()) / (1000 * 60 * 60 * 24)));
+            
+            if (weight2b > 0 && weight3 > 0) {
+              const prevSgr = ((Math.log(weight2b) - Math.log(weight3)) / days2) * 100;
+              if (prevSgr > -50 && prevSgr < 50) {
+                totalPrevSgr += prevSgr;
+                prevSgrCount++;
+              }
+            }
+          }
+        }
       }
     });
 
     const avgMortality = mortalityCount > 0 ? totalMortality / mortalityCount : null;
+    const avgPrevMortality = prevMortalityCount > 0 ? totalPrevMortality / prevMortalityCount : null;
+    const avgSgr = sgrCount > 0 ? totalSgr / sgrCount : null;
+    const avgPrevSgr = prevSgrCount > 0 ? totalPrevSgr / prevSgrCount : null;
+
+    // Calculate trends
+    let mortalityTrend: 'up' | 'down' | 'stable' = 'stable';
+    if (avgMortality !== null && avgPrevMortality !== null) {
+      const mortDiff = avgMortality - avgPrevMortality;
+      if (mortDiff > 0.5) mortalityTrend = 'up';
+      else if (mortDiff < -0.5) mortalityTrend = 'down';
+    }
+
+    let sgrTrend: 'up' | 'down' | 'stable' = 'stable';
+    if (avgSgr !== null && avgPrevSgr !== null) {
+      const sgrDiff = avgSgr - avgPrevSgr;
+      if (sgrDiff > 0.2) sgrTrend = 'up';
+      else if (sgrDiff < -0.2) sgrTrend = 'down';
+    }
 
     return {
       critical,
       warning,
       healthy,
       noMeasure,
-      avgSgr: null, // SGR calculation would require more complex logic
+      avgSgr,
       avgMortality,
-      activeCount: flupsyBaskets.length
+      activeCount: flupsyBaskets.length,
+      sgrTrend,
+      mortalityTrend
     };
   };
 
@@ -675,84 +781,127 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             </div>
           </div>
           
-          {/* Inline FLUPSY metrics with descriptive labels */}
+          {/* Stato salute unità - FLUPSY metrics box */}
           {flupsyStats.activeCount > 0 && (
-            <div className="flex items-center gap-2 flex-wrap text-[11px]">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded px-2 py-1">
-                      <AlertTriangle className="h-3 w-3 text-red-600" />
-                      <span className="text-red-700">Critiche:</span>
-                      <span className="font-bold text-red-600">{flupsyStats.critical}</span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Ceste con mortalità superiore al 10%</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded px-2 py-1">
-                      <AlertCircle className="h-3 w-3 text-orange-600" />
-                      <span className="text-orange-700">Attenzione:</span>
-                      <span className="font-bold text-orange-600">{flupsyStats.warning}</span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Ceste con mortalità tra 5% e 10%</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1 bg-green-50 border border-green-200 rounded px-2 py-1">
-                      <CheckCircle className="h-3 w-3 text-green-600" />
-                      <span className="text-green-700">In salute:</span>
-                      <span className="font-bold text-green-600">{flupsyStats.healthy}</span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Ceste con mortalità inferiore al 5%</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              {flupsyStats.avgMortality !== null && (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+              <span className="text-[10px] font-semibold text-slate-600 whitespace-nowrap">Stato salute unità:</span>
+              <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className={`flex items-center gap-1 rounded px-2 py-1 border ${
-                        flupsyStats.avgMortality > 5 
-                          ? 'bg-red-50 border-red-200' 
-                          : 'bg-green-50 border-green-200'
-                      }`}>
-                        <span className={flupsyStats.avgMortality > 5 ? 'text-red-700' : 'text-green-700'}>
-                          Mort. media:
-                        </span>
-                        <span className={`font-bold ${flupsyStats.avgMortality > 5 ? 'text-red-600' : 'text-green-600'}`}>
-                          {flupsyStats.avgMortality.toFixed(1)}%
-                        </span>
+                      <div className="flex items-center gap-0.5 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                        <AlertTriangle className="h-2.5 w-2.5 text-red-600" />
+                        <span className="text-red-700">Critiche:</span>
+                        <span className="font-bold text-red-600">{flupsyStats.critical}</span>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent>Mortalità media delle ceste attive in questo FLUPSY</TooltipContent>
+                    <TooltipContent>Ceste con mortalità superiore al 10%</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
-              
-              {flupsyStats.noMeasure > 0 && (
+                
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                        <Clock className="h-3 w-3 text-amber-600" />
-                        <span className="text-amber-700">Da misurare:</span>
-                        <span className="font-bold text-amber-600">{flupsyStats.noMeasure}</span>
+                      <div className="flex items-center gap-0.5 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5">
+                        <AlertCircle className="h-2.5 w-2.5 text-orange-600" />
+                        <span className="text-orange-700">Attenzione:</span>
+                        <span className="font-bold text-orange-600">{flupsyStats.warning}</span>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent>Ceste senza operazioni di misura da più di 7 giorni</TooltipContent>
+                    <TooltipContent>Ceste con mortalità tra 5% e 10%</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-0.5 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
+                        <CheckCircle className="h-2.5 w-2.5 text-green-600" />
+                        <span className="text-green-700">In salute:</span>
+                        <span className="font-bold text-green-600">{flupsyStats.healthy}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Ceste con mortalità inferiore al 5%</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <span className="text-slate-300">|</span>
+                
+                {/* SGR Medio con trend */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-0.5 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5">
+                        <span className="text-blue-700">SGR:</span>
+                        <span className="font-bold text-blue-600">
+                          {flupsyStats.avgSgr !== null ? `${flupsyStats.avgSgr.toFixed(2)}%` : 'N/D'}
+                        </span>
+                        {flupsyStats.avgSgr !== null && flupsyStats.sgrTrend === 'up' && (
+                          <TrendingUp className="h-2.5 w-2.5 text-green-500" />
+                        )}
+                        {flupsyStats.avgSgr !== null && flupsyStats.sgrTrend === 'down' && (
+                          <TrendingDown className="h-2.5 w-2.5 text-red-500" />
+                        )}
+                        {flupsyStats.avgSgr !== null && flupsyStats.sgrTrend === 'stable' && (
+                          <Minus className="h-2.5 w-2.5 text-gray-400" />
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      SGR medio (tasso di crescita specifico) - {flupsyStats.sgrTrend === 'up' ? 'In aumento' : flupsyStats.sgrTrend === 'down' ? 'In diminuzione' : 'Stabile'}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                {/* Mortalità media con trend */}
+                {flupsyStats.avgMortality !== null && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 border ${
+                          flupsyStats.avgMortality > 5 
+                            ? 'bg-red-50 border-red-200' 
+                            : 'bg-green-50 border-green-200'
+                        }`}>
+                          <span className={flupsyStats.avgMortality > 5 ? 'text-red-700' : 'text-green-700'}>
+                            Mort:
+                          </span>
+                          <span className={`font-bold ${flupsyStats.avgMortality > 5 ? 'text-red-600' : 'text-green-600'}`}>
+                            {flupsyStats.avgMortality.toFixed(1)}%
+                          </span>
+                          {flupsyStats.mortalityTrend === 'up' && (
+                            <TrendingUp className="h-2.5 w-2.5 text-red-500" />
+                          )}
+                          {flupsyStats.mortalityTrend === 'down' && (
+                            <TrendingDown className="h-2.5 w-2.5 text-green-500" />
+                          )}
+                          {flupsyStats.mortalityTrend === 'stable' && (
+                            <Minus className="h-2.5 w-2.5 text-gray-400" />
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Mortalità media - {flupsyStats.mortalityTrend === 'up' ? 'In aumento ⚠️' : flupsyStats.mortalityTrend === 'down' ? 'In diminuzione ✓' : 'Stabile'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                
+                {flupsyStats.noMeasure > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-0.5 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                          <Clock className="h-2.5 w-2.5 text-amber-600" />
+                          <span className="text-amber-700">Da misurare:</span>
+                          <span className="font-bold text-amber-600">{flupsyStats.noMeasure}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Ceste senza misura da più di 7 giorni</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
             </div>
           )}
           
