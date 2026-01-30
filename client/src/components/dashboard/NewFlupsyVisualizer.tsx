@@ -1022,7 +1022,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="all" className="bg-gray-100 data-[state=active]:bg-gray-400 data-[state=active]:text-white">Tutti i FLUPSY</TabsTrigger>
+                    <TabsTrigger value="all" className={selectedTab === 'all' ? 'bg-gray-500 text-white' : 'bg-gray-100'}>Tutti i FLUPSY</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>Mostra tutti i FLUPSY senza filtri</TooltipContent>
                 </Tooltip>
@@ -1030,7 +1030,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="active" className="bg-blue-100 data-[state=active]:bg-blue-500 data-[state=active]:text-white">Con cestelli attivi</TabsTrigger>
+                    <TabsTrigger value="active" className={selectedTab === 'active' ? 'bg-blue-500 text-white' : 'bg-blue-100'}>Con cestelli attivi</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>FLUPSY con almeno un cestello con ciclo attivo</TooltipContent>
                 </Tooltip>
@@ -1038,7 +1038,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="large" className="bg-green-100 data-[state=active]:bg-green-500 data-[state=active]:text-white">Con taglie grandi</TabsTrigger>
+                    <TabsTrigger value="large" className={selectedTab === 'large' ? 'bg-green-500 text-white' : 'bg-green-100'}>Con taglie grandi</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>Cestelli con taglia TP-3000 o superiore (≤29.000 animali/kg)</TooltipContent>
                 </Tooltip>
@@ -1046,7 +1046,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="expected" className="bg-yellow-100 data-[state=active]:bg-yellow-500 data-[state=active]:text-white">Con taglie attese</TabsTrigger>
+                    <TabsTrigger value="expected" className={selectedTab === 'expected' ? 'bg-yellow-500 text-white' : 'bg-yellow-100'}>Con taglie attese</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>Cestelli la cui taglia attesa differisce dalla taglia registrata</TooltipContent>
                 </Tooltip>
@@ -1054,7 +1054,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="highMortality" className="bg-red-100 data-[state=active]:bg-red-500 data-[state=active]:text-white">Con mortalità alta</TabsTrigger>
+                    <TabsTrigger value="highMortality" className={selectedTab === 'highMortality' ? 'bg-red-500 text-white' : 'bg-red-100'}>Con mortalità alta</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>Cestelli con mortalità superiore al 10%</TooltipContent>
                 </Tooltip>
@@ -1062,7 +1062,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="needsMeasure" className="bg-orange-100 data-[state=active]:bg-orange-500 data-[state=active]:text-white">Da misurare</TabsTrigger>
+                    <TabsTrigger value="needsMeasure" className={selectedTab === 'needsMeasure' ? 'bg-orange-500 text-white' : 'bg-orange-100'}>Da misurare</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>Cestelli senza misura da più di 7 giorni</TooltipContent>
                 </Tooltip>
@@ -1070,7 +1070,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="readyHarvest" className="bg-purple-100 data-[state=active]:bg-purple-500 data-[state=active]:text-white">Pronte raccolta</TabsTrigger>
+                    <TabsTrigger value="readyHarvest" className={selectedTab === 'readyHarvest' ? 'bg-purple-500 text-white' : 'bg-purple-100'}>Pronte raccolta</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>Cestelli con taglia TP-3000 o superiore, pronti per la vendita</TooltipContent>
                 </Tooltip>
@@ -1078,7 +1078,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <TabsTrigger value="heavyWeight" className="bg-teal-100 data-[state=active]:bg-teal-500 data-[state=active]:text-white">Peso elevato</TabsTrigger>
+                    <TabsTrigger value="heavyWeight" className={selectedTab === 'heavyWeight' ? 'bg-teal-500 text-white' : 'bg-teal-100'}>Peso elevato</TabsTrigger>
                   </TooltipTrigger>
                   <TooltipContent>Cestelli con peso totale superiore a 20 kg</TooltipContent>
                 </Tooltip>
