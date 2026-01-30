@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Waves, Thermometer, Droplets, ExternalLink, AlertCircle, Leaf } from 'lucide-react';
+import { Waves, Thermometer, Droplets, ExternalLink, AlertCircle, Leaf, TrendingUp, Calendar } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface LocationData {
   locationName: string;
@@ -60,17 +65,39 @@ const MiniSparkline = ({ data, color = '#3b82f6' }: { data: number[], color?: st
   );
 };
 
+interface HistoryRecord {
+  date: string;
+  sst: number | null;
+  chlorophyll: number | null;
+  salinity: number | null;
+  waveHeight: number | null;
+}
+
+interface HistoryData {
+  success: boolean;
+  data: Record<string, HistoryRecord[]>;
+}
+
 export default function ChlorophyllIndicator() {
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyDays, setHistoryDays] = useState('30');
+  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+
   const { data, isLoading, isError } = useQuery<{ success: boolean; data: MarineData }>({
     queryKey: ['/api/marine-data/latest'],
     staleTime: 1000 * 60 * 30,
     refetchOnWindowFocus: false,
   });
 
-  const handleClick = () => {
-    if (data?.data?.sourceUrl) {
-      window.open(data.data.sourceUrl, '_blank', 'noopener,noreferrer');
-    }
+  const { data: historyData, isLoading: historyLoading } = useQuery<HistoryData>({
+    queryKey: ['/api/marine-data/history-by-location', historyDays],
+    enabled: showHistory,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setShowHistory(true);
   };
 
   if (isLoading) {
@@ -259,11 +286,168 @@ export default function ChlorophyllIndicator() {
             </div>
             <div className="flex items-center justify-between text-[10px] text-gray-400">
               <span>Fonte: {source}</span>
-              <span className="text-blue-500">Clicca per Copernicus Marine ↗</span>
+              <span className="text-blue-500">Clicca per grafici storici ↗</span>
             </div>
           </div>
         </TooltipContent>
       </Tooltip>
+
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Storico Dati Ambientali
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-gray-500" />
+              <Select value={historyDays} onValueChange={setHistoryDays}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">7 giorni</SelectItem>
+                  <SelectItem value="14">14 giorni</SelectItem>
+                  <SelectItem value="30">30 giorni</SelectItem>
+                  <SelectItem value="60">60 giorni</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Sito:</span>
+              <Select value={selectedLocation || 'all'} onValueChange={(v) => setSelectedLocation(v === 'all' ? null : v)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti i siti</SelectItem>
+                  <SelectItem value="Ca' Pisani">Ca' Pisani (CP)</SelectItem>
+                  <SelectItem value="Delta Futuro">Delta Futuro (DF)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {historyLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <span className="ml-2 text-gray-500">Caricamento dati storici...</span>
+            </div>
+          ) : historyData?.success && historyData.data ? (
+            <Tabs defaultValue="sst" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="sst">Temperatura (SST)</TabsTrigger>
+                <TabsTrigger value="chlorophyll">Clorofilla-a</TabsTrigger>
+                <TabsTrigger value="salinity">Salinità</TabsTrigger>
+              </TabsList>
+
+              {['sst', 'chlorophyll', 'salinity'].map((metric) => {
+                const locationNames = Object.keys(historyData.data);
+                const filteredLocations = selectedLocation 
+                  ? locationNames.filter(l => l === selectedLocation)
+                  : locationNames;
+                
+                const chartData: any[] = [];
+                const allDates = new Set<string>();
+                
+                filteredLocations.forEach(loc => {
+                  historyData.data[loc].forEach(record => {
+                    const dateStr = new Date(record.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+                    allDates.add(dateStr);
+                  });
+                });
+
+                Array.from(allDates).sort().forEach(dateStr => {
+                  const point: any = { date: dateStr };
+                  filteredLocations.forEach(loc => {
+                    const record = historyData.data[loc].find(r => 
+                      new Date(r.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) === dateStr
+                    );
+                    if (record) {
+                      point[loc] = metric === 'sst' ? record.sst : metric === 'chlorophyll' ? record.chlorophyll : record.salinity;
+                    }
+                  });
+                  chartData.push(point);
+                });
+
+                const colors: Record<string, string> = {
+                  "Ca' Pisani": '#3b82f6',
+                  "Delta Futuro": '#10b981'
+                };
+
+                const units: Record<string, string> = {
+                  sst: '°C',
+                  chlorophyll: 'µg/L',
+                  salinity: '‰'
+                };
+
+                const titles: Record<string, string> = {
+                  sst: 'Temperatura Superficiale del Mare',
+                  chlorophyll: 'Concentrazione Clorofilla-a',
+                  salinity: 'Salinità'
+                };
+
+                return (
+                  <TabsContent key={metric} value={metric} className="mt-4">
+                    <div className="mb-2">
+                      <h3 className="text-sm font-semibold text-gray-700">{titles[metric]}</h3>
+                      <p className="text-xs text-gray-500">Ultimi {historyDays} giorni - {chartData.length} rilevazioni</p>
+                    </div>
+                    {chartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#9ca3af" />
+                          <YAxis tick={{ fontSize: 10 }} stroke="#9ca3af" unit={units[metric]} />
+                          <RechartsTooltip 
+                            contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                            formatter={(value: number) => [value?.toFixed(2) + ' ' + units[metric], '']}
+                          />
+                          <Legend />
+                          {filteredLocations.map(loc => (
+                            <Line 
+                              key={loc}
+                              type="monotone" 
+                              dataKey={loc} 
+                              stroke={colors[loc] || '#6b7280'} 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name={loc}
+                              connectNulls
+                            />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        Nessun dato disponibile per il periodo selezionato
+                      </div>
+                    )}
+                  </TabsContent>
+                );
+              })}
+            </Tabs>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Nessun dato storico disponibile
+            </div>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+            <span className="text-xs text-gray-400">Fonte: Copernicus Marine Data Store</span>
+            <button 
+              onClick={() => data?.data?.sourceUrl && window.open(data.data.sourceUrl, '_blank')}
+              className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Apri Copernicus Marine
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
