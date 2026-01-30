@@ -1485,6 +1485,7 @@ export default function OperationForm({
                               field.onChange(isNaN(numValue) ? null : numValue);
                             }
                           }}
+                          onFocus={(e) => e.target.select()}
                           onBlur={field.onBlur}
                           name={field.name}
                           ref={field.ref}

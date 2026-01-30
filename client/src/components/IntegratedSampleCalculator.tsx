@@ -229,6 +229,7 @@ export default function IntegratedSampleCalculator({
             placeholder="N. morti"
             value={deadCount?.toString() || ''}
             onChange={e => setDeadCount(parseInt(e.target.value) || null)}
+            onFocus={(e) => e.target.select()}
             className="h-9"
           />
           <p className="text-xs text-muted-foreground mt-1">
