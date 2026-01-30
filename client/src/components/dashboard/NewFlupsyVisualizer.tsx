@@ -141,13 +141,21 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return info ? info.daysSinceLastMeasurement > 7 : false;
   };
 
-  // Helper to check if basket has high mortality (>10%)
+  // Helper to check if basket has high mortality (>10%) - uses allOperations for consistency
   const hasHighMortality = (basket: any): boolean => {
     if (!basket || !basket.currentCycleId) return false;
-    const mortality = mortalityRates?.find(m => 
-      m.basketId === basket.id && m.cycleId === basket.currentCycleId
-    );
-    return mortality ? mortality.mortalityPercent > 10 : false;
+    if (!allOperations || allOperations.length === 0) return false;
+    
+    // Find latest operation with mortality data for this basket's current cycle
+    const basketOps = allOperations
+      .filter((op: any) => op.basketId === basket.id && op.cycleId === basket.currentCycleId)
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    const latestOp = basketOps[0];
+    if (!latestOp) return false;
+    
+    const mortality = latestOp.mortalityRate;
+    return mortality !== null && mortality !== undefined && mortality > 10;
   };
 
   // Helper to check if basket has optimal growth (calculated from weight change)
