@@ -160,12 +160,17 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return growth < 2 && growth >= 0; // Less than 2% weight increase
   };
 
-  // Helper to check if basket is ready for harvest (large size + heavy weight)
+  // Helper to check if basket is ready for harvest (large size only - TP-3000 or higher)
   const isReadyForHarvest = (basket: any): boolean => {
-    if (!hasLargeSize(basket)) return false;
+    return hasLargeSize(basket);
+  };
+
+  // Helper to check if basket has heavy weight (>20kg)
+  const hasHeavyWeight = (basket: any): boolean => {
+    if (!basket || (basket.state !== 'active' && basket.state !== 'occupied')) return false;
     const latestOp = getLatestOperation(basket.id);
     if (!latestOp?.totalWeight) return false;
-    return latestOp.totalWeight > 20000; // More than 20kg
+    return latestOp.totalWeight > 20000; // More than 20kg (20000g)
   };
 
   // Helper to get expected size info
@@ -726,13 +731,70 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             className="w-full"
           >
             <TabsList className="mb-4 flex-wrap h-auto gap-1">
-              <TabsTrigger value="all" className="bg-gray-100 data-[state=active]:bg-gray-400 data-[state=active]:text-white">Tutti i FLUPSY</TabsTrigger>
-              <TabsTrigger value="active" className="bg-blue-100 data-[state=active]:bg-blue-500 data-[state=active]:text-white">Con cestelli attivi</TabsTrigger>
-              <TabsTrigger value="large" className="bg-green-100 data-[state=active]:bg-green-500 data-[state=active]:text-white">Con taglie grandi</TabsTrigger>
-              <TabsTrigger value="expected" className="bg-yellow-100 data-[state=active]:bg-yellow-500 data-[state=active]:text-white">Con taglie attese</TabsTrigger>
-              <TabsTrigger value="highMortality" className="bg-red-100 data-[state=active]:bg-red-500 data-[state=active]:text-white">Con mortalità alta</TabsTrigger>
-              <TabsTrigger value="needsMeasure" className="bg-orange-100 data-[state=active]:bg-orange-500 data-[state=active]:text-white">Da misurare</TabsTrigger>
-              <TabsTrigger value="readyHarvest" className="bg-purple-100 data-[state=active]:bg-purple-500 data-[state=active]:text-white">Pronte raccolta</TabsTrigger>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="all" className="bg-gray-100 data-[state=active]:bg-gray-400 data-[state=active]:text-white">Tutti i FLUPSY</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Mostra tutti i FLUPSY senza filtri</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="active" className="bg-blue-100 data-[state=active]:bg-blue-500 data-[state=active]:text-white">Con cestelli attivi</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>FLUPSY con almeno un cestello con ciclo attivo</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="large" className="bg-green-100 data-[state=active]:bg-green-500 data-[state=active]:text-white">Con taglie grandi</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Cestelli con taglia TP-3000 o superiore (≤29.000 animali/kg)</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="expected" className="bg-yellow-100 data-[state=active]:bg-yellow-500 data-[state=active]:text-white">Con taglie attese</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Cestelli la cui taglia attesa differisce dalla taglia registrata</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="highMortality" className="bg-red-100 data-[state=active]:bg-red-500 data-[state=active]:text-white">Con mortalità alta</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Cestelli con mortalità superiore al 10%</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="needsMeasure" className="bg-orange-100 data-[state=active]:bg-orange-500 data-[state=active]:text-white">Da misurare</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Cestelli senza misura da più di 7 giorni</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="readyHarvest" className="bg-purple-100 data-[state=active]:bg-purple-500 data-[state=active]:text-white">Pronte raccolta</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Cestelli con taglia TP-3000 o superiore, pronti per la vendita</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="heavyWeight" className="bg-teal-100 data-[state=active]:bg-teal-500 data-[state=active]:text-white">Peso elevato</TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Cestelli con peso totale superiore a 20 kg</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </TabsList>
             
             <TabsContent value="all" className="space-y-4">
@@ -779,6 +841,13 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => isReadyForHarvest(b));
               }).map((flupsy: any) => renderFlupsy(flupsy, false, false, isReadyForHarvest))}
+            </TabsContent>
+
+            <TabsContent value="heavyWeight" className="space-y-4">
+              {flupsys?.filter((flupsy: any) => {
+                const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
+                return flupsyBaskets?.some((b: any) => hasHeavyWeight(b));
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, hasHeavyWeight))}
             </TabsContent>
           </Tabs>
         </>
