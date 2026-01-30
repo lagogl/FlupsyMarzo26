@@ -11,7 +11,7 @@ interface HealthSgrCardProps {
   activeBaskets: any[];
 }
 
-type CategoryType = 'critical' | 'warning' | 'healthy' | null;
+type CategoryType = 'critical' | 'warning' | 'healthy' | 'noMeasure' | null;
 
 interface BasketDetail {
   basketId: number;
@@ -34,6 +34,7 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         criticalBaskets: [] as BasketDetail[],
         warningBaskets: [] as BasketDetail[],
         healthyBaskets: [] as BasketDetail[],
+        noMeasureBaskets: [] as BasketDetail[],
         avgSgr: null,
         avgMortality: null,
         sgrTrend: 'stable' as const,
@@ -67,6 +68,7 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
     const criticalBaskets: BasketDetail[] = [];
     const warningBaskets: BasketDetail[] = [];
     const healthyBaskets: BasketDetail[] = [];
+    const noMeasureBaskets: BasketDetail[] = [];
     let totalMortality = 0;
     let mortalityCount = 0;
     let totalPrevMortality = 0;
@@ -102,6 +104,14 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       if (!latestOp) {
         noRecentOps++;
         daysSinceLastMeasure.push(999);
+        noMeasureBaskets.push({
+          basketId: basket.id,
+          basketCode: basket.code || `Cesta ${basket.id}`,
+          flupsyName: basket.flupsyName || 'N/D',
+          mortality: 0,
+          lastOpDate: 'Mai',
+          operations: []
+        });
         return;
       }
 
@@ -111,6 +121,14 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       
       if (daysDiff > 7) {
         noRecentOps++;
+        noMeasureBaskets.push({
+          basketId: basket.id,
+          basketCode: basket.code || `Cesta ${basket.id}`,
+          flupsyName: basket.flupsyName || 'N/D',
+          mortality: latestOp.mortalityRate || 0,
+          lastOpDate: latestOp.date,
+          operations: basketOps.slice(0, 5)
+        });
       }
 
       // Mortalità attuale (ultima operazione)
@@ -221,6 +239,7 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       criticalBaskets,
       warningBaskets,
       healthyBaskets,
+      noMeasureBaskets,
       avgSgr,
       avgMortality,
       sgrTrend,
@@ -239,6 +258,8 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         return { title: 'Ceste in Attenzione (Mortalità 5-10%)', baskets: stats.warningBaskets, color: 'text-orange-600' };
       case 'healthy':
         return { title: 'Ceste in Salute (Mortalità < 5%)', baskets: stats.healthyBaskets, color: 'text-green-600' };
+      case 'noMeasure':
+        return { title: 'Ceste senza misura >7 giorni', baskets: stats.noMeasureBaskets, color: 'text-amber-600' };
       default:
         return { title: '', baskets: [], color: '' };
     }
@@ -337,7 +358,10 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
               </span>
             </div>
 
-            <div className="flex justify-between items-center bg-amber-50 rounded px-2 py-1">
+            <div 
+              className="flex justify-between items-center bg-amber-50 rounded px-2 py-1 cursor-pointer hover:bg-amber-100 transition-colors"
+              onClick={() => stats.noRecentOps > 0 && setOpenCategory('noMeasure')}
+            >
               <span className="text-gray-600 flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 Ceste senza misura {">"}7gg
