@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { AlertTriangle, AlertCircle, CheckCircle, Activity, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle, Activity, Clock, TrendingUp, TrendingDown, Minus, X } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface HealthSgrCardProps {
   operations: any[];
@@ -9,13 +11,29 @@ interface HealthSgrCardProps {
   activeBaskets: any[];
 }
 
+type CategoryType = 'critical' | 'warning' | 'healthy' | null;
+
+interface BasketDetail {
+  basketId: number;
+  basketCode: string;
+  flupsyName: string;
+  mortality: number;
+  lastOpDate: string;
+  operations: any[];
+}
+
 export default function HealthSgrCard({ operations, activeCycles, activeBaskets }: HealthSgrCardProps) {
+  const [openCategory, setOpenCategory] = useState<CategoryType>(null);
+
   const stats = useMemo(() => {
     if (!operations || !activeCycles || !activeBaskets || activeBaskets.length === 0) {
       return {
         critical: 0,
         warning: 0,
         healthy: 0,
+        criticalBaskets: [] as BasketDetail[],
+        warningBaskets: [] as BasketDetail[],
+        healthyBaskets: [] as BasketDetail[],
         avgSgr: null,
         avgMortality: null,
         sgrTrend: 'stable' as const,
@@ -46,6 +64,9 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
     let critical = 0;
     let warning = 0;
     let healthy = 0;
+    const criticalBaskets: BasketDetail[] = [];
+    const warningBaskets: BasketDetail[] = [];
+    const healthyBaskets: BasketDetail[] = [];
     let totalMortality = 0;
     let mortalityCount = 0;
     let totalPrevMortality = 0;
@@ -142,13 +163,26 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
 
       const mortality = latestOp.mortalityRate || 0;
 
+      // Prepara i dettagli della cesta
+      const basketDetail: BasketDetail = {
+        basketId: basket.id,
+        basketCode: basket.code || `Cesta ${basket.id}`,
+        flupsyName: basket.flupsyName || 'N/D',
+        mortality: mortality,
+        lastOpDate: latestOp.date,
+        operations: basketOps.slice(0, 5) // ultime 5 operazioni
+      };
+
       // Classificazione basata su mortalità
       if (mortality > 10) {
         critical++;
+        criticalBaskets.push(basketDetail);
       } else if (mortality > 5) {
         warning++;
+        warningBaskets.push(basketDetail);
       } else {
         healthy++;
+        healthyBaskets.push(basketDetail);
       }
     });
 
@@ -184,6 +218,9 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       critical,
       warning,
       healthy,
+      criticalBaskets,
+      warningBaskets,
+      healthyBaskets,
       avgSgr,
       avgMortality,
       sgrTrend,
@@ -193,6 +230,21 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       maxDaysSinceMeasure
     };
   }, [operations, activeCycles, activeBaskets]);
+
+  const getCategoryData = () => {
+    switch (openCategory) {
+      case 'critical':
+        return { title: 'Ceste Critiche (Mortalità > 10%)', baskets: stats.criticalBaskets, color: 'text-red-600' };
+      case 'warning':
+        return { title: 'Ceste in Attenzione (Mortalità 5-10%)', baskets: stats.warningBaskets, color: 'text-orange-600' };
+      case 'healthy':
+        return { title: 'Ceste in Salute (Mortalità < 5%)', baskets: stats.healthyBaskets, color: 'text-green-600' };
+      default:
+        return { title: '', baskets: [], color: '' };
+    }
+  };
+
+  const categoryData = getCategoryData();
 
   return (
     <Card className="bg-gradient-to-br from-slate-50 to-purple-100 border-l-4 border-purple-500 h-full">
@@ -208,7 +260,10 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         </div>
 
         <div className="grid grid-cols-3 gap-1 mb-3">
-          <div className="bg-red-50 border border-red-200 rounded px-2 py-1 text-center">
+          <div 
+            className="bg-red-50 border border-red-200 rounded px-2 py-1 text-center cursor-pointer hover:bg-red-100 transition-colors"
+            onClick={() => stats.critical > 0 && setOpenCategory('critical')}
+          >
             <div className="flex items-center justify-center gap-1">
               <AlertTriangle className="h-3 w-3 text-red-600" />
               <span className="text-[10px] text-red-700">Critiche</span>
@@ -216,7 +271,10 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
             <div className="text-lg font-bold text-red-600">{stats.critical}</div>
           </div>
           
-          <div className="bg-orange-50 border border-orange-200 rounded px-2 py-1 text-center">
+          <div 
+            className="bg-orange-50 border border-orange-200 rounded px-2 py-1 text-center cursor-pointer hover:bg-orange-100 transition-colors"
+            onClick={() => stats.warning > 0 && setOpenCategory('warning')}
+          >
             <div className="flex items-center justify-center gap-1">
               <AlertCircle className="h-3 w-3 text-orange-600" />
               <span className="text-[10px] text-orange-700">Attenzione</span>
@@ -224,7 +282,10 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
             <div className="text-lg font-bold text-orange-600">{stats.warning}</div>
           </div>
           
-          <div className="bg-green-50 border border-green-200 rounded px-2 py-1 text-center">
+          <div 
+            className="bg-green-50 border border-green-200 rounded px-2 py-1 text-center cursor-pointer hover:bg-green-100 transition-colors"
+            onClick={() => stats.healthy > 0 && setOpenCategory('healthy')}
+          >
             <div className="flex items-center justify-center gap-1">
               <CheckCircle className="h-3 w-3 text-green-600" />
               <span className="text-[10px] text-green-700">In Salute</span>
@@ -294,6 +355,61 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
           </Link>
         </div>
       </CardContent>
+
+      <Dialog open={openCategory !== null} onOpenChange={(open) => !open && setOpenCategory(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className={categoryData.color}>{categoryData.title}</DialogTitle>
+          </DialogHeader>
+          
+          {categoryData.baskets.length > 0 ? (
+            <div className="space-y-4">
+              {categoryData.baskets.map((basket) => (
+                <div key={basket.basketId} className="border rounded-lg p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="font-semibold">{basket.basketCode}</div>
+                    <div className="text-sm text-gray-500">{basket.flupsyName}</div>
+                  </div>
+                  <div className="text-sm mb-2">
+                    <span className="text-gray-600">Mortalità: </span>
+                    <span className={`font-semibold ${basket.mortality > 10 ? 'text-red-600' : basket.mortality > 5 ? 'text-orange-600' : 'text-green-600'}`}>
+                      {basket.mortality.toFixed(1)}%
+                    </span>
+                    <span className="text-gray-400 ml-4">
+                      Ultima op: {new Date(basket.lastOpDate).toLocaleDateString('it-IT')}
+                    </span>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Data</TableHead>
+                        <TableHead className="text-xs">Tipo</TableHead>
+                        <TableHead className="text-xs">Peso (kg)</TableHead>
+                        <TableHead className="text-xs">Mortalità %</TableHead>
+                        <TableHead className="text-xs">Animali/kg</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {basket.operations.map((op: any, idx: number) => (
+                        <TableRow key={idx}>
+                          <TableCell className="text-xs">{new Date(op.date).toLocaleDateString('it-IT')}</TableCell>
+                          <TableCell className="text-xs capitalize">{op.type}</TableCell>
+                          <TableCell className="text-xs">{op.totalWeight ? (op.totalWeight / 1000).toFixed(2) : '-'}</TableCell>
+                          <TableCell className="text-xs">{op.mortalityRate !== null ? `${op.mortalityRate.toFixed(1)}%` : '-'}</TableCell>
+                          <TableCell className="text-xs">{op.animalsPerKg || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-4">Nessuna cesta in questa categoria</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
