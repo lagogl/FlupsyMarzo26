@@ -98,6 +98,16 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     staleTime: 120000, // 2 minutes
   });
 
+  // Fetch mortality rates for filtering
+  const { data: mortalityRates } = useQuery<Array<{
+    basketId: number;
+    cycleId: number;
+    mortalityPercent: number;
+  }>>({
+    queryKey: ['/api/mortality-rates'],
+    staleTime: 120000, // 2 minutes
+  });
+
   // Create a map for quick lookup of expected size changes
   const expectedSizesMap = useMemo(() => {
     const map = new Map<number, { expectedSize: string; daysSince: number }>();
@@ -117,6 +127,45 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   // Helper to check if basket has expected size change
   const hasExpectedSizeChange = (basketId: number): boolean => {
     return expectedSizesMap.has(basketId);
+  };
+
+  // Helper to check if basket needs measurement (>7 days since last)
+  const needsMeasurement = (basketId: number): boolean => {
+    const info = expectedSizesData?.find(e => e.basketId === basketId);
+    return info ? info.daysSinceLastMeasurement > 7 : false;
+  };
+
+  // Helper to check if basket has high mortality (>10%)
+  const hasHighMortality = (basket: any): boolean => {
+    if (!basket || !basket.currentCycleId) return false;
+    const mortality = mortalityRates?.find(m => 
+      m.basketId === basket.id && m.cycleId === basket.currentCycleId
+    );
+    return mortality ? mortality.mortalityPercent > 10 : false;
+  };
+
+  // Helper to check if basket has optimal growth (calculated from weight change)
+  const hasOptimalGrowth = (basket: any): boolean => {
+    const latestOp = getLatestOperation(basket.id);
+    if (!latestOp?.totalWeight || !latestOp?.previousWeight) return false;
+    const growth = ((latestOp.totalWeight - latestOp.previousWeight) / latestOp.previousWeight) * 100;
+    return growth > 5; // More than 5% weight increase
+  };
+
+  // Helper to check if basket has slow growth
+  const hasSlowGrowth = (basket: any): boolean => {
+    const latestOp = getLatestOperation(basket.id);
+    if (!latestOp?.totalWeight || !latestOp?.previousWeight) return false;
+    const growth = ((latestOp.totalWeight - latestOp.previousWeight) / latestOp.previousWeight) * 100;
+    return growth < 2 && growth >= 0; // Less than 2% weight increase
+  };
+
+  // Helper to check if basket is ready for harvest (large size + heavy weight)
+  const isReadyForHarvest = (basket: any): boolean => {
+    if (!hasLargeSize(basket)) return false;
+    const latestOp = getLatestOperation(basket.id);
+    if (!latestOp?.totalWeight) return false;
+    return latestOp.totalWeight > 20000; // More than 20kg
   };
 
   // Helper to get expected size info
@@ -670,11 +719,14 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             onValueChange={setSelectedTab}
             className="w-full"
           >
-            <TabsList className="mb-4">
-              <TabsTrigger value="all">Tutti i FLUPSY</TabsTrigger>
-              <TabsTrigger value="active">Con cestelli attivi</TabsTrigger>
-              <TabsTrigger value="large">Con taglie grandi</TabsTrigger>
-              <TabsTrigger value="expected">Con taglie attese</TabsTrigger>
+            <TabsList className="mb-4 flex-wrap h-auto gap-1">
+              <TabsTrigger value="all" className="data-[state=active]:bg-gray-200">Tutti i FLUPSY</TabsTrigger>
+              <TabsTrigger value="active" className="data-[state=active]:bg-blue-200">Con cestelli attivi</TabsTrigger>
+              <TabsTrigger value="large" className="data-[state=active]:bg-green-200">Con taglie grandi</TabsTrigger>
+              <TabsTrigger value="expected" className="data-[state=active]:bg-yellow-200">Con taglie attese</TabsTrigger>
+              <TabsTrigger value="highMortality" className="data-[state=active]:bg-red-200">Con mortalità alta</TabsTrigger>
+              <TabsTrigger value="needsMeasure" className="data-[state=active]:bg-orange-200">Da misurare</TabsTrigger>
+              <TabsTrigger value="readyHarvest" className="data-[state=active]:bg-purple-200">Pronte raccolta</TabsTrigger>
             </TabsList>
             
             <TabsContent value="all" className="space-y-4">
@@ -700,6 +752,27 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasExpectedSizeChange(b.id));
               }).map((flupsy: any) => renderFlupsy(flupsy, false, true))}
+            </TabsContent>
+
+            <TabsContent value="highMortality" className="space-y-4">
+              {flupsys?.filter((flupsy: any) => {
+                const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
+                return flupsyBaskets?.some((b: any) => hasHighMortality(b));
+              }).map((flupsy: any) => renderFlupsy(flupsy))}
+            </TabsContent>
+
+            <TabsContent value="needsMeasure" className="space-y-4">
+              {flupsys?.filter((flupsy: any) => {
+                const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
+                return flupsyBaskets?.some((b: any) => needsMeasurement(b.id));
+              }).map((flupsy: any) => renderFlupsy(flupsy))}
+            </TabsContent>
+
+            <TabsContent value="readyHarvest" className="space-y-4">
+              {flupsys?.filter((flupsy: any) => {
+                const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
+                return flupsyBaskets?.some((b: any) => isReadyForHarvest(b));
+              }).map((flupsy: any) => renderFlupsy(flupsy))}
             </TabsContent>
           </Tabs>
         </>
