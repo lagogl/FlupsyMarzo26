@@ -116,4 +116,47 @@ router.get('/locations', (req: Request, res: Response) => {
   });
 });
 
+router.get('/history-by-location', async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const locationName = req.query.location as string;
+    const data = await marineDataService.getHistoricalData(days);
+    
+    const filteredData = locationName 
+      ? data.filter(r => r.locationName === locationName)
+      : data;
+    
+    const groupedByLocation: Record<string, any[]> = {};
+    
+    filteredData.forEach(record => {
+      const loc = record.locationName || 'Sconosciuto';
+      if (!groupedByLocation[loc]) {
+        groupedByLocation[loc] = [];
+      }
+      groupedByLocation[loc].push({
+        date: record.recordedAt,
+        sst: record.seaSurfaceTemperature,
+        chlorophyll: record.chlorophyllA,
+        salinity: record.salinity,
+        waveHeight: record.waveHeight,
+        source: record.source
+      });
+    });
+    
+    Object.keys(groupedByLocation).forEach(loc => {
+      groupedByLocation[loc].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+    });
+    
+    res.json({ 
+      success: true, 
+      data: groupedByLocation,
+      totalRecords: filteredData.length 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
 export default router;
