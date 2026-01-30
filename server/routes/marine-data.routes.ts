@@ -159,4 +159,65 @@ router.get('/history-by-location', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/backfill-year', async (req: Request, res: Response) => {
+  try {
+    const year = parseInt(req.body.year) || 2025;
+    
+    if (year < 2020 || year > new Date().getFullYear()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Anno non valido. Inserire un anno tra 2020 e ${new Date().getFullYear()}` 
+      });
+    }
+    
+    console.log(`[MarineData API] Starting backfill for year ${year}...`);
+    
+    res.json({ 
+      success: true, 
+      message: `Backfill avviato per l'anno ${year}. Il processo continuerà in background.`,
+      status: 'started'
+    });
+    
+    marineDataService.backfillYear(year)
+      .then(result => {
+        console.log(`[MarineData API] Backfill ${year} completed: ${result.message}`);
+      })
+      .catch(err => {
+        console.error(`[MarineData API] Backfill ${year} error:`, err);
+      });
+      
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
+router.get('/backfill-status', async (req: Request, res: Response) => {
+  try {
+    const year = parseInt(req.query.year as string) || 2025;
+    const startOfYear = new Date(year, 0, 1);
+    const endOfYear = new Date(year, 11, 31, 23, 59, 59);
+    
+    const data = await marineDataService.getHistoricalData(365);
+    const yearData = data.filter(r => {
+      const recordDate = new Date(r.recordedAt);
+      return recordDate >= startOfYear && recordDate <= endOfYear;
+    });
+    
+    res.json({
+      success: true,
+      year,
+      totalRecords: yearData.length,
+      byMonth: Array.from({ length: 12 }, (_, i) => {
+        const monthData = yearData.filter(r => new Date(r.recordedAt).getMonth() === i);
+        return {
+          month: i + 1,
+          records: monthData.length
+        };
+      })
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
 export default router;

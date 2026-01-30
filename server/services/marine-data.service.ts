@@ -559,6 +559,84 @@ export class MarineDataService {
       message: `Recuperati ${totalFilled} record per ${gaps.length} buchi nei dati`
     };
   }
+
+  async backfillYear(year: number, progressCallback?: (progress: { month: number; filled: number; total: number }) => void): Promise<{ success: boolean; filled: number; message: string }> {
+    console.log(`[MarineData] Starting full year backfill for ${year}...`);
+    
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    const now = new Date();
+    
+    if (endDate > now) {
+      endDate.setTime(now.getTime());
+    }
+    
+    let totalFilled = 0;
+    
+    for (let month = 0; month < 12; month++) {
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
+      
+      if (monthStart > now) break;
+      if (monthEnd > now) monthEnd.setTime(now.getTime());
+      
+      console.log(`[MarineData] Backfilling ${year}-${String(month + 1).padStart(2, '0')}...`);
+      
+      for (const [key, location] of Object.entries(LOCATIONS)) {
+        try {
+          const historicalData = await this.fetchHistoricalFromOpenMeteo(location, monthStart, monthEnd);
+          
+          const recordsToInsert: any[] = [];
+          
+          for (const point of historicalData) {
+            if (point.sst === null) continue;
+            
+            recordsToInsert.push({
+              recordedAt: point.date,
+              locationName: location.name,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              seaSurfaceTemperature: point.sst,
+              waveHeight: point.waveHeight,
+              chlorophyllA: null,
+              salinity: null,
+              currentSpeed: null,
+              source: 'open-meteo-historical',
+            });
+          }
+          
+          if (recordsToInsert.length > 0) {
+            for (const record of recordsToInsert) {
+              try {
+                await db.insert(marineData).values(record);
+                totalFilled++;
+              } catch (e) {
+                // Ignore duplicate records
+              }
+            }
+          }
+          
+          console.log(`[MarineData] ${location.name} ${year}-${String(month + 1).padStart(2, '0')}: ${recordsToInsert.length} records`);
+        } catch (err) {
+          console.warn(`[MarineData] Error fetching ${location.name} ${year}-${String(month + 1).padStart(2, '0')}:`, err);
+        }
+      }
+      
+      if (progressCallback) {
+        progressCallback({ month: month + 1, filled: totalFilled, total: 12 });
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    console.log(`[MarineData] Year ${year} backfill complete: ${totalFilled} records added`);
+    
+    return {
+      success: true,
+      filled: totalFilled,
+      message: `Recuperati ${totalFilled} record per l'anno ${year}`
+    };
+  }
 }
 
 export const marineDataService = new MarineDataService();
