@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, Brush } from 'recharts';
 
 interface LocationData {
   locationName: string;
@@ -427,6 +427,13 @@ export default function ChlorophyllIndicator() {
                               connectNulls
                             />
                           ))}
+                          <Brush 
+                            dataKey="date" 
+                            height={30} 
+                            stroke="#3b82f6"
+                            fill="#f1f5f9"
+                            travellerWidth={10}
+                          />
                         </LineChart>
                       </ResponsiveContainer>
                     ) : (
