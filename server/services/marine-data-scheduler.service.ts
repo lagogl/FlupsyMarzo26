@@ -11,15 +11,30 @@ export function startMarineDataScheduler(): void {
   
   console.log('[MarineDataScheduler] Starting automatic marine data collection (every 6 hours)...');
   
-  marineDataService.fetchAndStoreData()
-    .then(result => {
+  (async () => {
+    try {
+      console.log('[MarineDataScheduler] Checking for missing data to backfill...');
+      const backfillResult = await marineDataService.fillMissingData(7);
+      if (backfillResult.filled > 0) {
+        console.log(`[MarineDataScheduler] Backfill completed: ${backfillResult.message}`);
+      } else {
+        console.log('[MarineDataScheduler] No data gaps to fill');
+      }
+    } catch (err) {
+      console.warn('[MarineDataScheduler] Backfill error (non-critical):', err);
+    }
+    
+    try {
+      const result = await marineDataService.fetchAndStoreData();
       if (result.success) {
         console.log('[MarineDataScheduler] Initial data fetch completed successfully');
       } else {
         console.warn('[MarineDataScheduler] Initial fetch failed:', result.error);
       }
-    })
-    .catch(err => console.error('[MarineDataScheduler] Initial fetch error:', err));
+    } catch (err) {
+      console.error('[MarineDataScheduler] Initial fetch error:', err);
+    }
+  })();
   
   schedulerInterval = setInterval(async () => {
     console.log('[MarineDataScheduler] Running scheduled marine data collection...');

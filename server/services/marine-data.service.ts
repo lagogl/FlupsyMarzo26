@@ -409,6 +409,156 @@ export class MarineDataService {
   isUsingRealData(): boolean {
     return true;
   }
+
+  async detectDataGaps(maxGapHours: number = 12): Promise<{ gaps: Array<{ start: Date; end: Date; hours: number }>; totalMissingHours: number }> {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    
+    const records = await db
+      .select({ recordedAt: marineData.recordedAt })
+      .from(marineData)
+      .where(gte(marineData.recordedAt, sevenDaysAgo))
+      .orderBy(marineData.recordedAt);
+    
+    const gaps: Array<{ start: Date; end: Date; hours: number }> = [];
+    let totalMissingHours = 0;
+    
+    if (records.length === 0) {
+      const hours = Math.round((Date.now() - sevenDaysAgo.getTime()) / (60 * 60 * 1000));
+      gaps.push({ start: sevenDaysAgo, end: new Date(), hours });
+      return { gaps, totalMissingHours: hours };
+    }
+    
+    const firstRecordTime = new Date(records[0].recordedAt!).getTime();
+    if (firstRecordTime - sevenDaysAgo.getTime() > maxGapHours * 60 * 60 * 1000) {
+      const hours = Math.round((firstRecordTime - sevenDaysAgo.getTime()) / (60 * 60 * 1000));
+      gaps.push({ start: sevenDaysAgo, end: new Date(firstRecordTime), hours });
+      totalMissingHours += hours;
+    }
+    
+    for (let i = 1; i < records.length; i++) {
+      const prevTime = new Date(records[i - 1].recordedAt!).getTime();
+      const currTime = new Date(records[i].recordedAt!).getTime();
+      const diffHours = (currTime - prevTime) / (60 * 60 * 1000);
+      
+      if (diffHours > maxGapHours) {
+        gaps.push({
+          start: new Date(prevTime),
+          end: new Date(currTime),
+          hours: Math.round(diffHours)
+        });
+        totalMissingHours += Math.round(diffHours);
+      }
+    }
+    
+    const lastRecordTime = new Date(records[records.length - 1].recordedAt!).getTime();
+    const nowTime = Date.now();
+    if (nowTime - lastRecordTime > maxGapHours * 60 * 60 * 1000) {
+      const hours = Math.round((nowTime - lastRecordTime) / (60 * 60 * 1000));
+      gaps.push({ start: new Date(lastRecordTime), end: new Date(), hours });
+      totalMissingHours += hours;
+    }
+    
+    return { gaps, totalMissingHours };
+  }
+
+  private async fetchHistoricalFromOpenMeteo(location: { name: string; latitude: number; longitude: number }, startDate: Date, endDate: Date): Promise<Array<{ date: Date; sst: number | null; waveHeight: number | null }>> {
+    try {
+      const start = startDate.toISOString().split('T')[0];
+      const end = endDate.toISOString().split('T')[0];
+      
+      const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${location.latitude}&longitude=${location.longitude}&hourly=sea_surface_temperature,wave_height&start_date=${start}&end_date=${end}&timezone=Europe/Rome`;
+      
+      const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      
+      if (!response.ok) {
+        console.warn(`[MarineData] Historical fetch failed for ${location.name}: ${response.status}`);
+        return [];
+      }
+      
+      const data = await response.json();
+      const results: Array<{ date: Date; sst: number | null; waveHeight: number | null }> = [];
+      
+      if (data.hourly?.time && data.hourly?.sea_surface_temperature) {
+        for (let i = 0; i < data.hourly.time.length; i += 6) {
+          results.push({
+            date: new Date(data.hourly.time[i]),
+            sst: data.hourly.sea_surface_temperature[i] ?? null,
+            waveHeight: data.hourly.wave_height?.[i] ?? null,
+          });
+        }
+      }
+      
+      return results;
+    } catch (error) {
+      console.warn(`[MarineData] Historical fetch error for ${location.name}:`, error);
+      return [];
+    }
+  }
+
+  async fillMissingData(maxDaysBack: number = 7): Promise<{ success: boolean; filled: number; message: string }> {
+    console.log('[MarineData] Checking for data gaps to fill...');
+    
+    const { gaps, totalMissingHours } = await this.detectDataGaps(12);
+    
+    if (gaps.length === 0) {
+      console.log('[MarineData] No significant data gaps found');
+      return { success: true, filled: 0, message: 'Nessun buco nei dati rilevato' };
+    }
+    
+    console.log(`[MarineData] Found ${gaps.length} gap(s) totaling ${totalMissingHours} hours`);
+    
+    let totalFilled = 0;
+    
+    for (const gap of gaps) {
+      const gapStart = new Date(Math.max(gap.start.getTime(), Date.now() - maxDaysBack * 24 * 60 * 60 * 1000));
+      const gapEnd = gap.end;
+      
+      if (gapStart >= gapEnd) continue;
+      
+      console.log(`[MarineData] Filling gap from ${gapStart.toISOString()} to ${gapEnd.toISOString()}`);
+      
+      for (const [key, location] of Object.entries(LOCATIONS)) {
+        const historicalData = await this.fetchHistoricalFromOpenMeteo(location, gapStart, gapEnd);
+        
+        for (const point of historicalData) {
+          if (point.sst === null) continue;
+          
+          const existingRecord = await db
+            .select({ id: marineData.id })
+            .from(marineData)
+            .where(gte(marineData.recordedAt, new Date(point.date.getTime() - 30 * 60 * 1000)))
+            .limit(1);
+          
+          const checkTime = new Date(point.date.getTime() + 30 * 60 * 1000);
+          const hasNearby = existingRecord.length > 0 && existingRecord[0].id;
+          
+          if (!hasNearby) {
+            await db.insert(marineData).values({
+              recordedAt: point.date,
+              locationName: location.name,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              seaSurfaceTemperature: point.sst,
+              waveHeight: point.waveHeight,
+              chlorophyllA: null,
+              salinity: null,
+              currentSpeed: null,
+              source: 'open-meteo-backfill',
+            });
+            totalFilled++;
+          }
+        }
+      }
+    }
+    
+    console.log(`[MarineData] Backfill complete: ${totalFilled} records added`);
+    
+    return {
+      success: true,
+      filled: totalFilled,
+      message: `Recuperati ${totalFilled} record per ${gaps.length} buchi nei dati`
+    };
+  }
 }
 
 export const marineDataService = new MarineDataService();
