@@ -400,7 +400,7 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
                           <TableCell className="text-xs">{op.totalWeight ? (op.totalWeight / 1000).toFixed(2) : '-'}</TableCell>
                           <TableCell className="text-xs">{op.mortalityRate !== null ? `${op.mortalityRate.toFixed(1)}%` : '-'}</TableCell>
                           <TableCell className="text-xs">{op.animalsPerKg || '-'}</TableCell>
-                          <TableCell className="text-xs">{op.sizeName || op.size || '-'}</TableCell>
+                          <TableCell className="text-xs">{op.sizeName || op.size?.name || op.size?.code || '-'}</TableCell>
                           <TableCell className="text-xs max-w-[150px] truncate" title={op.notes || ''}>{op.notes || '-'}</TableCell>
                         </TableRow>
                       ))}
