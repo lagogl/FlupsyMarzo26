@@ -169,6 +169,7 @@ interface BasketInfo {
   lot: Lot | null;
   growthRate: number | null;
   cycleDuration: number | null;
+  cycleStartDate: string | null;
   operations: Operation[];
   animalCount: number;
   mortalityRate: MortalityRate | null;
@@ -497,6 +498,7 @@ export default function BasketSelection() {
         lot,
         growthRate,
         cycleDuration,
+        cycleStartDate: currentCycle?.startDate || null,
         operations: sortedOperations,
         animalCount,
         mortalityRate,
@@ -680,10 +682,16 @@ export default function BasketSelection() {
     },
     {
       id: 'animalsPerKg',
-      header: 'pz / Kg',
+      header: 'pz/Kg',
       cell: (basket) => {
         if (!basket.lastOperation?.animalsPerKg) return <span className="text-muted-foreground">-</span>;
         return <span>{Math.round(basket.lastOperation.animalsPerKg).toLocaleString('it-IT')}</span>;
+      },
+      sortable: true,
+      sortFn: (a, b) => {
+        const aVal = a.lastOperation?.animalsPerKg || 0;
+        const bVal = b.lastOperation?.animalsPerKg || 0;
+        return aVal - bVal;
       },
     },
     {
@@ -701,6 +709,12 @@ export default function BasketSelection() {
         if (!basket.lastOperation?.averageWeight) return <span className="text-muted-foreground">-</span>;
         return <span>{basket.lastOperation.averageWeight.toFixed(2)} g</span>;
       },
+      sortable: true,
+      sortFn: (a, b) => {
+        const aVal = a.lastOperation?.averageWeight || 0;
+        const bVal = b.lastOperation?.averageWeight || 0;
+        return aVal - bVal;
+      },
     },
     {
       id: 'cycleDuration',
@@ -708,6 +722,27 @@ export default function BasketSelection() {
       cell: (basket) => {
         if (!basket.cycleDuration) return <span className="text-muted-foreground">-</span>;
         return <span>{basket.cycleDuration} giorni</span>;
+      },
+      sortable: true,
+      sortFn: (a, b) => {
+        const aVal = a.cycleDuration || 0;
+        const bVal = b.cycleDuration || 0;
+        return aVal - bVal;
+      },
+    },
+    {
+      id: 'activationDate',
+      header: 'Prima Attiv.',
+      cell: (basket) => {
+        if (!basket.cycleStartDate) return <span className="text-muted-foreground">-</span>;
+        const date = new Date(basket.cycleStartDate);
+        return <span>{format(date, 'dd/MM/yyyy')}</span>;
+      },
+      sortable: true,
+      sortFn: (a, b) => {
+        const dateA = a.cycleStartDate ? new Date(a.cycleStartDate).getTime() : 0;
+        const dateB = b.cycleStartDate ? new Date(b.cycleStartDate).getTime() : 0;
+        return dateA - dateB;
       },
     },
     {
