@@ -675,42 +675,45 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             </div>
           </div>
           
-          {/* Inline FLUPSY metrics */}
+          {/* Inline FLUPSY metrics with descriptive labels */}
           {flupsyStats.activeCount > 0 && (
-            <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap text-[11px]">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center gap-0.5 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                    <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded px-2 py-1">
                       <AlertTriangle className="h-3 w-3 text-red-600" />
-                      <span className="text-xs font-semibold text-red-600">{flupsyStats.critical}</span>
+                      <span className="text-red-700">Critiche:</span>
+                      <span className="font-bold text-red-600">{flupsyStats.critical}</span>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>Ceste critiche (mortalità {">"} 10%)</TooltipContent>
+                  <TooltipContent>Ceste con mortalità superiore al 10%</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center gap-0.5 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5">
+                    <div className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded px-2 py-1">
                       <AlertCircle className="h-3 w-3 text-orange-600" />
-                      <span className="text-xs font-semibold text-orange-600">{flupsyStats.warning}</span>
+                      <span className="text-orange-700">Attenzione:</span>
+                      <span className="font-bold text-orange-600">{flupsyStats.warning}</span>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>Ceste in attenzione (mortalità 5-10%)</TooltipContent>
+                  <TooltipContent>Ceste con mortalità tra 5% e 10%</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center gap-0.5 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
+                    <div className="flex items-center gap-1 bg-green-50 border border-green-200 rounded px-2 py-1">
                       <CheckCircle className="h-3 w-3 text-green-600" />
-                      <span className="text-xs font-semibold text-green-600">{flupsyStats.healthy}</span>
+                      <span className="text-green-700">In salute:</span>
+                      <span className="font-bold text-green-600">{flupsyStats.healthy}</span>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>Ceste in salute (mortalità {"<"} 5%)</TooltipContent>
+                  <TooltipContent>Ceste con mortalità inferiore al 5%</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               
@@ -718,19 +721,20 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 border ${
+                      <div className={`flex items-center gap-1 rounded px-2 py-1 border ${
                         flupsyStats.avgMortality > 5 
                           ? 'bg-red-50 border-red-200' 
                           : 'bg-green-50 border-green-200'
                       }`}>
-                        <span className={`text-xs font-semibold ${
-                          flupsyStats.avgMortality > 5 ? 'text-red-600' : 'text-green-600'
-                        }`}>
-                          M:{flupsyStats.avgMortality.toFixed(1)}%
+                        <span className={flupsyStats.avgMortality > 5 ? 'text-red-700' : 'text-green-700'}>
+                          Mort. media:
+                        </span>
+                        <span className={`font-bold ${flupsyStats.avgMortality > 5 ? 'text-red-600' : 'text-green-600'}`}>
+                          {flupsyStats.avgMortality.toFixed(1)}%
                         </span>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent>Mortalità media: {flupsyStats.avgMortality.toFixed(1)}%</TooltipContent>
+                    <TooltipContent>Mortalità media delle ceste attive in questo FLUPSY</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
@@ -739,12 +743,13 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="flex items-center gap-0.5 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                      <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                         <Clock className="h-3 w-3 text-amber-600" />
-                        <span className="text-xs font-semibold text-amber-600">{flupsyStats.noMeasure}</span>
+                        <span className="text-amber-700">Da misurare:</span>
+                        <span className="font-bold text-amber-600">{flupsyStats.noMeasure}</span>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent>Ceste senza misura da {">"} 7 giorni</TooltipContent>
+                    <TooltipContent>Ceste senza operazioni di misura da più di 7 giorni</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
