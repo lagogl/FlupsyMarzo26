@@ -7,7 +7,7 @@ import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Fan } from 'lucide-react';
+import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { getOperationTypeLabel } from '@/lib/utils';
 
 interface NewFlupsyVisualizerProps {
@@ -176,6 +176,60 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   // Helper to get expected size info
   const getExpectedSizeInfo = (basketId: number) => {
     return expectedSizesMap.get(basketId);
+  };
+
+  // Helper to calculate FLUPSY-specific statistics
+  const getFlupsyStats = (flupsyId: number) => {
+    const flupsyBaskets = filteredBaskets?.filter((b: any) => 
+      b.flupsyId === flupsyId && b.currentCycleId && (b.state === 'active' || b.state === 'occupied')
+    ) || [];
+    
+    if (flupsyBaskets.length === 0) {
+      return { critical: 0, warning: 0, healthy: 0, noMeasure: 0, avgSgr: null, avgMortality: null, activeCount: 0 };
+    }
+
+    let critical = 0, warning = 0, healthy = 0, noMeasure = 0;
+    let totalMortality = 0, mortalityCount = 0;
+    const today = new Date();
+
+    flupsyBaskets.forEach((basket: any) => {
+      const latestOp = getLatestOperation(basket.id);
+      
+      if (!latestOp) {
+        noMeasure++;
+        return;
+      }
+
+      // Check days since last measurement
+      const opDate = new Date(latestOp.date);
+      const daysDiff = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff > 7) noMeasure++;
+
+      // Mortality classification
+      const mortality = latestOp.mortalityRate;
+      if (mortality !== null && mortality !== undefined) {
+        totalMortality += mortality;
+        mortalityCount++;
+        
+        if (mortality > 10) critical++;
+        else if (mortality >= 5) warning++;
+        else healthy++;
+      } else {
+        healthy++; // No mortality data = assume healthy
+      }
+    });
+
+    const avgMortality = mortalityCount > 0 ? totalMortality / mortalityCount : null;
+
+    return {
+      critical,
+      warning,
+      healthy,
+      noMeasure,
+      avgSgr: null, // SGR calculation would require more complex logic
+      avgMortality,
+      activeCount: flupsyBaskets.length
+    };
   };
 
   // Helper function to get the latest operation for a basket (usa la mappa ottimizzata)
@@ -603,9 +657,12 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       }
     });
 
+    // Calculate FLUPSY-specific stats
+    const flupsyStats = getFlupsyStats(flupsy.id);
+
     return (
       <div key={`flupsy-${flupsy.id}`} className="mb-8">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <div className="flex items-center">
             <svg className="w-8 h-8 text-blue-500 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
@@ -617,8 +674,85 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <div className="text-xs text-gray-500">{maxPositions} ceste</div>
             </div>
           </div>
+          
+          {/* Inline FLUPSY metrics */}
+          {flupsyStats.activeCount > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-0.5 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                      <AlertTriangle className="h-3 w-3 text-red-600" />
+                      <span className="text-xs font-semibold text-red-600">{flupsyStats.critical}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Ceste critiche (mortalità {">"} 10%)</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-0.5 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5">
+                      <AlertCircle className="h-3 w-3 text-orange-600" />
+                      <span className="text-xs font-semibold text-orange-600">{flupsyStats.warning}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Ceste in attenzione (mortalità 5-10%)</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-0.5 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
+                      <CheckCircle className="h-3 w-3 text-green-600" />
+                      <span className="text-xs font-semibold text-green-600">{flupsyStats.healthy}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Ceste in salute (mortalità {"<"} 5%)</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              {flupsyStats.avgMortality !== null && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 border ${
+                        flupsyStats.avgMortality > 5 
+                          ? 'bg-red-50 border-red-200' 
+                          : 'bg-green-50 border-green-200'
+                      }`}>
+                        <span className={`text-xs font-semibold ${
+                          flupsyStats.avgMortality > 5 ? 'text-red-600' : 'text-green-600'
+                        }`}>
+                          M:{flupsyStats.avgMortality.toFixed(1)}%
+                        </span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Mortalità media: {flupsyStats.avgMortality.toFixed(1)}%</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              
+              {flupsyStats.noMeasure > 0 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-0.5 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                        <Clock className="h-3 w-3 text-amber-600" />
+                        <span className="text-xs font-semibold text-amber-600">{flupsyStats.noMeasure}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Ceste senza misura da {">"} 7 giorni</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          )}
+          
           <Badge variant="outline" className="text-xs">
-            Ca {flupsy.location || 'Pisani'}
+            {flupsy.location || 'N/D'}
           </Badge>
         </div>
 
