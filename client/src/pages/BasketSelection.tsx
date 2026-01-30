@@ -787,6 +787,12 @@ export default function BasketSelection() {
           </span>
         );
       },
+      sortable: true,
+      sortFn: (a, b) => {
+        const aVal = a.growthRate || 0;
+        const bVal = b.growthRate || 0;
+        return aVal - bVal;
+      },
     },
     {
       id: 'mortality',
@@ -805,6 +811,12 @@ export default function BasketSelection() {
             {basket.mortalityRate.mortalityPercent.toFixed(1)}%
           </span>
         );
+      },
+      sortable: true,
+      sortFn: (a, b) => {
+        const aVal = a.mortalityRate?.mortalityPercent || 0;
+        const bVal = b.mortalityRate?.mortalityPercent || 0;
+        return aVal - bVal;
       },
     },
   ];
