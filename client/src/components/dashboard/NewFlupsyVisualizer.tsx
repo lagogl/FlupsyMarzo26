@@ -720,13 +720,13 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             className="w-full"
           >
             <TabsList className="mb-4 flex-wrap h-auto gap-1">
-              <TabsTrigger value="all" className="data-[state=active]:bg-gray-200">Tutti i FLUPSY</TabsTrigger>
-              <TabsTrigger value="active" className="data-[state=active]:bg-blue-200">Con cestelli attivi</TabsTrigger>
-              <TabsTrigger value="large" className="data-[state=active]:bg-green-200">Con taglie grandi</TabsTrigger>
-              <TabsTrigger value="expected" className="data-[state=active]:bg-yellow-200">Con taglie attese</TabsTrigger>
-              <TabsTrigger value="highMortality" className="data-[state=active]:bg-red-200">Con mortalità alta</TabsTrigger>
-              <TabsTrigger value="needsMeasure" className="data-[state=active]:bg-orange-200">Da misurare</TabsTrigger>
-              <TabsTrigger value="readyHarvest" className="data-[state=active]:bg-purple-200">Pronte raccolta</TabsTrigger>
+              <TabsTrigger value="all" className="bg-gray-100 data-[state=active]:bg-gray-400 data-[state=active]:text-white">Tutti i FLUPSY</TabsTrigger>
+              <TabsTrigger value="active" className="bg-blue-100 data-[state=active]:bg-blue-500 data-[state=active]:text-white">Con cestelli attivi</TabsTrigger>
+              <TabsTrigger value="large" className="bg-green-100 data-[state=active]:bg-green-500 data-[state=active]:text-white">Con taglie grandi</TabsTrigger>
+              <TabsTrigger value="expected" className="bg-yellow-100 data-[state=active]:bg-yellow-500 data-[state=active]:text-white">Con taglie attese</TabsTrigger>
+              <TabsTrigger value="highMortality" className="bg-red-100 data-[state=active]:bg-red-500 data-[state=active]:text-white">Con mortalità alta</TabsTrigger>
+              <TabsTrigger value="needsMeasure" className="bg-orange-100 data-[state=active]:bg-orange-500 data-[state=active]:text-white">Da misurare</TabsTrigger>
+              <TabsTrigger value="readyHarvest" className="bg-purple-100 data-[state=active]:bg-purple-500 data-[state=active]:text-white">Pronte raccolta</TabsTrigger>
             </TabsList>
             
             <TabsContent value="all" className="space-y-4">
