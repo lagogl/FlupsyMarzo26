@@ -91,6 +91,11 @@ export default function ChlorophyllIndicator() {
 
   const { data: historyData, isLoading: historyLoading } = useQuery<HistoryData>({
     queryKey: ['/api/marine-data/history-by-location', historyDays],
+    queryFn: async () => {
+      const res = await fetch(`/api/marine-data/history-by-location?days=${historyDays}`);
+      if (!res.ok) throw new Error('Failed to fetch history');
+      return res.json();
+    },
     enabled: showHistory,
     staleTime: 1000 * 60 * 5,
   });
@@ -313,6 +318,9 @@ export default function ChlorophyllIndicator() {
                   <SelectItem value="14">14 giorni</SelectItem>
                   <SelectItem value="30">30 giorni</SelectItem>
                   <SelectItem value="60">60 giorni</SelectItem>
+                  <SelectItem value="90">90 giorni</SelectItem>
+                  <SelectItem value="180">6 mesi</SelectItem>
+                  <SelectItem value="365">1 anno</SelectItem>
                 </SelectContent>
               </Select>
             </div>
