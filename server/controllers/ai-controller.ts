@@ -856,6 +856,23 @@ export function registerAIRoutes(app: Express) {
     }
   });
 
+  // Modulo: Analisi Pattern Mortalità con Alert Anomalie
+  app.get("/api/ai/mortality-analysis", async (req: Request, res: Response) => {
+    try {
+      const { flupsyId } = req.query;
+      const { MortalityAnalysisService } = await import('../ai/mortality-analysis-service');
+      
+      const analysis = await MortalityAnalysisService.analyzePatterns(
+        flupsyId ? parseInt(flupsyId as string) : undefined
+      );
+      
+      res.json({ success: true, ...analysis });
+    } catch (error) {
+      console.error('Errore analisi mortalità AI:', error);
+      res.status(500).json({ success: false, error: 'Errore elaborazione analisi mortalità' });
+    }
+  });
+
   // Modulo: Analisi Scostamenti Produzione
   app.get("/api/ai/production-forecast", async (req: Request, res: Response) => {
     try {

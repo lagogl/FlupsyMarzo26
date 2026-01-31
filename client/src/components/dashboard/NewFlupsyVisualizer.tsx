@@ -194,6 +194,52 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return expectedSizesMap.get(basketId);
   };
 
+  // Helper per calcolare la "freschezza" della mortalità
+  // Ritorna colore e label basati sui giorni dall'ultima mortalità registrata
+  const getMortalityFreshness = (lastMortalityDate: string | null): { 
+    color: string; 
+    bgColor: string; 
+    label: string; 
+    daysSince: number;
+    isRecent: boolean;
+  } | null => {
+    if (!lastMortalityDate) return null;
+    
+    const today = new Date();
+    const mortDate = new Date(lastMortalityDate);
+    const diffTime = today.getTime() - mortDate.getTime();
+    const daysSince = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (daysSince <= 3) {
+      // Rosso - mortalità recente (problema potenzialmente attivo)
+      return { 
+        color: 'text-red-600', 
+        bgColor: 'bg-red-100', 
+        label: daysSince === 0 ? 'Oggi' : daysSince === 1 ? 'Ieri' : `${daysSince}gg fa`,
+        daysSince,
+        isRecent: true
+      };
+    } else if (daysSince <= 7) {
+      // Giallo - mortalità da monitorare
+      return { 
+        color: 'text-yellow-600', 
+        bgColor: 'bg-yellow-100', 
+        label: `${daysSince}gg fa`,
+        daysSince,
+        isRecent: false
+      };
+    } else {
+      // Verde - mortalità storica (situazione stabile)
+      return { 
+        color: 'text-green-600', 
+        bgColor: 'bg-green-100', 
+        label: `${daysSince}gg fa`,
+        daysSince,
+        isRecent: false
+      };
+    }
+  };
+
   // Helper to calculate FLUPSY-specific statistics with SGR and trends
   const getFlupsyStats = (flupsyId: number) => {
     const flupsyBaskets = filteredBaskets?.filter((b: any) => 
@@ -594,17 +640,24 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   </svg>
                 </div>
               )}
-              {/* Mortality indicator - skull icon in top-left corner */}
-              {latestOperation?.lastMortalityCount && latestOperation.lastMortalityCount > 0 && (
-                <div className="absolute -top-1 -left-1" title={`Mortalità: ${latestOperation.lastMortalityCount} animali`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="10" r="7"/>
-                    <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
-                    <circle cx="15" cy="9" r="1.5" fill="currentColor"/>
-                    <path d="M9 14h6M10 17v3M14 17v3M12 14v6"/>
-                  </svg>
-                </div>
-              )}
+              {/* Mortality indicator - skull icon with freshness color in top-left corner */}
+              {latestOperation?.lastMortalityCount && latestOperation.lastMortalityCount > 0 && (() => {
+                const freshness = getMortalityFreshness(latestOperation.lastMortalityDate);
+                const colorClass = freshness?.color || 'text-gray-500';
+                return (
+                  <div 
+                    className={`absolute -top-2 -left-2 ${freshness?.bgColor || 'bg-gray-100'} rounded-full p-0.5 shadow-sm`}
+                    title={`Mortalità: ${latestOperation.lastMortalityCount} animali (${latestOperation.lastMortalityRate?.toFixed(1)}%) - ${freshness?.label || 'N/D'}`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${colorClass}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="10" r="7"/>
+                      <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
+                      <circle cx="15" cy="9" r="1.5" fill="currentColor"/>
+                      <path d="M9 14h6M10 17v3M14 17v3M12 14v6"/>
+                    </svg>
+                  </div>
+                );
+              })()}
               <div className="text-xs text-center text-gray-500 font-medium">CESTA #{basket.physicalNumber}</div>
               
               {latestOperation && (
@@ -705,16 +758,37 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   </>
                 )}
                 
-                {latestOperation.lastMortalityCount && latestOperation.lastMortalityCount > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span className="font-medium">Ultima mortalità:</span>
-                    <span>
-                      {latestOperation.lastMortalityCount} animali 
-                      {latestOperation.lastMortalityRate != null && ` (${latestOperation.lastMortalityRate < 0.01 ? '<0,01' : latestOperation.lastMortalityRate.toFixed(2).replace('.', ',')}%)`}
-                      {latestOperation.lastMortalityDate && ` - ${format(new Date(latestOperation.lastMortalityDate), 'dd/MM/yy')}`}
-                    </span>
-                  </div>
-                )}
+                {latestOperation.lastMortalityCount && latestOperation.lastMortalityCount > 0 && (() => {
+                  const freshness = getMortalityFreshness(latestOperation.lastMortalityDate);
+                  return (
+                    <div className="space-y-1 border-t pt-1 mt-1">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-red-600">Ultima mortalità:</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${freshness?.bgColor} ${freshness?.color} font-medium`}>
+                          {freshness?.label || 'N/D'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Morti:</span>
+                        <span className="font-medium">{latestOperation.lastMortalityCount} animali</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Tasso:</span>
+                        <span className="font-medium text-red-600">
+                          {latestOperation.lastMortalityRate != null 
+                            ? `${latestOperation.lastMortalityRate < 0.01 ? '<0,01' : latestOperation.lastMortalityRate.toFixed(2).replace('.', ',')}%` 
+                            : 'N/D'}
+                        </span>
+                      </div>
+                      {latestOperation.lastMortalityDate && (
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Data:</span>
+                          <span>{format(new Date(latestOperation.lastMortalityDate), 'dd/MM/yyyy')}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 
                 {latestOperation.notes && (
                   <div className="mt-1 pt-1 border-t">

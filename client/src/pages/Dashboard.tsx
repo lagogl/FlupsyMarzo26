@@ -13,6 +13,8 @@ import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredicti
 import InfoTicker from '@/components/dashboard/InfoTicker';
 import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
+import MortalityTemporalCard from '@/components/dashboard/MortalityTemporalCard';
+import MortalityAlertsCard from '@/components/dashboard/MortalityAlertsCard';
 import { Basket, Cycle, Operation, Lot } from '@shared/schema';
 import { TooltipTrigger } from '@/components/ui/tooltip-trigger';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
@@ -494,6 +496,10 @@ export default function Dashboard() {
           activeCycles={activeCycles} 
           activeBaskets={activeBaskets} 
         />
+
+        <MortalityTemporalCard />
+
+        <MortalityAlertsCard />
       </div>
 
       {/* FLUPSY Visualizer */}

@@ -611,6 +611,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ success: false, error: 'Errore calcolo distribuzione' });
     }
   });
+
+  // Endpoint per analisi temporale mortalità (recente vs storica)
+  app.get("/api/stats/mortality-temporal", async (req: Request, res: Response) => {
+    try {
+      const flupsyId = req.query.flupsyId ? parseInt(req.query.flupsyId as string) : undefined;
+      
+      const result = await db.execute(sql`
+        WITH mortality_ops AS (
+          SELECT 
+            o.id,
+            o.basket_id,
+            o.dead_count,
+            o.mortality_rate,
+            o.date,
+            b.flupsy_id,
+            f.name as flupsy_name,
+            s.code as size_code,
+            (CURRENT_DATE - DATE(o.date)) as days_ago
+          FROM operations o
+          JOIN baskets b ON b.id = o.basket_id
+          JOIN flupsys f ON f.id = b.flupsy_id
+          LEFT JOIN sizes s ON o.size_id = s.id
+          WHERE b.state = 'active'
+            AND b.current_cycle_id IS NOT NULL
+            AND o.dead_count IS NOT NULL 
+            AND o.dead_count > 0
+            ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+        )
+        SELECT 
+          CASE 
+            WHEN days_ago <= 3 THEN 'recent'
+            WHEN days_ago <= 7 THEN 'medium'
+            ELSE 'old'
+          END as period,
+          COUNT(DISTINCT basket_id) as baskets_affected,
+          SUM(dead_count) as total_dead,
+          AVG(mortality_rate) as avg_mortality_rate,
+          MIN(date) as oldest_date,
+          MAX(date) as newest_date
+        FROM mortality_ops
+        GROUP BY 
+          CASE 
+            WHEN days_ago <= 3 THEN 'recent'
+            WHEN days_ago <= 7 THEN 'medium'
+            ELSE 'old'
+          END
+      `);
+      
+      // Anche per trend: confronto settimana corrente vs settimana precedente
+      const trendResult = await db.execute(sql`
+        WITH current_week AS (
+          SELECT COALESCE(SUM(o.dead_count), 0) as deaths
+          FROM operations o
+          JOIN baskets b ON b.id = o.basket_id
+          WHERE b.state = 'active'
+            AND o.dead_count IS NOT NULL AND o.dead_count > 0
+            AND o.date >= CURRENT_DATE - INTERVAL '7 days'
+            ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+        ),
+        previous_week AS (
+          SELECT COALESCE(SUM(o.dead_count), 0) as deaths
+          FROM operations o
+          JOIN baskets b ON b.id = o.basket_id
+          WHERE b.state = 'active'
+            AND o.dead_count IS NOT NULL AND o.dead_count > 0
+            AND o.date >= CURRENT_DATE - INTERVAL '14 days'
+            AND o.date < CURRENT_DATE - INTERVAL '7 days'
+            ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+        )
+        SELECT 
+          (SELECT deaths FROM current_week) as current_week_deaths,
+          (SELECT deaths FROM previous_week) as previous_week_deaths
+      `);
+      
+      const periods: Record<string, any> = {
+        recent: { basketsAffected: 0, totalDead: 0, avgMortalityRate: 0, label: 'Ultimi 3 giorni' },
+        medium: { basketsAffected: 0, totalDead: 0, avgMortalityRate: 0, label: '4-7 giorni fa' },
+        old: { basketsAffected: 0, totalDead: 0, avgMortalityRate: 0, label: 'Oltre 7 giorni' }
+      };
+      
+      for (const row of result.rows as any[]) {
+        if (periods[row.period]) {
+          periods[row.period] = {
+            ...periods[row.period],
+            basketsAffected: parseInt(row.baskets_affected) || 0,
+            totalDead: parseInt(row.total_dead) || 0,
+            avgMortalityRate: parseFloat(row.avg_mortality_rate) || 0,
+            oldestDate: row.oldest_date,
+            newestDate: row.newest_date
+          };
+        }
+      }
+      
+      const trendRow = trendResult.rows[0] as any;
+      const currentWeek = parseInt(trendRow?.current_week_deaths) || 0;
+      const previousWeek = parseInt(trendRow?.previous_week_deaths) || 0;
+      
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      let trendPercent = 0;
+      if (previousWeek > 0) {
+        trendPercent = ((currentWeek - previousWeek) / previousWeek) * 100;
+        if (trendPercent > 10) trend = 'up';
+        else if (trendPercent < -10) trend = 'down';
+      } else if (currentWeek > 0) {
+        trend = 'up';
+        trendPercent = 100;
+      }
+      
+      res.json({
+        success: true,
+        periods,
+        weeklyComparison: {
+          currentWeek,
+          previousWeek,
+          trend,
+          trendPercent: Math.round(trendPercent)
+        },
+        totalMortality: periods.recent.totalDead + periods.medium.totalDead + periods.old.totalDead,
+        recentMortalityRatio: periods.recent.totalDead / (periods.recent.totalDead + periods.medium.totalDead + periods.old.totalDead || 1)
+      });
+    } catch (error) {
+      console.error('Errore calcolo mortalità temporale:', error);
+      res.status(500).json({ success: false, error: 'Errore calcolo mortalità temporale' });
+    }
+  });
   
   // === Basket routes ===
   // 🔄 MIGRATO AL MODULO: server/modules/operations/baskets
