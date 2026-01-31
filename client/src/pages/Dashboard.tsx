@@ -395,8 +395,8 @@ export default function Dashboard() {
         />
       </div>
       
-      {/* Dashboard Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* Dashboard Summary - Prima riga: Statistiche principali */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <TooltipTrigger 
           tooltip={{
             id: 'baskets-card',
@@ -496,9 +496,11 @@ export default function Dashboard() {
           activeCycles={activeCycles} 
           activeBaskets={activeBaskets} 
         />
+      </div>
 
+      {/* Dashboard Summary - Seconda riga: Analisi Mortalità */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <MortalityTemporalCard />
-
         <MortalityAlertsCard />
       </div>
 
