@@ -119,21 +119,25 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       const daysDiff = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
       daysSinceLastMeasure.push(daysDiff);
       
+      // Find last operation WITH mortality (deadCount > 0) - mortality is inherited
+      const lastMortalityOp = basketOps.find((op: any) => op.deadCount && op.deadCount > 0);
+      const mortality = lastMortalityOp?.mortalityRate ?? null;
+      
       if (daysDiff > 7) {
         noRecentOps++;
         noMeasureBaskets.push({
           basketId: basket.id,
           basketCode: basket.code || `Cesta ${basket.id}`,
           flupsyName: basket.flupsyName || 'N/D',
-          mortality: latestOp.mortalityRate || 0,
+          mortality: mortality || 0,
           lastOpDate: latestOp.date,
           operations: basketOps.slice(0, 5)
         });
       }
 
-      // Mortalità attuale (ultima operazione)
-      if (latestOp.mortalityRate !== null && latestOp.mortalityRate !== undefined) {
-        totalMortality += latestOp.mortalityRate;
+      // Mortalità attuale - usa l'ultima operazione CON mortalità (deadCount > 0)
+      if (mortality !== null && mortality !== undefined) {
+        totalMortality += mortality;
         mortalityCount++;
       }
 
@@ -179,23 +183,24 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         }
       }
 
-      const mortality = latestOp.mortalityRate || 0;
+      // Use the mortality already calculated from last operation WITH mortality (defined above)
+      const mortalityForClassification = mortality || 0;
 
       // Prepara i dettagli della cesta
       const basketDetail: BasketDetail = {
         basketId: basket.id,
         basketCode: basket.code || `Cesta ${basket.id}`,
         flupsyName: basket.flupsyName || 'N/D',
-        mortality: mortality,
+        mortality: mortalityForClassification,
         lastOpDate: latestOp.date,
         operations: basketOps.slice(0, 5) // ultime 5 operazioni
       };
 
-      // Classificazione basata su mortalità
-      if (mortality > 10) {
+      // Classificazione basata su mortalità - usa mortalità ereditata dall'ultima op CON mortalità
+      if (mortalityForClassification > 10) {
         critical++;
         criticalBaskets.push(basketDetail);
-      } else if (mortality > 5) {
+      } else if (mortalityForClassification > 5) {
         warning++;
         warningBaskets.push(basketDetail);
       } else {

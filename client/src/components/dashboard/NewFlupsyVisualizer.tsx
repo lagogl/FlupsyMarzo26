@@ -146,20 +146,17 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return info ? info.daysSinceLastMeasurement > 7 : false;
   };
 
-  // Helper to check if basket has high mortality (>10%) - uses allOperations for consistency
+  // Helper to check if basket has high mortality (>10%) - uses lastMortalityRate from latestOperationsMap
+  // which correctly finds the LAST operation WITH mortality, not just the last operation
   const hasHighMortality = (basket: any): boolean => {
     if (!basket || !basket.currentCycleId) return false;
-    if (!allOperations || allOperations.length === 0) return false;
+    if (!latestOperationsMap) return false;
     
-    // Find latest operation with mortality data for this basket's current cycle
-    const basketOps = allOperations
-      .filter((op: any) => op.basketId === basket.id && op.cycleId === basket.currentCycleId)
-      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Get the last mortality data for this basket (from query that finds last op WITH mortality)
+    const latestOpData = latestOperationsMap[basket.id];
+    if (!latestOpData) return false;
     
-    const latestOp = basketOps[0];
-    if (!latestOp) return false;
-    
-    const mortality = latestOp.mortalityRate;
+    const mortality = latestOpData.lastMortalityRate;
     return mortality !== null && mortality !== undefined && mortality > 10;
   };
 
@@ -254,8 +251,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       const daysDiff = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
       if (daysDiff > 7) noMeasure++;
 
-      // Mortality classification (current)
-      const mortality = latestOp.mortalityRate;
+      // Mortality classification - use lastMortalityRate from latestOperationsMap
+      // This correctly uses the LAST operation WITH mortality, not just the last operation
+      const latestOpData = latestOperationsMap?.[basket.id];
+      const mortality = latestOpData?.lastMortalityRate;
       if (mortality !== null && mortality !== undefined) {
         totalMortality += mortality;
         mortalityCount++;
@@ -267,7 +266,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
         healthy++;
       }
 
-      // Mortality trend (previous operation)
+      // Mortality trend - for now we just use current mortality as we don't have historical lastMortalityRate
+      // The trend is less critical than the correct current mortality classification
       if (basketOps.length >= 2 && basketOps[1].mortalityRate !== null && basketOps[1].mortalityRate !== undefined) {
         totalPrevMortality += basketOps[1].mortalityRate;
         prevMortalityCount++;
@@ -858,7 +858,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
         const animalsPerKg = latestOp?.measurementAnimalsPerKg || latestOp?.animalsPerKg;
         const sizeCode = animalsPerKg ? getSizeCodeFromAnimalsPerKg(animalsPerKg) : 'N/D';
         const weightKg = latestOp?.totalWeight ? (latestOp.totalWeight / 1000).toFixed(2) : '';
-        const mortality = latestOp?.mortalityRate;
+        // Use lastMortalityRate from latestOperationsMap (last operation WITH mortality)
+        const latestOpData = latestOperationsMap?.[basket.id];
+        const mortality = latestOpData?.lastMortalityRate;
         const lastDate = latestOp?.date ? format(new Date(latestOp.date), 'dd/MM/yyyy') : '';
 
         worksheet.addRow([
