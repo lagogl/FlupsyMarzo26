@@ -769,10 +769,6 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span>Morti:</span>
-                        <span className="font-medium">{latestOperation.lastMortalityCount} animali</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
                         <span>Tasso:</span>
                         <span className="font-medium text-red-600">
                           {latestOperation.lastMortalityRate != null 
