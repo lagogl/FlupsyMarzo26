@@ -805,14 +805,14 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     const worksheet = workbook.addWorksheet('Ceste Filtrate');
 
     // Title row
-    worksheet.mergeCells('A1:I1');
+    worksheet.mergeCells('A1:K1');
     const titleCell = worksheet.getCell('A1');
     titleCell.value = `Export Ceste - Filtro: ${filterLabel} - ${reportDate}`;
     titleCell.font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } };
     titleCell.alignment = { horizontal: 'left' };
 
     // Header row
-    const headers = ['FLUPSY', 'Fila', 'Cesta', 'Stato', 'Taglia', 'An/kg', 'Peso (kg)', 'Mortalità %', 'Ultima misura'];
+    const headers = ['FLUPSY', 'Fila', 'Cesta', 'Stato', 'Taglia', 'An/kg', 'Peso (kg)', 'Animali attuali', 'Animali iniziali', 'Mortalità %', 'Ultima misura'];
     worksheet.addRow(headers);
     const headerRow = worksheet.getRow(2);
     headerRow.eachCell((cell: any) => {
@@ -843,10 +843,12 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     let totalMortality = 0;
     let mortalityCount = 0;
     let basketCount = 0;
+    let totalCurrentAnimals = 0;
+    let totalInitialAnimals = 0;
 
     groupedByFlupsy.forEach((items, flupsyName) => {
       // FLUPSY group header
-      worksheet.mergeCells(`A${currentRow}:I${currentRow}`);
+      worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
       const groupCell = worksheet.getCell(`A${currentRow}`);
       groupCell.value = flupsyName;
       groupCell.font = { bold: true, size: 11, color: { argb: 'FF1E40AF' } };
@@ -862,6 +864,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
         const latestOpData = latestOperationsMap?.[basket.id];
         const mortality = latestOpData?.lastMortalityRate;
         const lastDate = latestOp?.date ? format(new Date(latestOp.date), 'dd/MM/yyyy') : '';
+        
+        // Animali attuali e iniziali
+        const currentAnimals = latestOpData?.animalCount || latestOp?.animalCount;
+        const initialAnimals = latestOpData?.initialAnimalCount;
 
         worksheet.addRow([
           '',
@@ -871,6 +877,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
           sizeCode,
           animalsPerKg || '',
           weightKg,
+          currentAnimals || '',
+          initialAnimals || '',
           mortality !== null && mortality !== undefined ? mortality.toFixed(2) : '',
           lastDate
         ]);
@@ -890,6 +898,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
           totalMortality += mortality;
           mortalityCount++;
         }
+        if (currentAnimals) totalCurrentAnimals += currentAnimals;
+        if (initialAnimals) totalInitialAnimals += initialAnimals;
         basketCount++;
         currentRow++;
       });
@@ -906,6 +916,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       '',
       '',
       (totalWeight / 1000).toFixed(2) + ' kg',
+      totalCurrentAnimals.toLocaleString('it-IT'),
+      totalInitialAnimals.toLocaleString('it-IT'),
       mortalityCount > 0 ? (totalMortality / mortalityCount).toFixed(2) + '% media' : '',
       ''
     ]);
@@ -929,12 +941,14 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       { width: 12 }, // Taglia
       { width: 12 }, // An/kg
       { width: 12 }, // Peso
+      { width: 16 }, // Animali attuali
+      { width: 16 }, // Animali iniziali
       { width: 14 }, // Mortalità
       { width: 14 }, // Ultima misura
     ];
 
     // Auto filter
-    worksheet.autoFilter = { from: 'A2', to: 'I2' };
+    worksheet.autoFilter = { from: 'A2', to: 'K2' };
 
     // Download file
     const buffer = await workbook.xlsx.writeBuffer();

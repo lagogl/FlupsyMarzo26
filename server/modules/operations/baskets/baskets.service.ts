@@ -665,6 +665,22 @@ export class BasketsService {
         WHERE b.current_cycle_id IS NOT NULL
           AND o.dead_count IS NOT NULL 
           AND o.dead_count > 0
+      ),
+      first_activation AS (
+        SELECT 
+          o.basket_id,
+          o.animal_count as initial_animal_count,
+          o.date as activation_date,
+          ROW_NUMBER() OVER (
+            PARTITION BY o.basket_id 
+            ORDER BY o.date ASC, o.id ASC
+          ) as rn
+        FROM operations o
+        INNER JOIN baskets b ON o.basket_id = b.id
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.type = 'prima-attivazione'
+          AND o.animal_count IS NOT NULL
+          AND o.animal_count > 0
       )
       SELECT 
         ro.id,
@@ -687,10 +703,13 @@ export class BasketsService {
         lm.dead_count as "lastMortalityCount",
         lm.calculated_mortality_rate as "lastMortalityRate",
         lm.mortality_date as "lastMortalityDate",
-        lm.mortality_op_type as "lastMortalityOpType"
+        lm.mortality_op_type as "lastMortalityOpType",
+        fa.initial_animal_count as "initialAnimalCount",
+        fa.activation_date as "activationDate"
       FROM ranked_operations ro
       LEFT JOIN last_measurement lmeas ON ro.basket_id = lmeas.basket_id AND lmeas.rn = 1
       LEFT JOIN last_mortality lm ON ro.basket_id = lm.basket_id AND lm.rn = 1
+      LEFT JOIN first_activation fa ON ro.basket_id = fa.basket_id AND fa.rn = 1
       WHERE ro.rn = 1
       ORDER BY ro.basket_id
     `);
@@ -720,7 +739,10 @@ export class BasketsService {
         lastMortalityCount: row.lastMortalityCount,
         lastMortalityRate: row.lastMortalityRate ? parseFloat(row.lastMortalityRate) : null,
         lastMortalityDate: row.lastMortalityDate,
-        lastMortalityOpType: row.lastMortalityOpType
+        lastMortalityOpType: row.lastMortalityOpType,
+        // Campi da prima attivazione (animali iniziali)
+        initialAnimalCount: row.initialAnimalCount,
+        activationDate: row.activationDate
       };
     }
     
