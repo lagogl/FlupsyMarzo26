@@ -4,9 +4,11 @@ import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import type { BasketGroup } from '@shared/schema';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Plus } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface Basket {
@@ -24,6 +26,10 @@ interface AssignGroupDialogProps {
 
 export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuccess }: AssignGroupDialogProps) {
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupColor, setNewGroupColor] = useState('#3b82f6');
+  const [newGroupPurpose, setNewGroupPurpose] = useState('');
   const { toast } = useToast();
 
   const { data: groups, isLoading: groupsLoading } = useQuery<(BasketGroup & { basketCount: number })[]>({
@@ -59,6 +65,39 @@ export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuc
     });
   }, [basketsWithGroups, groups]);
 
+  const resetState = () => {
+    setSelectedGroupId('');
+    setIsCreatingNew(false);
+    setNewGroupName('');
+    setNewGroupColor('#3b82f6');
+    setNewGroupPurpose('');
+  };
+
+  const createGroupMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('/api/basket-groups', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newGroupName,
+          color: newGroupColor,
+          purpose: newGroupPurpose || undefined,
+          highlightOrder: 0
+        })
+      });
+      return response;
+    },
+    onSuccess: async (newGroup: any) => {
+      await assignMutation.mutateAsync(newGroup.id);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Errore",
+        description: error.message || "Impossibile creare il gruppo",
+        variant: "destructive"
+      });
+    }
+  });
+
   const assignMutation = useMutation({
     mutationFn: async (groupId: number | null) => {
       return await apiRequest('/api/basket-groups/assign', {
@@ -73,7 +112,7 @@ export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuc
       queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
       queryClient.invalidateQueries({ queryKey: ['/api/basket-groups'] });
       onOpenChange(false);
-      setSelectedGroupId('');
+      resetState();
       toast({
         title: "Assegnazione completata",
         description: `${selectedBasketIds.length} ceste assegnate al gruppo`
@@ -146,84 +185,167 @@ export function AssignGroupDialog({ open, onOpenChange, selectedBasketIds, onSuc
           </Alert>
         )}
 
-        <div className="py-4">
-          {groupsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          ) : (
-            <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
-              <SelectTrigger data-testid="select-group">
-                <SelectValue placeholder="Seleziona un gruppo..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none" data-testid="option-remove-group">
-                  Rimuovi gruppo
-                </SelectItem>
-                {groups?.map(group => (
-                  <SelectItem 
-                    key={group.id} 
-                    value={group.id.toString()}
-                    data-testid={`option-group-${group.id}`}
+        <div className="py-4 space-y-4">
+          {!isCreatingNew ? (
+            <>
+              {groupsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (
+                <>
+                  <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                    <SelectTrigger data-testid="select-group">
+                      <SelectValue placeholder="Seleziona un gruppo esistente..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" data-testid="option-remove-group">
+                        Rimuovi gruppo
+                      </SelectItem>
+                      {groups?.map(group => (
+                        <SelectItem 
+                          key={group.id} 
+                          value={group.id.toString()}
+                          data-testid={`option-group-${group.id}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {group.color && (
+                              <div 
+                                className="w-3 h-3 rounded-full border border-gray-300" 
+                                style={{ backgroundColor: group.color }}
+                              />
+                            )}
+                            <span>{group.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({group.basketCount})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setIsCreatingNew(true)}
                   >
-                    <div className="flex items-center gap-2">
-                      {group.color && (
-                        <div 
-                          className="w-3 h-3 rounded-full border border-gray-300" 
-                          style={{ backgroundColor: group.color }}
-                        />
-                      )}
-                      <span>{group.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({group.basketCount})
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crea nuovo gruppo
+                  </Button>
+                </>
+              )}
+            </>
+          ) : (
+            <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Nuovo Gruppo</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsCreatingNew(false)}
+                >
+                  Annulla
+                </Button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="groupName">Nome gruppo *</Label>
+                  <Input
+                    id="groupName"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="Es: Ceste da vagliare"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="groupPurpose">Descrizione (opzionale)</Label>
+                  <Input
+                    id="groupPurpose"
+                    value={newGroupPurpose}
+                    onChange={(e) => setNewGroupPurpose(e.target.value)}
+                    placeholder="Es: Ceste con mortalità alta da controllare"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="groupColor">Colore</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      id="groupColor"
+                      value={newGroupColor}
+                      onChange={(e) => setNewGroupColor(e.target.value)}
+                      className="w-10 h-10 rounded cursor-pointer border"
+                    />
+                    <span className="text-sm text-muted-foreground">{newGroupColor}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
         <DialogFooter className="flex justify-between">
-          <Button 
-            variant="destructive" 
-            onClick={handleRemoveFromGroup}
-            disabled={assignMutation.isPending}
-            data-testid="button-remove-from-group"
-          >
-            {assignMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Rimuovendo...
-              </>
-            ) : (
-              'Rimuovi da gruppo'
-            )}
-          </Button>
-          <div className="flex gap-2">
+          {!isCreatingNew && (
             <Button 
-              variant="outline" 
-              onClick={() => onOpenChange(false)}
-              disabled={assignMutation.isPending}
-              data-testid="button-cancel"
-            >
-              Annulla
-            </Button>
-            <Button 
-              onClick={handleAssign}
-              disabled={!selectedGroupId || assignMutation.isPending}
-              data-testid="button-confirm-assign"
+              variant="destructive" 
+              onClick={handleRemoveFromGroup}
+              disabled={assignMutation.isPending || createGroupMutation.isPending}
+              data-testid="button-remove-from-group"
             >
               {assignMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Assegnando...
+                  Rimuovendo...
                 </>
               ) : (
-                'Assegna'
+                'Rimuovi da gruppo'
               )}
             </Button>
+          )}
+          {isCreatingNew && <div />}
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                onOpenChange(false);
+                resetState();
+              }}
+              disabled={assignMutation.isPending || createGroupMutation.isPending}
+              data-testid="button-cancel"
+            >
+              Annulla
+            </Button>
+            {isCreatingNew ? (
+              <Button 
+                onClick={() => createGroupMutation.mutate()}
+                disabled={!newGroupName.trim() || createGroupMutation.isPending || assignMutation.isPending}
+                data-testid="button-create-and-assign"
+              >
+                {(createGroupMutation.isPending || assignMutation.isPending) ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  'Crea e Assegna'
+                )}
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleAssign}
+                disabled={!selectedGroupId || assignMutation.isPending}
+                data-testid="button-confirm-assign"
+              >
+                {assignMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Assegnando...
+                  </>
+                ) : (
+                  'Assegna'
+                )}
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>

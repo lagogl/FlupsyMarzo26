@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,9 +9,10 @@ import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus, Download } from 'lucide-react';
+import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus, Download, Users } from 'lucide-react';
 import { getOperationTypeLabel } from '@/lib/utils';
 import * as ExcelJS from 'exceljs';
+import { AssignGroupDialog } from '@/components/AssignGroupDialog';
 
 interface NewFlupsyVisualizerProps {
   selectedFlupsyIds?: number[];
@@ -19,6 +21,7 @@ interface NewFlupsyVisualizerProps {
 export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlupsyVisualizerProps) {
   const [, navigate] = useLocation();
   const [selectedTab, setSelectedTab] = useState<string>("all");
+  const [isAssignGroupDialogOpen, setIsAssignGroupDialogOpen] = useState(false);
 
   // Fetch flupsys
   const { data: allFlupsys, isLoading: isLoadingFlupsys } = useQuery({
@@ -1327,7 +1330,35 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 <TooltipContent>Esporta le ceste del filtro attivo in Excel</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAssignGroupDialogOpen(true)}
+                    className="flex items-center gap-2 whitespace-nowrap"
+                    disabled={getFilteredBasketsForExport().length === 0}
+                  >
+                    <Users className="h-4 w-4" />
+                    Assegna a gruppo
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Assegna le ceste del filtro attivo a un gruppo</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             </div>
+            
+            <AssignGroupDialog
+              open={isAssignGroupDialogOpen}
+              onOpenChange={setIsAssignGroupDialogOpen}
+              selectedBasketIds={getFilteredBasketsForExport().map(item => item.basket.id)}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/basket-groups'] });
+              }}
+            />
             
             <TabsContent value="all" className="space-y-4">
               {flupsys?.map((flupsy: any) => renderFlupsy(flupsy))}
