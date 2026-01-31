@@ -429,7 +429,7 @@ export default function Dashboard() {
                 />
               </div>
             </HoverCardTrigger>
-            <HoverCardContent className="w-auto p-0" side="bottom" align="start">
+            <HoverCardContent className="w-auto p-0" side="right" align="start" sideOffset={10}>
               <SizeDistributionPopup />
             </HoverCardContent>
           </HoverCard>
