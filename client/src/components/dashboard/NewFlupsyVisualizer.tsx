@@ -1320,23 +1320,6 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleExportExcel}
-                    className="flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <Download className="h-4 w-4" />
-                    Esporta Excel
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Esporta le ceste del filtro attivo in Excel</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
                     onClick={() => setIsAssignGroupDialogOpen(true)}
                     className="flex items-center gap-2 whitespace-nowrap"
                     disabled={getFilteredBasketsForExport().length === 0}
@@ -1346,6 +1329,23 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Assegna le ceste del filtro attivo a un gruppo</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportExcel}
+                    className="flex items-center gap-2 whitespace-nowrap bg-green-500 hover:bg-green-600 text-white border-green-500 hover:border-green-600"
+                  >
+                    <Download className="h-4 w-4" />
+                    Esporta Excel
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Esporta le ceste del filtro attivo in Excel</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             </div>
