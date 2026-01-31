@@ -35,10 +35,10 @@ export default function SizeDistributionPopup() {
 
   if (isLoading) {
     return (
-      <div className="p-4 min-w-[500px]">
-        <div className="animate-pulse flex space-x-4">
-          <div className="h-48 w-48 bg-gray-200 rounded-full"></div>
-          <div className="h-48 w-48 bg-gray-200 rounded-full"></div>
+      <div className="p-6 min-w-[1000px]">
+        <div className="animate-pulse flex space-x-8 justify-center">
+          <div className="h-80 w-80 bg-gray-200 rounded-full"></div>
+          <div className="h-80 w-80 bg-gray-200 rounded-full"></div>
         </div>
       </div>
     );
@@ -106,28 +106,28 @@ export default function SizeDistributionPopup() {
   };
 
   return (
-    <div className="p-4 min-w-[600px] max-w-[700px] bg-white rounded-lg shadow-xl">
-      <div className="grid grid-cols-2 gap-4">
+    <div className="p-6 min-w-[1000px] max-w-[1200px] bg-white rounded-lg shadow-xl">
+      <div className="grid grid-cols-2 gap-8">
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2 text-center">
+          <h3 className="text-base font-semibold text-gray-700 mb-3 text-center">
             Distribuzione Animali per Taglia
           </h3>
-          <p className="text-xs text-gray-500 text-center mb-2">
+          <p className="text-sm text-gray-500 text-center mb-3">
             Totale: {formatNumber(totalAnimals)} animali
           </p>
           {animalsData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={350}>
               <PieChart>
                 <Pie
                   data={animalsData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={40}
-                  outerRadius={70}
+                  innerRadius={70}
+                  outerRadius={130}
                   paddingAngle={2}
                   dataKey="value"
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  labelLine={false}
+                  labelLine={true}
                 >
                   {animalsData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -137,16 +137,16 @@ export default function SizeDistributionPopup() {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">
+            <div className="h-[350px] flex items-center justify-center text-gray-400 text-base">
               Nessun dato disponibile
             </div>
           )}
-          <div className="mt-2 max-h-[100px] overflow-y-auto">
-            <div className="flex flex-wrap gap-1 justify-center">
-              {animalsData.slice(0, 8).map((d, i) => (
-                <div key={i} className="flex items-center text-[10px]">
+          <div className="mt-4 max-h-[120px] overflow-y-auto">
+            <div className="flex flex-wrap gap-2 justify-center">
+              {animalsData.slice(0, 10).map((d, i) => (
+                <div key={i} className="flex items-center text-xs">
                   <div 
-                    className="w-2 h-2 rounded-full mr-1" 
+                    className="w-3 h-3 rounded-full mr-1.5" 
                     style={{ backgroundColor: d.color }}
                   />
                   <span>{d.name}: {formatNumber(d.value)}</span>
@@ -157,25 +157,25 @@ export default function SizeDistributionPopup() {
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2 text-center">
+          <h3 className="text-base font-semibold text-gray-700 mb-3 text-center">
             Mortalità Media per Taglia
           </h3>
-          <p className="text-xs text-gray-500 text-center mb-2">
+          <p className="text-sm text-gray-500 text-center mb-3">
             Ceste con mortalità registrata
           </p>
           {mortalityData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={350}>
               <PieChart>
                 <Pie
                   data={mortalityData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={40}
-                  outerRadius={70}
+                  innerRadius={70}
+                  outerRadius={130}
                   paddingAngle={2}
                   dataKey="value"
                   label={({ name, value }) => `${name} ${value.toFixed(0)}%`}
-                  labelLine={false}
+                  labelLine={true}
                 >
                   {mortalityData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -185,16 +185,16 @@ export default function SizeDistributionPopup() {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">
+            <div className="h-[350px] flex items-center justify-center text-gray-400 text-base">
               Nessuna mortalità registrata
             </div>
           )}
-          <div className="mt-2 max-h-[100px] overflow-y-auto">
-            <div className="flex flex-wrap gap-1 justify-center">
-              {mortalityData.slice(0, 8).map((d, i) => (
-                <div key={i} className="flex items-center text-[10px]">
+          <div className="mt-4 max-h-[120px] overflow-y-auto">
+            <div className="flex flex-wrap gap-2 justify-center">
+              {mortalityData.slice(0, 10).map((d, i) => (
+                <div key={i} className="flex items-center text-xs">
                   <div 
-                    className="w-2 h-2 rounded-full mr-1" 
+                    className="w-3 h-3 rounded-full mr-1.5" 
                     style={{ backgroundColor: d.color }}
                   />
                   <span>{d.name}: {d.value.toFixed(1)}%</span>
