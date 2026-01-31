@@ -8521,6 +8521,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoint per scaricare il PDF delle modifiche al sistema mortalità (Gennaio 2026)
+  const { generateMortalityUpdatePDF } = await import('./services/mortality-update-pdf.service');
+  app.get("/api/guides/mortality-update.pdf", async (req, res) => {
+    try {
+      const pdfBuffer = await generateMortalityUpdatePDF();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="Aggiornamento_Mortalita_FLUPSY_2026.pdf"');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Errore generazione PDF mortalità:', error);
+      res.status(500).json({ error: 'Errore nella generazione del PDF' });
+    }
+  });
+
   // Route per eliminare tutti i dati relativi ai lotti
   app.post("/api/reset-lots", async (req, res) => {
     try {
