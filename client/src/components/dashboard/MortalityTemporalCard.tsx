@@ -123,8 +123,6 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
                 <p className="font-medium">Ultimi 3 giorni</p>
                 <p>Mortalità ponderata: {periods.recent.avgMortalityRate.toFixed(2)}%</p>
                 <p>Ceste con mortalità: {periods.recent.basketsAffected}</p>
-                <p>Campioni analizzati: {periods.recent.totalSampled?.toLocaleString('it-IT') || 'N/D'}</p>
-                <p>Morti nei campioni: {periods.recent.totalDead.toLocaleString('it-IT')}</p>
                 {periods.recent.newestDate && <p>Ultima: {new Date(periods.recent.newestDate).toLocaleDateString('it-IT')}</p>}
               </TooltipContent>
             </Tooltip>
@@ -150,8 +148,6 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
                 <p className="font-medium">4-7 giorni fa</p>
                 <p>Mortalità ponderata: {periods.medium.avgMortalityRate.toFixed(2)}%</p>
                 <p>Ceste con mortalità: {periods.medium.basketsAffected}</p>
-                <p>Campioni analizzati: {periods.medium.totalSampled?.toLocaleString('it-IT') || 'N/D'}</p>
-                <p>Morti nei campioni: {periods.medium.totalDead.toLocaleString('it-IT')}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -176,8 +172,6 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
                 <p className="font-medium">Oltre 7 giorni fa</p>
                 <p>Mortalità ponderata: {periods.old.avgMortalityRate.toFixed(2)}%</p>
                 <p>Ceste con mortalità: {periods.old.basketsAffected}</p>
-                <p>Campioni analizzati: {periods.old.totalSampled?.toLocaleString('it-IT') || 'N/D'}</p>
-                <p>Morti nei campioni: {periods.old.totalDead.toLocaleString('it-IT')}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
