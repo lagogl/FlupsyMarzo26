@@ -534,12 +534,15 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                       {op.size ? (typeof op.size === 'object' ? op.size.code : op.size) : '-'}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-right font-mono">
-                      {op.deadCount && op.deadCount > 0 ? (
+                      {op.mortalityRate && op.mortalityRate > 0 ? (
                         <span className="text-red-600 font-semibold">
-                          {op.deadCount.toLocaleString('it-IT')}
-                          {op.mortalityRate && ` (${op.mortalityRate.toFixed(1)}%)`}
+                          {op.mortalityRate.toFixed(1)}%
                         </span>
-                      ) : '-'}
+                      ) : (op.deadCount && op.deadCount > 0 ? (
+                        <span className="text-red-600 font-semibold">
+                          {op.deadCount.toLocaleString('it-IT')} morti
+                        </span>
+                      ) : '-')}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-xs max-w-[200px] truncate" title={op.notes || ''}>
                       {op.notes || '-'}
@@ -624,15 +627,16 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                         </div>
                       )}
                       
-                      {op.deadCount && op.deadCount > 0 && (
+                      {(op.mortalityRate && op.mortalityRate > 0) || (op.deadCount && op.deadCount > 0) ? (
                         <div>
                           <div className="text-sm font-medium text-red-600">Mortalità</div>
                           <div className="font-medium text-red-600">
-                            {op.deadCount.toLocaleString('it-IT')} animali
-                            {op.mortalityRate && ` (${op.mortalityRate.toFixed(1)}%)`}
+                            {op.mortalityRate && op.mortalityRate > 0 
+                              ? `${op.mortalityRate.toFixed(1)}%`
+                              : `${op.deadCount?.toLocaleString('it-IT')} morti`}
                           </div>
                         </div>
-                      )}
+                      ) : null}
                       
                       {op.notes && (
                         <div className="sm:col-span-3">
