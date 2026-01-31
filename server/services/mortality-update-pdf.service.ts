@@ -1,6 +1,6 @@
 /**
- * Servizio per la generazione del PDF delle modifiche al sistema di mortalità
- * Aggiornamento Gennaio 2026 - Mortalità Cumulativa Ponderata
+ * Servizio per la generazione del PDF delle modifiche al sistema
+ * Aggiornamento Gennaio 2026 - Mortalità, Dashboard e Analisi AI
  */
 import PDFDocument from 'pdfkit';
 
@@ -11,9 +11,9 @@ export async function generateMortalityUpdatePDF(): Promise<Buffer> {
         size: 'A4',
         margins: { top: 50, bottom: 50, left: 50, right: 50 },
         info: {
-          Title: 'Aggiornamento Sistema Mortalità - Gennaio 2026',
+          Title: 'Aggiornamento Sistema FLUPSY - 30-31 Gennaio 2026',
           Author: 'Delta Futuro',
-          Subject: 'Nuove funzionalità per il calcolo della mortalità cumulativa ponderata'
+          Subject: 'Nuove funzionalità per mortalità, dashboard e analisi AI'
         }
       });
 
@@ -26,221 +26,284 @@ export async function generateMortalityUpdatePDF(): Promise<Buffer> {
       const accentColor = '#0ea5e9';
       const successColor = '#10b981';
       const warningColor = '#f59e0b';
+      const dangerColor = '#ef4444';
 
+      // ============ PAGINA 1 ============
       // Header
-      doc.rect(0, 0, doc.page.width, 120).fill(primaryColor);
+      doc.rect(0, 0, doc.page.width, 100).fill(primaryColor);
       
-      doc.fontSize(24)
+      doc.fontSize(22)
          .fillColor('white')
          .font('Helvetica-Bold')
-         .text('AGGIORNAMENTO SISTEMA MORTALITÀ', 50, 40, { align: 'center' });
+         .text('AGGIORNAMENTO SISTEMA FLUPSY', 50, 35, { align: 'center' });
       
-      doc.fontSize(14)
+      doc.fontSize(12)
          .font('Helvetica')
-         .text('Gennaio 2026 - Mortalità Cumulativa Ponderata', { align: 'center' });
-      
-      doc.fontSize(10)
-         .text('Delta Futuro - FLUPSY Management System', { align: 'center' });
+         .text('30-31 Gennaio 2026 - Novità per Operatori', { align: 'center' });
 
-      let yPos = 150;
+      let yPos = 130;
 
-      // Sezione 1: Introduzione
+      // Indice
       doc.fillColor(primaryColor)
-         .fontSize(16)
+         .fontSize(14)
          .font('Helvetica-Bold')
-         .text('1. Cosa è cambiato?', 50, yPos);
+         .text('INDICE DELLE NOVITÀ', 50, yPos);
       
       yPos += 25;
       doc.fillColor('#333')
-         .fontSize(11)
-         .font('Helvetica')
-         .text('Il sistema di calcolo della mortalità è stato migliorato per fornire dati più accurati e significativi.', 50, yPos, { width: 495 });
-      
-      yPos += 35;
-      doc.text('Prima: La mortalità veniva calcolata come media semplice delle percentuali delle singole operazioni.', 50, yPos, { width: 495 });
-      
-      yPos += 30;
-      doc.fillColor(successColor)
-         .font('Helvetica-Bold')
-         .text('Ora: La mortalità viene calcolata in modo cumulativo e ponderato, considerando il numero totale di animali campionati.', 50, yPos, { width: 495 });
-
-      // Sezione 2: Come funziona
-      yPos += 50;
-      doc.fillColor(primaryColor)
-         .fontSize(16)
-         .font('Helvetica-Bold')
-         .text('2. Come funziona il nuovo calcolo?', 50, yPos);
-      
-      yPos += 30;
-      doc.fillColor('#333')
-         .fontSize(11)
-         .font('Helvetica')
-         .text('Quando registri un\'operazione di Misura con mortalità:', 50, yPos);
-      
-      yPos += 25;
-      doc.font('Helvetica-Bold')
-         .text('Esempio pratico:', 70, yPos);
-      
-      yPos += 20;
-      doc.font('Helvetica')
-         .text('• Campione 1: 100 animali controllati, 5 morti → 5%', 70, yPos);
-      yPos += 15;
-      doc.text('• Campione 2: 80 animali controllati, 3 morti → 3.75%', 70, yPos);
-      yPos += 15;
-      doc.text('• Campione 3: 120 animali controllati, 2 morti → 1.67%', 70, yPos);
-      
-      yPos += 25;
-      doc.fillColor(warningColor)
-         .font('Helvetica-Bold')
-         .text('Calcolo VECCHIO (media semplice):', 70, yPos);
-      yPos += 15;
-      doc.font('Helvetica')
-         .fillColor('#333')
-         .text('(5% + 3.75% + 1.67%) / 3 = 3.47%', 70, yPos);
-      
-      yPos += 25;
-      doc.fillColor(successColor)
-         .font('Helvetica-Bold')
-         .text('Calcolo NUOVO (cumulativo ponderato):', 70, yPos);
-      yPos += 15;
-      doc.font('Helvetica')
-         .fillColor('#333')
-         .text('(5 + 3 + 2) morti / (100 + 80 + 120) campionati × 100 = 3.33%', 70, yPos);
-      
-      yPos += 25;
-      doc.font('Helvetica-Oblique')
          .fontSize(10)
-         .text('Il nuovo calcolo è più preciso perché dà più peso ai campioni più grandi.', 70, yPos);
-
-      // Sezione 3: Cosa vedi nella Dashboard
-      yPos += 45;
-      doc.fillColor(primaryColor)
-         .fontSize(16)
-         .font('Helvetica-Bold')
-         .text('3. Cosa vedi nella Dashboard?', 50, yPos);
-      
-      yPos += 30;
-      doc.fillColor('#333')
-         .fontSize(11)
-         .font('Helvetica')
-         .text('La card "Analisi Mortalità Temporale" ora mostra:', 50, yPos);
-      
-      yPos += 25;
-      
-      // Box Recente
-      doc.rect(70, yPos, 140, 60).fill('#fee2e2').stroke('#fca5a5');
-      doc.fillColor('#991b1b')
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text('RECENTE (ultimi 3 gg)', 80, yPos + 8);
-      doc.fontSize(16)
-         .text('X.X%', 80, yPos + 25);
-      doc.fontSize(8)
-         .font('Helvetica')
-         .text('N ceste • M morti campione', 80, yPos + 45);
-      
-      // Box Monitorare
-      doc.rect(220, yPos, 140, 60).fill('#fef3c7').stroke('#fcd34d');
-      doc.fillColor('#92400e')
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text('MONITORARE (4-7 gg)', 230, yPos + 8);
-      doc.fontSize(16)
-         .text('X.X%', 230, yPos + 25);
-      doc.fontSize(8)
-         .font('Helvetica')
-         .text('N ceste • M morti campione', 230, yPos + 45);
-      
-      // Box Storica
-      doc.rect(370, yPos, 140, 60).fill('#dcfce7').stroke('#86efac');
-      doc.fillColor('#166534')
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text('STORICA (>7 gg)', 380, yPos + 8);
-      doc.fontSize(16)
-         .text('X.X%', 380, yPos + 25);
-      doc.fontSize(8)
-         .font('Helvetica')
-         .text('N ceste • M morti campione', 380, yPos + 45);
-      
-      yPos += 80;
-      doc.fillColor('#333')
-         .fontSize(11)
-         .font('Helvetica')
-         .text('La percentuale mostrata è ora la mortalità cumulativa ponderata del periodo.', 50, yPos, { width: 495 });
-
-      // Sezione 4: Morti Stimati Totali
-      yPos += 35;
-      doc.fillColor(primaryColor)
-         .fontSize(16)
-         .font('Helvetica-Bold')
-         .text('4. Morti Stimati sulla Popolazione', 50, yPos);
-      
-      yPos += 25;
-      doc.fillColor('#333')
-         .fontSize(11)
-         .font('Helvetica')
-         .text('In fondo alla card trovi ora un nuovo dato:', 50, yPos);
-      
-      yPos += 25;
-      doc.rect(70, yPos, 420, 40).fill('#f3f4f6').stroke('#d1d5db');
-      doc.fillColor('#374151')
-         .fontSize(10)
-         .font('Helvetica')
-         .text('Morti stimati totali: ', 80, yPos + 12);
-      doc.fillColor('#dc2626')
-         .font('Helvetica-Bold')
-         .text('~15.000.000', 175, yPos + 12);
-      doc.fillColor('#6b7280')
-         .font('Helvetica')
-         .text('(14.42% della popolazione)', 260, yPos + 12);
-      
-      yPos += 55;
-      doc.fillColor('#333')
-         .fontSize(11)
-         .font('Helvetica')
-         .text('Questo numero rappresenta la stima dei morti totali, calcolata come:', 50, yPos);
-      
-      yPos += 20;
-      doc.font('Helvetica-Bold')
-         .text('Animali iniziali (alla prima attivazione) - Animali attuali = Morti stimati', 70, yPos);
-      
-      yPos += 25;
-      doc.font('Helvetica-Oblique')
-         .fontSize(10)
-         .text('Passa il mouse sopra per vedere i dettagli: animali iniziali, attuali e differenza.', 50, yPos);
-
-      // Sezione 5: Note importanti
-      yPos += 40;
-      doc.fillColor(primaryColor)
-         .fontSize(16)
-         .font('Helvetica-Bold')
-         .text('5. Note Importanti', 50, yPos);
-      
-      yPos += 25;
-      doc.fillColor('#333')
-         .fontSize(11)
          .font('Helvetica');
       
-      const notes = [
-        '• Non cambia nulla nel modo in cui registri le operazioni.',
-        '• I dati delle operazioni passate vengono ancora mostrati correttamente.',
-        '• Le nuove operazioni beneficeranno del calcolo più preciso.',
-        '• I colori indicano la "freschezza" del dato: rosso = recente, giallo = da monitorare, verde = storico.'
+      const indice = [
+        '1. Mortalità Cumulativa Ponderata (nuovo calcolo più preciso)',
+        '2. Card Analisi Mortalità Temporale (dashboard)',
+        '3. Card Analisi AI Mortalità (pattern e alert)',
+        '4. Popup Interattivi (distribuzione animali e mortalità per taglia)',
+        '5. Layout Dashboard Migliorato',
+        '6. Export Excel con Animali Iniziali'
       ];
       
-      notes.forEach(note => {
-        doc.text(note, 50, yPos, { width: 495 });
-        yPos += 18;
+      indice.forEach(item => {
+        doc.text(item, 60, yPos);
+        yPos += 15;
       });
 
-      // Footer
-      doc.rect(0, doc.page.height - 40, doc.page.width, 40).fill(primaryColor);
-      doc.fillColor('white')
-         .fontSize(9)
+      // Sezione 1: Mortalità Cumulativa
+      yPos += 20;
+      doc.fillColor(primaryColor)
+         .fontSize(14)
+         .font('Helvetica-Bold')
+         .text('1. MORTALITÀ CUMULATIVA PONDERATA', 50, yPos);
+      
+      yPos += 20;
+      doc.fillColor('#333')
+         .fontSize(10)
          .font('Helvetica')
-         .text('Delta Futuro © 2026 - FLUPSY Management System', 50, doc.page.height - 28, { align: 'center' });
-      doc.text('Documento generato automaticamente', { align: 'center' });
+         .text('Il sistema ora calcola la mortalità in modo più accurato.', 50, yPos);
+      
+      yPos += 20;
+      doc.font('Helvetica-Bold')
+         .text('PRIMA (media semplice - meno preciso):', 60, yPos);
+      yPos += 12;
+      doc.font('Helvetica')
+         .text('• Campione 1: 5% + Campione 2: 10% + Campione 3: 2% = media 5.7%', 70, yPos);
+      
+      yPos += 20;
+      doc.fillColor(successColor)
+         .font('Helvetica-Bold')
+         .text('ORA (cumulativo ponderato - più preciso):', 60, yPos);
+      yPos += 12;
+      doc.font('Helvetica')
+         .fillColor('#333')
+         .text('• Totale morti nei campioni ÷ Totale animali campionati × 100', 70, yPos);
+      yPos += 12;
+      doc.text('• Le ceste con campioni più grandi pesano di più nel calcolo', 70, yPos);
+
+      yPos += 25;
+      doc.font('Helvetica-Oblique')
+         .fontSize(9)
+         .text('Non cambia nulla nel modo in cui registri le operazioni. Il sistema calcola automaticamente.', 60, yPos);
+
+      // Sezione 2: Card Mortalità Temporale
+      yPos += 30;
+      doc.fillColor(primaryColor)
+         .fontSize(14)
+         .font('Helvetica-Bold')
+         .text('2. CARD ANALISI MORTALITÀ TEMPORALE', 50, yPos);
+      
+      yPos += 20;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica')
+         .text('Nella dashboard trovi una nuova card che mostra la mortalità divisa per periodi:', 50, yPos);
+      
+      yPos += 20;
+      
+      // Mini box colorati
+      doc.rect(60, yPos, 130, 45).fill('#fee2e2').stroke('#fca5a5');
+      doc.fillColor('#991b1b').fontSize(9).font('Helvetica-Bold').text('RECENTE', 70, yPos + 5);
+      doc.fontSize(8).font('Helvetica').text('Ultimi 3 giorni', 70, yPos + 17);
+      doc.fillColor('#dc2626').text('Colore ROSSO', 70, yPos + 30);
+      
+      doc.rect(200, yPos, 130, 45).fill('#fef3c7').stroke('#fcd34d');
+      doc.fillColor('#92400e').fontSize(9).font('Helvetica-Bold').text('MONITORARE', 210, yPos + 5);
+      doc.fontSize(8).font('Helvetica').text('4-7 giorni fa', 210, yPos + 17);
+      doc.fillColor('#d97706').text('Colore GIALLO', 210, yPos + 30);
+      
+      doc.rect(340, yPos, 130, 45).fill('#dcfce7').stroke('#86efac');
+      doc.fillColor('#166534').fontSize(9).font('Helvetica-Bold').text('STORICA', 350, yPos + 5);
+      doc.fontSize(8).font('Helvetica').text('Oltre 7 giorni', 350, yPos + 17);
+      doc.fillColor('#16a34a').text('Colore VERDE', 350, yPos + 30);
+      
+      yPos += 60;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica')
+         .text('In fondo alla card trovi anche:', 50, yPos);
+      yPos += 15;
+      doc.text('• Morti stimati totali sulla popolazione (differenza tra animali iniziali e attuali)', 60, yPos);
+      yPos += 12;
+      doc.text('• Percentuale di mortalità sulla popolazione totale', 60, yPos);
+
+      // Sezione 3: Card AI
+      yPos += 30;
+      doc.fillColor(primaryColor)
+         .fontSize(14)
+         .font('Helvetica-Bold')
+         .text('3. CARD ANALISI AI MORTALITÀ', 50, yPos);
+      
+      yPos += 20;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica')
+         .text('Una nuova card con intelligenza artificiale analizza i dati e rileva automaticamente:', 50, yPos);
+      
+      yPos += 18;
+      const patterns = [
+        { name: 'SPIKE', desc: 'Aumento improvviso della mortalità (>50% rispetto alla media)', color: dangerColor },
+        { name: 'PERSISTENTE', desc: '3 o più eventi di mortalità in 7 giorni sulla stessa cesta', color: warningColor },
+        { name: 'LOCALIZZATA', desc: '3 o più ceste con mortalità nello stesso FLUPSY', color: warningColor },
+        { name: 'IN MIGLIORAMENTO', desc: 'Riduzione significativa della mortalità', color: successColor }
+      ];
+      
+      patterns.forEach(p => {
+        doc.fillColor(p.color).font('Helvetica-Bold').text(`• ${p.name}:`, 60, yPos);
+        doc.fillColor('#333').font('Helvetica').text(p.desc, 150, yPos);
+        yPos += 14;
+      });
+
+      yPos += 10;
+      doc.fillColor('#333')
+         .font('Helvetica')
+         .text('La card mostra anche le ceste più colpite con la loro percentuale di mortalità.', 50, yPos);
+
+      // Sezione 4: Popup Interattivi
+      yPos += 30;
+      doc.fillColor(primaryColor)
+         .fontSize(14)
+         .font('Helvetica-Bold')
+         .text('4. POPUP INTERATTIVI', 50, yPos);
+      
+      yPos += 20;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica')
+         .text('Nella dashboard, passando il mouse sopra le statistiche delle ceste attive:', 50, yPos);
+      
+      yPos += 18;
+      doc.text('• Popup con grafico a torta della distribuzione animali per taglia', 60, yPos);
+      yPos += 12;
+      doc.text('• Popup con grafico a torta della distribuzione mortalità per taglia', 60, yPos);
+      yPos += 12;
+      doc.text('• Dettagli completi: numero ceste, animali totali, percentuali', 60, yPos);
+
+      // Footer pagina 1
+      doc.rect(0, doc.page.height - 35, doc.page.width, 35).fill(primaryColor);
+      doc.fillColor('white')
+         .fontSize(8)
+         .font('Helvetica')
+         .text('Delta Futuro © 2026 - FLUPSY Management System - Pagina 1/2', 50, doc.page.height - 22, { align: 'center' });
+
+      // ============ PAGINA 2 ============
+      doc.addPage();
+      
+      // Header pagina 2
+      doc.rect(0, 0, doc.page.width, 60).fill(primaryColor);
+      doc.fontSize(16)
+         .fillColor('white')
+         .font('Helvetica-Bold')
+         .text('AGGIORNAMENTO SISTEMA FLUPSY - continua', 50, 25, { align: 'center' });
+
+      yPos = 90;
+
+      // Sezione 5: Layout Dashboard
+      doc.fillColor(primaryColor)
+         .fontSize(14)
+         .font('Helvetica-Bold')
+         .text('5. LAYOUT DASHBOARD MIGLIORATO', 50, yPos);
+      
+      yPos += 20;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica')
+         .text('La dashboard è stata riorganizzata per una migliore visualizzazione:', 50, yPos);
+      
+      yPos += 18;
+      doc.text('• Prima riga: 4 card principali (Ceste, Cicli, Lotti, Health SGR)', 60, yPos);
+      yPos += 12;
+      doc.text('• Seconda riga: 2 card mortalità affiancate (Temporale + AI)', 60, yPos);
+      yPos += 12;
+      doc.text('• Design simmetrico e più leggibile', 60, yPos);
+
+      // Sezione 6: Export Excel
+      yPos += 30;
+      doc.fillColor(primaryColor)
+         .fontSize(14)
+         .font('Helvetica-Bold')
+         .text('6. EXPORT EXCEL CON ANIMALI INIZIALI', 50, yPos);
+      
+      yPos += 20;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica')
+         .text('Gli export Excel ora includono anche:', 50, yPos);
+      
+      yPos += 18;
+      doc.text('• Numero animali iniziali (alla prima attivazione)', 60, yPos);
+      yPos += 12;
+      doc.text('• Numero animali attuali', 60, yPos);
+      yPos += 12;
+      doc.text('• Differenza (morti stimati)', 60, yPos);
+
+      // Riquadro riepilogo
+      yPos += 40;
+      doc.rect(50, yPos, 495, 120).fill('#f0f9ff').stroke(accentColor);
+      yPos += 15;
+      doc.fillColor(primaryColor)
+         .fontSize(12)
+         .font('Helvetica-Bold')
+         .text('RIEPILOGO PER GLI OPERATORI', 60, yPos);
+      
+      yPos += 25;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica');
+      
+      const riepilogo = [
+        '✓ Non cambia nulla nel modo in cui registri le operazioni',
+        '✓ Il calcolo della mortalità è ora più preciso automaticamente',
+        '✓ Nuove card nella dashboard per monitorare meglio la mortalità',
+        '✓ Popup informativi passando il mouse sulle statistiche',
+        '✓ Export Excel più completi con dati iniziali e attuali'
+      ];
+      
+      riepilogo.forEach(item => {
+        doc.text(item, 70, yPos, { width: 460 });
+        yPos += 16;
+      });
+
+      // Sezione contatti/supporto
+      yPos += 40;
+      doc.fillColor(primaryColor)
+         .fontSize(12)
+         .font('Helvetica-Bold')
+         .text('SUPPORTO', 50, yPos);
+      
+      yPos += 18;
+      doc.fillColor('#333')
+         .fontSize(10)
+         .font('Helvetica')
+         .text('Per domande o problemi, contattare il responsabile IT o consultare la guida operativa', 50, yPos);
+      yPos += 12;
+      doc.text('completa disponibile in: /api/guides/operator-guide.pdf', 50, yPos);
+
+      // Footer pagina 2
+      doc.rect(0, doc.page.height - 35, doc.page.width, 35).fill(primaryColor);
+      doc.fillColor('white')
+         .fontSize(8)
+         .font('Helvetica')
+         .text('Delta Futuro © 2026 - FLUPSY Management System - Pagina 2/2', 50, doc.page.height - 22, { align: 'center' });
+      doc.text('Documento generato il ' + new Date().toLocaleDateString('it-IT'), { align: 'center' });
 
       doc.end();
     } catch (error) {
