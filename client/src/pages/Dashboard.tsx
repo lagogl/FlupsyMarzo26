@@ -12,8 +12,10 @@ import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
 import InfoTicker from '@/components/dashboard/InfoTicker';
 import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
+import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
 import { Basket, Cycle, Operation, Lot } from '@shared/schema';
 import { TooltipTrigger } from '@/components/ui/tooltip-trigger';
+import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { useTooltip } from '@/contexts/TooltipContext';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, AlertCircle } from 'lucide-react';
@@ -396,34 +398,41 @@ export default function Dashboard() {
         <TooltipTrigger 
           tooltip={{
             id: 'baskets-card',
-            content: 'Questo indicatore mostra il numero di ceste attualmente attive nel sistema. Clicca per visualizzare tutte le ceste.',
+            content: 'Questo indicatore mostra il numero di ceste attualmente attive nel sistema. Passa il mouse per vedere la distribuzione per taglia.',
             position: 'top'
           }}
           showOnMount={isFirstTimeUser}
           onlyFirstTime={true}
         >
-          <div ref={basketsCardRef}>
-            <StatCard 
-              title="Ceste Attive" 
-              value={activeBaskets.length} 
-              icon={<div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>}
-              changeText={
-                activeBasketsWithoutCycle.length > 0 
-                  ? `${activeBasketsWithCycle.length} con ciclo, ${activeBasketsWithoutCycle.length} senza ciclo` 
-                  : lastMonthBaskets > 0 
-                    ? `+${lastMonthBaskets} dall'ultimo mese` 
-                    : `${lastMonthBaskets} dall'ultimo mese`
-              }
-              changeType={activeBasketsWithoutCycle.length > 0 ? 'warning' : lastMonthBaskets >= 0 ? 'success' : 'error'}
-              linkTo="/baskets"
-              cardColor="from-blue-50 to-blue-100 border-l-4 border-blue-500"
-              secondaryInfo={`${(animalsStats?.totalAnimals || 0).toLocaleString('it-IT')} animali`}
-            />
-          </div>
+          <HoverCard openDelay={300} closeDelay={100}>
+            <HoverCardTrigger asChild>
+              <div ref={basketsCardRef}>
+                <StatCard 
+                  title="Ceste Attive" 
+                  value={activeBaskets.length} 
+                  icon={<div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>}
+                  changeText={
+                    activeBasketsWithoutCycle.length > 0 
+                      ? `${activeBasketsWithCycle.length} con ciclo, ${activeBasketsWithoutCycle.length} senza ciclo` 
+                      : lastMonthBaskets > 0 
+                        ? `+${lastMonthBaskets} dall'ultimo mese` 
+                        : `${lastMonthBaskets} dall'ultimo mese`
+                  }
+                  changeType={activeBasketsWithoutCycle.length > 0 ? 'warning' : lastMonthBaskets >= 0 ? 'success' : 'error'}
+                  linkTo="/baskets"
+                  cardColor="from-blue-50 to-blue-100 border-l-4 border-blue-500"
+                  secondaryInfo={`${(animalsStats?.totalAnimals || 0).toLocaleString('it-IT')} animali`}
+                />
+              </div>
+            </HoverCardTrigger>
+            <HoverCardContent className="w-auto p-0" side="bottom" align="start">
+              <SizeDistributionPopup />
+            </HoverCardContent>
+          </HoverCard>
         </TooltipTrigger>
 
         <TooltipTrigger 

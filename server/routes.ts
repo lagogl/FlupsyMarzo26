@@ -520,6 +520,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Endpoint per distribuzione animali e mortalità per taglia (per grafici a torta)
+  app.get("/api/stats/distribution-by-size", async (req: Request, res: Response) => {
+    try {
+      const result = await db.execute(sql`
+        WITH latest_ops AS (
+          SELECT DISTINCT ON (o.basket_id) 
+            o.basket_id,
+            o.animal_count,
+            o.size_id,
+            s.code as size_code,
+            s.color as size_color
+          FROM operations o
+          JOIN baskets b ON b.id = o.basket_id
+          LEFT JOIN sizes s ON o.size_id = s.id
+          WHERE b.state = 'active'
+            AND b.current_cycle_id IS NOT NULL
+            AND o.type IN ('misura', 'peso', 'prima-attivazione')
+            AND o.animal_count > 0
+          ORDER BY o.basket_id, o.date DESC, o.id DESC
+        ),
+        last_mortality AS (
+          SELECT DISTINCT ON (o.basket_id)
+            o.basket_id,
+            o.mortality_rate,
+            o.size_id,
+            s.code as size_code
+          FROM operations o
+          JOIN baskets b ON b.id = o.basket_id
+          LEFT JOIN sizes s ON o.size_id = s.id
+          WHERE b.state = 'active'
+            AND b.current_cycle_id IS NOT NULL
+            AND o.dead_count IS NOT NULL 
+            AND o.dead_count > 0
+          ORDER BY o.basket_id, o.date DESC, o.id DESC
+        )
+        SELECT 
+          'animals' as type,
+          lo.size_code,
+          lo.size_color,
+          COUNT(*) as basket_count,
+          COALESCE(SUM(lo.animal_count), 0) as total_animals,
+          0 as avg_mortality
+        FROM latest_ops lo
+        WHERE lo.size_code IS NOT NULL
+        GROUP BY lo.size_code, lo.size_color
+        
+        UNION ALL
+        
+        SELECT 
+          'mortality' as type,
+          lm.size_code,
+          NULL as size_color,
+          COUNT(*) as basket_count,
+          0 as total_animals,
+          COALESCE(AVG(lm.mortality_rate), 0) as avg_mortality
+        FROM last_mortality lm
+        WHERE lm.size_code IS NOT NULL
+        GROUP BY lm.size_code
+        ORDER BY type, size_code
+      `);
+      
+      const animalsBySize: Array<{sizeCode: string, color: string | null, basketCount: number, totalAnimals: number}> = [];
+      const mortalityBySize: Array<{sizeCode: string, basketCount: number, avgMortality: number}> = [];
+      
+      for (const row of result.rows as any[]) {
+        if (row.type === 'animals') {
+          animalsBySize.push({
+            sizeCode: row.size_code,
+            color: row.size_color,
+            basketCount: parseInt(row.basket_count) || 0,
+            totalAnimals: parseInt(row.total_animals) || 0
+          });
+        } else {
+          mortalityBySize.push({
+            sizeCode: row.size_code,
+            basketCount: parseInt(row.basket_count) || 0,
+            avgMortality: parseFloat(row.avg_mortality) || 0
+          });
+        }
+      }
+      
+      res.json({
+        success: true,
+        animalsBySize,
+        mortalityBySize
+      });
+    } catch (error) {
+      console.error('Errore calcolo distribuzione per taglia:', error);
+      res.status(500).json({ success: false, error: 'Errore calcolo distribuzione' });
+    }
+  });
+  
   // === Basket routes ===
   // 🔄 MIGRATO AL MODULO: server/modules/operations/baskets
   // Le route dei cestelli sono state modularizzate per una migliore organizzazione
