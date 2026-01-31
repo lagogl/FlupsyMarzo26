@@ -115,15 +115,16 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
                     {periods.recent.avgMortalityRate.toFixed(1)}%
                   </div>
                   <div className="text-[10px] text-red-500">
-                    {periods.recent.basketsAffected} ceste • {periods.recent.totalDead.toLocaleString('it-IT')} morti
+                    {periods.recent.basketsAffected} ceste
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-medium">Ultimi 3 giorni</p>
-                <p>Mortalità media: {periods.recent.avgMortalityRate.toFixed(2)}%</p>
-                <p>Totale morti: {periods.recent.totalDead.toLocaleString('it-IT')}</p>
-                <p>Ceste colpite: {periods.recent.basketsAffected}</p>
+                <p>Mortalità ponderata: {periods.recent.avgMortalityRate.toFixed(2)}%</p>
+                <p>Ceste con mortalità: {periods.recent.basketsAffected}</p>
+                <p>Campioni analizzati: {periods.recent.totalSampled?.toLocaleString('it-IT') || 'N/D'}</p>
+                <p>Morti nei campioni: {periods.recent.totalDead.toLocaleString('it-IT')}</p>
                 {periods.recent.newestDate && <p>Ultima: {new Date(periods.recent.newestDate).toLocaleDateString('it-IT')}</p>}
               </TooltipContent>
             </Tooltip>
@@ -141,15 +142,16 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
                     {periods.medium.avgMortalityRate.toFixed(1)}%
                   </div>
                   <div className="text-[10px] text-yellow-600">
-                    {periods.medium.basketsAffected} ceste • {periods.medium.totalDead.toLocaleString('it-IT')} morti
+                    {periods.medium.basketsAffected} ceste
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-medium">4-7 giorni fa</p>
-                <p>Mortalità media: {periods.medium.avgMortalityRate.toFixed(2)}%</p>
-                <p>Totale morti: {periods.medium.totalDead.toLocaleString('it-IT')}</p>
-                <p>Ceste colpite: {periods.medium.basketsAffected}</p>
+                <p>Mortalità ponderata: {periods.medium.avgMortalityRate.toFixed(2)}%</p>
+                <p>Ceste con mortalità: {periods.medium.basketsAffected}</p>
+                <p>Campioni analizzati: {periods.medium.totalSampled?.toLocaleString('it-IT') || 'N/D'}</p>
+                <p>Morti nei campioni: {periods.medium.totalDead.toLocaleString('it-IT')}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -166,15 +168,16 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
                     {periods.old.avgMortalityRate.toFixed(1)}%
                   </div>
                   <div className="text-[10px] text-green-600">
-                    {periods.old.basketsAffected} ceste • {periods.old.totalDead.toLocaleString('it-IT')} morti
+                    {periods.old.basketsAffected} ceste
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-medium">Oltre 7 giorni fa</p>
-                <p>Mortalità media: {periods.old.avgMortalityRate.toFixed(2)}%</p>
-                <p>Totale morti: {periods.old.totalDead.toLocaleString('it-IT')}</p>
-                <p>Ceste colpite: {periods.old.basketsAffected}</p>
+                <p>Mortalità ponderata: {periods.old.avgMortalityRate.toFixed(2)}%</p>
+                <p>Ceste con mortalità: {periods.old.basketsAffected}</p>
+                <p>Campioni analizzati: {periods.old.totalSampled?.toLocaleString('it-IT') || 'N/D'}</p>
+                <p>Morti nei campioni: {periods.old.totalDead.toLocaleString('it-IT')}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
