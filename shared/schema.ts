@@ -387,8 +387,9 @@ export const operations = pgTable("operations", {
   totalWeight: real("total_weight"), // in grams
   animalsPerKg: integer("animals_per_kg"),
   averageWeight: real("average_weight"), // in milligrams, calculated: 1,000,000 / animalsPerKg
-  deadCount: integer("dead_count"), // numero di animali morti
-  mortalityRate: real("mortality_rate"), // percentuale di mortalità
+  deadCount: integer("dead_count"), // numero di animali morti nel campione
+  sampleCount: integer("sample_count"), // dimensione totale del campione (vivi + morti)
+  mortalityRate: real("mortality_rate"), // percentuale di mortalità calcolata sul campione
   notes: text("notes"),
   metadata: text("metadata"), // metadati aggiuntivi in formato JSON (per API esterne)
   source: text("source").notNull().default("desktop_manager"), // origine operazione: 'desktop_manager' o 'mobile_nfc'

@@ -507,6 +507,7 @@ export function implementDirectOperationRoute(app: Express) {
             
             operationData.animalCount = finalCount;
             operationData.mortalityRate = mortalityRate * 100; // Salva la percentuale
+            operationData.sampleCount = totalSample; // Salva dimensione campione per calcolo mortalità cumulativa
           } else {
             // Nessun morto dichiarato → usa liveAnimals dal campione se disponibile
             // liveAnimals = (totalWeight / 1000) * animalsPerKg
