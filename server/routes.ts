@@ -617,12 +617,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const flupsyId = req.query.flupsyId ? parseInt(req.query.flupsyId as string) : undefined;
       
+      // Query principale con calcolo mortalità cumulativa ponderata
+      // Usa sample_count se disponibile, altrimenti fallback su mortality_rate
       const result = await db.execute(sql`
         WITH mortality_ops AS (
           SELECT 
             o.id,
             o.basket_id,
             o.dead_count,
+            o.sample_count,
             o.mortality_rate,
             o.date,
             b.flupsy_id,
@@ -647,7 +650,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           END as period,
           COUNT(DISTINCT basket_id) as baskets_affected,
           SUM(dead_count) as total_dead,
-          AVG(mortality_rate) as avg_mortality_rate,
+          SUM(sample_count) as total_sampled,
+          -- Mortalità cumulativa ponderata: SUM(morti)/SUM(campioni)*100
+          -- Fallback su AVG(mortality_rate) se sample_count non disponibile
+          CASE 
+            WHEN SUM(COALESCE(sample_count, 0)) > 0 
+            THEN (SUM(dead_count)::float / SUM(sample_count)::float) * 100
+            ELSE AVG(mortality_rate)
+          END as weighted_mortality_rate,
           MIN(date) as oldest_date,
           MAX(date) as newest_date
         FROM mortality_ops
@@ -686,9 +696,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       `);
       
       const periods: Record<string, any> = {
-        recent: { basketsAffected: 0, totalDead: 0, avgMortalityRate: 0, label: 'Ultimi 3 giorni' },
-        medium: { basketsAffected: 0, totalDead: 0, avgMortalityRate: 0, label: '4-7 giorni fa' },
-        old: { basketsAffected: 0, totalDead: 0, avgMortalityRate: 0, label: 'Oltre 7 giorni' }
+        recent: { basketsAffected: 0, totalDead: 0, totalSampled: 0, avgMortalityRate: 0, label: 'Ultimi 3 giorni' },
+        medium: { basketsAffected: 0, totalDead: 0, totalSampled: 0, avgMortalityRate: 0, label: '4-7 giorni fa' },
+        old: { basketsAffected: 0, totalDead: 0, totalSampled: 0, avgMortalityRate: 0, label: 'Oltre 7 giorni' }
       };
       
       for (const row of result.rows as any[]) {
@@ -697,12 +707,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...periods[row.period],
             basketsAffected: parseInt(row.baskets_affected) || 0,
             totalDead: parseInt(row.total_dead) || 0,
-            avgMortalityRate: parseFloat(row.avg_mortality_rate) || 0,
+            totalSampled: parseInt(row.total_sampled) || 0,
+            avgMortalityRate: parseFloat(row.weighted_mortality_rate) || 0, // Ora usa mortalità cumulativa ponderata
             oldestDate: row.oldest_date,
             newestDate: row.newest_date
           };
         }
       }
+      
+      // Calcola morti stimati sulla popolazione totale (differenza animalCount dalla prima attivazione)
+      const estimatedDeadResult = await db.execute(sql`
+        WITH active_baskets AS (
+          SELECT b.id, b.flupsy_id
+          FROM baskets b
+          WHERE b.state = 'active' AND b.current_cycle_id IS NOT NULL
+          ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+        ),
+        first_ops AS (
+          SELECT DISTINCT ON (o.basket_id)
+            o.basket_id,
+            o.animal_count as initial_count
+          FROM operations o
+          JOIN active_baskets ab ON ab.id = o.basket_id
+          WHERE o.type = 'prima-attivazione' AND o.animal_count > 0
+          ORDER BY o.basket_id, o.date ASC
+        ),
+        last_ops AS (
+          SELECT DISTINCT ON (o.basket_id)
+            o.basket_id,
+            o.animal_count as current_count
+          FROM operations o
+          JOIN active_baskets ab ON ab.id = o.basket_id
+          WHERE o.animal_count > 0
+          ORDER BY o.basket_id, o.date DESC, o.id DESC
+        )
+        SELECT 
+          COALESCE(SUM(fo.initial_count), 0) as total_initial,
+          COALESCE(SUM(lo.current_count), 0) as total_current
+        FROM first_ops fo
+        JOIN last_ops lo ON fo.basket_id = lo.basket_id
+      `);
+      
+      const estRow = estimatedDeadResult.rows[0] as any;
+      const totalInitial = parseInt(estRow?.total_initial) || 0;
+      const totalCurrent = parseInt(estRow?.total_current) || 0;
+      const estimatedTotalDead = Math.max(0, totalInitial - totalCurrent);
       
       const trendRow = trendResult.rows[0] as any;
       const currentWeek = parseInt(trendRow?.current_week_deaths) || 0;
@@ -729,7 +778,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           trendPercent: Math.round(trendPercent)
         },
         totalMortality: periods.recent.totalDead + periods.medium.totalDead + periods.old.totalDead,
-        recentMortalityRatio: periods.recent.totalDead / (periods.recent.totalDead + periods.medium.totalDead + periods.old.totalDead || 1)
+        recentMortalityRatio: periods.recent.totalDead / (periods.recent.totalDead + periods.medium.totalDead + periods.old.totalDead || 1),
+        // Nuovi dati per mortalità stimata sulla popolazione
+        populationStats: {
+          totalInitial,
+          totalCurrent,
+          estimatedTotalDead,
+          estimatedMortalityPercent: totalInitial > 0 ? ((estimatedTotalDead / totalInitial) * 100) : 0
+        }
       });
     } catch (error) {
       console.error('Errore calcolo mortalità temporale:', error);

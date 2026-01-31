@@ -9,6 +9,7 @@ interface MortalityTemporalData {
     recent: {
       basketsAffected: number;
       totalDead: number;
+      totalSampled: number;
       avgMortalityRate: number;
       label: string;
       oldestDate?: string;
@@ -17,12 +18,14 @@ interface MortalityTemporalData {
     medium: {
       basketsAffected: number;
       totalDead: number;
+      totalSampled: number;
       avgMortalityRate: number;
       label: string;
     };
     old: {
       basketsAffected: number;
       totalDead: number;
+      totalSampled: number;
       avgMortalityRate: number;
       label: string;
     };
@@ -35,6 +38,12 @@ interface MortalityTemporalData {
   };
   totalMortality: number;
   recentMortalityRatio: number;
+  populationStats: {
+    totalInitial: number;
+    totalCurrent: number;
+    estimatedTotalDead: number;
+    estimatedMortalityPercent: number;
+  };
 }
 
 interface MortalityTemporalCardProps {
@@ -65,7 +74,7 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
     return null;
   }
 
-  const { periods, weeklyComparison, totalMortality, recentMortalityRatio } = data;
+  const { periods, weeklyComparison, totalMortality, recentMortalityRatio, populationStats } = data;
   
   const TrendIcon = weeklyComparison.trend === 'up' ? TrendingUp : 
                     weeklyComparison.trend === 'down' ? TrendingDown : Minus;
@@ -189,6 +198,30 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
           <div className="text-xs text-center py-1 bg-red-50 text-red-700 rounded border border-red-200">
             {Math.round(recentMortalityRatio * 100)}% della mortalità è recente (ultimi 3 giorni)
           </div>
+        )}
+
+        {populationStats && populationStats.estimatedTotalDead > 0 && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-xs text-center py-2 bg-gray-50 text-gray-700 rounded border border-gray-200 cursor-help">
+                  <span className="font-medium">Morti stimati totali:</span>{' '}
+                  <span className="text-red-600 font-bold">
+                    ~{populationStats.estimatedTotalDead.toLocaleString('it-IT')}
+                  </span>{' '}
+                  <span className="text-muted-foreground">
+                    ({populationStats.estimatedMortalityPercent.toFixed(2)}% della popolazione)
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-medium">Stima basata sulla differenza animali</p>
+                <p>Animali iniziali: {populationStats.totalInitial.toLocaleString('it-IT')}</p>
+                <p>Animali attuali: {populationStats.totalCurrent.toLocaleString('it-IT')}</p>
+                <p>Differenza (morti stimati): {populationStats.estimatedTotalDead.toLocaleString('it-IT')}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </CardContent>
     </Card>
