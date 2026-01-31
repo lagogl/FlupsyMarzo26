@@ -231,8 +231,8 @@ export default function MortalityAlertsCard() {
                         <span className="text-muted-foreground">{basket.flupsyName}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-red-600 font-medium">{basket.totalDeaths} morti</span>
-                        <span className="text-muted-foreground">({basket.mortalityEvents} eventi)</span>
+                        <span className="text-red-600 font-medium">{basket.avgMortalityRate.toFixed(1)}%</span>
+                        <span className="text-muted-foreground">({basket.mortalityEvents} ev.)</span>
                       </div>
                     </div>
                   ))}
