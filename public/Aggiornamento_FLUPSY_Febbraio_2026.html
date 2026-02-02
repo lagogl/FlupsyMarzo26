@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aggiornamento FLUPSY - Febbraio 2026</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .header .date {
+      font-size: 16px;
+      opacity: 0.9;
+      background: rgba(255,255,255,0.2);
+      display: inline-block;
+      padding: 5px 20px;
+      border-radius: 20px;
+    }
+    .content { padding: 30px; }
+    .section {
+      margin-bottom: 25px;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .section-header {
+      padding: 15px 20px;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-header .icon {
+      font-size: 24px;
+    }
+    .section-body {
+      padding: 20px;
+      background: #f8fafc;
+    }
+    .section-1 .section-header { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+    .section-2 .section-header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .section-3 .section-header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+    
+    .feature {
+      background: white;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 12px;
+      border-left: 4px solid;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .feature-title {
+      font-weight: bold;
+      font-size: 15px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .feature-desc {
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .section-1 .feature { border-left-color: #3b82f6; }
+    .section-2 .feature { border-left-color: #10b981; }
+    .section-3 .feature { border-left-color: #f59e0b; }
+    
+    .highlight {
+      background: #fef3c7;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      color: #92400e;
+    }
+    .keyboard {
+      background: #e2e8f0;
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 13px;
+      border: 1px solid #cbd5e1;
+    }
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      padding-left: 0;
+    }
+    .steps li {
+      counter-increment: step;
+      padding: 8px 0 8px 40px;
+      position: relative;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .steps li:last-child { border-bottom: none; }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    .footer {
+      background: #f1f5f9;
+      padding: 20px;
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+      border-top: 2px dashed #e2e8f0;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-right: 5px;
+    }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-orange { background: #fed7aa; color: #9a3412; }
+    
+    @media print {
+      body { background: white; padding: 0; }
+      .container { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>FLUPSY Management System</h1>
+      <div class="date">Aggiornamento Febbraio 2026</div>
+    </div>
+    
+    <div class="content">
+      <!-- Sezione 1: Filtro Sito -->
+      <div class="section section-1">
+        <div class="section-header">
+          <span class="icon">📍</span>
+          Nuovo Filtro per Sito
+        </div>
+        <div class="section-body">
+          <div class="feature">
+            <div class="feature-title">
+              <span class="badge badge-blue">NUOVO</span>
+              Dropdown "Sito" nella pagina Spreadsheet Operazioni
+            </div>
+            <div class="feature-desc">
+              <p style="margin-bottom: 10px;">Ora puoi filtrare le ceste per <span class="highlight">sito di produzione</span> prima di selezionare il FLUPSY.</p>
+              <p><strong>Siti disponibili:</strong></p>
+              <ul style="margin: 10px 0 0 20px; color: #475569;">
+                <li>Ca Pisani</li>
+                <li>Hatchery DF</li>
+                <li>Vasca FL lato Goro</li>
+                <li>Vasca FL lato Gorino</li>
+              </ul>
+            </div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Come funziona</div>
+            <div class="feature-desc">
+              <ol class="steps">
+                <li>Vai alla pagina <strong>Spreadsheet Operazioni</strong></li>
+                <li>Seleziona il <strong>Sito</strong> dal nuovo dropdown</li>
+                <li>Il dropdown FLUPSY mostrerà solo i FLUPSY di quel sito</li>
+                <li>Le ceste visualizzate saranno filtrate automaticamente</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Sezione 2: Toggle Data -->
+      <div class="section section-2">
+        <div class="section-header">
+          <span class="icon">📅</span>
+          Toggle Data Attivazione / Ultima Operazione
+        </div>
+        <div class="section-body">
+          <div class="feature">
+            <div class="feature-title">
+              <span class="badge badge-green">NUOVO</span>
+              Pulsante di scambio nella colonna data
+            </div>
+            <div class="feature-desc">
+              <p style="margin-bottom: 10px;">Nella tabella, accanto alla colonna <strong>"Ult.Op"</strong> c'è ora un pulsante blu <span class="keyboard">⇄</span> che permette di alternare tra:</p>
+              <ul style="margin: 10px 0 0 20px; color: #475569;">
+                <li><strong>Ult.Op</strong> = Data dell'ultima operazione registrata</li>
+                <li><strong>Attiv.</strong> = Data di prima attivazione del ciclo</li>
+              </ul>
+            </div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Come usarlo</div>
+            <div class="feature-desc">
+              <ol class="steps">
+                <li>Trova la colonna <strong>"Ult.Op"</strong> nell'intestazione della tabella</li>
+                <li>Clicca sul pulsante blu <span class="keyboard">⇄</span> accanto al titolo</li>
+                <li>La colonna cambierà in <strong>"Attiv."</strong> mostrando le date di attivazione</li>
+                <li>Clicca di nuovo per tornare a "Ult.Op"</li>
+              </ol>
+              <p style="margin-top: 10px; font-style: italic; color: #64748b;">
+                Nota: L'ordinamento funziona in base alla data attualmente visualizzata.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Sezione 3: Export Google Sheets -->
+      <div class="section section-3">
+        <div class="section-header">
+          <span class="icon">📊</span>
+          Esportazione Google Sheets
+        </div>
+        <div class="section-body">
+          <div class="feature">
+            <div class="feature-title">
+              <span class="badge badge-orange">NUOVO</span>
+              Pulsante "Google Sheets" arancione
+            </div>
+            <div class="feature-desc">
+              <p style="margin-bottom: 10px;">Accanto al pulsante verde <strong>"Esporta Excel"</strong> c'è ora un pulsante arancione <strong>"Google Sheets"</strong>.</p>
+              <p><strong>Vantaggi del formato Google Sheets:</strong></p>
+              <ul style="margin: 10px 0 0 20px; color: #475569;">
+                <li>Date in formato corretto (YYYY-MM-DD) riconosciute automaticamente</li>
+                <li>Numeri senza separatori delle migliaia (pronti per calcoli)</li>
+                <li>Include anche la <strong>Data Attivazione</strong> come colonna separata</li>
+                <li>Compatibile con importazione diretta in Google Sheets</li>
+              </ul>
+            </div>
+          </div>
+          <div class="feature">
+            <div class="feature-title">Come importare in Google Sheets</div>
+            <div class="feature-desc">
+              <ol class="steps">
+                <li>Clicca il pulsante arancione <strong>"Google Sheets"</strong></li>
+                <li>Scarica il file CSV generato</li>
+                <li>Apri Google Sheets e vai su <strong>File > Importa</strong></li>
+                <li>Seleziona il file CSV scaricato</li>
+                <li>I dati saranno pronti con formati corretti!</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p><strong>FLUPSY Management System</strong> - Guida Operatori</p>
+      <p>Documento generato il 02 Febbraio 2026</p>
+    </div>
+  </div>
+</body>
+</html>
