@@ -666,7 +666,7 @@ export default function SpreadsheetOperations() {
           averageWeight,
           lastOperationDate: lastOp?.date,
           lastOperationType: lastOp?.type,
-          activationDate: activationOp?.date,  // Data prima attivazione ciclo
+          activationDate: basket.activationOperation?.date,  // Data prima attivazione ciclo
           // ✅ IMPORTANTE: Aggiungi il campo lastOperation per l'inizializzazione del form
           lastOperation: lastOp,
           // Nome FLUPSY per visualizzazione quando "TUTTI" selezionato
