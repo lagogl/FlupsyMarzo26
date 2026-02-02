@@ -58,6 +58,7 @@ interface OperationRowData {
   averageWeight?: number;
   lastOperationDate?: string;
   lastOperationType?: string;
+  activationDate?: string;  // Data prima attivazione ciclo corrente
   flupsyName?: string;
   // Dati SGR (Specific Growth Rate)
   currentCycleId?: number;
@@ -144,6 +145,7 @@ export default function SpreadsheetOperations() {
   const [selectedSiteFilter, setSelectedSiteFilter] = useState<string>("all");
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
   const [selectedSizeFilter, setSelectedSizeFilter] = useState<string>("all");
+  const [showActivationDate, setShowActivationDate] = useState<boolean>(false);  // Toggle Ult.Op / Data Attiv.
   const [sortColumn, setSortColumn] = useState<string>("physicalNumber");
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedOperationType, setSelectedOperationType] = useState<string>('misura');
@@ -664,6 +666,7 @@ export default function SpreadsheetOperations() {
           averageWeight,
           lastOperationDate: lastOp?.date,
           lastOperationType: lastOp?.type,
+          activationDate: activationOp?.date,  // Data prima attivazione ciclo
           // ✅ IMPORTANTE: Aggiungi il campo lastOperation per l'inizializzazione del form
           lastOperation: lastOp,
           // Nome FLUPSY per visualizzazione quando "TUTTI" selezionato
@@ -2701,18 +2704,32 @@ export default function SpreadsheetOperations() {
                   </div>
                   <div 
                     style={{width: '50px'}} 
-                    className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
-                    onClick={() => {
-                      if (sortColumn === 'lastOpDate') {
-                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                      } else {
-                        setSortColumn('lastOpDate');
-                        setSortDirection('asc');
-                      }
-                    }}
-                    title="Clicca per ordinare per data ultima operazione"
+                    className="px-1 py-1.5 border-r flex items-center gap-0.5"
                   >
-                    <span className="underline decoration-dotted underline-offset-2">Ult.Op</span>
+                    <span 
+                      className="cursor-pointer text-blue-600 hover:text-blue-800 text-[10px]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowActivationDate(!showActivationDate);
+                      }}
+                      title={showActivationDate ? "Mostra Ultima Operazione" : "Mostra Data Attivazione"}
+                    >
+                      ⇄
+                    </span>
+                    <span 
+                      className="underline decoration-dotted underline-offset-2 cursor-pointer hover:bg-gray-200 flex-1"
+                      onClick={() => {
+                        if (sortColumn === 'lastOpDate') {
+                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('lastOpDate');
+                          setSortDirection('asc');
+                        }
+                      }}
+                      title={`Ordina per ${showActivationDate ? 'data attivazione' : 'ultima operazione'}`}
+                    >
+                      {showActivationDate ? 'Attiv.' : 'Ult.Op'}
+                    </span>
                     {sortColumn === 'lastOpDate' ? (
                       <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                     ) : (
@@ -2970,8 +2987,12 @@ export default function SpreadsheetOperations() {
                     return compareNum(a.averageWeight, b.averageWeight);
                   }
                   if (sortColumn === 'lastOpDate') {
-                    const dateA = a.lastOperationDate ? new Date(a.lastOperationDate).getTime() : 0;
-                    const dateB = b.lastOperationDate ? new Date(b.lastOperationDate).getTime() : 0;
+                    const dateA = showActivationDate 
+                      ? (a.activationDate ? new Date(a.activationDate).getTime() : 0)
+                      : (a.lastOperationDate ? new Date(a.lastOperationDate).getTime() : 0);
+                    const dateB = showActivationDate 
+                      ? (b.activationDate ? new Date(b.activationDate).getTime() : 0)
+                      : (b.lastOperationDate ? new Date(b.lastOperationDate).getTime() : 0);
                     return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
                   }
                   if (sortColumn === 'lot') {
@@ -3467,10 +3488,16 @@ export default function SpreadsheetOperations() {
                     </div>
 
                     <div style={{width: '50px'}} className="px-1 py-1 border-r flex items-center text-xs text-gray-500">
-                      <span className="truncate" title={`${row.lastOperationType} - ${row.lastOperationDate}`}>
+                      <span className="truncate" title={showActivationDate 
+                        ? `Data Attivazione: ${row.activationDate ? new Date(row.activationDate).toLocaleDateString('it-IT') : 'N/A'}`
+                        : `${row.lastOperationType} - ${row.lastOperationDate}`
+                      }>
                         {(row as any).isNewRow && row.date ? 
                           new Date(row.date).toLocaleDateString('it-IT', {month: '2-digit', day: '2-digit'})
-                          : row.lastOperationDate ? new Date(row.lastOperationDate).toLocaleDateString('it-IT', {month: '2-digit', day: '2-digit'}) : '-'}
+                          : showActivationDate 
+                            ? (row.activationDate ? new Date(row.activationDate).toLocaleDateString('it-IT', {month: '2-digit', day: '2-digit'}) : '-')
+                            : (row.lastOperationDate ? new Date(row.lastOperationDate).toLocaleDateString('it-IT', {month: '2-digit', day: '2-digit'}) : '-')
+                        }
                       </span>
                     </div>
 
