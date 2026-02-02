@@ -1992,6 +1992,141 @@ export default function SpreadsheetOperations() {
     }
   };
 
+  // Esporta per Google Sheets (CSV con formati numerici e date corretti)
+  const exportToGoogleSheets = () => {
+    try {
+      // Prepara i dati filtrati e ordinati (stessa logica della visualizzazione)
+      const filteredRows = operationRows
+        .filter((row) => {
+          if (selectedSizeFilter === "all") return true;
+          const sizesArray = Array.isArray(sizes) ? sizes : [];
+          const selectedSize = sizesArray.find((s: any) => s.id === parseInt(selectedSizeFilter));
+          if (!selectedSize) return true;
+          return row.currentSize === selectedSize.code;
+        })
+        .sort((a, b) => {
+          if (sortColumn === 'size') {
+            const getSizeNum = (size: string | undefined) => {
+              if (!size || !size.startsWith('TP-')) return 999999;
+              return parseInt(size.substring(3)) || 999999;
+            };
+            const numA = getSizeNum(a.currentSize);
+            const numB = getSizeNum(b.currentSize);
+            return sortDirection === 'asc' ? numA - numB : numB - numA;
+          }
+          return sortDirection === 'asc' 
+            ? a.physicalNumber - b.physicalNumber 
+            : b.physicalNumber - a.physicalNumber;
+        });
+
+      // Header CSV
+      const headers = [
+        'Cesta', 'FLUPSY', 'Taglia', 'P.Med(mg)', 'Ult.Op', 'Data Attiv.', 'Lotto ID', 'Lotto Fornitore',
+        'Animali', 'Peso Tot (g)', 'Anim/kg', 'SGR-Peso', 'SGR Medio', 'SGR Misura',
+        'P.Camp', 'Vivi', 'Morti', 'Tot.Camp.', 'Mortalità %', 'Note'
+      ];
+
+      // Prepara le righe CSV con formati corretti per Google Sheets
+      const csvRows = filteredRows.map((row) => {
+        const lot = ((lots as any[]) || []).find((l: any) => l.id === (row.lotId || 1));
+        
+        // Calcola SGR per l'export
+        const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
+        const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
+        
+        // Calcola SGR da misure
+        const basketOps = ((operations as any[]) || [])
+          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.totalWeight)
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        let sgrMisuraValue: number | null = null;
+        if (basketOps.length >= 2) {
+          const latest = basketOps[0];
+          const previous = basketOps[1];
+          const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
+          if (latest.totalWeight > 0 && previous.totalWeight > 0) {
+            sgrMisuraValue = ((Math.log(latest.totalWeight) - Math.log(previous.totalWeight)) / days) * 100;
+          }
+        }
+        
+        // SGR Medio
+        let sgrMedioValue: number | null = null;
+        if (sgrPesoValue != null && sgrMisuraValue != null) {
+          sgrMedioValue = (sgrPesoValue + sgrMisuraValue) / 2;
+        } else if (sgrPesoValue != null) {
+          sgrMedioValue = sgrPesoValue;
+        } else if (sgrMisuraValue != null) {
+          sgrMedioValue = sgrMisuraValue;
+        }
+
+        // Formatta valori per Google Sheets (numeri senza separatori, date in ISO)
+        return [
+          row.physicalNumber,  // Numero cesta (numerico)
+          row.flupsyName || '',  // FLUPSY (testo)
+          row.currentSize || '',  // Taglia (testo)
+          row.averageWeight ? Math.round(row.averageWeight * 100) / 100 : '',  // Peso medio (numerico)
+          row.lastOperationDate ? row.lastOperationDate.split('T')[0] : '',  // Ult.Op (data ISO)
+          row.activationDate ? row.activationDate.split('T')[0] : '',  // Data Attiv. (data ISO)
+          lot?.id || '',  // Lotto ID (numerico)
+          lot?.supplier || '',  // Fornitore (testo)
+          row.animalCount || '',  // Animali (numerico senza separatori)
+          row.totalWeight || '',  // Peso Tot (numerico)
+          row.animalsPerKg || '',  // Anim/kg (numerico)
+          sgrPesoValue != null ? Math.round(sgrPesoValue * 100) / 100 : '',  // SGR-Peso
+          sgrMedioValue != null ? Math.round(sgrMedioValue * 100) / 100 : '',  // SGR Medio
+          sgrMisuraValue != null ? Math.round(sgrMisuraValue * 100) / 100 : '',  // SGR Misura
+          row.sampleWeight || '',  // P.Camp
+          row.liveAnimals || '',  // Vivi
+          row.deadCount || '',  // Morti
+          row.totalSample || '',  // Tot.Camp.
+          row.mortalityRate != null ? Math.round(row.mortalityRate * 10000) / 100 : '',  // Mortalità % (numerico)
+          (row.notes || '').replace(/"/g, '""')  // Note (escape quotes)
+        ];
+      });
+
+      // Funzione per escapare valori CSV
+      const escapeCSV = (value: any): string => {
+        if (value === null || value === undefined || value === '') return '';
+        const str = String(value);
+        // Se contiene virgola, newline o virgolette, wrap in quotes
+        if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      // Costruisci CSV
+      const csvContent = [
+        headers.map(escapeCSV).join(','),
+        ...csvRows.map(row => row.map(escapeCSV).join(','))
+      ].join('\n');
+
+      // Crea e scarica il file
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });  // BOM per Excel/Sheets
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const flupsyName = selectedFlupsyId === "all" 
+        ? "TUTTI" 
+        : ((flupsys as any[]) || []).find((f: any) => f.id === parseInt(selectedFlupsyId))?.name || 'FLUPSY';
+      a.download = `Spreadsheet_${flupsyName}_${operationDate}_GoogleSheets.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export completato",
+        description: `Esportate ${filteredRows.length} righe per Google Sheets (CSV)`,
+      });
+    } catch (error) {
+      console.error('Errore export Google Sheets:', error);
+      toast({
+        title: "Errore export",
+        description: "Si è verificato un errore durante l'esportazione",
+        variant: "destructive"
+      });
+    }
+  };
+
   // Salva SOLO le nuove operazioni create nella sessione corrente (esclude righe originali)
   const saveAllRows = async () => {
     console.log('🔄 Spreadsheet: Inizio salvataggio SOLO nuove operazioni della sessione');
@@ -2395,6 +2530,14 @@ export default function SpreadsheetOperations() {
             >
               <Download className="h-3 w-3" />
               Esporta Excel
+            </button>
+            <button
+              onClick={exportToGoogleSheets}
+              className="h-8 px-3 text-xs bg-amber-500 text-white rounded hover:bg-amber-600 flex items-center gap-1 transition-colors"
+              title="Esporta per Google Sheets (CSV con formati numerici corretti)"
+            >
+              <Download className="h-3 w-3" />
+              Google Sheets
             </button>
             <button
               onClick={saveAllRows}
