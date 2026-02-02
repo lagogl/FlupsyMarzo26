@@ -141,6 +141,7 @@ export default function SpreadsheetOperations() {
     return 'bg-gray-100 text-gray-800'; // Default per taglie non TP-XXX
   };
   
+  const [selectedSiteFilter, setSelectedSiteFilter] = useState<string>("all");
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
   const [selectedSizeFilter, setSelectedSizeFilter] = useState<string>("all");
   const [sortColumn, setSortColumn] = useState<string>("physicalNumber");
@@ -471,6 +472,12 @@ export default function SpreadsheetOperations() {
     // Include SOLO i cestelli con cicli attivi dal FLUPSY selezionato
     const eligibleBaskets: BasketData[] = ((baskets as any[]) || [])
       .filter((basket: any) => {
+        // Filtro per sito: verifica che il FLUPSY appartenga al sito selezionato
+        if (selectedSiteFilter !== "all") {
+          const flupsy = ((flupsys as any[]) || []).find((f: any) => f.id === basket.flupsyId);
+          if (!flupsy || flupsy.location !== selectedSiteFilter) return false;
+        }
+        
         // Il cestello deve appartenere al FLUPSY selezionato (oppure TUTTI)
         if (selectedFlupsyId !== "all" && basket.flupsyId !== parseInt(selectedFlupsyId)) return false;
         
@@ -684,7 +691,7 @@ export default function SpreadsheetOperations() {
       // Reset righe salvate per nuova sessione
       setSavedRows(new Set());
     }
-  }, [selectedFlupsyId, selectedOperationType, operationDate, baskets, sizes, operations, lots]);
+  }, [selectedSiteFilter, selectedFlupsyId, selectedOperationType, operationDate, baskets, flupsys, sizes, operations, lots]);
 
   // **FUNZIONE UTILITY PER FORMATTAZIONE NUMERICA**
   const formatNumberWithSeparators = (value: number | null | undefined): string => {
@@ -2271,6 +2278,31 @@ export default function SpreadsheetOperations() {
       {/* Controlli compatti */}
       <div className="bg-white border rounded-lg p-2 shadow-sm">
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Filtro Sito */}
+          <div className="flex items-center gap-2 min-w-0">
+            <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Sito</label>
+            <Select value={selectedSiteFilter} onValueChange={(value) => {
+              setSelectedSiteFilter(value);
+              setSelectedFlupsyId("all"); // Reset FLUPSY quando cambia sito
+            }}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectValue placeholder="Tutti i siti" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">TUTTI</SelectItem>
+                {(() => {
+                  const sites = [...new Set(((flupsys as any[]) || []).map((f: any) => f.location).filter(Boolean))].sort();
+                  return sites.map((site: string) => (
+                    <SelectItem key={site} value={site}>
+                      {site}
+                    </SelectItem>
+                  ));
+                })()}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Filtro FLUPSY */}
           <div className="flex items-center gap-2 min-w-0">
             <label className="text-xs font-medium text-gray-600 whitespace-nowrap">FLUPSY</label>
             <Select value={selectedFlupsyId} onValueChange={setSelectedFlupsyId}>
@@ -2279,7 +2311,9 @@ export default function SpreadsheetOperations() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">TUTTI</SelectItem>
-                {((flupsys as any[]) || []).map((flupsy: any) => (
+                {((flupsys as any[]) || [])
+                  .filter((flupsy: any) => selectedSiteFilter === "all" || flupsy.location === selectedSiteFilter)
+                  .map((flupsy: any) => (
                   <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                     {flupsy.name}
                   </SelectItem>
