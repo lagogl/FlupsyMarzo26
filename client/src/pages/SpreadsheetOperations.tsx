@@ -2707,12 +2707,12 @@ export default function SpreadsheetOperations() {
                     className="px-1 py-1.5 border-r flex items-center gap-0.5"
                   >
                     <span 
-                      className="cursor-pointer text-blue-600 hover:text-blue-800 text-[10px]"
+                      className="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white rounded px-0.5 text-[9px] font-bold"
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowActivationDate(!showActivationDate);
                       }}
-                      title={showActivationDate ? "Mostra Ultima Operazione" : "Mostra Data Attivazione"}
+                      title={showActivationDate ? "Clicca per vedere Ultima Operazione" : "Clicca per vedere Data Attivazione"}
                     >
                       ⇄
                     </span>
