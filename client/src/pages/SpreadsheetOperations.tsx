@@ -2652,6 +2652,8 @@ export default function SpreadsheetOperations() {
               onChange={s => setPivotState(s)}
               renderers={italianRenderers}
               aggregators={italianAggregators}
+              rendererName={pivotState.rendererName || 'Tabella'}
+              aggregatorName={pivotState.aggregatorName || 'Conteggio'}
               {...pivotState}
             />
           </div>
