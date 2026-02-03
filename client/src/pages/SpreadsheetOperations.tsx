@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
+import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download, PieChart, X } from "lucide-react";
 import ExcelJS from 'exceljs';
 import "../styles/spreadsheet.css";
 
@@ -146,6 +146,10 @@ export default function SpreadsheetOperations() {
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
   const [selectedSizeFilter, setSelectedSizeFilter] = useState<string>("all");
   const [showActivationDate, setShowActivationDate] = useState<boolean>(false);  // Toggle Ult.Op / Data Attiv.
+  const [showPivotPanel, setShowPivotPanel] = useState<boolean>(false);  // Toggle pannello pivot
+  const [pivotGroupBy, setPivotGroupBy] = useState<string>("flupsyName");  // Campo per raggruppamento
+  const [pivotValue, setPivotValue] = useState<string>("totalWeight");  // Valore da aggregare
+  const [pivotCalc, setPivotCalc] = useState<string>("sum");  // Tipo calcolo: sum, avg, count
   const [sortColumn, setSortColumn] = useState<string>("physicalNumber");
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedOperationType, setSelectedOperationType] = useState<string>('misura');
@@ -2540,6 +2544,18 @@ export default function SpreadsheetOperations() {
               Google Sheets
             </button>
             <button
+              onClick={() => setShowPivotPanel(!showPivotPanel)}
+              className={`h-8 px-3 text-xs rounded flex items-center gap-1 transition-colors ${
+                showPivotPanel 
+                  ? 'bg-purple-700 text-white hover:bg-purple-800' 
+                  : 'bg-purple-500 text-white hover:bg-purple-600'
+              }`}
+              title="Apri tabella pivot per aggregare i dati"
+            >
+              <PieChart className="h-3 w-3" />
+              {showPivotPanel ? 'Chiudi Pivot' : 'Pivot'}
+            </button>
+            <button
               onClick={saveAllRows}
               className="h-8 px-3 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1 transition-colors"
             >
@@ -2557,6 +2573,208 @@ export default function SpreadsheetOperations() {
           </div>
         </div>
       </div>
+
+      {/* Pannello Pivot espandibile */}
+      {showPivotPanel && operationRows.length > 0 && (
+        <div className="bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-300 rounded-lg shadow-md overflow-hidden">
+          <div className="bg-purple-600 text-white px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <PieChart className="h-4 w-4" />
+              <span className="font-medium">Tabella Pivot</span>
+            </div>
+            <button 
+              onClick={() => setShowPivotPanel(false)}
+              className="p-1 hover:bg-purple-700 rounded transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          
+          <div className="p-4">
+            <div className="flex items-center gap-4 flex-wrap mb-4">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-700 whitespace-nowrap">Raggruppa per</label>
+                <Select value={pivotGroupBy} onValueChange={setPivotGroupBy}>
+                  <SelectTrigger className="w-36 h-8 text-xs bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="flupsyName">FLUPSY</SelectItem>
+                    <SelectItem value="lotName">Lotto</SelectItem>
+                    <SelectItem value="currentSize">Taglia</SelectItem>
+                    <SelectItem value="month">Mese</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-700 whitespace-nowrap">Valore</label>
+                <Select value={pivotValue} onValueChange={setPivotValue}>
+                  <SelectTrigger className="w-36 h-8 text-xs bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="totalWeight">Peso (g)</SelectItem>
+                    <SelectItem value="animalCount">N° Animali</SelectItem>
+                    <SelectItem value="animalsPerKg">Animali/kg</SelectItem>
+                    <SelectItem value="count">N° Operazioni</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-700 whitespace-nowrap">Calcolo</label>
+                <Select value={pivotCalc} onValueChange={setPivotCalc}>
+                  <SelectTrigger className="w-28 h-8 text-xs bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sum">Somma</SelectItem>
+                    <SelectItem value="avg">Media</SelectItem>
+                    <SelectItem value="count">Conteggio</SelectItem>
+                    <SelectItem value="min">Minimo</SelectItem>
+                    <SelectItem value="max">Massimo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Tabella Pivot risultati */}
+            <div className="bg-white rounded-lg border border-purple-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-purple-100">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium text-purple-800">
+                      {pivotGroupBy === 'flupsyName' ? 'FLUPSY' : 
+                       pivotGroupBy === 'lotName' ? 'Lotto' : 
+                       pivotGroupBy === 'currentSize' ? 'Taglia' : 
+                       pivotGroupBy === 'month' ? 'Mese' : pivotGroupBy}
+                    </th>
+                    <th className="px-4 py-2 text-right font-medium text-purple-800">
+                      {pivotCalc === 'sum' ? 'Somma' : 
+                       pivotCalc === 'avg' ? 'Media' : 
+                       pivotCalc === 'count' ? 'Conteggio' :
+                       pivotCalc === 'min' ? 'Minimo' : 'Massimo'} - {
+                       pivotValue === 'totalWeight' ? 'Peso (g)' : 
+                       pivotValue === 'animalCount' ? 'N° Animali' : 
+                       pivotValue === 'animalsPerKg' ? 'Animali/kg' : 'N° Operazioni'}
+                    </th>
+                    <th className="px-4 py-2 text-right font-medium text-purple-800">N° Righe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const filteredRows = operationRows.filter(row => {
+                      if (pivotValue === 'count') return true;
+                      const val = row[pivotValue as keyof OperationRowData];
+                      return val !== null && val !== undefined && !isNaN(Number(val));
+                    });
+
+                    const groups: { [key: string]: { values: number[], count: number } } = {};
+                    
+                    filteredRows.forEach(row => {
+                      let groupKey = '';
+                      if (pivotGroupBy === 'flupsyName') {
+                        groupKey = row.flupsyName || 'N/A';
+                      } else if (pivotGroupBy === 'lotName') {
+                        const lot = ((lots as any[]) || []).find((l: any) => l.id === row.lotId);
+                        groupKey = lot ? `${lot.supplier || ''} ${lot.supplierLotNumber || ''}`.trim() || `Lotto #${row.lotId}` : 'N/A';
+                      } else if (pivotGroupBy === 'currentSize') {
+                        groupKey = row.currentSize || 'N/A';
+                      } else if (pivotGroupBy === 'month') {
+                        const date = new Date(row.date || row.lastOperationDate || '');
+                        groupKey = isNaN(date.getTime()) ? 'N/A' : 
+                          `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                      }
+
+                      if (!groups[groupKey]) {
+                        groups[groupKey] = { values: [], count: 0 };
+                      }
+                      groups[groupKey].count++;
+                      
+                      if (pivotValue !== 'count') {
+                        const val = Number(row[pivotValue as keyof OperationRowData]);
+                        if (!isNaN(val)) {
+                          groups[groupKey].values.push(val);
+                        }
+                      }
+                    });
+
+                    const getSortValue = (data: { values: number[], count: number }): number => {
+                      if (pivotCalc === 'count') return data.count;
+                      if (data.values.length === 0) return 0;
+                      if (pivotCalc === 'sum') return data.values.reduce((s, v) => s + v, 0);
+                      if (pivotCalc === 'avg') return data.values.reduce((s, v) => s + v, 0) / data.values.length;
+                      if (pivotCalc === 'min') return Math.min(...data.values);
+                      return Math.max(...data.values);
+                    };
+
+                    const sortedGroups = Object.entries(groups).sort((a, b) => {
+                      return getSortValue(b[1]) - getSortValue(a[1]);
+                    });
+
+                    let grandTotal = 0;
+                    let grandCount = 0;
+                    let allValues: number[] = [];
+
+                    return (
+                      <>
+                        {sortedGroups.map(([key, data], idx) => {
+                          let displayValue = 0;
+                          if (pivotValue === 'count' || pivotCalc === 'count') {
+                            displayValue = data.count;
+                          } else if (pivotCalc === 'sum') {
+                            displayValue = data.values.reduce((s, v) => s + v, 0);
+                          } else if (pivotCalc === 'avg') {
+                            displayValue = data.values.length > 0 ? 
+                              data.values.reduce((s, v) => s + v, 0) / data.values.length : 0;
+                          } else if (pivotCalc === 'min') {
+                            displayValue = data.values.length > 0 ? Math.min(...data.values) : 0;
+                          } else if (pivotCalc === 'max') {
+                            displayValue = data.values.length > 0 ? Math.max(...data.values) : 0;
+                          }
+
+                          grandCount += data.count;
+                          allValues = allValues.concat(data.values);
+                          if (pivotCalc === 'sum' || pivotCalc === 'count') {
+                            grandTotal += displayValue;
+                          }
+
+                          return (
+                            <tr key={key} className={idx % 2 === 0 ? 'bg-white' : 'bg-purple-50'}>
+                              <td className="px-4 py-2 font-medium text-gray-800">{key}</td>
+                              <td className="px-4 py-2 text-right text-gray-700">
+                                {displayValue.toLocaleString('it-IT', { 
+                                  minimumFractionDigits: pivotCalc === 'avg' ? 1 : 0,
+                                  maximumFractionDigits: pivotCalc === 'avg' ? 1 : 0 
+                                })}
+                              </td>
+                              <td className="px-4 py-2 text-right text-gray-500">{data.count}</td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-purple-200 font-bold">
+                          <td className="px-4 py-2 text-purple-900">TOTALE</td>
+                          <td className="px-4 py-2 text-right text-purple-900">
+                            {(pivotCalc === 'avg' && allValues.length > 0) 
+                              ? (allValues.reduce((s, v) => s + v, 0) / allValues.length).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                              : (pivotCalc === 'min' && allValues.length > 0)
+                              ? Math.min(...allValues).toLocaleString('it-IT')
+                              : (pivotCalc === 'max' && allValues.length > 0)
+                              ? Math.max(...allValues).toLocaleString('it-IT')
+                              : grandTotal.toLocaleString('it-IT')}
+                          </td>
+                          <td className="px-4 py-2 text-right text-purple-900">{grandCount}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Controlli Previsioni di Crescita */}
       {selectedFlupsyId && (
