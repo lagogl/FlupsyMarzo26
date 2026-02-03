@@ -2616,12 +2616,99 @@ export default function SpreadsheetOperations() {
               <span className="font-medium">Tabella Pivot Interattiva</span>
               <span className="text-xs opacity-75">(trascina i campi per raggruppare)</span>
             </div>
-            <button 
-              onClick={() => setShowPivotPanel(false)}
-              className="p-1 hover:bg-purple-700 rounded transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => {
+                  const pivotTable = document.querySelector('.pvtTable');
+                  if (!pivotTable) {
+                    toast({ title: "Nessuna tabella pivot da esportare", variant: "destructive" });
+                    return;
+                  }
+                  const rows = pivotTable.querySelectorAll('tr');
+                  const data: string[][] = [];
+                  rows.forEach(row => {
+                    const cells = row.querySelectorAll('th, td');
+                    const rowData: string[] = [];
+                    cells.forEach(cell => {
+                      rowData.push((cell as HTMLElement).innerText || '');
+                    });
+                    if (rowData.length > 0) data.push(rowData);
+                  });
+                  
+                  const workbook = new ExcelJS.Workbook();
+                  const sheet = workbook.addWorksheet('Pivot');
+                  data.forEach((row, idx) => {
+                    const excelRow = sheet.addRow(row);
+                    if (idx === 0) {
+                      excelRow.eachCell(cell => {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } };
+                        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                      });
+                    }
+                  });
+                  sheet.columns.forEach(col => { col.width = 15; });
+                  
+                  workbook.xlsx.writeBuffer().then(buffer => {
+                    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `pivot_${new Date().toISOString().split('T')[0]}.xlsx`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast({ title: "Excel esportato con successo!" });
+                  });
+                }}
+                className="px-3 py-1 bg-green-500 hover:bg-green-600 rounded text-xs font-medium flex items-center gap-1"
+              >
+                <Download className="h-3 w-3" />
+                Excel
+              </button>
+              <button 
+                onClick={() => {
+                  const pivotTable = document.querySelector('.pvtTable');
+                  if (!pivotTable) {
+                    toast({ title: "Nessuna tabella pivot da esportare", variant: "destructive" });
+                    return;
+                  }
+                  const rows = pivotTable.querySelectorAll('tr');
+                  const csvRows: string[] = [];
+                  rows.forEach(row => {
+                    const cells = row.querySelectorAll('th, td');
+                    const rowData: string[] = [];
+                    cells.forEach(cell => {
+                      let val = (cell as HTMLElement).innerText || '';
+                      val = val.replace(/"/g, '""');
+                      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                        val = `"${val}"`;
+                      }
+                      rowData.push(val);
+                    });
+                    if (rowData.length > 0) csvRows.push(rowData.join(','));
+                  });
+                  
+                  const csv = csvRows.join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `pivot_${new Date().toISOString().split('T')[0]}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast({ title: "CSV esportato! Importalo in Google Sheets" });
+                }}
+                className="px-3 py-1 bg-blue-500 hover:bg-blue-600 rounded text-xs font-medium flex items-center gap-1"
+              >
+                <Download className="h-3 w-3" />
+                Google Sheets
+              </button>
+              <button 
+                onClick={() => setShowPivotPanel(false)}
+                className="p-1 hover:bg-purple-700 rounded transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           
           <div className="p-4 bg-white overflow-x-auto">
