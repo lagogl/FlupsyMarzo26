@@ -16,7 +16,40 @@ import ExcelJS from 'exceljs';
 import PivotTableUI from 'react-pivottable/PivotTableUI';
 import 'react-pivottable/pivottable.css';
 import TableRenderers from 'react-pivottable/TableRenderers';
+import createPlotlyRenderers from 'react-pivottable/PlotlyRenderers';
+import { aggregatorTemplates, aggregators as defaultAggregators } from 'react-pivottable/Utilities';
 import "../styles/spreadsheet.css";
+
+const italianRenderers: { [key: string]: any } = {
+  'Tabella': TableRenderers['Table'],
+  'Tabella Heatmap': TableRenderers['Table Heatmap'],
+  'Tabella Heatmap Colonne': TableRenderers['Table Col Heatmap'],
+  'Tabella Heatmap Righe': TableRenderers['Table Row Heatmap'],
+  'Esporta TSV': TableRenderers['Exportable TSV'],
+};
+
+const italianAggregators: { [key: string]: any } = {
+  'Conteggio': aggregatorTemplates.count(),
+  'Valori Unici': aggregatorTemplates.countUnique(),
+  'Lista Valori Unici': aggregatorTemplates.listUnique(),
+  'Somma': aggregatorTemplates.sum(),
+  'Somma Intera': aggregatorTemplates.intSum(),
+  'Media': aggregatorTemplates.average(),
+  'Mediana': aggregatorTemplates.median(),
+  'Varianza Campione': aggregatorTemplates.var(1),
+  'Deviazione Standard': aggregatorTemplates.stdev(1),
+  'Minimo': aggregatorTemplates.min(),
+  'Massimo': aggregatorTemplates.max(),
+  'Primo': aggregatorTemplates.first(),
+  'Ultimo': aggregatorTemplates.last(),
+  'Somma su Somma': aggregatorTemplates.sumOverSum(),
+  'Somma % Totale': aggregatorTemplates.fractionOf(aggregatorTemplates.sum(), 'total'),
+  'Somma % Righe': aggregatorTemplates.fractionOf(aggregatorTemplates.sum(), 'row'),
+  'Somma % Colonne': aggregatorTemplates.fractionOf(aggregatorTemplates.sum(), 'col'),
+  'Conteggio % Totale': aggregatorTemplates.fractionOf(aggregatorTemplates.count(), 'total'),
+  'Conteggio % Righe': aggregatorTemplates.fractionOf(aggregatorTemplates.count(), 'row'),
+  'Conteggio % Colonne': aggregatorTemplates.fractionOf(aggregatorTemplates.count(), 'col'),
+};
 
 interface BasketData {
   id: number;
@@ -2618,7 +2651,8 @@ export default function SpreadsheetOperations() {
                 };
               })}
               onChange={s => setPivotState(s)}
-              renderers={TableRenderers}
+              renderers={italianRenderers}
+              aggregators={italianAggregators}
               {...pivotState}
             />
           </div>
