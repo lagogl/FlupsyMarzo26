@@ -71,6 +71,40 @@ export function implementDirectOperationRoute(app: Express) {
     }
   });
   
+  // ===== ROUTE DI NOTIFICA OPERAZIONI ESTERNE =====
+  // Endpoint per app esterne per notificare il server di nuove operazioni
+  console.log("📡 Registrazione route EXTERNAL NOTIFY: /api/operations/notify-new");
+  app.post('/api/operations/notify-new', async (req, res) => {
+    console.log("📡 EXTERNAL NOTIFY: Ricevuta notifica di nuova operazione esterna");
+    try {
+      // Invalida TUTTE le cache
+      invalidateAllCaches();
+      console.log('🗑️ Cache invalidate per nuova operazione esterna');
+      
+      // Emetti notifica WebSocket per aggiornare tutti i client
+      const result = broadcastMessage('operation_created', {
+        source: 'external_app',
+        timestamp: new Date().toISOString(),
+        message: 'Nuova operazione da app esterna'
+      });
+      console.log('📡 WebSocket broadcast inviato, client raggiunti:', result);
+      
+      return res.json({
+        success: true,
+        message: 'Notification sent successfully',
+        clientsNotified: result,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Errore notifica esterna:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error sending notification',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // ===== ROUTE DI ELIMINAZIONE DIRETTA =====
   // NOTA: Ora usa il servizio lifecycle centralizzato per eliminazioni consistenti
   console.log("🗑️ Registrazione route DELETE: /api/emergency-delete/:id (via LifecycleService)");

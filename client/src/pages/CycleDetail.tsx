@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRoute, Link } from 'wouter';
+import { useWebSocketMessage } from '@/lib/websocket';
 import { format, differenceInDays } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { ArrowLeft, ChevronRight, Calendar, Droplets, List, Box, LineChart as LineChartIcon, BarChart, RefreshCw, Home } from 'lucide-react';
@@ -746,6 +747,22 @@ export default function CycleDetail() {
     queryFn: cycleId ? () => fetch(`/api/operations?cycleId=${cycleId}`).then(res => res.json()) : undefined,
     enabled: !!cycleId
   });
+
+  // WebSocket listener for real-time updates when operations are created/updated
+  const queryClient = useQueryClient();
+  useWebSocketMessage('operation_created', useCallback(() => {
+    console.log('🔄 CycleDetail: Ricevuta notifica operation_created, aggiorno dati');
+    refetchOperations();
+    queryClient.invalidateQueries({ queryKey: ['/api/cycles', cycleId] });
+  }, [refetchOperations, queryClient, cycleId]));
+  
+  useWebSocketMessage('operation_updated', useCallback(() => {
+    refetchOperations();
+  }, [refetchOperations]));
+  
+  useWebSocketMessage('operation_deleted', useCallback(() => {
+    refetchOperations();
+  }, [refetchOperations]));
   
   // Fetch flupsys data to get the flupsy name
   const { data: flupsys } = useQuery({
