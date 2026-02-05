@@ -585,6 +585,11 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     // Get the latest operation for tooltip info
     const latestOperation = getLatestOperation(basket.id);
     
+    // Get cycle start date (first activation date)
+    const cycleStartDate = basket.currentCycleId 
+      ? cycles.find((c: any) => c.id === basket.currentCycleId)?.startDate 
+      : null;
+    
     // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per taglia
     const measurementAnimalsPerKg = latestOperation?.measurementAnimalsPerKg || latestOperation?.animalsPerKg;
     
@@ -694,6 +699,16 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                        latestOperation.type === 'mortalita' ? 'Mortalità' :
                        latestOperation.type}
                     </div>
+                    
+                    {/* Data prima attivazione del ciclo */}
+                    {cycleStartDate && (
+                      <>
+                        <div className="text-[11px] text-gray-600">Attivato:</div>
+                        <div className="text-[11px] text-right">
+                          {format(new Date(cycleStartDate), 'dd/MM/yy')}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </>
               )}

@@ -250,6 +250,11 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
 
     // Get the latest operation for tooltip info
     const latestOperation = basket ? getLatestOperation(basket.id) : null;
+    
+    // Get cycle start date (first activation date)
+    const cycleStartDate = basket?.currentCycleId 
+      ? cycles.find((c: any) => c.id === basket.currentCycleId)?.startDate 
+      : null;
 
     return (
       <TooltipProvider key={`${flupsyId}-${row}-${position}`}>
@@ -294,6 +299,13 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
                   <div className="text-[10px] text-gray-500 mt-1">
                     {format(new Date(latestOperation.date), 'dd/MM/yy')}
                   </div>
+                  
+                  {/* Data prima attivazione del ciclo */}
+                  {cycleStartDate && (
+                    <div className="text-[10px] text-blue-600 mt-0.5">
+                      Attiv: {format(new Date(cycleStartDate), 'dd/MM/yy')}
+                    </div>
+                  )}
                 </>
               )}
             </div>
