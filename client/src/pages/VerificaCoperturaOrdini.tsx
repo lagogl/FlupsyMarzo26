@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, ShieldCheck, ShieldAlert, TrendingUp, Package, AlertTriangle, CheckCircle2, XCircle, Eye, BarChart3 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Cell } from "recharts";
-import * as XLSX from "xlsx";
+import * as ExcelJS from "exceljs";
 
 interface MonthSizeSnapshot {
   giacenzaPre: number;
@@ -114,25 +114,66 @@ export default function VerificaCoperturaOrdini() {
     staleTime: 60000,
   });
 
-  const exportExcel = () => {
+  const headerFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+  const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+  const evenRowFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
+  const borderStyle: Partial<ExcelJS.Borders> = {
+    top: { style: "thin", color: { argb: "FFD1D5DB" } },
+    bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+    left: { style: "thin", color: { argb: "FFD1D5DB" } },
+    right: { style: "thin", color: { argb: "FFD1D5DB" } },
+  };
+
+  const styleSheet = (ws: ExcelJS.Worksheet) => {
+    const headerRow = ws.getRow(1);
+    headerRow.eachCell(cell => {
+      cell.fill = headerFill;
+      cell.font = headerFont;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = borderStyle;
+    });
+    headerRow.height = 22;
+
+    for (let r = 2; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      row.eachCell(cell => {
+        cell.border = borderStyle;
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        if (r % 2 === 0) cell.fill = evenRowFill;
+      });
+    }
+
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: ws.columnCount } };
+  };
+
+  const exportExcel = async () => {
     if (!data) return;
 
-    const wb = XLSX.utils.book_new();
+    const ExcelModule = (ExcelJS as any).default || ExcelJS;
+    const wb = new ExcelModule.Workbook();
 
-    const overviewRows = data.timeline.map(t => ({
-      "Mese": t.monthName,
-      "Giacenza Disponibile": t.totaleGiacenzaPre,
-      "Ordini": t.totaleOrdini,
-      "Soddisfatti": t.totaleSoddisfatti,
-      "Gap": t.totaleGap,
-      "Copertura %": t.coperturaPctGlobale,
-      "Giacenza Residua": t.totaleGiacenzaPost,
-    }));
-    const wsOverview = XLSX.utils.json_to_sheet(overviewRows);
-    wsOverview["!cols"] = [
-      { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 14 }, { wch: 18 }
+    const wsOverview = wb.addWorksheet("Riepilogo Mensile");
+    wsOverview.columns = [
+      { header: "Mese", key: "mese", width: 14 },
+      { header: "Giacenza Disponibile", key: "giacenza", width: 22 },
+      { header: "Ordini", key: "ordini", width: 16 },
+      { header: "Soddisfatti", key: "soddisfatti", width: 16 },
+      { header: "Gap", key: "gap", width: 14 },
+      { header: "Copertura %", key: "copertura", width: 14 },
+      { header: "Giacenza Residua", key: "residua", width: 20 },
     ];
-    XLSX.utils.book_append_sheet(wb, wsOverview, "Riepilogo Mensile");
+    data.timeline.forEach(t => {
+      wsOverview.addRow({
+        mese: t.monthName,
+        giacenza: t.totaleGiacenzaPre,
+        ordini: t.totaleOrdini,
+        soddisfatti: t.totaleSoddisfatti,
+        gap: t.totaleGap,
+        copertura: t.coperturaPctGlobale,
+        residua: t.totaleGiacenzaPost,
+      });
+    });
+    styleSheet(wsOverview);
 
     const sizesWithData = Object.keys(data.riepilogoPerTaglia).sort((a, b) => {
       const numA = parseInt(a.replace(/\D/g, "")) || 0;
@@ -140,43 +181,79 @@ export default function VerificaCoperturaOrdini() {
       return numA - numB;
     });
 
-    const detailHeader = ["Taglia", "Giacenza Iniziale", ...data.timeline.map(t => `${t.monthShort} Giac`), ...data.timeline.map(t => `${t.monthShort} Ord`), ...data.timeline.map(t => `${t.monthShort} Gap`), "Tot Ordini", "Tot Soddisfatti", "Tot Gap", "Copertura %"];
-    const detailRows = sizesWithData.map(size => {
-      const riepilogo = data.riepilogoPerTaglia[size];
-      const row: (string | number)[] = [
-        size,
-        riepilogo.giacenzaIniziale,
-        ...data.timeline.map(t => t.perTaglia[size]?.giacenzaPre || 0),
-        ...data.timeline.map(t => t.perTaglia[size]?.ordini || 0),
-        ...data.timeline.map(t => t.perTaglia[size]?.gap || 0),
-        riepilogo.totaleOrdini,
-        riepilogo.totaleSoddisfatti,
-        riepilogo.totaleGap,
-        riepilogo.coperturaPct,
-      ];
-      return row;
+    const wsDetail = wb.addWorksheet("Dettaglio Taglie");
+    const detailCols: Partial<ExcelJS.Column>[] = [
+      { header: "Taglia", key: "taglia", width: 12 },
+      { header: "Giac. Iniziale", key: "giacIniz", width: 16 },
+      ...data.timeline.map(t => ({ header: `${t.monthShort} Giac`, key: `g${t.month}`, width: 14 })),
+      ...data.timeline.map(t => ({ header: `${t.monthShort} Ord`, key: `o${t.month}`, width: 14 })),
+      ...data.timeline.map(t => ({ header: `${t.monthShort} Gap`, key: `p${t.month}`, width: 14 })),
+      { header: "Tot Ordini", key: "totOrd", width: 14 },
+      { header: "Tot Soddisfatti", key: "totSodd", width: 16 },
+      { header: "Tot Gap", key: "totGap", width: 12 },
+      { header: "Copertura %", key: "cop", width: 14 },
+    ];
+    wsDetail.columns = detailCols;
+
+    sizesWithData.forEach(size => {
+      const r = data.riepilogoPerTaglia[size];
+      const rowData: Record<string, string | number> = {
+        taglia: size,
+        giacIniz: r.giacenzaIniziale,
+        totOrd: r.totaleOrdini,
+        totSodd: r.totaleSoddisfatti,
+        totGap: r.totaleGap,
+        cop: r.coperturaPct,
+      };
+      data.timeline.forEach(t => {
+        const cell = t.perTaglia[size];
+        rowData[`g${t.month}`] = cell?.giacenzaPre || 0;
+        rowData[`o${t.month}`] = cell?.ordini || 0;
+        rowData[`p${t.month}`] = cell?.gap || 0;
+      });
+      wsDetail.addRow(rowData);
     });
-    const wsDetail = XLSX.utils.aoa_to_sheet([detailHeader, ...detailRows]);
-    XLSX.utils.book_append_sheet(wb, wsDetail, "Dettaglio Taglie");
+    styleSheet(wsDetail);
 
     if (data.ordiniDettaglio.length > 0) {
-      const ordiniRows = data.ordiniDettaglio.map(o => ({
-        "ID Ordine": o.ordineId,
-        "Cliente": o.clienteNome,
-        "Taglia": o.taglia,
-        "Taglia Vendita": o.saleSize || "N/D",
-        "Quantità Totale": o.quantita,
-        "Quantità/Mese": o.quantitaPerMese,
-        "Mesi": o.mesiCoperti,
-        "Data Inizio": o.dataInizioConsegna || "N/D",
-        "Data Fine": o.dataFineConsegna || "N/D",
-        "Stato": o.stato,
-      }));
-      const wsOrdini = XLSX.utils.json_to_sheet(ordiniRows);
-      XLSX.utils.book_append_sheet(wb, wsOrdini, "Ordini Dettaglio");
+      const wsOrdini = wb.addWorksheet("Ordini Dettaglio");
+      wsOrdini.columns = [
+        { header: "ID Ordine", key: "id", width: 10 },
+        { header: "Cliente", key: "cliente", width: 25 },
+        { header: "Taglia", key: "taglia", width: 12 },
+        { header: "Taglia Vendita", key: "saleSize", width: 14 },
+        { header: "Quantità Totale", key: "qty", width: 18 },
+        { header: "Quantità/Mese", key: "qtyMese", width: 16 },
+        { header: "Mesi", key: "mesi", width: 8 },
+        { header: "Data Inizio", key: "inizio", width: 14 },
+        { header: "Data Fine", key: "fine", width: 14 },
+        { header: "Stato", key: "stato", width: 14 },
+      ];
+      data.ordiniDettaglio.forEach(o => {
+        wsOrdini.addRow({
+          id: o.ordineId,
+          cliente: o.clienteNome,
+          taglia: o.taglia,
+          saleSize: o.saleSize || "N/D",
+          qty: o.quantita,
+          qtyMese: o.quantitaPerMese,
+          mesi: o.mesiCoperti,
+          inizio: o.dataInizioConsegna || "N/D",
+          fine: o.dataFineConsegna || "N/D",
+          stato: o.stato,
+        });
+      });
+      styleSheet(wsOrdini);
     }
 
-    XLSX.writeFile(wb, `Verifica_Copertura_${year}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Verifica_Copertura_${year}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (isLoading) {
@@ -472,16 +549,16 @@ export default function VerificaCoperturaOrdini() {
               <p className="text-sm text-muted-foreground">Giacenza disponibile / Ordini / Gap per ogni combinazione. Celle colorate in base alla copertura.</p>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[70vh] relative">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-sm">
                     <TableRow>
-                      <TableHead className="sticky left-0 bg-background z-10 min-w-[90px]">Taglia</TableHead>
-                      <TableHead className="text-right min-w-[80px]">Giac. Iniz.</TableHead>
+                      <TableHead className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 min-w-[100px] font-bold text-sm">Taglia</TableHead>
+                      <TableHead className="text-right min-w-[90px] font-bold text-sm">Giac. Iniz.</TableHead>
                       {data.timeline.map(t => (
-                        <TableHead key={t.month} className="text-center min-w-[120px]">{t.monthShort}</TableHead>
+                        <TableHead key={t.month} className="text-center min-w-[130px] font-bold text-sm">{t.monthShort}</TableHead>
                       ))}
-                      <TableHead className="text-center min-w-[70px]">Tot %</TableHead>
+                      <TableHead className="text-center min-w-[80px] font-bold text-sm">Tot %</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -493,26 +570,26 @@ export default function VerificaCoperturaOrdini() {
                       })
                       .map(([size, riepilogo]) => (
                         <TableRow key={size}>
-                          <TableCell className="sticky left-0 bg-background z-10 font-bold text-xs">{size}</TableCell>
-                          <TableCell className="text-right font-mono text-xs text-blue-700">
+                          <TableCell className="sticky left-0 bg-background z-10 font-bold text-sm">{size}</TableCell>
+                          <TableCell className="text-right font-mono text-sm text-blue-700">
                             {riepilogo.giacenzaIniziale > 0 ? formatNumber(riepilogo.giacenzaIniziale) : <span className="text-gray-300">-</span>}
                           </TableCell>
                           {data.timeline.map(t => {
                             const cell = t.perTaglia[size];
                             if (!cell || (cell.giacenzaPre === 0 && cell.ordini === 0)) {
-                              return <TableCell key={t.month} className="text-center text-gray-300 text-xs">-</TableCell>;
+                              return <TableCell key={t.month} className="text-center text-gray-300 text-sm">-</TableCell>;
                             }
                             return (
-                              <TableCell key={t.month} className={`text-center text-xs p-1 ${cell.ordini > 0 ? getCoverageBg(cell.coperturaPct) : ""}`}>
+                              <TableCell key={t.month} className={`text-center text-sm p-1.5 ${cell.ordini > 0 ? getCoverageBg(cell.coperturaPct) : ""}`}>
                                 <div className="space-y-0.5">
-                                  <div className="font-mono text-blue-700">{formatNumber(cell.giacenzaPre)}</div>
+                                  <div className="font-mono text-blue-700 font-medium">{formatNumber(cell.giacenzaPre)}</div>
                                   {cell.ordini > 0 && (
                                     <>
                                       <div className="font-mono text-purple-700">{formatNumber(cell.ordini)}</div>
                                       {cell.gap > 0 ? (
                                         <div className="font-mono text-red-600 font-bold">-{formatNumber(cell.gap)}</div>
                                       ) : (
-                                        <div className="font-mono text-emerald-600">OK</div>
+                                        <div className="font-mono text-emerald-600 font-semibold">OK</div>
                                       )}
                                     </>
                                   )}
@@ -522,11 +599,11 @@ export default function VerificaCoperturaOrdini() {
                           })}
                           <TableCell className="text-center">
                             {riepilogo.totaleOrdini > 0 ? (
-                              <Badge className={`${getCoverageColor(riepilogo.coperturaPct)} text-white border-0 text-xs`}>
+                              <Badge className={`${getCoverageColor(riepilogo.coperturaPct)} text-white border-0 text-sm`}>
                                 {riepilogo.coperturaPct}%
                               </Badge>
                             ) : (
-                              <span className="text-gray-300 text-xs">-</span>
+                              <span className="text-gray-300 text-sm">-</span>
                             )}
                           </TableCell>
                         </TableRow>
