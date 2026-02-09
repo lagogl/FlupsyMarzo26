@@ -1124,7 +1124,7 @@ export default function CycleDetail() {
                         <YAxis 
                           tick={{ fontSize: 11 }} 
                           stroke="#6b7280"
-                          tickFormatter={(value: number) => value < 1 ? value.toFixed(2) : `${Math.round(value)}`}
+                          tickFormatter={(value: number) => value < 1 ? value.toFixed(3) : `${Math.round(value)}`}
                           domain={['auto', 'auto']}
                         />
                         <Tooltip 
