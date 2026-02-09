@@ -9,10 +9,8 @@ import { getCachedQuery, setCachedQuery, invalidateQueryCache, getCacheStats, ge
 import { generateDataInsights, formatInsightsForUser, createInsightsSheet } from "../services/ai-report/insights-service";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_BASE_URL = 'https://api.deepseek.com';
-const AI_MODEL = 'deepseek-chat';
+const AI_MODEL = 'gpt-4o';
 
-// Client DeepSeek per report generation
 let aiClient: OpenAI | null = null;
 
 function initializeAIClient() {
@@ -20,7 +18,6 @@ function initializeAIClient() {
   if (currentApiKey && currentApiKey.length > 10) {
     aiClient = new OpenAI({
       apiKey: currentApiKey,
-      baseURL: AI_BASE_URL,
       timeout: 30000
     });
     return true;
