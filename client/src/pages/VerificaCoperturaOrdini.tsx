@@ -671,7 +671,9 @@ export default function VerificaCoperturaOrdini() {
                           <TableCell className="text-right font-mono text-sm">{formatNumber(o.quantita)}</TableCell>
                           <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatNumber(o.quantitaPerMese)}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">
-                            {o.dataInizioConsegna || "?"} → {o.dataFineConsegna || "?"}
+                            {!o.dataInizioConsegna && !o.dataFineConsegna 
+                              ? <span className="text-amber-500 font-medium">Nessuna data</span>
+                              : `${o.dataInizioConsegna || "?"} → ${o.dataFineConsegna || "?"}`}
                           </TableCell>
                           <TableCell>
                             <Badge variant={o.stato === "Completato" ? "default" : "secondary"} className="text-xs">

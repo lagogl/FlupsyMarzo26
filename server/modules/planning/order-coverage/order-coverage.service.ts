@@ -258,9 +258,13 @@ export class OrderCoverageService {
         })
         .map(o => {
           const qty = o.quantitaTotale || o.quantita || 0;
-          const di = o.dataInizioConsegna ? new Date(o.dataInizioConsegna) : null;
-          const df = o.dataFineConsegna ? new Date(o.dataFineConsegna) : null;
-          let mesi = 1;
+          let di = o.dataInizioConsegna ? new Date(o.dataInizioConsegna) : null;
+          let df = o.dataFineConsegna ? new Date(o.dataFineConsegna) : null;
+
+          if (di && !df) df = di;
+          if (!di && df) di = df;
+
+          let mesi = 12;
           if (di && df) {
             mesi = Math.max(1, (df.getFullYear() - di.getFullYear()) * 12 + (df.getMonth() - di.getMonth()) + 1);
           }

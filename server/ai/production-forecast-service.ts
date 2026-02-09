@@ -714,10 +714,21 @@ export class ProductionForecastService {
         const quantita = ordine.quantitaTotale || ordine.quantita || 0;
         if (quantita <= 0) continue;
 
-        const dataInizio = ordine.dataInizioConsegna ? new Date(ordine.dataInizioConsegna) : null;
-        const dataFine = ordine.dataFineConsegna ? new Date(ordine.dataFineConsegna) : null;
+        let dataInizio = ordine.dataInizioConsegna ? new Date(ordine.dataInizioConsegna) : null;
+        let dataFine = ordine.dataFineConsegna ? new Date(ordine.dataFineConsegna) : null;
 
-        if (!dataInizio || !dataFine) continue;
+        if (dataInizio && !dataFine) dataFine = dataInizio;
+        if (!dataInizio && dataFine) dataInizio = dataFine;
+
+        if (!dataInizio || !dataFine) {
+          const quantitaPerMese = Math.round(quantita / 12);
+          for (let m = 1; m <= 12; m++) {
+            if (!result[m.toString()][saleSize]) result[m.toString()][saleSize] = 0;
+            result[m.toString()][saleSize] += quantitaPerMese;
+          }
+          continue;
+        }
+
         if (dataInizio.getFullYear() > year) continue;
         if (dataFine.getFullYear() < year) continue;
 
