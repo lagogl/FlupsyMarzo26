@@ -117,37 +117,69 @@ export class OrderCoverageService {
       const perTaglia: Record<string, MonthSizeSnapshot> = {};
       let totGiacPre = 0, totGiacPost = 0, totOrd = 0, totSodd = 0, totGap = 0;
 
+      const availableStock: Record<string, number> = {};
       for (const size of SALE_SIZES) {
-        const giacenza = stockPre[size] || 0;
-        const ordini = monthOrders[size] || 0;
+        availableStock[size] = stockPre[size] || 0;
+      }
 
-        if (giacenza === 0 && ordini === 0) continue;
+      const orderSizesWithOrders = SALE_SIZES.filter(s => (monthOrders[s] || 0) > 0);
 
-        const soddisfatti = Math.min(giacenza, ordini);
-        const gap = Math.max(0, ordini - soddisfatti);
-        const copertura = ordini > 0 ? Math.round((soddisfatti / ordini) * 100) : (giacenza > 0 ? 100 : 0);
+      for (const orderSize of orderSizesWithOrders) {
+        const ordini = monthOrders[orderSize] || 0;
+        let remaining = ordini;
+        let fulfilled = 0;
+        const orderIdx = SALE_SIZES.indexOf(orderSize);
 
-        if (soddisfatti > 0) {
-          baskets = productionForecastService.removeAnimalsFromSaleSize(baskets, size, soddisfatti);
+        for (let i = orderIdx; i >= 0 && remaining > 0; i--) {
+          const stockSize = SALE_SIZES[i];
+          const available = availableStock[stockSize] || 0;
+          if (available <= 0) continue;
+
+          const used = Math.min(available, remaining);
+          availableStock[stockSize] -= used;
+          fulfilled += used;
+          remaining -= used;
+
+          baskets = productionForecastService.removeAnimalsFromSaleSize(baskets, stockSize, used);
         }
 
-        perTaglia[size] = {
+        const giacenza = stockPre[orderSize] || 0;
+        const gap = Math.max(0, ordini - fulfilled);
+        const copertura = ordini > 0 ? Math.round((fulfilled / ordini) * 100) : 100;
+
+        perTaglia[orderSize] = {
           giacenzaPre: Math.round(giacenza),
-          giacenzaPost: Math.round(Math.max(0, giacenza - soddisfatti)),
+          giacenzaPost: Math.round(availableStock[orderSize] || 0),
           ordini: Math.round(ordini),
-          soddisfatti: Math.round(soddisfatti),
+          soddisfatti: Math.round(fulfilled),
           gap: Math.round(gap),
           coperturaPct: copertura
         };
 
-        totGiacPre += giacenza;
         totOrd += ordini;
-        totSodd += soddisfatti;
+        totSodd += fulfilled;
         totGap += gap;
       }
 
       const stockPost = productionForecastService.aggregateBySaleSize(baskets);
       totGiacPost = Object.values(stockPost).reduce((a, b) => a + b, 0);
+
+      for (const size of SALE_SIZES) {
+        const giacenza = stockPre[size] || 0;
+        if (perTaglia[size]) {
+          perTaglia[size].giacenzaPost = Math.round(stockPost[size] || 0);
+        } else if (giacenza > 0) {
+          perTaglia[size] = {
+            giacenzaPre: Math.round(giacenza),
+            giacenzaPost: Math.round(stockPost[size] || 0),
+            ordini: 0,
+            soddisfatti: 0,
+            gap: 0,
+            coperturaPct: 100
+          };
+        }
+        totGiacPre += giacenza;
+      }
 
       timeline.push({
         month,
