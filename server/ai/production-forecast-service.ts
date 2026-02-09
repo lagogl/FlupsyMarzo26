@@ -813,9 +813,11 @@ export class ProductionForecastService {
     let stockT10 = currentAggregated.T10;
 
     for (let month = 1; month <= 12; month++) {
-      const monthsFromNow = month - currentMonth;
+      const isPastMonth = month < currentMonth;
+      const isCurrentMonth = month === currentMonth;
+      const isFutureMonth = month > currentMonth;
       
-      if (monthsFromNow > 0) {
+      if (isFutureMonth) {
         basketInventoryMutable = this.simulateMonthlyGrowth(basketInventoryMutable, sgrLookup, month - 1, mortalityRates);
         const newAggregated = this.aggregateByCategory(basketInventoryMutable);
         stockT1 = newAggregated.T1;
@@ -837,7 +839,6 @@ export class ProductionForecastService {
       for (const sizeCategory of categoriesToProcess) {
         const target = monthTargets.find(t => t.sizeCategory === sizeCategory);
         const budgetAnimals = target?.targetAnimals || 0;
-        // Recupera ordini per questo mese e categoria
         const ordersAnimals = ordersByMonth[month.toString()]?.[sizeCategory] || 0;
 
         let availableForSale = 0;
@@ -848,7 +849,13 @@ export class ProductionForecastService {
         let giorniCrescita = 0;
         let giacenzaInizioMese = 0;
 
-        if (sizeCategory === 'T3') {
+        if (isPastMonth) {
+          if (sizeCategory === 'T3') giacenzaInizioMese = 0;
+          else if (sizeCategory === 'T10') giacenzaInizioMese = 0;
+          else if (sizeCategory === 'T1') giacenzaInizioMese = 0;
+          soldAnimals = 0;
+          availableForSale = 0;
+        } else if (sizeCategory === 'T3') {
           giacenzaInizioMese = stockT3;
           availableForSale = stockT3;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
