@@ -416,6 +416,27 @@ export class ProductionForecastService {
     });
   }
 
+  removeAnimalsFromCategory(
+    baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>,
+    category: string,
+    toRemove: number
+  ): Array<{basketId: number, animalsPerKg: number, animalCount: number}> {
+    const categoryBaskets = baskets.filter(b => this.getCategoryFromAnimalsPerKg(b.animalsPerKg) === category);
+    const totalInCategory = categoryBaskets.reduce((sum, b) => sum + b.animalCount, 0);
+    if (totalInCategory <= 0 || toRemove <= 0) return baskets;
+
+    const removalRatio = Math.min(1, toRemove / totalInCategory);
+    return baskets.map(b => {
+      if (this.getCategoryFromAnimalsPerKg(b.animalsPerKg) === category) {
+        return {
+          ...b,
+          animalCount: Math.round(b.animalCount * (1 - removalRatio))
+        };
+      }
+      return b;
+    }).filter(b => b.animalCount > 0);
+  }
+
   aggregateByCategory(baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>): Record<string, number> {
     const result: Record<string, number> = { T1: 0, T3: 0, T10: 0 };
     for (const basket of baskets) {
@@ -832,12 +853,18 @@ export class ProductionForecastService {
           availableForSale = stockT3;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT3 = Math.max(0, stockT3 - soldAnimals);
+          if (soldAnimals > 0) {
+            basketInventoryMutable = this.removeAnimalsFromCategory(basketInventoryMutable, 'T3', soldAnimals);
+          }
           
         } else if (sizeCategory === 'T10') {
           giacenzaInizioMese = stockT10;
           availableForSale = stockT10;
           soldAnimals = Math.min(availableForSale, budgetAnimals);
           stockT10 = Math.max(0, stockT10 - soldAnimals);
+          if (soldAnimals > 0) {
+            basketInventoryMutable = this.removeAnimalsFromCategory(basketInventoryMutable, 'T10', soldAnimals);
+          }
         } else if (sizeCategory === 'T1') {
           giacenzaInizioMese = stockT1;
         }
