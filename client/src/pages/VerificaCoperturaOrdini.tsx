@@ -549,16 +549,16 @@ export default function VerificaCoperturaOrdini() {
               <p className="text-sm text-muted-foreground">Giacenza disponibile / Ordini / Gap per ogni combinazione. Celle colorate in base alla copertura.</p>
             </CardHeader>
             <CardContent>
-              <div className="overflow-auto max-h-[70vh] relative">
+              <div className="overflow-auto max-h-[70vh] border rounded-md">
                 <Table>
-                  <TableHeader className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-sm">
+                  <TableHeader>
                     <TableRow>
-                      <TableHead className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 min-w-[100px] font-bold text-sm">Taglia</TableHead>
-                      <TableHead className="text-right min-w-[90px] font-bold text-sm">Giac. Iniz.</TableHead>
+                      <TableHead className="sticky top-0 sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 min-w-[100px] font-bold text-sm shadow-[2px_2px_4px_rgba(0,0,0,0.08)]">Taglia</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 text-right min-w-[90px] font-bold text-sm">Giac. Iniz.</TableHead>
                       {data.timeline.map(t => (
-                        <TableHead key={t.month} className="text-center min-w-[130px] font-bold text-sm">{t.monthShort}</TableHead>
+                        <TableHead key={t.month} className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 text-center min-w-[130px] font-bold text-sm">{t.monthShort}</TableHead>
                       ))}
-                      <TableHead className="text-center min-w-[80px] font-bold text-sm">Tot %</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 text-center min-w-[80px] font-bold text-sm">Tot %</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
