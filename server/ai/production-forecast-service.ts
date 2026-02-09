@@ -397,14 +397,16 @@ export class ProductionForecastService {
     baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>,
     sgrLookup: SgrByMonthSize,
     monthIndex: number,
-    mortalityRates: { T1: number; T3: number; T10: number }
+    mortalityRates: { T1: number; T3: number; T10: number },
+    days: number = 30
   ): Array<{basketId: number, animalsPerKg: number, animalCount: number}> {
+    const mortalityFraction = days / 30;
     return baskets.map(basket => {
       const category = this.getCategoryFromAnimalsPerKg(basket.animalsPerKg);
-      const mortality = mortalityRates[category];
+      const mortality = mortalityRates[category] * mortalityFraction;
       const sgr = this.getSgrForAnimalsPerKg(sgrLookup, monthIndex, basket.animalsPerKg);
       const currentWeight = 1000000 / basket.animalsPerKg;
-      const newWeight = currentWeight * Math.pow(1 + sgr / 100, 30);
+      const newWeight = currentWeight * Math.pow(1 + sgr / 100, days);
       const newAnimalsPerKg = Math.round(1000000 / newWeight);
       const survivingAnimals = Math.round(basket.animalCount * (1 - mortality));
       
@@ -817,7 +819,18 @@ export class ProductionForecastService {
       const isCurrentMonth = month === currentMonth;
       const isFutureMonth = month > currentMonth;
       
-      if (isFutureMonth) {
+      if (isCurrentMonth) {
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const currentDay = today.getDate();
+        const remainingDays = Math.max(0, daysInMonth - currentDay);
+        if (remainingDays > 0) {
+          basketInventoryMutable = this.simulateMonthlyGrowth(basketInventoryMutable, sgrLookup, month - 1, mortalityRates, remainingDays);
+          const newAggregated = this.aggregateByCategory(basketInventoryMutable);
+          stockT1 = newAggregated.T1;
+          stockT3 = newAggregated.T3;
+          stockT10 = newAggregated.T10;
+        }
+      } else if (isFutureMonth) {
         basketInventoryMutable = this.simulateMonthlyGrowth(basketInventoryMutable, sgrLookup, month - 1, mortalityRates);
         const newAggregated = this.aggregateByCategory(basketInventoryMutable);
         stockT1 = newAggregated.T1;
