@@ -831,8 +831,24 @@ export default function AnalisiScostamenti() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredData.map((row, idx) => (
-                      <TableRow key={idx}>
+                    {filteredData.map((row, idx) => {
+                      const monthColors: Record<string, string> = {
+                        'Gennaio': 'bg-blue-50',
+                        'Febbraio': 'bg-emerald-50',
+                        'Marzo': 'bg-amber-50',
+                        'Aprile': 'bg-rose-50',
+                        'Maggio': 'bg-violet-50',
+                        'Giugno': 'bg-cyan-50',
+                        'Luglio': 'bg-orange-50',
+                        'Agosto': 'bg-lime-50',
+                        'Settembre': 'bg-pink-50',
+                        'Ottobre': 'bg-teal-50',
+                        'Novembre': 'bg-indigo-50',
+                        'Dicembre': 'bg-yellow-50',
+                      };
+                      const bgClass = monthColors[row.monthName] || '';
+                      return (
+                      <TableRow key={idx} className={bgClass}>
                         <TableCell className="font-medium">{row.monthName}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs font-medium">
@@ -870,7 +886,8 @@ export default function AnalisiScostamenti() {
                         </TableCell>
                         <TableCell>{getStatusBadge(row.status, row.statusDescription)}</TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                     <TableRow className="bg-slate-100 font-bold border-t-2">
                       <TableCell>TOTALE</TableCell>
                       <TableCell>-</TableCell>
