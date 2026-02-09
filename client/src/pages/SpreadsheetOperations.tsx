@@ -1953,20 +1953,20 @@ export default function SpreadsheetOperations() {
           trend: `${trendData.trend.toUpperCase()} (${(trendData.multiplier * 100).toFixed(0)}%)`,
           flupsy: row.flupsyName || '-',
           taglia: row.currentSize || '-',
-          pesoMedio: row.averageWeight ? Math.round(row.averageWeight * 100) / 100 : '-',
+          pesoMedio: row.averageWeight ? Math.round(row.averageWeight * 100) / 100 : null,
           ultOp: row.lastOperationDate ? new Date(row.lastOperationDate).toLocaleDateString('it-IT', {month: '2-digit', day: '2-digit'}) : '-',
           lotto: lotDisplay,
-          animali: row.animalCount ? row.animalCount.toLocaleString('it-IT') : '-',
-          pesoTot: row.totalWeight ? row.totalWeight.toLocaleString('it-IT') : '-',
-          animKg: row.animalsPerKg ? row.animalsPerKg.toLocaleString('it-IT') : '-',
-          sgrPeso: sgrPesoValue != null ? sgrPesoValue.toFixed(2) : '-',
-          sgrMedio: sgrMedioValue != null ? sgrMedioValue.toFixed(2) : '-',
-          sgrMisura: sgrMisuraValue != null ? sgrMisuraValue.toFixed(2) : '-',
-          pesoCampione: row.sampleWeight || '-',
-          vivi: row.liveAnimals || '-',
-          morti: row.deadCount || '-',
-          totCampione: row.totalSample || '-',
-          mortalita: row.mortalityRate ? `${(row.mortalityRate * 100).toFixed(2)}%` : '-',
+          animali: row.animalCount ? row.animalCount : null,
+          pesoTot: row.totalWeight ? row.totalWeight : null,
+          animKg: row.animalsPerKg ? row.animalsPerKg : null,
+          sgrPeso: sgrPesoValue != null ? Math.round(sgrPesoValue * 100) / 100 : null,
+          sgrMedio: sgrMedioValue != null ? Math.round(sgrMedioValue * 100) / 100 : null,
+          sgrMisura: sgrMisuraValue != null ? Math.round(sgrMisuraValue * 100) / 100 : null,
+          pesoCampione: row.sampleWeight || null,
+          vivi: row.liveAnimals || null,
+          morti: row.deadCount != null ? row.deadCount : null,
+          totCampione: row.totalSample || null,
+          mortalita: row.mortalityRate ? Math.round(row.mortalityRate * 100 * 100) / 100 : null,
           urgenza: analysis.urgency,
           problemi: analysis.issues.join('; '),
           raccomandazioni: analysis.recommendations.join('; '),
@@ -1995,6 +1995,39 @@ export default function SpreadsheetOperations() {
           cell.alignment = { vertical: 'middle' };
         });
       });
+
+      const numFmtInt = '#,##0';
+      const numFmtDec2 = '#,##0.00';
+      const colKeyToIndex: Record<string, number> = {};
+      columns.forEach((col, i) => { colKeyToIndex[col.key] = i + 1; });
+
+      const numericColumns: Record<string, string> = {
+        pesoMedio: numFmtDec2,
+        animali: numFmtInt,
+        pesoTot: numFmtInt,
+        animKg: numFmtInt,
+        sgrPeso: numFmtDec2,
+        sgrMedio: numFmtDec2,
+        sgrMisura: numFmtDec2,
+        pesoCampione: numFmtDec2,
+        vivi: numFmtInt,
+        morti: numFmtInt,
+        totCampione: numFmtInt,
+        mortalita: numFmtDec2,
+      };
+
+      for (let r = 2; r <= filteredRows.length + 1; r++) {
+        const row = worksheet.getRow(r);
+        for (const [key, fmt] of Object.entries(numericColumns)) {
+          const colIdx = colKeyToIndex[key];
+          if (colIdx) {
+            const cell = row.getCell(colIdx);
+            if (cell.value != null && cell.value !== '') {
+              cell.numFmt = fmt;
+            }
+          }
+        }
+      }
 
       // Abilita AutoFilter per tutte le colonne
       worksheet.autoFilter = {
