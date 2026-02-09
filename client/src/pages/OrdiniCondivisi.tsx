@@ -41,7 +41,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import '../styles/spreadsheet.css';
 
 interface RigaOrdine {
@@ -747,7 +747,7 @@ export default function OrdiniCondivisi() {
     },
   });
 
-  const esportaOrdini = () => {
+  const esportaOrdini = async () => {
     if (ordiniFiltrati.length === 0) {
       toast({
         title: '⚠️ Nessun ordine da esportare',
@@ -757,57 +757,220 @@ export default function OrdiniCondivisi() {
       return;
     }
 
-    const datiEsportazione = ordiniFiltrati.flatMap(ordine => {
-      const consegneOrdine = getConsegnePerOrdine(ordine.id);
-      const righeOrdine = getRigheOrdine(ordine.id);
-      
-      const rigaBase = {
-        'Numero Ordine': ordine.numero || '',
-        'Cliente': ordine.clienteNome || '',
-        'Data Ordine': ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
-        'Stato': ordine.stato || '',
-        'Quantità Totale Ordine': ordine.quantitaTotale || 0,
-        'Taglia Ordine': ordine.tagliaRichiesta || '',
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'FLUPSY Management System';
+      workbook.created = new Date();
+
+      const ws = workbook.addWorksheet('Ordini', {
+        views: [{ state: 'frozen', ySplit: 1 }],
+      });
+
+      const headerFill: ExcelJS.Fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E3A5F' },
+      };
+      const headerFont: Partial<ExcelJS.Font> = {
+        bold: true,
+        color: { argb: 'FFFFFFFF' },
+        size: 11,
+      };
+      const headerBorder: Partial<ExcelJS.Borders> = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } },
+      };
+      const cellBorder: Partial<ExcelJS.Borders> = {
+        top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+      };
+      const altRowFill: ExcelJS.Fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF5F5F5' },
       };
 
-      const righe = righeOrdine.map(riga => ({
-        ...rigaBase,
-        'Tipo Riga': 'Dettaglio Prodotto',
-        'Riga N.': riga.rigaNumero || '',
-        'Codice Prodotto': riga.codiceProdotto || '',
-        'Taglia': riga.taglia || '',
-        'Descrizione': riga.descrizione || '',
-        'Quantità': riga.quantita || 0,
-        'Prezzo Unitario (€)': riga.prezzoUnitario || 0,
-        'Importo (€)': riga.importoRiga || 0,
-      }));
+      const columns = [
+        { header: 'N. Ordine', key: 'numero', width: 12 },
+        { header: 'Cliente', key: 'cliente', width: 35 },
+        { header: 'Data Ordine', key: 'dataOrdine', width: 14 },
+        { header: 'Data Consegna', key: 'dataConsegna', width: 14 },
+        { header: 'Stato', key: 'stato', width: 14 },
+        { header: 'Taglia', key: 'taglia', width: 10 },
+        { header: 'Quantita Totale', key: 'quantitaTotale', width: 18 },
+        { header: 'Quantita Consegnata', key: 'quantitaConsegnata', width: 20 },
+        { header: 'Residuo', key: 'residuo', width: 16 },
+        { header: 'Tipo Riga', key: 'tipoRiga', width: 16 },
+        { header: 'Codice Prodotto', key: 'codiceProdotto', width: 18 },
+        { header: 'Descrizione', key: 'descrizione', width: 30 },
+        { header: 'Quantita Riga', key: 'quantitaRiga', width: 16 },
+        { header: 'Prezzo Unit. (EUR)', key: 'prezzoUnitario', width: 18 },
+        { header: 'Importo (EUR)', key: 'importo', width: 16 },
+        { header: 'Note', key: 'note', width: 30 },
+      ];
+      ws.columns = columns;
 
-      const consegneRighe = consegneOrdine.map(consegna => ({
-        ...rigaBase,
-        'Tipo Riga': 'Consegna',
-        'Data Consegna': consegna.dataConsegna ? format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it }) : '',
-        'Quantità Consegnata': consegna.quantitaConsegnata || 0,
-        'App Origine': consegna.appOrigine === 'delta_futuro' ? 'SandNursery' : 'Flupsy',
-        'Note Consegna': consegna.note || '',
-      }));
+      const headerRow = ws.getRow(1);
+      headerRow.height = 22;
+      headerRow.eachCell((cell) => {
+        cell.fill = headerFill;
+        cell.font = headerFont;
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = headerBorder;
+      });
 
-      return [...righe, ...consegneRighe];
-    });
+      let rowIndex = 0;
+      ordiniFiltrati.forEach(ordine => {
+        const consegneOrdine = getConsegnePerOrdine(ordine.id);
+        const righeOrdine = getRigheOrdine(ordine.id);
+        const totaleConsegnato = consegneOrdine.reduce((sum, c) => sum + (c.quantitaConsegnata || 0), 0);
+        const residuo = (ordine.quantitaTotale || 0) - totaleConsegnato;
 
-    const ws = XLSX.utils.json_to_sheet(datiEsportazione);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Ordini Filtrati');
+        if (righeOrdine.length === 0 && consegneOrdine.length === 0) {
+          const r = ws.addRow({
+            numero: ordine.numero || '',
+            cliente: ordine.clienteNome || '',
+            dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
+            dataConsegna: '',
+            stato: ordine.stato || '',
+            taglia: ordine.tagliaRichiesta || '',
+            quantitaTotale: ordine.quantitaTotale || 0,
+            quantitaConsegnata: totaleConsegnato,
+            residuo: residuo,
+            tipoRiga: 'Riepilogo',
+            codiceProdotto: '',
+            descrizione: '',
+            quantitaRiga: null,
+            prezzoUnitario: null,
+            importo: null,
+            note: '',
+          });
+          applyRowStyle(r, rowIndex, cellBorder, altRowFill);
+          rowIndex++;
+        }
 
-    const dataOggi = format(new Date(), 'dd-MM-yyyy');
-    const nomeFile = `ordini_${filtroStato !== 'tutti' ? filtroStato.toLowerCase() + '_' : ''}${dataOggi}.xlsx`;
-    
-    XLSX.writeFile(wb, nomeFile);
+        righeOrdine.forEach(riga => {
+          const r = ws.addRow({
+            numero: ordine.numero || '',
+            cliente: ordine.clienteNome || '',
+            dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
+            dataConsegna: '',
+            stato: ordine.stato || '',
+            taglia: riga.taglia || ordine.tagliaRichiesta || '',
+            quantitaTotale: ordine.quantitaTotale || 0,
+            quantitaConsegnata: totaleConsegnato,
+            residuo: residuo,
+            tipoRiga: 'Prodotto',
+            codiceProdotto: riga.codiceProdotto || '',
+            descrizione: riga.descrizione || '',
+            quantitaRiga: riga.quantita || 0,
+            prezzoUnitario: riga.prezzoUnitario || 0,
+            importo: riga.importoRiga || 0,
+            note: '',
+          });
+          applyRowStyle(r, rowIndex, cellBorder, altRowFill);
+          rowIndex++;
+        });
 
-    toast({
-      title: '✅ Esportazione completata',
-      description: `${ordiniFiltrati.length} ordini esportati in ${nomeFile}`,
-    });
+        consegneOrdine.forEach(consegna => {
+          const r = ws.addRow({
+            numero: ordine.numero || '',
+            cliente: ordine.clienteNome || '',
+            dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
+            dataConsegna: consegna.dataConsegna ? format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it }) : '',
+            stato: ordine.stato || '',
+            taglia: ordine.tagliaRichiesta || '',
+            quantitaTotale: ordine.quantitaTotale || 0,
+            quantitaConsegnata: consegna.quantitaConsegnata || 0,
+            residuo: residuo,
+            tipoRiga: 'Consegna',
+            codiceProdotto: '',
+            descrizione: consegna.appOrigine === 'delta_futuro' ? 'SandNursery' : 'Flupsy',
+            quantitaRiga: consegna.quantitaConsegnata || 0,
+            prezzoUnitario: null,
+            importo: null,
+            note: consegna.note || '',
+          });
+          applyRowStyle(r, rowIndex, cellBorder, altRowFill);
+          rowIndex++;
+        });
+      });
+
+      const numFmtInt = '#,##0';
+      const numFmtDec2 = '#,##0.00';
+      const numericCols: Record<string, string> = {
+        quantitaTotale: numFmtInt,
+        quantitaConsegnata: numFmtInt,
+        residuo: numFmtInt,
+        quantitaRiga: numFmtInt,
+        prezzoUnitario: numFmtDec2,
+        importo: numFmtDec2,
+      };
+      const colKeyToIdx: Record<string, number> = {};
+      columns.forEach((c, i) => { colKeyToIdx[c.key] = i + 1; });
+
+      for (let r = 2; r <= rowIndex + 1; r++) {
+        const row = ws.getRow(r);
+        for (const [key, fmt] of Object.entries(numericCols)) {
+          const colIdx = colKeyToIdx[key];
+          if (colIdx) {
+            const cell = row.getCell(colIdx);
+            if (cell.value != null && cell.value !== '') {
+              cell.numFmt = fmt;
+            }
+          }
+        }
+      }
+
+      ws.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: rowIndex + 1, column: columns.length },
+      };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dataOggi = format(new Date(), 'dd-MM-yyyy');
+      a.download = `ordini_${filtroStato !== 'tutti' ? filtroStato.toLowerCase() + '_' : ''}${dataOggi}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: '✅ Esportazione completata',
+        description: `${ordiniFiltrati.length} ordini esportati in Excel`,
+      });
+    } catch (error) {
+      console.error('Errore export Excel ordini:', error);
+      toast({
+        title: 'Errore export',
+        description: 'Si e verificato un errore durante l\'esportazione',
+        variant: 'destructive',
+      });
+    }
   };
+
+  function applyRowStyle(
+    row: ExcelJS.Row,
+    index: number,
+    border: Partial<ExcelJS.Borders>,
+    altFill: ExcelJS.Fill,
+  ) {
+    row.eachCell((cell) => {
+      cell.border = border;
+      cell.alignment = { vertical: 'middle' };
+    });
+    if (index % 2 === 1) {
+      row.eachCell((cell) => {
+        cell.fill = altFill;
+      });
+    }
+  }
 
   if (loadingOrdini) {
     return (
