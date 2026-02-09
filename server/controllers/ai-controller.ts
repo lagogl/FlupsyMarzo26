@@ -1138,13 +1138,16 @@ export function registerAIRoutes(app: Express) {
         ['Mortalità T10 (%)', mortalityRates.T10 * 100, 'Mortalità mensile applicata durante fase T10 (seme grande)'],
         [''],
         ['=== INVENTARIO INIZIALE (da operazioni attive) ==='],
-        ['Taglia Vendita', 'Animali', 'Criterio Classificazione'],
-        ['TP-1000 (Seme)', inventoryByCategory['TP-1000'] || 0, 'Animali con animals_per_kg > 97.000'],
-        ['TP-2000', inventoryByCategory['TP-2000'] || 0, 'Animali con animals_per_kg tra 29.001 e 97.000'],
-        ['TP-3000', inventoryByCategory['TP-3000'] || 0, 'Animali con animals_per_kg tra 15.001 e 29.000'],
-        ['TP-4000', inventoryByCategory['TP-4000'] || 0, 'Animali con animals_per_kg tra 9.001 e 15.000'],
-        ['TP-5000', inventoryByCategory['TP-5000'] || 0, 'Animali con animals_per_kg <= 9.000'],
-        ['TOTALE INVENTARIO', Object.values(inventoryByCategory).reduce((sum: number, v) => sum + (v as number || 0), 0), 'Somma di tutte le taglie'],
+        ['Taglia', 'Animali'],
+        ...Object.entries(inventoryByCategory)
+          .filter(([_, v]) => (v as number) > 0)
+          .sort(([a], [b]) => {
+            const numA = parseInt(a.replace(/\D/g, '')) || 0;
+            const numB = parseInt(b.replace(/\D/g, '')) || 0;
+            return numA - numB;
+          })
+          .map(([size, count]) => [size, count]),
+        ['TOTALE INVENTARIO', Object.values(inventoryByCategory).reduce((sum: number, v) => sum + (v as number || 0), 0)],
         [''],
         ['=== ORDINI TOTALI ASSOLUTI (da Fatture in Cloud) ==='],
         ['Taglia', 'Ordini Totali', 'Categoria', '% sul Totale']

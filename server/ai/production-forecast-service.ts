@@ -254,27 +254,13 @@ export class ProductionForecastService {
         ORDER BY o.basket_id, o.date DESC, o.id DESC
       )
       SELECT 
-        CASE 
-          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
-          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
-          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
-          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
-          ELSE 'TP-1000'
-        END as size_category,
+        size_name as size_category,
         size_name,
         SUM(animal_count) as total_animals,
         MIN(min_animals_per_kg) || '-' || MAX(max_animals_per_kg) as animals_per_kg_range
       FROM latest_ops
-      GROUP BY 
-        CASE 
-          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
-          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
-          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
-          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
-          ELSE 'TP-1000'
-        END,
-        size_name
-      ORDER BY size_category, size_name
+      GROUP BY size_name
+      ORDER BY MIN(min_animals_per_kg) DESC
     `);
 
     return (inventory.rows as any[]).map(row => ({
@@ -290,8 +276,8 @@ export class ProductionForecastService {
       WITH latest_ops AS (
         SELECT DISTINCT ON (o.basket_id) 
           o.basket_id,
-          o.animals_per_kg,
-          o.animal_count
+          o.animal_count,
+          s.name as size_name
         FROM operations o
         JOIN baskets b ON b.id = o.basket_id
         JOIN sizes s ON s.id = o.size_id
@@ -301,23 +287,10 @@ export class ProductionForecastService {
         ORDER BY o.basket_id, o.date DESC, o.id DESC
       )
       SELECT 
-        CASE 
-          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
-          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
-          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
-          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
-          ELSE 'TP-1000'
-        END as size_category,
+        size_name as size_category,
         SUM(animal_count) as total_animals
       FROM latest_ops
-      GROUP BY 
-        CASE 
-          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
-          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
-          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
-          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
-          ELSE 'TP-1000'
-        END
+      GROUP BY size_name
     `);
 
     const inventory: Record<string, number> = {};
@@ -492,14 +465,44 @@ export class ProductionForecastService {
     }).filter(b => b.animalCount > 0);
   }
 
-  static SALE_SIZES = ['TP-1000', 'TP-2000', 'TP-3000', 'TP-4000', 'TP-5000'];
+  static SALE_SIZES = [
+    'TP-10000', 'TP-9000', 'TP-8000', 'TP-7000', 'TP-6000', 'TP-5500',
+    'TP-5000', 'TP-4500', 'TP-4000', 'TP-3500', 'TP-3000', 'TP-2800',
+    'TP-2500', 'TP-2000', 'TP-1900', 'TP-1800', 'TP-1500', 'TP-1260',
+    'TP-1140', 'TP-1000', 'TP-800', 'TP-700', 'TP-600', 'TP-500',
+    'TP-450', 'TP-350', 'TP-300', 'TP-250', 'TP-180'
+  ];
 
   static SALE_SIZE_THRESHOLDS = [
+    { size: 'TP-10000', maxAnimalsPerKg: 1200 },
+    { size: 'TP-9000', maxAnimalsPerKg: 1800 },
+    { size: 'TP-8000', maxAnimalsPerKg: 2300 },
+    { size: 'TP-7000', maxAnimalsPerKg: 3000 },
+    { size: 'TP-6000', maxAnimalsPerKg: 3900 },
+    { size: 'TP-5500', maxAnimalsPerKg: 6000 },
     { size: 'TP-5000', maxAnimalsPerKg: 9000 },
+    { size: 'TP-4500', maxAnimalsPerKg: 13000 },
     { size: 'TP-4000', maxAnimalsPerKg: 15000 },
+    { size: 'TP-3500', maxAnimalsPerKg: 20000 },
     { size: 'TP-3000', maxAnimalsPerKg: 29000 },
+    { size: 'TP-2800', maxAnimalsPerKg: 40000 },
+    { size: 'TP-2500', maxAnimalsPerKg: 70000 },
     { size: 'TP-2000', maxAnimalsPerKg: 97000 },
-    { size: 'TP-1000', maxAnimalsPerKg: Infinity },
+    { size: 'TP-1900', maxAnimalsPerKg: 120000 },
+    { size: 'TP-1800', maxAnimalsPerKg: 190000 },
+    { size: 'TP-1500', maxAnimalsPerKg: 300000 },
+    { size: 'TP-1260', maxAnimalsPerKg: 350000 },
+    { size: 'TP-1140', maxAnimalsPerKg: 600000 },
+    { size: 'TP-1000', maxAnimalsPerKg: 880000 },
+    { size: 'TP-800', maxAnimalsPerKg: 1000000 },
+    { size: 'TP-700', maxAnimalsPerKg: 1900000 },
+    { size: 'TP-600', maxAnimalsPerKg: 2000000 },
+    { size: 'TP-500', maxAnimalsPerKg: 8000000 },
+    { size: 'TP-450', maxAnimalsPerKg: 15000000 },
+    { size: 'TP-350', maxAnimalsPerKg: 20000000 },
+    { size: 'TP-300', maxAnimalsPerKg: 30000000 },
+    { size: 'TP-250', maxAnimalsPerKg: 70000000 },
+    { size: 'TP-180', maxAnimalsPerKg: Infinity },
   ];
 
   mapAnimalsPerKgToSaleSize(animalsPerKg: number): string {
@@ -511,12 +514,17 @@ export class ProductionForecastService {
 
   mapOrderSizeToSaleSize(tagliaCode: string): string | null {
     if (!tagliaCode) return null;
+    const normalized = tagliaCode.toUpperCase().trim().replace(/\s+/g, '').replace(/\./g, '').replace(/,/g, '');
+    if (ProductionForecastService.SALE_SIZES.includes(normalized)) return normalized;
+    if (!normalized.startsWith('TP-') && normalized.startsWith('TP')) {
+      const withDash = 'TP-' + normalized.substring(2);
+      if (ProductionForecastService.SALE_SIZES.includes(withDash)) return withDash;
+    }
     const num = parseInt(tagliaCode.replace(/\D/g, '')) || 0;
-    if (num >= 5000) return 'TP-5000';
-    if (num >= 4000) return 'TP-4000';
-    if (num >= 3000) return 'TP-3000';
-    if (num >= 2000) return 'TP-2000';
-    if (num >= 1000) return 'TP-1000';
+    if (num > 0) {
+      const tpName = `TP-${num}`;
+      if (ProductionForecastService.SALE_SIZES.includes(tpName)) return tpName;
+    }
     return null;
   }
   
@@ -880,16 +888,20 @@ export class ProductionForecastService {
     
     let stockBySaleSize = this.aggregateBySaleSize(basketInventoryMutable);
 
+    const T3_SIZES = ['TP-2000', 'TP-2500', 'TP-2800', 'TP-3000', 'TP-3500'];
+    const T10_SIZES = ['TP-4000', 'TP-4500', 'TP-5000', 'TP-5500', 'TP-6000', 'TP-7000', 'TP-8000', 'TP-9000', 'TP-10000'];
+    const T1_SIZES = ProductionForecastService.SALE_SIZES.filter(s => !T3_SIZES.includes(s) && !T10_SIZES.includes(s));
+
     const mapBudgetToSaleSize = (category: string): string[] => {
-      if (category === 'T3') return ['TP-2000', 'TP-3000'];
-      if (category === 'T10') return ['TP-4000', 'TP-5000'];
-      return ['TP-1000'];
+      if (category === 'T3') return T3_SIZES;
+      if (category === 'T10') return T10_SIZES;
+      return T1_SIZES;
     };
 
     const getMortalityForSaleSize = (saleSize: string): number => {
-      if (saleSize === 'TP-1000') return mortalityRates.T1;
-      if (saleSize === 'TP-2000' || saleSize === 'TP-3000') return mortalityRates.T3;
-      return mortalityRates.T10;
+      if (T10_SIZES.includes(saleSize)) return mortalityRates.T10;
+      if (T3_SIZES.includes(saleSize)) return mortalityRates.T3;
+      return mortalityRates.T1;
     };
 
     for (let month = 1; month <= 12; month++) {
@@ -960,8 +972,8 @@ export class ProductionForecastService {
         const deficit = budgetAnimals - soldAnimals;
         let seminaT1Richiesta = 0;
         
-        const growthCategory = saleSize === 'TP-4000' || saleSize === 'TP-5000' ? 'T10' : 'T3';
-        const growthMonths = growthCategory === 'T3' ? 6 : 10;
+        const growthCategory = T10_SIZES.includes(saleSize) ? 'T10' : T3_SIZES.includes(saleSize) ? 'T3' : 'T1';
+        const growthMonths = growthCategory === 'T10' ? 10 : growthCategory === 'T3' ? 6 : 3;
         const cumulativeMortalityT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
         const cumulativeMortalityT3 = growthCategory === 'T10' 
           ? Math.pow(1 - mortalityRates.T3, 4) 

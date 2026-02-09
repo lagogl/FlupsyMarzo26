@@ -122,7 +122,7 @@ const getVarianceColor = (variance: number) => {
   return 'text-red-600';
 };
 
-const SALE_SIZES = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'] as const;
+const SALE_SIZES_DEFAULT = ['TP-2000', 'TP-2500', 'TP-2800', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-4500', 'TP-5000'] as const;
 
 export default function AnalisiScostamenti() {
   const currentYear = new Date().getFullYear();
@@ -139,12 +139,14 @@ export default function AnalisiScostamenti() {
   const [appliedMortalityT3, setAppliedMortalityT3] = useState<number>(3);
   const [appliedMortalityT10, setAppliedMortalityT10] = useState<number>(2);
 
-  // State per mortalità per taglia di vendita
   const [mortalityBySize, setMortalityBySize] = useState<Record<string, number>>({
     'TP-2000': 8,
+    'TP-2500': 10,
+    'TP-2800': 11,
     'TP-3000': 12,
     'TP-3500': 15,
     'TP-4000': 18,
+    'TP-4500': 19,
     'TP-5000': 20
   });
 
@@ -195,7 +197,7 @@ export default function AnalisiScostamenti() {
 
   const saveAllMortalities = async () => {
     try {
-      for (const size of SALE_SIZES) {
+      for (const size of Object.keys(mortalityBySize)) {
         await saveMortalityMutation.mutateAsync({
           saleSize: size,
           totalMortalityPercent: mortalityBySize[size]
@@ -399,7 +401,7 @@ export default function AnalisiScostamenti() {
                       const numB = parseInt(b.replace(/\D/g, '')) || 0;
                       return numA - numB;
                     })
-                : [...SALE_SIZES];
+                : [...SALE_SIZES_DEFAULT];
               
               return dynamicSizes.map(size => {
                 const isT3 = size.includes('2000') || size.includes('3000') || size.includes('3500');
@@ -475,10 +477,15 @@ export default function AnalisiScostamenti() {
             </p>
             {data.ordersAbsoluteBySize && Object.keys(data.ordersAbsoluteBySize).length > 0 && (
               <div className="mt-2 pt-2 border-t space-y-1">
-                {SALE_SIZES.map((sizeCode) => {
+                {Object.keys(data.ordersAbsoluteBySize || {}).sort((a, b) => {
+                  const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                  const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                  return numA - numB;
+                }).map((sizeCode) => {
                   const qty = data.ordersAbsoluteBySize?.[sizeCode] || 0;
                   if (qty === 0) return null;
-                  const isT3 = sizeCode.includes('2000') || sizeCode.includes('3000') || sizeCode.includes('3500');
+                  const sizeNum = parseInt(sizeCode.replace(/\D/g, '')) || 0;
+                  const isT3 = sizeNum >= 2000 && sizeNum < 4000;
                   return (
                     <div key={sizeCode} className="flex justify-between text-xs">
                       <span className={isT3 ? 'text-green-700' : 'text-purple-700'}>
@@ -973,8 +980,15 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
   const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   
-  // Taglie ordinate
-  const sizes = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'];
+  const sizes = [...new Set([
+    ...monthlyData.map(d => d.sizeCategory),
+    ...currentInventory.map(i => i.sizeName),
+    ...Object.keys(ordersAbsoluteBySize).filter(k => ordersAbsoluteBySize[k] > 0)
+  ])].sort((a, b) => {
+    const numA = parseInt(a.replace(/\D/g, '')) || 0;
+    const numB = parseInt(b.replace(/\D/g, '')) || 0;
+    return numA - numB;
+  });
   
   const askAI = async (question: string) => {
     setAiLoading(true);
@@ -1186,7 +1200,8 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
             const orders = getOrdersForSize(size);
             const orderMonths = getOrderMonthsForSize(size);
             const seedingReqs = getSeedingForSize(size);
-            const isT10 = size.includes('4000') || size.includes('5000');
+            const sizeNum = parseInt(size.replace(/\D/g, '')) || 0;
+            const isT10 = sizeNum >= 4000;
             const effectiveMort = getEffectiveMortality(size);
             const baseMort = mortalityBySize[size] || 0;
             const inventoryDelta = adjustedInventory - inventory;
