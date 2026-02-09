@@ -280,6 +280,76 @@ async function calculateGiacenzeForRange(startDate: Date, endDate: Date, flupsyI
       ${flupsyFilter}
   `);
 
+  // Query per entrate per taglia (prima-attivazione + ripopolamento)
+  const entratePerTagliaResult = await db.execute(sql`
+    SELECT COALESCE(s.code, 'N/A') as size_code, SUM(o.animal_count) as totale
+    FROM operations o
+    JOIN baskets b ON b.id = o.basket_id
+    LEFT JOIN sizes s ON o.size_id = s.id
+    WHERE o.type IN ('prima-attivazione', 'ripopolamento')
+      AND o.date >= ${dateFromStr}
+      AND o.date <= ${dateToStr}
+      ${flupsyFilter}
+    GROUP BY s.code
+  `);
+
+  // Query per uscite per taglia (vendita + cessazione)
+  const uscitePerTagliaResult = await db.execute(sql`
+    SELECT COALESCE(s.code, 'N/A') as size_code, SUM(o.animal_count) as totale
+    FROM operations o
+    JOIN baskets b ON b.id = o.basket_id
+    LEFT JOIN sizes s ON o.size_id = s.id
+    WHERE o.type IN ('vendita', 'cessazione')
+      AND o.date >= ${dateFromStr}
+      AND o.date <= ${dateToStr}
+      ${flupsyFilter}
+    GROUP BY s.code
+  `);
+
+  // Query per entrate per FLUPSY
+  const entratePerFlupsyResult = await db.execute(sql`
+    SELECT b.flupsy_id, SUM(o.animal_count) as totale
+    FROM operations o
+    JOIN baskets b ON b.id = o.basket_id
+    WHERE o.type IN ('prima-attivazione', 'ripopolamento')
+      AND o.date >= ${dateFromStr}
+      AND o.date <= ${dateToStr}
+      ${flupsyFilter}
+    GROUP BY b.flupsy_id
+  `);
+
+  // Query per uscite per FLUPSY
+  const uscitePerFlupsyResult = await db.execute(sql`
+    SELECT b.flupsy_id, SUM(o.animal_count) as totale
+    FROM operations o
+    JOIN baskets b ON b.id = o.basket_id
+    WHERE o.type IN ('vendita', 'cessazione')
+      AND o.date >= ${dateFromStr}
+      AND o.date <= ${dateToStr}
+      ${flupsyFilter}
+    GROUP BY b.flupsy_id
+  `);
+
+  // Mappa entrate/uscite per taglia
+  const entratePerTaglia = new Map<string, number>();
+  for (const row of entratePerTagliaResult.rows as any[]) {
+    entratePerTaglia.set(row.size_code, parseInt(row.totale) || 0);
+  }
+  const uscitePerTaglia = new Map<string, number>();
+  for (const row of uscitePerTagliaResult.rows as any[]) {
+    uscitePerTaglia.set(row.size_code, parseInt(row.totale) || 0);
+  }
+
+  // Mappa entrate/uscite per FLUPSY
+  const entratePerFlupsy = new Map<number, number>();
+  for (const row of entratePerFlupsyResult.rows as any[]) {
+    entratePerFlupsy.set(row.flupsy_id, parseInt(row.totale) || 0);
+  }
+  const uscitePerFlupsy = new Map<number, number>();
+  for (const row of uscitePerFlupsyResult.rows as any[]) {
+    uscitePerFlupsy.set(row.flupsy_id, parseInt(row.totale) || 0);
+  }
+
   // Calcola totale giacenza dall'ultima operazione di ogni cestello
   let totale_giacenza = 0;
   const taglieMap = new Map<string, number>();
@@ -304,22 +374,24 @@ async function calculateGiacenzeForRange(startDate: Date, endDate: Date, flupsyI
   const totale_entrate = parseInt((entrateResult.rows[0] as any)?.totale) || 0;
   const totale_uscite = parseInt((usciteResult.rows[0] as any)?.totale) || 0;
 
-  // Costruisci array dettaglio taglie
-  const dettaglio_taglie = Array.from(taglieMap.entries()).map(([code, giacenza]) => ({
+  // Costruisci array dettaglio taglie con entrate/uscite reali
+  const allSizeCodes = new Set([...taglieMap.keys(), ...entratePerTaglia.keys(), ...uscitePerTaglia.keys()]);
+  const dettaglio_taglie = Array.from(allSizeCodes).map((code) => ({
     code,
     name: code,
-    giacenza,
-    entrate: 0, // Non più calcolato per taglia (metrica storica)
-    uscite: 0
+    giacenza: taglieMap.get(code) || 0,
+    entrate: entratePerTaglia.get(code) || 0,
+    uscite: uscitePerTaglia.get(code) || 0
   }));
 
-  // Costruisci array dettaglio FLUPSY
-  const dettaglio_flupsys = Array.from(flupsysMap.entries()).map(([id, data]) => ({
+  // Costruisci array dettaglio FLUPSY con entrate/uscite reali
+  const allFlupsyIds = new Set([...flupsysMap.keys(), ...entratePerFlupsy.keys(), ...uscitePerFlupsy.keys()]);
+  const dettaglio_flupsys = Array.from(allFlupsyIds).map((id) => ({
     id,
-    name: data.name,
-    giacenza: data.giacenza,
-    entrate: 0, // Non più calcolato per FLUPSY (metrica storica)
-    uscite: 0
+    name: flupsysMap.get(id)?.name || `FLUPSY ${id}`,
+    giacenza: flupsysMap.get(id)?.giacenza || 0,
+    entrate: entratePerFlupsy.get(id) || 0,
+    uscite: uscitePerFlupsy.get(id) || 0
   }));
 
   const giorniAnalizzati = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
