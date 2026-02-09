@@ -60,6 +60,7 @@ import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-
 import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
 import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import { getBasketLotComposition } from "./services/basket-lot-composition.service";
+import { determineSizeByAnimalsPerKg } from "./utils/size-determination";
 import { operationsLifecycleService } from "./services/operations-lifecycle.service";
 
 // Importazione del router per le API esterne
@@ -2543,18 +2544,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ success: true, operation: operation, cycle: newCycle });
       }
       
-      // === GESTIONE OPERAZIONI MISURA ===
+      // === GESTIONE OPERAZIONI MISURA (ALLINEATA con direct-operations.ts) ===
       if (req.body.type === 'misura') {
-        const { basketId, date, animalCount, totalWeight, notes } = req.body;
+        const { basketId, date, totalWeight, notes, sampleWeight, liveAnimals, deadCount, animalsPerKg, manualCountAdjustment } = req.body;
+        let { animalCount } = req.body;
         
-        console.log("🔍 MISURA - Validazione parametri:", { basketId, date, animalCount, totalWeight });
+        console.log("🔍 MISURA ALLINEATA - Validazione parametri:", { basketId, date, animalCount, totalWeight, sampleWeight, liveAnimals, deadCount, animalsPerKg });
         
-        // Validazione base
         if (!basketId || !date) {
           return res.status(400).json({ message: "basketId e date sono obbligatori per operazioni misura" });
         }
         
-        // Verifica cestello esistente
         const [basket] = await db.select().from(schema.baskets).where(eq(schema.baskets.id, basketId)).limit(1);
         if (!basket) {
           return res.status(404).json({ message: "Cestello non trovato" });
@@ -2564,13 +2564,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Il cestello deve essere attivo per operazioni di misura" });
         }
         
-        // Usa il ciclo attivo del cestello (non creare uno nuovo!)
         const cycleId = basket.currentCycleId;
         if (!cycleId) {
           return res.status(400).json({ message: "Cestello non ha un ciclo attivo" });
         }
         
-        // Verifica ciclo esistente
         const [cycle] = await db.select().from(schema.cycles).where(eq(schema.cycles.id, cycleId)).limit(1);
         if (!cycle) {
           return res.status(404).json({ message: "Ciclo attivo non trovato" });
@@ -2578,20 +2576,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const formattedDate = format(new Date(date), 'yyyy-MM-dd');
         
-        // 🎯 LOTTI MISTI: Arricchire note e metadata se il cestello ha lotti misti
+        // === VALIDAZIONE DATE (ordine cronologico) ===
+        const existingOps = await db
+          .select()
+          .from(schema.operations)
+          .where(
+            and(
+              eq(schema.operations.basketId, basketId),
+              eq(schema.operations.cycleId, cycleId)
+            )
+          )
+          .orderBy(sql`${schema.operations.date} DESC`);
+        
+        const sameDate = existingOps.find(op => op.date === formattedDate);
+        if (sameDate) {
+          return res.status(400).json({ message: `Esiste già un'operazione per la cesta ${basket.physicalNumber} nella data ${formattedDate}. Ogni cesta può avere massimo una operazione per data.` });
+        }
+        
+        if (existingOps.length > 0) {
+          const lastOp = existingOps[0];
+          const lastDate = new Date(lastOp.date);
+          const opDate = new Date(formattedDate);
+          
+          if (opDate <= lastDate) {
+            const nextValidDate = new Date(lastDate);
+            nextValidDate.setDate(nextValidDate.getDate() + 1);
+            const lastDateFormatted = lastDate.toLocaleDateString('it-IT');
+            const nextValidDateStr = nextValidDate.toLocaleDateString('it-IT');
+            return res.status(400).json({ message: `⚠️ Data non valida: Il cestello #${basket.physicalNumber} ha già un'operazione più recente del ${lastDateFormatted}. Per registrare una nuova operazione, usa una data dal ${nextValidDateStr} in poi.` });
+          }
+        }
+        
+        console.log("✅ MISURA ALLINEATA - Validazione date completata");
+        
+        // === ENFORZA LOTTO DEL CICLO ATTIVO ===
+        const enforcedLotId = cycle.lotId;
+        console.log(`✅ MISURA ALLINEATA - Lotto forzato dal ciclo attivo: ${enforcedLotId}`);
+        
+        // === CALCOLO animalsPerKg DA liveAnimals/sampleWeight (come direct-operations) ===
+        let calculatedAnimalsPerKg = animalsPerKg ? Number(animalsPerKg) : null;
+        
+        if (!calculatedAnimalsPerKg && liveAnimals && sampleWeight && sampleWeight > 0) {
+          calculatedAnimalsPerKg = Math.round((liveAnimals / sampleWeight) * 1000);
+          console.log(`📊 MISURA ALLINEATA - animalsPerKg calcolato da campione: ${calculatedAnimalsPerKg} (${liveAnimals} vivi / ${sampleWeight}g × 1000)`);
+        }
+        
+        // === CALCOLO animalCount SE MANCANTE ===
+        if (!animalCount && liveAnimals && sampleWeight && totalWeight) {
+          animalCount = Math.round((liveAnimals / sampleWeight) * totalWeight);
+          console.log(`📊 MISURA ALLINEATA - AnimalCount calcolato: ${animalCount}`);
+        }
+        
+        // === CALCOLO averageWeight E sizeId ===
+        let calculatedAverageWeight: number | null = null;
+        let calculatedSizeId: number | null = null;
+        
+        if (calculatedAnimalsPerKg && calculatedAnimalsPerKg > 0) {
+          calculatedAverageWeight = 1000000 / calculatedAnimalsPerKg;
+          console.log(`📊 MISURA ALLINEATA - averageWeight: ${calculatedAverageWeight}, animalsPerKg: ${calculatedAnimalsPerKg}`);
+          
+          const appropriateSizeId = await determineSizeByAnimalsPerKg(calculatedAnimalsPerKg);
+          if (appropriateSizeId) {
+            calculatedSizeId = appropriateSizeId;
+            console.log(`📊 MISURA ALLINEATA - Taglia calcolata automaticamente: sizeId=${calculatedSizeId}`);
+          }
+        }
+        
+        // === MORTALITÀ CUMULATIVA ===
+        let finalAnimalCount = animalCount || null;
+        let calculatedMortalityRate = null;
+        let calculatedSampleCount = null;
         let operationNotes = notes || null;
+        
+        const primaAttivazioneResult = await db
+          .select({ animalCount: schema.operations.animalCount })
+          .from(schema.operations)
+          .where(
+            and(
+              eq(schema.operations.cycleId, cycleId),
+              eq(schema.operations.type, 'prima-attivazione')
+            )
+          )
+          .orderBy(sql`${schema.operations.id} ASC`)
+          .limit(1);
+        
+        const lastOperationResult = await db
+          .select({ animalCount: schema.operations.animalCount })
+          .from(schema.operations)
+          .where(eq(schema.operations.cycleId, cycleId))
+          .orderBy(sql`${schema.operations.id} DESC`)
+          .limit(1);
+        
+        const originalCount = primaAttivazioneResult.length > 0 ? primaAttivazioneResult[0].animalCount || 0 : 0;
+        const lastCount = lastOperationResult.length > 0 ? lastOperationResult[0].animalCount || 0 : originalCount;
+        
+        console.log(`📊 MISURA ALLINEATA - Prima attivazione: ${originalCount} animali, Ultima operazione: ${lastCount} animali`);
+        
+        const hasMortality = deadCount && deadCount > 0;
+        const effectiveLiveAnimals = liveAnimals || 0;
+        const effectiveDeadCount = deadCount || 0;
+        const totalSample = effectiveLiveAnimals + effectiveDeadCount;
+        
+        if (hasMortality && totalSample > 0) {
+          const mortalityRate = effectiveDeadCount / totalSample;
+          const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
+          finalAnimalCount = Math.min(calculatedCount, lastCount);
+          calculatedMortalityRate = mortalityRate * 100;
+          calculatedSampleCount = totalSample;
+          
+          console.log(`🔴 MISURA ALLINEATA - Mortalità: ${(mortalityRate * 100).toFixed(2)}%`);
+          console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
+          console.log(`   Vincolo (min con ${lastCount}): ${finalAnimalCount}`);
+        } else if (!manualCountAdjustment) {
+          const calculatedLiveAnimals = calculatedAnimalsPerKg && totalWeight
+            ? Math.round((totalWeight / 1000) * calculatedAnimalsPerKg)
+            : effectiveLiveAnimals;
+          
+          if (calculatedLiveAnimals > 0 && calculatedLiveAnimals < lastCount) {
+            const unexplainedDifference = lastCount - calculatedLiveAnimals;
+            const unexplainedPercent = ((unexplainedDifference / lastCount) * 100).toFixed(1);
+            
+            console.log(`🟡 MISURA ALLINEATA - Riduzione senza morti: -${unexplainedDifference} (${unexplainedPercent}%)`);
+            finalAnimalCount = calculatedLiveAnimals;
+            calculatedMortalityRate = 0;
+            
+            const autoNote = `[Auto] Differenza non spiegata: -${unexplainedDifference.toLocaleString('it-IT')} animali (${unexplainedPercent}%) rispetto all'ultimo conteggio`;
+            operationNotes = operationNotes 
+              ? `${operationNotes} | ${autoNote}`
+              : autoNote;
+          } else if (calculatedLiveAnimals > 0 && calculatedLiveAnimals >= lastCount) {
+            console.log(`🟢 MISURA ALLINEATA - Nessuna riduzione: Campione=${calculatedLiveAnimals}, Mantiene=${lastCount}`);
+            finalAnimalCount = lastCount;
+            calculatedMortalityRate = 0;
+          } else {
+            console.log(`🟢 MISURA ALLINEATA - Nessun dato campione: Mantiene=${lastCount}`);
+            finalAnimalCount = lastCount;
+            calculatedMortalityRate = 0;
+          }
+        }
+        
+        // === LOTTI MISTI: Arricchire note e metadata ===
         let operationMetadata = null;
         const lotComposition = await getBasketLotComposition(basketId, cycleId);
         
         if (lotComposition && lotComposition.length > 1) {
-          console.log(`🎯 BYPASS MISURA - Cestello ${basketId} ha ${lotComposition.length} lotti - COMPOSIZIONE MISTA`);
+          console.log(`🎯 MISURA ALLINEATA - Cestello ${basketId} ha ${lotComposition.length} lotti - COMPOSIZIONE MISTA`);
           
-          // Trova lotto dominante (quello con maggior percentuale)
           const dominantLot = lotComposition.reduce((max, comp) => 
             (comp.percentage || 0) > (max.percentage || 0) ? comp : max
           , lotComposition[0]);
           
-          // Costruisci descrizione lotti misti con dettagli per le note
           const lotDetails = await Promise.all(
             lotComposition.map(async (comp: any) => {
               const lot = await storage.getLot(comp.lotId);
@@ -2613,7 +2747,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? `${operationNotes}\n${mixedLotNote}` 
             : mixedLotNote;
           
-          // 🎯 METADATA: Aggiungi metadata strutturati per tracciamento completo
           operationMetadata = JSON.stringify({
             isMixed: true,
             dominantLot: dominantLot.lotId,
@@ -2624,25 +2757,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
               animalCount: l.animalCount
             }))
           });
-          
-          console.log(`🎯 BYPASS MISURA - Note arricchite: ${operationNotes}`);
-          console.log(`🎯 BYPASS MISURA - Metadata aggiunti: ${operationMetadata}`);
         }
         
-        // Crea operazione misura senza .returning() per evitare deadlock
+        // === INSERIMENTO OPERAZIONE ===
         await db.insert(schema.operations).values({
           basketId,
           cycleId,
-          lotId: cycle.lotId,
+          lotId: enforcedLotId,
           type: 'misura',
           date: formattedDate,
-          animalCount: animalCount || null,
+          animalCount: finalAnimalCount,
           totalWeight: totalWeight || null,
+          animalsPerKg: calculatedAnimalsPerKg,
+          averageWeight: calculatedAverageWeight,
+          sizeId: calculatedSizeId,
+          deadCount: effectiveDeadCount,
+          mortalityRate: calculatedMortalityRate,
+          sampleCount: calculatedSampleCount,
           notes: operationNotes,
           metadata: operationMetadata
         });
         
-        console.log("🎉 OPERAZIONE MISURA CREATA - Cestello:", basketId, "Ciclo attivo:", cycleId);
+        console.log("🎉 MISURA ALLINEATA - Operazione creata con successo - Cestello:", basketId, "Ciclo:", cycleId, "AnimalCount:", finalAnimalCount, "SizeId:", calculatedSizeId);
         return res.json({ 
           success: true, 
           message: "Operazione misura creata con successo",
