@@ -293,6 +293,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/target-size-annotations', targetSizeModule.targetSizeAnnotationsRoutes);
   console.log('✅ Modulo TARGET-SIZE-ANNOTATIONS registrato su /api/target-size-annotations/*');
 
+  // Registra il modulo VERIFICA COPERTURA ORDINI
+  const orderCoverageModule = await import('./modules/planning/order-coverage');
+  app.use('/api/verifica-copertura', orderCoverageModule.orderCoverageRoutes);
+  console.log('✅ Modulo VERIFICA COPERTURA ORDINI registrato su /api/verifica-copertura/*');
+
   // Registra il modulo SCREENING
   registerScreeningRoutes(app);
 

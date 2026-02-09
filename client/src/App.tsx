@@ -75,6 +75,8 @@ import TaskManagement from "@/pages/TaskManagement";
 import AttivitaConsigliate from "@/pages/AttivitaConsigliate";
 // Importazione Analisi Scostamenti Produzione
 import AnalisiScostamenti from "@/pages/AnalisiScostamenti";
+// Importazione Verifica Copertura Ordini
+import VerificaCoperturaOrdini from "@/pages/VerificaCoperturaOrdini";
 // Importazione Operators (Gestione Operatori)
 import Operators from "@/pages/Operators";
 // Importazione Menu Settings (Impostazioni Personali)
@@ -148,6 +150,7 @@ function Router() {
       <ProtectedRoute path="/ai-enhanced" component={AIEnhanced}/>
       <ProtectedRoute path="/attivita-consigliate" component={AttivitaConsigliate}/>
       <ProtectedRoute path="/analisi-scostamenti" component={AnalisiScostamenti}/>
+      <ProtectedRoute path="/verifica-copertura" component={VerificaCoperturaOrdini}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
       <ProtectedRoute path="/task-management" component={TaskManagement}/>
