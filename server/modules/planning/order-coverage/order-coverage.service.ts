@@ -98,14 +98,7 @@ export class OrderCoverageService {
     const endMonth = Math.min(12, startMonth + months - 1);
 
     for (let month = startMonth; month <= endMonth; month++) {
-      if (month === currentMonth) {
-        const daysInMonth = new Date(year, month, 0).getDate();
-        const currentDay = today.getDate();
-        const remainingDays = Math.max(0, daysInMonth - currentDay);
-        if (remainingDays > 0) {
-          baskets = productionForecastService.simulateMonthlyGrowth(baskets, sgrLookup, month - 1, mortalityRates, remainingDays);
-        }
-      } else {
+      if (month !== currentMonth) {
         baskets = productionForecastService.simulateMonthlyGrowth(baskets, sgrLookup, month - 1, mortalityRates);
       }
 
