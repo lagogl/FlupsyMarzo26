@@ -431,6 +431,7 @@ export default function VerificaCoperturaOrdini() {
                   />
                   <Legend />
                   <Bar dataKey="giacenza" name="Giacenza Disponibile" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="ordini" name="Ordini Totali" fill="#a855f7" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="soddisfatti" name="Ordini Soddisfatti" fill="#10b981" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="gap" name="Gap" radius={[4, 4, 0, 0]}>
                     {chartData.map((entry, index) => (
