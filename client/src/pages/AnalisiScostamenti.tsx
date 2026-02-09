@@ -1287,7 +1287,12 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                             <div className="font-bold">{size} - {m.name}</div>
                             <div>Ordini: {formatNumber(orderInMonth.orders)}</div>
                             <div className={orderInMonth.variance >= 0 ? 'text-green-400' : 'text-red-400'}>
-                              {orderInMonth.variance >= 0 ? '✅ Coperto' : '❌ Gap'}: {formatNumber(Math.abs(orderInMonth.variance))}
+                              {orderInMonth.variance > 0 
+                                ? `✅ Coperto (+${formatNumber(orderInMonth.variance)} surplus)`
+                                : orderInMonth.variance === 0
+                                  ? '✅ Coperto al 100%'
+                                  : `❌ Gap: ${formatNumber(Math.abs(orderInMonth.variance))}`
+                              }
                             </div>
                           </div>
                         )}
