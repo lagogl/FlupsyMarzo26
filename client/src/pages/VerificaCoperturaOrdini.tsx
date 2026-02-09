@@ -182,40 +182,51 @@ export default function VerificaCoperturaOrdini() {
     });
 
     const wsDetail = wb.addWorksheet("Dettaglio Taglie");
-    const detailCols: Partial<ExcelJS.Column>[] = [
-      { header: "Taglia", key: "taglia", width: 12 },
-      { header: "Giac. Iniziale", key: "giacIniz", width: 16 },
-      ...data.timeline.map(t => ({ header: `${t.monthShort} Giac`, key: `g${t.month}`, width: 14 })),
-      ...data.timeline.map(t => ({ header: `${t.monthShort} Ord`, key: `o${t.month}`, width: 14 })),
-      ...data.timeline.map(t => ({ header: `${t.monthShort} Sodd`, key: `s${t.month}`, width: 14 })),
-      ...data.timeline.map(t => ({ header: `${t.monthShort} Gap`, key: `p${t.month}`, width: 14 })),
-      { header: "Tot Ordini", key: "totOrd", width: 14 },
-      { header: "Tot Soddisfatti", key: "totSodd", width: 16 },
-      { header: "Tot Gap", key: "totGap", width: 12 },
-      { header: "Copertura %", key: "cop", width: 14 },
-    ];
-    wsDetail.columns = detailCols;
 
-    sizesWithData.forEach(size => {
-      const r = data.riepilogoPerTaglia[size];
-      const rowData: Record<string, string | number> = {
-        taglia: size,
-        giacIniz: r.giacenzaIniziale,
-        totOrd: r.totaleOrdini,
-        totSodd: r.totaleSoddisfatti,
-        totGap: r.totaleGap,
-        cop: r.coperturaPct,
-      };
-      data.timeline.forEach(t => {
-        const cell = t.perTaglia[size];
-        rowData[`g${t.month}`] = cell?.giacenzaPre || 0;
-        rowData[`o${t.month}`] = cell?.ordini || 0;
-        rowData[`s${t.month}`] = cell?.soddisfatti || 0;
-        rowData[`p${t.month}`] = cell?.gap || 0;
+    const sectionFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+    const sectionFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 12 };
+
+    const addSection = (title: string, metric: 'giacenzaPre' | 'ordini' | 'soddisfatti' | 'gap') => {
+      const titleRow = wsDetail.addRow([title]);
+      titleRow.font = sectionFont;
+      titleRow.fill = sectionFill;
+      wsDetail.mergeCells(titleRow.number, 1, titleRow.number, sizesWithData.length + 1);
+
+      const headerRow = wsDetail.addRow(["Mese", ...sizesWithData]);
+      headerRow.font = headerFont;
+      headerRow.fill = headerFill;
+      headerRow.eachCell(cell => {
+        cell.border = borderStyle;
+        cell.alignment = { horizontal: "center" };
       });
-      wsDetail.addRow(rowData);
+
+      data.timeline.forEach(t => {
+        const vals = sizesWithData.map(size => {
+          const cell = t.perTaglia[size];
+          return cell ? (cell[metric] || 0) : 0;
+        });
+        const row = wsDetail.addRow([t.monthName, ...vals]);
+        row.eachCell((cell, colNumber) => {
+          cell.border = borderStyle;
+          if (colNumber > 1) {
+            cell.numFmt = '#,##0';
+            cell.alignment = { horizontal: "right" };
+          }
+        });
+      });
+
+      wsDetail.addRow([]);
+    };
+
+    wsDetail.getColumn(1).width = 14;
+    sizesWithData.forEach((_, i) => {
+      wsDetail.getColumn(i + 2).width = 14;
     });
-    styleSheet(wsDetail);
+
+    addSection("GIACENZA DISPONIBILE", "giacenzaPre");
+    addSection("ORDINI", "ordini");
+    addSection("SODDISFATTI", "soddisfatti");
+    addSection("GAP", "gap");
 
     if (data.ordiniDettaglio.length > 0) {
       const wsOrdini = wb.addWorksheet("Ordini Dettaglio");
