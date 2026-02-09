@@ -535,15 +535,15 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                       {op.size ? (typeof op.size === 'object' ? op.size.code : op.size) : '-'}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-right font-mono">
-                      {op.mortalityRate && op.mortalityRate > 0 ? (
-                        <span className="text-red-600 font-semibold">
-                          {op.mortalityRate.toFixed(1)}%
-                        </span>
-                      ) : (op.deadCount && op.deadCount > 0 ? (
-                        <span className="text-red-600 font-semibold">
-                          {op.deadCount.toLocaleString('it-IT')} morti
-                        </span>
-                      ) : '-')}
+                      {(() => {
+                        const rate = op.mortalityRate && op.mortalityRate > 0 ? op.mortalityRate : 
+                          (op.deadCount && op.deadCount > 0 && op.sampleCount && op.sampleCount > 0 
+                            ? (op.deadCount / op.sampleCount) * 100 : null);
+                        if (rate !== null && rate > 0) {
+                          return <span className="text-red-600 font-semibold">{rate.toFixed(1)}%</span>;
+                        }
+                        return '-';
+                      })()}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-xs max-w-[200px] truncate" title={op.notes || ''}>
                       {op.notes || '-'}
@@ -628,16 +628,20 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                         </div>
                       )}
                       
-                      {(op.mortalityRate && op.mortalityRate > 0) || (op.deadCount && op.deadCount > 0) ? (
-                        <div>
-                          <div className="text-sm font-medium text-red-600">Mortalità</div>
-                          <div className="font-medium text-red-600">
-                            {op.mortalityRate && op.mortalityRate > 0 
-                              ? `${op.mortalityRate.toFixed(1)}%`
-                              : `${op.deadCount?.toLocaleString('it-IT')} morti`}
-                          </div>
-                        </div>
-                      ) : null}
+                      {(() => {
+                        const rate = op.mortalityRate && op.mortalityRate > 0 ? op.mortalityRate : 
+                          (op.deadCount && op.deadCount > 0 && op.sampleCount && op.sampleCount > 0 
+                            ? (op.deadCount / op.sampleCount) * 100 : null);
+                        if (rate !== null && rate > 0) {
+                          return (
+                            <div>
+                              <div className="text-sm font-medium text-red-600">Mortalità</div>
+                              <div className="font-medium text-red-600">{rate.toFixed(1)}%</div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       
                       {op.notes && (
                         <div className="sm:col-span-3">
@@ -867,7 +871,7 @@ export default function CycleDetail() {
     .map((op: any) => ({
       date: format(new Date(op.date), 'dd/MM', { locale: it }),
       fullDate: format(new Date(op.date), 'dd MMM yyyy', { locale: it }),
-      peso: Math.round(parseFloat(op.averageWeight)),
+      peso: parseFloat(parseFloat(op.averageWeight).toFixed(2)),
       type: op.type
     }))
     .reverse(); // chronological order
@@ -1121,7 +1125,7 @@ export default function CycleDetail() {
                           tick={{ fontSize: 11 }} 
                           stroke="#6b7280"
                           tickFormatter={(value) => `${value}`}
-                          domain={['dataMin - 1', 'dataMax + 1']}
+                          domain={[(dataMin: number) => Math.max(0, dataMin * 0.9), (dataMax: number) => dataMax * 1.1]}
                         />
                         <Tooltip 
                           formatter={(value: number) => [`${value} mg`, 'Peso medio']}
