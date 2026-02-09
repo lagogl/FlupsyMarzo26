@@ -1076,9 +1076,10 @@ export function registerAIRoutes(app: Express) {
       
       sortedSizes.forEach((size, index) => {
         const value = (ordersAbsoluteBySize as Record<string, number>)[size] || 0;
-        const isT3 = size.includes('2000') || size.includes('3000') || size.includes('3500');
+        const sizeNum = parseInt(size.replace(/\D/g, '')) || 0;
+        const cat = sizeNum < 2000 ? 'T1' : sizeNum <= 3500 ? 'T3' : 'T10';
         const percentage = totalOrdersAbsolute > 0 ? ((value / totalOrdersAbsolute) * 100).toFixed(1) : '0';
-        const row = ws2.addRow([size, value, isT3 ? 'T3' : 'T10', `${percentage}%`]);
+        const row = ws2.addRow([size, value, cat, `${percentage}%`]);
         applyDataRowStyle(row, index % 2 === 1);
         applyNumberFormat(row.getCell(2));
       });
@@ -1164,9 +1165,10 @@ export function registerAIRoutes(app: Express) {
       
       for (const size of sortedSizes) {
         const value = (ordersAbsoluteBySize as Record<string, number>)[size] || 0;
-        const isT3 = size.includes('2000') || size.includes('3000') || size.includes('3500');
+        const sizeNum = parseInt(size.replace(/\D/g, '')) || 0;
+        const cat = sizeNum < 2000 ? 'T1' : sizeNum <= 3500 ? 'T3' : 'T10';
         const percentage = totalOrdersAbsolute > 0 ? ((value / totalOrdersAbsolute) * 100).toFixed(1) : '0';
-        parametriData.push([size, value, isT3 ? 'T3' : 'T10', `${percentage}%`]);
+        parametriData.push([size, value, cat, `${percentage}%`]);
       }
       parametriData.push(['TOTALE ORDINI', totalOrdersAbsolute, '-', '100%']);
       

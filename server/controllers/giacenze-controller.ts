@@ -142,23 +142,23 @@ export async function getGiacenzeSummary(req: Request, res: Response) {
       FROM latest_ops
     `);
     
-    // Query per entrate totali (prima-attivazione) nel periodo
+    // Query per entrate totali (prima-attivazione + ripopolamento) nel periodo
     const entrateResult = await db.execute(sql`
       SELECT COALESCE(SUM(o.animal_count), 0) as totale_entrate
       FROM operations o
       JOIN baskets b ON b.id = o.basket_id
-      WHERE o.type = 'prima-attivazione'
+      WHERE o.type IN ('prima-attivazione', 'ripopolamento')
         AND o.date >= ${dateFrom as string}
         AND o.date <= ${dateTo as string}
         ${flupsyFilter}
     `);
     
-    // Query per uscite totali (vendita) nel periodo
+    // Query per uscite totali (vendita + cessazione) nel periodo
     const usciteResult = await db.execute(sql`
       SELECT COALESCE(SUM(o.animal_count), 0) as totale_uscite
       FROM operations o
       JOIN baskets b ON b.id = o.basket_id
-      WHERE o.type = 'vendita'
+      WHERE o.type IN ('vendita', 'cessazione')
         AND o.date >= ${dateFrom as string}
         AND o.date <= ${dateTo as string}
         ${flupsyFilter}
@@ -258,23 +258,23 @@ async function calculateGiacenzeForRange(startDate: Date, endDate: Date, flupsyI
     FROM latest_ops
   `);
 
-  // Query per entrate (prima-attivazione) nel periodo
+  // Query per entrate (prima-attivazione + ripopolamento) nel periodo
   const entrateResult = await db.execute(sql`
     SELECT COALESCE(SUM(o.animal_count), 0) as totale
     FROM operations o
     JOIN baskets b ON b.id = o.basket_id
-    WHERE o.type = 'prima-attivazione'
+    WHERE o.type IN ('prima-attivazione', 'ripopolamento')
       AND o.date >= ${dateFromStr}
       AND o.date <= ${dateToStr}
       ${flupsyFilter}
   `);
 
-  // Query per uscite (vendita) nel periodo
+  // Query per uscite (vendita + cessazione) nel periodo
   const usciteResult = await db.execute(sql`
     SELECT COALESCE(SUM(o.animal_count), 0) as totale
     FROM operations o
     JOIN baskets b ON b.id = o.basket_id
-    WHERE o.type = 'vendita'
+    WHERE o.type IN ('vendita', 'cessazione')
       AND o.date >= ${dateFromStr}
       AND o.date <= ${dateToStr}
       ${flupsyFilter}
