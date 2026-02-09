@@ -255,9 +255,11 @@ export class ProductionForecastService {
       )
       SELECT 
         CASE 
-          WHEN min_animals_per_kg <= 6000 THEN 'T10'
-          WHEN min_animals_per_kg <= 30000 THEN 'T3'
-          ELSE 'T1'
+          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
+          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
+          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
+          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
+          ELSE 'TP-1000'
         END as size_category,
         size_name,
         SUM(animal_count) as total_animals,
@@ -265,9 +267,11 @@ export class ProductionForecastService {
       FROM latest_ops
       GROUP BY 
         CASE 
-          WHEN min_animals_per_kg <= 6000 THEN 'T10'
-          WHEN min_animals_per_kg <= 30000 THEN 'T3'
-          ELSE 'T1'
+          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
+          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
+          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
+          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
+          ELSE 'TP-1000'
         END,
         size_name
       ORDER BY size_category, size_name
@@ -286,8 +290,8 @@ export class ProductionForecastService {
       WITH latest_ops AS (
         SELECT DISTINCT ON (o.basket_id) 
           o.basket_id,
-          o.animal_count,
-          s.min_animals_per_kg
+          o.animals_per_kg,
+          o.animal_count
         FROM operations o
         JOIN baskets b ON b.id = o.basket_id
         JOIN sizes s ON s.id = o.size_id
@@ -298,21 +302,28 @@ export class ProductionForecastService {
       )
       SELECT 
         CASE 
-          WHEN min_animals_per_kg <= 6000 THEN 'T10'
-          WHEN min_animals_per_kg <= 30000 THEN 'T3'
-          ELSE 'T1'
+          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
+          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
+          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
+          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
+          ELSE 'TP-1000'
         END as size_category,
         SUM(animal_count) as total_animals
       FROM latest_ops
       GROUP BY 
         CASE 
-          WHEN min_animals_per_kg <= 6000 THEN 'T10'
-          WHEN min_animals_per_kg <= 30000 THEN 'T3'
-          ELSE 'T1'
+          WHEN animals_per_kg <= 9000 THEN 'TP-5000'
+          WHEN animals_per_kg <= 15000 THEN 'TP-4000'
+          WHEN animals_per_kg <= 29000 THEN 'TP-3000'
+          WHEN animals_per_kg <= 97000 THEN 'TP-2000'
+          ELSE 'TP-1000'
         END
     `);
 
-    const inventory: Record<string, number> = { T1: 0, T3: 0, T10: 0 };
+    const inventory: Record<string, number> = {};
+    for (const size of ProductionForecastService.SALE_SIZES) {
+      inventory[size] = 0;
+    }
     for (const row of result.rows as any[]) {
       inventory[row.size_category] = parseInt(row.total_animals) || 0;
     }
