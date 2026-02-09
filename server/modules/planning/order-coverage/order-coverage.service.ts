@@ -98,8 +98,16 @@ export class OrderCoverageService {
     const endMonth = Math.min(12, startMonth + months - 1);
 
     for (let month = startMonth; month <= endMonth; month++) {
-      if (month !== currentMonth) {
-        baskets = productionForecastService.simulateMonthlyGrowth(baskets, sgrLookup, month - 1, mortalityRates);
+      if (month === currentMonth) {
+        const currentDay = today.getDate();
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const remainingDays = Math.max(0, daysInMonth - currentDay);
+        if (remainingDays > 0) {
+          baskets = this.simulateDailyGrowth(baskets, sgrLookup, month - 1, mortalityRates, remainingDays);
+        }
+      } else {
+        const daysInMonth = new Date(year, month, 0).getDate();
+        baskets = this.simulateDailyGrowth(baskets, sgrLookup, month - 1, mortalityRates, daysInMonth);
       }
 
       const stockPre = productionForecastService.aggregateBySaleSize(baskets);
@@ -276,6 +284,37 @@ export class OrderCoverageService {
       console.error('Errore recupero dettagli ordini per copertura:', error);
       return [];
     }
+  }
+
+  private simulateDailyGrowth(
+    baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>,
+    sgrLookup: any,
+    monthIndex: number,
+    mortalityRates: { T1: number; T3: number; T10: number },
+    totalDays: number
+  ): Array<{basketId: number, animalsPerKg: number, animalCount: number}> {
+    let current = baskets.map(b => ({ ...b }));
+    const dailyMortalityFraction = 1 / 30;
+
+    for (let day = 0; day < totalDays; day++) {
+      current = current.map(basket => {
+        const category = productionForecastService.getCategoryFromAnimalsPerKg(basket.animalsPerKg);
+        const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, monthIndex, basket.animalsPerKg);
+        const currentWeight = 1000000 / basket.animalsPerKg;
+        const newWeight = currentWeight * (1 + sgr / 100);
+        const newAnimalsPerKg = Math.round(1000000 / newWeight);
+        const dailyMortality = mortalityRates[category] * dailyMortalityFraction;
+        const survivingAnimals = Math.round(basket.animalCount * (1 - dailyMortality));
+
+        return {
+          basketId: basket.basketId,
+          animalsPerKg: newAnimalsPerKg,
+          animalCount: survivingAnimals
+        };
+      });
+    }
+
+    return current;
   }
 }
 
