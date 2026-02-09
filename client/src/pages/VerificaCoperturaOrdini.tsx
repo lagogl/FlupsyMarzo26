@@ -549,19 +549,19 @@ export default function VerificaCoperturaOrdini() {
               <p className="text-sm text-muted-foreground">Giacenza disponibile / Ordini / Gap per ogni combinazione. Celle colorate in base alla copertura.</p>
             </CardHeader>
             <CardContent>
-              <div className="overflow-auto max-h-[70vh] border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="sticky top-0 sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 min-w-[100px] font-bold text-sm shadow-[2px_2px_4px_rgba(0,0,0,0.08)]">Taglia</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 text-right min-w-[90px] font-bold text-sm">Giac. Iniz.</TableHead>
+              <div className="overflow-auto max-h-[70vh] border rounded-md relative">
+                <table className="w-full caption-bottom text-sm">
+                  <thead className="[&_tr]:border-b">
+                    <tr className="border-b">
+                      <th className="sticky top-0 left-0 z-30 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-left align-middle font-bold text-sm text-muted-foreground min-w-[100px] shadow-[2px_2px_4px_rgba(0,0,0,0.08)]">Taglia</th>
+                      <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-right align-middle font-bold text-sm text-muted-foreground min-w-[90px]">Giac. Iniz.</th>
                       {data.timeline.map(t => (
-                        <TableHead key={t.month} className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 text-center min-w-[130px] font-bold text-sm">{t.monthShort}</TableHead>
+                        <th key={t.month} className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-center align-middle font-bold text-sm text-muted-foreground min-w-[130px]">{t.monthShort}</th>
                       ))}
-                      <TableHead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 text-center min-w-[80px] font-bold text-sm">Tot %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                      <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-center align-middle font-bold text-sm text-muted-foreground min-w-[80px]">Tot %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="[&_tr:last-child]:border-0">
                     {sizesAll
                       .filter(([size]) => {
                         if (selectedSize) return size === selectedSize;
@@ -569,18 +569,18 @@ export default function VerificaCoperturaOrdini() {
                         return r && (r.totaleOrdini > 0 || r.giacenzaIniziale > 0);
                       })
                       .map(([size, riepilogo]) => (
-                        <TableRow key={size}>
-                          <TableCell className="sticky left-0 bg-background z-10 font-bold text-sm">{size}</TableCell>
-                          <TableCell className="text-right font-mono text-sm text-blue-700">
+                        <tr key={size} className="border-b transition-colors hover:bg-muted/50">
+                          <td className="sticky left-0 bg-background z-10 p-2 align-middle font-bold text-sm">{size}</td>
+                          <td className="p-2 align-middle text-right font-mono text-sm text-blue-700">
                             {riepilogo.giacenzaIniziale > 0 ? formatNumber(riepilogo.giacenzaIniziale) : <span className="text-gray-300">-</span>}
-                          </TableCell>
+                          </td>
                           {data.timeline.map(t => {
                             const cell = t.perTaglia[size];
                             if (!cell || (cell.giacenzaPre === 0 && cell.ordini === 0)) {
-                              return <TableCell key={t.month} className="text-center text-gray-300 text-sm">-</TableCell>;
+                              return <td key={t.month} className="p-2 align-middle text-center text-gray-300 text-sm">-</td>;
                             }
                             return (
-                              <TableCell key={t.month} className={`text-center text-sm p-1.5 ${cell.ordini > 0 ? getCoverageBg(cell.coperturaPct) : ""}`}>
+                              <td key={t.month} className={`text-center text-sm p-1.5 align-middle ${cell.ordini > 0 ? getCoverageBg(cell.coperturaPct) : ""}`}>
                                 <div className="space-y-0.5">
                                   <div className="font-mono text-blue-700 font-medium">{formatNumber(cell.giacenzaPre)}</div>
                                   {cell.ordini > 0 && (
@@ -594,10 +594,10 @@ export default function VerificaCoperturaOrdini() {
                                     </>
                                   )}
                                 </div>
-                              </TableCell>
+                              </td>
                             );
                           })}
-                          <TableCell className="text-center">
+                          <td className="p-2 align-middle text-center">
                             {riepilogo.totaleOrdini > 0 ? (
                               <Badge className={`${getCoverageColor(riepilogo.coperturaPct)} text-white border-0 text-sm`}>
                                 {riepilogo.coperturaPct}%
@@ -605,11 +605,11 @@ export default function VerificaCoperturaOrdini() {
                             ) : (
                               <span className="text-gray-300 text-sm">-</span>
                             )}
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
               <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-blue-600" /> Giacenza</span>
