@@ -10,7 +10,7 @@ import {
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
   ClipboardList, Users, FolderOpen, Sparkles, Radio, Target, Eye, EyeOff, Star,
-  AlertCircle
+  AlertCircle, ShieldCheck
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -188,7 +188,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <Brain className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiDashboard, path: "/ai-dashboard" },
         { icon: <ClipboardList className="h-5 w-5 mr-2 text-purple-600" />, label: "Attività Consigliate", path: "/attivita-consigliate" },
         { icon: <Target className="h-5 w-5 mr-2 text-purple-600" />, label: "Analisi Scostamenti", path: "/analisi-scostamenti" },
-        { icon: <Target className="h-5 w-5 mr-2 text-blue-600" />, label: "Verifica Copertura", path: "/verifica-copertura" },
         { icon: <FileSpreadsheet className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiReportGenerator, path: "/ai-report-generator" },
         { icon: <Sparkles className="h-5 w-5 mr-2 text-purple-600" />, label: "AI Enhanced (BETA)", path: "/ai-enhanced" },
         { icon: <BarChart3 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiGrowthVariability, path: "/growth-variability-analysis" },
@@ -201,6 +200,15 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <FileText className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.plantDiary, path: "/diario-di-impianto" },
         { icon: <Leaf className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.environmentalImpact, path: "/eco-impact" },
         { icon: <Leaf className="h-5 w-5 mr-2 text-green-600" />, label: "LCI - ECOTAPES", path: "/lci" }
+      ]
+    },
+    {
+      id: 'planning',
+      label: 'Pianificazione',
+      icon: <ShieldCheck className="h-5 w-5" />,
+      color: 'text-blue-600',
+      items: [
+        { icon: <ShieldCheck className="h-5 w-5 mr-2 text-blue-600" />, label: "Verifica Copertura Ordini", path: "/verifica-copertura" },
       ]
     },
     {
