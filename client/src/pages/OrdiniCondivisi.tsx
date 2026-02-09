@@ -829,13 +829,18 @@ export default function OrdiniCondivisi() {
         const righeOrdine = getRigheOrdine(ordine.id);
         const totaleConsegnato = consegneOrdine.reduce((sum, c) => sum + (c.quantitaConsegnata || 0), 0);
         const residuo = (ordine.quantitaTotale || 0) - totaleConsegnato;
+        const dataConsegnaOrdine = ordine.dataInizioConsegna
+          ? format(new Date(ordine.dataInizioConsegna), 'dd/MM/yyyy', { locale: it })
+          : ordine.dataFineConsegna
+            ? format(new Date(ordine.dataFineConsegna), 'dd/MM/yyyy', { locale: it })
+            : '';
 
         if (righeOrdine.length === 0 && consegneOrdine.length === 0) {
           const r = ws.addRow({
             numero: ordine.numero || '',
             cliente: ordine.clienteNome || '',
             dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
-            dataConsegna: '',
+            dataConsegna: dataConsegnaOrdine,
             stato: ordine.stato || '',
             taglia: ordine.tagliaRichiesta || '',
             quantitaTotale: ordine.quantitaTotale || 0,
@@ -858,7 +863,7 @@ export default function OrdiniCondivisi() {
             numero: ordine.numero || '',
             cliente: ordine.clienteNome || '',
             dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
-            dataConsegna: '',
+            dataConsegna: dataConsegnaOrdine,
             stato: ordine.stato || '',
             taglia: riga.taglia || ordine.tagliaRichiesta || '',
             quantitaTotale: ordine.quantitaTotale || 0,
