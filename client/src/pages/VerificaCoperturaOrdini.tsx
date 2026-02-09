@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, ShieldCheck, ShieldAlert, TrendingUp, Package, AlertTriangle, CheckCircle2, XCircle, Eye, BarChart3 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 import * as ExcelJS from "exceljs";
 
 interface MonthSizeSnapshot {
@@ -187,6 +187,7 @@ export default function VerificaCoperturaOrdini() {
       { header: "Giac. Iniziale", key: "giacIniz", width: 16 },
       ...data.timeline.map(t => ({ header: `${t.monthShort} Giac`, key: `g${t.month}`, width: 14 })),
       ...data.timeline.map(t => ({ header: `${t.monthShort} Ord`, key: `o${t.month}`, width: 14 })),
+      ...data.timeline.map(t => ({ header: `${t.monthShort} Sodd`, key: `s${t.month}`, width: 14 })),
       ...data.timeline.map(t => ({ header: `${t.monthShort} Gap`, key: `p${t.month}`, width: 14 })),
       { header: "Tot Ordini", key: "totOrd", width: 14 },
       { header: "Tot Soddisfatti", key: "totSodd", width: 16 },
@@ -209,6 +210,7 @@ export default function VerificaCoperturaOrdini() {
         const cell = t.perTaglia[size];
         rowData[`g${t.month}`] = cell?.giacenzaPre || 0;
         rowData[`o${t.month}`] = cell?.ordini || 0;
+        rowData[`s${t.month}`] = cell?.soddisfatti || 0;
         rowData[`p${t.month}`] = cell?.gap || 0;
       });
       wsDetail.addRow(rowData);
@@ -326,7 +328,7 @@ export default function VerificaCoperturaOrdini() {
               <SelectItem value="2027">2027</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={exportExcel} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Button onClick={exportExcel} className="gap-2 bg-black hover:bg-gray-800 text-white">
             <Download className="h-4 w-4" />
             Excel
           </Button>
@@ -433,11 +435,7 @@ export default function VerificaCoperturaOrdini() {
                   <Bar dataKey="giacenza" name="Giacenza Disponibile" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="ordini" name="Ordini Totali" fill="#a855f7" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="soddisfatti" name="Ordini Soddisfatti" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="gap" name="Gap" radius={[4, 4, 0, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={index} fill={entry.gap > 0 ? "#ef4444" : "#d1d5db"} />
-                    ))}
-                  </Bar>
+                  <Bar dataKey="gap" name="Gap" fill="#ef4444" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
