@@ -798,7 +798,8 @@ export default function OrdiniCondivisi() {
         { header: 'N. Ordine', key: 'numero', width: 12 },
         { header: 'Cliente', key: 'cliente', width: 35 },
         { header: 'Data Ordine', key: 'dataOrdine', width: 14 },
-        { header: 'Data Consegna', key: 'dataConsegna', width: 14 },
+        { header: 'Inizio Consegna', key: 'dataInizioConsegna', width: 16 },
+        { header: 'Fine Consegna', key: 'dataFineConsegna', width: 16 },
         { header: 'Stato', key: 'stato', width: 14 },
         { header: 'Taglia', key: 'taglia', width: 10 },
         { header: 'Quantita Totale', key: 'quantitaTotale', width: 18 },
@@ -829,18 +830,20 @@ export default function OrdiniCondivisi() {
         const righeOrdine = getRigheOrdine(ordine.id);
         const totaleConsegnato = consegneOrdine.reduce((sum, c) => sum + (c.quantitaConsegnata || 0), 0);
         const residuo = (ordine.quantitaTotale || 0) - totaleConsegnato;
-        const dataConsegnaOrdine = ordine.dataInizioConsegna
+        const inizioConsegna = ordine.dataInizioConsegna
           ? format(new Date(ordine.dataInizioConsegna), 'dd/MM/yyyy', { locale: it })
-          : ordine.dataFineConsegna
-            ? format(new Date(ordine.dataFineConsegna), 'dd/MM/yyyy', { locale: it })
-            : '';
+          : '';
+        const fineConsegna = ordine.dataFineConsegna
+          ? format(new Date(ordine.dataFineConsegna), 'dd/MM/yyyy', { locale: it })
+          : '';
 
         if (righeOrdine.length === 0 && consegneOrdine.length === 0) {
           const r = ws.addRow({
             numero: ordine.numero || '',
             cliente: ordine.clienteNome || '',
             dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
-            dataConsegna: dataConsegnaOrdine,
+            dataInizioConsegna: inizioConsegna,
+            dataFineConsegna: fineConsegna,
             stato: ordine.stato || '',
             taglia: ordine.tagliaRichiesta || '',
             quantitaTotale: ordine.quantitaTotale || 0,
@@ -863,7 +866,8 @@ export default function OrdiniCondivisi() {
             numero: ordine.numero || '',
             cliente: ordine.clienteNome || '',
             dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
-            dataConsegna: dataConsegnaOrdine,
+            dataInizioConsegna: inizioConsegna,
+            dataFineConsegna: fineConsegna,
             stato: ordine.stato || '',
             taglia: riga.taglia || ordine.tagliaRichiesta || '',
             quantitaTotale: ordine.quantitaTotale || 0,
@@ -886,7 +890,8 @@ export default function OrdiniCondivisi() {
             numero: ordine.numero || '',
             cliente: ordine.clienteNome || '',
             dataOrdine: ordine.data ? format(new Date(ordine.data), 'dd/MM/yyyy', { locale: it }) : '',
-            dataConsegna: consegna.dataConsegna ? format(new Date(consegna.dataConsegna), 'dd/MM/yyyy', { locale: it }) : '',
+            dataInizioConsegna: inizioConsegna,
+            dataFineConsegna: fineConsegna,
             stato: ordine.stato || '',
             taglia: ordine.tagliaRichiesta || '',
             quantitaTotale: ordine.quantitaTotale || 0,
