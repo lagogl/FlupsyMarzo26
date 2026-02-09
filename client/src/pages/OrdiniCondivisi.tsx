@@ -673,13 +673,13 @@ export default function OrdiniCondivisi() {
 
   const sincronizzaConFIC = useMutation({
     mutationFn: async () => {
+      await apiRequest('/api/fatture-in-cloud/clients/sync', 'POST', {});
       return apiRequest('/api/fatture-in-cloud/orders/sync', 'POST', {});
     },
     onMutate: () => {
-      // Attiva lo stato del progresso
       setSyncProgress({
         isActive: true,
-        message: 'Avvio sincronizzazione con Fatture in Cloud...',
+        message: 'Sincronizzazione clienti da Fatture in Cloud...',
         progress: 0
       });
     },
@@ -688,11 +688,10 @@ export default function OrdiniCondivisi() {
       queryClient.invalidateQueries({ queryKey: ['/api/ordini-condivisi/consegne'] });
       toast({
         title: '✅ Sincronizzazione completata',
-        description: 'Gli ordini sono stati sincronizzati con Fatture in Cloud',
+        description: 'Clienti e ordini sincronizzati con Fatture in Cloud',
       });
     },
     onError: (error: any) => {
-      // Nascondi il progresso in caso di errore
       setSyncProgress({ isActive: false, message: '', progress: 0 });
       toast({
         title: '❌ Errore sincronizzazione',
