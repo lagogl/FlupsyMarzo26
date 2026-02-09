@@ -1044,30 +1044,23 @@ export default function OperationFormCompact({
       totalWeight: values.totalWeight ? Number(values.totalWeight) : null,
       sampleWeight: values.sampleWeight ? Number(values.sampleWeight) : null,
       liveAnimals: values.liveAnimals ? Number(values.liveAnimals) : null,
-      deadCount: values.deadCount ? Number(values.deadCount) : 0,
-      totalSample: values.totalSample ? Number(values.totalSample) : null,
-      mortalityRate: values.mortalityRate ? Number(values.mortalityRate) : null,
+      deadCount: values.deadCount != null ? Number(values.deadCount) : 0,
+      totalSample: values.totalSample != null ? Number(values.totalSample) : null,
+      mortalityRate: values.mortalityRate != null ? Number(values.mortalityRate) : null,
       notes: values.notes || null
     };
     
-    // Gestione speciale per operazione di misurazione con mortalità
-    if (values.type === 'misura' && values.deadCount && values.deadCount > 0 && prevOperationData) {
-      console.log("Misurazione con mortalità > 0: verrà calcolato un nuovo conteggio animali");
+    // Flusso UNIFICATO per operazioni misura: sempre conferma prima dell'invio
+    if (values.type === 'misura' && prevOperationData) {
+      const hasMortality = values.deadCount && values.deadCount > 0;
+      if (hasMortality) {
+        console.log("Misurazione con mortalità > 0: verrà calcolato un nuovo conteggio animali");
+      } else {
+        console.log("Misurazione senza mortalità: conteggio animali mantenuto invariato");
+      }
       setPendingValues(formattedValues);
       setShowConfirmDialog(true);
       return;
-    } else if (values.type === 'misura' && (!values.deadCount || values.deadCount === 0) && prevOperationData) {
-      // Senza mortalità: mantiene il conteggio animali precedente (se disponibile)
-      if (prevOperationData?.animalCount && (!formattedValues.animalCount || Number(formattedValues.animalCount) !== prevOperationData.animalCount)) {
-        console.log("Misurazione senza mortalità: mantenuto conteggio animali precedente:", prevOperationData.animalCount);
-        // Aggiorna il conteggio animali con quello precedente
-        formattedValues.animalCount = prevOperationData.animalCount;
-        toast({
-          title: "Conteggio animali mantenuto",
-          description: "Senza mortalità, il numero di animali è stato mantenuto invariato.",
-          duration: 4000
-        });
-      }
     }
     
     // Chiamata diretta alla funzione di submit per gli altri casi
@@ -2485,11 +2478,15 @@ export default function OperationFormCompact({
             <AlertDialogDescription>
               {pendingValues && (
                 <div className="space-y-4">
-                  <p>È stata rilevata una mortalità di <span className="font-semibold">{pendingValues.deadCount}</span> su <span className="font-semibold">{pendingValues.totalSample}</span> animali nel campione ({pendingValues.mortalityRate?.toFixed(2)}%).</p>
+                  {pendingValues.deadCount > 0 ? (
+                    <p>È stata rilevata una mortalità di <span className="font-semibold">{pendingValues.deadCount}</span> su <span className="font-semibold">{pendingValues.totalSample || 0}</span> animali nel campione ({(pendingValues.mortalityRate || 0).toFixed(2)}%).</p>
+                  ) : (
+                    <p>Nessuna mortalità rilevata nel campione (0%). Il conteggio animali verrà mantenuto invariato.</p>
+                  )}
                   
-                  <p>Basandosi sull'ultima operazione registrata, il conteggio animali verrà aggiornato da <span className="font-semibold">{prevOperationData?.animalCount?.toLocaleString('it-IT') || 'N/A'}</span> a <span className="font-semibold">{(pendingValues.animalCount)?.toLocaleString('it-IT')}</span>.</p>
+                  <p>Conteggio animali: da <span className="font-semibold">{prevOperationData?.animalCount?.toLocaleString('it-IT') || 'N/A'}</span> a <span className="font-semibold">{(pendingValues.animalCount)?.toLocaleString('it-IT') || prevOperationData?.animalCount?.toLocaleString('it-IT') || 'N/A'}</span>.</p>
                   
-                  <p>Vuoi procedere con questo aggiornamento?</p>
+                  <p>Vuoi procedere con la registrazione?</p>
                 </div>
               )}
             </AlertDialogDescription>

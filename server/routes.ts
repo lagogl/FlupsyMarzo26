@@ -2677,43 +2677,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const effectiveDeadCount = deadCount || 0;
         const totalSample = effectiveLiveAnimals + effectiveDeadCount;
         
-        if (hasMortality && totalSample > 0) {
-          const mortalityRate = effectiveDeadCount / totalSample;
-          const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
-          finalAnimalCount = Math.min(calculatedCount, lastCount);
-          calculatedMortalityRate = mortalityRate * 100;
-          calculatedSampleCount = totalSample;
-          
+        // Flusso UNIFICATO: stessa logica sia con mortalità che senza
+        const mortalityRate = (hasMortality && totalSample > 0) ? effectiveDeadCount / totalSample : 0;
+        const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
+        finalAnimalCount = Math.min(calculatedCount, lastCount);
+        calculatedMortalityRate = mortalityRate * 100;
+        calculatedSampleCount = totalSample > 0 ? totalSample : null;
+        
+        if (hasMortality) {
           console.log(`🔴 MISURA ALLINEATA - Mortalità: ${(mortalityRate * 100).toFixed(2)}%`);
-          console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
-          console.log(`   Vincolo (min con ${lastCount}): ${finalAnimalCount}`);
-        } else if (!manualCountAdjustment) {
-          const calculatedLiveAnimals = calculatedAnimalsPerKg && totalWeight
-            ? Math.round((totalWeight / 1000) * calculatedAnimalsPerKg)
-            : effectiveLiveAnimals;
-          
-          if (calculatedLiveAnimals > 0 && calculatedLiveAnimals < lastCount) {
-            const unexplainedDifference = lastCount - calculatedLiveAnimals;
-            const unexplainedPercent = ((unexplainedDifference / lastCount) * 100).toFixed(1);
-            
-            console.log(`🟡 MISURA ALLINEATA - Riduzione senza morti: -${unexplainedDifference} (${unexplainedPercent}%)`);
-            finalAnimalCount = calculatedLiveAnimals;
-            calculatedMortalityRate = 0;
-            
-            const autoNote = `[Auto] Differenza non spiegata: -${unexplainedDifference.toLocaleString('it-IT')} animali (${unexplainedPercent}%) rispetto all'ultimo conteggio`;
-            operationNotes = operationNotes 
-              ? `${operationNotes} | ${autoNote}`
-              : autoNote;
-          } else if (calculatedLiveAnimals > 0 && calculatedLiveAnimals >= lastCount) {
-            console.log(`🟢 MISURA ALLINEATA - Nessuna riduzione: Campione=${calculatedLiveAnimals}, Mantiene=${lastCount}`);
-            finalAnimalCount = lastCount;
-            calculatedMortalityRate = 0;
-          } else {
-            console.log(`🟢 MISURA ALLINEATA - Nessun dato campione: Mantiene=${lastCount}`);
-            finalAnimalCount = lastCount;
-            calculatedMortalityRate = 0;
-          }
+        } else {
+          console.log(`🟢 MISURA ALLINEATA - Senza mortalità: 0%, mantengo ultimo conteggio`);
         }
+        console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
+        console.log(`   Vincolo (min con ${lastCount}): ${finalAnimalCount}`);
         
         // === LOTTI MISTI: Arricchire note e metadata ===
         let operationMetadata = null;

@@ -527,61 +527,22 @@ export function implementDirectOperationRoute(app: Express) {
           const deadCount = operationData.deadCount || 0;
           const totalSample = liveAnimals + deadCount;
           
-          if (hasMortality && totalSample > 0) {
-            // Calcola mortalità cumulativa
-            const mortalityRate = deadCount / totalSample;
-            const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
-            
-            // Applica vincolo: non può mai aumentare (i morti non risorgono)
-            const finalCount = Math.min(calculatedCount, lastCount);
-            
+          // Flusso UNIFICATO: stessa logica sia con mortalità che senza
+          const mortalityRate = (hasMortality && totalSample > 0) ? deadCount / totalSample : 0;
+          const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
+          const finalCount = Math.min(calculatedCount, lastCount);
+          
+          if (hasMortality) {
             console.log(`🔴 MORTALITÀ RILEVATA: ${(mortalityRate * 100).toFixed(2)}%`);
-            console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
-            console.log(`   Vincolo (min con ${lastCount}): ${finalCount}`);
-            
-            operationData.animalCount = finalCount;
-            operationData.mortalityRate = mortalityRate * 100; // Salva la percentuale
-            operationData.sampleCount = totalSample; // Salva dimensione campione per calcolo mortalità cumulativa
           } else {
-            // Nessun morto dichiarato → usa liveAnimals dal campione se disponibile
-            // liveAnimals = (totalWeight / 1000) * animalsPerKg
-            const calculatedLiveAnimals = operationData.animalsPerKg && operationData.totalWeight
-              ? Math.round((operationData.totalWeight / 1000) * operationData.animalsPerKg)
-              : liveAnimals;
-            
-            if (calculatedLiveAnimals > 0 && calculatedLiveAnimals < lastCount) {
-              // Riduzione rilevata senza morti dichiarati
-              const unexplainedDifference = lastCount - calculatedLiveAnimals;
-              const unexplainedPercent = ((unexplainedDifference / lastCount) * 100).toFixed(1);
-              
-              console.log(`🟡 MISURA SENZA MORTI DICHIARATI:`);
-              console.log(`   Ultimo conteggio: ${lastCount}`);
-              console.log(`   Animali rilevati dal campione: ${calculatedLiveAnimals}`);
-              console.log(`   Differenza non spiegata: -${unexplainedDifference} (${unexplainedPercent}%)`);
-              
-              // Usa il valore dal campione
-              operationData.animalCount = calculatedLiveAnimals;
-              operationData.mortalityRate = 0;
-              
-              // Aggiungi nota automatica per tracciabilità
-              const autoNote = `[Auto] Differenza non spiegata: -${unexplainedDifference.toLocaleString('it-IT')} animali (${unexplainedPercent}%) rispetto all'ultimo conteggio`;
-              operationData.notes = operationData.notes 
-                ? `${operationData.notes} | ${autoNote}`
-                : autoNote;
-              
-              console.log(`📝 Nota aggiunta: ${autoNote}`);
-            } else if (calculatedLiveAnimals > 0 && calculatedLiveAnimals >= lastCount) {
-              // Campione indica stesso numero o più animali → mantieni ultimo (no resurrezione)
-              console.log(`🟢 NESSUNA RIDUZIONE: Campione=${calculatedLiveAnimals}, Mantiene=${lastCount}`);
-              operationData.animalCount = lastCount;
-              operationData.mortalityRate = 0;
-            } else {
-              // Fallback: mantieni ultimo valore se non abbiamo dati campione
-              console.log(`🟢 NESSUN DATO CAMPIONE: Mantengo ultimo animalCount = ${lastCount}`);
-              operationData.animalCount = lastCount;
-              operationData.mortalityRate = 0;
-            }
+            console.log(`🟢 MISURA SENZA MORTALITÀ: mortalità 0%, mantengo ultimo conteggio`);
           }
+          console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
+          console.log(`   Vincolo (min con ${lastCount}): ${finalCount}`);
+          
+          operationData.animalCount = finalCount;
+          operationData.mortalityRate = mortalityRate * 100;
+          operationData.sampleCount = totalSample > 0 ? totalSample : null;
         } else {
           console.warn(`⚠️ Impossibile applicare logica mortalità cumulativa: cycleId non disponibile`);
           // Fallback: mantieni il valore calcolato precedentemente
