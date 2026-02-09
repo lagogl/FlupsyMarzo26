@@ -1922,9 +1922,8 @@ export default function SpreadsheetOperations() {
         const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
-        // Calcola SGR da misure
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.totalWeight)
+          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue = null;
@@ -1932,12 +1931,11 @@ export default function SpreadsheetOperations() {
           const latest = basketOps[0];
           const previous = basketOps[1];
           const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
-          if (latest.totalWeight > 0 && previous.totalWeight > 0) {
-            sgrMisuraValue = ((Math.log(latest.totalWeight) - Math.log(previous.totalWeight)) / days) * 100;
+          if (latest.averageWeight > 0 && previous.averageWeight > 0) {
+            sgrMisuraValue = ((Math.log(latest.averageWeight) - Math.log(previous.averageWeight)) / days) * 100;
           }
         }
         
-        // SGR Medio
         let sgrMedioValue = null;
         if (sgrPesoValue != null && sgrMisuraValue != null) {
           sgrMedioValue = (sgrPesoValue + sgrMisuraValue) / 2;
@@ -2104,9 +2102,8 @@ export default function SpreadsheetOperations() {
         const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
-        // Calcola SGR da misure
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.totalWeight)
+          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue: number | null = null;
@@ -2114,12 +2111,11 @@ export default function SpreadsheetOperations() {
           const latest = basketOps[0];
           const previous = basketOps[1];
           const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
-          if (latest.totalWeight > 0 && previous.totalWeight > 0) {
-            sgrMisuraValue = ((Math.log(latest.totalWeight) - Math.log(previous.totalWeight)) / days) * 100;
+          if (latest.averageWeight > 0 && previous.averageWeight > 0) {
+            sgrMisuraValue = ((Math.log(latest.averageWeight) - Math.log(previous.averageWeight)) / days) * 100;
           }
         }
         
-        // SGR Medio
         let sgrMedioValue: number | null = null;
         if (sgrPesoValue != null && sgrMisuraValue != null) {
           sgrMedioValue = (sgrPesoValue + sgrMisuraValue) / 2;
@@ -4069,10 +4065,20 @@ export default function SpreadsheetOperations() {
                     {/* SGR MEDIO - Media pesata degli SGR */}
                     <div style={{width: '55px'}} className="px-1 py-1 border-r bg-blue-50">
                       {(() => {
-                        // SGR medio: combina SGR-Peso e SGR da misure se disponibili
                         const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
                         const sgrPeso = sgrPesoData?.sgrPesoMedio;
-                        const sgrMisura = row.sgrMisura;
+                        const sgrMisuraOps = ((operations as any[]) || [])
+                          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+                          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        let sgrMisura: number | null = null;
+                        if (sgrMisuraOps.length >= 2) {
+                          const lat = sgrMisuraOps[0];
+                          const prev = sgrMisuraOps[1];
+                          const d = Math.max(1, Math.round((new Date(lat.date).getTime() - new Date(prev.date).getTime()) / (1000 * 60 * 60 * 24)));
+                          if (lat.averageWeight > 0 && prev.averageWeight > 0) {
+                            sgrMisura = ((Math.log(lat.averageWeight) - Math.log(prev.averageWeight)) / d) * 100;
+                          }
+                        }
                         let sgrMedio = null;
                         if (sgrPeso != null && sgrMisura != null) {
                           sgrMedio = (sgrPeso + sgrMisura) / 2;
@@ -4092,17 +4098,16 @@ export default function SpreadsheetOperations() {
                     {/* SGR (MISURA) - Calcolato da operazioni MISURA */}
                     <div style={{width: '55px'}} className="px-1 py-1 border-r bg-green-50">
                       {(() => {
-                        // Calcola SGR da ultime 2 misure per questa cesta
                         const basketOps = ((operations as any[]) || [])
-                          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.totalWeight)
+                          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         
                         if (basketOps.length >= 2) {
                           const latest = basketOps[0];
                           const previous = basketOps[1];
                           const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
-                          if (latest.totalWeight > 0 && previous.totalWeight > 0) {
-                            const sgr = ((Math.log(latest.totalWeight) - Math.log(previous.totalWeight)) / days) * 100;
+                          if (latest.averageWeight > 0 && previous.averageWeight > 0) {
+                            const sgr = ((Math.log(latest.averageWeight) - Math.log(previous.averageWeight)) / days) * 100;
                             return (
                               <div className={`w-full h-6 px-1 text-xs rounded flex items-center justify-end font-medium ${sgr >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                                 {sgr.toFixed(2)}

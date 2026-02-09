@@ -3,7 +3,7 @@
  * Contiene tutta la logica business per i cicli produttivi
  */
 
-import { sql, eq, and, asc, desc } from 'drizzle-orm';
+import { sql, eq, and, asc, desc, isNotNull } from 'drizzle-orm';
 import { db, pool } from '../../../db';
 import { cycles, baskets, flupsys, lots, operations, pendingClosures } from '../../../../shared/schema';
 
@@ -726,13 +726,13 @@ class CyclesService {
   }> {
     console.log(`📊 SGR-PESO: Calcolo per ciclo ${cycleId}`);
     
-    // Recupera operazioni peso e prima-attivazione ordinate per data
     const relevantOps = await db
       .select()
       .from(operations)
       .where(and(
         eq(operations.cycleId, cycleId),
-        sql`${operations.type} IN ('peso', 'prima-attivazione')`
+        sql`${operations.type} IN ('peso', 'prima-attivazione', 'misura')`,
+        isNotNull(operations.averageWeight)
       ))
       .orderBy(asc(operations.date), asc(operations.id));
     
@@ -744,8 +744,8 @@ class CyclesService {
         sgrPesoMedio: null,
         sgrPesoIntermedi: [],
         totalDays: 0,
-        startWeight: relevantOps.length > 0 ? relevantOps[0].totalWeight : null,
-        endWeight: relevantOps.length > 0 ? relevantOps[relevantOps.length - 1].totalWeight : null
+        startWeight: relevantOps.length > 0 ? relevantOps[0].averageWeight : null,
+        endWeight: relevantOps.length > 0 ? relevantOps[relevantOps.length - 1].averageWeight : null
       };
     }
     
@@ -762,12 +762,11 @@ class CyclesService {
       sgr: number;
     }> = [];
     
-    // Calcola SGR tra coppie consecutive
     for (let i = 0; i < relevantOps.length - 1; i++) {
       const op1 = relevantOps[i];
       const op2 = relevantOps[i + 1];
       
-      if (!op1.totalWeight || !op2.totalWeight || op1.totalWeight <= 0 || op2.totalWeight <= 0) {
+      if (!op1.averageWeight || !op2.averageWeight || op1.averageWeight <= 0 || op2.averageWeight <= 0) {
         continue;
       }
       
@@ -775,8 +774,7 @@ class CyclesService {
       const date2 = new Date(op2.date);
       const days = Math.max(1, Math.round((date2.getTime() - date1.getTime()) / (1000 * 60 * 60 * 24)));
       
-      // SGR = (ln(W2) - ln(W1)) / t * 100
-      const sgr = ((Math.log(op2.totalWeight) - Math.log(op1.totalWeight)) / days) * 100;
+      const sgr = ((Math.log(op2.averageWeight) - Math.log(op1.averageWeight)) / days) * 100;
       
       sgrPesoIntermedi.push({
         fromOperationId: op1.id,
@@ -785,14 +783,13 @@ class CyclesService {
         toDate: op2.date,
         fromType: op1.type,
         toType: op2.type,
-        fromWeight: op1.totalWeight,
-        toWeight: op2.totalWeight,
+        fromWeight: op1.averageWeight,
+        toWeight: op2.averageWeight,
         days,
         sgr: Math.round(sgr * 100) / 100
       });
     }
     
-    // Calcola SGR medio pesato sui giorni
     let totalWeightedSgr = 0;
     let totalDaysSum = 0;
     
@@ -814,8 +811,8 @@ class CyclesService {
       sgrPesoMedio,
       sgrPesoIntermedi,
       totalDays,
-      startWeight: firstOp.totalWeight,
-      endWeight: lastOp.totalWeight
+      startWeight: firstOp.averageWeight,
+      endWeight: lastOp.averageWeight
     };
   }
 }
