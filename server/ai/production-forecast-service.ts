@@ -448,10 +448,67 @@ export class ProductionForecastService {
     return result;
   }
 
-  // Lista delle taglie di vendita supportate
-  static SALE_SIZES = ['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'];
+  aggregateBySaleSize(baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const size of ProductionForecastService.SALE_SIZES) {
+      result[size] = 0;
+    }
+    for (const basket of baskets) {
+      const saleSize = this.mapAnimalsPerKgToSaleSize(basket.animalsPerKg);
+      result[saleSize] += basket.animalCount;
+    }
+    return result;
+  }
+
+  removeAnimalsFromSaleSize(
+    baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>,
+    saleSize: string,
+    toRemove: number
+  ): Array<{basketId: number, animalsPerKg: number, animalCount: number}> {
+    const saleSizeBaskets = baskets.filter(b => this.mapAnimalsPerKgToSaleSize(b.animalsPerKg) === saleSize);
+    const totalInSize = saleSizeBaskets.reduce((sum, b) => sum + b.animalCount, 0);
+    if (totalInSize <= 0 || toRemove <= 0) return baskets;
+
+    const removalRatio = Math.min(1, toRemove / totalInSize);
+    return baskets.map(b => {
+      if (this.mapAnimalsPerKgToSaleSize(b.animalsPerKg) === saleSize) {
+        return {
+          ...b,
+          animalCount: Math.round(b.animalCount * (1 - removalRatio))
+        };
+      }
+      return b;
+    }).filter(b => b.animalCount > 0);
+  }
+
+  static SALE_SIZES = ['TP-1000', 'TP-2000', 'TP-3000', 'TP-4000', 'TP-5000'];
+
+  static SALE_SIZE_THRESHOLDS = [
+    { size: 'TP-5000', maxAnimalsPerKg: 9000 },
+    { size: 'TP-4000', maxAnimalsPerKg: 15000 },
+    { size: 'TP-3000', maxAnimalsPerKg: 29000 },
+    { size: 'TP-2000', maxAnimalsPerKg: 97000 },
+    { size: 'TP-1000', maxAnimalsPerKg: Infinity },
+  ];
+
+  mapAnimalsPerKgToSaleSize(animalsPerKg: number): string {
+    for (const t of ProductionForecastService.SALE_SIZE_THRESHOLDS) {
+      if (animalsPerKg <= t.maxAnimalsPerKg) return t.size;
+    }
+    return 'TP-1000';
+  }
+
+  mapOrderSizeToSaleSize(tagliaCode: string): string | null {
+    if (!tagliaCode) return null;
+    const num = parseInt(tagliaCode.replace(/\D/g, '')) || 0;
+    if (num >= 5000) return 'TP-5000';
+    if (num >= 4000) return 'TP-4000';
+    if (num >= 3000) return 'TP-3000';
+    if (num >= 2000) return 'TP-2000';
+    if (num >= 1000) return 'TP-1000';
+    return null;
+  }
   
-  // Mappa taglia -> categoria aggregata (per compatibilità)
   mapTagliaToAggregateCategory(tagliaRichiesta: string | null): 'T3' | 'T10' | null {
     if (!tagliaRichiesta) return null;
     const taglia = tagliaRichiesta.toUpperCase();
@@ -631,7 +688,9 @@ export class ProductionForecastService {
 
       for (const ordine of ordini) {
         const tagliaCode = this.normalizeTagliaCode(ordine.tagliaRichiesta);
-        if (!tagliaCode || !ProductionForecastService.SALE_SIZES.includes(tagliaCode)) continue;
+        if (!tagliaCode) continue;
+        const saleSize = this.mapOrderSizeToSaleSize(tagliaCode);
+        if (!saleSize) continue;
 
         const quantita = ordine.quantitaTotale || ordine.quantita || 0;
         if (quantita <= 0) continue;
@@ -654,10 +713,10 @@ export class ProductionForecastService {
         const meseFineAnno = dataFine.getFullYear() === year ? dataFine.getMonth() + 1 : 12;
 
         for (let m = meseInizioAnno; m <= meseFineAnno; m++) {
-          if (!result[m.toString()][tagliaCode]) {
-            result[m.toString()][tagliaCode] = 0;
+          if (!result[m.toString()][saleSize]) {
+            result[m.toString()][saleSize] = 0;
           }
-          result[m.toString()][tagliaCode] += quantitaPerMese;
+          result[m.toString()][saleSize] += quantitaPerMese;
         }
       }
 
@@ -784,20 +843,19 @@ export class ProductionForecastService {
     year: number, 
     mortalityRates: { T1: number; T3: number; T10: number } = { T1: 0.05, T3: 0.03, T10: 0.02 }
   ): Promise<ForecastSummary> {
-    // Parallelizza tutte le query indipendenti per velocizzare il caricamento
     const [
       targets,
       sgrRates,
       currentInventory,
       sgrLookup,
-      ordersByMonth,
+      ordersBySizeMonth,
       basketInventory
     ] = await Promise.all([
       this.getProductionTargets(year),
       this.getSgrRates(),
       this.getCurrentInventoryBySize(),
       this.getSgrLookup(),
-      this.getOrdersByMonthAndCategory(year),
+      this.getOrdersByMonthAndSize(year),
       this.getBasketLevelInventory()
     ]);
     
@@ -809,10 +867,19 @@ export class ProductionForecastService {
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
     
-    let currentAggregated = this.aggregateByCategory(basketInventoryMutable);
-    let stockT1 = currentAggregated.T1;
-    let stockT3 = currentAggregated.T3;
-    let stockT10 = currentAggregated.T10;
+    let stockBySaleSize = this.aggregateBySaleSize(basketInventoryMutable);
+
+    const mapBudgetToSaleSize = (category: string): string[] => {
+      if (category === 'T3') return ['TP-2000', 'TP-3000'];
+      if (category === 'T10') return ['TP-4000', 'TP-5000'];
+      return ['TP-1000'];
+    };
+
+    const getMortalityForSaleSize = (saleSize: string): number => {
+      if (saleSize === 'TP-1000') return mortalityRates.T1;
+      if (saleSize === 'TP-2000' || saleSize === 'TP-3000') return mortalityRates.T3;
+      return mortalityRates.T10;
+    };
 
     for (let month = 1; month <= 12; month++) {
       const isPastMonth = month < currentMonth;
@@ -825,34 +892,36 @@ export class ProductionForecastService {
         const remainingDays = Math.max(0, daysInMonth - currentDay);
         if (remainingDays > 0) {
           basketInventoryMutable = this.simulateMonthlyGrowth(basketInventoryMutable, sgrLookup, month - 1, mortalityRates, remainingDays);
-          const newAggregated = this.aggregateByCategory(basketInventoryMutable);
-          stockT1 = newAggregated.T1;
-          stockT3 = newAggregated.T3;
-          stockT10 = newAggregated.T10;
+          stockBySaleSize = this.aggregateBySaleSize(basketInventoryMutable);
         }
       } else if (isFutureMonth) {
         basketInventoryMutable = this.simulateMonthlyGrowth(basketInventoryMutable, sgrLookup, month - 1, mortalityRates);
-        const newAggregated = this.aggregateByCategory(basketInventoryMutable);
-        stockT1 = newAggregated.T1;
-        stockT3 = newAggregated.T3;
-        stockT10 = newAggregated.T10;
+        stockBySaleSize = this.aggregateBySaleSize(basketInventoryMutable);
       }
       
-      // Combina target budget con ordini per questo mese
+      const monthOrders = ordersBySizeMonth[month.toString()] || {};
       const monthTargets = targets.filter(t => t.month === month);
-      const monthOrders = ordersByMonth[month.toString()] || { T3: 0, T10: 0 };
       
-      // Crea set di categorie da processare (target + ordini)
-      const categoriesToProcess = new Set<string>();
-      monthTargets.forEach(t => categoriesToProcess.add(t.sizeCategory));
-      Object.entries(monthOrders).forEach(([cat, qty]) => {
-        if (qty > 0 && (cat === 'T3' || cat === 'T10')) categoriesToProcess.add(cat);
-      });
+      const saleSizesToProcess = new Set<string>();
+      for (const saleSize of ProductionForecastService.SALE_SIZES) {
+        if ((monthOrders[saleSize] || 0) > 0) saleSizesToProcess.add(saleSize);
+        if ((stockBySaleSize[saleSize] || 0) > 0 && !isPastMonth) saleSizesToProcess.add(saleSize);
+      }
+      for (const target of monthTargets) {
+        const mappedSizes = mapBudgetToSaleSize(target.sizeCategory);
+        mappedSizes.forEach(s => saleSizesToProcess.add(s));
+      }
       
-      for (const sizeCategory of categoriesToProcess) {
-        const target = monthTargets.find(t => t.sizeCategory === sizeCategory);
-        const budgetAnimals = target?.targetAnimals || 0;
-        const ordersAnimals = ordersByMonth[month.toString()]?.[sizeCategory] || 0;
+      for (const saleSize of saleSizesToProcess) {
+        const ordersAnimals = monthOrders[saleSize] || 0;
+        
+        let budgetAnimals = 0;
+        for (const target of monthTargets) {
+          const mappedSizes = mapBudgetToSaleSize(target.sizeCategory);
+          if (mappedSizes.includes(saleSize)) {
+            budgetAnimals += Math.round(target.targetAnimals / mappedSizes.length);
+          }
+        }
 
         let availableForSale = 0;
         let soldAnimals = 0;
@@ -863,38 +932,27 @@ export class ProductionForecastService {
         let giacenzaInizioMese = 0;
 
         if (isPastMonth) {
-          if (sizeCategory === 'T3') giacenzaInizioMese = 0;
-          else if (sizeCategory === 'T10') giacenzaInizioMese = 0;
-          else if (sizeCategory === 'T1') giacenzaInizioMese = 0;
+          giacenzaInizioMese = 0;
           soldAnimals = 0;
           availableForSale = 0;
-        } else if (sizeCategory === 'T3') {
-          giacenzaInizioMese = stockT3;
-          availableForSale = stockT3;
-          soldAnimals = Math.min(availableForSale, budgetAnimals);
-          stockT3 = Math.max(0, stockT3 - soldAnimals);
+        } else {
+          giacenzaInizioMese = stockBySaleSize[saleSize] || 0;
+          availableForSale = giacenzaInizioMese;
+          const demand = Math.max(budgetAnimals, ordersAnimals);
+          soldAnimals = Math.min(availableForSale, demand);
+          stockBySaleSize[saleSize] = Math.max(0, (stockBySaleSize[saleSize] || 0) - soldAnimals);
           if (soldAnimals > 0) {
-            basketInventoryMutable = this.removeAnimalsFromCategory(basketInventoryMutable, 'T3', soldAnimals);
+            basketInventoryMutable = this.removeAnimalsFromSaleSize(basketInventoryMutable, saleSize, soldAnimals);
           }
-          
-        } else if (sizeCategory === 'T10') {
-          giacenzaInizioMese = stockT10;
-          availableForSale = stockT10;
-          soldAnimals = Math.min(availableForSale, budgetAnimals);
-          stockT10 = Math.max(0, stockT10 - soldAnimals);
-          if (soldAnimals > 0) {
-            basketInventoryMutable = this.removeAnimalsFromCategory(basketInventoryMutable, 'T10', soldAnimals);
-          }
-        } else if (sizeCategory === 'T1') {
-          giacenzaInizioMese = stockT1;
         }
 
         const deficit = budgetAnimals - soldAnimals;
         let seminaT1Richiesta = 0;
         
-        const growthMonths = sizeCategory === 'T3' ? 6 : 10;
+        const growthCategory = saleSize === 'TP-4000' || saleSize === 'TP-5000' ? 'T10' : 'T3';
+        const growthMonths = growthCategory === 'T3' ? 6 : 10;
         const cumulativeMortalityT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
-        const cumulativeMortalityT3 = sizeCategory === 'T10' 
+        const cumulativeMortalityT3 = growthCategory === 'T10' 
           ? Math.pow(1 - mortalityRates.T3, 4) 
           : 1;
         
@@ -906,7 +964,7 @@ export class ProductionForecastService {
             sgrLookup,
             month,
             year,
-            sizeCategory
+            growthCategory
           );
           
           giorniCrescita = growthCalc.totalDays;
@@ -922,7 +980,7 @@ export class ProductionForecastService {
             targetMonth: month,
             targetYear: year,
             targetMonthName: MONTH_NAMES[month - 1],
-            targetSize: sizeCategory,
+            targetSize: saleSize,
             seedT1Amount: Math.round(seminaT1Richiesta),
             growthDays: giorniCrescita
           });
@@ -935,13 +993,10 @@ export class ProductionForecastService {
         const varianceBudgetProduction = productionForecast - budgetAnimals;
         const varianceOrdersProduction = productionForecast - ordersAnimals;
 
-        // Calcola deficit percentuali
         const deficitBudgetPct = budgetAnimals > 0 ? ((budgetAnimals - productionForecast) / budgetAnimals) * 100 : 0;
         const deficitOrdiniPct = ordersAnimals > 0 ? ((ordersAnimals - productionForecast) / ordersAnimals) * 100 : 0;
         const deficitOrdiniAssoluto = ordersAnimals - productionForecast;
-        const deficitBudgetAssoluto = budgetAnimals - productionForecast;
 
-        // Determina status e descrizione
         let status: 'on_track' | 'warning' | 'critical' = 'on_track';
         let statusDescription = 'Coperto';
 
@@ -970,14 +1025,15 @@ export class ProductionForecastService {
           statusDescription = `Ordini -${this.formatNumber(deficitOrdiniAssoluto)}`;
         }
 
-        const stockResiduo = sizeCategory === 'T3' ? stockT3 : 
-                             sizeCategory === 'T10' ? stockT10 : stockT1;
+        if (giacenzaInizioMese === 0 && budgetAnimals === 0 && ordersAnimals === 0 && isPastMonth) continue;
+
+        const stockResiduo = stockBySaleSize[saleSize] || 0;
 
         monthlyData.push({
           year,
           month,
           monthName: MONTH_NAMES[month - 1],
-          sizeCategory,
+          sizeCategory: saleSize,
           budgetAnimals,
           ordersAnimals,
           productionForecast: Math.round(productionForecast),
@@ -1013,20 +1069,16 @@ export class ProductionForecastService {
     const ordersAbsoluteByCategory = ordersDiagnostic.totaliPerCategoria || ordersByCategoryAgg;
     const ordersAbsoluteBySize = ordersDiagnostic.totaliPerTaglia || {};
     
-    // Calcola ordini per taglia specifica (nuova funzionalità)
-    const ordersBySize = await this.getOrdersByMonthAndSize(year);
     const ordersBySpecificSize: OrdersBySize[] = [];
     const sizeAnnualTotals: Record<string, number> = {};
     
-    // Aggrega ordini annuali per taglia
     for (let m = 1; m <= 12; m++) {
-      const monthData = ordersBySize[m.toString()] || {};
+      const monthData = ordersBySizeMonth[m.toString()] || {};
       for (const [sizeCode, qty] of Object.entries(monthData)) {
         sizeAnnualTotals[sizeCode] = (sizeAnnualTotals[sizeCode] || 0) + qty;
       }
     }
     
-    // Converti in array con categoria aggregata
     for (const [sizeCode, totalAnimals] of Object.entries(sizeAnnualTotals)) {
       if (totalAnimals > 0) {
         ordersBySpecificSize.push({
@@ -1037,22 +1089,18 @@ export class ProductionForecastService {
       }
     }
     
-    // Ordina per numero taglia
     ordersBySpecificSize.sort((a, b) => {
       const numA = parseInt(a.sizeCode.replace(/\D/g, '')) || 0;
       const numB = parseInt(b.sizeCode.replace(/\D/g, '')) || 0;
       return numA - numB;
     });
 
-    // Aggrega budget e ordini per categoria
-    const budgetByCategory: Record<string, number> = { T3: 0, T10: 0 };
-    const ordersByCategoryAgg: Record<string, number> = { T3: 0, T10: 0 };
+    const budgetByCategory: Record<string, number> = {};
+    const ordersByCategoryAgg: Record<string, number> = {};
     
     for (const m of monthlyData) {
-      if (m.sizeCategory === 'T3' || m.sizeCategory === 'T10') {
-        budgetByCategory[m.sizeCategory] += m.budgetAnimals;
-        ordersByCategoryAgg[m.sizeCategory] += m.ordersAnimals;
-      }
+      budgetByCategory[m.sizeCategory] = (budgetByCategory[m.sizeCategory] || 0) + m.budgetAnimals;
+      ordersByCategoryAgg[m.sizeCategory] = (ordersByCategoryAgg[m.sizeCategory] || 0) + m.ordersAnimals;
     }
 
     return {

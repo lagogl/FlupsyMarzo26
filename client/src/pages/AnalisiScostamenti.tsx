@@ -68,7 +68,7 @@ interface InventoryBySize {
 interface OrdersBySize {
   sizeCode: string;
   totalAnimals: number;
-  aggregateCategory: 'T3' | 'T10';
+  aggregateCategory: string;
 }
 
 interface ForecastData {
@@ -309,51 +309,33 @@ export default function AnalisiScostamenti() {
     );
   }
 
-  // Mappa taglie specifiche alle categorie
-  const mapSizeToCategory = (size: string): string => {
-    if (size.includes('2000') || size.includes('3000') || size.includes('3500')) return 'T3';
-    if (size.includes('4000') || size.includes('5000')) return 'T10';
-    return size;
-  };
-  
-  const effectiveCategory = selectedCategory.startsWith('TP-') 
-    ? mapSizeToCategory(selectedCategory) 
-    : selectedCategory;
-  
-  const filteredData = effectiveCategory === 'all' 
+  const filteredData = selectedCategory === 'all' 
     ? data.monthlyData 
-    : data.monthlyData.filter(d => d.sizeCategory === effectiveCategory);
+    : data.monthlyData.filter(d => d.sizeCategory === selectedCategory);
 
-  // Grafici dinamici basati sulla selezione
-  const showT3Chart = effectiveCategory === 'all' || effectiveCategory === 'T3';
-  const showT10Chart = effectiveCategory === 'all' || effectiveCategory === 'T10';
-  
-  const chartDataT3 = data.monthlyData
-    .filter(d => d.sizeCategory === 'T3')
-    .map(d => ({
-      name: d.monthName.substring(0, 3),
-      budget: d.budgetAnimals / 1000000,
-      produzione: d.productionForecast / 1000000,
-      ordini: d.ordersAnimals / 1000000
-    }));
+  const availableSaleSizes = [...new Set(data.monthlyData.map(d => d.sizeCategory))].sort((a, b) => {
+    const numA = parseInt(a.replace(/\D/g, '')) || 0;
+    const numB = parseInt(b.replace(/\D/g, '')) || 0;
+    return numA - numB;
+  });
 
-  const chartDataT10 = data.monthlyData
-    .filter(d => d.sizeCategory === 'T10')
-    .map(d => ({
-      name: d.monthName.substring(0, 3),
-      budget: d.budgetAnimals / 1000000,
-      produzione: d.productionForecast / 1000000,
-      ordini: d.ordersAnimals / 1000000
-    }));
-    
-  
-  const totalT3Budget = data.monthlyData
-    .filter(d => d.sizeCategory === 'T3')
-    .reduce((sum, d) => sum + d.budgetAnimals, 0);
-  
-  const totalT10Budget = data.monthlyData
-    .filter(d => d.sizeCategory === 'T10')
-    .reduce((sum, d) => sum + d.budgetAnimals, 0);
+  const chartDataBySaleSize: Record<string, Array<{ name: string; budget: number; produzione: number; ordini: number }>> = {};
+  for (const saleSize of availableSaleSizes) {
+    const months = new Set<string>();
+    data.monthlyData.filter(d => d.sizeCategory === saleSize).forEach(d => months.add(d.monthName.substring(0, 3)));
+    chartDataBySaleSize[saleSize] = data.monthlyData
+      .filter(d => d.sizeCategory === saleSize)
+      .map(d => ({
+        name: d.monthName.substring(0, 3),
+        budget: d.budgetAnimals / 1000000,
+        produzione: d.productionForecast / 1000000,
+        ordini: d.ordersAnimals / 1000000
+      }));
+  }
+
+  const chartsToShow = selectedCategory === 'all' 
+    ? availableSaleSizes 
+    : [selectedCategory];
 
   const criticalMonths = data.monthlyData.filter(d => d.status === 'critical');
   const warningMonths = data.monthlyData.filter(d => d.status === 'warning');
@@ -387,19 +369,9 @@ export default function AnalisiScostamenti() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tutte</SelectItem>
-              <SelectItem value="T3">Solo T3</SelectItem>
-              <SelectItem value="T10">Solo T10</SelectItem>
-              {data?.ordersAbsoluteBySize && Object.keys(data.ordersAbsoluteBySize)
-                .filter(s => (data.ordersAbsoluteBySize?.[s] || 0) > 0)
-                .sort((a, b) => {
-                  const numA = parseInt(a.replace(/\D/g, '')) || 0;
-                  const numB = parseInt(b.replace(/\D/g, '')) || 0;
-                  return numA - numB;
-                })
-                .map(size => (
-                  <SelectItem key={size} value={size}>{size}</SelectItem>
-                ))
-              }
+              {availableSaleSizes.map(size => (
+                <SelectItem key={size} value={size}>{size}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -480,7 +452,10 @@ export default function AnalisiScostamenti() {
           <CardContent>
             <div className="text-2xl font-bold">{formatNumber(data.totalBudget)}</div>
             <p className="text-xs text-muted-foreground">
-              T3: {formatNumber(data.budgetByCategory?.T3 || totalT3Budget)} | T10: {formatNumber(data.budgetByCategory?.T10 || totalT10Budget)}
+              {data.budgetByCategory && Object.entries(data.budgetByCategory)
+                .filter(([_, v]) => v > 0)
+                .map(([k, v]) => `${k}: ${formatNumber(v)}`)
+                .join(' | ')}
             </p>
           </CardContent>
         </Card>
@@ -493,7 +468,10 @@ export default function AnalisiScostamenti() {
           <CardContent>
             <div className="text-2xl font-bold text-indigo-600">{formatNumber(data.totalOrders)}</div>
             <p className="text-xs text-muted-foreground">
-              T3: {formatNumber(data.ordersByCategory?.T3 || 0)} | T10: {formatNumber(data.ordersByCategory?.T10 || 0)}
+              {data.ordersByCategory && Object.entries(data.ordersByCategory)
+                .filter(([_, v]) => v > 0)
+                .map(([k, v]) => `${k}: ${formatNumber(v)}`)
+                .join(' | ')}
             </p>
             {data.ordersAbsoluteBySize && Object.keys(data.ordersAbsoluteBySize).length > 0 && (
               <div className="mt-2 pt-2 border-t space-y-1">
@@ -643,56 +621,41 @@ export default function AnalisiScostamenti() {
         </TabsList>
 
         <TabsContent value="chart" className="space-y-4">
-          <div className={`grid gap-4 ${showT3Chart && showT10Chart ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
-            {showT3Chart && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    Budget vs Ordini vs Produzione - {selectedCategory.startsWith('TP-') && effectiveCategory === 'T3' ? `${selectedCategory} (T3)` : 'T3'}
-                  </CardTitle>
-                  <CardDescription>Milioni di animali per mese (verde = T3)</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartDataT3}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
-                      <Legend />
-                      <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
-                      <Bar dataKey="ordini" name="Ordini" fill="#6366f1" />
-                      <Bar dataKey="produzione" name="Produzione" fill="#22c55e" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
-
-            {showT10Chart && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    Budget vs Ordini vs Produzione - {selectedCategory.startsWith('TP-') && effectiveCategory === 'T10' ? `${selectedCategory} (T10)` : 'T10'}
-                  </CardTitle>
-                  <CardDescription>Milioni di animali per mese (blu = T10)</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartDataT10}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
-                      <Legend />
-                      <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
-                      <Bar dataKey="ordini" name="Ordini" fill="#6366f1" />
-                      <Bar dataKey="produzione" name="Produzione" fill="#3b82f6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
+          <div className={`grid gap-4 ${chartsToShow.length >= 2 ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+            {chartsToShow.map(saleSize => {
+              const chartData = chartDataBySaleSize[saleSize] || [];
+              if (chartData.length === 0) return null;
+              const colorMap: Record<string, string> = {
+                'TP-1000': '#f59e0b',
+                'TP-2000': '#22c55e',
+                'TP-3000': '#10b981',
+                'TP-4000': '#3b82f6',
+                'TP-5000': '#8b5cf6'
+              };
+              const barColor = colorMap[saleSize] || '#3b82f6';
+              return (
+                <Card key={saleSize}>
+                  <CardHeader>
+                    <CardTitle>Budget vs Ordini vs Produzione - {saleSize}</CardTitle>
+                    <CardDescription>Milioni di animali per mese</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <RechartsTooltip formatter={(value: number) => `${value.toFixed(2)}M`} />
+                        <Legend />
+                        <Bar dataKey="budget" name="Budget" fill="#94a3b8" />
+                        <Bar dataKey="ordini" name="Ordini" fill="#6366f1" />
+                        <Bar dataKey="produzione" name="Produzione" fill={barColor} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </TabsContent>
 
@@ -740,7 +703,7 @@ export default function AnalisiScostamenti() {
                               Taglia <HelpCircle className="h-3 w-3 text-muted-foreground" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-xs">
-                              <p>Taglie specifiche (TP-XXX) previste per la vendita in questo mese. T3 = animali piccoli (TP-2000/3000/3500), T10 = animali grandi (TP-4000/5000)</p>
+                              <p>Taglia di vendita (TP-XXX) per cui è prevista la disponibilità in questo mese</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -872,48 +835,9 @@ export default function AnalisiScostamenti() {
                       <TableRow key={idx}>
                         <TableCell className="font-medium">{row.monthName}</TableCell>
                         <TableCell>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger className="cursor-help">
-                                <Badge variant="outline" className="text-xs font-medium">
-                                  {row.sizeCategory === 'T3' ? 'Semina Normale' : row.sizeCategory === 'T10' ? 'Semina Grossa' : row.sizeCategory}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="p-2">
-                                <div className="flex flex-col gap-1.5">
-                                  {row.sizeCategory === 'T3' ? (
-                                    <>
-                                      <div className="flex items-center justify-between gap-3">
-                                        <Badge className="text-xs bg-blue-500 text-white">TP-2000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-2000'] || 0)} ordini</span>
-                                      </div>
-                                      <div className="flex items-center justify-between gap-3">
-                                        <Badge className="text-xs bg-green-500 text-white">TP-3000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-3000'] || 0)} ordini</span>
-                                      </div>
-                                      <div className="flex items-center justify-between gap-3">
-                                        <Badge className="text-xs bg-teal-500 text-white">TP-3500</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-3500'] || 0)} ordini</span>
-                                      </div>
-                                    </>
-                                  ) : row.sizeCategory === 'T10' ? (
-                                    <>
-                                      <div className="flex items-center justify-between gap-3">
-                                        <Badge className="text-xs bg-orange-500 text-white">TP-4000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-4000'] || 0)} ordini</span>
-                                      </div>
-                                      <div className="flex items-center justify-between gap-3">
-                                        <Badge className="text-xs bg-red-500 text-white">TP-5000</Badge>
-                                        <span className="text-xs text-gray-600">{formatNumber(data.ordersAbsoluteBySize?.['TP-5000'] || 0)} ordini</span>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <Badge variant="outline">{row.sizeCategory}</Badge>
-                                  )}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <Badge variant="outline" className="text-xs font-medium">
+                            {row.sizeCategory}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right text-purple-600 font-medium">
                           {formatNumber(row.giacenzaInizioMese)}
@@ -1156,19 +1080,15 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
     return inv?.totalAnimals || 0;
   };
   
-  // Trova mesi con ordini per una taglia
   const getOrderMonthsForSize = (size: string) => {
-    const category = size.includes('2000') || size.includes('3000') || size.includes('3500') ? 'T3' : 'T10';
     return monthlyData
-      .filter(d => d.sizeCategory === category && d.ordersAnimals > 0)
+      .filter(d => d.sizeCategory === size && d.ordersAnimals > 0)
       .map(d => ({ month: d.month, orders: d.ordersAnimals, variance: d.varianceOrdersProduction }));
   };
   
-  // Trova requisiti di semina
   const getSeedingForSize = (size: string) => {
-    const category = size.includes('2000') || size.includes('3000') || size.includes('3500') ? 'T3' : 'T10';
     return monthlyData
-      .filter(d => d.sizeCategory === category && d.seminaT1Richiesta > 0)
+      .filter(d => d.sizeCategory === size && d.seminaT1Richiesta > 0)
       .map(d => ({ 
         targetMonth: d.month, 
         seedingMonth: d.meseSeminaT1,
@@ -1658,7 +1578,7 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                     <div>
                       <span className="font-medium">{d.monthName}</span>
                       <Badge variant="secondary" className="ml-2 text-xs">
-                        {d.sizeCategory === 'T3' ? 'TP-2000/3000/3500' : 'TP-4000/5000'}
+                        {d.sizeCategory}
                       </Badge>
                     </div>
                     <div className="text-red-600 font-bold">
