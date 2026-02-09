@@ -966,48 +966,22 @@ export function registerAIRoutes(app: Express) {
       
       let monthlyData = forecast.monthlyData || [];
       const ordersAbsoluteBySize = forecast.ordersAbsoluteBySize || {};
-      
-      // Calcola totale ordini assoluto in base al filtro categoria
-      let ordersAbsoluteFiltered = 0;
       const absoluteBySizeRecord = ordersAbsoluteBySize as Record<string, number>;
       
-      // Filtra per categoria o taglia specifica
       if (category && category !== 'all') {
-        if (category.startsWith('TP-')) {
-          // Taglia specifica - usa solo quella taglia
-          ordersAbsoluteFiltered = absoluteBySizeRecord[category] || 0;
-          const isT3 = category.includes('2000') || category.includes('3000') || category.includes('3500');
-          const effectiveCategory = isT3 ? 'T3' : 'T10';
-          monthlyData = monthlyData.filter((m: any) => m.sizeCategory === effectiveCategory);
-        } else {
-          // Categoria T3 o T10
-          monthlyData = monthlyData.filter((m: any) => m.sizeCategory === category);
-          if (category === 'T3') {
-            ordersAbsoluteFiltered = (absoluteBySizeRecord['TP-2000'] || 0) + 
-                                      (absoluteBySizeRecord['TP-3000'] || 0) + 
-                                      (absoluteBySizeRecord['TP-3500'] || 0);
-          } else {
-            ordersAbsoluteFiltered = (absoluteBySizeRecord['TP-4000'] || 0) + 
-                                      (absoluteBySizeRecord['TP-5000'] || 0);
-          }
-        }
-      } else {
-        // Tutte le categorie
-        ordersAbsoluteFiltered = Object.values(absoluteBySizeRecord).reduce((sum, v) => sum + v, 0);
+        monthlyData = monthlyData.filter((m: any) => m.sizeCategory === category);
       }
+      
+      const ordersAbsoluteFiltered = category && category !== 'all'
+        ? (absoluteBySizeRecord[category as string] || 0)
+        : Object.values(absoluteBySizeRecord).reduce((sum, v) => sum + v, 0);
       
       const workbook = createFormattedWorkbook();
       const ws = workbook.addWorksheet('Scostamenti Produzione');
       
-      const headers = ['Mese', 'Categoria', 'Taglie Incluse', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
+      const headers = ['Mese', 'Taglia', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
                        'Δ vs Budget', 'Δ vs Ordini', 'Stock', 'Semina T1', 'Mese Semina', 'Stato'];
-      setColumnWidths(ws, [15, 10, 25, 15, 15, 15, 15, 15, 15, 15, 15, 15, 22]);
-      
-      const categoryToSizes: Record<string, string> = {
-        'T3': 'TP-2000, TP-3000, TP-3500',
-        'T10': 'TP-4000, TP-5000',
-        'T1': 'Seme iniziale'
-      };
+      setColumnWidths(ws, [15, 12, 15, 15, 15, 15, 15, 15, 15, 15, 15, 22]);
       
       const titleRow = ws.addRow([`Analisi Scostamenti Produzione ${targetYear}`]);
       applyTitleStyle(titleRow);
@@ -1022,12 +996,11 @@ export function registerAIRoutes(app: Express) {
       const headerRow = ws.addRow(headers);
       applyHeaderStyle(headerRow);
       
-      const statusColIndex = 12;
+      const statusColIndex = 11;
       monthlyData.forEach((row: any, index: number) => {
         const rowData = [
           row.monthName,
           row.sizeCategory,
-          categoryToSizes[row.sizeCategory] || '-',
           row.giacenzaInizioMese,
           row.budgetAnimals,
           row.ordersAnimals || 0,
@@ -1044,7 +1017,7 @@ export function registerAIRoutes(app: Express) {
         
         applyStatusStyle(excelRow.getCell(statusColIndex + 1), String(rowData[statusColIndex]));
         
-        for (let col = 4; col <= 11; col++) {
+        for (let col = 3; col <= 10; col++) {
           if (typeof rowData[col - 1] === 'number') {
             applyNumberFormat(excelRow.getCell(col));
           }
@@ -1054,10 +1027,9 @@ export function registerAIRoutes(app: Express) {
       const totals = [
         'TOTALE',
         '-',
-        '-', // Taglie Incluse
-        '-', // Giacenza
+        '-',
         monthlyData.reduce((sum: number, r: any) => sum + r.budgetAnimals, 0),
-        ordersAbsoluteFiltered, // Usa totale assoluto ordini filtrato per categoria
+        ordersAbsoluteFiltered,
         monthlyData.reduce((sum: number, r: any) => sum + r.productionForecast, 0),
         monthlyData.reduce((sum: number, r: any) => sum + r.varianceBudgetProduction, 0),
         monthlyData.reduce((sum: number, r: any) => sum + r.varianceOrdersProduction, 0),
@@ -1068,7 +1040,7 @@ export function registerAIRoutes(app: Express) {
       ];
       const totalRow = ws.addRow(totals);
       applyTotalRowStyle(totalRow);
-      for (let col = 5; col <= 12; col++) {
+      for (let col = 4; col <= 10; col++) {
         if (typeof totals[col - 1] === 'number') {
           applyNumberFormat(totalRow.getCell(col));
         }
@@ -1146,12 +1118,9 @@ export function registerAIRoutes(app: Express) {
       const ordersAbsoluteBySize = forecast.ordersAbsoluteBySize || {};
       const totalOrdersAbsolute = Object.values(ordersAbsoluteBySize as Record<string, number>).reduce((sum, v) => sum + v, 0);
       
-      // Recupera dati aggiuntivi per fogli dettagliati
       const targets = await productionForecastService.getProductionTargets(targetYear);
       const sgrRates = await productionForecastService.getSgrRates();
       const inventoryByCategory = await productionForecastService.getTotalInventoryByCategory();
-      const sgrLookup = await productionForecastService.getSgrLookup();
-      const ordersByMonth = await productionForecastService.getOrdersByMonthAndCategory(targetYear);
       const ordersBySpecificSize = forecast.ordersBySpecificSize || [];
       
       const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -1217,242 +1186,79 @@ export function registerAIRoutes(app: Express) {
         sgrData.push([sgr.month, sgr.sizeId, sgr.sizeName, sgr.sgr, comment]);
       }
       
-      // FOGLIO 3: CALCOLI DETTAGLIATI MESE PER MESE
+      // FOGLIO 3: CALCOLI DETTAGLIATI MESE PER MESE (usa dati dal forecast calcolato)
       const calcData: any[] = [
         ['CALCOLI DETTAGLIATI MENSILI'],
         [''],
-        ['Legenda formule:'],
-        ['- Stock Residuo = Stock precedente - Venduto + Transizioni da categoria inferiore - Mortalità'],
-        ['- Venduto = MIN(Stock disponibile, Budget)'],
-        ['- Deficit Budget = Budget - Venduto (se negativo = surplus, se positivo = manca stock)'],
-        ['- Deficit Ordini = Ordini - Venduto (confronto con ordini reali da Fatture in Cloud)'],
-        ['- Sopravvivenza Cumulativa T3 = (1 - Mortalità_T1)^mesi_crescita'],
-        ['- Sopravvivenza Cumulativa T10 = (1 - Mortalità_T1)^6 × (1 - Mortalità_T3)^4'],
-        ['- Semina T1 = Deficit / Sopravvivenza_Cumulativa'],
-        ['- Giorni Crescita = Calcolato all\'indietro usando SGR mensili reali'],
+        ['Legenda:'],
+        ['- Giacenza = Stock disponibile a inizio mese per questa taglia (simulazione con SGR)'],
+        ['- Produzione = MIN(Giacenza, MAX(Budget, Ordini)) - animali vendibili questo mese'],
+        ['- Δ vs Budget = Produzione - Budget (negativo = manca stock)'],
+        ['- Δ vs Ordini = Produzione - Ordini (negativo = ordini scoperti)'],
+        ['- Semina T1 = Animali da seminare per coprire il deficit futuro'],
         [''],
-        ['Mese', 'Taglia', 'Stock Inizio Mese', 'Transizione Entrata', 'Mortalità Applicata', 
-         'Stock Disponibile', 'Budget', 'Ordini', 'Venduto', 'Stock Fine Mese', 'Δ vs Budget', 'Δ vs Ordini',
-         'Mesi Crescita', 'Sopravvivenza %', 'Semina T1 Richiesta', 'Mese Semina', 'Giorni Crescita', 'Stato', 'Commento Calcolo']
+        ['Mese', 'Taglia', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
+         'Δ vs Budget', 'Δ vs Ordini', 'Stock Residuo', 'Semina T1', 'Mese Semina', 'Giorni Crescita', 'Stato', 'Commento']
       ];
       
-      let stockT1 = inventoryByCategory.T1 || 0;
-      let stockT3 = inventoryByCategory.T3 || 0;
-      let stockT10 = inventoryByCategory.T10 || 0;
+      const monthlyData = forecast.monthlyData || [];
       
-      const today = new Date();
-      const currentMonth = today.getMonth() + 1;
-      
-      for (let month = 1; month <= 12; month++) {
-        const monthsFromNow = month - currentMonth;
+      for (const row of monthlyData) {
+        const deficitBudget = row.budgetAnimals - row.productionForecast;
+        const deficitOrdini = row.ordersAnimals - row.productionForecast;
         
-        const stockT1Inizio = stockT1;
-        const stockT3Inizio = stockT3;
-        const stockT10Inizio = stockT10;
-        
-        let t1ToT3Transition = 0;
-        let t3ToT10Transition = 0;
-        let mortalityT1Applied = 0;
-        let mortalityT3Applied = 0;
-        let mortalityT10Applied = 0;
-        
-        if (monthsFromNow > 0) {
-          t1ToT3Transition = stockT1 * 0.15;
-          mortalityT1Applied = (stockT1 - t1ToT3Transition) * mortalityRates.T1;
-          stockT1 = Math.max(0, (stockT1 - t1ToT3Transition) * (1 - mortalityRates.T1));
-          stockT3 += t1ToT3Transition * (1 - mortalityRates.T1);
-          
-          t3ToT10Transition = stockT3 * 0.10;
-          mortalityT3Applied = (stockT3 - t3ToT10Transition) * mortalityRates.T3;
-          stockT3 = Math.max(0, (stockT3 - t3ToT10Transition) * (1 - mortalityRates.T3));
-          stockT10 += t3ToT10Transition * (1 - mortalityRates.T3);
-          
-          mortalityT10Applied = stockT10 * mortalityRates.T10;
-          stockT10 = stockT10 * (1 - mortalityRates.T10);
+        let commento = '';
+        if (deficitBudget > 0) {
+          commento = `Deficit Budget ${deficitBudget.toLocaleString('it-IT')} animali. ` +
+            `Ordini: ${row.ordersAnimals.toLocaleString('it-IT')} (Δ ${deficitOrdini.toLocaleString('it-IT')}).`;
+          if (row.seminaT1Richiesta > 0) {
+            commento += ` Semina richiesta: ${row.seminaT1Richiesta.toLocaleString('it-IT')}.`;
+          }
+        } else if (deficitOrdini > 0) {
+          commento = `Budget coperto. ATTENZIONE: ordini ${row.ordersAnimals.toLocaleString('it-IT')} > produzione ${row.productionForecast.toLocaleString('it-IT')} (gap: ${deficitOrdini.toLocaleString('it-IT')}).`;
+        } else if (row.budgetAnimals > 0 || row.ordersAnimals > 0) {
+          commento = `Stock sufficiente. Produzione ${row.productionForecast.toLocaleString('it-IT')} su budget ${row.budgetAnimals.toLocaleString('it-IT')}, ordini ${row.ordersAnimals.toLocaleString('it-IT')}.`;
+        } else {
+          commento = row.giacenzaInizioMese > 0 ? `Giacenza ${row.giacenzaInizioMese.toLocaleString('it-IT')} senza domanda.` : '-';
         }
         
-        const monthTargets = targets.filter((t: any) => t.month === month);
-        
-        for (const target of monthTargets) {
-          const budgetAnimals = target.targetAnimals || 0;
-          const ordersAnimals = ordersByMonth[month.toString()]?.[target.sizeCategory] || 0;
-          
-          let stockInizio = 0;
-          let transizione = 0;
-          let mortalita = 0;
-          let stockDisponibile = 0;
-          let venduto = 0;
-          let stockFine = 0;
-          
-          if (target.sizeCategory === 'T3') {
-            stockInizio = stockT3Inizio;
-            transizione = t1ToT3Transition * (1 - mortalityRates.T1);
-            mortalita = mortalityT3Applied;
-            stockDisponibile = stockT3;
-            venduto = Math.min(stockT3, budgetAnimals);
-            stockT3 = Math.max(0, stockT3 - venduto);
-            stockFine = stockT3;
-          } else if (target.sizeCategory === 'T10') {
-            stockInizio = stockT10Inizio;
-            transizione = t3ToT10Transition * (1 - mortalityRates.T3);
-            mortalita = mortalityT10Applied;
-            stockDisponibile = stockT10;
-            venduto = Math.min(stockT10, budgetAnimals);
-            stockT10 = Math.max(0, stockT10 - venduto);
-            stockFine = stockT10;
-          }
-          
-          const deficitBudget = budgetAnimals - venduto;
-          const deficitOrdini = ordersAnimals - venduto;
-          
-          const growthMonths = target.sizeCategory === 'T3' ? 6 : 10;
-          const survivalT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
-          const survivalT3 = target.sizeCategory === 'T10' ? Math.pow(1 - mortalityRates.T3, 4) : 1;
-          const totalSurvival = survivalT1 * survivalT3;
-          
-          let seminaT1 = 0;
-          let meseSemina = '-';
-          let giorniCrescita = 0;
-          let stato = 'Coperto';
-          let commento = '';
-          
-          // Calcola deficit percentuali (stessa logica del service)
-          const deficitBudgetPct = budgetAnimals > 0 ? (deficitBudget / budgetAnimals) * 100 : 0;
-          const deficitOrdiniPct = ordersAnimals > 0 ? (deficitOrdini / ordersAnimals) * 100 : 0;
-          
-          const hasBudgetCritical = deficitBudgetPct > 20;
-          const hasBudgetWarning = deficitBudgetPct > 10;
-          const hasOrdersCritical = deficitOrdiniPct > 30;
-          const hasOrdersWarning = deficitOrdini > 0;
-          
-          // Determina stato descrittivo
-          if (hasBudgetCritical && hasOrdersCritical) {
-            stato = `Budget -${Math.round(deficitBudgetPct)}% / Ordini -${Math.round(deficitOrdiniPct)}%`;
-          } else if (hasBudgetCritical) {
-            stato = `Budget -${Math.round(deficitBudgetPct)}%`;
-          } else if (hasOrdersCritical) {
-            stato = `Ordini -${Math.round(deficitOrdiniPct)}%`;
-          } else if (hasBudgetWarning && hasOrdersWarning) {
-            stato = `Budget -${Math.round(deficitBudgetPct)}% / Ordini -${deficitOrdini.toLocaleString('it-IT')}`;
-          } else if (hasBudgetWarning) {
-            stato = `Budget -${Math.round(deficitBudgetPct)}%`;
-          } else if (hasOrdersWarning) {
-            stato = `Ordini -${deficitOrdini.toLocaleString('it-IT')}`;
-          }
-          
-          if (deficitBudget > 0) {
-            seminaT1 = Math.ceil(deficitBudget / totalSurvival);
-            
-            const growthCalc = productionForecastService.calculateGrowthDaysBackward(
-              sgrLookup, month, targetYear, target.sizeCategory
-            );
-            giorniCrescita = growthCalc.totalDays;
-            meseSemina = MONTH_NAMES[growthCalc.seedingMonth - 1] + ' ' + growthCalc.seedingYear;
-            
-            commento = `Deficit Budget ${deficitBudget.toLocaleString('it-IT')} animali. ` +
-              `Ordini: ${ordersAnimals.toLocaleString('it-IT')} (Δ ${deficitOrdini.toLocaleString('it-IT')}). ` +
-              `Sopravvivenza: ${(totalSurvival * 100).toFixed(1)}%. ` +
-              `Semina = ${deficitBudget.toLocaleString('it-IT')} / ${(totalSurvival * 100).toFixed(1)}% = ${seminaT1.toLocaleString('it-IT')}`;
-          } else if (deficitOrdini > 0) {
-            commento = `Budget coperto. ATTENZIONE: ordini ${ordersAnimals.toLocaleString('it-IT')} > produzione ${venduto.toLocaleString('it-IT')} (gap: ${deficitOrdini.toLocaleString('it-IT')}).`;
-          } else {
-            commento = `Stock sufficiente. Venduto ${venduto.toLocaleString('it-IT')} su budget ${budgetAnimals.toLocaleString('it-IT')}, ordini ${ordersAnimals.toLocaleString('it-IT')}.`;
-          }
-          
-          calcData.push([
-            MONTH_NAMES[month - 1],
-            target.sizeCategory,
-            Math.round(stockInizio),
-            Math.round(transizione),
-            Math.round(mortalita),
-            Math.round(stockDisponibile),
-            budgetAnimals,
-            ordersAnimals,
-            Math.round(venduto),
-            Math.round(stockFine),
-            Math.round(deficitBudget),
-            Math.round(deficitOrdini),
-            growthMonths,
-            (totalSurvival * 100).toFixed(1) + '%',
-            Math.round(seminaT1),
-            meseSemina,
-            giorniCrescita,
-            stato,
-            commento
-          ]);
-        }
+        calcData.push([
+          row.monthName,
+          row.sizeCategory,
+          Math.round(row.giacenzaInizioMese),
+          row.budgetAnimals,
+          row.ordersAnimals,
+          Math.round(row.productionForecast),
+          Math.round(row.varianceBudgetProduction),
+          Math.round(row.varianceOrdersProduction),
+          Math.round(row.stockResiduo),
+          Math.round(row.seminaT1Richiesta || 0),
+          row.meseSeminaT1 || '-',
+          row.giorniCrescita || 0,
+          row.statusDescription || 'Coperto',
+          commento
+        ]);
       }
       
-      // FOGLIO 4: RIEPILOGO SEMINE
+      // FOGLIO 4: RIEPILOGO SEMINE (usa dati dal forecast)
       const semineData: any[] = [
         ['RIEPILOGO SEMINE T1 RICHIESTE'],
         [''],
         ['Questo foglio mostra quando e quanto seminare T1 per coprire i deficit di produzione.'],
         ['Il mese di semina è calcolato all\'indietro dal mese target usando i valori SGR reali.'],
         [''],
-        ['Mese Target', 'Taglia Target', 'Deficit Animali', 'Semina T1 Richiesta', 'Mese Semina', 
-         'Giorni Crescita', 'Formula Sopravvivenza', 'Sopravvivenza %']
+        ['Mese Target', 'Taglia Target', 'Semina T1 Richiesta', 'Mese Semina', 'Giorni Crescita']
       ];
       
-      // Ricalcola per foglio semine
-      stockT1 = inventoryByCategory.T1 || 0;
-      stockT3 = inventoryByCategory.T3 || 0;
-      stockT10 = inventoryByCategory.T10 || 0;
-      
-      for (let month = 1; month <= 12; month++) {
-        const monthsFromNow = month - currentMonth;
-        
-        if (monthsFromNow > 0) {
-          const t1ToT3 = stockT1 * 0.15;
-          stockT1 = Math.max(0, (stockT1 - t1ToT3) * (1 - mortalityRates.T1));
-          stockT3 += t1ToT3 * (1 - mortalityRates.T1);
-          
-          const t3ToT10 = stockT3 * 0.10;
-          stockT3 = Math.max(0, (stockT3 - t3ToT10) * (1 - mortalityRates.T3));
-          stockT10 += t3ToT10 * (1 - mortalityRates.T3);
-          stockT10 = stockT10 * (1 - mortalityRates.T10);
-        }
-        
-        const monthTargets = targets.filter((t: any) => t.month === month);
-        
-        for (const target of monthTargets) {
-          const budget = target.targetAnimals || 0;
-          let available = target.sizeCategory === 'T3' ? stockT3 : stockT10;
-          const sold = Math.min(available, budget);
-          
-          if (target.sizeCategory === 'T3') {
-            stockT3 = Math.max(0, stockT3 - sold);
-          } else {
-            stockT10 = Math.max(0, stockT10 - sold);
-          }
-          
-          const deficit = budget - sold;
-          if (deficit > 0) {
-            const growthMonths = target.sizeCategory === 'T3' ? 6 : 10;
-            const survT1 = Math.pow(1 - mortalityRates.T1, growthMonths);
-            const survT3 = target.sizeCategory === 'T10' ? Math.pow(1 - mortalityRates.T3, 4) : 1;
-            const total = survT1 * survT3;
-            
-            const formula = target.sizeCategory === 'T10' 
-              ? `(1-${mortalityRates.T1*100}%)^${growthMonths} × (1-${mortalityRates.T3*100}%)^4`
-              : `(1-${mortalityRates.T1*100}%)^${growthMonths}`;
-            
-            const growthCalc = productionForecastService.calculateGrowthDaysBackward(
-              sgrLookup, month, targetYear, target.sizeCategory
-            );
-            
-            semineData.push([
-              MONTH_NAMES[month - 1] + ' ' + targetYear,
-              target.sizeCategory,
-              deficit,
-              Math.ceil(deficit / total),
-              MONTH_NAMES[growthCalc.seedingMonth - 1] + ' ' + growthCalc.seedingYear,
-              growthCalc.totalDays,
-              formula,
-              (total * 100).toFixed(1) + '%'
-            ]);
-          }
-        }
+      const seedingSchedule = forecast.seedingSchedule || [];
+      for (const s of seedingSchedule) {
+        semineData.push([
+          s.targetMonthName + ' ' + s.targetYear,
+          s.targetSize,
+          s.seedT1Amount,
+          s.seedingMonthName + ' ' + s.seedingYear,
+          s.growthDays
+        ]);
       }
       
       // Crea workbook formattato con ExcelJS
@@ -1471,7 +1277,7 @@ export function registerAIRoutes(app: Express) {
         } else if (String(rowData[0]).startsWith('===')) {
           applySectionTitleStyle(row);
           ws1.mergeCells(rowNum, 1, rowNum, 3);
-        } else if (rowData[0] === 'Parametro' || rowData[0] === 'Categoria') {
+        } else if (rowData[0] === 'Parametro' || rowData[0] === 'Categoria' || rowData[0] === 'Taglia') {
           applyHeaderStyle(row);
         } else if (rowData[0] && rowData[0] !== '') {
           applyDataRowStyle(row, rowNum % 2 === 0);
@@ -1497,27 +1303,27 @@ export function registerAIRoutes(app: Express) {
         rowNum++;
       }
       
-      // FOGLIO 3: Calcoli Dettagliati (principale)
+      // FOGLIO 3: Calcoli Dettagliati (principale) - 14 colonne
       const ws3 = workbook.addWorksheet('Calcoli Dettagliati');
-      setColumnWidths(ws3, [12, 8, 15, 15, 15, 15, 12, 12, 12, 15, 12, 12, 10, 12, 15, 15, 12, 18, 45]);
+      setColumnWidths(ws3, [12, 12, 15, 12, 12, 15, 12, 12, 15, 12, 15, 12, 18, 45]);
       
       rowNum = 1;
-      const statusColIndex = 17;
+      const statusColIdx = 12;
       for (const rowData of calcData) {
         const row = ws3.addRow(rowData);
         if (rowNum === 1) {
           applyTitleStyle(row);
-          ws3.mergeCells(rowNum, 1, rowNum, 19);
+          ws3.mergeCells(rowNum, 1, rowNum, 14);
         } else if (rowData[0] === 'Mese') {
           applyHeaderStyle(row);
         } else if (String(rowData[0]).startsWith('-') || String(rowData[0]).startsWith('Legenda')) {
           row.getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
         } else if (rowData[0] && rowData[0] !== '') {
           applyDataRowStyle(row, rowNum % 2 === 0);
-          if (rowData[statusColIndex]) {
-            applyStatusStyle(row.getCell(statusColIndex + 1), String(rowData[statusColIndex]));
+          if (rowData[statusColIdx]) {
+            applyStatusStyle(row.getCell(statusColIdx + 1), String(rowData[statusColIdx]));
           }
-          for (let col = 3; col <= 16; col++) {
+          for (let col = 3; col <= 12; col++) {
             if (typeof rowData[col - 1] === 'number') {
               applyNumberFormat(row.getCell(col));
             }
@@ -1526,25 +1332,25 @@ export function registerAIRoutes(app: Express) {
         rowNum++;
       }
       
-      // FOGLIO 4: Riepilogo Semine
+      // FOGLIO 4: Riepilogo Semine - 5 colonne
       const ws4 = workbook.addWorksheet('Riepilogo Semine');
-      setColumnWidths(ws4, [20, 15, 18, 18, 18, 15, 35, 15]);
+      setColumnWidths(ws4, [20, 15, 18, 18, 15]);
       
       rowNum = 1;
       for (const rowData of semineData) {
         const row = ws4.addRow(rowData);
         if (rowNum === 1) {
           applyTitleStyle(row);
-          ws4.mergeCells(rowNum, 1, rowNum, 8);
+          ws4.mergeCells(rowNum, 1, rowNum, 5);
         } else if (rowData[0] === 'Mese Target') {
           applyHeaderStyle(row);
         } else if (String(rowData[0]).startsWith('Questo') || String(rowData[0]).startsWith('Il mese')) {
           row.getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
-          ws4.mergeCells(rowNum, 1, rowNum, 8);
+          ws4.mergeCells(rowNum, 1, rowNum, 5);
         } else if (rowData[0] && rowData[0] !== '') {
           applyDataRowStyle(row, rowNum % 2 === 0);
           if (typeof rowData[2] === 'number') applyNumberFormat(row.getCell(3));
-          if (typeof rowData[3] === 'number') applyNumberFormat(row.getCell(4));
+          if (typeof rowData[4] === 'number') applyNumberFormat(row.getCell(5));
         }
         rowNum++;
       }
