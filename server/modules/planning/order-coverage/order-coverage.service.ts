@@ -293,28 +293,46 @@ export class OrderCoverageService {
     mortalityRates: { T1: number; T3: number; T10: number },
     totalDays: number
   ): Array<{basketId: number, animalsPerKg: number, animalCount: number}> {
-    let current = baskets.map(b => ({ ...b }));
+    let working = baskets.map(b => ({
+      basketId: b.basketId,
+      weightMg: 1000000 / b.animalsPerKg,
+      animalCount: b.animalCount
+    }));
+
     const dailyMortalityFraction = 1 / 30;
+    let sizeChanges = 0;
 
     for (let day = 0; day < totalDays; day++) {
-      current = current.map(basket => {
-        const category = productionForecastService.getCategoryFromAnimalsPerKg(basket.animalsPerKg);
-        const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, monthIndex, basket.animalsPerKg);
-        const currentWeight = 1000000 / basket.animalsPerKg;
-        const newWeight = currentWeight * (1 + sgr / 100);
-        const newAnimalsPerKg = Math.round(1000000 / newWeight);
+      working = working.map(b => {
+        const animalsPerKg = 1000000 / b.weightMg;
+        const category = productionForecastService.getCategoryFromAnimalsPerKg(animalsPerKg);
+        const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, monthIndex, animalsPerKg);
+        const newWeight = b.weightMg * (1 + sgr / 100);
+        const newAnimalsPerKg = 1000000 / newWeight;
+        const oldSaleSize = productionForecastService.mapAnimalsPerKgToSaleSize(animalsPerKg);
+        const newSaleSize = productionForecastService.mapAnimalsPerKgToSaleSize(newAnimalsPerKg);
+        if (oldSaleSize !== newSaleSize) sizeChanges++;
+
         const dailyMortality = mortalityRates[category] * dailyMortalityFraction;
-        const survivingAnimals = Math.round(basket.animalCount * (1 - dailyMortality));
+        const survivingAnimals = Math.round(b.animalCount * (1 - dailyMortality));
 
         return {
-          basketId: basket.basketId,
-          animalsPerKg: newAnimalsPerKg,
+          basketId: b.basketId,
+          weightMg: newWeight,
           animalCount: survivingAnimals
         };
       });
     }
 
-    return current;
+    if (sizeChanges > 0) {
+      console.log(`[DailyGrowth] Mese ${monthIndex + 1}, ${totalDays} giorni: ${sizeChanges} cambi taglia rilevati`);
+    }
+
+    return working.map(b => ({
+      basketId: b.basketId,
+      animalsPerKg: Math.round(1000000 / b.weightMg),
+      animalCount: b.animalCount
+    }));
   }
 }
 
