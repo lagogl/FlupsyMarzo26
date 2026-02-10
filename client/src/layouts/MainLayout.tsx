@@ -209,6 +209,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       color: 'text-blue-600',
       items: [
         { icon: <ShieldCheck className="h-5 w-5 mr-2 text-blue-600" />, label: "Verifica Copertura Ordini", path: "/verifica-copertura" },
+        { icon: <TrendingUp className="h-5 w-5 mr-2 text-blue-600" />, label: "Proiezione Crescita", path: "/proiezione-crescita" },
       ]
     },
     {
