@@ -3,11 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import * as XLSX from "xlsx";
 
 interface SizeMonthProjection {
   month: number;
@@ -70,6 +71,299 @@ interface HatcheryArrival {
 
 function formatNumber(n: number): string {
   return n.toLocaleString("it-IT");
+}
+
+interface SpreadsheetRow {
+  label: string;
+  color: string;
+  bgClass: string;
+  textClass: string;
+  values: (number | string)[];
+  isNegative?: boolean;
+  isBold?: boolean;
+}
+
+function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: {
+  data: GrowthProjectionResult;
+  mc: MonthlyContext[];
+  showHatcheryForm: boolean;
+  setShowHatcheryForm: (v: boolean) => void;
+  toast: any;
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [selectedCell, setSelectedCell] = useState<{row: number, col: number} | null>(null);
+  const [selectedRow, setSelectedRow] = useState<number | null>(null);
+  const [selectedCol, setSelectedCol] = useState<number | null>(null);
+
+  const rows: SpreadsheetRow[] = [
+    {
+      label: "Giacenza lorda (inventario)",
+      color: "#3b82f6",
+      bgClass: "bg-blue-50",
+      textClass: "text-blue-700",
+      values: mc.map(m => m.giacenzaLordaInventario),
+    },
+    {
+      label: "Giacenza lorda (con schiuditoio)",
+      color: "#06b6d4",
+      bgClass: "bg-cyan-50",
+      textClass: "text-cyan-700",
+      values: mc.map(m => m.giacenzaLordaConSchiuditoio),
+    },
+    {
+      label: `Ordini evasi ${data.targetSize}`,
+      color: "#a855f7",
+      bgClass: "bg-purple-50",
+      textClass: "text-purple-700",
+      values: mc.map(m => {
+        if (m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget) return `-${m.ordiniEvasi} / ${m.ordiniTarget}`;
+        if (m.ordiniEvasi > 0) return -m.ordiniEvasi;
+        if (m.ordiniTarget > 0) return `0 / ${m.ordiniTarget}`;
+        return 0;
+      }),
+      isNegative: true,
+    },
+    {
+      label: `Giacenza netta ${data.targetSize}`,
+      color: "#16a34a",
+      bgClass: "bg-green-50",
+      textClass: "text-green-700",
+      values: mc.map(m => m.giacenzaNetTarget),
+      isBold: true,
+    },
+    {
+      label: "Budget Produzione",
+      color: "#f59e0b",
+      bgClass: "bg-amber-50",
+      textClass: "text-amber-700",
+      values: mc.map(m => m.budgetProduzione),
+    },
+    {
+      label: "Arrivi Schiuditoio (TP-300)",
+      color: "#10b981",
+      bgClass: "bg-emerald-50",
+      textClass: "text-emerald-700",
+      values: mc.map(m => m.arriviSchiuditoio),
+    },
+  ];
+
+  const excelColLetter = (idx: number) => String.fromCharCode(65 + idx);
+
+  const handleExportExcel = useCallback(() => {
+    const headers = ["Indicatore", ...mc.map(m => m.monthLabel)];
+    const wsData = [headers];
+    for (const row of rows) {
+      wsData.push([
+        row.label,
+        ...row.values.map(v => typeof v === 'number' ? String(v) : String(v))
+      ]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    const colWidths = [{ wch: 35 }, ...mc.map(() => ({ wch: 16 }))];
+    ws['!cols'] = colWidths;
+
+    for (let r = 1; r <= rows.length; r++) {
+      for (let c = 1; c <= mc.length; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[cellRef];
+        if (cell) {
+          const numVal = parseFloat(String(cell.v).replace(/[^\d.-]/g, ''));
+          if (!isNaN(numVal)) {
+            cell.v = numVal;
+            cell.t = 'n';
+            cell.z = '#,##0';
+          }
+        }
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Proiezione Crescita");
+    XLSX.writeFile(wb, `Proiezione_Crescita_${data.targetSize}.xlsx`);
+    toast({ title: "Esportato", description: "File Excel scaricato" });
+  }, [mc, rows, data.targetSize]);
+
+  const handleCopyTable = useCallback(() => {
+    const headers = ["Indicatore", ...mc.map(m => m.monthLabel)].join("\t");
+    const dataRows = rows.map(row =>
+      [row.label, ...row.values.map(v => typeof v === 'number' ? v : String(v))].join("\t")
+    );
+    const text = [headers, ...dataRows].join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      toast({ title: "Copiato", description: "Tabella copiata negli appunti" });
+    });
+  }, [mc, rows]);
+
+  const handleCellClick = (rowIdx: number, colIdx: number) => {
+    setSelectedCell({ row: rowIdx, col: colIdx });
+    setSelectedRow(null);
+    setSelectedCol(null);
+  };
+
+  const handleRowHeaderClick = (rowIdx: number) => {
+    setSelectedRow(rowIdx);
+    setSelectedCell(null);
+    setSelectedCol(null);
+  };
+
+  const handleColHeaderClick = (colIdx: number) => {
+    setSelectedCol(colIdx);
+    setSelectedCell(null);
+    setSelectedRow(null);
+  };
+
+  const isCellSelected = (rowIdx: number, colIdx: number) => {
+    if (selectedCell && selectedCell.row === rowIdx && selectedCell.col === colIdx) return true;
+    if (selectedRow === rowIdx) return true;
+    if (selectedCol === colIdx) return true;
+    return false;
+  };
+
+  const cellRef = selectedCell
+    ? `${excelColLetter(selectedCell.col + 1)}${selectedCell.row + 2}`
+    : selectedRow !== null
+      ? `${selectedRow + 2}`
+      : selectedCol !== null
+        ? `${excelColLetter(selectedCol + 1)}`
+        : "";
+
+  const cellValue = selectedCell
+    ? rows[selectedCell.row]?.values[selectedCell.col]
+    : "";
+
+  return (
+    <Card className="border-gray-300 shadow-sm">
+      <CardHeader className="pb-1 pt-3 px-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Grid3X3 className="h-4 w-4 text-green-700" />
+            <CardTitle className="text-sm font-semibold text-green-800">Tabella Riepilogativa Mensile</CardTitle>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleCopyTable}>
+              <Copy className="h-3 w-3" /> Copia
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-green-700" onClick={handleExportExcel}>
+              <Download className="h-3 w-3" /> Excel
+            </Button>
+            <Button
+              variant={showHatcheryForm ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setShowHatcheryForm(!showHatcheryForm)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Arrivi Schiuditoio
+            </Button>
+          </div>
+        </div>
+        {(selectedCell || selectedRow !== null || selectedCol !== null) && (
+          <div className="flex items-center gap-2 mt-1 bg-gray-100 rounded px-2 py-1 text-xs border">
+            <span className="font-mono font-bold text-green-700 min-w-[40px]">{cellRef}</span>
+            <span className="text-gray-400">|</span>
+            <span className="font-mono text-gray-700 flex-1">
+              {selectedCell ? (typeof cellValue === 'number' ? formatNumber(cellValue) : String(cellValue)) : (selectedRow !== null ? rows[selectedRow]?.label : "")}
+            </span>
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto border-t border-gray-300">
+          <table
+            ref={tableRef}
+            className="w-full text-xs border-collapse select-none"
+            style={{ fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}
+            onClick={() => { setSelectedCell(null); setSelectedRow(null); setSelectedCol(null); }}
+          >
+            <thead>
+              <tr>
+                <th
+                  className="sticky left-0 z-20 bg-gradient-to-b from-gray-100 to-gray-200 border-r-2 border-b border-gray-300 p-0 min-w-[220px]"
+                  style={{ borderRight: '2px solid #9ca3af' }}
+                >
+                  <div className="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 tracking-wide uppercase">
+                    Indicatore
+                  </div>
+                </th>
+                {mc.map((m, i) => (
+                  <th
+                    key={i}
+                    className={`border-b border-r border-gray-300 p-0 min-w-[110px] cursor-pointer transition-colors ${selectedCol === i ? 'bg-blue-200' : 'bg-gradient-to-b from-gray-100 to-gray-200'}`}
+                    onClick={(e) => { e.stopPropagation(); handleColHeaderClick(i); }}
+                  >
+                    <div className="px-2 py-1.5 text-center text-[11px] font-semibold text-gray-600">
+                      <div>{m.monthLabel}</div>
+                      <div className="text-[9px] font-normal text-gray-400 font-mono">{excelColLetter(i + 1)}</div>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIdx) => (
+                <tr key={rowIdx} className="group">
+                  <td
+                    className={`sticky left-0 z-10 border-b border-gray-200 p-0 cursor-pointer transition-colors ${selectedRow === rowIdx ? 'bg-blue-100' : row.bgClass}`}
+                    style={{ borderRight: '2px solid #9ca3af' }}
+                    onClick={(e) => { e.stopPropagation(); handleRowHeaderClick(rowIdx); }}
+                  >
+                    <div className="px-2 py-2 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: row.color }}></span>
+                      <span className={`font-semibold text-[11px] ${row.textClass}`}>{row.label}</span>
+                      <span className="text-[9px] text-gray-400 font-mono ml-auto">{rowIdx + 1}</span>
+                    </div>
+                  </td>
+                  {row.values.map((val, colIdx) => {
+                    const isSelected = isCellSelected(rowIdx, colIdx);
+                    const numVal = typeof val === 'number' ? val : null;
+                    const isNeg = numVal !== null && numVal < 0;
+                    const isEmpty = numVal === 0 && !row.isNegative;
+                    const displayVal = typeof val === 'string'
+                      ? val
+                      : numVal === 0
+                        ? (row.isNegative ? '-' : '-')
+                        : formatNumber(numVal!);
+
+                    return (
+                      <td
+                        key={colIdx}
+                        className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); handleCellClick(rowIdx, colIdx); }}
+                      >
+                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[12px] ${isEmpty ? 'text-gray-300' : isNeg ? 'text-red-600' : row.textClass}`}>
+                          {displayVal}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50">
+                <td
+                  className="sticky left-0 z-10 bg-gray-50 border-t-2 border-gray-300 p-0"
+                  style={{ borderRight: '2px solid #9ca3af' }}
+                >
+                  <div className="px-2 py-1.5 text-[10px] text-gray-400 font-mono">
+                    {rows.length} righe × {mc.length} colonne
+                  </div>
+                </td>
+                {mc.map((_, i) => (
+                  <td key={i} className="border-t-2 border-r border-gray-300 p-0">
+                    <div className="px-2 py-1.5 text-center text-[9px] text-gray-400 font-mono">
+                      {excelColLetter(i + 1)}
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ProiezioneCrescita() {
@@ -253,127 +547,13 @@ export default function ProiezioneCrescita() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Tabella Riepilogativa Mensile</CardTitle>
-            <Button
-              variant={showHatcheryForm ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowHatcheryForm(!showHatcheryForm)}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Arrivi Schiuditoio
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left p-2 font-semibold sticky left-0 bg-muted/50 z-10 min-w-[220px]">Indicatore</th>
-                  {mc.map((m, i) => (
-                    <th key={i} className="text-center p-2 font-semibold min-w-[100px]">{m.monthLabel}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b bg-blue-50/50">
-                  <td className="p-2 font-semibold sticky left-0 bg-blue-50/50 z-10">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
-                      Giacenza lorda (inventario)
-                    </span>
-                  </td>
-                  {mc.map((m, i) => (
-                    <td key={i} className="p-2 text-center font-semibold text-blue-700">
-                      {formatNumber(m.giacenzaLordaInventario)}
-                    </td>
-                  ))}
-                </tr>
-
-                <tr className="border-b bg-cyan-50/50">
-                  <td className="p-2 font-semibold sticky left-0 bg-cyan-50/50 z-10">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="w-3 h-3 rounded-full bg-cyan-500 inline-block"></span>
-                      Giacenza lorda (con schiuditoio)
-                    </span>
-                  </td>
-                  {mc.map((m, i) => {
-                    const diff = m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario;
-                    return (
-                      <td key={i} className="p-2 text-center font-semibold text-cyan-700">
-                        {formatNumber(m.giacenzaLordaConSchiuditoio)}
-                        {diff > 0 && <div className="text-[10px] text-cyan-500">(+{formatNumber(diff)})</div>}
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                <tr className="border-b bg-purple-50/50">
-                  <td className="p-2 font-semibold sticky left-0 bg-purple-50/50 z-10">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
-                      Ordini evasi {data.targetSize}
-                    </span>
-                  </td>
-                  {mc.map((m, i) => {
-                    const partial = m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget;
-                    return (
-                      <td key={i} className={`p-2 text-center font-semibold ${m.ordiniEvasi > 0 ? (partial ? 'text-red-600' : 'text-purple-700') : 'text-gray-400'}`}>
-                        {m.ordiniEvasi > 0 ? `-${formatNumber(m.ordiniEvasi)}${partial ? ` / ${formatNumber(m.ordiniTarget)}` : ''}` : (m.ordiniTarget > 0 ? <span className="text-red-500 text-xs">0 / {formatNumber(m.ordiniTarget)}</span> : '-')}
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                <tr className="border-b bg-green-50/50">
-                  <td className="p-2 font-semibold sticky left-0 bg-green-50/50 z-10">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="w-3 h-3 rounded-full bg-green-600 inline-block"></span>
-                      Giacenza netta {data.targetSize}
-                    </span>
-                  </td>
-                  {mc.map((m, i) => (
-                    <td key={i} className={`p-2 text-center font-bold ${m.giacenzaNetTarget >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {formatNumber(m.giacenzaNetTarget)}
-                    </td>
-                  ))}
-                </tr>
-
-                <tr className="border-b bg-amber-50/50">
-                  <td className="p-2 font-semibold sticky left-0 bg-amber-50/50 z-10">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
-                      Budget Produzione
-                    </span>
-                  </td>
-                  {mc.map((m, i) => (
-                    <td key={i} className={`p-2 text-center font-semibold ${m.budgetProduzione > 0 ? 'text-amber-700' : 'text-gray-400'}`}>
-                      {m.budgetProduzione > 0 ? formatNumber(m.budgetProduzione) : '-'}
-                    </td>
-                  ))}
-                </tr>
-
-                <tr className="border-b bg-emerald-50/50">
-                  <td className="p-2 font-semibold sticky left-0 bg-emerald-50/50 z-10">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-                      Arrivi Schiuditoio (TP-300)
-                    </span>
-                  </td>
-                  {mc.map((m, i) => (
-                    <td key={i} className={`p-2 text-center font-semibold ${m.arriviSchiuditoio > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
-                      {m.arriviSchiuditoio > 0 ? formatNumber(m.arriviSchiuditoio) : '-'}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      <ExcelTable
+        data={data}
+        mc={mc}
+        showHatcheryForm={showHatcheryForm}
+        setShowHatcheryForm={setShowHatcheryForm}
+        toast={toast}
+      />
 
       {showHatcheryForm && (
         <Card className="border-emerald-200">
