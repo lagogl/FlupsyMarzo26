@@ -46,6 +46,7 @@ interface MonthlyContext {
   giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
   schiuditoioNecessario: number;
+  perditeMortalita: number;
 }
 
 interface GrowthProjectionResult {
@@ -202,6 +203,8 @@ export class GrowthProjectionService {
         });
       }
 
+      const totalBeforeMortality = globalBaskets.reduce((s, b) => s + b.animalCount, 0);
+
       if (simulDays > 0) {
         const dailyMortalityFraction = 1 / daysInMonth;
         for (let day = 0; day < simulDays; day++) {
@@ -231,6 +234,9 @@ export class GrowthProjectionService {
           });
         }
       }
+
+      const totalAfterMortality = globalBaskets.reduce((s, b) => s + b.animalCount, 0);
+      const perditeMortalita = Math.max(0, totalBeforeMortality - totalAfterMortality);
 
       let giacenzaLordaInventario = 0;
       let giacenzaLordaConSchiuditoio = 0;
@@ -286,7 +292,8 @@ export class GrowthProjectionService {
         giacenzaLordaInventario,
         giacenzaLordaConSchiuditoio,
         giacenzaNetTarget,
-        schiuditoioNecessario: 0
+        schiuditoioNecessario: 0,
+        perditeMortalita
       });
     }
 

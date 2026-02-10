@@ -46,6 +46,7 @@ interface MonthlyContext {
   giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
   schiuditoioNecessario: number;
+  perditeMortalita: number;
 }
 
 interface GrowthProjectionResult {
@@ -115,6 +116,18 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
       bgClass: "bg-cyan-50",
       textClass: "text-cyan-700",
       values: mc.map(m => m.giacenzaLordaConSchiuditoio),
+    },
+    {
+      label: "Perdite per mortalità",
+      tooltip: "Numero di animali persi nel mese a causa della mortalità. Calcolato come differenza tra il totale animali a inizio mese e il totale dopo la simulazione giorno per giorno. La mortalità NON viene applicata alla giacenza già pronta (animali già a taglia target). I tassi sono configurabili nella pagina Gestione Mortalità.",
+      color: "#dc2626",
+      bgClass: "bg-red-50",
+      textClass: "text-red-700",
+      values: mc.map(m => m.perditeMortalita || 0),
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m ? (m.perditeMortalita || 0) > 0 : false;
+      },
     },
     {
       label: `Ordini richiesti ${data.targetSize}`,
@@ -268,11 +281,18 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
         return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Schiuditoio (non ancora a taglia) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
       }
       case 2: {
+        const perdite = m.perditeMortalita || 0;
+        if (perdite > 0) {
+          return `= Animali persi nel mese per mortalità: ${fn(perdite)} (tassi applicati per taglia, esclusa giacenza già pronta)`;
+        }
+        return `= Nessuna perdita per mortalità in ${m.monthName}`;
+      }
+      case 3: {
         return m.ordiniTarget > 0
           ? `= Totale ordini richiesti per ${data.targetSize} a ${m.monthName}: ${fn(m.ordiniTarget)} animali`
           : `= Nessun ordine per ${m.monthName}`;
       }
-      case 3: {
+      case 4: {
         if (m.ordiniEvasi > 0 && m.ordiniEvasi >= m.ordiniTarget) {
           return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(m.ordiniTarget)} richiesti → Copertura completa ✓`;
         }
@@ -284,21 +304,21 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
         }
         return `= Nessun ordine per ${m.monthName}`;
       }
-      case 4: {
+      case 5: {
         return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
       }
-      case 5: {
+      case 6: {
         const necessario = m.schiuditoioNecessario || 0;
         if (necessario > 0) {
           return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap ordini futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
         }
         return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
       }
-      case 6:
+      case 7:
         return m.budgetProduzione > 0
           ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
           : `= Nessun budget pianificato per ${m.monthName}`;
-      case 7:
+      case 8:
         return m.arriviSchiuditoio > 0
           ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
           : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
