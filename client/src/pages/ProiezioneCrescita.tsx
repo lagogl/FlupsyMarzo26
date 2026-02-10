@@ -220,17 +220,51 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     return false;
   };
 
-  const cellRef = selectedCell
-    ? `${excelColLetter(selectedCell.col + 1)}${selectedCell.row + 2}`
-    : selectedRow !== null
-      ? `${selectedRow + 2}`
-      : selectedCol !== null
-        ? `${excelColLetter(selectedCol + 1)}`
-        : "";
+  const getCellFormula = (rowIdx: number, colIdx: number): string => {
+    const m = mc[colIdx];
+    if (!m) return "";
+    const fn = formatNumber;
 
-  const cellValue = selectedCell
-    ? rows[selectedCell.row]?.values[selectedCell.col]
-    : "";
+    switch (rowIdx) {
+      case 0:
+        return `= Simulazione crescita SGR giorno per giorno (solo inventario reale) → animali con ≤${fn(data.targetMaxAnimalsPerKg)} an/kg = ${fn(m.giacenzaLordaInventario)}`;
+      case 1: {
+        const diff = m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario;
+        if (diff > 0) {
+          return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Contributo schiuditoio cresciuto (${fn(diff)}) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
+        }
+        return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Schiuditoio (non ancora a taglia) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
+      }
+      case 2: {
+        if (m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget) {
+          return `= Ordini richiesti (${fn(m.ordiniTarget)}) - Evasi solo (${fn(m.ordiniEvasi)}) → Scorte insufficienti, mancano ${fn(m.ordiniTarget - m.ordiniEvasi)}`;
+        }
+        if (m.ordiniEvasi > 0) {
+          return `= -Ordini evasi (${fn(m.ordiniEvasi)}) → Sottratti da cestelli più grandi`;
+        }
+        if (m.ordiniTarget > 0) {
+          return `= Ordini richiesti (${fn(m.ordiniTarget)}) - Evasi (0) → Nessuno stock disponibile a ${data.targetSize}`;
+        }
+        return `= Nessun ordine per ${m.monthName}`;
+      }
+      case 3: {
+        return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evasi (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
+      }
+      case 4:
+        return m.budgetProduzione > 0
+          ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
+          : `= Nessun budget pianificato per ${m.monthName}`;
+      case 5:
+        return m.arriviSchiuditoio > 0
+          ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
+          : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
+      default:
+        return "";
+    }
+  };
+
+  const cellFormula = selectedCell ? getCellFormula(selectedCell.row, selectedCell.col) : "";
+  const cellValue = selectedCell ? rows[selectedCell.row]?.values[selectedCell.col] : "";
 
   return (
     <Card className="border-gray-300 shadow-sm">
@@ -258,13 +292,15 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
             </Button>
           </div>
         </div>
-        {(selectedCell || selectedRow !== null || selectedCol !== null) && (
-          <div className="flex items-center gap-2 mt-1 bg-gray-100 rounded px-2 py-1 text-xs border">
-            <span className="font-mono font-bold text-green-700 min-w-[40px]">{cellRef}</span>
-            <span className="text-gray-400">|</span>
-            <span className="font-mono text-gray-700 flex-1">
-              {selectedCell ? (typeof cellValue === 'number' ? formatNumber(cellValue) : String(cellValue)) : (selectedRow !== null ? rows[selectedRow]?.label : "")}
-            </span>
+        {selectedCell && (
+          <div className="flex flex-col gap-1 mt-1">
+            <div className="flex items-center gap-2 bg-gray-100 rounded px-2 py-1.5 text-xs border">
+              <span className="font-mono font-bold text-green-700 min-w-[24px]">fx</span>
+              <span className="text-gray-300">│</span>
+              <span className="font-mono text-gray-700 flex-1 text-[11px] leading-relaxed">
+                {cellFormula}
+              </span>
+            </div>
           </div>
         )}
       </CardHeader>
