@@ -344,6 +344,20 @@ export default function GestioneMortalita() {
             <span className="text-sm text-gray-500 mr-1">
               {selectedCells.size > 0 ? `${selectedCells.size} celle selezionate` : 'Seleziona celle trascinando o con Shift+click'}
             </span>
+            {selectedCells.size > 1 && (() => {
+              const values = Array.from(selectedCells).map(k => {
+                const { size, month } = parseCellKey(k);
+                return editableRates[size]?.[month] ?? 0;
+              });
+              const sum = values.reduce((a, b) => a + b, 0);
+              const avg = sum / values.length;
+              return (
+                <span className="inline-flex items-center gap-3 bg-gray-900 text-white text-sm font-semibold px-3 py-1 rounded-md shadow">
+                  <span>Somma: {sum % 1 === 0 ? sum : sum.toFixed(1)}%</span>
+                  <span className="border-l border-gray-600 pl-3">Media: {avg.toFixed(2)}%</span>
+                </span>
+              );
+            })()}
             <div className="flex items-center gap-1 ml-auto">
               <Button
                 variant="outline"
