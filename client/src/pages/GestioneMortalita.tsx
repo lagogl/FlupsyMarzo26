@@ -426,7 +426,7 @@ export default function GestioneMortalita() {
                 {sortedSizes.map((size, si) => (
                   <tr key={size.name} className={`${si % 2 === 0 ? 'bg-white' : 'bg-gray-50'} border-b border-gray-200`}>
                     <td
-                      className={`sticky left-0 z-10 border-r-2 border-gray-300 p-1.5 font-semibold text-sm cursor-pointer hover:opacity-80 ${si % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                      className={`sticky left-0 z-10 border-r-2 border-gray-300 p-1.5 font-semibold text-sm text-center cursor-pointer hover:opacity-80 ${si % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
                       onClick={() => handleSelectRow(size.name)}
                       title={`Seleziona riga ${size.name}`}
                     >
