@@ -298,6 +298,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/verifica-copertura', orderCoverageModule.orderCoverageRoutes);
   console.log('✅ Modulo VERIFICA COPERTURA ORDINI registrato su /api/verifica-copertura/*');
 
+  // Registra il modulo PROIEZIONE CRESCITA
+  const growthProjectionModule = await import('./modules/planning/growth-projection');
+  app.use('/api/proiezione-crescita', growthProjectionModule.growthProjectionRoutes);
+  console.log('✅ Modulo PROIEZIONE CRESCITA registrato su /api/proiezione-crescita/*');
+
   // Registra il modulo SCREENING
   registerScreeningRoutes(app);
 
