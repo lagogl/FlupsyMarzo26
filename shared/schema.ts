@@ -1573,3 +1573,22 @@ export const insertMarineDataSchema = createInsertSchema(marineData)
 
 export type MarineData = typeof marineData.$inferSelect;
 export type InsertMarineData = z.infer<typeof insertMarineDataSchema>;
+
+// ===== ARRIVI SCHIUDITOIO (Hatchery Arrivals) =====
+
+export const hatcheryArrivals = pgTable("hatchery_arrivals", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  quantity: integer("quantity").notNull(),
+  sizeCategory: text("size_category").notNull().default('TP-300'),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertHatcheryArrivalSchema = createInsertSchema(hatcheryArrivals)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+
+export type HatcheryArrival = typeof hatcheryArrivals.$inferSelect;
+export type InsertHatcheryArrival = z.infer<typeof insertHatcheryArrivalSchema>;

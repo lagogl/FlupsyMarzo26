@@ -1,4 +1,7 @@
 import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
+import { db } from "../../../db";
+import { hatcheryArrivals, productionTargets } from "../../../../shared/schema";
+import { eq } from "drizzle-orm";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -27,6 +30,16 @@ interface SizeGroupProjection {
   months: SizeMonthProjection[];
 }
 
+interface MonthlyContext {
+  month: number;
+  monthName: string;
+  monthShort: string;
+  ordiniTarget: number;
+  budgetProduzione: number;
+  arriviSchiuditoio: number;
+  giacenzaCumulativaTarget: number;
+}
+
 interface GrowthProjectionResult {
   targetSize: string;
   targetMaxAnimalsPerKg: number;
@@ -36,6 +49,7 @@ interface GrowthProjectionResult {
   totalAlreadyAtTarget: number;
   totalNotYetAtTarget: number;
   groups: SizeGroupProjection[];
+  monthlyContext: MonthlyContext[];
 }
 
 export class GrowthProjectionService {
@@ -49,10 +63,25 @@ export class GrowthProjectionService {
     if (!threshold) throw new Error(`Taglia target ${targetSize} non trovata`);
     const targetMaxAnimalsPerKg = threshold.maxAnimalsPerKg;
 
-    const [sgrLookup, basketInventory] = await Promise.all([
+    const [sgrLookup, basketInventory, ordersByMonth, budgetRows, hatcheryRows] = await Promise.all([
       productionForecastService.getSgrLookup(),
-      productionForecastService.getBasketLevelInventory()
+      productionForecastService.getBasketLevelInventory(),
+      productionForecastService.getOrdersByMonthAndSize(projYear),
+      db.select().from(productionTargets).where(eq(productionTargets.year, projYear)),
+      db.select().from(hatcheryArrivals).where(eq(hatcheryArrivals.year, projYear))
     ]);
+
+    const budgetByMonth: Record<number, number> = {};
+    for (const row of budgetRows) {
+      if (!budgetByMonth[row.month]) budgetByMonth[row.month] = 0;
+      budgetByMonth[row.month] += row.targetAnimals;
+    }
+
+    const hatcheryByMonth: Record<number, number> = {};
+    for (const row of hatcheryRows) {
+      if (!hatcheryByMonth[row.month]) hatcheryByMonth[row.month] = 0;
+      hatcheryByMonth[row.month] += row.quantity;
+    }
 
     const grouped: Record<string, Array<{basketId: number, animalsPerKg: number, animalCount: number}>> = {};
     for (const b of basketInventory) {
@@ -71,6 +100,76 @@ export class GrowthProjectionService {
       const idxB = ProductionForecastService.SALE_SIZES.indexOf(b);
       return idxB - idxA;
     });
+
+    let hatcheryBasketCounter = 900000;
+
+    const allWorkingBaskets: Array<{basketId: number, weightMg: number, animalCount: number}>[] = [];
+    for (const sizeKey of sortedSizes) {
+      allWorkingBaskets.push(grouped[sizeKey].map(b => ({
+        basketId: b.basketId,
+        weightMg: 1000000 / b.animalsPerKg,
+        animalCount: b.animalCount
+      })));
+    }
+
+    let globalBaskets = allWorkingBaskets.flat();
+
+    const monthlyContext: MonthlyContext[] = [];
+
+    for (let m = currentMonth; m < 12; m++) {
+      const daysInMonth = new Date(projYear, m + 1, 0).getDate();
+      let simulDays = daysInMonth;
+      if (m === currentMonth) {
+        simulDays = Math.max(0, daysInMonth - currentDay);
+      }
+
+      const hatcheryThisMonth = hatcheryByMonth[m + 1] || 0;
+      if (hatcheryThisMonth > 0) {
+        const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
+        const hatcheryApk = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
+        globalBaskets.push({
+          basketId: hatcheryBasketCounter++,
+          weightMg: 1000000 / hatcheryApk,
+          animalCount: hatcheryThisMonth
+        });
+      }
+
+      if (simulDays > 0) {
+        const dailyMortalityFraction = 1 / daysInMonth;
+        for (let day = 0; day < simulDays; day++) {
+          globalBaskets = globalBaskets.map(b => {
+            const apk = 1000000 / b.weightMg;
+            const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
+            const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m, apk);
+            const newWeight = b.weightMg * (1 + sgr / 100);
+            const dailyMortality = mortalityRates[category] * dailyMortalityFraction;
+            const surviving = Math.round(b.animalCount * (1 - dailyMortality));
+            return { basketId: b.basketId, weightMg: newWeight, animalCount: surviving };
+          });
+        }
+      }
+
+      let giacenzaTarget = 0;
+      for (const b of globalBaskets) {
+        const apk = 1000000 / b.weightMg;
+        if (apk <= targetMaxAnimalsPerKg) {
+          giacenzaTarget += b.animalCount;
+        }
+      }
+
+      const ordiniMonth = ordersByMonth[(m + 1).toString()] || {};
+      const ordiniTarget = ordiniMonth[targetSize] || 0;
+
+      monthlyContext.push({
+        month: m + 1,
+        monthName: MONTH_NAMES[m],
+        monthShort: MONTH_SHORT[m],
+        ordiniTarget,
+        budgetProduzione: budgetByMonth[m + 1] || 0,
+        arriviSchiuditoio: hatcheryThisMonth,
+        giacenzaCumulativaTarget: giacenzaTarget
+      });
+    }
 
     for (const sizeKey of sortedSizes) {
       const basketsInGroup = grouped[sizeKey];
@@ -157,7 +256,8 @@ export class GrowthProjectionService {
       totalCurrentQuantity: totalCurrentQty,
       totalAlreadyAtTarget: totalAlready,
       totalNotYetAtTarget: totalCurrentQty - totalAlready,
-      groups
+      groups,
+      monthlyContext
     };
   }
 }

@@ -1,7 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useState } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface SizeMonthProjection {
   month: number;
@@ -23,6 +28,16 @@ interface SizeGroupProjection {
   months: SizeMonthProjection[];
 }
 
+interface MonthlyContext {
+  month: number;
+  monthName: string;
+  monthShort: string;
+  ordiniTarget: number;
+  budgetProduzione: number;
+  arriviSchiuditoio: number;
+  giacenzaCumulativaTarget: number;
+}
+
 interface GrowthProjectionResult {
   targetSize: string;
   targetMaxAnimalsPerKg: number;
@@ -32,6 +47,16 @@ interface GrowthProjectionResult {
   totalAlreadyAtTarget: number;
   totalNotYetAtTarget: number;
   groups: SizeGroupProjection[];
+  monthlyContext: MonthlyContext[];
+}
+
+interface HatcheryArrival {
+  id: number;
+  year: number;
+  month: number;
+  quantity: number;
+  sizeCategory: string;
+  notes: string | null;
 }
 
 function formatNumber(n: number): string {
@@ -39,8 +64,39 @@ function formatNumber(n: number): string {
 }
 
 export default function ProiezioneCrescita() {
+  const { toast } = useToast();
+  const [showHatcheryForm, setShowHatcheryForm] = useState(false);
+  const [hatcheryInputs, setHatcheryInputs] = useState<Record<number, string>>({});
+
   const { data, isLoading, error } = useQuery<GrowthProjectionResult>({
     queryKey: ["/api/proiezione-crescita"],
+  });
+
+  const currentYear = new Date().getFullYear();
+  const { data: hatcheryData } = useQuery<HatcheryArrival[]>({
+    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", currentYear],
+  });
+
+  const saveHatchery = useMutation({
+    mutationFn: async (payload: { year: number; month: number; quantity: number }) => {
+      return apiRequest("POST", "/api/proiezione-crescita/hatchery-arrivals", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals"] });
+      toast({ title: "Salvato", description: "Arrivo schiuditoio salvato" });
+    }
+  });
+
+  const deleteHatchery = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/proiezione-crescita/hatchery-arrivals/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals"] });
+      toast({ title: "Eliminato", description: "Arrivo schiuditoio eliminato" });
+    }
   });
 
   if (isLoading) {
@@ -66,6 +122,15 @@ export default function ProiezioneCrescita() {
 
   const groupsBelow = data.groups.filter(g => !g.alreadyAtTarget);
   const groupsAbove = data.groups.filter(g => g.alreadyAtTarget);
+  const mc = data.monthlyContext;
+
+  const handleSaveHatchery = (month: number) => {
+    const val = parseInt(hatcheryInputs[month] || "0");
+    if (val > 0) {
+      saveHatchery.mutate({ year: data.year, month, quantity: val });
+      setHatcheryInputs(prev => ({ ...prev, [month]: "" }));
+    }
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -74,7 +139,7 @@ export default function ProiezioneCrescita() {
         <div>
           <h1 className="text-2xl font-bold">Proiezione Crescita verso {data.targetSize}</h1>
           <p className="text-sm text-muted-foreground">
-            Quando la giacenza attuale raggiungerà la taglia target ({`≤ ${formatNumber(data.targetMaxAnimalsPerKg)} an/kg`})
+            Progressione mese per mese con ordini, budget e arrivi schiuditoio ({`target ≤ ${formatNumber(data.targetMaxAnimalsPerKg)} an/kg`})
           </p>
         </div>
       </div>
@@ -108,6 +173,161 @@ export default function ProiezioneCrescita() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Tabella Riepilogativa Mensile</CardTitle>
+            <Button
+              variant={showHatcheryForm ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowHatcheryForm(!showHatcheryForm)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Arrivi Schiuditoio
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left p-2 font-semibold sticky left-0 bg-muted/50 z-10 min-w-[200px]">Indicatore</th>
+                  {mc.map(m => (
+                    <th key={m.month} className="text-center p-2 font-semibold min-w-[100px]">{m.monthShort}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b bg-blue-50/50">
+                  <td className="p-2 font-semibold sticky left-0 bg-blue-50/50 z-10">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
+                      Giacenza a {data.targetSize}
+                    </span>
+                  </td>
+                  {mc.map(m => (
+                    <td key={m.month} className="p-2 text-center font-semibold text-blue-700">
+                      {formatNumber(m.giacenzaCumulativaTarget)}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr className="border-b bg-purple-50/50">
+                  <td className="p-2 font-semibold sticky left-0 bg-purple-50/50 z-10">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
+                      Ordini {data.targetSize}
+                    </span>
+                  </td>
+                  {mc.map(m => (
+                    <td key={m.month} className={`p-2 text-center font-semibold ${m.ordiniTarget > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
+                      {m.ordiniTarget > 0 ? formatNumber(m.ordiniTarget) : '-'}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr className="border-b bg-amber-50/50">
+                  <td className="p-2 font-semibold sticky left-0 bg-amber-50/50 z-10">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+                      Budget Produzione
+                    </span>
+                  </td>
+                  {mc.map(m => (
+                    <td key={m.month} className={`p-2 text-center font-semibold ${m.budgetProduzione > 0 ? 'text-amber-700' : 'text-gray-400'}`}>
+                      {m.budgetProduzione > 0 ? formatNumber(m.budgetProduzione) : '-'}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr className="border-b bg-emerald-50/50">
+                  <td className="p-2 font-semibold sticky left-0 bg-emerald-50/50 z-10">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                      Arrivi Schiuditoio (TP-300)
+                    </span>
+                  </td>
+                  {mc.map(m => (
+                    <td key={m.month} className={`p-2 text-center font-semibold ${m.arriviSchiuditoio > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
+                      {m.arriviSchiuditoio > 0 ? formatNumber(m.arriviSchiuditoio) : '-'}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr className="border-b">
+                  <td className="p-2 font-semibold sticky left-0 bg-background z-10">
+                    <span className="inline-flex items-center gap-1">
+                      Saldo (Giacenza - Ordini)
+                    </span>
+                  </td>
+                  {mc.map(m => {
+                    const saldo = m.giacenzaCumulativaTarget - m.ordiniTarget;
+                    return (
+                      <td key={m.month} className={`p-2 text-center font-bold ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        {m.ordiniTarget > 0 ? formatNumber(saldo) : '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {showHatcheryForm && (
+        <Card className="border-emerald-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg text-emerald-700">Inserisci Arrivi Schiuditoio (TP-300) - {data.year}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {Array.from({ length: 12 }, (_, i) => i + 1).map(month => {
+                const existing = hatcheryData?.find(h => h.month === month);
+                return (
+                  <div key={month} className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-muted-foreground">{MONTH_NAMES[month - 1]}</label>
+                    {existing ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-semibold text-emerald-700 flex-1">{formatNumber(existing.quantity)}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-red-500"
+                          onClick={() => deleteHatchery.mutate(existing.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          className="h-8 text-sm"
+                          value={hatcheryInputs[month] || ""}
+                          onChange={e => setHatcheryInputs(prev => ({ ...prev, [month]: e.target.value }))}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-emerald-600"
+                          onClick={() => handleSaveHatchery(month)}
+                          disabled={!hatcheryInputs[month] || parseInt(hatcheryInputs[month]) <= 0}
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {groupsAbove.length > 0 && (
         <Card className="border-green-200">
@@ -150,7 +370,7 @@ export default function ProiezioneCrescita() {
               Progressione mensile verso {data.targetSize}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Per ogni taglia attuale, la taglia proiettata mese per mese con la quantità di animali
+              Per ogni taglia attuale, la taglia proiettata mese per mese
             </p>
           </CardHeader>
           <CardContent>
@@ -221,3 +441,8 @@ export default function ProiezioneCrescita() {
     </div>
   );
 }
+
+const MONTH_NAMES = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+];
