@@ -86,12 +86,12 @@ export default function ProiezioneCrescita() {
     : [new Date().getFullYear()];
 
   const { data: hatcheryData } = useQuery<HatcheryArrival[]>({
-    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", hatcheryYears[0]],
+    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", { year: hatcheryYears[0] }],
     enabled: !!data,
   });
 
   const { data: hatcheryData2 } = useQuery<HatcheryArrival[]>({
-    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", hatcheryYears[1]],
+    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", { year: hatcheryYears[1] }],
     enabled: !!data && hatcheryYears.length > 1,
   });
 
@@ -103,7 +103,7 @@ export default function ProiezioneCrescita() {
     },
     onSuccess: () => {
       for (const y of hatcheryYears) {
-        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", y] });
+        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", { year: y }] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
       toast({ title: "Salvato", description: "Arrivo schiuditoio salvato" });
@@ -116,7 +116,7 @@ export default function ProiezioneCrescita() {
     },
     onSuccess: () => {
       for (const y of hatcheryYears) {
-        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", y] });
+        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", { year: y }] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
       toast({ title: "Eliminato", description: "Arrivo schiuditoio eliminato" });
@@ -157,7 +157,7 @@ export default function ProiezioneCrescita() {
     }
   };
 
-  const hatcheryMonths = mc.map(m => ({ year: m.year, month: m.month, label: m.monthLabel, monthName: m.monthName }));
+  const hatcheryMonths = mc.map(m => ({ year: m.year, month: m.month, label: m.monthLabel }));
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -311,7 +311,7 @@ export default function ProiezioneCrescita() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {hatcheryMonths.map(({ year, month, label, monthName }) => {
+              {hatcheryMonths.map(({ year, month, label }) => {
                 const existing = allHatcheryData.find(h => h.year === year && h.month === month);
                 const inputKey = `${year}-${month}`;
                 return (
