@@ -320,7 +320,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ Modulo SYSTEM MAINTENANCE registrato su /api/operations/:id/update, /api/test-delete/:id, /api/database-snapshot');
 
   // API esterne disabilitate - Aggiungi solo una risposta di status per evitare errori 401
-  app.all("/api/external/*", (req, res) => {
+  // Eccezione: /api/external/notify-update è attivo per invalidazione cache da app esterna
+  app.all("/api/external/*", (req, res, next) => {
+    if (req.path === '/api/external/notify-update') {
+      return next();
+    }
     return res.status(503).json({
       success: false,
       message: "Le API esterne sono temporaneamente disabilitate per manutenzione",

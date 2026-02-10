@@ -17,11 +17,10 @@ interface UnifiedCache {
 let unifiedCache: UnifiedCache = {
   data: null,
   timestamp: null,
-  ttl: 300000, // 5 minuti - cache più lunga per ridurre carico OTTIMIZZATA
+  ttl: 60000, // 60 secondi - bilanciamento tra performance e freschezza dati (supporta aggiornamenti da app esterna)
 };
 
-// OTTIMIZZAZIONE: Cache aumentata a 5 minuti per ridurre carico database
-console.log('🚀 Cache operazioni unificata ottimizzata con TTL 5min per performance migliori');
+console.log('🚀 Cache operazioni unificata con TTL 60s');
 unifiedCache.data = null;
 unifiedCache.timestamp = null;
 
@@ -98,11 +97,10 @@ export async function getOperationsUnified(req: Request, res: Response) {
       queryTime
     };
 
-    // OTTIMIZZAZIONE: Cache estesa a 5 minuti per ridurre carico database
     unifiedCache = {
       data: unifiedData,
       timestamp: now,
-      ttl: 300000  // 5 minuti invece di 30s per performance migliori
+      ttl: 60000  // 60 secondi - bilanciamento tra performance e freschezza dati
     };
 
     console.log(`🚀 UNIFIED: Dati salvati in cache - ${operationsData.length} operazioni, ${basketsData.length} cestelli`);
@@ -127,7 +125,7 @@ export function invalidateUnifiedCache() {
   unifiedCache = {
     data: null,
     timestamp: null,
-    ttl: 30000
+    ttl: 60000
   };
   console.log('🗑️ Cache unificata invalidata');
 }

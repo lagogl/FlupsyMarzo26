@@ -50,6 +50,7 @@ Preferred communication style: Simple, everyday language.
 - **OperationsLifecycleService**: Centralized service for handling all operation deletions to prevent state misalignment. All future deletion code paths must use this service.
 - **Basket State Consistency Invariant**: All basket state updates must atomically write `state`, `currentCycleId`, and `cycleCode`. Enforced by a PostgreSQL trigger.
 - **Centralized Cache Invalidation**: All cache invalidation uses a single `invalidateAllCaches()` function.
+- **External App Cache Notification (Feb 2026)**: Protected endpoint `POST /api/external/notify-update` with API key authentication (`x-api-key` header, env var `EXTERNAL_NOTIFY_API_KEY`) for external apps to trigger immediate cache invalidation after database writes. Cache TTLs reduced to 60 seconds (operations, baskets, unified) as fallback. **Documentation**: `docs/NOTIFICA_AGGIORNAMENTO_CACHE.md`.
 - **FK Constraints**: Full referential integrity via foreign key constraints for data integrity.
 - **Nightly Integrity Check System**: Automated scheduler for checking basket state consistency and orphan records.
 - **Daily Automatic Backup System (Jan 2026)**: Automated database backup scheduler running at 02:00 daily with 7-day retention policy. Uses `pg_dump --schema=public` to export all 68+ tables. Old backups beyond retention period are automatically cleaned up. **Files**: `server/services/daily-backup-scheduler.service.ts`. **Manual backups**: Available via `/database-management` page.

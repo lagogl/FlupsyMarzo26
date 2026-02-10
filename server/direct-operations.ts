@@ -71,17 +71,14 @@ export function implementDirectOperationRoute(app: Express) {
     }
   });
   
-  // ===== ROUTE DI NOTIFICA OPERAZIONI ESTERNE =====
-  // Endpoint per app esterne per notificare il server di nuove operazioni
+  // ===== ROUTE DI NOTIFICA OPERAZIONI ESTERNE (legacy, senza auth) =====
   console.log("📡 Registrazione route EXTERNAL NOTIFY: /api/operations/notify-new");
   app.post('/api/operations/notify-new', async (req, res) => {
     console.log("📡 EXTERNAL NOTIFY: Ricevuta notifica di nuova operazione esterna");
     try {
-      // Invalida TUTTE le cache
       invalidateAllCaches();
       console.log('🗑️ Cache invalidate per nuova operazione esterna');
       
-      // Emetti notifica WebSocket per aggiornare tutti i client
       const result = broadcastMessage('operation_created', {
         source: 'external_app',
         timestamp: new Date().toISOString(),
@@ -101,6 +98,53 @@ export function implementDirectOperationRoute(app: Express) {
         success: false,
         message: 'Error sending notification',
         error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // ===== ENDPOINT PROTETTO PER APP ESTERNA =====
+  console.log("🔐 Registrazione route EXTERNAL NOTIFY (con API key): POST /api/external/notify-update");
+  app.post('/api/external/notify-update', async (req, res) => {
+    const apiKey = req.headers['x-api-key'] as string;
+    const expectedKey = process.env.EXTERNAL_NOTIFY_API_KEY;
+
+    if (!expectedKey) {
+      console.error('❌ EXTERNAL_NOTIFY_API_KEY non configurata');
+      return res.status(500).json({ success: false, error: 'Server configuration error' });
+    }
+
+    if (!apiKey || apiKey !== expectedKey) {
+      console.warn('⚠️ Tentativo di accesso non autorizzato a /api/external/notify-update');
+      return res.status(401).json({ success: false, error: 'Unauthorized: invalid or missing API key' });
+    }
+
+    console.log("🔐 EXTERNAL NOTIFY (autenticato): Ricevuta notifica di aggiornamento dati");
+    const { source, entity, action, details } = req.body || {};
+
+    try {
+      invalidateAllCaches();
+      console.log(`🗑️ Cache invalidate per aggiornamento esterno [source=${source || 'unknown'}, entity=${entity || 'all'}, action=${action || 'update'}]`);
+
+      const result = broadcastMessage('external_data_updated', {
+        source: source || 'external_app',
+        entity: entity || 'operations',
+        action: action || 'update',
+        details: details || null,
+        timestamp: new Date().toISOString(),
+      });
+      console.log('📡 WebSocket broadcast inviato, client raggiunti:', result);
+
+      return res.json({
+        success: true,
+        message: 'Cache invalidated and clients notified',
+        clientsNotified: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('❌ Errore notify-update esterno:', error);
+      return res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
