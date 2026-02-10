@@ -395,7 +395,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                           <span className={`font-semibold text-[13px] ${row.textClass}`}>{row.label}</span>
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs text-sm p-3 leading-relaxed">
+                      <TooltipContent side="right" className="max-w-xs text-sm p-3 leading-relaxed bg-gray-900 text-white border border-gray-700 shadow-lg">
                         {row.tooltip}
                       </TooltipContent>
                     </Tooltip>
