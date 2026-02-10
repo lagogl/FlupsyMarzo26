@@ -148,14 +148,15 @@ export class GrowthProjectionService {
 
     let hatcheryBasketCounter = 900000;
 
-    let globalBaskets: Array<{basketId: number, weightMg: number, animalCount: number, isHatchery: boolean}> = [];
+    let globalBaskets: Array<{basketId: number, weightMg: number, animalCount: number, isHatchery: boolean, alreadyAtTarget: boolean}> = [];
     for (const sizeKey of sortedSizes) {
       for (const b of grouped[sizeKey]) {
         globalBaskets.push({
           basketId: b.basketId,
           weightMg: 1000000 / b.animalsPerKg,
           animalCount: b.animalCount,
-          isHatchery: false
+          isHatchery: false,
+          alreadyAtTarget: b.animalsPerKg <= targetMaxAnimalsPerKg
         });
       }
     }
@@ -185,7 +186,8 @@ export class GrowthProjectionService {
           basketId: hatcheryBasketCounter++,
           weightMg: 1000000 / hatcheryApk,
           animalCount: hatcheryThisMonth,
-          isHatchery: true
+          isHatchery: true,
+          alreadyAtTarget: false
         });
       }
 
@@ -197,6 +199,10 @@ export class GrowthProjectionService {
             const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
             const newWeight = b.weightMg * (1 + sgr / 100);
 
+            if (b.alreadyAtTarget) {
+              return { ...b, weightMg: newWeight };
+            }
+
             let dailyMortality: number;
             if (useCustomMortality) {
               dailyMortality = customMonthlyRate * dailyMortalityFraction;
@@ -206,7 +212,7 @@ export class GrowthProjectionService {
             }
 
             const surviving = Math.round(b.animalCount * (1 - dailyMortality));
-            return { basketId: b.basketId, weightMg: newWeight, animalCount: surviving, isHatchery: b.isHatchery };
+            return { ...b, weightMg: newWeight, animalCount: surviving };
           });
         }
       }
