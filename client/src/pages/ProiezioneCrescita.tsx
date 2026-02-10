@@ -10,8 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 
 interface SizeMonthProjection {
   month: number;
+  year: number;
   monthName: string;
   monthShort: string;
+  monthLabel: string;
   avgAnimalsPerKg: number;
   projectedSize: string;
   quantity: number;
@@ -30,8 +32,10 @@ interface SizeGroupProjection {
 
 interface MonthlyContext {
   month: number;
+  year: number;
   monthName: string;
   monthShort: string;
+  monthLabel: string;
   ordiniTarget: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
@@ -63,27 +67,45 @@ function formatNumber(n: number): string {
   return n.toLocaleString("it-IT");
 }
 
+const MONTH_NAMES = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+];
+
 export default function ProiezioneCrescita() {
   const { toast } = useToast();
   const [showHatcheryForm, setShowHatcheryForm] = useState(false);
-  const [hatcheryInputs, setHatcheryInputs] = useState<Record<number, string>>({});
+  const [hatcheryInputs, setHatcheryInputs] = useState<Record<string, string>>({});
 
   const { data, isLoading, error } = useQuery<GrowthProjectionResult>({
     queryKey: ["/api/proiezione-crescita"],
   });
 
-  const currentYear = new Date().getFullYear();
+  const hatcheryYears = data?.monthlyContext
+    ? [...new Set(data.monthlyContext.map(m => m.year))]
+    : [new Date().getFullYear()];
+
   const { data: hatcheryData } = useQuery<HatcheryArrival[]>({
-    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", currentYear],
+    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", hatcheryYears[0]],
+    enabled: !!data,
   });
+
+  const { data: hatcheryData2 } = useQuery<HatcheryArrival[]>({
+    queryKey: ["/api/proiezione-crescita/hatchery-arrivals", hatcheryYears[1]],
+    enabled: !!data && hatcheryYears.length > 1,
+  });
+
+  const allHatcheryData = [...(hatcheryData || []), ...(hatcheryData2 || [])];
 
   const saveHatchery = useMutation({
     mutationFn: async (payload: { year: number; month: number; quantity: number }) => {
       return apiRequest("POST", "/api/proiezione-crescita/hatchery-arrivals", payload);
     },
     onSuccess: () => {
+      for (const y of hatcheryYears) {
+        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", y] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals"] });
       toast({ title: "Salvato", description: "Arrivo schiuditoio salvato" });
     }
   });
@@ -93,8 +115,10 @@ export default function ProiezioneCrescita() {
       return apiRequest("DELETE", `/api/proiezione-crescita/hatchery-arrivals/${id}`);
     },
     onSuccess: () => {
+      for (const y of hatcheryYears) {
+        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", y] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals"] });
       toast({ title: "Eliminato", description: "Arrivo schiuditoio eliminato" });
     }
   });
@@ -124,13 +148,16 @@ export default function ProiezioneCrescita() {
   const groupsAbove = data.groups.filter(g => g.alreadyAtTarget);
   const mc = data.monthlyContext;
 
-  const handleSaveHatchery = (month: number) => {
-    const val = parseInt(hatcheryInputs[month] || "0");
+  const handleSaveHatchery = (year: number, month: number) => {
+    const key = `${year}-${month}`;
+    const val = parseInt(hatcheryInputs[key] || "0");
     if (val > 0) {
-      saveHatchery.mutate({ year: data.year, month, quantity: val });
-      setHatcheryInputs(prev => ({ ...prev, [month]: "" }));
+      saveHatchery.mutate({ year, month, quantity: val });
+      setHatcheryInputs(prev => ({ ...prev, [key]: "" }));
     }
   };
+
+  const hatcheryMonths = mc.map(m => ({ year: m.year, month: m.month, label: m.monthLabel, monthName: m.monthName }));
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -139,7 +166,7 @@ export default function ProiezioneCrescita() {
         <div>
           <h1 className="text-2xl font-bold">Proiezione Crescita verso {data.targetSize}</h1>
           <p className="text-sm text-muted-foreground">
-            Progressione mese per mese con ordini, budget e arrivi schiuditoio ({`target ≤ ${formatNumber(data.targetMaxAnimalsPerKg)} an/kg`})
+            Progressione 12 mesi con ordini, budget e arrivi schiuditoio ({`target \u2264 ${formatNumber(data.targetMaxAnimalsPerKg)} an/kg`})
           </p>
         </div>
       </div>
@@ -194,8 +221,8 @@ export default function ProiezioneCrescita() {
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="text-left p-2 font-semibold sticky left-0 bg-muted/50 z-10 min-w-[200px]">Indicatore</th>
-                  {mc.map(m => (
-                    <th key={m.month} className="text-center p-2 font-semibold min-w-[100px]">{m.monthShort}</th>
+                  {mc.map((m, i) => (
+                    <th key={i} className="text-center p-2 font-semibold min-w-[100px]">{m.monthLabel}</th>
                   ))}
                 </tr>
               </thead>
@@ -207,8 +234,8 @@ export default function ProiezioneCrescita() {
                       Giacenza a {data.targetSize}
                     </span>
                   </td>
-                  {mc.map(m => (
-                    <td key={m.month} className="p-2 text-center font-semibold text-blue-700">
+                  {mc.map((m, i) => (
+                    <td key={i} className="p-2 text-center font-semibold text-blue-700">
                       {formatNumber(m.giacenzaCumulativaTarget)}
                     </td>
                   ))}
@@ -221,8 +248,8 @@ export default function ProiezioneCrescita() {
                       Ordini {data.targetSize}
                     </span>
                   </td>
-                  {mc.map(m => (
-                    <td key={m.month} className={`p-2 text-center font-semibold ${m.ordiniTarget > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
+                  {mc.map((m, i) => (
+                    <td key={i} className={`p-2 text-center font-semibold ${m.ordiniTarget > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
                       {m.ordiniTarget > 0 ? formatNumber(m.ordiniTarget) : '-'}
                     </td>
                   ))}
@@ -235,8 +262,8 @@ export default function ProiezioneCrescita() {
                       Budget Produzione
                     </span>
                   </td>
-                  {mc.map(m => (
-                    <td key={m.month} className={`p-2 text-center font-semibold ${m.budgetProduzione > 0 ? 'text-amber-700' : 'text-gray-400'}`}>
+                  {mc.map((m, i) => (
+                    <td key={i} className={`p-2 text-center font-semibold ${m.budgetProduzione > 0 ? 'text-amber-700' : 'text-gray-400'}`}>
                       {m.budgetProduzione > 0 ? formatNumber(m.budgetProduzione) : '-'}
                     </td>
                   ))}
@@ -249,8 +276,8 @@ export default function ProiezioneCrescita() {
                       Arrivi Schiuditoio (TP-300)
                     </span>
                   </td>
-                  {mc.map(m => (
-                    <td key={m.month} className={`p-2 text-center font-semibold ${m.arriviSchiuditoio > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
+                  {mc.map((m, i) => (
+                    <td key={i} className={`p-2 text-center font-semibold ${m.arriviSchiuditoio > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
                       {m.arriviSchiuditoio > 0 ? formatNumber(m.arriviSchiuditoio) : '-'}
                     </td>
                   ))}
@@ -262,10 +289,10 @@ export default function ProiezioneCrescita() {
                       Saldo (Giacenza - Ordini)
                     </span>
                   </td>
-                  {mc.map(m => {
+                  {mc.map((m, i) => {
                     const saldo = m.giacenzaCumulativaTarget - m.ordiniTarget;
                     return (
-                      <td key={m.month} className={`p-2 text-center font-bold ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      <td key={i} className={`p-2 text-center font-bold ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                         {m.ordiniTarget > 0 ? formatNumber(saldo) : '-'}
                       </td>
                     );
@@ -280,15 +307,16 @@ export default function ProiezioneCrescita() {
       {showHatcheryForm && (
         <Card className="border-emerald-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg text-emerald-700">Inserisci Arrivi Schiuditoio (TP-300) - {data.year}</CardTitle>
+            <CardTitle className="text-lg text-emerald-700">Inserisci Arrivi Schiuditoio (TP-300)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {Array.from({ length: 12 }, (_, i) => i + 1).map(month => {
-                const existing = hatcheryData?.find(h => h.month === month);
+              {hatcheryMonths.map(({ year, month, label, monthName }) => {
+                const existing = allHatcheryData.find(h => h.year === year && h.month === month);
+                const inputKey = `${year}-${month}`;
                 return (
-                  <div key={month} className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-muted-foreground">{MONTH_NAMES[month - 1]}</label>
+                  <div key={inputKey} className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-muted-foreground">{label}</label>
                     {existing ? (
                       <div className="flex items-center gap-1">
                         <span className="text-sm font-semibold text-emerald-700 flex-1">{formatNumber(existing.quantity)}</span>
@@ -307,15 +335,15 @@ export default function ProiezioneCrescita() {
                           type="number"
                           placeholder="0"
                           className="h-8 text-sm"
-                          value={hatcheryInputs[month] || ""}
-                          onChange={e => setHatcheryInputs(prev => ({ ...prev, [month]: e.target.value }))}
+                          value={hatcheryInputs[inputKey] || ""}
+                          onChange={e => setHatcheryInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
                         />
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-emerald-600"
-                          onClick={() => handleSaveHatchery(month)}
-                          disabled={!hatcheryInputs[month] || parseInt(hatcheryInputs[month]) <= 0}
+                          onClick={() => handleSaveHatchery(year, month)}
+                          disabled={!hatcheryInputs[inputKey] || parseInt(hatcheryInputs[inputKey]) <= 0}
                         >
                           <Save className="h-4 w-4" />
                         </Button>
@@ -383,8 +411,8 @@ export default function ProiezioneCrescita() {
                       <th className="text-right p-2 font-semibold min-w-[80px]">Cestelli</th>
                       <th className="text-right p-2 font-semibold min-w-[100px]">Quantità</th>
                       <th className="text-center p-2 font-semibold min-w-[110px]">Raggiunge</th>
-                      {groupsBelow[0]?.months.map(m => (
-                        <th key={m.month} className="text-center p-2 font-semibold min-w-[90px]">{m.monthShort}</th>
+                      {groupsBelow[0]?.months.map((m, i) => (
+                        <th key={i} className="text-center p-2 font-semibold min-w-[90px]">{m.monthLabel}</th>
                       ))}
                     </tr>
                   </thead>
@@ -402,15 +430,15 @@ export default function ProiezioneCrescita() {
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                              Non in {data.year}
+                              Non nel periodo
                             </span>
                           )}
                         </td>
-                        {g.months.map(m => {
+                        {g.months.map((m, i) => {
                           const reached = m.reachedTarget;
                           const bg = reached ? "bg-green-100 text-green-800" : "bg-amber-50 text-amber-800";
                           return (
-                            <td key={m.month} className={`p-2 text-center ${bg}`}>
+                            <td key={i} className={`p-2 text-center ${bg}`}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <div className="cursor-default">
@@ -419,7 +447,7 @@ export default function ProiezioneCrescita() {
                                   </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p className="font-semibold">{m.monthName} {data.year}</p>
+                                  <p className="font-semibold">{m.monthName}</p>
                                   <p>Taglia: {m.projectedSize}</p>
                                   <p>An/kg: {formatNumber(m.avgAnimalsPerKg)}</p>
                                   <p>Quantità: {formatNumber(m.quantity)}</p>
@@ -441,8 +469,3 @@ export default function ProiezioneCrescita() {
     </div>
   );
 }
-
-const MONTH_NAMES = [
-  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-];

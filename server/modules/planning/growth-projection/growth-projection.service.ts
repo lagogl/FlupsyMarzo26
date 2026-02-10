@@ -1,7 +1,7 @@
 import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import { hatcheryArrivals, productionTargets } from "../../../../shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -12,8 +12,10 @@ const MONTH_SHORT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Se
 
 interface SizeMonthProjection {
   month: number;
+  year: number;
   monthName: string;
   monthShort: string;
+  monthLabel: string;
   avgAnimalsPerKg: number;
   projectedSize: string;
   quantity: number;
@@ -32,8 +34,10 @@ interface SizeGroupProjection {
 
 interface MonthlyContext {
   month: number;
+  year: number;
   monthName: string;
   monthShort: string;
+  monthLabel: string;
   ordiniTarget: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
@@ -52,35 +56,76 @@ interface GrowthProjectionResult {
   monthlyContext: MonthlyContext[];
 }
 
+interface MonthStep {
+  monthIndex: number;
+  year: number;
+  month1Based: number;
+}
+
 export class GrowthProjectionService {
+
+  private buildMonthSteps(startMonth0: number, startYear: number, count: number): MonthStep[] {
+    const steps: MonthStep[] = [];
+    for (let i = 0; i < count; i++) {
+      const totalMonth = startMonth0 + i;
+      const y = startYear + Math.floor(totalMonth / 12);
+      const m0 = totalMonth % 12;
+      steps.push({ monthIndex: m0, year: y, month1Based: m0 + 1 });
+    }
+    return steps;
+  }
 
   async project(targetSize: string = 'TP-3000', year?: number): Promise<GrowthProjectionResult> {
     const now = new Date();
-    const projYear = year || now.getFullYear();
-    const mortalityRates = { T1: 0.05, T3: 0.03, T10: 0.02 };
+    const startYear = year || now.getFullYear();
+    const mortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
 
     const threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === targetSize);
     if (!threshold) throw new Error(`Taglia target ${targetSize} non trovata`);
     const targetMaxAnimalsPerKg = threshold.maxAnimalsPerKg;
 
-    const [sgrLookup, basketInventory, ordersByMonth, budgetRows, hatcheryRows] = await Promise.all([
+    const currentMonth0 = now.getMonth();
+    const currentDay = now.getDate();
+
+    const monthSteps = this.buildMonthSteps(currentMonth0, startYear, 12);
+
+    const yearsNeeded = [...new Set(monthSteps.map(s => s.year))];
+
+    const [sgrLookup, basketInventory, ...ordersByYearArr] = await Promise.all([
       productionForecastService.getSgrLookup(),
       productionForecastService.getBasketLevelInventory(),
-      productionForecastService.getOrdersByMonthAndSize(projYear),
-      db.select().from(productionTargets).where(eq(productionTargets.year, projYear)),
-      db.select().from(hatcheryArrivals).where(eq(hatcheryArrivals.year, projYear))
+      ...yearsNeeded.map(y => productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders })))
     ]);
 
-    const budgetByMonth: Record<number, number> = {};
-    for (const row of budgetRows) {
-      if (!budgetByMonth[row.month]) budgetByMonth[row.month] = 0;
-      budgetByMonth[row.month] += row.targetAnimals;
+    const [budgetRows, hatcheryRows] = await Promise.all([
+      yearsNeeded.length > 0
+        ? db.select().from(productionTargets).where(inArray(productionTargets.year, yearsNeeded))
+        : Promise.resolve([]),
+      yearsNeeded.length > 0
+        ? db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, yearsNeeded))
+        : Promise.resolve([])
+    ]);
+
+    const ordersByYearMonth: Record<string, Record<string, number>> = {};
+    for (const { year: y, orders } of ordersByYearArr) {
+      for (const [monthStr, sizeMap] of Object.entries(orders)) {
+        const key = `${y}-${monthStr}`;
+        ordersByYearMonth[key] = sizeMap as Record<string, number>;
+      }
     }
 
-    const hatcheryByMonth: Record<number, number> = {};
+    const budgetByYearMonth: Record<string, number> = {};
+    for (const row of budgetRows) {
+      const key = `${row.year}-${row.month}`;
+      if (!budgetByYearMonth[key]) budgetByYearMonth[key] = 0;
+      budgetByYearMonth[key] += row.targetAnimals;
+    }
+
+    const hatcheryByYearMonth: Record<string, number> = {};
     for (const row of hatcheryRows) {
-      if (!hatcheryByMonth[row.month]) hatcheryByMonth[row.month] = 0;
-      hatcheryByMonth[row.month] += row.quantity;
+      const key = `${row.year}-${row.month}`;
+      if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = 0;
+      hatcheryByYearMonth[key] += row.quantity;
     }
 
     const grouped: Record<string, Array<{basketId: number, animalsPerKg: number, animalCount: number}>> = {};
@@ -90,11 +135,6 @@ export class GrowthProjectionService {
       grouped[saleSize].push({ ...b });
     }
 
-    const currentMonth = now.getMonth();
-    const currentDay = now.getDate();
-
-    const groups: SizeGroupProjection[] = [];
-
     const sortedSizes = Object.keys(grouped).sort((a, b) => {
       const idxA = ProductionForecastService.SALE_SIZES.indexOf(a);
       const idxB = ProductionForecastService.SALE_SIZES.indexOf(b);
@@ -103,27 +143,32 @@ export class GrowthProjectionService {
 
     let hatcheryBasketCounter = 900000;
 
-    const allWorkingBaskets: Array<{basketId: number, weightMg: number, animalCount: number}>[] = [];
+    let globalBaskets: Array<{basketId: number, weightMg: number, animalCount: number}> = [];
     for (const sizeKey of sortedSizes) {
-      allWorkingBaskets.push(grouped[sizeKey].map(b => ({
-        basketId: b.basketId,
-        weightMg: 1000000 / b.animalsPerKg,
-        animalCount: b.animalCount
-      })));
+      for (const b of grouped[sizeKey]) {
+        globalBaskets.push({
+          basketId: b.basketId,
+          weightMg: 1000000 / b.animalsPerKg,
+          animalCount: b.animalCount
+        });
+      }
     }
 
-    let globalBaskets = allWorkingBaskets.flat();
-
     const monthlyContext: MonthlyContext[] = [];
+    const crossesYear = yearsNeeded.length > 1;
 
-    for (let m = currentMonth; m < 12; m++) {
-      const daysInMonth = new Date(projYear, m + 1, 0).getDate();
+    for (let i = 0; i < monthSteps.length; i++) {
+      const step = monthSteps[i];
+      const m0 = step.monthIndex;
+      const y = step.year;
+      const daysInMonth = new Date(y, m0 + 1, 0).getDate();
       let simulDays = daysInMonth;
-      if (m === currentMonth) {
+      if (i === 0) {
         simulDays = Math.max(0, daysInMonth - currentDay);
       }
 
-      const hatcheryThisMonth = hatcheryByMonth[m + 1] || 0;
+      const ymKey = `${y}-${step.month1Based}`;
+      const hatcheryThisMonth = hatcheryByYearMonth[ymKey] || 0;
       if (hatcheryThisMonth > 0) {
         const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
         const hatcheryApk = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
@@ -140,7 +185,7 @@ export class GrowthProjectionService {
           globalBaskets = globalBaskets.map(b => {
             const apk = 1000000 / b.weightMg;
             const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-            const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m, apk);
+            const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
             const newWeight = b.weightMg * (1 + sgr / 100);
             const dailyMortality = mortalityRates[category] * dailyMortalityFraction;
             const surviving = Math.round(b.animalCount * (1 - dailyMortality));
@@ -157,19 +202,25 @@ export class GrowthProjectionService {
         }
       }
 
-      const ordiniMonth = ordersByMonth[(m + 1).toString()] || {};
+      const ordiniMonth = ordersByYearMonth[ymKey] || {};
       const ordiniTarget = ordiniMonth[targetSize] || 0;
 
+      const label = crossesYear ? `${MONTH_SHORT[m0]} ${String(y).slice(-2)}` : MONTH_SHORT[m0];
+
       monthlyContext.push({
-        month: m + 1,
-        monthName: MONTH_NAMES[m],
-        monthShort: MONTH_SHORT[m],
+        month: step.month1Based,
+        year: y,
+        monthName: `${MONTH_NAMES[m0]} ${y}`,
+        monthShort: MONTH_SHORT[m0],
+        monthLabel: label,
         ordiniTarget,
-        budgetProduzione: budgetByMonth[m + 1] || 0,
+        budgetProduzione: budgetByYearMonth[ymKey] || 0,
         arriviSchiuditoio: hatcheryThisMonth,
         giacenzaCumulativaTarget: giacenzaTarget
       });
     }
+
+    const groups: SizeGroupProjection[] = [];
 
     for (const sizeKey of sortedSizes) {
       const basketsInGroup = grouped[sizeKey];
@@ -189,10 +240,13 @@ export class GrowthProjectionService {
       const months: SizeMonthProjection[] = [];
       let monthReached: string | null = alreadyAtTarget ? 'Già raggiunta' : null;
 
-      for (let m = currentMonth; m < 12; m++) {
-        const daysInMonth = new Date(projYear, m + 1, 0).getDate();
+      for (let i = 0; i < monthSteps.length; i++) {
+        const step = monthSteps[i];
+        const m0 = step.monthIndex;
+        const y = step.year;
+        const daysInMonth = new Date(y, m0 + 1, 0).getDate();
         let simulDays = daysInMonth;
-        if (m === currentMonth) {
+        if (i === 0) {
           simulDays = Math.max(0, daysInMonth - currentDay);
         }
 
@@ -202,7 +256,7 @@ export class GrowthProjectionService {
             workingBaskets = workingBaskets.map(b => {
               const apk = 1000000 / b.weightMg;
               const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-              const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m, apk);
+              const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
               const newWeight = b.weightMg * (1 + sgr / 100);
               const dailyMortality = mortalityRates[category] * dailyMortalityFraction;
               const surviving = Math.round(b.animalCount * (1 - dailyMortality));
@@ -220,13 +274,17 @@ export class GrowthProjectionService {
         const reached = weightedApk <= targetMaxAnimalsPerKg && weightedApk > 0;
 
         if (reached && !monthReached && !alreadyAtTarget) {
-          monthReached = MONTH_NAMES[m];
+          monthReached = `${MONTH_NAMES[m0]} ${y}`;
         }
 
+        const label = crossesYear ? `${MONTH_SHORT[m0]} ${String(y).slice(-2)}` : MONTH_SHORT[m0];
+
         months.push({
-          month: m + 1,
-          monthName: MONTH_NAMES[m],
-          monthShort: MONTH_SHORT[m],
+          month: step.month1Based,
+          year: y,
+          monthName: `${MONTH_NAMES[m0]} ${y}`,
+          monthShort: MONTH_SHORT[m0],
+          monthLabel: label,
           avgAnimalsPerKg: weightedApk,
           projectedSize: projSize,
           quantity: totalAnimals,
@@ -252,7 +310,7 @@ export class GrowthProjectionService {
       targetSize,
       targetMaxAnimalsPerKg,
       generatedAt: now.toISOString(),
-      year: projYear,
+      year: startYear,
       totalCurrentQuantity: totalCurrentQty,
       totalAlreadyAtTarget: totalAlready,
       totalNotYetAtTarget: totalCurrentQty - totalAlready,
