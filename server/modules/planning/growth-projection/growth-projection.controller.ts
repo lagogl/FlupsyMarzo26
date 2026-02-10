@@ -135,29 +135,25 @@ router.put("/mortality-rates/bulk", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Formato dati non valido" });
     }
 
+    const validRates = rates.filter((r: any) => r.sizeName && r.month && r.monthlyPercentage !== undefined);
+    if (validRates.length === 0) {
+      return res.json([]);
+    }
+
+    await db.delete(projectionMortalityRates);
+
+    const batchSize = 50;
     const results = [];
-    for (const rate of rates) {
-      const { sizeName, month, monthlyPercentage, notes } = rate;
-      if (!sizeName || !month || monthlyPercentage === undefined) continue;
-
-      const existing = await db.select().from(projectionMortalityRates)
-        .where(and(
-          eq(projectionMortalityRates.sizeName, sizeName),
-          eq(projectionMortalityRates.month, month)
-        ));
-
-      if (existing.length > 0) {
-        const updated = await db.update(projectionMortalityRates)
-          .set({ monthlyPercentage, notes, updatedAt: new Date() })
-          .where(eq(projectionMortalityRates.id, existing[0].id))
-          .returning();
-        results.push(updated[0]);
-      } else {
-        const inserted = await db.insert(projectionMortalityRates).values({
-          sizeName, month, monthlyPercentage, notes
-        }).returning();
-        results.push(inserted[0]);
-      }
+    for (let i = 0; i < validRates.length; i += batchSize) {
+      const batch = validRates.slice(i, i + batchSize).map((r: any) => ({
+        sizeName: r.sizeName,
+        month: r.month,
+        monthlyPercentage: r.monthlyPercentage,
+        notes: r.notes || null,
+        updatedAt: new Date()
+      }));
+      const inserted = await db.insert(projectionMortalityRates).values(batch).returning();
+      results.push(...inserted);
     }
 
     res.json(results);
