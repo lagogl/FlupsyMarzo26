@@ -119,7 +119,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
       values: mc.map(m => m.ordiniTarget),
     },
     {
-      label: `Ordini evasi ${data.targetSize}`,
+      label: `Ordini evadibili ${data.targetSize}`,
       color: "#a855f7",
       bgClass: "bg-purple-50",
       textClass: "text-purple-700",
