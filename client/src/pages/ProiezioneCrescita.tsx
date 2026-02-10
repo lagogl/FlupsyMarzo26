@@ -41,7 +41,8 @@ interface MonthlyContext {
   ordiniEvasi: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
-  giacenzaLordaTarget: number;
+  giacenzaLordaInventario: number;
+  giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
 }
 
@@ -282,14 +283,32 @@ export default function ProiezioneCrescita() {
                   <td className="p-2 font-semibold sticky left-0 bg-blue-50/50 z-10">
                     <span className="inline-flex items-center gap-1">
                       <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
-                      Giacenza lorda {data.targetSize}
+                      Giacenza lorda (inventario)
                     </span>
                   </td>
                   {mc.map((m, i) => (
                     <td key={i} className="p-2 text-center font-semibold text-blue-700">
-                      {formatNumber(m.giacenzaLordaTarget)}
+                      {formatNumber(m.giacenzaLordaInventario)}
                     </td>
                   ))}
+                </tr>
+
+                <tr className="border-b bg-cyan-50/50">
+                  <td className="p-2 font-semibold sticky left-0 bg-cyan-50/50 z-10">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-cyan-500 inline-block"></span>
+                      Giacenza lorda (con schiuditoio)
+                    </span>
+                  </td>
+                  {mc.map((m, i) => {
+                    const diff = m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario;
+                    return (
+                      <td key={i} className="p-2 text-center font-semibold text-cyan-700">
+                        {formatNumber(m.giacenzaLordaConSchiuditoio)}
+                        {diff > 0 && <div className="text-[10px] text-cyan-500">(+{formatNumber(diff)})</div>}
+                      </td>
+                    );
+                  })}
                 </tr>
 
                 <tr className="border-b bg-purple-50/50">

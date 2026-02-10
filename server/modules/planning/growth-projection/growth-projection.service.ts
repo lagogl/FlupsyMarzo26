@@ -42,7 +42,8 @@ interface MonthlyContext {
   ordiniEvasi: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
-  giacenzaLordaTarget: number;
+  giacenzaLordaInventario: number;
+  giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
 }
 
@@ -146,13 +147,14 @@ export class GrowthProjectionService {
 
     let hatcheryBasketCounter = 900000;
 
-    let globalBaskets: Array<{basketId: number, weightMg: number, animalCount: number}> = [];
+    let globalBaskets: Array<{basketId: number, weightMg: number, animalCount: number, isHatchery: boolean}> = [];
     for (const sizeKey of sortedSizes) {
       for (const b of grouped[sizeKey]) {
         globalBaskets.push({
           basketId: b.basketId,
           weightMg: 1000000 / b.animalsPerKg,
-          animalCount: b.animalCount
+          animalCount: b.animalCount,
+          isHatchery: false
         });
       }
     }
@@ -181,7 +183,8 @@ export class GrowthProjectionService {
         globalBaskets.push({
           basketId: hatcheryBasketCounter++,
           weightMg: 1000000 / hatcheryApk,
-          animalCount: hatcheryThisMonth
+          animalCount: hatcheryThisMonth,
+          isHatchery: true
         });
       }
 
@@ -202,16 +205,20 @@ export class GrowthProjectionService {
             }
 
             const surviving = Math.round(b.animalCount * (1 - dailyMortality));
-            return { basketId: b.basketId, weightMg: newWeight, animalCount: surviving };
+            return { basketId: b.basketId, weightMg: newWeight, animalCount: surviving, isHatchery: b.isHatchery };
           });
         }
       }
 
-      let giacenzaLordaTarget = 0;
+      let giacenzaLordaInventario = 0;
+      let giacenzaLordaConSchiuditoio = 0;
       for (const b of globalBaskets) {
         const apk = 1000000 / b.weightMg;
         if (apk <= targetMaxAnimalsPerKg) {
-          giacenzaLordaTarget += b.animalCount;
+          giacenzaLordaConSchiuditoio += b.animalCount;
+          if (!b.isHatchery) {
+            giacenzaLordaInventario += b.animalCount;
+          }
         }
       }
 
@@ -254,7 +261,8 @@ export class GrowthProjectionService {
         ordiniEvasi,
         budgetProduzione: budgetByYearMonth[ymKey] || 0,
         arriviSchiuditoio: hatcheryThisMonth,
-        giacenzaLordaTarget,
+        giacenzaLordaInventario,
+        giacenzaLordaConSchiuditoio,
         giacenzaNetTarget
       });
     }
