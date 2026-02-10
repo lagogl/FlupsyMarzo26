@@ -81,6 +81,7 @@ interface SpreadsheetRow {
   values: (number | string)[];
   isNegative?: boolean;
   isBold?: boolean;
+  isWarning?: (colIdx: number) => boolean;
 }
 
 function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: {
@@ -111,17 +112,25 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
       values: mc.map(m => m.giacenzaLordaConSchiuditoio),
     },
     {
-      label: `Ordini ${data.targetSize}`,
+      label: `Ordini richiesti ${data.targetSize}`,
+      color: "#7c3aed",
+      bgClass: "bg-violet-50",
+      textClass: "text-violet-700",
+      values: mc.map(m => m.ordiniTarget),
+    },
+    {
+      label: `Ordini evasi ${data.targetSize}`,
       color: "#a855f7",
       bgClass: "bg-purple-50",
       textClass: "text-purple-700",
-      values: mc.map(m => {
-        if (m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget) return `-${m.ordiniEvasi} / ${m.ordiniTarget}`;
-        if (m.ordiniEvasi > 0) return -m.ordiniEvasi;
-        if (m.ordiniTarget > 0) return `0 / ${m.ordiniTarget}`;
-        return 0;
+      values: mc.map((m, i) => {
+        return m.ordiniEvasi > 0 ? -m.ordiniEvasi : 0;
       }),
       isNegative: true,
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m ? m.ordiniTarget > 0 && m.ordiniEvasi < m.ordiniTarget : false;
+      },
     },
     {
       label: `Giacenza netta ${data.targetSize}`,
@@ -236,25 +245,30 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
         return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Schiuditoio (non ancora a taglia) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
       }
       case 2: {
-        if (m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget) {
-          return `= Ordini richiesti (${fn(m.ordiniTarget)}) - Evasi solo (${fn(m.ordiniEvasi)}) → Scorte insufficienti, mancano ${fn(m.ordiniTarget - m.ordiniEvasi)}`;
-        }
-        if (m.ordiniEvasi > 0) {
-          return `= -Ordini evasi (${fn(m.ordiniEvasi)}) → Sottratti da cestelli più grandi`;
-        }
-        if (m.ordiniTarget > 0) {
-          return `= Ordini richiesti (${fn(m.ordiniTarget)}) - Evasi (0) → Nessuno stock disponibile a ${data.targetSize}`;
-        }
-        return `= Nessun ordine per ${m.monthName}`;
+        return m.ordiniTarget > 0
+          ? `= Totale ordini richiesti per ${data.targetSize} a ${m.monthName}: ${fn(m.ordiniTarget)} animali`
+          : `= Nessun ordine per ${m.monthName}`;
       }
       case 3: {
+        if (m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget) {
+          return `= Evasi solo ${fn(m.ordiniEvasi)} su ${fn(m.ordiniTarget)} richiesti → Mancano ${fn(m.ordiniTarget - m.ordiniEvasi)} animali`;
+        }
+        if (m.ordiniEvasi > 0) {
+          return `= -${fn(m.ordiniEvasi)} animali sottratti dall'inventario → Ordine completamente evaso`;
+        }
+        if (m.ordiniTarget > 0) {
+          return `= 0 evasi su ${fn(m.ordiniTarget)} richiesti → Nessuno stock disponibile a ${data.targetSize}`;
+        }
+        return `= Nessun ordine da evadere per ${m.monthName}`;
+      }
+      case 4: {
         return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evasi (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
       }
-      case 4:
+      case 5:
         return m.budgetProduzione > 0
           ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
           : `= Nessun budget pianificato per ${m.monthName}`;
-      case 5:
+      case 6:
         return m.arriviSchiuditoio > 0
           ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
           : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
@@ -353,6 +367,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                     const numVal = typeof val === 'number' ? val : null;
                     const isNeg = numVal !== null && numVal < 0;
                     const isEmpty = numVal === 0 && !row.isNegative;
+                    const warn = row.isWarning ? row.isWarning(colIdx) : false;
                     const displayVal = typeof val === 'string'
                       ? val
                       : numVal === 0
@@ -362,10 +377,10 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                     return (
                       <td
                         key={colIdx}
-                        className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
+                        className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${warn ? 'bg-red-50' : ''} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
                         onClick={(e) => { e.stopPropagation(); handleCellClick(rowIdx, colIdx); }}
                       >
-                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${isEmpty ? 'text-gray-300' : isNeg ? 'text-red-600' : row.textClass}`}>
+                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : isNeg ? 'text-red-600' : row.textClass}`}>
                           {displayVal}
                         </div>
                       </td>
