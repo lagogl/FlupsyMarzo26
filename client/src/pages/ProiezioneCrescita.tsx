@@ -308,7 +308,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
         <div className="overflow-x-auto border-t border-gray-300">
           <table
             ref={tableRef}
-            className="w-full text-xs border-collapse select-none"
+            className="w-full text-sm border-collapse select-none"
             style={{ fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}
             onClick={() => { setSelectedCell(null); setSelectedRow(null); setSelectedCol(null); }}
           >
@@ -318,7 +318,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                   className="sticky left-0 z-20 bg-gradient-to-b from-gray-100 to-gray-200 border-r-2 border-b border-gray-300 p-0 min-w-[220px]"
                   style={{ borderRight: '2px solid #9ca3af' }}
                 >
-                  <div className="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 tracking-wide uppercase">
+                  <div className="px-2 py-1.5 text-left text-[13px] font-semibold text-gray-600 tracking-wide uppercase">
                     Indicatore
                   </div>
                 </th>
@@ -328,7 +328,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                     className={`border-b border-r border-gray-300 p-0 min-w-[110px] cursor-pointer transition-colors ${selectedCol === i ? 'bg-blue-200' : 'bg-gradient-to-b from-gray-100 to-gray-200'}`}
                     onClick={(e) => { e.stopPropagation(); handleColHeaderClick(i); }}
                   >
-                    <div className="px-2 py-1.5 text-center text-[11px] font-semibold text-gray-600">
+                    <div className="px-2 py-1.5 text-center text-[13px] font-semibold text-gray-600">
                       {m.monthLabel}
                     </div>
                   </th>
@@ -345,7 +345,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                   >
                     <div className="px-2 py-2 flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: row.color }}></span>
-                      <span className={`font-semibold text-[11px] ${row.textClass}`}>{row.label}</span>
+                      <span className={`font-semibold text-[13px] ${row.textClass}`}>{row.label}</span>
                     </div>
                   </td>
                   {row.values.map((val, colIdx) => {
@@ -365,7 +365,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                         className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
                         onClick={(e) => { e.stopPropagation(); handleCellClick(rowIdx, colIdx); }}
                       >
-                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[12px] ${isEmpty ? 'text-gray-300' : isNeg ? 'text-red-600' : row.textClass}`}>
+                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${isEmpty ? 'text-gray-300' : isNeg ? 'text-red-600' : row.textClass}`}>
                           {displayVal}
                         </div>
                       </td>
