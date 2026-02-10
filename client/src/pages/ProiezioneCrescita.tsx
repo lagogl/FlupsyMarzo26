@@ -585,39 +585,6 @@ export default function ProiezioneCrescita() {
             <div className="text-2xl font-bold text-amber-700">{formatNumber(data.totalNotYetAtTarget)}</div>
           </CardContent>
         </Card>
-        <Card className={activeMortality !== undefined ? "border-orange-300 bg-orange-50/50" : ""}>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-              <Percent className="h-4 w-4" />
-              Mortalità mensile
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="100"
-                placeholder={activeMortality !== undefined ? String(activeMortality) : "Auto"}
-                value={mortalityInput}
-                onChange={e => setMortalityInput(e.target.value)}
-                className="h-8 w-20 text-sm"
-              />
-              <span className="text-sm text-muted-foreground">%</span>
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleApplyMortality}
-                disabled={!mortalityInput || isNaN(parseFloat(mortalityInput))}>
-                Applica
-              </Button>
-              {activeMortality !== undefined && (
-                <Button size="sm" variant="ghost" className="h-8 text-xs text-orange-600" onClick={handleResetMortality}>
-                  Reset
-                </Button>
-              )}
-            </div>
-            {activeMortality !== undefined && (
-              <p className="text-xs text-orange-600 mt-1 font-semibold">{activeMortality}% fissa su tutto il ciclo</p>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       <ExcelTable
