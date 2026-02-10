@@ -1,0 +1,27 @@
+Segnalazione: Ritardo visualizzazione operazioni inserite da app esterna
+Contesto: La nostra applicazione mobile (FLUPSY) registra operazioni di tipo PESO direttamente nella tabella operations del database Delta Futuro tramite l'endpoint POST /api/direct-operations. I dati vengono scritti immediatamente nel database, ma l'applicazione frontend che consulta lo stesso database mostra i nuovi record solo dopo circa 10 minuti.
+
+Dettagli tecnici dell'inserimento:
+
+Scrittura diretta sulla tabella operations via connessione PostgreSQL (DELTA_FUTURO_DB_URL)
+I record sono disponibili nel database immediatamente dopo l'INSERT (verificabile con query diretta)
+Il ritardo non è lato scrittura ma lato lettura dell'altra applicazione
+Possibili cause da verificare:
+
+Cache applicativa frontend: Se l'app usa un sistema di caching (React Query, SWR, Apollo, ecc.), verificare l'intervallo di staleTime o refetchInterval. Un valore di 600000ms (10 min) spiegherebbe esattamente il comportamento osservato.
+
+Cache backend/API: Verificare se il server API che serve i dati ha una cache in-memory (es: Redis, node-cache) sulle query delle operazioni, con TTL impostato a 10 minuti.
+
+Header HTTP di cache: Controllare se le risposte API includono header come Cache-Control: max-age=600 o simili che istruiscono il browser a non richiedere dati freschi.
+
+Viste materializzate: Se le query leggono da una vista materializzata anziché dalla tabella operations diretta, verificare la frequenza di refresh della vista (REFRESH MATERIALIZED VIEW).
+
+Connection pooling con statement cache: Alcuni pool di connessioni (es: PgBouncer) possono cachare i risultati di prepared statement. Verificare la configurazione del pool.
+
+Suggerimenti risolutivi:
+
+Ridurre il tempo di polling/refresh a 30-60 secondi per le schermate che mostrano le operazioni recenti
+Aggiungere un pulsante "Aggiorna" manuale che forzi l'invalidazione della cache
+Invalidare la cache delle operazioni dopo ogni scrittura sulla stessa tabella
+Se si usano viste materializzate, valutare il passaggio a query dirette o aumentare la frequenza di refresh
+Contatto: Per qualsiasi chiarimento sul formato dei dati inseriti o sulla struttura dei record, siamo disponibili.
