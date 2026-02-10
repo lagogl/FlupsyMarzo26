@@ -2,7 +2,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -37,9 +38,11 @@ interface MonthlyContext {
   monthShort: string;
   monthLabel: string;
   ordiniTarget: number;
+  ordiniEvasi: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
-  giacenzaCumulativaTarget: number;
+  giacenzaLordaTarget: number;
+  giacenzaNetTarget: number;
 }
 
 interface GrowthProjectionResult {
@@ -47,6 +50,7 @@ interface GrowthProjectionResult {
   targetMaxAnimalsPerKg: number;
   generatedAt: string;
   year: number;
+  mortalityPercent: number | null;
   totalCurrentQuantity: number;
   totalAlreadyAtTarget: number;
   totalNotYetAtTarget: number;
@@ -67,18 +71,20 @@ function formatNumber(n: number): string {
   return n.toLocaleString("it-IT");
 }
 
-const MONTH_NAMES = [
-  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-];
-
 export default function ProiezioneCrescita() {
   const { toast } = useToast();
   const [showHatcheryForm, setShowHatcheryForm] = useState(false);
   const [hatcheryInputs, setHatcheryInputs] = useState<Record<string, string>>({});
+  const [mortalityInput, setMortalityInput] = useState<string>("");
+  const [activeMortality, setActiveMortality] = useState<number | undefined>(undefined);
+
+  const queryParams: Record<string, any> = {};
+  if (activeMortality !== undefined) {
+    queryParams.mortalityPercent = activeMortality;
+  }
 
   const { data, isLoading, error } = useQuery<GrowthProjectionResult>({
-    queryKey: ["/api/proiezione-crescita"],
+    queryKey: ["/api/proiezione-crescita", queryParams],
   });
 
   const hatcheryYears = data?.monthlyContext
@@ -157,6 +163,18 @@ export default function ProiezioneCrescita() {
     }
   };
 
+  const handleApplyMortality = () => {
+    const val = parseFloat(mortalityInput);
+    if (!isNaN(val) && val >= 0 && val <= 100) {
+      setActiveMortality(val);
+    }
+  };
+
+  const handleResetMortality = () => {
+    setActiveMortality(undefined);
+    setMortalityInput("");
+  };
+
   const hatcheryMonths = mc.map(m => ({ year: m.year, month: m.month, label: m.monthLabel }));
 
   return (
@@ -166,12 +184,12 @@ export default function ProiezioneCrescita() {
         <div>
           <h1 className="text-2xl font-bold">Proiezione Crescita verso {data.targetSize}</h1>
           <p className="text-sm text-muted-foreground">
-            Progressione 12 mesi con ordini, budget e arrivi schiuditoio ({`target \u2264 ${formatNumber(data.targetMaxAnimalsPerKg)} an/kg`})
+            Progressione 12 mesi con ordini (sottratti dalla giacenza), budget e arrivi schiuditoio
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
@@ -185,7 +203,7 @@ export default function ProiezioneCrescita() {
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-green-700 mb-1">
               <CheckCircle2 className="h-4 w-4" />
-              Già a {data.targetSize} o superiore
+              Già a {data.targetSize}+
             </div>
             <div className="text-2xl font-bold text-green-700">{formatNumber(data.totalAlreadyAtTarget)}</div>
           </CardContent>
@@ -194,9 +212,42 @@ export default function ProiezioneCrescita() {
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-amber-700 mb-1">
               <Clock className="h-4 w-4" />
-              In crescita verso {data.targetSize}
+              In crescita
             </div>
             <div className="text-2xl font-bold text-amber-700">{formatNumber(data.totalNotYetAtTarget)}</div>
+          </CardContent>
+        </Card>
+        <Card className={activeMortality !== undefined ? "border-orange-300 bg-orange-50/50" : ""}>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+              <Percent className="h-4 w-4" />
+              Mortalità mensile
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                placeholder={activeMortality !== undefined ? String(activeMortality) : "Auto"}
+                value={mortalityInput}
+                onChange={e => setMortalityInput(e.target.value)}
+                className="h-8 w-20 text-sm"
+              />
+              <span className="text-sm text-muted-foreground">%</span>
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleApplyMortality}
+                disabled={!mortalityInput || isNaN(parseFloat(mortalityInput))}>
+                Applica
+              </Button>
+              {activeMortality !== undefined && (
+                <Button size="sm" variant="ghost" className="h-8 text-xs text-orange-600" onClick={handleResetMortality}>
+                  Reset
+                </Button>
+              )}
+            </div>
+            {activeMortality !== undefined && (
+              <p className="text-xs text-orange-600 mt-1 font-semibold">{activeMortality}% fissa su tutto il ciclo</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -220,7 +271,7 @@ export default function ProiezioneCrescita() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left p-2 font-semibold sticky left-0 bg-muted/50 z-10 min-w-[200px]">Indicatore</th>
+                  <th className="text-left p-2 font-semibold sticky left-0 bg-muted/50 z-10 min-w-[220px]">Indicatore</th>
                   {mc.map((m, i) => (
                     <th key={i} className="text-center p-2 font-semibold min-w-[100px]">{m.monthLabel}</th>
                   ))}
@@ -231,12 +282,12 @@ export default function ProiezioneCrescita() {
                   <td className="p-2 font-semibold sticky left-0 bg-blue-50/50 z-10">
                     <span className="inline-flex items-center gap-1">
                       <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
-                      Giacenza a {data.targetSize}
+                      Giacenza lorda {data.targetSize}
                     </span>
                   </td>
                   {mc.map((m, i) => (
                     <td key={i} className="p-2 text-center font-semibold text-blue-700">
-                      {formatNumber(m.giacenzaCumulativaTarget)}
+                      {formatNumber(m.giacenzaLordaTarget)}
                     </td>
                   ))}
                 </tr>
@@ -245,12 +296,29 @@ export default function ProiezioneCrescita() {
                   <td className="p-2 font-semibold sticky left-0 bg-purple-50/50 z-10">
                     <span className="inline-flex items-center gap-1">
                       <span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
-                      Ordini {data.targetSize}
+                      Ordini evasi {data.targetSize}
+                    </span>
+                  </td>
+                  {mc.map((m, i) => {
+                    const partial = m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget;
+                    return (
+                      <td key={i} className={`p-2 text-center font-semibold ${m.ordiniEvasi > 0 ? (partial ? 'text-red-600' : 'text-purple-700') : 'text-gray-400'}`}>
+                        {m.ordiniEvasi > 0 ? `-${formatNumber(m.ordiniEvasi)}${partial ? ` / ${formatNumber(m.ordiniTarget)}` : ''}` : (m.ordiniTarget > 0 ? <span className="text-red-500 text-xs">0 / {formatNumber(m.ordiniTarget)}</span> : '-')}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                <tr className="border-b bg-green-50/50">
+                  <td className="p-2 font-semibold sticky left-0 bg-green-50/50 z-10">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full bg-green-600 inline-block"></span>
+                      Giacenza netta {data.targetSize}
                     </span>
                   </td>
                   {mc.map((m, i) => (
-                    <td key={i} className={`p-2 text-center font-semibold ${m.ordiniTarget > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
-                      {m.ordiniTarget > 0 ? formatNumber(m.ordiniTarget) : '-'}
+                    <td key={i} className={`p-2 text-center font-bold ${m.giacenzaNetTarget >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {formatNumber(m.giacenzaNetTarget)}
                     </td>
                   ))}
                 </tr>
@@ -281,22 +349,6 @@ export default function ProiezioneCrescita() {
                       {m.arriviSchiuditoio > 0 ? formatNumber(m.arriviSchiuditoio) : '-'}
                     </td>
                   ))}
-                </tr>
-
-                <tr className="border-b">
-                  <td className="p-2 font-semibold sticky left-0 bg-background z-10">
-                    <span className="inline-flex items-center gap-1">
-                      Saldo (Giacenza - Ordini)
-                    </span>
-                  </td>
-                  {mc.map((m, i) => {
-                    const saldo = m.giacenzaCumulativaTarget - m.ordiniTarget;
-                    return (
-                      <td key={i} className={`p-2 text-center font-bold ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {m.ordiniTarget > 0 ? formatNumber(saldo) : '-'}
-                      </td>
-                    );
-                  })}
                 </tr>
               </tbody>
             </table>

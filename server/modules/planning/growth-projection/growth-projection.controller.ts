@@ -10,8 +10,15 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     const targetSize = (req.query.targetSize as string) || 'TP-3000';
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    let mortalityPercent: number | undefined = undefined;
+    if (req.query.mortalityPercent !== undefined) {
+      const parsed = parseFloat(req.query.mortalityPercent as string);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+        mortalityPercent = parsed;
+      }
+    }
 
-    const result = await growthProjectionService.project(targetSize, year);
+    const result = await growthProjectionService.project(targetSize, year, mortalityPercent);
     res.json(result);
   } catch (error) {
     console.error("Errore proiezione crescita:", error);

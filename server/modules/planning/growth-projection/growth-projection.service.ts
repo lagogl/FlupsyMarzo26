@@ -39,9 +39,11 @@ interface MonthlyContext {
   monthShort: string;
   monthLabel: string;
   ordiniTarget: number;
+  ordiniEvasi: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
-  giacenzaCumulativaTarget: number;
+  giacenzaLordaTarget: number;
+  giacenzaNetTarget: number;
 }
 
 interface GrowthProjectionResult {
@@ -49,6 +51,7 @@ interface GrowthProjectionResult {
   targetMaxAnimalsPerKg: number;
   generatedAt: string;
   year: number;
+  mortalityPercent: number | null;
   totalCurrentQuantity: number;
   totalAlreadyAtTarget: number;
   totalNotYetAtTarget: number;
@@ -75,10 +78,10 @@ export class GrowthProjectionService {
     return steps;
   }
 
-  async project(targetSize: string = 'TP-3000', year?: number): Promise<GrowthProjectionResult> {
+  async project(targetSize: string = 'TP-3000', year?: number, mortalityPercent?: number): Promise<GrowthProjectionResult> {
     const now = new Date();
     const startYear = year || now.getFullYear();
-    const mortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
+    const defaultMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
 
     const threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === targetSize);
     if (!threshold) throw new Error(`Taglia target ${targetSize} non trovata`);
@@ -154,6 +157,9 @@ export class GrowthProjectionService {
       }
     }
 
+    const useCustomMortality = mortalityPercent !== undefined && mortalityPercent !== null;
+    const customMonthlyRate = useCustomMortality ? mortalityPercent! / 100 : 0;
+
     const monthlyContext: MonthlyContext[] = [];
     const crossesYear = yearsNeeded.length > 1;
 
@@ -184,26 +190,57 @@ export class GrowthProjectionService {
         for (let day = 0; day < simulDays; day++) {
           globalBaskets = globalBaskets.map(b => {
             const apk = 1000000 / b.weightMg;
-            const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
             const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
             const newWeight = b.weightMg * (1 + sgr / 100);
-            const dailyMortality = mortalityRates[category] * dailyMortalityFraction;
+
+            let dailyMortality: number;
+            if (useCustomMortality) {
+              dailyMortality = customMonthlyRate * dailyMortalityFraction;
+            } else {
+              const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
+              dailyMortality = defaultMortalityRates[category] * dailyMortalityFraction;
+            }
+
             const surviving = Math.round(b.animalCount * (1 - dailyMortality));
             return { basketId: b.basketId, weightMg: newWeight, animalCount: surviving };
           });
         }
       }
 
-      let giacenzaTarget = 0;
+      let giacenzaLordaTarget = 0;
       for (const b of globalBaskets) {
         const apk = 1000000 / b.weightMg;
         if (apk <= targetMaxAnimalsPerKg) {
-          giacenzaTarget += b.animalCount;
+          giacenzaLordaTarget += b.animalCount;
         }
       }
 
       const ordiniMonth = ordersByYearMonth[ymKey] || {};
       const ordiniTarget = ordiniMonth[targetSize] || 0;
+
+      let ordiniEvasi = 0;
+      if (ordiniTarget > 0) {
+        let toFulfill = ordiniTarget;
+        const eligibleBaskets = globalBaskets
+          .filter(b => (1000000 / b.weightMg) <= targetMaxAnimalsPerKg && b.animalCount > 0)
+          .sort((a, b) => (1000000 / a.weightMg) - (1000000 / b.weightMg));
+
+        for (const eb of eligibleBaskets) {
+          if (toFulfill <= 0) break;
+          const take = Math.min(eb.animalCount, toFulfill);
+          eb.animalCount -= take;
+          toFulfill -= take;
+          ordiniEvasi += take;
+        }
+      }
+
+      let giacenzaNetTarget = 0;
+      for (const b of globalBaskets) {
+        const apk = 1000000 / b.weightMg;
+        if (apk <= targetMaxAnimalsPerKg) {
+          giacenzaNetTarget += b.animalCount;
+        }
+      }
 
       const label = crossesYear ? `${MONTH_SHORT[m0]} ${String(y).slice(-2)}` : MONTH_SHORT[m0];
 
@@ -214,9 +251,11 @@ export class GrowthProjectionService {
         monthShort: MONTH_SHORT[m0],
         monthLabel: label,
         ordiniTarget,
+        ordiniEvasi,
         budgetProduzione: budgetByYearMonth[ymKey] || 0,
         arriviSchiuditoio: hatcheryThisMonth,
-        giacenzaCumulativaTarget: giacenzaTarget
+        giacenzaLordaTarget,
+        giacenzaNetTarget
       });
     }
 
@@ -255,10 +294,17 @@ export class GrowthProjectionService {
           for (let day = 0; day < simulDays; day++) {
             workingBaskets = workingBaskets.map(b => {
               const apk = 1000000 / b.weightMg;
-              const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
               const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
               const newWeight = b.weightMg * (1 + sgr / 100);
-              const dailyMortality = mortalityRates[category] * dailyMortalityFraction;
+
+              let dailyMortality: number;
+              if (useCustomMortality) {
+                dailyMortality = customMonthlyRate * dailyMortalityFraction;
+              } else {
+                const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
+                dailyMortality = defaultMortalityRates[category] * dailyMortalityFraction;
+              }
+
               const surviving = Math.round(b.animalCount * (1 - dailyMortality));
               return { basketId: b.basketId, weightMg: newWeight, animalCount: surviving };
             });
@@ -311,6 +357,7 @@ export class GrowthProjectionService {
       targetMaxAnimalsPerKg,
       generatedAt: now.toISOString(),
       year: startYear,
+      mortalityPercent: mortalityPercent ?? null,
       totalCurrentQuantity: totalCurrentQty,
       totalAlreadyAtTarget: totalAlready,
       totalNotYetAtTarget: totalCurrentQty - totalAlready,
