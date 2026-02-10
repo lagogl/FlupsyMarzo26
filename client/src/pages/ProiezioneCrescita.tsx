@@ -279,15 +279,11 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
         return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
       }
       case 5: {
-        const gap = m.ordiniTarget - m.ordiniEvasi;
         const necessario = m.schiuditoioNecessario || 0;
         if (necessario > 0) {
-          return `= Gap ordini (${fn(gap)}) ÷ fattore sopravvivenza crescita da TP-300 a ${data.targetSize} (SGR + mortalità) = ${fn(necessario)} animali TP-300 da schiuditoio`;
+          return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap ordini futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
         }
-        if (gap > 0 && necessario === 0) {
-          return `= TP-300 non raggiungerebbe ${data.targetSize} entro ${m.monthName} secondo le tabelle di crescita`;
-        }
-        return `= Ordini completamente coperti dall'inventario → Nessun arrivo necessario`;
+        return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
       }
       case 6:
         return m.budgetProduzione > 0

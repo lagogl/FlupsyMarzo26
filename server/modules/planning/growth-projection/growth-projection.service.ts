@@ -323,14 +323,23 @@ export class GrowthProjectionService {
       });
     }
 
+    // Trova il mese in cui TP-300 raggiunge la taglia target (quanti mesi di crescita servono)
+    const monthsToReachTarget = cumulativeGrowth.findIndex(g => g.reachedTarget);
+    const growthSurvivalFactor = monthsToReachTarget >= 0
+      ? cumulativeGrowth[monthsToReachTarget].survivalFactor
+      : 0;
+
+    // Per ogni mese con gap, posiziona schiuditoioNecessario nel mese di ARRIVO
+    // (cioè monthsToReachTarget mesi PRIMA del mese di consegna)
     for (let i = 0; i < monthlyContext.length; i++) {
       const gap = monthlyContext[i].ordiniTarget - monthlyContext[i].ordiniEvasi;
-      if (gap > 0) {
-        const growth = cumulativeGrowth[i];
-        if (growth.reachedTarget && growth.survivalFactor > 0) {
-          monthlyContext[i].schiuditoioNecessario = Math.ceil(gap / growth.survivalFactor);
+      if (gap > 0 && monthsToReachTarget >= 0 && growthSurvivalFactor > 0) {
+        const arrivalMonthIndex = i - monthsToReachTarget;
+        if (arrivalMonthIndex >= 0 && arrivalMonthIndex < monthlyContext.length) {
+          // Somma al mese di arrivo (più gap possono richiedere arrivi nello stesso mese)
+          monthlyContext[arrivalMonthIndex].schiuditoioNecessario += Math.ceil(gap / growthSurvivalFactor);
         }
-        // Se non ha raggiunto la taglia, resta 0 (impossibile in tempo)
+        // Se arrivalMonthIndex < 0, è troppo tardi: gli arrivi avrebbero dovuto avvenire in passato
       }
     }
 
