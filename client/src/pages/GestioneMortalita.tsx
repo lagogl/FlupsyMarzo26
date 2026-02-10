@@ -435,7 +435,7 @@ export default function GestioneMortalita() {
                             max="100"
                             value={editableRates[size.name]?.[m.num] ?? 0}
                             onChange={(e) => handleCellChange(size.name, m.num, e.target.value)}
-                            className="w-full text-center h-7 text-sm font-medium border-0 bg-transparent focus:bg-white focus:border focus:border-blue-400 rounded-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none pointer-events-auto"
+                            className="w-full text-center h-7 text-[15px] font-semibold border-0 bg-transparent focus:bg-white focus:border focus:border-blue-400 rounded-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none pointer-events-auto"
                             onFocus={() => {
                               if (selectedCells.size <= 1) {
                                 setSelectedCells(new Set([key]));
@@ -445,7 +445,7 @@ export default function GestioneMortalita() {
                         </td>
                       );
                     })}
-                    <td className="p-1 text-center border-l-2 border-gray-300 font-bold bg-gray-50 text-sm">
+                    <td className="p-1 text-center border-l-2 border-gray-300 font-bold bg-gray-50 text-[15px]">
                       {getSizeAvg(size.name).toFixed(1)}%
                     </td>
                   </tr>
