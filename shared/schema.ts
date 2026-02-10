@@ -504,7 +504,7 @@ export const lotLedger = pgTable("lot_ledger", {
 // Projection Mortality Rates (Tassi mortalità per modulo Proiezione Crescita)
 export const projectionMortalityRates = pgTable("projection_mortality_rates", {
   id: serial("id").primaryKey(),
-  category: text("category").notNull(), // T1, T3, T10
+  sizeName: text("size_name").notNull(), // es. TP-300, TP-1000, TP-3000...
   month: integer("month").notNull(), // 1-12
   monthlyPercentage: real("monthly_percentage").notNull(), // percentuale mensile (es. 5.0 = 5%)
   notes: text("notes"),

@@ -84,8 +84,8 @@ export class GrowthProjectionService {
     const rows = await db.select().from(projectionMortalityRates);
     const lookup: Record<string, Record<number, number>> = {};
     for (const row of rows) {
-      if (!lookup[row.category]) lookup[row.category] = {};
-      lookup[row.category][row.month] = row.monthlyPercentage / 100;
+      if (!lookup[row.sizeName]) lookup[row.sizeName] = {};
+      lookup[row.sizeName][row.month] = row.monthlyPercentage / 100;
     }
     return lookup;
   }
@@ -218,9 +218,10 @@ export class GrowthProjectionService {
             if (useCustomMortality) {
               dailyMortality = customMonthlyRate * dailyMortalityFraction;
             } else {
-              const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
+              const sizeName = productionForecastService.mapAnimalsPerKgToSaleSize(apk);
               const month1Based = m0 + 1;
-              const dbRate = dbMortalityRates[category]?.[month1Based];
+              const dbRate = dbMortalityRates[sizeName]?.[month1Based];
+              const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
               const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
               dailyMortality = monthlyRate * dailyMortalityFraction;
             }
@@ -325,9 +326,10 @@ export class GrowthProjectionService {
           if (useCustomMortality) {
             dailyMortality = customMonthlyRate * dailyMortalityFraction;
           } else {
-            const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
+            const sizeName = productionForecastService.mapAnimalsPerKgToSaleSize(apk);
             const month1Based = m0 + 1;
-            const dbRate = dbMortalityRates[category]?.[month1Based];
+            const dbRate = dbMortalityRates[sizeName]?.[month1Based];
+            const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
             const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
             dailyMortality = monthlyRate * dailyMortalityFraction;
           }
@@ -408,9 +410,10 @@ export class GrowthProjectionService {
               if (useCustomMortality) {
                 dailyMortality = customMonthlyRate * dailyMortalityFraction;
               } else {
-                const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
+                const sizeName = productionForecastService.mapAnimalsPerKgToSaleSize(apk);
                 const month1Based = m0 + 1;
-                const dbRate = dbMortalityRates[category]?.[month1Based];
+                const dbRate = dbMortalityRates[sizeName]?.[month1Based];
+                const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
                 const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
                 dailyMortality = monthlyRate * dailyMortalityFraction;
               }

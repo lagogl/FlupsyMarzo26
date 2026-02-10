@@ -96,14 +96,14 @@ router.get("/mortality-rates", async (_req: Request, res: Response) => {
 
 router.put("/mortality-rates", async (req: Request, res: Response) => {
   try {
-    const { category, month, monthlyPercentage, notes } = req.body;
-    if (!category || !month || monthlyPercentage === undefined) {
-      return res.status(400).json({ error: "Categoria, mese e percentuale sono obbligatori" });
+    const { sizeName, month, monthlyPercentage, notes } = req.body;
+    if (!sizeName || !month || monthlyPercentage === undefined) {
+      return res.status(400).json({ error: "Taglia, mese e percentuale sono obbligatori" });
     }
 
     const existing = await db.select().from(projectionMortalityRates)
       .where(and(
-        eq(projectionMortalityRates.category, category),
+        eq(projectionMortalityRates.sizeName, sizeName),
         eq(projectionMortalityRates.month, month)
       ));
 
@@ -116,7 +116,7 @@ router.put("/mortality-rates", async (req: Request, res: Response) => {
     }
 
     const inserted = await db.insert(projectionMortalityRates).values({
-      category,
+      sizeName,
       month,
       monthlyPercentage,
       notes
@@ -137,12 +137,12 @@ router.put("/mortality-rates/bulk", async (req: Request, res: Response) => {
 
     const results = [];
     for (const rate of rates) {
-      const { category, month, monthlyPercentage, notes } = rate;
-      if (!category || !month || monthlyPercentage === undefined) continue;
+      const { sizeName, month, monthlyPercentage, notes } = rate;
+      if (!sizeName || !month || monthlyPercentage === undefined) continue;
 
       const existing = await db.select().from(projectionMortalityRates)
         .where(and(
-          eq(projectionMortalityRates.category, category),
+          eq(projectionMortalityRates.sizeName, sizeName),
           eq(projectionMortalityRates.month, month)
         ));
 
@@ -154,7 +154,7 @@ router.put("/mortality-rates/bulk", async (req: Request, res: Response) => {
         results.push(updated[0]);
       } else {
         const inserted = await db.insert(projectionMortalityRates).values({
-          category, month, monthlyPercentage, notes
+          sizeName, month, monthlyPercentage, notes
         }).returning();
         results.push(inserted[0]);
       }
