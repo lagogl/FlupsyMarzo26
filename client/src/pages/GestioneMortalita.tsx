@@ -387,7 +387,7 @@ export default function GestioneMortalita() {
               <thead>
                 <tr>
                   <th
-                    className="sticky left-0 z-10 bg-gray-100 border-r-2 border-b border-gray-300 p-2 text-left min-w-[100px] text-sm cursor-pointer hover:bg-gray-200"
+                    className="sticky left-0 z-10 bg-gray-900 text-white border-r-2 border-b border-gray-700 p-2 text-left min-w-[100px] text-sm cursor-pointer hover:bg-gray-800"
                     onClick={handleSelectAll}
                     title="Seleziona tutto"
                   >
@@ -396,23 +396,23 @@ export default function GestioneMortalita() {
                   {MONTHS.map((m, mi) => (
                     <th
                       key={m.num}
-                      className="bg-gray-100 border-b border-gray-300 p-1 text-center min-w-[52px] font-medium text-sm cursor-pointer hover:bg-gray-200"
+                      className="bg-gray-900 text-white border-b border-gray-700 p-1 text-center min-w-[52px] font-medium text-sm cursor-pointer hover:bg-gray-800"
                       onClick={() => handleSelectColumn(m.num)}
                       title={`Seleziona colonna ${m.short}`}
                     >
                       {m.short}
                     </th>
                   ))}
-                  <th className="bg-gray-200 border-b border-l-2 border-gray-300 p-1 text-center min-w-[60px] font-bold text-sm">
+                  <th className="bg-gray-900 text-white border-b border-l-2 border-gray-700 p-1 text-center min-w-[60px] font-bold text-sm">
                     Media
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {sortedSizes.map((size, si) => (
-                  <tr key={size.name} className={`${getRowColor(size.name)} border-b border-gray-200`}>
+                  <tr key={size.name} className={`${si % 2 === 0 ? 'bg-white' : 'bg-gray-50'} border-b border-gray-200`}>
                     <td
-                      className={`sticky left-0 z-10 border-r-2 border-gray-300 p-1.5 font-semibold text-sm cursor-pointer hover:opacity-80 ${getHeaderColor(size.name)}`}
+                      className={`sticky left-0 z-10 border-r-2 border-gray-300 p-1.5 font-semibold text-sm cursor-pointer hover:opacity-80 ${si % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
                       onClick={() => handleSelectRow(size.name)}
                       title={`Seleziona riga ${size.name}`}
                     >
