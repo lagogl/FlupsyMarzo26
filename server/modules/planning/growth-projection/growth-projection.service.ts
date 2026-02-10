@@ -45,6 +45,7 @@ interface MonthlyContext {
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
+  schiuditoioNecessario: number;
 }
 
 interface GrowthProjectionResult {
@@ -263,8 +264,74 @@ export class GrowthProjectionService {
         arriviSchiuditoio: hatcheryThisMonth,
         giacenzaLordaInventario,
         giacenzaLordaConSchiuditoio,
-        giacenzaNetTarget
+        giacenzaNetTarget,
+        schiuditoioNecessario: 0
       });
+    }
+
+    // Calcolo schiuditoio necessario: per ogni mese con gap (ordini > evadibili),
+    // simula crescita di un lotto TP-300 in avanti fino a quel mese usando SGR + mortalità.
+    // Calcola il fattore di sopravvivenza cumulativo e verifica se TP-300 raggiunge
+    // la taglia target entro quel mese. Se sì: schiuditoioNecessario = gap / survivalFactor
+    // (quanti TP-300 servono ORA per avere "gap" animali a taglia entro quel mese).
+    const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
+    const startApk = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
+
+    // Precalcolo: simula crescita cumulativa da TP-300 mese per mese,
+    // salvando il fattore di sopravvivenza e se ha raggiunto la taglia target
+    const cumulativeGrowth: Array<{ reachedTarget: boolean; survivalFactor: number }> = [];
+    let simWeightMg = 1000000 / startApk;
+    let simSurvival = 1.0;
+    let simReachedTarget = false;
+
+    for (let i = 0; i < monthSteps.length; i++) {
+      const step = monthSteps[i];
+      const m0 = step.monthIndex;
+      const y = step.year;
+      const daysInMonth = new Date(y, m0 + 1, 0).getDate();
+      let simulDays = daysInMonth;
+      if (i === 0) {
+        simulDays = Math.max(0, daysInMonth - currentDay);
+      }
+
+      if (!simReachedTarget && simulDays > 0) {
+        const dailyMortalityFraction = 1 / daysInMonth;
+        for (let day = 0; day < simulDays; day++) {
+          const apk = 1000000 / simWeightMg;
+          const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
+          simWeightMg = simWeightMg * (1 + sgr / 100);
+
+          let dailyMortality: number;
+          if (useCustomMortality) {
+            dailyMortality = customMonthlyRate * dailyMortalityFraction;
+          } else {
+            const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
+            dailyMortality = defaultMortalityRates[category] * dailyMortalityFraction;
+          }
+          simSurvival *= (1 - dailyMortality);
+
+          if ((1000000 / simWeightMg) <= targetMaxAnimalsPerKg) {
+            simReachedTarget = true;
+            break;
+          }
+        }
+      }
+
+      cumulativeGrowth.push({
+        reachedTarget: simReachedTarget,
+        survivalFactor: simSurvival
+      });
+    }
+
+    for (let i = 0; i < monthlyContext.length; i++) {
+      const gap = monthlyContext[i].ordiniTarget - monthlyContext[i].ordiniEvasi;
+      if (gap > 0) {
+        const growth = cumulativeGrowth[i];
+        if (growth.reachedTarget && growth.survivalFactor > 0) {
+          monthlyContext[i].schiuditoioNecessario = Math.ceil(gap / growth.survivalFactor);
+        }
+        // Se non ha raggiunto la taglia, resta 0 (impossibile in tempo)
+      }
     }
 
     const groups: SizeGroupProjection[] = [];

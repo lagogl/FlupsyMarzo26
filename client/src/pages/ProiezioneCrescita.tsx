@@ -45,6 +45,7 @@ interface MonthlyContext {
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
+  schiuditoioNecessario: number;
 }
 
 interface GrowthProjectionResult {
@@ -147,13 +148,10 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
       color: "#be185d",
       bgClass: "bg-pink-50",
       textClass: "text-pink-700",
-      values: mc.map(m => {
-        const gap = m.ordiniTarget - m.ordiniEvasi;
-        return gap > 0 ? gap : 0;
-      }),
+      values: mc.map(m => m.schiuditoioNecessario || 0),
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
-        return m ? (m.ordiniTarget - m.ordiniEvasi) > 0 : false;
+        return m ? (m.schiuditoioNecessario || 0) > 0 : false;
       },
     },
     {
@@ -282,8 +280,12 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
       }
       case 5: {
         const gap = m.ordiniTarget - m.ordiniEvasi;
-        if (gap > 0) {
-          return `= Ordini richiesti (${fn(m.ordiniTarget)}) - Evadibili (${fn(m.ordiniEvasi)}) = ${fn(gap)} animali da integrare con schiuditoio`;
+        const necessario = m.schiuditoioNecessario || 0;
+        if (necessario > 0) {
+          return `= Gap ordini (${fn(gap)}) ÷ fattore sopravvivenza crescita da TP-300 a ${data.targetSize} (SGR + mortalità) = ${fn(necessario)} animali TP-300 da schiuditoio`;
+        }
+        if (gap > 0 && necessario === 0) {
+          return `= TP-300 non raggiungerebbe ${data.targetSize} entro ${m.monthName} secondo le tabelle di crescita`;
         }
         return `= Ordini completamente coperti dall'inventario → Nessun arrivo necessario`;
       }
