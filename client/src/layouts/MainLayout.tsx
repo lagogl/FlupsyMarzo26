@@ -10,7 +10,7 @@ import {
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
   ClipboardList, Users, FolderOpen, Sparkles, Radio, Target, Eye, EyeOff, Star,
-  AlertCircle, ShieldCheck
+  AlertCircle, ShieldCheck, Skull
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -210,6 +210,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       items: [
         { icon: <ShieldCheck className="h-5 w-5 mr-2 text-blue-600" />, label: "Verifica Copertura Ordini", path: "/verifica-copertura" },
         { icon: <TrendingUp className="h-5 w-5 mr-2 text-blue-600" />, label: "Proiezione Crescita", path: "/proiezione-crescita" },
+        { icon: <Skull className="h-5 w-5 mr-2 text-red-500" />, label: "Gestione Mortalità", path: "/gestione-mortalita" },
       ]
     },
     {

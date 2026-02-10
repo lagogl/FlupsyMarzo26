@@ -1,6 +1,6 @@
 import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
-import { hatcheryArrivals, productionTargets } from "../../../../shared/schema";
+import { hatcheryArrivals, productionTargets, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, inArray } from "drizzle-orm";
 
 const MONTH_NAMES = [
@@ -80,10 +80,20 @@ export class GrowthProjectionService {
     return steps;
   }
 
+  private async getMortalityRatesFromDb(): Promise<Record<string, Record<number, number>>> {
+    const rows = await db.select().from(projectionMortalityRates);
+    const lookup: Record<string, Record<number, number>> = {};
+    for (const row of rows) {
+      if (!lookup[row.category]) lookup[row.category] = {};
+      lookup[row.category][row.month] = row.monthlyPercentage / 100;
+    }
+    return lookup;
+  }
+
   async project(targetSize: string = 'TP-3000', year?: number, mortalityPercent?: number): Promise<GrowthProjectionResult> {
     const now = new Date();
     const startYear = year || now.getFullYear();
-    const defaultMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
+    const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
 
     const threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === targetSize);
     if (!threshold) throw new Error(`Taglia target ${targetSize} non trovata`);
@@ -96,9 +106,10 @@ export class GrowthProjectionService {
 
     const yearsNeeded = [...new Set(monthSteps.map(s => s.year))];
 
-    const [sgrLookup, basketInventory, ...ordersByYearArr] = await Promise.all([
+    const [sgrLookup, basketInventory, dbMortalityRates, ...ordersByYearArr] = await Promise.all([
       productionForecastService.getSgrLookup(),
       productionForecastService.getBasketLevelInventory(),
+      this.getMortalityRatesFromDb(),
       ...yearsNeeded.map(y => productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders })))
     ]);
 
@@ -208,7 +219,10 @@ export class GrowthProjectionService {
               dailyMortality = customMonthlyRate * dailyMortalityFraction;
             } else {
               const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-              dailyMortality = defaultMortalityRates[category] * dailyMortalityFraction;
+              const month1Based = m0 + 1;
+              const dbRate = dbMortalityRates[category]?.[month1Based];
+              const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
+              dailyMortality = monthlyRate * dailyMortalityFraction;
             }
 
             const surviving = Math.round(b.animalCount * (1 - dailyMortality));
@@ -312,7 +326,10 @@ export class GrowthProjectionService {
             dailyMortality = customMonthlyRate * dailyMortalityFraction;
           } else {
             const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-            dailyMortality = defaultMortalityRates[category] * dailyMortalityFraction;
+            const month1Based = m0 + 1;
+            const dbRate = dbMortalityRates[category]?.[month1Based];
+            const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
+            dailyMortality = monthlyRate * dailyMortalityFraction;
           }
           simSurvival *= (1 - dailyMortality);
 
@@ -392,7 +409,10 @@ export class GrowthProjectionService {
                 dailyMortality = customMonthlyRate * dailyMortalityFraction;
               } else {
                 const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-                dailyMortality = defaultMortalityRates[category] * dailyMortalityFraction;
+                const month1Based = m0 + 1;
+                const dbRate = dbMortalityRates[category]?.[month1Based];
+                const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
+                dailyMortality = monthlyRate * dailyMortalityFraction;
               }
 
               const surviving = Math.round(b.animalCount * (1 - dailyMortality));

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { growthProjectionService } from "./growth-projection.service";
 import { db } from "../../../db";
-import { hatcheryArrivals } from "../../../../shared/schema";
+import { hatcheryArrivals, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, and } from "drizzle-orm";
 
 const router = Router();
@@ -81,6 +81,89 @@ router.delete("/hatchery-arrivals/:id", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Errore eliminazione arrivo schiuditoio:", error);
     res.status(500).json({ error: "Errore nell'eliminazione" });
+  }
+});
+
+router.get("/mortality-rates", async (_req: Request, res: Response) => {
+  try {
+    const rates = await db.select().from(projectionMortalityRates);
+    res.json(rates);
+  } catch (error) {
+    console.error("Errore lettura tassi mortalità:", error);
+    res.status(500).json({ error: "Errore nel recupero tassi mortalità" });
+  }
+});
+
+router.put("/mortality-rates", async (req: Request, res: Response) => {
+  try {
+    const { category, month, monthlyPercentage, notes } = req.body;
+    if (!category || !month || monthlyPercentage === undefined) {
+      return res.status(400).json({ error: "Categoria, mese e percentuale sono obbligatori" });
+    }
+
+    const existing = await db.select().from(projectionMortalityRates)
+      .where(and(
+        eq(projectionMortalityRates.category, category),
+        eq(projectionMortalityRates.month, month)
+      ));
+
+    if (existing.length > 0) {
+      const updated = await db.update(projectionMortalityRates)
+        .set({ monthlyPercentage, notes, updatedAt: new Date() })
+        .where(eq(projectionMortalityRates.id, existing[0].id))
+        .returning();
+      return res.json(updated[0]);
+    }
+
+    const inserted = await db.insert(projectionMortalityRates).values({
+      category,
+      month,
+      monthlyPercentage,
+      notes
+    }).returning();
+    res.json(inserted[0]);
+  } catch (error) {
+    console.error("Errore salvataggio tasso mortalità:", error);
+    res.status(500).json({ error: "Errore nel salvataggio tasso mortalità" });
+  }
+});
+
+router.put("/mortality-rates/bulk", async (req: Request, res: Response) => {
+  try {
+    const { rates } = req.body;
+    if (!Array.isArray(rates)) {
+      return res.status(400).json({ error: "Formato dati non valido" });
+    }
+
+    const results = [];
+    for (const rate of rates) {
+      const { category, month, monthlyPercentage, notes } = rate;
+      if (!category || !month || monthlyPercentage === undefined) continue;
+
+      const existing = await db.select().from(projectionMortalityRates)
+        .where(and(
+          eq(projectionMortalityRates.category, category),
+          eq(projectionMortalityRates.month, month)
+        ));
+
+      if (existing.length > 0) {
+        const updated = await db.update(projectionMortalityRates)
+          .set({ monthlyPercentage, notes, updatedAt: new Date() })
+          .where(eq(projectionMortalityRates.id, existing[0].id))
+          .returning();
+        results.push(updated[0]);
+      } else {
+        const inserted = await db.insert(projectionMortalityRates).values({
+          category, month, monthlyPercentage, notes
+        }).returning();
+        results.push(inserted[0]);
+      }
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error("Errore salvataggio bulk tassi mortalità:", error);
+    res.status(500).json({ error: "Errore nel salvataggio bulk" });
   }
 });
 

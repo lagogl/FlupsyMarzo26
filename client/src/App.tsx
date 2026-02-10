@@ -79,6 +79,8 @@ import AnalisiScostamenti from "@/pages/AnalisiScostamenti";
 import VerificaCoperturaOrdini from "@/pages/VerificaCoperturaOrdini";
 // Importazione Proiezione Crescita
 import ProiezioneCrescita from "@/pages/ProiezioneCrescita";
+// Importazione Gestione Mortalità
+import GestioneMortalita from "@/pages/GestioneMortalita";
 // Importazione Operators (Gestione Operatori)
 import Operators from "@/pages/Operators";
 // Importazione Menu Settings (Impostazioni Personali)
@@ -154,6 +156,7 @@ function Router() {
       <ProtectedRoute path="/analisi-scostamenti" component={AnalisiScostamenti}/>
       <ProtectedRoute path="/verifica-copertura" component={VerificaCoperturaOrdini}/>
       <ProtectedRoute path="/proiezione-crescita" component={ProiezioneCrescita}/>
+      <ProtectedRoute path="/gestione-mortalita" component={GestioneMortalita}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
       <ProtectedRoute path="/task-management" component={TaskManagement}/>

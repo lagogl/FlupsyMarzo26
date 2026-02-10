@@ -501,6 +501,16 @@ export const lotLedger = pgTable("lot_ledger", {
 
 // Position History removed for performance optimization
 
+// Projection Mortality Rates (Tassi mortalità per modulo Proiezione Crescita)
+export const projectionMortalityRates = pgTable("projection_mortality_rates", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(), // T1, T3, T10
+  month: integer("month").notNull(), // 1-12
+  monthlyPercentage: real("monthly_percentage").notNull(), // percentuale mensile (es. 5.0 = 5%)
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at"),
+});
+
 // Mortality Rate (Tasso di mortalità previsto per taglia e mese) - LEGACY
 export const mortalityRates = pgTable("mortality_rates", {
   id: serial("id").primaryKey(),
@@ -593,6 +603,11 @@ export const insertLotLedgerSchema = createInsertSchema(lotLedger).omit({
   createdAt: true
 });
 
+
+export const insertProjectionMortalityRateSchema = createInsertSchema(projectionMortalityRates).omit({
+  id: true,
+  updatedAt: true
+});
 
 export const insertMortalityRateSchema = createInsertSchema(mortalityRates).omit({
   id: true
@@ -742,6 +757,9 @@ export type InsertLot = z.infer<typeof insertLotSchema>;
 export type LotLedger = typeof lotLedger.$inferSelect;
 export type InsertLotLedger = z.infer<typeof insertLotLedgerSchema>;
 
+
+export type ProjectionMortalityRate = typeof projectionMortalityRates.$inferSelect;
+export type InsertProjectionMortalityRate = z.infer<typeof insertProjectionMortalityRateSchema>;
 
 export type MortalityRate = typeof mortalityRates.$inferSelect;
 export type InsertMortalityRate = z.infer<typeof insertMortalityRateSchema>;
