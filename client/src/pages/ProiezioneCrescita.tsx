@@ -673,6 +673,9 @@ export default function ProiezioneCrescita() {
           <CardHeader className="pb-2">
             <CardTitle className="text-lg text-green-700">
               Già a taglia {data.targetSize} o superiore
+              <span className="ml-3 text-base font-normal text-gray-600">
+                Totale: <span className="font-semibold text-green-700">{formatNumber(groupsAbove.reduce((sum, g) => sum + g.currentQuantity, 0))}</span>
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
