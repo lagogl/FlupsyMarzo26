@@ -99,7 +99,7 @@ export default function ProiezioneCrescita() {
 
   const saveHatchery = useMutation({
     mutationFn: async (payload: { year: number; month: number; quantity: number }) => {
-      return apiRequest("POST", "/api/proiezione-crescita/hatchery-arrivals", payload);
+      return apiRequest("/api/proiezione-crescita/hatchery-arrivals", "POST", payload);
     },
     onSuccess: () => {
       for (const y of hatcheryYears) {
@@ -112,7 +112,7 @@ export default function ProiezioneCrescita() {
 
   const deleteHatchery = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/proiezione-crescita/hatchery-arrivals/${id}`);
+      return apiRequest(`/api/proiezione-crescita/hatchery-arrivals/${id}`, "DELETE");
     },
     onSuccess: () => {
       for (const y of hatcheryYears) {
