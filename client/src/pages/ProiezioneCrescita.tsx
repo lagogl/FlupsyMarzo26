@@ -76,6 +76,7 @@ function formatNumber(n: number): string {
 
 interface SpreadsheetRow {
   label: string;
+  tooltip: string;
   color: string;
   bgClass: string;
   textClass: string;
@@ -101,6 +102,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
   const rows: SpreadsheetRow[] = [
     {
       label: "Giacenza lorda (inventario)",
+      tooltip: "Numero totale di animali presenti nell'inventario reale (cestelli attivi) che hanno raggiunto o superato la taglia target selezionata. Considera solo la crescita simulata dell'inventario esistente, senza includere arrivi futuri dallo schiuditoio.",
       color: "#3b82f6",
       bgClass: "bg-blue-50",
       textClass: "text-blue-700",
@@ -108,6 +110,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: "Giacenza lorda (con schiuditoio)",
+      tooltip: "Numero totale di animali a taglia target includendo sia l'inventario reale sia il contributo degli arrivi pianificati dallo schiuditoio. Gli animali TP-300 inseriti come arrivi vengono simulati in crescita mese per mese usando SGR e mortalità, e conteggiati quando raggiungono la taglia target.",
       color: "#06b6d4",
       bgClass: "bg-cyan-50",
       textClass: "text-cyan-700",
@@ -115,6 +118,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: `Ordini richiesti ${data.targetSize}`,
+      tooltip: `Quantità totale di animali di taglia ${data.targetSize} (o compatibile) richiesta dagli ordini clienti per quel mese. Include ordini da database esterno e ordini avanzati. Rappresenta la domanda da soddisfare.`,
       color: "#ea580c",
       bgClass: "bg-orange-50",
       textClass: "text-orange-700",
@@ -122,6 +126,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: `Ordini evadibili ${data.targetSize}`,
+      tooltip: `Quantità di ordini che possono essere effettivamente evasi con l'inventario disponibile (incluso schiuditoio). Verde = ordini completamente coperti. Rosso = copertura parziale, c'è un gap tra domanda e disponibilità. Gli ordini vengono evasi dal più grande al più piccolo per ottimizzare l'uso dello stock.`,
       color: "#a855f7",
       bgClass: "bg-purple-50",
       textClass: "text-purple-700",
@@ -137,6 +142,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: `Giacenza residua ${data.targetSize}`,
+      tooltip: `Animali rimasti dopo aver evaso gli ordini del mese. Calcolato come: Giacenza lorda (con schiuditoio) meno Ordini evadibili. Un valore positivo indica surplus disponibile. Un valore negativo indica carenza di stock.`,
       color: "#16a34a",
       bgClass: "bg-green-50",
       textClass: "text-green-700",
@@ -145,6 +151,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: `Schiuditoio necessario ${data.targetSize}`,
+      tooltip: `Numero di animali TP-300 che devono ARRIVARE dallo schiuditoio in questo mese per poter crescere e coprire i gap degli ordini futuri. Il calcolo simula la crescita da TP-300 alla taglia target usando SGR e mortalità, e posiziona il fabbisogno nel mese di arrivo (non nel mese di consegna). Se il valore è 0, non ci sono gap futuri che richiedono arrivi in questo mese.`,
       color: "#be185d",
       bgClass: "bg-pink-50",
       textClass: "text-pink-700",
@@ -156,6 +163,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: "Budget Produzione",
+      tooltip: "Budget di vendita pianificato per il mese, espresso in numero di animali. Rappresenta l'obiettivo commerciale mensile definito nel piano di produzione annuale.",
       color: "#f59e0b",
       bgClass: "bg-amber-50",
       textClass: "text-amber-700",
@@ -163,6 +171,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: "Arrivi Schiuditoio (TP-300)",
+      tooltip: "Quantità di animali TP-300 (~30M an/kg) pianificati in arrivo dallo schiuditoio per questo mese. Questi valori sono inseriti manualmente e vengono usati nella simulazione di crescita per calcolare il loro contributo futuro alla giacenza a taglia target.",
       color: "#10b981",
       bgClass: "bg-emerald-50",
       textClass: "text-emerald-700",
@@ -341,6 +350,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto border-t border-gray-300">
+          <TooltipProvider delayDuration={200}>
           <table
             ref={tableRef}
             className="w-full text-sm border-collapse select-none"
@@ -378,10 +388,17 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                     style={{ borderRight: '2px solid #9ca3af' }}
                     onClick={(e) => { e.stopPropagation(); handleRowHeaderClick(rowIdx); }}
                   >
-                    <div className="px-2 py-2 flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: row.color }}></span>
-                      <span className={`font-semibold text-[13px] ${row.textClass}`}>{row.label}</span>
-                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="px-2 py-2 flex items-center gap-2 cursor-help">
+                          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: row.color }}></span>
+                          <span className={`font-semibold text-[13px] ${row.textClass}`}>{row.label}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs text-sm p-3 leading-relaxed">
+                        {row.tooltip}
+                      </TooltipContent>
+                    </Tooltip>
                   </td>
                   {row.values.map((val, colIdx) => {
                     const isSelected = isCellSelected(rowIdx, colIdx);
@@ -415,6 +432,7 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
               ))}
             </tbody>
           </table>
+          </TooltipProvider>
         </div>
       </CardContent>
     </Card>
