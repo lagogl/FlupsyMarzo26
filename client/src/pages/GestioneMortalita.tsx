@@ -396,12 +396,12 @@ export default function GestioneMortalita() {
             </div>
           </div>
 
-          <div className="overflow-x-auto select-none">
+          <div className="overflow-auto select-none" style={{ maxHeight: 'calc(100vh - 280px)' }}>
             <table className="w-full border-collapse" style={{ fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
-              <thead>
+              <thead className="sticky top-0 z-20">
                 <tr>
                   <th
-                    className="sticky left-0 z-10 bg-gray-900 text-white border-r-2 border-b border-gray-700 p-2 text-left min-w-[100px] text-sm cursor-pointer hover:bg-gray-800"
+                    className="sticky left-0 z-30 bg-gray-900 text-white border-r-2 border-b border-gray-700 p-2 text-left min-w-[100px] text-sm cursor-pointer hover:bg-gray-800"
                     onClick={handleSelectAll}
                     title="Seleziona tutto"
                   >
