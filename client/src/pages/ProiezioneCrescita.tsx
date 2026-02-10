@@ -82,6 +82,7 @@ interface SpreadsheetRow {
   isNegative?: boolean;
   isBold?: boolean;
   isWarning?: (colIdx: number) => boolean;
+  isSuccess?: (colIdx: number) => boolean;
 }
 
 function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: {
@@ -113,9 +114,9 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
     },
     {
       label: `Ordini richiesti ${data.targetSize}`,
-      color: "#7c3aed",
-      bgClass: "bg-violet-50",
-      textClass: "text-violet-700",
+      color: "#ea580c",
+      bgClass: "bg-orange-50",
+      textClass: "text-orange-700",
       values: mc.map(m => m.ordiniTarget),
     },
     {
@@ -123,22 +124,37 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
       color: "#a855f7",
       bgClass: "bg-purple-50",
       textClass: "text-purple-700",
-      values: mc.map((m, i) => {
-        return m.ordiniEvasi > 0 ? -m.ordiniEvasi : 0;
-      }),
-      isNegative: true,
+      values: mc.map(m => m.ordiniEvasi),
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
         return m ? m.ordiniTarget > 0 && m.ordiniEvasi < m.ordiniTarget : false;
       },
+      isSuccess: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m ? m.ordiniTarget > 0 && m.ordiniEvasi >= m.ordiniTarget : false;
+      },
     },
     {
-      label: `Giacenza netta ${data.targetSize}`,
+      label: `Giacenza residua ${data.targetSize}`,
       color: "#16a34a",
       bgClass: "bg-green-50",
       textClass: "text-green-700",
       values: mc.map(m => m.giacenzaNetTarget),
       isBold: true,
+    },
+    {
+      label: `Schiuditoio necessario ${data.targetSize}`,
+      color: "#be185d",
+      bgClass: "bg-pink-50",
+      textClass: "text-pink-700",
+      values: mc.map(m => {
+        const gap = m.ordiniTarget - m.ordiniEvasi;
+        return gap > 0 ? gap : 0;
+      }),
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m ? (m.ordiniTarget - m.ordiniEvasi) > 0 : false;
+      },
     },
     {
       label: "Budget Produzione",
@@ -250,25 +266,32 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
           : `= Nessun ordine per ${m.monthName}`;
       }
       case 3: {
-        if (m.ordiniEvasi > 0 && m.ordiniEvasi < m.ordiniTarget) {
-          return `= Evasi solo ${fn(m.ordiniEvasi)} su ${fn(m.ordiniTarget)} richiesti → Mancano ${fn(m.ordiniTarget - m.ordiniEvasi)} animali`;
+        if (m.ordiniEvasi > 0 && m.ordiniEvasi >= m.ordiniTarget) {
+          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(m.ordiniTarget)} richiesti → Copertura completa ✓`;
         }
         if (m.ordiniEvasi > 0) {
-          return `= -${fn(m.ordiniEvasi)} animali sottratti dall'inventario → Ordine completamente evaso`;
+          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(m.ordiniTarget)} richiesti → Mancano ${fn(m.ordiniTarget - m.ordiniEvasi)} animali`;
         }
         if (m.ordiniTarget > 0) {
-          return `= 0 evasi su ${fn(m.ordiniTarget)} richiesti → Nessuno stock disponibile a ${data.targetSize}`;
+          return `= 0 evadibili su ${fn(m.ordiniTarget)} richiesti → Nessuno stock disponibile a ${data.targetSize}`;
         }
-        return `= Nessun ordine da evadere per ${m.monthName}`;
+        return `= Nessun ordine per ${m.monthName}`;
       }
       case 4: {
-        return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evasi (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
+        return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
       }
-      case 5:
+      case 5: {
+        const gap = m.ordiniTarget - m.ordiniEvasi;
+        if (gap > 0) {
+          return `= Ordini richiesti (${fn(m.ordiniTarget)}) - Evadibili (${fn(m.ordiniEvasi)}) = ${fn(gap)} animali da integrare con schiuditoio`;
+        }
+        return `= Ordini completamente coperti dall'inventario → Nessun arrivo necessario`;
+      }
+      case 6:
         return m.budgetProduzione > 0
           ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
           : `= Nessun budget pianificato per ${m.monthName}`;
-      case 6:
+      case 7:
         return m.arriviSchiuditoio > 0
           ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
           : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
@@ -368,19 +391,23 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
                     const isNeg = numVal !== null && numVal < 0;
                     const isEmpty = numVal === 0 && !row.isNegative;
                     const warn = row.isWarning ? row.isWarning(colIdx) : false;
+                    const success = row.isSuccess ? row.isSuccess(colIdx) : false;
                     const displayVal = typeof val === 'string'
                       ? val
                       : numVal === 0
                         ? (row.isNegative ? '-' : '-')
                         : formatNumber(numVal!);
 
+                    const cellBg = isSelected ? '' : warn ? 'bg-red-50' : success ? 'bg-green-50' : '';
+                    const textColor = isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : success ? 'text-green-700 font-bold' : isNeg ? 'text-red-600' : row.textClass;
+
                     return (
                       <td
                         key={colIdx}
-                        className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${warn ? 'bg-red-50' : ''} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
+                        className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
                         onClick={(e) => { e.stopPropagation(); handleCellClick(rowIdx, colIdx); }}
                       >
-                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : isNeg ? 'text-red-600' : row.textClass}`}>
+                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor}`}>
                           {displayVal}
                         </div>
                       </td>
