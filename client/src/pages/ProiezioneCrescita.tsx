@@ -613,7 +613,12 @@ export default function ProiezioneCrescita() {
       {showHatcheryForm && (
         <Card className="border-emerald-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg text-emerald-700">Inserisci Arrivi Schiuditoio (TP-300)</CardTitle>
+            <CardTitle className="text-lg text-emerald-700">
+              Inserisci Arrivi Schiuditoio (TP-300)
+              <span className="ml-3 text-base font-normal text-gray-600">
+                Totale: <span className="font-semibold text-emerald-700">{formatNumber(allHatcheryData.reduce((sum, h) => sum + h.quantity, 0))}</span>
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
