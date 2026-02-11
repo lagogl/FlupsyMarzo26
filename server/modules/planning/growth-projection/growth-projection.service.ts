@@ -42,6 +42,7 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
+  domandaEffettiva: number;
   arriviSchiuditoio: number;
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
@@ -254,9 +255,11 @@ export class GrowthProjectionService {
 
       const ordiniMonth = ordersByYearMonth[ymKey] || {};
       const ordiniTarget = ordiniMonth[targetSize] || 0;
+      const budgetMese = budgetByYearMonth[ymKey] || 0;
+      const domandaEffettiva = Math.max(ordiniTarget, budgetMese);
       const ordiniArretrati = carryOver;
 
-      const totalToFulfill = ordiniTarget + ordiniArretrati;
+      const totalToFulfill = domandaEffettiva + ordiniArretrati;
       let ordiniEvasi = 0;
       if (totalToFulfill > 0) {
         let toFulfill = totalToFulfill;
@@ -294,6 +297,7 @@ export class GrowthProjectionService {
         ordiniArretrati,
         ordiniEvasi,
         budgetProduzione: budgetByYearMonth[ymKey] || 0,
+        domandaEffettiva,
         arriviSchiuditoio: hatcheryThisMonth,
         giacenzaLordaInventario,
         giacenzaLordaConSchiuditoio,
@@ -370,7 +374,7 @@ export class GrowthProjectionService {
     // Per ogni mese con gap, posiziona schiuditoioNecessario nel mese di ARRIVO
     // (cioè monthsToReachTarget mesi PRIMA del mese di consegna)
     for (let i = 0; i < monthlyContext.length; i++) {
-      const gap = (monthlyContext[i].ordiniTarget + monthlyContext[i].ordiniArretrati) - monthlyContext[i].ordiniEvasi;
+      const gap = (monthlyContext[i].domandaEffettiva + monthlyContext[i].ordiniArretrati) - monthlyContext[i].ordiniEvasi;
       if (gap > 0 && monthsToReachTarget >= 0 && growthSurvivalFactor > 0) {
         const arrivalMonthIndex = i - monthsToReachTarget;
         if (arrivalMonthIndex >= 0 && arrivalMonthIndex < monthlyContext.length) {

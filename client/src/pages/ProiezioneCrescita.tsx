@@ -41,6 +41,7 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
+  domandaEffettiva: number;
   arriviSchiuditoio: number;
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
@@ -134,16 +135,33 @@ function ExcelTable({ data, mc, toast }: {
       values: mc.map(m => m.perditeMortalita || 0),
     },
     {
-      label: `Ordini richiesti ${data.targetSize}`,
-      tooltip: `Quantità totale di animali di taglia ${data.targetSize} (o compatibile) richiesta dagli ordini clienti per quel mese. Include ordini da database esterno e ordini avanzati. Rappresenta la domanda da soddisfare.`,
+      label: `Ordini clienti ${data.targetSize}`,
+      tooltip: `Quantità totale di animali di taglia ${data.targetSize} (o compatibile) richiesta dagli ordini clienti per quel mese. Include ordini da database esterno e ordini avanzati.`,
       color: "#ea580c",
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.ordiniTarget),
     },
     {
+      label: "Budget Produzione",
+      tooltip: "Budget di vendita pianificato per il mese, espresso in numero di animali. Rappresenta l'obiettivo commerciale mensile definito nel piano di produzione annuale.",
+      color: "#f59e0b",
+      bgClass: "",
+      textClass: "text-gray-800",
+      values: mc.map(m => m.budgetProduzione),
+    },
+    {
+      label: `Domanda effettiva`,
+      tooltip: `Il maggiore tra ordini clienti e budget produzione per il mese. Questo valore guida i calcoli di evasione, giacenza residua e fabbisogno schiuditoio. Se il budget è superiore agli ordini, il sistema pianifica per il budget.`,
+      color: "#7c3aed",
+      bgClass: "",
+      textClass: "text-gray-900",
+      values: mc.map(m => m.domandaEffettiva),
+      isBold: true,
+    },
+    {
       label: `Arretrato mese precedente`,
-      tooltip: `Ordini non evasi nei mesi precedenti per mancanza di prodotto, trascinati a questo mese per tentare di evaderli. Se presente, questi animali si sommano agli ordini del mese corrente nel tentativo di evasione.`,
+      tooltip: `Ordini non evasi nei mesi precedenti per mancanza di prodotto, trascinati a questo mese per tentare di evaderli. Se presente, questi animali si sommano alla domanda del mese corrente nel tentativo di evasione.`,
       color: "#b91c1c",
       bgClass: "",
       textClass: "text-gray-600",
@@ -155,19 +173,19 @@ function ExcelTable({ data, mc, toast }: {
     },
     {
       label: `Ordini evadibili ${data.targetSize}`,
-      tooltip: `Quantità di ordini che possono essere effettivamente evasi con l'inventario disponibile (incluso schiuditoio). Include l'evasione sia degli ordini del mese che dell'arretrato. Verde = ordini completamente coperti. Rosso = copertura parziale, c'è un gap tra domanda e disponibilità.`,
+      tooltip: `Quantità della domanda effettiva (+ arretrato) che può essere evasa con l'inventario disponibile (incluso schiuditoio). Verde = domanda completamente coperta. Rosso = copertura parziale, c'è un gap.`,
       color: "#a855f7",
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.ordiniEvasi),
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
-        const totalDemand = m ? m.ordiniTarget + (m.ordiniArretrati || 0) : 0;
+        const totalDemand = m ? m.domandaEffettiva + (m.ordiniArretrati || 0) : 0;
         return m ? totalDemand > 0 && m.ordiniEvasi < totalDemand : false;
       },
       isSuccess: (colIdx: number) => {
         const m = mc[colIdx];
-        const totalDemand = m ? m.ordiniTarget + (m.ordiniArretrati || 0) : 0;
+        const totalDemand = m ? m.domandaEffettiva + (m.ordiniArretrati || 0) : 0;
         return m ? totalDemand > 0 && m.ordiniEvasi >= totalDemand : false;
       },
     },
@@ -191,14 +209,6 @@ function ExcelTable({ data, mc, toast }: {
         const m = mc[colIdx];
         return m ? (m.schiuditoioNecessario || 0) > 0 : false;
       },
-    },
-    {
-      label: "Budget Produzione",
-      tooltip: "Budget di vendita pianificato per il mese, espresso in numero di animali. Rappresenta l'obiettivo commerciale mensile definito nel piano di produzione annuale.",
-      color: "#f59e0b",
-      bgClass: "",
-      textClass: "text-gray-800",
-      values: mc.map(m => m.budgetProduzione),
     },
     {
       label: "Arrivi Schiuditoio (TP-300)",
@@ -362,20 +372,27 @@ function ExcelTable({ data, mc, toast }: {
       }
       case 3: {
         return m.ordiniTarget > 0
-          ? `= Totale ordini richiesti per ${data.targetSize} a ${m.monthName}: ${fn(m.ordiniTarget)} animali`
-          : `= Nessun ordine per ${m.monthName}`;
+          ? `= Ordini clienti per ${data.targetSize} a ${m.monthName}: ${fn(m.ordiniTarget)} animali`
+          : `= Nessun ordine clienti per ${m.monthName}`;
       }
-      case 4: {
+      case 4:
+        return m.budgetProduzione > 0
+          ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
+          : `= Nessun budget pianificato per ${m.monthName}`;
+      case 5: {
+        return `= MAX(Ordini clienti ${fn(m.ordiniTarget)}, Budget ${fn(m.budgetProduzione)}) = ${fn(m.domandaEffettiva)} animali. Questo valore guida evasione e fabbisogno schiuditoio.`;
+      }
+      case 6: {
         const arretrato = m.ordiniArretrati || 0;
         if (arretrato > 0) {
-          return `= Ordini non evasi trascinati dai mesi precedenti: ${fn(arretrato)} animali. Sommati agli ordini del mese (${fn(m.ordiniTarget)}) = ${fn(m.ordiniTarget + arretrato)} totale da evadere`;
+          return `= Domanda non evasa trascinata dai mesi precedenti: ${fn(arretrato)} animali. Sommata alla domanda del mese (${fn(m.domandaEffettiva)}) = ${fn(m.domandaEffettiva + arretrato)} totale da evadere`;
         }
         return `= Nessun arretrato da mesi precedenti`;
       }
-      case 5: {
-        const totalDemand = m.ordiniTarget + (m.ordiniArretrati || 0);
+      case 7: {
+        const totalDemand = m.domandaEffettiva + (m.ordiniArretrati || 0);
         if (m.ordiniEvasi > 0 && m.ordiniEvasi >= totalDemand) {
-          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti (${fn(m.ordiniTarget)} ordini + ${fn(m.ordiniArretrati || 0)} arretrato) → Copertura completa ✓`;
+          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti (${fn(m.domandaEffettiva)} domanda + ${fn(m.ordiniArretrati || 0)} arretrato) → Copertura completa ✓`;
         }
         if (m.ordiniEvasi > 0) {
           const nonEvasi = totalDemand - m.ordiniEvasi;
@@ -384,23 +401,19 @@ function ExcelTable({ data, mc, toast }: {
         if (totalDemand > 0) {
           return `= 0 evadibili su ${fn(totalDemand)} richiesti → ${fn(totalDemand)} animali trascinati al mese successivo`;
         }
-        return `= Nessun ordine per ${m.monthName}`;
+        return `= Nessuna domanda per ${m.monthName}`;
       }
-      case 6: {
+      case 8: {
         return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
       }
-      case 7: {
+      case 9: {
         const necessario = m.schiuditoioNecessario || 0;
         if (necessario > 0) {
-          return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap ordini futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
+          return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
         }
         return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
       }
-      case 8:
-        return m.budgetProduzione > 0
-          ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
-          : `= Nessun budget pianificato per ${m.monthName}`;
-      case 9:
+      case 10:
         return m.arriviSchiuditoio > 0
           ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
           : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
