@@ -39,6 +39,7 @@ interface MonthlyContext {
   monthShort: string;
   monthLabel: string;
   ordiniTarget: number;
+  ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
@@ -177,6 +178,7 @@ export class GrowthProjectionService {
     const customMonthlyRate = useCustomMortality ? mortalityPercent! / 100 : 0;
 
     const monthlyContext: MonthlyContext[] = [];
+    let carryOver = 0;
     const crossesYear = yearsNeeded.length > 1;
 
     for (let i = 0; i < monthSteps.length; i++) {
@@ -252,10 +254,12 @@ export class GrowthProjectionService {
 
       const ordiniMonth = ordersByYearMonth[ymKey] || {};
       const ordiniTarget = ordiniMonth[targetSize] || 0;
+      const ordiniArretrati = carryOver;
 
+      const totalToFulfill = ordiniTarget + ordiniArretrati;
       let ordiniEvasi = 0;
-      if (ordiniTarget > 0) {
-        let toFulfill = ordiniTarget;
+      if (totalToFulfill > 0) {
+        let toFulfill = totalToFulfill;
         const eligibleBaskets = globalBaskets
           .filter(b => (1000000 / b.weightMg) <= targetMaxAnimalsPerKg && b.animalCount > 0)
           .sort((a, b) => (1000000 / a.weightMg) - (1000000 / b.weightMg));
@@ -268,6 +272,7 @@ export class GrowthProjectionService {
           ordiniEvasi += take;
         }
       }
+      carryOver = totalToFulfill - ordiniEvasi;
 
       let giacenzaNetTarget = 0;
       for (const b of globalBaskets) {
@@ -286,6 +291,7 @@ export class GrowthProjectionService {
         monthShort: MONTH_SHORT[m0],
         monthLabel: label,
         ordiniTarget,
+        ordiniArretrati,
         ordiniEvasi,
         budgetProduzione: budgetByYearMonth[ymKey] || 0,
         arriviSchiuditoio: hatcheryThisMonth,
@@ -364,7 +370,7 @@ export class GrowthProjectionService {
     // Per ogni mese con gap, posiziona schiuditoioNecessario nel mese di ARRIVO
     // (cioè monthsToReachTarget mesi PRIMA del mese di consegna)
     for (let i = 0; i < monthlyContext.length; i++) {
-      const gap = monthlyContext[i].ordiniTarget - monthlyContext[i].ordiniEvasi;
+      const gap = (monthlyContext[i].ordiniTarget + monthlyContext[i].ordiniArretrati) - monthlyContext[i].ordiniEvasi;
       if (gap > 0 && monthsToReachTarget >= 0 && growthSurvivalFactor > 0) {
         const arrivalMonthIndex = i - monthsToReachTarget;
         if (arrivalMonthIndex >= 0 && arrivalMonthIndex < monthlyContext.length) {

@@ -39,6 +39,7 @@ interface MonthlyContext {
   monthShort: string;
   monthLabel: string;
   ordiniTarget: number;
+  ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
   arriviSchiuditoio: number;
@@ -146,19 +147,33 @@ function ExcelTable({ data, mc, toast }: {
       values: mc.map(m => m.ordiniTarget),
     },
     {
+      label: `Arretrato mese precedente`,
+      tooltip: `Ordini non evasi nei mesi precedenti per mancanza di prodotto, trascinati a questo mese per tentare di evaderli. Se presente, questi animali si sommano agli ordini del mese corrente nel tentativo di evasione.`,
+      color: "#b91c1c",
+      bgClass: "bg-red-50",
+      textClass: "text-red-800",
+      values: mc.map(m => m.ordiniArretrati || 0),
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m ? (m.ordiniArretrati || 0) > 0 : false;
+      },
+    },
+    {
       label: `Ordini evadibili ${data.targetSize}`,
-      tooltip: `Quantità di ordini che possono essere effettivamente evasi con l'inventario disponibile (incluso schiuditoio). Verde = ordini completamente coperti. Rosso = copertura parziale, c'è un gap tra domanda e disponibilità. Gli ordini vengono evasi dal più grande al più piccolo per ottimizzare l'uso dello stock.`,
+      tooltip: `Quantità di ordini che possono essere effettivamente evasi con l'inventario disponibile (incluso schiuditoio). Include l'evasione sia degli ordini del mese che dell'arretrato. Verde = ordini completamente coperti. Rosso = copertura parziale, c'è un gap tra domanda e disponibilità.`,
       color: "#a855f7",
       bgClass: "bg-purple-50",
       textClass: "text-purple-700",
       values: mc.map(m => m.ordiniEvasi),
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
-        return m ? m.ordiniTarget > 0 && m.ordiniEvasi < m.ordiniTarget : false;
+        const totalDemand = m ? m.ordiniTarget + (m.ordiniArretrati || 0) : 0;
+        return m ? totalDemand > 0 && m.ordiniEvasi < totalDemand : false;
       },
       isSuccess: (colIdx: number) => {
         const m = mc[colIdx];
-        return m ? m.ordiniTarget > 0 && m.ordiniEvasi >= m.ordiniTarget : false;
+        const totalDemand = m ? m.ordiniTarget + (m.ordiniArretrati || 0) : 0;
+        return m ? totalDemand > 0 && m.ordiniEvasi >= totalDemand : false;
       },
     },
     {
@@ -301,32 +316,41 @@ function ExcelTable({ data, mc, toast }: {
           : `= Nessun ordine per ${m.monthName}`;
       }
       case 4: {
-        if (m.ordiniEvasi > 0 && m.ordiniEvasi >= m.ordiniTarget) {
-          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(m.ordiniTarget)} richiesti → Copertura completa ✓`;
+        const arretrato = m.ordiniArretrati || 0;
+        if (arretrato > 0) {
+          return `= Ordini non evasi trascinati dai mesi precedenti: ${fn(arretrato)} animali. Sommati agli ordini del mese (${fn(m.ordiniTarget)}) = ${fn(m.ordiniTarget + arretrato)} totale da evadere`;
+        }
+        return `= Nessun arretrato da mesi precedenti`;
+      }
+      case 5: {
+        const totalDemand = m.ordiniTarget + (m.ordiniArretrati || 0);
+        if (m.ordiniEvasi > 0 && m.ordiniEvasi >= totalDemand) {
+          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti (${fn(m.ordiniTarget)} ordini + ${fn(m.ordiniArretrati || 0)} arretrato) → Copertura completa ✓`;
         }
         if (m.ordiniEvasi > 0) {
-          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(m.ordiniTarget)} richiesti → Mancano ${fn(m.ordiniTarget - m.ordiniEvasi)} animali`;
+          const nonEvasi = totalDemand - m.ordiniEvasi;
+          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti → Mancano ${fn(nonEvasi)} animali (trascinati al mese successivo)`;
         }
-        if (m.ordiniTarget > 0) {
-          return `= 0 evadibili su ${fn(m.ordiniTarget)} richiesti → Nessuno stock disponibile a ${data.targetSize}`;
+        if (totalDemand > 0) {
+          return `= 0 evadibili su ${fn(totalDemand)} richiesti → ${fn(totalDemand)} animali trascinati al mese successivo`;
         }
         return `= Nessun ordine per ${m.monthName}`;
       }
-      case 5: {
+      case 6: {
         return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
       }
-      case 6: {
+      case 7: {
         const necessario = m.schiuditoioNecessario || 0;
         if (necessario > 0) {
           return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap ordini futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
         }
         return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
       }
-      case 7:
+      case 8:
         return m.budgetProduzione > 0
           ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
           : `= Nessun budget pianificato per ${m.monthName}`;
-      case 8:
+      case 9:
         return m.arriviSchiuditoio > 0
           ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
           : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
