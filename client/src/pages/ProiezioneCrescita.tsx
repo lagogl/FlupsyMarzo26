@@ -8,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useState, useCallback, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import * as XLSX from "xlsx";
 
 interface SizeMonthProjection {
   month: number;
@@ -213,38 +212,93 @@ function ExcelTable({ data, mc, toast }: {
 
   const excelColLetter = (idx: number) => String.fromCharCode(65 + idx);
 
-  const handleExportExcel = useCallback(() => {
-    const headers = ["Indicatore", ...mc.map(m => m.monthLabel)];
-    const wsData = [headers];
-    for (const row of rows) {
-      wsData.push([
-        row.label,
-        ...row.values.map(v => typeof v === 'number' ? String(v) : String(v))
-      ]);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
+  const handleExportExcel = useCallback(async () => {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "FLUPSY Management";
+    wb.created = new Date();
+    const ws = wb.addWorksheet("Scostamenti", {
+      views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }]
+    });
 
-    const colWidths = [{ wch: 35 }, ...mc.map(() => ({ wch: 16 }))];
-    ws['!cols'] = colWidths;
+    const titleRow = ws.addRow([`Scostamenti - Target ${data.targetSize}`]);
+    titleRow.font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
+    ws.mergeCells(1, 1, 1, mc.length + 1);
+    titleRow.alignment = { horizontal: "center", vertical: "middle" };
+    titleRow.height = 30;
 
-    for (let r = 1; r <= rows.length; r++) {
-      for (let c = 1; c <= mc.length; c++) {
-        const cellRef = XLSX.utils.encode_cell({ r, c });
-        const cell = ws[cellRef];
-        if (cell) {
-          const numVal = parseFloat(String(cell.v).replace(/[^\d.-]/g, ''));
-          if (!isNaN(numVal)) {
-            cell.v = numVal;
-            cell.t = 'n';
-            cell.z = '#,##0';
+    const headerLabels = ["INDICATORE", ...mc.map(m => m.monthLabel)];
+    const headerRow = ws.addRow(headerLabels);
+    headerRow.height = 24;
+    headerRow.eachCell((cell, colNumber) => {
+      cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+      cell.alignment = { horizontal: colNumber === 1 ? "left" : "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin", color: { argb: "FF0D253F" } },
+        bottom: { style: "thin", color: { argb: "FF0D253F" } },
+        left: { style: "thin", color: { argb: "FF0D253F" } },
+        right: { style: "thin", color: { argb: "FF0D253F" } },
+      };
+    });
+
+    const lightGray = "FFF7F7F7";
+    const white = "FFFFFFFF";
+    const thinBorder = {
+      top: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+      bottom: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+      left: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+      right: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+    };
+
+    rows.forEach((row, rowIdx) => {
+      const rowData = [row.label, ...row.values.map(v => typeof v === "number" ? v : 0)];
+      const excelRow = ws.addRow(rowData);
+      const stripeBg = rowIdx % 2 === 0 ? white : lightGray;
+
+      excelRow.eachCell((cell, colNumber) => {
+        cell.border = thinBorder;
+        if (colNumber === 1) {
+          cell.font = { bold: true, size: 10, color: { argb: "FF333333" } };
+          cell.alignment = { horizontal: "left", vertical: "middle" };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripeBg } };
+        } else {
+          const colIdx = colNumber - 2;
+          cell.numFmt = "#,##0";
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+
+          const warn = row.isWarning ? row.isWarning(colIdx) : false;
+          const success = row.isSuccess ? row.isSuccess(colIdx) : false;
+
+          if (warn) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+            cell.font = { bold: true, size: 10, color: { argb: "FFDC2626" } };
+          } else if (success) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } };
+            cell.font = { bold: true, size: 10, color: { argb: "FF16A34A" } };
+          } else {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripeBg } };
+            cell.font = { size: 10, color: { argb: "FF333333" }, bold: !!row.isBold };
           }
         }
-      }
-    }
+      });
+    });
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Proiezione Crescita");
-    XLSX.writeFile(wb, `Proiezione_Crescita_${data.targetSize}.xlsx`);
+    ws.columns = [{ width: 38 }, ...mc.map(() => ({ width: 16 }))];
+
+    ws.autoFilter = {
+      from: { row: 2, column: 1 },
+      to: { row: 2 + rows.length, column: mc.length + 1 },
+    };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Scostamenti_${data.targetSize}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
     toast({ title: "Esportato", description: "File Excel scaricato" });
   }, [mc, rows, data.targetSize]);
 
