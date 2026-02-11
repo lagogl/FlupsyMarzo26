@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -111,10 +111,21 @@ function ExcelTable({ data, mc, toast }: {
   toast: any;
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
-  const [selectedCell, setSelectedCell] = useState<{row: number, col: number} | null>(null);
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [anchorCell, setAnchorCell] = useState<{row: number, col: number} | null>(null);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [selectedCol, setSelectedCol] = useState<number | null>(null);
   const [ordersExpanded, setOrdersExpanded] = useState(false);
+
+  const cellKey = (r: number, c: number) => `${r},${c}`;
+  const parseKey = (k: string) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; };
+
+  const selectedCell = useMemo(() => {
+    if (selectedCells.size === 1) {
+      return parseKey([...selectedCells][0]);
+    }
+    return null;
+  }, [selectedCells]);
 
   const allOrderSizes = (() => {
     const sizeSet = new Set<string>();
@@ -384,26 +395,86 @@ function ExcelTable({ data, mc, toast }: {
     });
   }, [mc, rows]);
 
-  const handleCellClick = (rowIdx: number, colIdx: number) => {
-    setSelectedCell({ row: rowIdx, col: colIdx });
-    setSelectedRow(null);
-    setSelectedCol(null);
+  const multiCellStats = useMemo(() => {
+    const allKeys = new Set(selectedCells);
+    if (selectedRow !== null) {
+      for (let c = 0; c < mc.length; c++) allKeys.add(cellKey(selectedRow, c));
+    }
+    if (selectedCol !== null) {
+      for (let r = 0; r < rows.length; r++) allKeys.add(cellKey(r, selectedCol));
+    }
+    if (allKeys.size < 2) return null;
+    const nums: number[] = [];
+    for (const k of allKeys) {
+      const { row: r, col: c } = parseKey(k);
+      const v = rows[r]?.values[c];
+      if (typeof v === 'number' && v !== 0) nums.push(v);
+    }
+    if (nums.length === 0) return null;
+    const sum = nums.reduce((a, b) => a + b, 0);
+    return {
+      somma: sum,
+      media: sum / nums.length,
+      conteggio: nums.length,
+      minimo: Math.min(...nums),
+      massimo: Math.max(...nums),
+      celle: allKeys.size,
+    };
+  }, [selectedCells, selectedRow, selectedCol, rows, mc]);
+
+  const handleCellClick = (rowIdx: number, colIdx: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const key = cellKey(rowIdx, colIdx);
+
+    if (e.shiftKey && anchorCell) {
+      const minR = Math.min(anchorCell.row, rowIdx);
+      const maxR = Math.max(anchorCell.row, rowIdx);
+      const minC = Math.min(anchorCell.col, colIdx);
+      const maxC = Math.max(anchorCell.col, colIdx);
+      const newSet = new Set<string>();
+      for (let r = minR; r <= maxR; r++) {
+        for (let c = minC; c <= maxC; c++) {
+          newSet.add(cellKey(r, c));
+        }
+      }
+      setSelectedCells(newSet);
+      setSelectedRow(null);
+      setSelectedCol(null);
+    } else if (e.ctrlKey || e.metaKey) {
+      const newSet = new Set(selectedCells);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      setSelectedCells(newSet);
+      setAnchorCell({ row: rowIdx, col: colIdx });
+      setSelectedRow(null);
+      setSelectedCol(null);
+    } else {
+      setSelectedCells(new Set([key]));
+      setAnchorCell({ row: rowIdx, col: colIdx });
+      setSelectedRow(null);
+      setSelectedCol(null);
+    }
   };
 
   const handleRowHeaderClick = (rowIdx: number) => {
     setSelectedRow(rowIdx);
-    setSelectedCell(null);
+    setSelectedCells(new Set());
     setSelectedCol(null);
+    setAnchorCell(null);
   };
 
   const handleColHeaderClick = (colIdx: number) => {
     setSelectedCol(colIdx);
-    setSelectedCell(null);
+    setSelectedCells(new Set());
     setSelectedRow(null);
+    setAnchorCell(null);
   };
 
   const isCellSelected = (rowIdx: number, colIdx: number) => {
-    if (selectedCell && selectedCell.row === rowIdx && selectedCell.col === colIdx) return true;
+    if (selectedCells.has(cellKey(rowIdx, colIdx))) return true;
     if (selectedRow === rowIdx) return true;
     if (selectedCol === colIdx) return true;
     return false;
@@ -519,7 +590,7 @@ function ExcelTable({ data, mc, toast }: {
             </Button>
           </div>
         </div>
-        {selectedCell && (
+        {selectedCell && !multiCellStats && (
           <div className="flex flex-col gap-1 mt-1">
             <div className="flex items-center gap-2 bg-gray-100 rounded px-2 py-1.5 text-xs border">
               <span className="font-mono font-bold text-green-700 min-w-[24px]">fx</span>
@@ -527,6 +598,39 @@ function ExcelTable({ data, mc, toast }: {
               <span className="font-mono text-gray-700 flex-1 text-[11px] leading-relaxed">
                 {cellFormula}
               </span>
+            </div>
+          </div>
+        )}
+        {multiCellStats && (
+          <div className="flex flex-col gap-1 mt-1">
+            <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded px-3 py-2 text-xs border border-blue-200">
+              <span className="font-mono font-bold text-blue-700 min-w-[24px]">Σ</span>
+              <span className="text-blue-200">│</span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 flex-1">
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-gray-500 font-medium">Somma:</span>
+                  <span className="font-mono font-bold text-blue-800">{formatNumber(multiCellStats.somma)}</span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-gray-500 font-medium">Media:</span>
+                  <span className="font-mono font-bold text-blue-800">{formatNumber(Math.round(multiCellStats.media))}</span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-gray-500 font-medium">Conteggio:</span>
+                  <span className="font-mono font-bold text-blue-800">{multiCellStats.conteggio}</span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-gray-500 font-medium">Min:</span>
+                  <span className="font-mono font-bold text-blue-800">{formatNumber(multiCellStats.minimo)}</span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-gray-500 font-medium">Max:</span>
+                  <span className="font-mono font-bold text-blue-800">{formatNumber(multiCellStats.massimo)}</span>
+                </span>
+                <span className="inline-flex items-center gap-1 text-gray-400">
+                  ({multiCellStats.celle} celle)
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -538,7 +642,7 @@ function ExcelTable({ data, mc, toast }: {
             ref={tableRef}
             className="w-full text-sm border-collapse select-none"
             style={{ fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}
-            onClick={() => { setSelectedCell(null); setSelectedRow(null); setSelectedCol(null); }}
+            onClick={() => { setSelectedCells(new Set()); setSelectedRow(null); setSelectedCol(null); setAnchorCell(null); }}
           >
             <thead>
               <tr>
@@ -614,7 +718,7 @@ function ExcelTable({ data, mc, toast }: {
                       <td
                         key={colIdx}
                         className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); handleCellClick(rowIdx, colIdx); }}
+                        onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
                       >
                         <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor}`}>
                           {displayVal}
