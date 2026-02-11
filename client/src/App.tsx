@@ -73,8 +73,6 @@ import LCIModule from "@/pages/LCIModule";
 import TaskManagement from "@/pages/TaskManagement";
 // Importazione Attività Consigliate AI
 import AttivitaConsigliate from "@/pages/AttivitaConsigliate";
-// Importazione Analisi Scostamenti Produzione
-import AnalisiScostamenti from "@/pages/AnalisiScostamenti";
 // Importazione Verifica Copertura Ordini
 import VerificaCoperturaOrdini from "@/pages/VerificaCoperturaOrdini";
 // Importazione Proiezione Crescita
@@ -153,7 +151,6 @@ function Router() {
       <ProtectedRoute path="/ai-report-generator" component={AIReportGenerator}/>
       <ProtectedRoute path="/ai-enhanced" component={AIEnhanced}/>
       <ProtectedRoute path="/attivita-consigliate" component={AttivitaConsigliate}/>
-      <ProtectedRoute path="/analisi-scostamenti" component={AnalisiScostamenti}/>
       <ProtectedRoute path="/verifica-copertura" component={VerificaCoperturaOrdini}/>
       <ProtectedRoute path="/proiezione-crescita" component={ProiezioneCrescita}/>
       <ProtectedRoute path="/gestione-mortalita" component={GestioneMortalita}/>

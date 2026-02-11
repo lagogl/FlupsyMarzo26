@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3 } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useCallback, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -71,6 +71,16 @@ interface HatcheryArrival {
   notes: string | null;
 }
 
+interface ProductionTarget {
+  id: number;
+  year: number;
+  month: number;
+  sizeCategory: string;
+  targetAnimals: number;
+  targetWeight: number | null;
+  notes: string | null;
+}
+
 function formatNumber(n: number): string {
   return n.toLocaleString("it-IT");
 }
@@ -88,11 +98,9 @@ interface SpreadsheetRow {
   isSuccess?: (colIdx: number) => boolean;
 }
 
-function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: {
+function ExcelTable({ data, mc, toast }: {
   data: GrowthProjectionResult;
   mc: MonthlyContext[];
-  showHatcheryForm: boolean;
-  setShowHatcheryForm: (v: boolean) => void;
   toast: any;
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
@@ -345,15 +353,6 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-green-700" onClick={handleExportExcel}>
               <Download className="h-3 w-3" /> Excel
             </Button>
-            <Button
-              variant={showHatcheryForm ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setShowHatcheryForm(!showHatcheryForm)}
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Arrivi Schiuditoio
-            </Button>
           </div>
         </div>
         {selectedCell && (
@@ -462,7 +461,9 @@ function ExcelTable({ data, mc, showHatcheryForm, setShowHatcheryForm, toast }: 
 export default function ProiezioneCrescita() {
   const { toast } = useToast();
   const [showHatcheryForm, setShowHatcheryForm] = useState(false);
+  const [showBudgetForm, setShowBudgetForm] = useState(false);
   const [hatcheryInputs, setHatcheryInputs] = useState<Record<string, string>>({});
+  const [budgetInputs, setBudgetInputs] = useState<Record<string, string>>({});
   const [mortalityInput, setMortalityInput] = useState<string>("");
   const [activeMortality, setActiveMortality] = useState<number | undefined>(undefined);
 
@@ -490,6 +491,31 @@ export default function ProiezioneCrescita() {
   });
 
   const allHatcheryData = [...(hatcheryData || []), ...(hatcheryData2 || [])];
+
+  const { data: budgetData } = useQuery<ProductionTarget[]>({
+    queryKey: ["/api/proiezione-crescita/production-targets", { year: hatcheryYears[0] }],
+    enabled: !!data,
+  });
+
+  const { data: budgetData2 } = useQuery<ProductionTarget[]>({
+    queryKey: ["/api/proiezione-crescita/production-targets", { year: hatcheryYears[1] }],
+    enabled: !!data && hatcheryYears.length > 1,
+  });
+
+  const allBudgetData = [...(budgetData || []), ...(budgetData2 || [])];
+
+  const saveBudget = useMutation({
+    mutationFn: async (payload: { year: number; month: number; sizeCategory: string; targetAnimals: number }) => {
+      return apiRequest("/api/proiezione-crescita/production-targets", "POST", payload);
+    },
+    onSuccess: () => {
+      for (const y of hatcheryYears) {
+        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/production-targets", { year: y }] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
+      toast({ title: "Salvato", description: "Budget produzione aggiornato" });
+    }
+  });
 
   const saveHatchery = useMutation({
     mutationFn: async (payload: { year: number; month: number; quantity: number }) => {
@@ -551,6 +577,15 @@ export default function ProiezioneCrescita() {
     }
   };
 
+  const handleSaveBudget = (year: number, month: number, sizeCategory: string) => {
+    const key = `${year}-${month}-${sizeCategory}`;
+    const raw = budgetInputs[key];
+    const val = parseInt(raw || "0");
+    if (isNaN(val) || val < 0) return;
+    saveBudget.mutate({ year, month, sizeCategory, targetAnimals: val });
+    setBudgetInputs(prev => ({ ...prev, [key]: "" }));
+  };
+
   const handleApplyMortality = () => {
     const val = parseFloat(mortalityInput);
     if (!isNaN(val) && val >= 0 && val <= 100) {
@@ -610,10 +645,95 @@ export default function ProiezioneCrescita() {
       <ExcelTable
         data={data}
         mc={mc}
-        showHatcheryForm={showHatcheryForm}
-        setShowHatcheryForm={setShowHatcheryForm}
         toast={toast}
       />
+
+      <div className="flex items-center gap-2">
+        <Button
+          variant={showBudgetForm ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs gap-1"
+          onClick={() => setShowBudgetForm(!showBudgetForm)}
+        >
+          <DollarSign className="h-3.5 w-3.5" />
+          Budget Produzione
+        </Button>
+        <Button
+          variant={showHatcheryForm ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs gap-1"
+          onClick={() => setShowHatcheryForm(!showHatcheryForm)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Arrivi Schiuditoio
+        </Button>
+      </div>
+
+      {showBudgetForm && (
+        <Card className="border-amber-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg text-amber-700 flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Budget Produzione
+              <span className="ml-3 text-base font-normal text-gray-600">
+                Totale: <span className="font-semibold text-amber-700">{formatNumber(allBudgetData.reduce((sum, b) => sum + b.targetAnimals, 0))}</span> animali
+              </span>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Inserisci gli obiettivi di vendita mensili per categoria (T3 = 6K-30K an/kg, T10 = {'<'}6K an/kg)
+            </p>
+          </CardHeader>
+          <CardContent>
+            {["T3", "T10"].map(cat => (
+              <div key={cat} className="mb-4">
+                <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-sm ${cat === "T3" ? "bg-amber-500" : "bg-orange-500"}`}></span>
+                  {cat} {cat === "T3" ? "(6K-30K an/kg)" : "(<6K an/kg)"}
+                  <span className="font-normal text-gray-500">
+                    — Totale: {formatNumber(allBudgetData.filter(b => b.sizeCategory === cat).reduce((sum, b) => sum + b.targetAnimals, 0))}
+                  </span>
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {mc.map(({ year, month, monthLabel }) => {
+                    const existing = allBudgetData.find(b => b.year === year && b.month === month && b.sizeCategory === cat);
+                    const inputKey = `${year}-${month}-${cat}`;
+                    return (
+                      <div key={inputKey} className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-muted-foreground">{monthLabel}</label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            placeholder="0"
+                            className={`h-8 text-sm ${existing ? 'font-semibold text-amber-700' : ''}`}
+                            value={budgetInputs[inputKey] ?? (existing ? String(existing.targetAnimals) : "")}
+                            onChange={e => setBudgetInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-amber-600"
+                            onClick={() => {
+                              const raw = budgetInputs[inputKey] ?? (existing ? String(existing.targetAnimals) : "0");
+                              const val = parseInt(raw || "0");
+                              if (!isNaN(val) && val >= 0) {
+                                saveBudget.mutate({ year, month, sizeCategory: cat, targetAnimals: val });
+                                setBudgetInputs(prev => { const n = {...prev}; delete n[inputKey]; return n; });
+                              }
+                            }}
+                            disabled={budgetInputs[inputKey] === undefined || budgetInputs[inputKey] === (existing ? String(existing.targetAnimals) : "")}
+                          >
+                            <Save className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {showHatcheryForm && (
         <Card className="border-emerald-200">

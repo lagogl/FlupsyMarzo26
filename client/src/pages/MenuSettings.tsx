@@ -17,7 +17,7 @@ import {
   LayoutDashboard, PieChart, BarChart, BarChart3, Filter, Database, 
   Leaf, LayoutGrid, CloudIcon, Table, Brain, CalendarDays, Globe, 
   History, FileSpreadsheet, Split, ClipboardList, Users, FolderOpen, 
-  Sparkles, Radio, Target
+  Sparkles, Radio
 } from "lucide-react";
 
 const allMenuItems = [
@@ -43,7 +43,6 @@ const allMenuItems = [
   { path: "/giacenze-range", label: "Calcolo Giacenze", category: "Giacenze", icon: <CalendarDays className="h-4 w-4" /> },
   { path: "/ai-dashboard", label: "Dashboard AI", category: "Analisi", icon: <Brain className="h-4 w-4" /> },
   { path: "/attivita-consigliate", label: "Attività Consigliate", category: "Analisi", icon: <ClipboardList className="h-4 w-4" /> },
-  { path: "/analisi-scostamenti", label: "Analisi Scostamenti", category: "Analisi", icon: <Target className="h-4 w-4" /> },
   { path: "/ai-report-generator", label: "Report AI", category: "Analisi", icon: <FileSpreadsheet className="h-4 w-4" /> },
   { path: "/statistics", label: "Statistiche", category: "Analisi", icon: <BarChart className="h-4 w-4" /> },
   { path: "/sgr", label: "Indici SGR", category: "Analisi", icon: <TrendingUp className="h-4 w-4" /> },

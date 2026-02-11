@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import { growthProjectionService } from "./growth-projection.service";
 import { db } from "../../../db";
-import { hatcheryArrivals, projectionMortalityRates } from "../../../../shared/schema";
-import { eq, and } from "drizzle-orm";
+import { hatcheryArrivals, projectionMortalityRates, productionTargets } from "../../../../shared/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -160,6 +160,58 @@ router.put("/mortality-rates/bulk", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Errore salvataggio bulk tassi mortalità:", error);
     res.status(500).json({ error: "Errore nel salvataggio bulk" });
+  }
+});
+
+router.get("/production-targets", async (req: Request, res: Response) => {
+  try {
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const targets = await db.select().from(productionTargets)
+      .where(eq(productionTargets.year, year));
+    res.json(targets);
+  } catch (error) {
+    console.error("Errore recupero production targets:", error);
+    res.status(500).json({ error: "Errore nel recupero dei target" });
+  }
+});
+
+router.post("/production-targets", async (req: Request, res: Response) => {
+  try {
+    const { year, month, sizeCategory, targetAnimals } = req.body;
+    if (!year || !month || !sizeCategory || targetAnimals === undefined) {
+      return res.status(400).json({ error: "Campi obbligatori mancanti" });
+    }
+
+    const existing = await db.select().from(productionTargets)
+      .where(and(
+        eq(productionTargets.year, year),
+        eq(productionTargets.month, month),
+        eq(productionTargets.sizeCategory, sizeCategory)
+      ));
+
+    if (existing.length > 0) {
+      if (targetAnimals === 0) {
+        await db.delete(productionTargets).where(eq(productionTargets.id, existing[0].id));
+        return res.json({ deleted: true });
+      }
+      const updated = await db.update(productionTargets)
+        .set({ targetAnimals, updatedAt: new Date() })
+        .where(eq(productionTargets.id, existing[0].id))
+        .returning();
+      return res.json(updated[0]);
+    }
+
+    if (targetAnimals === 0) {
+      return res.json({ skipped: true });
+    }
+
+    const inserted = await db.insert(productionTargets).values({
+      year, month, sizeCategory, targetAnimals
+    }).returning();
+    res.json(inserted[0]);
+  } catch (error) {
+    console.error("Errore salvataggio production target:", error);
+    res.status(500).json({ error: "Errore nel salvataggio del target" });
   }
 });
 
