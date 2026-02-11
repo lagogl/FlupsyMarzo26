@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3 } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useCallback, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -38,6 +38,8 @@ interface MonthlyContext {
   monthShort: string;
   monthLabel: string;
   ordiniTarget: number;
+  ordiniTotali: number;
+  ordiniBySize: Record<string, number>;
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
@@ -97,6 +99,10 @@ interface SpreadsheetRow {
   isBold?: boolean;
   isWarning?: (colIdx: number) => boolean;
   isSuccess?: (colIdx: number) => boolean;
+  isExpandable?: boolean;
+  isSubRow?: boolean;
+  subRowSize?: string;
+  groupKey?: string;
 }
 
 function ExcelTable({ data, mc, toast }: {
@@ -108,6 +114,23 @@ function ExcelTable({ data, mc, toast }: {
   const [selectedCell, setSelectedCell] = useState<{row: number, col: number} | null>(null);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [selectedCol, setSelectedCol] = useState<number | null>(null);
+  const [ordersExpanded, setOrdersExpanded] = useState(false);
+
+  const allOrderSizes = (() => {
+    const sizeSet = new Set<string>();
+    for (const m of mc) {
+      if (m.ordiniBySize) {
+        for (const sz of Object.keys(m.ordiniBySize)) {
+          if (m.ordiniBySize[sz] > 0) sizeSet.add(sz);
+        }
+      }
+    }
+    return [...sizeSet].sort((a, b) => {
+      const numA = parseInt(a.replace(/\D/g, '')) || 0;
+      const numB = parseInt(b.replace(/\D/g, '')) || 0;
+      return numA - numB;
+    });
+  })();
 
   const rows: SpreadsheetRow[] = [
     {
@@ -135,13 +158,27 @@ function ExcelTable({ data, mc, toast }: {
       values: mc.map(m => m.perditeMortalita || 0),
     },
     {
-      label: `Ordini clienti ${data.targetSize}`,
-      tooltip: `Quantità totale di animali di taglia ${data.targetSize} (o compatibile) richiesta dagli ordini clienti per quel mese. Include ordini da database esterno e ordini avanzati.`,
+      label: `Ordini clienti (Totale)`,
+      tooltip: `Somma di tutti gli ordini clienti per tutte le taglie nel mese. Clicca la freccia per espandere e vedere il dettaglio per singola taglia. Taglie presenti negli ordini: ${allOrderSizes.join(', ') || 'nessuna'}.`,
       color: "#ea580c",
       bgClass: "",
       textClass: "text-gray-800",
-      values: mc.map(m => m.ordiniTarget),
+      values: mc.map(m => m.ordiniTotali || 0),
+      isBold: true,
+      isExpandable: true,
+      groupKey: "ordini",
     },
+    ...(ordersExpanded ? allOrderSizes.map(sz => ({
+      label: `  ↳ ${sz}`,
+      tooltip: `Ordini clienti specifici per taglia ${sz}. Quantità richiesta per questo mese.`,
+      color: "#fb923c",
+      bgClass: "bg-orange-50/50",
+      textClass: "text-gray-600",
+      values: mc.map(m => (m.ordiniBySize?.[sz]) || 0),
+      isSubRow: true,
+      subRowSize: sz,
+      groupKey: "ordini",
+    })) : []),
     {
       label: "Budget Produzione",
       tooltip: "Budget di vendita pianificato per il mese, espresso in numero di animali. Rappresenta l'obiettivo commerciale mensile definito nel piano di produzione annuale.",
@@ -261,17 +298,38 @@ function ExcelTable({ data, mc, toast }: {
       right: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
     };
 
-    rows.forEach((row, rowIdx) => {
+    const excelRows: SpreadsheetRow[] = [];
+    for (const row of rows) {
+      excelRows.push(row);
+      if (row.isExpandable && row.groupKey === "ordini" && !ordersExpanded) {
+        for (const sz of allOrderSizes) {
+          excelRows.push({
+            label: `  ↳ ${sz}`,
+            tooltip: `Ordini clienti ${sz}`,
+            color: "#fb923c",
+            bgClass: "bg-orange-50/50",
+            textClass: "text-gray-600",
+            values: mc.map(m => (m.ordiniBySize?.[sz]) || 0),
+            isSubRow: true,
+            subRowSize: sz,
+            groupKey: "ordini",
+          });
+        }
+      }
+    }
+
+    excelRows.forEach((row, rowIdx) => {
       const rowData = [row.label, ...row.values.map(v => typeof v === "number" ? v : 0)];
       const excelRow = ws.addRow(rowData);
       const stripeBg = rowIdx % 2 === 0 ? white : lightGray;
+      const isSubRowExcel = !!row.isSubRow;
 
       excelRow.eachCell((cell, colNumber) => {
         cell.border = thinBorder;
         if (colNumber === 1) {
-          cell.font = { bold: true, size: 10, color: { argb: "FF333333" } };
-          cell.alignment = { horizontal: "left", vertical: "middle" };
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripeBg } };
+          cell.font = { bold: !isSubRowExcel, size: isSubRowExcel ? 9 : 10, color: { argb: isSubRowExcel ? "FF888888" : "FF333333" }, italic: isSubRowExcel };
+          cell.alignment = { horizontal: "left", vertical: "middle", indent: isSubRowExcel ? 2 : 0 };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: isSubRowExcel ? "FFFFF7ED" : stripeBg } };
         } else {
           const colIdx = colNumber - 2;
           cell.numFmt = "#,##0";
@@ -286,6 +344,9 @@ function ExcelTable({ data, mc, toast }: {
           } else if (success) {
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } };
             cell.font = { bold: true, size: 10, color: { argb: "FF16A34A" } };
+          } else if (isSubRowExcel) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+            cell.font = { size: 9, color: { argb: "FF666666" } };
           } else {
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripeBg } };
             cell.font = { size: 10, color: { argb: "FF333333" }, bold: !!row.isBold };
@@ -298,7 +359,7 @@ function ExcelTable({ data, mc, toast }: {
 
     ws.autoFilter = {
       from: { row: 2, column: 1 },
-      to: { row: 2 + rows.length, column: mc.length + 1 },
+      to: { row: 2 + excelRows.length, column: mc.length + 1 },
     };
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -352,74 +413,90 @@ function ExcelTable({ data, mc, toast }: {
     const m = mc[colIdx];
     if (!m) return "";
     const fn = formatNumber;
+    const row = rows[rowIdx];
+    if (!row) return "";
 
-    switch (rowIdx) {
-      case 0:
-        return `= Simulazione crescita SGR giorno per giorno (solo inventario reale) → animali con ≤${fn(data.targetMaxAnimalsPerKg)} an/kg = ${fn(m.giacenzaLordaInventario)}`;
-      case 1: {
-        const diff = m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario;
-        if (diff > 0) {
-          return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Contributo schiuditoio cresciuto (${fn(diff)}) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
-        }
-        return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Schiuditoio (non ancora a taglia) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
-      }
-      case 2: {
-        const perdite = m.perditeMortalita || 0;
-        if (perdite > 0) {
-          return `= Animali persi nel mese per mortalità: ${fn(perdite)} (tassi applicati per taglia, esclusa giacenza già pronta)`;
-        }
-        return `= Nessuna perdita per mortalità in ${m.monthName}`;
-      }
-      case 3: {
-        return m.ordiniTarget > 0
-          ? `= Ordini clienti per ${data.targetSize} a ${m.monthName}: ${fn(m.ordiniTarget)} animali`
-          : `= Nessun ordine clienti per ${m.monthName}`;
-      }
-      case 4:
-        return m.budgetProduzione > 0
-          ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
-          : `= Nessun budget pianificato per ${m.monthName}`;
-      case 5: {
-        return `= MAX(Ordini clienti ${fn(m.ordiniTarget)}, Budget ${fn(m.budgetProduzione)}) = ${fn(m.domandaEffettiva)} animali. Questo valore guida evasione e fabbisogno schiuditoio.`;
-      }
-      case 6: {
-        const arretrato = m.ordiniArretrati || 0;
-        if (arretrato > 0) {
-          return `= Domanda non evasa trascinata dai mesi precedenti: ${fn(arretrato)} animali. Sommata alla domanda del mese (${fn(m.domandaEffettiva)}) = ${fn(m.domandaEffettiva + arretrato)} totale da evadere`;
-        }
-        return `= Nessun arretrato da mesi precedenti`;
-      }
-      case 7: {
-        const totalDemand = m.domandaEffettiva + (m.ordiniArretrati || 0);
-        if (m.ordiniEvasi > 0 && m.ordiniEvasi >= totalDemand) {
-          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti (${fn(m.domandaEffettiva)} domanda + ${fn(m.ordiniArretrati || 0)} arretrato) → Copertura completa ✓`;
-        }
-        if (m.ordiniEvasi > 0) {
-          const nonEvasi = totalDemand - m.ordiniEvasi;
-          return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti → Mancano ${fn(nonEvasi)} animali (trascinati al mese successivo)`;
-        }
-        if (totalDemand > 0) {
-          return `= 0 evadibili su ${fn(totalDemand)} richiesti → ${fn(totalDemand)} animali trascinati al mese successivo`;
-        }
-        return `= Nessuna domanda per ${m.monthName}`;
-      }
-      case 8: {
-        return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
-      }
-      case 9: {
-        const necessario = m.schiuditoioNecessario || 0;
-        if (necessario > 0) {
-          return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
-        }
-        return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
-      }
-      case 10:
-        return m.arriviSchiuditoio > 0
-          ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
-          : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
-      default:
-        return "";
+    if (row.isSubRow && row.subRowSize) {
+      const qty = m.ordiniBySize?.[row.subRowSize] || 0;
+      return qty > 0
+        ? `= Ordini clienti ${row.subRowSize} per ${m.monthName}: ${fn(qty)} animali`
+        : `= Nessun ordine ${row.subRowSize} per ${m.monthName}`;
     }
+
+    const label = row.label;
+    if (label.startsWith("Giacenza lorda (inventario)")) {
+      return `= Simulazione crescita SGR giorno per giorno (solo inventario reale) → animali con ≤${fn(data.targetMaxAnimalsPerKg)} an/kg = ${fn(m.giacenzaLordaInventario)}`;
+    }
+    if (label.startsWith("Giacenza lorda (con schiuditoio)")) {
+      const diff = m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario;
+      if (diff > 0) {
+        return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Contributo schiuditoio cresciuto (${fn(diff)}) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
+      }
+      return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Schiuditoio (non ancora a taglia) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
+    }
+    if (label.startsWith("Perdite per mortalità")) {
+      const perdite = m.perditeMortalita || 0;
+      if (perdite > 0) {
+        return `= Animali persi nel mese per mortalità: ${fn(perdite)} (tassi applicati per taglia, esclusa giacenza già pronta)`;
+      }
+      return `= Nessuna perdita per mortalità in ${m.monthName}`;
+    }
+    if (label.startsWith("Ordini clienti")) {
+      const tot = m.ordiniTotali || 0;
+      if (tot > 0) {
+        const breakdown = allOrderSizes
+          .filter(sz => (m.ordiniBySize?.[sz] || 0) > 0)
+          .map(sz => `${sz}: ${fn(m.ordiniBySize[sz])}`)
+          .join(', ');
+        return `= Totale ordini tutte le taglie per ${m.monthName}: ${fn(tot)} animali (${breakdown})`;
+      }
+      return `= Nessun ordine clienti per ${m.monthName}`;
+    }
+    if (label === "Budget Produzione") {
+      return m.budgetProduzione > 0
+        ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
+        : `= Nessun budget pianificato per ${m.monthName}`;
+    }
+    if (label === "Domanda effettiva") {
+      return `= MAX(Ordini ${data.targetSize} ${fn(m.ordiniTarget)}, Budget ${fn(m.budgetProduzione)}) = ${fn(m.domandaEffettiva)} animali. Questo valore guida evasione e fabbisogno schiuditoio.`;
+    }
+    if (label.startsWith("Arretrato mese precedente")) {
+      const arretrato = m.ordiniArretrati || 0;
+      if (arretrato > 0) {
+        return `= Domanda non evasa trascinata dai mesi precedenti: ${fn(arretrato)} animali. Sommata alla domanda del mese (${fn(m.domandaEffettiva)}) = ${fn(m.domandaEffettiva + arretrato)} totale da evadere`;
+      }
+      return `= Nessun arretrato da mesi precedenti`;
+    }
+    if (label.startsWith("Ordini evadibili")) {
+      const totalDemand = m.domandaEffettiva + (m.ordiniArretrati || 0);
+      if (m.ordiniEvasi > 0 && m.ordiniEvasi >= totalDemand) {
+        return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti (${fn(m.domandaEffettiva)} domanda + ${fn(m.ordiniArretrati || 0)} arretrato) → Copertura completa ✓`;
+      }
+      if (m.ordiniEvasi > 0) {
+        const nonEvasi = totalDemand - m.ordiniEvasi;
+        return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti → Mancano ${fn(nonEvasi)} animali (trascinati al mese successivo)`;
+      }
+      if (totalDemand > 0) {
+        return `= 0 evadibili su ${fn(totalDemand)} richiesti → ${fn(totalDemand)} animali trascinati al mese successivo`;
+      }
+      return `= Nessuna domanda per ${m.monthName}`;
+    }
+    if (label.startsWith("Giacenza residua")) {
+      return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
+    }
+    if (label.startsWith("Schiuditoio necessario")) {
+      const necessario = m.schiuditoioNecessario || 0;
+      if (necessario > 0) {
+        return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
+      }
+      return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
+    }
+    if (label.startsWith("Arrivi Schiuditoio")) {
+      return m.arriviSchiuditoio > 0
+        ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
+        : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
+    }
+    return "";
   };
 
   const cellFormula = selectedCell ? getCellFormula(selectedCell.row, selectedCell.col) : "";
@@ -496,9 +573,20 @@ function ExcelTable({ data, mc, toast }: {
                   >
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="px-2 py-2 flex items-center gap-2 cursor-help">
-                          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: row.color }}></span>
-                          <span className={`font-semibold text-[13px] ${row.textClass}`}>{row.label}</span>
+                        <div
+                          className={`px-2 py-2 flex items-center gap-2 ${row.isExpandable ? 'cursor-pointer' : 'cursor-help'}`}
+                          onClick={row.isExpandable ? (e) => { e.stopPropagation(); setOrdersExpanded(!ordersExpanded); } : undefined}
+                        >
+                          {row.isExpandable ? (
+                            ordersExpanded
+                              ? <ChevronDown className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+                              : <ChevronRight className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+                          ) : row.isSubRow ? (
+                            <span className="w-2.5 h-2.5 flex-shrink-0" />
+                          ) : (
+                            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: row.color }}></span>
+                          )}
+                          <span className={`font-semibold text-[13px] ${row.textClass} ${row.isSubRow ? 'text-[12px] font-normal' : ''}`}>{row.label}</span>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs text-sm p-3 leading-relaxed bg-gray-900 text-white border border-gray-700 shadow-lg">

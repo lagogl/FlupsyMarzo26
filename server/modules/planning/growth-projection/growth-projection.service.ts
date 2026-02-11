@@ -39,6 +39,8 @@ interface MonthlyContext {
   monthShort: string;
   monthLabel: string;
   ordiniTarget: number;
+  ordiniTotali: number;
+  ordiniBySize: Record<string, number>;
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
@@ -255,6 +257,14 @@ export class GrowthProjectionService {
 
       const ordiniMonth = ordersByYearMonth[ymKey] || {};
       const ordiniTarget = ordiniMonth[targetSize] || 0;
+      const ordiniBySize: Record<string, number> = {};
+      let ordiniTotali = 0;
+      for (const [sz, qty] of Object.entries(ordiniMonth)) {
+        if (typeof qty === 'number' && qty > 0) {
+          ordiniBySize[sz] = qty;
+          ordiniTotali += qty;
+        }
+      }
       const budgetMese = budgetByYearMonth[ymKey] || 0;
       const domandaEffettiva = Math.max(ordiniTarget, budgetMese);
       const ordiniArretrati = carryOver;
@@ -294,6 +304,8 @@ export class GrowthProjectionService {
         monthShort: MONTH_SHORT[m0],
         monthLabel: label,
         ordiniTarget,
+        ordiniTotali,
+        ordiniBySize,
         ordiniArretrati,
         ordiniEvasi,
         budgetProduzione: budgetByYearMonth[ymKey] || 0,
