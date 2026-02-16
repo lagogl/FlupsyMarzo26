@@ -42,18 +42,13 @@ interface BuoyResponse {
 }
 
 function getMarkerColor(station: BuoyStation): string {
-  if (!station.ultimaLettura?.temperatura) return "#6b7280";
-  const t = station.ultimaLettura.temperatura;
-  if (t < 5) return "#3b82f6";
-  if (t < 10) return "#06b6d4";
-  if (t < 15) return "#22c55e";
-  if (t < 20) return "#f59e0b";
-  if (t < 25) return "#f97316";
-  return "#ef4444";
+  if (station.fonte === "ARPAE") return "#22c55e";
+  if (station.fonte === "ARPAV") return "#22d3ee";
+  return "#6b7280";
 }
 
-function getMarkerRadius(station: BuoyStation): number {
-  return station.ultimaLettura?.temperatura ? 10 : 6;
+function getMarkerRadius(_station: BuoyStation): number {
+  return 6;
 }
 
 function formatTimestamp(ts?: string): string {
@@ -291,8 +286,8 @@ export default function MappaGISLaguna() {
               zoomControl={true}
             >
               <TileLayer
-                attribution='&copy; <a href="https://stadiamaps.com/">Stadia</a>'
-                url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               {flyTo && <FlyToStation lat={flyTo.lat} lon={flyTo.lon} />}
               {stations.map((station) => (

@@ -131,22 +131,35 @@ async function fetchArpaeData(): Promise<BuoyStation[]> {
   }
 }
 
+async function fetchWithRetry(url: string, timeoutMs: number, retries = 2): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    } catch (err) {
+      if (attempt === retries) throw err;
+      console.log(`[BuoyData] ARPAV retry ${attempt + 1} for ${url.split('/').pop()}`);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+}
+
 async function fetchArpavData(): Promise<BuoyStation[]> {
   if (isCacheValid(arpavCache)) return arpavCache!.data;
 
   try {
     const [stationsRes, dataRes] = await Promise.all([
-      fetch('https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point', { signal: AbortSignal.timeout(8000) }),
-      fetch('https://api.arpa.veneto.it/REST/v1/acqua_boe_dati', { signal: AbortSignal.timeout(8000) })
+      fetchWithRetry('https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point', 20000),
+      fetchWithRetry('https://api.arpa.veneto.it/REST/v1/acqua_boe_dati', 20000)
     ]);
 
-    if (!stationsRes.ok) throw new Error(`ARPAV stations HTTP ${stationsRes.status}`);
-    if (!dataRes.ok) throw new Error(`ARPAV data HTTP ${dataRes.status}`);
 
     const stationsJson = await stationsRes.json() as any;
     const dataJson = await dataRes.json() as any;
 
     const rawStations = stationsJson.data || [];
+    console.log(`[BuoyData] ARPAV raw: ${rawStations.length} stazioni, ${(dataJson.data || []).length} record dati`);
     const allData = dataJson.data || [];
 
     const stationMap = new Map<number, any>();
@@ -176,22 +189,36 @@ async function fetchArpavData(): Promise<BuoyStation[]> {
 
       const items = dataByStation.get(codseqst) || [];
 
-      const latestByParam = new Map<string, any>();
+      const latestByParamUdm = new Map<string, any>();
       for (const item of items) {
-        const key = `${item.PARAMETRO}_${item.UDM}`;
-        const existing = latestByParam.get(key);
+        const paramLower = (item.PARAMETRO || '').toLowerCase();
+        const udm = (item.UDM || '').toLowerCase();
+        const key = `${paramLower}||${udm}`;
+        const existing = latestByParamUdm.get(key);
         if (!existing || item.DATA > existing.DATA) {
-          latestByParam.set(key, item);
+          latestByParamUdm.set(key, item);
         }
       }
 
-      const temp = latestByParam.get('Temperatura acqua_°C');
-      const ph = latestByParam.get('pH misurato a campo_');
-      const sal = latestByParam.get('Salinità_PSU');
-      const o2mg = latestByParam.get('Ossigeno disciolto_mg/l');
-      const o2sat = latestByParam.get('Ossigeno disciolto_% di sat.');
-      const chl = latestByParam.get('Clorofilla a_µg/L');
-      const cond = latestByParam.get('Conducibilità_mS/cm');
+      function findParam(paramSubstr: string, udmSubstr?: string): any {
+        for (const [key, val] of latestByParamUdm.entries()) {
+          const [p, u] = key.split('||');
+          if (p.includes(paramSubstr.toLowerCase())) {
+            if (udmSubstr === undefined || u.includes(udmSubstr.toLowerCase())) {
+              return val;
+            }
+          }
+        }
+        return null;
+      }
+
+      const temp = findParam('temperatura');
+      const ph = findParam('ph');
+      const sal = findParam('salinit');
+      const o2mg = findParam('ossigeno', 'mg');
+      const o2sat = findParam('ossigeno', 'sat');
+      const chl = findParam('clorofilla');
+      const cond = findParam('conducibilit');
 
       const reading: BuoyReading = {
         temperatura: temp?.MEDIA,
@@ -205,7 +232,7 @@ async function fetchArpavData(): Promise<BuoyStation[]> {
 
       const latestTimestamp = [temp, ph, sal, o2mg, o2sat, chl, cond]
         .filter(Boolean)
-        .map(d => d.DATA)
+        .map((d: any) => d.DATA)
         .sort()
         .pop();
 
