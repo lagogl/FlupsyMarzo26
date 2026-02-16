@@ -136,8 +136,8 @@ async function fetchArpavData(): Promise<BuoyStation[]> {
 
   try {
     const [stationsRes, dataRes] = await Promise.all([
-      fetch('https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point', { signal: AbortSignal.timeout(15000) }),
-      fetch('https://api.arpa.veneto.it/REST/v1/acqua_boe_dati', { signal: AbortSignal.timeout(15000) })
+      fetch('https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point', { signal: AbortSignal.timeout(8000) }),
+      fetch('https://api.arpa.veneto.it/REST/v1/acqua_boe_dati', { signal: AbortSignal.timeout(8000) })
     ]);
 
     if (!stationsRes.ok) throw new Error(`ARPAV stations HTTP ${stationsRes.status}`);
@@ -230,8 +230,23 @@ async function fetchArpavData(): Promise<BuoyStation[]> {
   } catch (error) {
     console.error('[BuoyData] Errore ARPAV:', error);
     if (arpavCache) return arpavCache.data;
-    return [];
+    return getArpavFallbackStations();
   }
+}
+
+function getArpavFallbackStations(): BuoyStation[] {
+  return [
+    {
+      id: 'arpav_vallona',
+      nome: 'Vallona',
+      lat: 45.0547,
+      lon: 12.3283,
+      fonte: 'ARPAV',
+      attiva: true,
+      ultimaLettura: undefined,
+      timestamp: undefined
+    }
+  ];
 }
 
 export async function getAllBuoyStations(): Promise<{ arpae: BuoyStation[], arpav: BuoyStation[] }> {
