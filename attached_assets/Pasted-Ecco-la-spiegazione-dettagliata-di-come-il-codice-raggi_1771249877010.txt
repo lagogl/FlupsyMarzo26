@@ -1,0 +1,133 @@
+Ecco la spiegazione dettagliata di come il codice raggiunge i dati delle boe ARPAV in tempo reale.
+
+Come funziona l'integrazione ARPAV nel codice
+Il flusso completo
+Il sistema fa due chiamate HTTP parallele alle API pubbliche di ARPAV (non serve nessuna API key):
+
+Chiamata 1 - Anagrafica stazioni:
+
+GET https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point
+Restituisce l'elenco delle boe con nome, codice identificativo e coordinate GPS.
+
+Chiamata 2 - Dati di misura:
+
+GET https://api.arpa.veneto.it/REST/v1/acqua_boe_dati
+Restituisce tutte le misure recenti di tutte le boe: temperatura, pH, salinita', ossigeno, clorofilla, conducibilita'.
+
+Come il codice le collega
+Le due risposte vengono unite tramite il campo chiave codseqst (nelle stazioni) e CODSEQST (nei dati). E' una relazione 1:N, ogni stazione ha piu' misure.
+
+Il flusso nel codice e' questo:
+
+// 1. Fetch parallelo (piu' veloce)
+const [stationsRes, dataRes] = await Promise.all([
+  fetch("https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point"),
+  fetch("https://api.arpa.veneto.it/REST/v1/acqua_boe_dati"),
+]);
+const stations = (await stationsRes.json()).data;   // array di stazioni
+const allData = (await dataRes.json()).data;         // array di misure
+// 2. Creare una mappa delle stazioni indicizzata per codice
+const stationMap = new Map();
+for (const s of stations) {
+  stationMap.set(s.codseqst, s);
+}
+// 3. Raggruppare tutte le misure per stazione
+const dataByStation = new Map();
+for (const d of allData) {
+  if (!dataByStation.has(d.CODSEQST)) {
+    dataByStation.set(d.CODSEQST, []);
+  }
+  dataByStation.get(d.CODSEQST).push(d);
+}
+// 4. Per ogni stazione, trovare l'ULTIMO valore di ogni parametro
+for (const [codseqst, stationInfo] of stationMap.entries()) {
+  const items = dataByStation.get(codseqst) || [];
+  
+  // La risposta contiene MOLTI record per parametro (storico).
+  // Serve trovare quello con DATA piu' recente per ogni PARAMETRO.
+  const latestByParam = new Map();
+  for (const item of items) {
+    const existing = latestByParam.get(item.PARAMETRO);
+    if (!existing || item.DATA > existing.DATA) {
+      latestByParam.set(item.PARAMETRO, item);
+    }
+  }
+  
+  // Ora latestByParam contiene l'ultima misura per ogni parametro
+}
+Le coordinate GPS
+Attenzione: il campo geometria nella risposta stazioni e' una stringa JSON, non un oggetto. Va parsato:
+
+// La risposta contiene: "geometria": "{\"type\":\"Point\",\"coordinates\":[12.38,44.95]}"
+// E' una STRINGA, non un oggetto!
+const geo = JSON.parse(stationInfo.geometria);
+const latitudine = geo.coordinates[1];   // secondo elemento
+const longitudine = geo.coordinates[0];  // primo elemento
+// Ordine GeoJSON: [longitudine, latitudine] - INVERTITO rispetto al solito!
+I nomi esatti dei parametri
+Il campo PARAMETRO nella risposta dati contiene questi valori testuali esatti:
+
+Valore campo PARAMETRO	Cosa misura	Campo UDM
+Temperatura acqua	Temperatura	°C
+pH misurato a campo	pH	(vuoto)
+Salinità	Salinita'	PSU
+Ossigeno disciolto	Ossigeno	mg/l oppure % di sat.
+Clorofilla a	Clorofilla	µg/L
+Conducibilità	Conducibilita'	mS/cm
+Trappola importante: "Ossigeno disciolto" appare due volte con unita' di misura diverse. Lo sviluppatore deve controllare il campo UDM per distinguerli:
+
+Se UDM === "mg/l" → e' il valore assoluto di ossigeno
+Se UDM contiene "% di sat" → e' la percentuale di saturazione
+const o2 = latestByParam.get("Ossigeno disciolto");
+if (o2 && o2.UDM === "mg/l") {
+  // Valore assoluto: o2.MEDIA e' gia' in mg/l
+  reading.ossigeno = o2.MEDIA;  // es: 9.0 mg/l
+}
+Filtraggio valori zero (sensori guasti)
+Alcune boe hanno sensori guasti che restituiscono tutti zeri. Nel nostro codice filtriamo cosi':
+
+// Se temperatura, pH e salinita' sono TUTTI a zero -> sensore guasto
+if (temperatura === 0 && ph === 0 && salinita === 0) {
+  // Scartare TUTTI i parametri di questa stazione
+}
+// Anche singoli zeri per questi parametri sono sospetti
+if (item.MEDIA === 0 && nomeParametro.includes("Temperatura")) continue;
+if (item.MEDIA === 0 && nomeParametro.includes("pH")) continue;
+if (item.MEDIA === 0 && nomeParametro.includes("Salinit")) continue;
+Esempio reale: la boa SCARDOVARI MARE restituisce tutti zeri perche' il sensore e' offline. Senza questo filtro, mostrerebbe pH 0 e temperatura 0°C.
+
+Caching
+Le boe aggiornano i dati circa ogni 30 minuti. Il nostro backend:
+
+Mantiene una cache di 15 minuti per non sovraccaricare ARPAV
+Fa polling ogni 5 minuti per avere dati ragionevolmente freschi
+Se la chiamata fallisce, restituisce i dati dalla cache precedente anziche' un errore
+const CACHE_DURATION = 15 * 60 * 1000;  // 15 minuti
+const POLL_INTERVAL = 5 * 60 * 1000;    // 5 minuti
+// Se la cache e' ancora valida, restituire quella
+if (cache && Date.now() - cache.timestamp < CACHE_DURATION) {
+  return cache.data;
+}
+// Altrimenti fare la chiamata
+try {
+  const freshData = await fetchFromArpav();
+  cache = { data: freshData, timestamp: Date.now() };
+  return freshData;
+} catch (error) {
+  // Fallback: restituire cache vecchia
+  if (cache) return cache.data;
+  return [];
+}
+Le 9 boe disponibili
+Le stazioni che rispondono attualmente sono:
+
+BARBAMARCO - Laguna di Barbamarco
+SCARDOVARI S. GIULIA - Laguna di Scardovari
+CANARIN - Laguna di Canarin
+CALERI - Laguna di Caleri
+MARINETTA - Laguna di Marinetta
+VALLONA - Laguna della Vallona
+SCARDOVARI INTERNO - Laguna di Scardovari
+BASSON - Laguna di Basson
+SCARDOVARI MARE - Laguna di Scardovari (sensore offline, dati filtrati)
+Questo e' tutto quello che serve allo sviluppatore per replicare l'integrazione: due chiamate GET senza autenticazione, join per codseqst, parsing del campo geometria come stringa JSON, attenzione all'ossigeno duplicato, e filtro degli zeri per i sensori guasti.

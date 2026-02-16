@@ -307,19 +307,44 @@ export default function MappaGISLaguna() {
                   }}
                 >
                   <Popup>
-                    <div className="text-xs min-w-[160px]">
+                    <div className="text-xs min-w-[180px]">
                       <strong>{station.nome}</strong>
                       <span className="ml-1 text-gray-500">({station.fonte})</span>
-                      {station.ultimaLettura?.temperatura != null && (
-                        <div className="mt-1">
-                          Temp: {station.ultimaLettura.temperatura.toFixed(1)}°C
+                      {station.ultimaLettura ? (
+                        <div className="mt-1 space-y-0.5">
+                          {station.ultimaLettura.temperatura != null && (
+                            <div>Temp: {station.ultimaLettura.temperatura.toFixed(1)}°C</div>
+                          )}
+                          {station.ultimaLettura.ph != null && (
+                            <div>pH: {station.ultimaLettura.ph.toFixed(1)}</div>
+                          )}
+                          {station.ultimaLettura.salinita != null && (
+                            <div>Salinità: {station.ultimaLettura.salinita.toFixed(1)}‰</div>
+                          )}
+                          {station.ultimaLettura.ossigenoMgL != null && (
+                            <div>O₂ disciolto: {station.ultimaLettura.ossigenoMgL.toFixed(2)} mg/l</div>
+                          )}
+                          {station.ultimaLettura.ossigenoSat != null && (
+                            <div>O₂ saturaz.: {station.ultimaLettura.ossigenoSat.toFixed(1)}%</div>
+                          )}
+                          {station.ultimaLettura.torbidita != null && (
+                            <div>Torbidità: {station.ultimaLettura.torbidita.toFixed(1)} NTU</div>
+                          )}
+                          {station.ultimaLettura.clorofilla != null && (
+                            <div>Clorofilla: {station.ultimaLettura.clorofilla.toFixed(1)} µg/L</div>
+                          )}
+                          {station.ultimaLettura.conducibilita != null && (
+                            <div>Conducibilità: {station.ultimaLettura.conducibilita.toFixed(1)} mS/cm</div>
+                          )}
+                          {station.ultimaLettura.livelloMare != null && (
+                            <div>Livello mare: {station.ultimaLettura.livelloMare.toFixed(2)} m</div>
+                          )}
+                          {station.timestamp && (
+                            <div className="text-gray-500 mt-1 text-[10px]">⏱ {formatTimestamp(station.timestamp)}</div>
+                          )}
                         </div>
-                      )}
-                      {station.ultimaLettura?.ph != null && (
-                        <div>pH: {station.ultimaLettura.ph.toFixed(1)}</div>
-                      )}
-                      {station.ultimaLettura?.salinita != null && (
-                        <div>Salinità: {station.ultimaLettura.salinita.toFixed(1)}‰</div>
+                      ) : (
+                        <div className="mt-1 text-gray-500">Nessun dato</div>
                       )}
                     </div>
                   </Popup>
@@ -364,14 +389,14 @@ export default function MappaGISLaguna() {
                     <button
                       key={s.id}
                       onClick={() => handleStationClick(s)}
-                      className={`w-full text-left px-3 py-2 rounded-md mb-1 flex items-center justify-between transition-colors ${
+                      className={`w-full text-left px-3 py-2 rounded-md mb-1 transition-colors ${
                         selectedStation?.id === s.id
                           ? "bg-gray-700 border border-gray-600"
                           : "hover:bg-gray-800"
                       }`}
                     >
                       <span className="text-gray-200 text-xs font-medium">{s.nome}</span>
-                      <div className="flex items-center gap-2 text-[10px]">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] mt-1">
                         {s.ultimaLettura?.temperatura != null && (
                           <span className="text-orange-300">{s.ultimaLettura.temperatura.toFixed(1)}°C</span>
                         )}
@@ -380,6 +405,24 @@ export default function MappaGISLaguna() {
                         )}
                         {s.ultimaLettura?.salinita != null && (
                           <span className="text-emerald-300">{s.ultimaLettura.salinita.toFixed(0)}‰</span>
+                        )}
+                        {s.ultimaLettura?.ossigenoMgL != null && (
+                          <span className="text-sky-300">O₂ {s.ultimaLettura.ossigenoMgL.toFixed(1)}mg/l</span>
+                        )}
+                        {s.ultimaLettura?.ossigenoSat != null && (
+                          <span className="text-sky-200">{s.ultimaLettura.ossigenoSat.toFixed(0)}%</span>
+                        )}
+                        {s.ultimaLettura?.torbidita != null && (
+                          <span className="text-yellow-300">Torb {s.ultimaLettura.torbidita.toFixed(1)}</span>
+                        )}
+                        {s.ultimaLettura?.clorofilla != null && (
+                          <span className="text-green-300">Chl {s.ultimaLettura.clorofilla.toFixed(1)}</span>
+                        )}
+                        {s.ultimaLettura?.conducibilita != null && (
+                          <span className="text-purple-300">Cond {s.ultimaLettura.conducibilita.toFixed(0)}</span>
+                        )}
+                        {s.ultimaLettura?.livelloMare != null && (
+                          <span className="text-blue-300">Lv {s.ultimaLettura.livelloMare.toFixed(2)}m</span>
                         )}
                       </div>
                     </button>
@@ -399,14 +442,14 @@ export default function MappaGISLaguna() {
                     <button
                       key={s.id}
                       onClick={() => handleStationClick(s)}
-                      className={`w-full text-left px-3 py-2 rounded-md mb-1 flex items-center justify-between transition-colors ${
+                      className={`w-full text-left px-3 py-2 rounded-md mb-1 transition-colors ${
                         selectedStation?.id === s.id
                           ? "bg-gray-700 border border-gray-600"
                           : "hover:bg-gray-800"
                       }`}
                     >
                       <span className="text-gray-200 text-xs font-medium">{s.nome}</span>
-                      <div className="flex items-center gap-2 text-[10px]">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] mt-1">
                         {s.ultimaLettura?.temperatura != null && (
                           <span className="text-orange-300">{s.ultimaLettura.temperatura.toFixed(1)}°C</span>
                         )}
@@ -415,6 +458,24 @@ export default function MappaGISLaguna() {
                         )}
                         {s.ultimaLettura?.salinita != null && (
                           <span className="text-emerald-300">{s.ultimaLettura.salinita.toFixed(0)}‰</span>
+                        )}
+                        {s.ultimaLettura?.ossigenoMgL != null && (
+                          <span className="text-sky-300">O₂ {s.ultimaLettura.ossigenoMgL.toFixed(1)}mg/l</span>
+                        )}
+                        {s.ultimaLettura?.ossigenoSat != null && (
+                          <span className="text-sky-200">{s.ultimaLettura.ossigenoSat.toFixed(0)}%</span>
+                        )}
+                        {s.ultimaLettura?.torbidita != null && (
+                          <span className="text-yellow-300">Torb {s.ultimaLettura.torbidita.toFixed(1)}</span>
+                        )}
+                        {s.ultimaLettura?.clorofilla != null && (
+                          <span className="text-green-300">Chl {s.ultimaLettura.clorofilla.toFixed(1)}</span>
+                        )}
+                        {s.ultimaLettura?.conducibilita != null && (
+                          <span className="text-purple-300">Cond {s.ultimaLettura.conducibilita.toFixed(0)}</span>
+                        )}
+                        {s.ultimaLettura?.livelloMare != null && (
+                          <span className="text-blue-300">Lv {s.ultimaLettura.livelloMare.toFixed(2)}m</span>
                         )}
                       </div>
                     </button>
@@ -434,14 +495,14 @@ export default function MappaGISLaguna() {
                     <button
                       key={s.id}
                       onClick={() => handleStationClick(s)}
-                      className={`w-full text-left px-3 py-2 rounded-md mb-1 flex items-center justify-between transition-colors ${
+                      className={`w-full text-left px-3 py-2 rounded-md mb-1 transition-colors ${
                         selectedStation?.id === s.id
                           ? "bg-gray-700 border border-gray-600"
                           : "hover:bg-gray-800"
                       }`}
                     >
                       <span className="text-gray-200 text-xs font-medium">{s.nome}</span>
-                      <div className="flex items-center gap-2 text-[10px]">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] mt-1">
                         {s.ultimaLettura?.temperatura != null && (
                           <span className="text-orange-300">{s.ultimaLettura.temperatura.toFixed(1)}°C</span>
                         )}
@@ -450,6 +511,27 @@ export default function MappaGISLaguna() {
                         )}
                         {s.ultimaLettura?.salinita != null && (
                           <span className="text-emerald-300">{s.ultimaLettura.salinita.toFixed(0)}‰</span>
+                        )}
+                        {s.ultimaLettura?.ossigenoMgL != null && (
+                          <span className="text-sky-300">O₂ {s.ultimaLettura.ossigenoMgL.toFixed(1)}mg/l</span>
+                        )}
+                        {s.ultimaLettura?.ossigenoSat != null && (
+                          <span className="text-sky-200">{s.ultimaLettura.ossigenoSat.toFixed(0)}%</span>
+                        )}
+                        {s.ultimaLettura?.torbidita != null && (
+                          <span className="text-yellow-300">Torb {s.ultimaLettura.torbidita.toFixed(1)}</span>
+                        )}
+                        {s.ultimaLettura?.clorofilla != null && (
+                          <span className="text-green-300">Chl {s.ultimaLettura.clorofilla.toFixed(1)}</span>
+                        )}
+                        {s.ultimaLettura?.conducibilita != null && (
+                          <span className="text-purple-300">Cond {s.ultimaLettura.conducibilita.toFixed(0)}</span>
+                        )}
+                        {s.ultimaLettura?.livelloMare != null && (
+                          <span className="text-blue-300">Lv {s.ultimaLettura.livelloMare.toFixed(2)}m</span>
+                        )}
+                        {!s.ultimaLettura && (
+                          <span className="text-gray-500">N/D</span>
                         )}
                       </div>
                     </button>
