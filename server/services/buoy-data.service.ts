@@ -34,6 +34,8 @@ const CACHE_TTL_MS = 15 * 60 * 1000;
 
 let arpaeCache: CacheEntry | null = null;
 let arpavCache: CacheEntry | null = null;
+let arpavLastFailure: number = 0;
+const ARPAV_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 
 function isCacheValid(cache: CacheEntry | null): boolean {
   if (!cache) return false;
@@ -131,7 +133,7 @@ async function fetchArpaeData(): Promise<BuoyStation[]> {
   }
 }
 
-async function fetchWithRetry(url: string, timeoutMs: number, retries = 2): Promise<any> {
+async function fetchWithRetry(url: string, timeoutMs: number, retries = 1): Promise<any> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
@@ -140,18 +142,21 @@ async function fetchWithRetry(url: string, timeoutMs: number, retries = 2): Prom
     } catch (err) {
       if (attempt === retries) throw err;
       console.log(`[BuoyData] ARPAV retry ${attempt + 1} for ${url.split('/').pop()}`);
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 500));
     }
   }
 }
 
 async function fetchArpavData(): Promise<BuoyStation[]> {
   if (isCacheValid(arpavCache)) return arpavCache!.data;
+  if (Date.now() - arpavLastFailure < ARPAV_FAILURE_COOLDOWN_MS) {
+    return getArpavFallbackStations();
+  }
 
   try {
     const [stationsRes, dataRes] = await Promise.all([
-      fetchWithRetry('https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point', 20000),
-      fetchWithRetry('https://api.arpa.veneto.it/REST/v1/acqua_boe_dati', 20000)
+      fetchWithRetry('https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point', 8000),
+      fetchWithRetry('https://api.arpa.veneto.it/REST/v1/acqua_boe_dati', 8000)
     ]);
 
 
@@ -255,7 +260,8 @@ async function fetchArpavData(): Promise<BuoyStation[]> {
     console.log(`[BuoyData] ARPAV: ${stations.length} stazioni caricate`);
     return stations;
   } catch (error) {
-    console.error('[BuoyData] Errore ARPAV:', error);
+    console.error('[BuoyData] Errore ARPAV:', (error as Error).message || error);
+    arpavLastFailure = Date.now();
     if (arpavCache) return arpavCache.data;
     return getArpavFallbackStations();
   }
@@ -272,12 +278,64 @@ function getArpavFallbackStations(): BuoyStation[] {
       attiva: true,
       ultimaLettura: undefined,
       timestamp: undefined
+    },
+    {
+      id: 'arpav_caleri',
+      nome: 'Caleri',
+      lat: 45.0933,
+      lon: 12.2717,
+      fonte: 'ARPAV',
+      attiva: true,
+      ultimaLettura: undefined,
+      timestamp: undefined
+    },
+    {
+      id: 'arpav_chioggia',
+      nome: 'Chioggia',
+      lat: 45.2167,
+      lon: 12.3000,
+      fonte: 'ARPAV',
+      attiva: true,
+      ultimaLettura: undefined,
+      timestamp: undefined
+    },
+    {
+      id: 'arpav_barena_trezze',
+      nome: 'Barena Trezze',
+      lat: 45.3100,
+      lon: 12.2600,
+      fonte: 'ARPAV',
+      attiva: true,
+      ultimaLettura: undefined,
+      timestamp: undefined
+    },
+    {
+      id: 'arpav_san_giuliano',
+      nome: 'San Giuliano',
+      lat: 45.4733,
+      lon: 12.2667,
+      fonte: 'ARPAV',
+      attiva: true,
+      ultimaLettura: undefined,
+      timestamp: undefined
+    },
+    {
+      id: 'arpav_palude_maggiore',
+      nome: 'Palude Maggiore',
+      lat: 45.4000,
+      lon: 12.3500,
+      fonte: 'ARPAV',
+      attiva: true,
+      ultimaLettura: undefined,
+      timestamp: undefined
     }
   ];
 }
 
 export async function getAllBuoyStations(): Promise<{ arpae: BuoyStation[], arpav: BuoyStation[] }> {
-  const [arpae, arpav] = await Promise.all([fetchArpaeData(), fetchArpavData()]);
+  const [arpaeResult, arpavResult] = await Promise.allSettled([fetchArpaeData(), fetchArpavData()]);
+  const arpae = arpaeResult.status === 'fulfilled' ? arpaeResult.value : [];
+  const arpav = arpavResult.status === 'fulfilled' ? arpavResult.value : getArpavFallbackStations();
   return { arpae, arpav };
 }
 
