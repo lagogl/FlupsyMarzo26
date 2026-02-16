@@ -1,0 +1,234 @@
+Guida Tecnica: Integrazione Dati Boe ARPAE Emilia-Romagna e ARPAV Veneto
+1. ARPAE Emilia-Romagna (Rete Meteo-Marina)
+Endpoint:
+
+GET https://apps.arpae.it/REST/meteo_marefe/?sort=_id
+Autenticazione: Nessuna (API pubblica, nessuna API key richiesta)
+
+Formato risposta: JSON. La struttura principale e':
+
+{
+  "_items": [
+    {
+      "_id": "gorino_2",
+      "anagrafica": {
+        "nome": "Gorino 2",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [12.3156, 44.7892]   // [longitudine, latitudine]
+        },
+        "variabili": ["temperatura_acqua_mare", "ph_acqua", "salinita_istantanea", "ossigeno_acqua"],
+        "comune": "Goro",
+        "provincia": "Ferrara"
+      },
+      "dati": {
+        "20260215": {           // chiave = data YYYYMMDD
+          "0800": {             // chiave = ora HHMM
+            "temperatura_acqua_mare": 9.6,     // °C
+            "ph_acqua": 7.9,
+            "salinita_istantanea": 23.0,       // PSU (‰)
+            "ossigeno_acqua": 0.00958,         // g/L (ATTENZIONE: grammi/litro, NON mg/l)
+            "ossigeno_disciolto": 95.2,        // % di saturazione
+            "torbidita": 12.5,                 // NTU
+            "clorofilla_a": 3.2,               // µg/L
+            "livello_mare_igm_pressione": 0.15 // metri
+          },
+          "0900": { ... }
+        },
+        "20260214": { ... }
+      }
+    },
+    // ... altre stazioni
+  ]
+}
+Stazioni disponibili (tipicamente 11):
+Bellocchio, Logonovo, Manufatto, Porto Garibaldi, Punta Volano, Gorino 2, Bocca Scanno, Nausicaa 2, Cervia Porto, Cattolica Porto, Po di Goro
+
+Come parsare i dati:
+
+// 1. Fetch
+const response = await fetch("https://apps.arpae.it/REST/meteo_marefe/?sort=_id");
+const json = await response.json();
+const items = json._items || [];
+// 2. Per ogni stazione
+for (const item of items) {
+  const nome = item.anagrafica.nome;
+  const lat = item.anagrafica.geometry.coordinates[1]; // ATTENZIONE: [lon, lat]
+  const lon = item.anagrafica.geometry.coordinates[0];
+  const comune = item.anagrafica.comune;
+  
+  // 3. Trovare l'ultima lettura
+  const days = Object.keys(item.dati).sort();            // ["20260214", "20260215"]
+  const latestDay = days[days.length - 1];               // "20260215"
+  const times = Object.keys(item.dati[latestDay]).sort(); // ["0800", "0900", ...]
+  const latestTime = times[times.length - 1];             // "0900"
+  
+  const reading = item.dati[latestDay][latestTime];
+  // reading.temperatura_acqua_mare = 9.6 (°C)
+  // reading.ph_acqua = 7.9
+  // reading.salinita_istantanea = 23.0 (PSU/‰)
+  // reading.ossigeno_acqua = 0.00958 (g/L → moltiplicare x1000 per avere mg/l)
+  
+  // 4. Ricostruire il timestamp
+  // "20260215" + "0900" → "2026-02-15T09:00:00"
+  const timestamp = `${latestDay.substring(0,4)}-${latestDay.substring(4,6)}-${latestDay.substring(6,8)}T${latestTime.substring(0,2)}:${latestTime.substring(2,4)}:00`;
+}
+Note importanti ARPAE:
+
+Le coordinate sono in formato GeoJSON: [longitudine, latitudine] (invertite rispetto al solito)
+L'ossigeno (ossigeno_acqua) e' in g/L (grammi/litro). Per visualizzare in mg/l, moltiplicare x1000
+L'ossigeno disciolto (ossigeno_disciolto) e' in % di saturazione
+Le chiavi data sono stringhe YYYYMMDD, le chiavi ora sono HHMM
+Alcune stazioni (es. Porto Garibaldi, Cattolica) possono non avere dati recenti
+L'API restituisce tipicamente le ultime 48 ore di dati
+2. ARPAV Veneto (Boe Delta del Po)
+Servono due chiamate separate: una per l'anagrafica stazioni, una per i dati.
+
+Endpoint Stazioni:
+
+GET https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point
+Endpoint Dati:
+
+GET https://api.arpa.veneto.it/REST/v1/acqua_boe_dati
+Autenticazione: Nessuna (API pubblica)
+
+Formato risposta stazioni:
+
+{
+  "data": [
+    {
+      "codseqst": 1234,
+      "nome": "SCARDOVARI S. GIULIA",
+      "geometria": "{\"type\":\"Point\",\"coordinates\":[12.3876,44.9512]}",
+      "statcd": 1,
+      "attiva": "S"
+    },
+    // ... altre stazioni
+  ]
+}
+Formato risposta dati:
+
+{
+  "data": [
+    {
+      "CODSEQ": 56789,
+      "DATA": "2026-02-15T09:00:00",
+      "MEDIA": 9.7,
+      "CODSEQST": 1234,            // FK verso stazione
+      "COD_PARAMETRO": 10,
+      "PARAMETRO": "Temperatura acqua",
+      "UDM": "°C"
+    },
+    {
+      "CODSEQ": 56790,
+      "DATA": "2026-02-15T09:00:00",
+      "MEDIA": 8.2,
+      "CODSEQST": 1234,
+      "COD_PARAMETRO": 20,
+      "PARAMETRO": "pH misurato a campo",
+      "UDM": ""
+    },
+    {
+      "CODSEQ": 56791,
+      "DATA": "2026-02-15T09:00:00",
+      "MEDIA": 30.0,
+      "CODSEQST": 1234,
+      "COD_PARAMETRO": 30,
+      "PARAMETRO": "Salinità",
+      "UDM": "PSU"
+    },
+    {
+      "CODSEQ": 56792,
+      "DATA": "2026-02-15T09:00:00",
+      "MEDIA": 9.0,
+      "CODSEQST": 1234,
+      "COD_PARAMETRO": 40,
+      "PARAMETRO": "Ossigeno disciolto",
+      "UDM": "mg/l"               // ATTENZIONE: qui e' gia' in mg/l
+    },
+    // ... altri parametri
+  ]
+}
+Stazioni disponibili (tipicamente 9):
+BARBAMARCO, SCARDOVARI S. GIULIA, CANARIN, CALERI, MARINETTA, VALLONA, SCARDOVARI INTERNO, BASSON, SCARDOVARI MARE
+
+Parametri misurati con nomi esatti del campo PARAMETRO:
+
+PARAMETRO	UDM	Descrizione
+Temperatura acqua	°C	Temperatura acqua mare
+pH misurato a campo	(adimensionale)	pH
+Salinità	PSU	Salinita' (equivalente a ‰)
+Ossigeno disciolto	mg/l	Ossigeno disciolto in mg/l
+Ossigeno disciolto	% di sat.	Saturazione ossigeno
+Clorofilla a	µg/L	Clorofilla
+Conducibilità	mS/cm	Conducibilita' elettrica
+Come parsare i dati:
+
+// 1. Fetch parallelo di stazioni + dati
+const [stationsRes, dataRes] = await Promise.all([
+  fetch("https://api.arpa.veneto.it/REST/v1/acqua_boe_stazioni_point"),
+  fetch("https://api.arpa.veneto.it/REST/v1/acqua_boe_dati"),
+]);
+const stations = (await stationsRes.json()).data;  // ArpavStation[]
+const allData = (await dataRes.json()).data;       // ArpavDataItem[]
+// 2. Creare mappa stazioni per codseqst
+const stationMap = new Map();
+for (const s of stations) {
+  stationMap.set(s.codseqst, s);
+}
+// 3. Raggruppare dati per stazione
+const dataByStation = new Map();
+for (const d of allData) {
+  if (!dataByStation.has(d.CODSEQST)) {
+    dataByStation.set(d.CODSEQST, []);
+  }
+  dataByStation.get(d.CODSEQST).push(d);
+}
+// 4. Per ogni stazione, trovare l'ultimo valore di ogni parametro
+for (const [codseqst, stationInfo] of stationMap.entries()) {
+  const items = dataByStation.get(codseqst) || [];
+  
+  // Parsare la geometria (e' una stringa JSON)
+  const geo = JSON.parse(stationInfo.geometria);
+  const lat = geo.coordinates[1];
+  const lon = geo.coordinates[0];
+  
+  // Trovare l'ultima lettura per ogni parametro
+  const latestByParam = new Map();
+  for (const item of items) {
+    const existing = latestByParam.get(item.PARAMETRO);
+    if (!existing || item.DATA > existing.DATA) {
+      latestByParam.set(item.PARAMETRO, item);
+    }
+  }
+  
+  // Estrarre valori
+  const temp = latestByParam.get("Temperatura acqua");        // .MEDIA in °C
+  const ph = latestByParam.get("pH misurato a campo");        // .MEDIA adimensionale
+  const sal = latestByParam.get("Salinità");                  // .MEDIA in PSU
+  const o2 = latestByParam.get("Ossigeno disciolto");         // .MEDIA in mg/l (se UDM="mg/l")
+  const chl = latestByParam.get("Clorofilla a");              // .MEDIA in µg/L
+}
+3. Differenze chiave tra le due API
+Aspetto	ARPAE	ARPAV
+Chiamate necessarie	1	2 (stazioni + dati)
+Struttura dati	Annidato per data/ora	Flat, un record per parametro
+Coordinate	Dentro anagrafica.geometry (GeoJSON)	Stringa JSON in geometria
+Ossigeno	g/L (dividere per mostrare mg/l)	mg/l (gia' in mg/l)
+Timestamp	Chiavi YYYYMMDD + HHMM separate	Campo DATA ISO 8601
+Storico	~48 ore di dati annidati	Solo ultimo valore per parametro
+4. Gestione errori e zero-value
+Entrambe le API possono restituire valori 0 quando un sensore e' guasto. Filtrare:
+
+// Se temperatura, pH e salinita' sono TUTTI a zero → sensore guasto
+if (temperatura === 0 && ph === 0 && salinita === 0) {
+  // Scartare TUTTI i parametri di questa stazione
+}
+// Anche singoli zeri per temperatura/pH/salinita' sono sospetti
+if (temperatura === 0) temperatura = undefined;
+if (ph === 0) ph = undefined;
+if (salinita === 0) salinita = undefined;
+5. Caching consigliato
+Cache: 15 minuti (i dati vengono aggiornati ogni ~30 min dalle boe)
+Polling: ogni 5 minuti per avere dati ragionevolmente freschi
+Fallback: se una chiamata fallisce, restituire i dati dalla cache precedent
