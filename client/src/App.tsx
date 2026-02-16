@@ -77,6 +77,7 @@ import AttivitaConsigliate from "@/pages/AttivitaConsigliate";
 import VerificaCoperturaOrdini from "@/pages/VerificaCoperturaOrdini";
 // Importazione Proiezione Crescita
 import ProiezioneCrescita from "@/pages/ProiezioneCrescita";
+import MappaGISLaguna from "@/pages/MappaGISLaguna";
 // Importazione Gestione Mortalità
 import GestioneMortalita from "@/pages/GestioneMortalita";
 // Importazione Operators (Gestione Operatori)
@@ -159,6 +160,7 @@ function Router() {
       <ProtectedRoute path="/task-management" component={TaskManagement}/>
       <ProtectedRoute path="/operators" component={Operators}/>
       <ProtectedRoute path="/lci" component={LCIModule}/>
+      <ProtectedRoute path="/mappa-gis" component={MappaGISLaguna}/>
       
       {/* Redirezione per pagine rimosse */}
       <Route path="/tp3000-forecast">

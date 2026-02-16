@@ -352,6 +352,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const marineDataRoutes = await import('./routes/marine-data.routes');
   app.use('/api/marine-data', marineDataRoutes.default);
   console.log("✅ Modulo MARINE DATA registrato su /api/marine-data/*");
+
+  const buoyDataRoutes = await import('./routes/buoy-data.routes');
+  app.use('/api/buoy-data', buoyDataRoutes.default);
+  console.log("✅ Modulo BUOY DATA registrato su /api/buoy-data/*");
   
   // === Autenticazione routes ===
   // 🔄 MIGRATO AL MODULO: server/modules/system/auth

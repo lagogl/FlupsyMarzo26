@@ -141,6 +141,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       color: 'text-blue-600',
       items: [
         { icon: <Home className="h-6 w-6 mr-2 text-black font-bold" />, label: translations.menuItems.dashboard, path: "/" },
+        { icon: <Globe className="h-5 w-5 mr-2 text-cyan-600" />, label: "Mappa GIS Laguna", path: "/mappa-gis" },
         { icon: <Package2 className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.lotManagement, path: "/lots" },
         { icon: <Package className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.basketManagement, path: "/baskets" },
         { icon: <FolderOpen className="h-5 w-5 mr-2 text-blue-600" />, label: "Gruppi Ceste", path: "/basket-groups" },
