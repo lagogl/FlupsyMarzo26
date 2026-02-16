@@ -1,6 +1,8 @@
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Thermometer, Droplets, Waves } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { fetchArpavFromBrowser } from '@/lib/arpav-client';
 
 interface BuoyReading {
   temperatura?: number | null;
@@ -102,12 +104,31 @@ function StationBadge({ station, short }: { station: BuoyStation; short: string 
 }
 
 export default function BuoyDataBadge() {
+  const [browserArpav, setBrowserArpav] = useState<BuoyStation[]>([]);
+
   const { data, isLoading } = useQuery<BuoyDataResponse>({
     queryKey: ['/api/buoy-data'],
     staleTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    fetchArpavFromBrowser().then(stations => setBrowserArpav(stations as BuoyStation[])).catch(() => {});
+    const interval = setInterval(() => {
+      fetchArpavFromBrowser().then(stations => setBrowserArpav(stations as BuoyStation[])).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const allStations = useMemo(() => {
+    const serverStations = data?.stations || [];
+    const arpae = serverStations.filter(s => s.fonte === 'ARPAE');
+    const arpavWithData = browserArpav.length > 0 && browserArpav.some(s => s.ultimaLettura)
+      ? browserArpav as BuoyStation[]
+      : serverStations.filter(s => s.fonte === 'ARPAV');
+    return [...arpae, ...arpavWithData];
+  }, [data, browserArpav]);
 
   if (isLoading) {
     return (
@@ -118,10 +139,10 @@ export default function BuoyDataBadge() {
     );
   }
 
-  if (!data?.stations) return null;
+  if (allStations.length === 0) return null;
 
   const matched = STATION_IDS.map(cfg => ({
-    station: findStation(data.stations, cfg.idPattern, cfg.namePattern),
+    station: findStation(allStations, cfg.idPattern, cfg.namePattern),
     short: cfg.short
   })).filter(m => m.station);
 

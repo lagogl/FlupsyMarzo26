@@ -8,6 +8,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { fetchArpavFromBrowser, type ArpavStation } from "@/lib/arpav-client";
 
 interface BuoyReading {
   temperatura?: number;
@@ -192,6 +193,8 @@ export default function MappaGISLaguna() {
   const [selectedStation, setSelectedStation] = useState<BuoyStation | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [flyTo, setFlyTo] = useState<{ lat: number; lon: number } | null>(null);
+  const [browserArpav, setBrowserArpav] = useState<BuoyStation[]>([]);
+  const [arpavLoading, setArpavLoading] = useState(true);
 
   const { data, isLoading, isFetching } = useQuery<BuoyResponse>({
     queryKey: ["/api/buoy-data"],
@@ -199,9 +202,37 @@ export default function MappaGISLaguna() {
     staleTime: 2 * 60 * 1000,
   });
 
-  const stations = data?.stations || [];
-  const arpaeStations = useMemo(() => stations.filter((s) => s.fonte === "ARPAE"), [stations]);
-  const arpavStations = useMemo(() => stations.filter((s) => s.fonte === "ARPAV"), [stations]);
+  useEffect(() => {
+    let cancelled = false;
+    setArpavLoading(true);
+    fetchArpavFromBrowser().then((stations) => {
+      if (!cancelled) {
+        setBrowserArpav(stations as BuoyStation[]);
+        setArpavLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setArpavLoading(false);
+    });
+    const interval = setInterval(() => {
+      fetchArpavFromBrowser().then((stations) => {
+        if (!cancelled) setBrowserArpav(stations as BuoyStation[]);
+      });
+    }, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  const serverArpae = useMemo(() => (data?.stations || []).filter((s) => s.fonte === "ARPAE"), [data]);
+  const serverArpav = useMemo(() => (data?.stations || []).filter((s) => s.fonte === "ARPAV"), [data]);
+
+  const arpavStations = useMemo(() => {
+    if (browserArpav.length > 0 && browserArpav.some(s => s.ultimaLettura)) {
+      return browserArpav;
+    }
+    return serverArpav;
+  }, [browserArpav, serverArpav]);
+
+  const arpaeStations = serverArpae;
+  const stations = useMemo(() => [...arpaeStations, ...arpavStations], [arpaeStations, arpavStations]);
 
   const handleRefresh = async () => {
     try {
