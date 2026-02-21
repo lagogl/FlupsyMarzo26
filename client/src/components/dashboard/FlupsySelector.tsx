@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Check, Filter, X, List, Search } from "lucide-react";
+import { Check, Filter, X, List, Search, Save, Eye } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
 
 interface Flupsy {
   id: number;
@@ -24,15 +25,22 @@ interface FlupsySelectorProps {
   selectedCenter: string;
   selectedFlupsyIds: number[];
   onSelectionChange: (selectedFlupsyIds: number[]) => void;
+  onSavePreferences?: (ids: number[]) => void;
+  isSavingPreferences?: boolean;
+  preferredFlupsyIds?: number[];
 }
 
 export default function FlupsySelector({ 
   selectedCenter, 
   selectedFlupsyIds, 
-  onSelectionChange 
+  onSelectionChange,
+  onSavePreferences,
+  isSavingPreferences,
+  preferredFlupsyIds = []
 }: FlupsySelectorProps) {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [isOpen, setIsOpen] = useState(false);
+  const { toast } = useToast();
 
   // Recupera i FLUPSY dal server
   const { data: allFlupsys, isLoading } = useQuery<Flupsy[]>({ 
@@ -92,33 +100,61 @@ export default function FlupsySelector({
   return (
     <Card className="mb-4">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-lg flex items-center">
             <List className="h-5 w-5 mr-2" />
             Seleziona FLUPSY
           </CardTitle>
           
-          {selectedFlupsyIds.length > 0 && selectedFlupsyIds.length < centerFlupsys.length && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onSelectionChange(centerFlupsys.map(f => f.id))}
-              className="h-8"
-            >
-              <Check className="h-4 w-4 mr-1" /> Seleziona tutti
-            </Button>
-          )}
-          
-          {selectedFlupsyIds.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onSelectionChange([])}
-              className="h-8 text-destructive"
-            >
-              <X className="h-4 w-4 mr-1" /> Deseleziona tutti
-            </Button>
-          )}
+          <div className="flex items-center gap-1 flex-wrap">
+            {onSavePreferences && selectedFlupsyIds.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onSavePreferences(selectedFlupsyIds);
+                  toast({ title: "Preferenza salvata", description: `${selectedFlupsyIds.length} FLUPSY salvati come preferiti. Saranno preselezionati al prossimo accesso.` });
+                }}
+                disabled={isSavingPreferences}
+                className="h-8 text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                <Save className="h-4 w-4 mr-1" /> Salva preferenza
+              </Button>
+            )}
+            
+            {preferredFlupsyIds.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onSelectionChange(centerFlupsys.map(f => f.id))}
+                className="h-8"
+              >
+                <Eye className="h-4 w-4 mr-1" /> Mostra tutti
+              </Button>
+            )}
+
+            {selectedFlupsyIds.length > 0 && selectedFlupsyIds.length < centerFlupsys.length && !preferredFlupsyIds.length && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onSelectionChange(centerFlupsys.map(f => f.id))}
+                className="h-8"
+              >
+                <Check className="h-4 w-4 mr-1" /> Seleziona tutti
+              </Button>
+            )}
+            
+            {selectedFlupsyIds.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onSelectionChange([])}
+                className="h-8 text-destructive"
+              >
+                <X className="h-4 w-4 mr-1" /> Deseleziona tutti
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       

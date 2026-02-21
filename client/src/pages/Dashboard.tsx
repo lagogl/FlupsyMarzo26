@@ -24,29 +24,27 @@ import { RefreshCw, AlertCircle } from 'lucide-react';
 import { useFilterPersistence } from '@/hooks/useFilterPersistence';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/hooks/use-auth';
+import { useFlupsyPreferences } from '@/hooks/use-flupsy-preferences';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { isFirstTimeUser, registerTooltip, showTooltip } = useTooltip();
   const queryClient = useQueryClient();
+  const { preferredFlupsyIds, savePreferredFlupsyIds, isSaving: isSavingFlupsyPrefs } = useFlupsyPreferences();
   
-  // Stato per gestire l'ultimo aggiornamento dei dati
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [needsRefresh, setNeedsRefresh] = useState<boolean>(false);
+  const [prefsLoaded, setPrefsLoaded] = useState<boolean>(false);
   
-  // Utilizzo del hook di persistenza per i filtri
-  // Inizializzazione con array vuoto per non caricare FLUPSY di default
   const [filters, setFilters] = useFilterPersistence('dashboard', {
     selectedCenter: '',
     selectedFlupsyIds: [] as number[]
   });
   
-  // Utilizzo dei filtri salvati
   const selectedCenter = filters.selectedCenter;
   const selectedFlupsyIds = filters.selectedFlupsyIds as number[];
   
-  // Funzioni per aggiornare i filtri
   const setSelectedCenter = (value: string) => 
     setFilters(prev => ({ ...prev, selectedCenter: value }));
   
@@ -164,7 +162,15 @@ export default function Dashboard() {
     }
   }, [isFirstTimeUser]); // Rimuoviamo registerTooltip e showTooltip dalle dipendenze
 
-  // Filtra i cestelli in base ai FLUPSY selezionati
+  useEffect(() => {
+    if (preferredFlupsyIds.length > 0 && !prefsLoaded && selectedFlupsyIds.length === 0) {
+      setSelectedFlupsyIds(preferredFlupsyIds);
+      setPrefsLoaded(true);
+    } else if (preferredFlupsyIds.length === 0 && !prefsLoaded) {
+      setPrefsLoaded(true);
+    }
+  }, [preferredFlupsyIds, prefsLoaded]);
+
   const filteredBaskets = useMemo(() => {
     if (!baskets) return [];
     if (selectedFlupsyIds.length === 0) return baskets;
@@ -392,6 +398,9 @@ export default function Dashboard() {
           onSelectionChange={(flupsyIds) => {
             setSelectedFlupsyIds(flupsyIds);
           }}
+          onSavePreferences={savePreferredFlupsyIds}
+          isSavingPreferences={isSavingFlupsyPrefs}
+          preferredFlupsyIds={preferredFlupsyIds}
         />
       </div>
       
