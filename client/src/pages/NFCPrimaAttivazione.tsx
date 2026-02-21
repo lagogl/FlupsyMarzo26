@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format } from "date-fns";
@@ -62,6 +63,7 @@ type PrimaAttivazioneFormData = z.infer<typeof primaAttivazioneSchema>;
 // NOTA: Questo componente è temporaneamente disabilitato e mostra una pagina "in lavorazione"
 // Tutto il codice originale è mantenuto per i futuri sviluppi
 function NFCPrimaAttivazioneOriginal() {
+  const { filterFlupsys } = useFlupsyPreferences();
   const { toast } = useToast();
   const [isNFCSupported, setIsNFCSupported] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
@@ -374,7 +376,7 @@ function NFCPrimaAttivazioneOriginal() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {Array.isArray(flupsys) && flupsys.map((flupsy: any) => (
+                              {filterFlupsys(Array.isArray(flupsys) ? flupsys : []).map((flupsy: any) => (
                                 <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                                   {flupsy.name}
                                 </SelectItem>

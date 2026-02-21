@@ -145,6 +145,7 @@ import OperationForm from '@/components/OperationFormCompact';
 import GrowthPerformanceIndicator from '@/components/GrowthPerformanceIndicator';
 import { useLocation, useSearch } from 'wouter';
 import { useFilterPersistence } from '@/hooks/useFilterPersistence';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -463,6 +464,7 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
 
 export default function Operations() {
   const queryClient = useQueryClient();
+  const { filterFlupsys } = useFlupsyPreferences();
 
   // WebSocket listeners per aggiornamenti real-time
   useWebSocketMessage('operation_created', async () => {
@@ -1949,7 +1951,7 @@ export default function Operations() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tutti i FLUPSY</SelectItem>
-                  {flupsys?.map((flupsy: any) => {
+                  {filterFlupsys(flupsys || []).map((flupsy: any) => {
                     // Conta i cestelli attivi per questo FLUPSY
                     const flupsyBaskets = baskets?.filter((b: any) => b.flupsyId === flupsy.id) || [];
                     const activeBaskets = flupsyBaskets.filter((b: any) => b.state === 'active');

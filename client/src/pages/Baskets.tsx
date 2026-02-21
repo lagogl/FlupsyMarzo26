@@ -22,8 +22,10 @@ import BasketForm from '@/components/BasketForm';
 import NFCReader from '@/components/NFCReader';
 import BasketPositionHistory from '@/components/BasketPositionHistory';
 import { useFilterPersistence } from '@/hooks/useFilterPersistence';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 export default function Baskets() {
+  const { filterFlupsys } = useFlupsyPreferences();
   // Utilizziamo il hook di persistenza per i filtri
   const [filters, setFilters] = useFilterPersistence('baskets', {
     searchTerm: '',
@@ -735,7 +737,7 @@ export default function Baskets() {
               <SelectContent>
                 <SelectItem value="all">Tutte le unità</SelectItem>
                 {flupsysArray.length > 0 ? (
-                  flupsysArray.map((flupsy: any) => (
+                  filterFlupsys(flupsysArray).map((flupsy: any) => (
                     <SelectItem key={flupsy.id} value={String(flupsy.id)}>
                       {flupsy.name}
                     </SelectItem>

@@ -18,6 +18,7 @@ import 'react-pivottable/pivottable.css';
 import TableRenderers from 'react-pivottable/TableRenderers';
 import { aggregators as defaultAggregators } from 'react-pivottable/Utilities';
 import "../styles/spreadsheet.css";
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 const italianRenderers: { [key: string]: any } = {
   'Tabella': TableRenderers['Table'],
@@ -114,6 +115,7 @@ export default function SpreadsheetOperations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const { filterFlupsys } = useFlupsyPreferences();
 
   // Funzione per badge taglia con colori (identica al Registro Operazioni)
   const getSizeBadgeClasses = (sizeCode: string): string => {
@@ -2515,8 +2517,8 @@ export default function SpreadsheetOperations() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">TUTTI</SelectItem>
-                {((flupsys as any[]) || [])
-                  .filter((flupsy: any) => selectedSiteFilter === "all" || flupsy.location === selectedSiteFilter)
+                {filterFlupsys(((flupsys as any[]) || [])
+                  .filter((flupsy: any) => selectedSiteFilter === "all" || flupsy.location === selectedSiteFilter))
                   .map((flupsy: any) => (
                   <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                     {flupsy.name}

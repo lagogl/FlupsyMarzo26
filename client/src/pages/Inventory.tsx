@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 import { getQueryFn } from "@/lib/queryClient";
 import { Helmet } from "react-helmet";
 import {
@@ -107,6 +108,7 @@ interface MortalityRate {
 }
 
 export default function Inventory() {
+  const { filterFlupsys } = useFlupsyPreferences();
   // Stato per le statistiche di inventario
   const [inventoryStats, setInventoryStats] = useState<{
     totalBaskets: number;
@@ -198,11 +200,11 @@ export default function Inventory() {
   
   const flupsyOptions = useMemo(() => {
     if (!flupsys) return [];
-    return (flupsys as any[]).map((flupsy: any) => ({
+    return filterFlupsys(flupsys as any[]).map((flupsy: any) => ({
       value: flupsy.id.toString(),
       label: flupsy.name
     }));
-  }, [flupsys]);
+  }, [flupsys, filterFlupsys]);
 
   // Calcola le statistiche di inventario quando i dati sono disponibili
   useEffect(() => {

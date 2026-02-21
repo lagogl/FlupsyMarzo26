@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import { Link, useLocation } from "wouter";
 type ViewMode = 'compact' | 'detailed' | 'positions';
 
 export default function FlupsyFullView() {
+  const { filterFlupsys } = useFlupsyPreferences();
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('detailed');
   const [showSidebar, setShowSidebar] = useState(true);
@@ -149,7 +151,7 @@ export default function FlupsyFullView() {
                     <SelectValue placeholder="Seleziona unità FLUPSY" />
                   </SelectTrigger>
                   <SelectContent>
-                    {flupsys && flupsys.map((flupsy: any) => (
+                    {filterFlupsys(flupsys || []).map((flupsy: any) => (
                       <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                         {flupsy.name}
                       </SelectItem>

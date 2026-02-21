@@ -126,7 +126,13 @@ export default function FlupsySelector({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onSelectionChange(centerFlupsys.map(f => f.id))}
+                onClick={() => {
+                  onSelectionChange(centerFlupsys.map(f => f.id));
+                  if (onSavePreferences) {
+                    onSavePreferences([]);
+                    toast({ title: "Filtro rimosso", description: "Tutti i FLUPSY sono ora visibili in ogni modulo." });
+                  }
+                }}
                 className="h-8"
               >
                 <Eye className="h-4 w-4 mr-1" /> Mostra tutti

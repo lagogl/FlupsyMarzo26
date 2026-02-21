@@ -52,6 +52,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 interface Basket {
   id: number;
@@ -77,6 +78,7 @@ type SortDirection = 'asc' | 'desc';
 
 export default function RFIDUHFTagManager() {
   const { toast } = useToast();
+  const { filterFlupsys } = useFlupsyPreferences();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [flupsyFilter, setFlupsyFilter] = useState<string>('all');
   const [programmingFilter, setProgrammingFilter] = useState<string>('all');
@@ -321,7 +323,7 @@ export default function RFIDUHFTagManager() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutti i FLUPSY</SelectItem>
-                    {flupsys.map((flupsy) => (
+                    {filterFlupsys(flupsys).map((flupsy) => (
                       <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                         {flupsy.name}
                       </SelectItem>

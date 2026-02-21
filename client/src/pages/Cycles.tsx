@@ -18,6 +18,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 import { useFilterPersistence } from '@/hooks/useFilterPersistence';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 // Definizione dell'interfaccia Operation per tipizzare i dati delle operazioni
 interface Operation {
@@ -90,6 +91,8 @@ interface Cycle {
 }
 
 export default function Cycles() {
+  const { filterFlupsys } = useFlupsyPreferences();
+  
   // Filtri
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -560,7 +563,7 @@ export default function Cycles() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">Tutti i FLUPSY</SelectItem>
-                      {flupsys.map((flupsy) => (
+                      {filterFlupsys(flupsys).map((flupsy) => (
                         <SelectItem key={flupsy.id} value={String(flupsy.id)}>
                           {flupsy.name}
                         </SelectItem>

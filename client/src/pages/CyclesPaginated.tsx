@@ -18,6 +18,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 import { useFilterPersistence } from '@/hooks/useFilterPersistence';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 // Definizione delle interfacce
 interface Operation {
@@ -87,6 +88,8 @@ interface Cycle {
 }
 
 export default function CyclesPaginated() {
+  const { filterFlupsys } = useFlupsyPreferences();
+  
   // State per filtri
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -620,7 +623,7 @@ export default function CyclesPaginated() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="0">Tutti i FLUPSY</SelectItem>
-                {flupsys.map(flupsy => (
+                {filterFlupsys(flupsys).map(flupsy => (
                   <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                     {flupsy.name}
                   </SelectItem>

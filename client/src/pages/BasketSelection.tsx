@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { differenceInDays, format } from 'date-fns';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 import { Brush, FolderOpen, FolderX } from 'lucide-react';
 import { getSizeColor } from '@/lib/getSizeColor';
 import type { BasketGroup } from '@shared/schema';
@@ -215,6 +216,7 @@ interface Column {
 }
 
 export default function BasketSelection() {
+  const { filterFlupsys } = useFlupsyPreferences();
   const { toast } = useToast();
   
   // Stati per gestire i dati e i filtri
@@ -1714,7 +1716,7 @@ export default function BasketSelection() {
                         <FormItem>
                           <FormLabel>Unità FLUPSY</FormLabel>
                           <div className="flex flex-wrap gap-2">
-                            {flupsys?.map(flupsy => (
+                            {filterFlupsys(flupsys || []).map(flupsy => (
                               <Badge
                                 key={flupsy.id}
                                 variant={field.value?.includes(flupsy.id) ? "default" : "outline"}

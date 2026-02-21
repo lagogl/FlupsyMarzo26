@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const statusLabels = {
 };
 
 export default function TaskManagement() {
+  const { filterFlupsys } = useFlupsyPreferences();
   const { toast } = useToast();
   const [selectedTask, setSelectedTask] = useState<number | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<number | null>(null);
@@ -324,7 +326,7 @@ export default function TaskManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">TUTTO</SelectItem>
-                {flupsySystems && flupsySystems.map((flupsy: any) => (
+                {filterFlupsys(flupsySystems || []).map((flupsy: any) => (
                   <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                     {flupsy.name}
                   </SelectItem>

@@ -8,6 +8,7 @@ import { Brain, BarChart3, Leaf, AlertTriangle, TrendingUp, Shield, Zap } from "
 import PageHeader from "@/components/PageHeader";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 interface AIHealthStatus {
   status: 'connected' | 'autonomous' | 'offline' | 'not_configured' | 'error';
@@ -80,6 +81,7 @@ interface BusinessAnalytics {
 }
 
 export default function AIDashboard() {
+  const { filterFlupsys } = useFlupsyPreferences();
   const [selectedFlupsy, setSelectedFlupsy] = useState<number | null>(570); // FLUPSY esistente
   const [timeframe, setTimeframe] = useState<string>('7');
   
@@ -257,7 +259,7 @@ export default function AIDashboard() {
                   <SelectValue placeholder="Seleziona FLUPSY" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(flupsys as any[])?.map((flupsy: any) => (
+                  {filterFlupsys((flupsys as any[]) || []).map((flupsy: any) => (
                     <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                       {flupsy.name}
                     </SelectItem>

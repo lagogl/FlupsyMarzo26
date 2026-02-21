@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { Link } from "wouter";
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 type ActivityType = 'pulizia' | 'campionamento' | 'calibratura' | 'misura' | 'raccolta';
 type Priority = 'alta' | 'media' | 'suggerimento';
@@ -148,6 +149,7 @@ function ActivitySection({ title, activities, icon: Icon, colorClass }: {
 type GroupBy = 'priority' | 'flupsy' | 'type';
 
 export default function AttivitaConsigliate() {
+  const { filterFlupsys } = useFlupsyPreferences();
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<string>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("priority");
 
@@ -210,7 +212,7 @@ export default function AttivitaConsigliate() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tutti i FLUPSY</SelectItem>
-                  {flupsys?.map((flupsy: any) => (
+                  {filterFlupsys(flupsys || []).map((flupsy: any) => (
                     <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                       {flupsy.name}
                     </SelectItem>

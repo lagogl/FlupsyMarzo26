@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,6 +69,7 @@ const getSizeColorWithBorder = (sizeCode: string): string => {
 
 // Questo componente visualizza il confronto tra lo stato attuale e futuro del FLUPSY
 export default function FlupsyComparison() {
+  const { filterFlupsys } = useFlupsyPreferences();
   // State per il FLUPSY selezionato
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<number | null>(null);
   
@@ -789,7 +791,7 @@ export default function FlupsyComparison() {
                 <SelectValue placeholder="Seleziona FLUPSY" />
               </SelectTrigger>
               <SelectContent>
-                {flupsys && flupsys.map(flupsy => (
+                {filterFlupsys(flupsys || []).map(flupsy => (
                   <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                     {flupsy.name}
                   </SelectItem>

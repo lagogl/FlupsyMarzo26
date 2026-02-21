@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle, BarChart3, TrendingUp, Split, Zap } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 interface LotComposition {
   lotId: number;
@@ -40,6 +41,7 @@ interface MixedLotsResponse {
 }
 
 const MixedLotsAnalytics: React.FC = () => {
+  const { filterFlupsys } = useFlupsyPreferences();
   const [selectedFlupsy, setSelectedFlupsy] = useState('all');
   const [selectedPeriod, setSelectedPeriod] = useState('30');
 
@@ -133,7 +135,7 @@ const MixedLotsAnalytics: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tutti i FLUPSY</SelectItem>
-                  {flupsyData?.map((flupsy: any) => (
+                  {filterFlupsys(flupsyData || []).map((flupsy: any) => (
                     <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                       {flupsy.name}
                     </SelectItem>
