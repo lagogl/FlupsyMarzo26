@@ -34,6 +34,25 @@ export class MenuPreferencesService {
     }
   }
 
+  async saveHiddenMenuItems(userId: number, hiddenMenuItems: string[]) {
+    const existing = await this.getPreferences(userId);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(userMenuPreferences)
+        .set({ hiddenMenuItems, updatedAt: new Date() })
+        .where(eq(userMenuPreferences.userId, userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(userMenuPreferences)
+        .values({ userId, menuItems: [], hiddenMenuItems, compactModeEnabled: false })
+        .returning();
+      return created;
+    }
+  }
+
   async savePreferredFlupsyIds(userId: number, preferredFlupsyIds: number[]) {
     const existing = await this.getPreferences(userId);
     

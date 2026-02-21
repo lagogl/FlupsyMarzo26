@@ -12,7 +12,7 @@ export class MenuPreferencesController {
       const preferences = await menuPreferencesService.getPreferences(userId);
       res.json({
         success: true,
-        data: preferences || { menuItems: [], compactModeEnabled: false }
+        data: preferences || { menuItems: [], hiddenMenuItems: [], compactModeEnabled: false }
       });
     } catch (error) {
       console.error("Error fetching menu preferences:", error);
@@ -43,6 +43,27 @@ export class MenuPreferencesController {
     } catch (error) {
       console.error("Error saving menu preferences:", error);
       res.status(500).json({ success: false, message: "Errore nel salvataggio delle preferenze" });
+    }
+  }
+
+  async saveHiddenMenuItems(req: Request, res: Response) {
+    try {
+      const userId = parseInt(req.params.userId);
+      const { hiddenMenuItems } = req.body;
+
+      if (isNaN(userId)) {
+        return res.status(400).json({ success: false, message: "ID utente non valido" });
+      }
+
+      if (!Array.isArray(hiddenMenuItems)) {
+        return res.status(400).json({ success: false, message: "hiddenMenuItems deve essere un array" });
+      }
+
+      const result = await menuPreferencesService.saveHiddenMenuItems(userId, hiddenMenuItems);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Error saving hidden menu items:", error);
+      res.status(500).json({ success: false, message: "Errore nel salvataggio voci nascoste" });
     }
   }
 
