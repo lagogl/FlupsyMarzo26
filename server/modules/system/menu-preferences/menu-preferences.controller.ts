@@ -46,6 +46,27 @@ export class MenuPreferencesController {
     }
   }
 
+  async savePreferredFlupsyIds(req: Request, res: Response) {
+    try {
+      const userId = parseInt(req.params.userId);
+      const { preferredFlupsyIds } = req.body;
+
+      if (isNaN(userId)) {
+        return res.status(400).json({ success: false, message: "ID utente non valido" });
+      }
+
+      if (!Array.isArray(preferredFlupsyIds)) {
+        return res.status(400).json({ success: false, message: "preferredFlupsyIds deve essere un array" });
+      }
+
+      const result = await menuPreferencesService.savePreferredFlupsyIds(userId, preferredFlupsyIds);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error("Error saving preferred flupsy ids:", error);
+      res.status(500).json({ success: false, message: "Errore nel salvataggio preferenze FLUPSY" });
+    }
+  }
+
   async toggleCompactMode(req: Request, res: Response) {
     try {
       const userId = parseInt(req.params.userId);

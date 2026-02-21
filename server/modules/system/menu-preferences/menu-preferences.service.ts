@@ -34,6 +34,25 @@ export class MenuPreferencesService {
     }
   }
 
+  async savePreferredFlupsyIds(userId: number, preferredFlupsyIds: number[]) {
+    const existing = await this.getPreferences(userId);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(userMenuPreferences)
+        .set({ preferredFlupsyIds, updatedAt: new Date() })
+        .where(eq(userMenuPreferences.userId, userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(userMenuPreferences)
+        .values({ userId, menuItems: [], compactModeEnabled: false, preferredFlupsyIds })
+        .returning();
+      return created;
+    }
+  }
+
   async toggleCompactMode(userId: number) {
     const existing = await this.getPreferences(userId);
     const newMode = existing ? !existing.compactModeEnabled : true;

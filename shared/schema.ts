@@ -25,6 +25,7 @@ export const userMenuPreferences = pgTable("user_menu_preferences", {
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   menuItems: text("menu_items").array().notNull().default([]),
   compactModeEnabled: boolean("compact_mode_enabled").notNull().default(false),
+  preferredFlupsyIds: integer("preferred_flupsy_ids").array().notNull().default([]),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
