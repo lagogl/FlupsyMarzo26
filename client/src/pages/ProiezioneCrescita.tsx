@@ -635,6 +635,9 @@ function ExcelTable({ data, mc, toast }: {
           </div>
         )}
       </CardHeader>
+      <div className="px-3 pb-1">
+        <p className="text-[10px] text-gray-400 italic">Ctrl+click per selezionare più celle · Shift+click per selezionare un intervallo</p>
+      </div>
       <CardContent className="p-0">
         <div className="overflow-x-auto border-t border-gray-300">
           <TooltipProvider delayDuration={200}>
