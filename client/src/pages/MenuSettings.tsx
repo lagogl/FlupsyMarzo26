@@ -180,7 +180,8 @@ export default function MenuSettings() {
     changePasswordMutation.mutate();
   };
 
-  const categories = [...new Set(allMenuItems.map(item => item.category))];
+  const visibleMenuItems = user?.role === 'admin' ? allMenuItems : allMenuItems.filter(item => item.category !== 'Sistema');
+  const categories = [...new Set(visibleMenuItems.map(item => item.category))];
 
   if (isLoading) {
     return <div className="p-6">Caricamento...</div>;
@@ -209,7 +210,7 @@ export default function MenuSettings() {
             <div key={category} className="space-y-2">
               <h3 className="font-medium text-sm text-gray-700 border-b pb-1">{category}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {allMenuItems.filter(item => item.category === category).map(item => (
+                {visibleMenuItems.filter(item => item.category === category).map(item => (
                   <div key={item.path} className={`flex items-center space-x-2 p-1 rounded ${hiddenItems.includes(item.path) ? 'opacity-50' : ''}`}>
                     <Checkbox 
                       id={`vis-${item.path}`}
@@ -262,7 +263,7 @@ export default function MenuSettings() {
               <div key={category} className="space-y-2">
                 <h3 className="font-medium text-sm text-gray-700">{category}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {allMenuItems.filter(item => item.category === category).map(item => (
+                  {visibleMenuItems.filter(item => item.category === category).map(item => (
                     <div key={item.path} className="flex items-center space-x-2">
                       <Checkbox 
                         id={item.path}
