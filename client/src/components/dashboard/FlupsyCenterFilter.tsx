@@ -225,6 +225,7 @@ export default function FlupsyCenterFilter({ onFilterChange }: FlupsyCenterFilte
           
           {/* Dati Boe + Indicatore Clorofilla + Previsioni Meteo */}
           <div className="flex items-center gap-2">
+            <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wide hidden sm:inline">Boe live</span>
             <BuoyDataBadge />
             <div className="h-6 w-px bg-gray-200" />
             <ChlorophyllIndicator />
