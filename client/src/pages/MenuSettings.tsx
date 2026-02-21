@@ -74,6 +74,7 @@ export default function MenuSettings() {
   const queryClient = useQueryClient();
   
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [hiddenItems, setHiddenItems] = useState<string[]>([]);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -92,6 +93,9 @@ export default function MenuSettings() {
     if (menuPrefs?.data?.menuItems) {
       setSelectedItems(menuPrefs.data.menuItems);
     }
+    if (menuPrefs?.data?.hiddenMenuItems) {
+      setHiddenItems(menuPrefs.data.hiddenMenuItems);
+    }
   }, [menuPrefs]);
 
   const savePrefsMutation = useMutation({
@@ -107,6 +111,22 @@ export default function MenuSettings() {
     },
     onError: () => {
       toast({ title: "Errore", description: "Impossibile salvare le preferenze.", variant: "destructive" });
+    }
+  });
+
+  const saveHiddenMutation = useMutation({
+    mutationFn: async (items: string[]) => {
+      return apiRequest(`/api/menu-preferences/${user?.id}/hidden-menu-items`, {
+        method: 'POST',
+        body: JSON.stringify({ hiddenMenuItems: items })
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/menu-preferences', user?.id] });
+      toast({ title: "Visibilità aggiornata", description: "Le voci nascoste sono state aggiornate." });
+    },
+    onError: () => {
+      toast({ title: "Errore", description: "Impossibile salvare le modifiche.", variant: "destructive" });
     }
   });
 
@@ -134,8 +154,18 @@ export default function MenuSettings() {
     );
   };
 
+  const toggleHidden = (path: string) => {
+    setHiddenItems(prev => 
+      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+    );
+  };
+
   const handleSavePreferences = () => {
     savePrefsMutation.mutate(selectedItems);
+  };
+
+  const handleSaveHidden = () => {
+    saveHiddenMutation.mutate(hiddenItems);
   };
 
   const handleChangePassword = () => {
@@ -163,17 +193,69 @@ export default function MenuSettings() {
         subtitle="Personalizza il tuo menu e gestisci il tuo account"
       />
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5 text-blue-500" />
+            Visibilità Voci di Menu
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Tutte le voci sono visibili per impostazione predefinita. Deseleziona quelle che non ti servono per nasconderle dal menu. Le nuove funzionalità appariranno automaticamente.
+          </p>
+          
+          {categories.map(category => (
+            <div key={category} className="space-y-2">
+              <h3 className="font-medium text-sm text-gray-700 border-b pb-1">{category}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {allMenuItems.filter(item => item.category === category).map(item => (
+                  <div key={item.path} className={`flex items-center space-x-2 p-1 rounded ${hiddenItems.includes(item.path) ? 'opacity-50' : ''}`}>
+                    <Checkbox 
+                      id={`vis-${item.path}`}
+                      checked={!hiddenItems.includes(item.path)}
+                      onCheckedChange={() => toggleHidden(item.path)}
+                    />
+                    <Label htmlFor={`vis-${item.path}`} className="flex items-center gap-2 text-sm cursor-pointer">
+                      {item.icon}
+                      {item.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+              <Separator className="my-2" />
+            </div>
+          ))}
+
+          <div className="flex gap-2">
+            <Button onClick={handleSaveHidden} disabled={saveHiddenMutation.isPending} className="flex-1">
+              <Save className="h-4 w-4 mr-2" />
+              {saveHiddenMutation.isPending ? "Salvataggio..." : "Salva Visibilità"}
+            </Button>
+            {hiddenItems.length > 0 && (
+              <Button variant="outline" onClick={() => { setHiddenItems([]); saveHiddenMutation.mutate([]); }}>
+                <Eye className="h-4 w-4 mr-2" />
+                Mostra Tutti
+              </Button>
+            )}
+          </div>
+          {hiddenItems.length > 0 && (
+            <p className="text-xs text-amber-600">{hiddenItems.length} {hiddenItems.length === 1 ? 'voce nascosta' : 'voci nascoste'}</p>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Star className="h-5 w-5 text-yellow-500" />
-              Menu Preferiti
+              Menu Preferiti (Compatto)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-gray-500">
-              Seleziona le voci che vuoi vedere nel menu compatto. In modalità compatta vedrai solo queste voci.
+              Seleziona le voci da mostrare quando attivi la modalità compatta (icona occhio nella sidebar).
             </p>
             
             {categories.map(category => (
@@ -260,23 +342,23 @@ export default function MenuSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Eye className="h-5 w-5 text-blue-500" />
+            <Settings className="h-5 w-5 text-gray-500" />
             Come Funziona
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div className="p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-medium mb-2">1. Seleziona i Preferiti</h4>
-              <p className="text-gray-600">Scegli le voci di menu che usi più spesso marcando le caselle.</p>
+              <h4 className="font-medium mb-2">1. Nuove Voci Automatiche</h4>
+              <p className="text-gray-600">Ogni nuova funzionalità appare automaticamente nel menu. Non devi fare nulla!</p>
             </div>
             <div className="p-4 bg-green-50 rounded-lg">
-              <h4 className="font-medium mb-2">2. Attiva Menu Compatto</h4>
-              <p className="text-gray-600">Clicca l'icona occhio nella sidebar per passare alla modalità compatta.</p>
+              <h4 className="font-medium mb-2">2. Nascondi Voci</h4>
+              <p className="text-gray-600">Deseleziona le voci che non ti servono nella sezione "Visibilità" per nasconderle dal menu.</p>
             </div>
             <div className="p-4 bg-purple-50 rounded-lg">
-              <h4 className="font-medium mb-2">3. Mostra Tutto</h4>
-              <p className="text-gray-600">Puoi sempre vedere tutte le voci cliccando "Mostra tutto" o l'icona occhio.</p>
+              <h4 className="font-medium mb-2">3. Menu Compatto</h4>
+              <p className="text-gray-600">Attiva la modalità compatta nella sidebar per vedere solo i tuoi preferiti selezionati.</p>
             </div>
           </div>
         </CardContent>

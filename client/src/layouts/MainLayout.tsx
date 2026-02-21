@@ -88,6 +88,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   const compactMode = menuPrefs?.data?.compactModeEnabled ?? false;
   const favoriteMenuItems: string[] = menuPrefs?.data?.menuItems ?? [];
+  const hiddenMenuItems: string[] = menuPrefs?.data?.hiddenMenuItems ?? [];
 
   // Toggle modalità compatta
   const toggleCompactMutation = useMutation({
@@ -355,7 +356,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             {compactMode && favoriteMenuItems.length > 0 ? (
               <div className="space-y-1">
                 <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">I tuoi preferiti</div>
-                {navCategories.flatMap(cat => cat.items).filter(item => favoriteMenuItems.includes(item.path)).map((item) => (
+                {navCategories.flatMap(cat => cat.items).filter(item => favoriteMenuItems.includes(item.path) && !hiddenMenuItems.includes(item.path)).map((item) => (
                   <a
                     key={item.path}
                     onClick={(e) => { e.preventDefault(); handleNavClick(item.path); }}
@@ -378,7 +379,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 </div>
               </div>
             ) : (
-            navCategories.map((category) => (
+            navCategories.map((category) => {
+              const visibleItems = category.items.filter(item => !hiddenMenuItems.includes(item.path));
+              if (visibleItems.length === 0) return null;
+              return (
               <div key={category.id} className="space-y-1">
                 {/* Header della categoria */}
                 <div 
@@ -400,7 +404,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 {/* Voci del menù in questa categoria */}
                 {expandedCategories[category.id] && (
                   <div className="ml-2 space-y-1 border-l-2 pl-2" style={{ borderColor: `var(--${category.color.split('-')[1]}-300)` }}>
-                    {category.items.map((item) => (
+                    {visibleItems.map((item) => (
                       <a
                         key={item.path}
                         onClick={(e) => {
@@ -430,7 +434,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                   </div>
                 )}
               </div>
-            ))
+            );})
             )}
           </nav>
           
