@@ -472,6 +472,14 @@ export function implementDirectOperationRoute(app: Express) {
         }
       }
       
+      // 4a. Per Vendita: se animalsPerKg non è fornito, calcolalo da totalWeight e animalCount
+      if (operationData.type === 'vendita' && !operationData.animalsPerKg &&
+          operationData.totalWeight && operationData.animalCount &&
+          operationData.totalWeight > 0 && operationData.animalCount > 0) {
+        operationData.animalsPerKg = Math.round((operationData.animalCount * 1000000) / operationData.totalWeight);
+        console.log(`🛒 VENDITA: Calcolato animalsPerKg=${operationData.animalsPerKg} da animalCount=${operationData.animalCount} totalWeight=${operationData.totalWeight}g`);
+      }
+
       // 4. Calcola averageWeight e sizeId appropriato se viene fornito animalsPerKg
       if (operationData.animalsPerKg && operationData.animalsPerKg > 0) {
         // Calcola il peso medio in mg per ogni animale
@@ -479,9 +487,9 @@ export function implementDirectOperationRoute(app: Express) {
         operationData.averageWeight = averageWeight;
         console.log(`Calcolato averageWeight: ${averageWeight} da animalsPerKg: ${operationData.animalsPerKg}`);
         
-        // Se l'operazione è di tipo "misura" o "peso", aggiorna automaticamente sizeId
+        // Se l'operazione è di tipo "misura", "peso", "prima-attivazione" o "vendita", aggiorna automaticamente sizeId
         if (
-          (operationData.type === 'misura' || operationData.type === 'peso' || operationData.type === 'prima-attivazione') && 
+          (operationData.type === 'misura' || operationData.type === 'peso' || operationData.type === 'prima-attivazione' || operationData.type === 'vendita') && 
           operationData.animalsPerKg > 0
         ) {
           console.log(`Calcolo automatico della taglia in base a ${operationData.animalsPerKg} animali/kg...`);

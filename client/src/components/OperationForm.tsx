@@ -503,6 +503,16 @@ export default function OperationForm({
       form.setValue('animalsPerKg', calculatedAnimalsPerKg);
     }
   }, [watchSampleWeight, watchLiveAnimals, watchManualCountAdjustment, form]);
+
+  // Per operazioni Vendita: calcola animalsPerKg da totalWeight e animalCount
+  // (non usa sampleWeight/liveAnimals come la Misura)
+  useEffect(() => {
+    if (watchType === 'vendita' && watchTotalWeight && watchAnimalCount &&
+        watchTotalWeight > 0 && watchAnimalCount > 0) {
+      const calculatedAnimalsPerKg = Math.round((watchAnimalCount * 1000000) / watchTotalWeight);
+      form.setValue('animalsPerKg', calculatedAnimalsPerKg);
+    }
+  }, [watchType, watchTotalWeight, watchAnimalCount, form]);
   
   // Calcola automaticamente i dati basati sul campione e aggiorna i campi correlati
   // NOTA: Il calcolo di animalCount dalla mortalità si applica SOLO a operazioni Misura
