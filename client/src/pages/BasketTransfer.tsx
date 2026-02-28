@@ -387,7 +387,14 @@ export default function BasketTransfer() {
                 </Button>
                 {mode === "partial" && assignments.length > 0 && (
                   <span className="text-xs text-gray-400 italic">
-                    ÷ {assignments.length + 1} quote: dest. ~{formatNumber(Math.floor(sourceAnimals / (assignments.length + 1)))} · sorgente trattiene ~{formatNumber(sourceAnimals - Math.floor(sourceAnimals / (assignments.length + 1)) * assignments.length)}
+                    {(() => {
+                      const n = assignments.length + 1;
+                      const base = Math.floor(sourceAnimals / n);
+                      const rem = sourceAnimals - base * n;
+                      const destMax = rem > 0 ? base + 1 : base;
+                      const destMin = base;
+                      return `÷ ${n} quote: dest. ${rem > 0 ? `${formatNumber(destMax)}/${formatNumber(destMin)}` : formatNumber(destMin)} · sorgente trattiene ${formatNumber(base)}`;
+                    })()}
                   </span>
                 )}
               </div>
