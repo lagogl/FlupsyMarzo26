@@ -44,6 +44,7 @@ import AuthPage from "@/pages/AuthPage";
 // Modulo selezione rimosso - ora si usa solo Vagliatura con Mappa
 // Importazione per il nuovo modulo di Vagliatura con Mappa
 import VagliaturaConMappa from "@/pages/VagliaturaConMappa";
+import BasketTransfer from "@/pages/BasketTransfer";
 // Importazioni per la gestione delle pagine di amministrazione
 import BackupPage from "@/pages/BackupPage";
 import AmministrazioneUtilita from "@/pages/AmministrazioneUtilita";
@@ -183,6 +184,9 @@ function Router() {
       {/* Vagliatura con Mappa routes */}
       <ProtectedRoute path="/vagliatura" component={VagliaturaConMappa}/>
       <ProtectedRoute path="/vagliatura-con-mappa" component={VagliaturaConMappa}/>
+
+      {/* Trasferimento Ciclo */}
+      <ProtectedRoute path="/trasferimento-ciclo" component={BasketTransfer}/>
       
       {/* Storico Vagliature routes */}
       <ProtectedRoute path="/screenings" component={ScreeningsList}/>

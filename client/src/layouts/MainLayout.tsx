@@ -10,7 +10,7 @@ import {
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
   ClipboardList, Users, FolderOpen, Sparkles, Radio, Target, Eye, EyeOff, Star,
-  AlertCircle, ShieldCheck, Skull
+  AlertCircle, ShieldCheck, Skull, ArrowLeftRight
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -149,6 +149,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <FileText className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.operations, path: "/operations" },
         { icon: <Table className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.spreadsheetOperations, path: "/spreadsheet-operations" },
         { icon: <LayoutGrid className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.screeningWithMap, path: "/vagliatura-con-mappa" },
+        { icon: <ArrowLeftRight className="h-5 w-5 mr-2 text-violet-600" />, label: "Trasferimento Ciclo", path: "/trasferimento-ciclo" },
         { icon: <History className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.screeningHistory || "Storico Vagliature", path: "/screenings" },
         { icon: <Tag className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.nfcTagManagement, path: "/nfc-tags" },
         { icon: <Radio className="h-5 w-5 mr-2 text-red-600" />, label: "Gestione Tag RFID UHF", path: "/rfid-uhf-tags" }

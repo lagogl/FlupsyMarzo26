@@ -59,6 +59,7 @@ import { validateBasketRow, validateBasketPosition } from "./utils/validation";
 import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-controller";
 import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
 import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
+import basketTransferRouter from "./modules/operations/transfer/basket-transfer.routes";
 import { getBasketLotComposition } from "./services/basket-lot-composition.service";
 import { determineSizeByAnimalsPerKg } from "./utils/size-determination";
 import { operationsLifecycleService } from "./services/operations-lifecycle.service";
@@ -347,6 +348,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Registra route per ordini condivisi (database esterno)
   app.use('/api/ordini-condivisi', ordiniCondivisiRouter);
   console.log("✅ Modulo ORDINI CONDIVISI registrato su /api/ordini-condivisi*");
+
+  // Registra route per trasferimento ciclo ceste
+  app.use('/api/basket-transfer', basketTransferRouter);
+  console.log("✅ Modulo TRASFERIMENTO CICLO registrato su /api/basket-transfer/*");
 
   // Registra il modulo MARINE DATA (dati mare Delta Po/Adriatico)
   const marineDataRoutes = await import('./routes/marine-data.routes');

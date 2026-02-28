@@ -108,7 +108,8 @@ export const operationTypes = [
   "selezione-origine",
   "dismissione",
   "chiusura-ciclo-vagliatura",
-  "chiusura-ciclo"
+  "chiusura-ciclo",
+  "trasferimento"
 ] as const;
 
 // Closure Destination Types (Destinazioni chiusura ciclo)
