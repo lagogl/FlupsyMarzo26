@@ -14,6 +14,7 @@ export interface TransferRequest {
   sourceBasketId: number;
   date: string;
   mode: 'total' | 'partial';
+  sourceRetention?: number;
   destinations: TransferDestination[];
 }
 
@@ -123,18 +124,20 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       throw new Error('La cesta sorgente non ha un ciclo attivo');
     }
 
+    const oldSourceCycleId = sourceBasket.currentCycleId;
+
     // ── 2. Leggi ciclo attivo sorgente ──────────────────────────────────────
     const [sourceCycle] = await tx
       .select()
       .from(cycles)
-      .where(eq(cycles.id, sourceBasket.currentCycleId))
+      .where(eq(cycles.id, oldSourceCycleId))
       .limit(1);
 
     if (!sourceCycle || sourceCycle.state === 'closed') {
       throw new Error('Il ciclo della cesta sorgente non è attivo');
     }
 
-    // ── 3. Leggi ultima operazione utile (animalsPerKg, sizeId, mortalityRate, sgrId) ──
+    // ── 3. Leggi ultima operazione utile ────────────────────────────────────
     const lastOpResult = await tx.execute(`
       SELECT animal_count, total_weight, animals_per_kg, size_id, mortality_rate, sgr_id, average_weight
       FROM operations
@@ -157,15 +160,26 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
     const sgrId = lastOp.sgr_id;
     const sourceAnimalCount = lastOp.animal_count;
 
-    if (totalTransferred > sourceAnimalCount) {
+    // In partial mode, compute retention from request or derive it
+    const sourceRetention = mode === 'partial'
+      ? (req.sourceRetention ?? (sourceAnimalCount - totalTransferred))
+      : 0;
+
+    const totalAccountedFor = totalTransferred + (mode === 'partial' ? sourceRetention : 0);
+    if (totalAccountedFor > sourceAnimalCount) {
       throw new Error(
-        `Impossibile trasferire ${totalTransferred.toLocaleString('it-IT')} animali: la cesta ne ha solo ${sourceAnimalCount.toLocaleString('it-IT')}`
+        `Impossibile trasferire ${totalAccountedFor.toLocaleString('it-IT')} animali: la cesta ne ha solo ${sourceAnimalCount.toLocaleString('it-IT')}`
+      );
+    }
+    if (mode === 'partial' && totalAccountedFor !== sourceAnimalCount) {
+      throw new Error(
+        `In modalità parziale la somma di tutte le quote (${totalAccountedFor.toLocaleString('it-IT')}) deve essere uguale al totale sorgente (${sourceAnimalCount.toLocaleString('it-IT')})`
       );
     }
 
     const lotId = sourceCycle.lotId;
 
-    // ── 4. Costruisci testo note bidirezionale ──────────────────────────────
+    // ── 4. Raccogli dettagli ceste destinazione ─────────────────────────────
     const destBasketDetails = await Promise.all(
       destinations.map(async (d) => {
         const [b] = await tx.select({ physicalNumber: baskets.physicalNumber, flupsyId: baskets.flupsyId })
@@ -177,31 +191,32 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
     );
 
     const dateFormatted = new Date(date).toLocaleDateString('it-IT');
-    const sizeLabel = sizeId ? `Taglia: dimensione id=${sizeId}` : '';
-
-    const destListForSource = destBasketDetails
-      .map(d => `cesta #${d.physicalNumber} (${d.flupsyName}): ${d.animalCount.toLocaleString('it-IT')} animali`)
-      .join(', ');
-
-    const sourceNotesText =
-      `Trasferimento ${mode === 'total' ? 'totale' : 'parziale'} del ${dateFormatted} → ${destListForSource} | ` +
-      `Tot. animali ceduti: ${totalTransferred.toLocaleString('it-IT')} | ${sizeLabel}`;
 
     const [sourcePhysical] = await tx.select({ physicalNumber: baskets.physicalNumber, flupsyId: baskets.flupsyId })
       .from(baskets).where(eq(baskets.id, sourceBasketId)).limit(1);
     const sourceFlupsyResult = await tx.execute(`SELECT name FROM flupsys WHERE id = ${sourcePhysical.flupsyId} LIMIT 1`);
     const sourceFlupsyName = (sourceFlupsyResult.rows[0] as any)?.name ?? `Flupsy ${sourcePhysical.flupsyId}`;
 
-    // ── 5. Registra operazione "trasferimento" sulla cesta sorgente ─────────
+    const destListShort = destBasketDetails
+      .map(d => `#${d.physicalNumber} (${d.flupsyName}): ${d.animalCount.toLocaleString('it-IT')}`)
+      .join(' | ');
+
+    const allBasketNums = destBasketDetails.map(d => `#${d.physicalNumber}`).join(', ');
+
+    // ── 5. Operazione "trasferimento" sul vecchio ciclo sorgente ────────────
     const sourceTotalWeight = animalsPerKg && animalsPerKg > 0
       ? Math.round((totalTransferred * 1000000) / animalsPerKg)
       : (lastOp.total_weight ?? 0);
+
+    const sourceTransferNotes = mode === 'total'
+      ? `Trasferimento totale del ${dateFormatted} → ${destListShort} | Tot. animali ceduti: ${totalTransferred.toLocaleString('it-IT')} su ${sourceAnimalCount.toLocaleString('it-IT')}`
+      : `Suddivisione ciclo #${oldSourceCycleId} del ${dateFormatted}: ceduti ${totalTransferred.toLocaleString('it-IT')} animali a ceste ${allBasketNums}. Quota trattenuta: ${sourceRetention.toLocaleString('it-IT')}. Ciclo chiuso.`;
 
     const [sourceOp] = await tx.insert(operations).values({
       type: 'trasferimento',
       date,
       basketId: sourceBasketId,
-      cycleId: sourceBasket.currentCycleId,
+      cycleId: oldSourceCycleId,
       lotId,
       animalCount: totalTransferred,
       totalWeight: sourceTotalWeight,
@@ -210,30 +225,31 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       sizeId: sizeId ?? null,
       mortalityRate: mortalityRate ?? null,
       sgrId: sgrId ?? null,
-      notes: sourceNotesText,
+      notes: sourceTransferNotes,
       source: 'desktop_manager',
     } as any).returning();
 
     await LotAutoStatsService.onOperationCreated(sourceOp);
 
-    // ── 6. Se trasferimento totale: chiudi ciclo + libera cesta sorgente ────
-    if (mode === 'total') {
-      await tx.update(cycles)
-        .set({ state: 'closed', endDate: date })
-        .where(eq(cycles.id, sourceBasket.currentCycleId));
+    // ── 6. Chiudi sempre il vecchio ciclo sorgente (totale E parziale) ──────
+    await tx.update(cycles)
+      .set({ state: 'closed', endDate: date })
+      .where(eq(cycles.id, oldSourceCycleId));
 
+    if (mode === 'total') {
+      // Modalità totale: la cesta sorgente torna libera
       await tx.update(baskets)
         .set({ state: 'available', currentCycleId: null, cycleCode: null })
         .where(eq(baskets.id, sourceBasketId));
     }
 
-    // ── 7. Registra transfer_out nel lot_ledger ─────────────────────────────
+    // ── 7. Transfer_out nel lot_ledger ──────────────────────────────────────
     await tx.insert(lotLedger).values({
       date,
       lotId: lotId!,
       type: 'transfer_out',
       quantity: totalTransferred.toString(),
-      sourceCycleId: sourceBasket.currentCycleId,
+      sourceCycleId: oldSourceCycleId,
       destCycleId: null,
       selectionId: null,
       operationId: sourceOp.id,
@@ -243,17 +259,89 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         source: 'basket_transfer',
         mode,
         totalTransferred,
+        sourceRetention: mode === 'partial' ? sourceRetention : 0,
         destinations: destBasketDetails.map(d => ({ basketId: d.basketId, animalCount: d.animalCount }))
       },
       idempotencyKey: `transfer_out_${sourceOp.id}_${lotId}_${sourceBasketId}`,
       notes: `Trasferimento ${mode} dalla cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})`,
     } as any);
 
-    // ── 8. Per ogni cesta destinazione: crea ciclo + prima-attivazione + lot_ledger ──
+    // ── 8. Modalità parziale: nuovo ciclo sulla cesta sorgente ──────────────
+    let sourceNewOpId: number | null = null;
+
+    if (mode === 'partial') {
+      const sourceRetentionWeight = animalsPerKg && animalsPerKg > 0
+        ? Math.round((sourceRetention * 1000000) / animalsPerKg)
+        : Math.round((sourceRetention / sourceAnimalCount) * (lastOp.total_weight ?? 0));
+
+      // Nuovo ciclo sulla sorgente
+      const [newSourceCycle] = await tx.insert(cycles).values({
+        basketId: sourceBasketId,
+        lotId: lotId!,
+        startDate: date,
+        state: 'active',
+        endDate: null,
+      } as any).returning();
+
+      const newSourceCycleCode = generateCycleCode(sourcePhysical.physicalNumber, sourcePhysical.flupsyId, date);
+
+      await tx.update(baskets)
+        .set({ state: 'active', currentCycleId: newSourceCycle.id, cycleCode: newSourceCycleCode })
+        .where(eq(baskets.id, sourceBasketId));
+
+      const sourceNewCycleNotes =
+        `Nuovo ciclo da suddivisione del ${dateFormatted} (vecchio ciclo #${oldSourceCycleId}). ` +
+        `Quota trattenuta: ${sourceRetention.toLocaleString('it-IT')} animali su ${sourceAnimalCount.toLocaleString('it-IT')} totali. ` +
+        `Ceste coinvolte nella suddivisione: #${sourcePhysical.physicalNumber} (sorgente), ${allBasketNums}.`;
+
+      const [sourceNewOp] = await tx.insert(operations).values({
+        type: 'prima-attivazione',
+        date,
+        basketId: sourceBasketId,
+        cycleId: newSourceCycle.id,
+        lotId: lotId!,
+        animalCount: sourceRetention,
+        totalWeight: sourceRetentionWeight,
+        animalsPerKg: animalsPerKg ?? null,
+        averageWeight: lastOp.average_weight ?? null,
+        sizeId: sizeId ?? null,
+        mortalityRate: mortalityRate ?? null,
+        sgrId: sgrId ?? null,
+        notes: sourceNewCycleNotes,
+        source: 'desktop_manager',
+      } as any).returning();
+
+      await LotAutoStatsService.onOperationCreated(sourceNewOp);
+      sourceNewOpId = sourceNewOp.id;
+
+      // Transfer_in per la quota sorgente (auto-assegnazione)
+      await tx.insert(lotLedger).values({
+        date,
+        lotId: lotId!,
+        type: 'transfer_in',
+        quantity: sourceRetention.toString(),
+        sourceCycleId: oldSourceCycleId,
+        destCycleId: newSourceCycle.id,
+        selectionId: null,
+        operationId: sourceNewOp.id,
+        basketId: sourceBasketId,
+        allocationMethod: 'measured',
+        allocationBasis: {
+          source: 'basket_transfer_self',
+          sourceBasketId,
+          sourcePhysicalNumber: sourcePhysical.physicalNumber,
+          sourceFlupsyName,
+          oldCycleId: oldSourceCycleId,
+        },
+        idempotencyKey: `transfer_in_${sourceOp.id}_${lotId}_${sourceBasketId}_self`,
+        notes: `Quota trattenuta dalla suddivisione del ${dateFormatted}: cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})`,
+      } as any);
+    }
+
+    // ── 9. Per ogni cesta destinazione: nuovo ciclo + prima-attivazione ──────
     const destinationOperationIds: number[] = [];
 
     for (const dest of destBasketDetails) {
-      // Verifica disponibilità cesta destinazione
       const [destBasket] = await tx.select()
         .from(baskets)
         .where(eq(baskets.id, dest.basketId))
@@ -263,17 +351,21 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         throw new Error(`La cesta #${dest.physicalNumber} non è disponibile per il trasferimento`);
       }
 
-      // Calcola peso per questa cesta
       const destWeight = animalsPerKg && animalsPerKg > 0
         ? Math.round((dest.animalCount * 1000000) / animalsPerKg)
         : Math.round((dest.animalCount / totalTransferred) * sourceTotalWeight);
 
-      // Note cesta destinazione
-      const destNotes =
-        `Trasferimento da cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName}) del ${dateFormatted} | ` +
-        `Ricevuti: ${dest.animalCount.toLocaleString('it-IT')} animali su ${totalTransferred.toLocaleString('it-IT')} totali trasferiti`;
+      const pctOnSource = sourceAnimalCount > 0
+        ? ((dest.animalCount / sourceAnimalCount) * 100).toFixed(1)
+        : '0';
 
-      // Crea nuovo ciclo
+      const destNotes = mode === 'total'
+        ? `Trasferimento totale da cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName}) del ${dateFormatted}. ` +
+          `Ricevuti: ${dest.animalCount.toLocaleString('it-IT')} animali su ${totalTransferred.toLocaleString('it-IT')} totali trasferiti (${pctOnSource}% del totale sorgente).`
+        : `Suddivisione da cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName}) del ${dateFormatted} (vecchio ciclo #${oldSourceCycleId}). ` +
+          `Quota ricevuta: ${dest.animalCount.toLocaleString('it-IT')} animali = ${pctOnSource}% del totale sorgente (${sourceAnimalCount.toLocaleString('it-IT')}). ` +
+          `Ceste coinvolte: #${sourcePhysical.physicalNumber} (sorgente), ${allBasketNums}.`;
+
       const [newCycle] = await tx.insert(cycles).values({
         basketId: dest.basketId,
         lotId: lotId!,
@@ -282,15 +374,12 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         endDate: null,
       } as any).returning();
 
-      // Genera cycle code
       const cycleCode = generateCycleCode(dest.physicalNumber, destBasket.flupsyId, date);
 
-      // Aggiorna stato cesta destinazione
       await tx.update(baskets)
         .set({ state: 'active', currentCycleId: newCycle.id, cycleCode })
         .where(eq(baskets.id, dest.basketId));
 
-      // Crea prima-attivazione sulla cesta destinazione
       const [destOp] = await tx.insert(operations).values({
         type: 'prima-attivazione',
         date,
@@ -311,13 +400,12 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       await LotAutoStatsService.onOperationCreated(destOp);
       destinationOperationIds.push(destOp.id);
 
-      // Registra transfer_in nel lot_ledger
       await tx.insert(lotLedger).values({
         date,
         lotId: lotId!,
         type: 'transfer_in',
         quantity: dest.animalCount.toString(),
-        sourceCycleId: sourceBasket.currentCycleId,
+        sourceCycleId: oldSourceCycleId,
         destCycleId: newCycle.id,
         selectionId: null,
         operationId: destOp.id,
@@ -334,7 +422,7 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       } as any);
     }
 
-    // ── 9. Invalida cache e notifica WebSocket ─────────────────────────────
+    // ── 10. Invalida cache e notifica WebSocket ─────────────────────────────
     invalidateAllCaches();
     broadcastMessage('operation_created', {
       type: 'trasferimento',
@@ -343,11 +431,12 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       message: `Trasferimento completato dalla cesta #${sourcePhysical.physicalNumber}`,
     });
 
+    const modeLabel = mode === 'total' ? 'totale' : 'parziale (con riciclo sorgente)';
     return {
       success: true,
       sourceOperationId: sourceOp.id,
       destinationOperationIds,
-      message: `Trasferimento completato: ${totalTransferred.toLocaleString('it-IT')} animali trasferiti su ${destinations.length} ceste`,
+      message: `Trasferimento ${modeLabel} completato: ${totalTransferred.toLocaleString('it-IT')} animali distribuiti su ${destinations.length} ceste${mode === 'partial' ? `, cesta sorgente riaperta con ${sourceRetention.toLocaleString('it-IT')} animali` : ''}`,
     };
   });
 }

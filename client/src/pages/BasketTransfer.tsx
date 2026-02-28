@@ -98,6 +98,7 @@ export default function BasketTransfer() {
         sourceBasketId: selectedSource!.id,
         date,
         mode,
+        sourceRetention: mode === "partial" ? sourceRetention : undefined,
         destinations: assignments.map(a => ({
           basketId: a.basket.id,
           animalCount: a.animalCount,
