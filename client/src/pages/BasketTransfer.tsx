@@ -400,14 +400,40 @@ export default function BasketTransfer() {
                   <tr className="border-b text-xs text-gray-500">
                     <th className="text-left py-2 px-2 font-medium">Cesta</th>
                     <th className="text-left py-2 px-2 font-medium">FLUPSY</th>
-                    <th className="text-center py-2 px-2 font-medium w-36">Animali da trasferire</th>
+                    <th className="text-center py-2 px-2 font-medium w-36">
+                      {mode === "partial" ? "Animali" : "Animali da trasferire"}
+                    </th>
                     <th className="text-center py-2 px-2 font-medium w-24">% sul tot.</th>
                     <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Riga sorgente — visibile solo in modalità parziale */}
+                  {mode === "partial" && selectedSource && (
+                    <tr className="border-b bg-violet-50/60">
+                      <td className="py-2 px-2 font-bold text-violet-700">
+                        #{selectedSource.physical_number}
+                        <span className="ml-1 text-xs font-normal text-violet-500">(sorgente)</span>
+                      </td>
+                      <td className="py-2 px-2 text-gray-600 text-xs">{selectedSource.flupsy_name}</td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={`font-bold text-sm ${
+                          remaining < 0 ? "text-red-600" :
+                          remaining === 0 ? "text-amber-500" :
+                          "text-violet-700"
+                        }`}>
+                          {formatNumber(remaining)}
+                        </span>
+                        <span className="block text-xs text-gray-400">trattiene</span>
+                      </td>
+                      <td className="py-2 px-2 text-center text-gray-500 text-xs">
+                        {sourceAnimals > 0 ? ((remaining / sourceAnimals) * 100).toFixed(1) : "0"}%
+                      </td>
+                      <td></td>
+                    </tr>
+                  )}
                   {assignments.map(a => {
-                    const pct = totalAssigned > 0 ? ((a.animalCount / totalAssigned) * 100).toFixed(1) : "0";
+                    const pct = sourceAnimals > 0 ? ((a.animalCount / sourceAnimals) * 100).toFixed(1) : "0";
                     return (
                       <tr key={a.basket.id} className="border-b hover:bg-gray-50">
                         <td className="py-2 px-2 font-medium">#{a.basket.physical_number}</td>
@@ -438,44 +464,56 @@ export default function BasketTransfer() {
                 <tfoot>
                   <tr className="bg-gray-50 border-t">
                     <td colSpan={2} className="py-2 px-2 text-xs font-medium text-gray-600">
-                      Totale assegnato
+                      {mode === "partial" ? "Totale trasferito" : "Totale assegnato"}
                     </td>
                     <td className="py-2 px-2 text-center">
                       <span className={`font-bold text-sm ${
                         totalAssigned > sourceAnimals ? "text-red-600" :
+                        totalAssigned === sourceAnimals && mode === "partial" ? "text-amber-600" :
                         totalAssigned === sourceAnimals ? "text-green-600" : "text-amber-600"
                       }`}>
                         {formatNumber(totalAssigned)} / {formatNumber(sourceAnimals)}
                       </span>
                     </td>
                     <td colSpan={2} className="py-2 px-2 text-center text-xs text-gray-500">
-                      {remaining === 0 && <CheckCircle2 className="h-4 w-4 text-green-500 inline" />}
                       {remaining < 0 && <XCircle className="h-4 w-4 text-red-500 inline" />}
+                      {remaining === 0 && mode === "total" && <CheckCircle2 className="h-4 w-4 text-green-500 inline" />}
+                      {remaining === 0 && mode === "partial" && (
+                        <span className="text-amber-600 text-xs">sorgente svuotata</span>
+                      )}
                     </td>
                   </tr>
                   <tr className={`border-t-2 ${
                     remaining < 0 ? "bg-red-50" :
-                    remaining === 0 ? "bg-green-50" :
-                    "bg-blue-50"
+                    remaining === 0 && mode === "total" ? "bg-green-50" :
+                    remaining === 0 && mode === "partial" ? "bg-amber-50" :
+                    mode === "partial" ? "bg-violet-50" : "bg-blue-50"
                   }`}>
                     <td colSpan={2} className="py-2 px-2 text-xs font-semibold text-gray-700">
-                      Da assegnare
+                      {mode === "partial" ? "Sorgente trattiene" : "Da assegnare"}
                     </td>
                     <td className="py-2 px-2 text-center">
                       <span className={`font-bold text-base ${
                         remaining < 0 ? "text-red-600" :
+                        remaining === 0 && mode === "partial" ? "text-amber-600" :
                         remaining === 0 ? "text-green-600" :
-                        "text-blue-700"
+                        mode === "partial" ? "text-violet-700" : "text-blue-700"
                       }`}>
                         {remaining < 0 ? "−" : ""}{formatNumber(Math.abs(remaining))}
                       </span>
                     </td>
                     <td colSpan={2} className="py-2 px-2 text-xs text-gray-500">
-                      {remaining > 0 && (
+                      {remaining > 0 && mode === "total" && (
                         <span className="text-blue-600">animali ancora da distribuire</span>
                       )}
-                      {remaining === 0 && (
+                      {remaining > 0 && mode === "partial" && (
+                        <span className="text-violet-600">rimangono nella cesta sorgente</span>
+                      )}
+                      {remaining === 0 && mode === "total" && (
                         <span className="text-green-600 font-medium">distribuzione completa</span>
+                      )}
+                      {remaining === 0 && mode === "partial" && (
+                        <span className="text-amber-600 font-medium">la sorgente resterà vuota — valuta modalità Totale</span>
                       )}
                       {remaining < 0 && (
                         <span className="text-red-600 font-medium">superato di {formatNumber(Math.abs(remaining))}</span>
