@@ -142,21 +142,29 @@ export default function BasketTransfer() {
 
   const distributeEqually = useCallback(() => {
     if (!selectedSource || assignments.length === 0) return;
-    const n = assignments.length;
-    // In modalità totale usa tutti gli animali sorgente.
-    // In modalità parziale usa il totale già assegnato (così l'utente decide quanti
-    // trasferire complessivamente, e il pulsante ripartisce solo quella quota).
-    // Se in parziale non è stato ancora inserito nulla, usa sourceAnimals come default.
-    const total = mode === "total"
-      ? sourceAnimals
-      : (totalAssigned > 0 ? totalAssigned : sourceAnimals);
-    const base = Math.floor(total / n);
-    const rem = total - base * n;
-    setAssignments(prev => prev.map((a, i) => ({
-      ...a,
-      animalCount: i < rem ? base + 1 : base,
-    })));
-  }, [selectedSource, assignments.length, sourceAnimals, mode, totalAssigned]);
+    const destCount = assignments.length;
+    if (mode === "total") {
+      // Modalità totale: divide tutti gli animali sorgente per N destinazioni
+      const base = Math.floor(sourceAnimals / destCount);
+      const rem = sourceAnimals - base * destCount;
+      setAssignments(prev => prev.map((a, i) => ({
+        ...a,
+        animalCount: i < rem ? base + 1 : base,
+      })));
+    } else {
+      // Modalità parziale: la cesta sorgente RIMANE ATTIVA e trattiene la sua quota.
+      // La distribuzione equa divide gli animali su (N destinazioni + 1 sorgente).
+      // Le destinazioni ricevono N/(N+1) del totale, la sorgente trattiene 1/(N+1).
+      const totalParts = destCount + 1;
+      const basePerPart = Math.floor(sourceAnimals / totalParts);
+      const remainder = sourceAnimals - basePerPart * totalParts;
+      // Il resto viene distribuito sulle prime ceste destinazione
+      setAssignments(prev => prev.map((a, i) => ({
+        ...a,
+        animalCount: i < remainder ? basePerPart + 1 : basePerPart,
+      })));
+    }
+  }, [selectedSource, assignments.length, sourceAnimals, mode]);
 
   const addDest = useCallback((b: DestBasket) => {
     if (usedDestIds.has(b.id)) return;
@@ -371,17 +379,15 @@ export default function BasketTransfer() {
                   className="text-xs h-7"
                   title={
                     mode === "total"
-                      ? "Divide tutti gli animali sorgente equamente tra le ceste"
-                      : totalAssigned > 0
-                        ? "Redistribuisce equamente il totale già inserito (non modifica il totale complessivo)"
-                        : "Divide tutti gli animali sorgente equamente tra le ceste"
+                      ? `Divide ${formatNumber(sourceAnimals)} animali equamente su ${assignments.length} ceste`
+                      : `Divide ${formatNumber(sourceAnimals)} animali su ${assignments.length + 1} quote (${assignments.length} destinazioni + 1 sorgente che trattiene la sua parte)`
                   }
                 >
                   <Scale className="h-3.5 w-3.5 mr-1" /> Distribuisci equamente
                 </Button>
-                {mode === "partial" && totalAssigned > 0 && (
+                {mode === "partial" && assignments.length > 0 && (
                   <span className="text-xs text-gray-400 italic">
-                    Ridistribuisce {formatNumber(totalAssigned)} animali già assegnati
+                    ÷ {assignments.length + 1} quote: dest. ~{formatNumber(Math.floor(sourceAnimals / (assignments.length + 1)))} · sorgente trattiene ~{formatNumber(sourceAnimals - Math.floor(sourceAnimals / (assignments.length + 1)) * assignments.length)}
                   </span>
                 )}
               </div>
