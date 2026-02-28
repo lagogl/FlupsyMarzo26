@@ -143,21 +143,28 @@ export default function BasketTransfer() {
   const distributeEqually = useCallback(() => {
     if (!selectedSource || assignments.length === 0) return;
     const n = assignments.length;
-    const total = sourceAnimals;
+    // In modalità totale usa tutti gli animali sorgente.
+    // In modalità parziale usa il totale già assegnato (così l'utente decide quanti
+    // trasferire complessivamente, e il pulsante ripartisce solo quella quota).
+    // Se in parziale non è stato ancora inserito nulla, usa sourceAnimals come default.
+    const total = mode === "total"
+      ? sourceAnimals
+      : (totalAssigned > 0 ? totalAssigned : sourceAnimals);
     const base = Math.floor(total / n);
     const rem = total - base * n;
     setAssignments(prev => prev.map((a, i) => ({
       ...a,
       animalCount: i < rem ? base + 1 : base,
     })));
-  }, [selectedSource, assignments.length, sourceAnimals]);
+  }, [selectedSource, assignments.length, sourceAnimals, mode, totalAssigned]);
 
   const addDest = useCallback((b: DestBasket) => {
     if (usedDestIds.has(b.id)) return;
-    const remaining = sourceAnimals - totalAssigned;
-    const initial = remaining > 0 ? remaining : 0;
+    // In modalità totale: auto-riempi con il saldo rimanente (comodità per distribuzione totale).
+    // In modalità parziale: parti da 0 — è l'utente a decidere quanti trasferire.
+    const initial = mode === "total" ? Math.max(0, sourceAnimals - totalAssigned) : 0;
     setAssignments(prev => [...prev, { basket: b, animalCount: initial }]);
-  }, [usedDestIds, sourceAnimals, totalAssigned]);
+  }, [usedDestIds, sourceAnimals, totalAssigned, mode]);
 
   const removeDest = useCallback((basketId: number) => {
     setAssignments(prev => prev.filter(a => a.basket.id !== basketId));
@@ -356,15 +363,27 @@ export default function BasketTransfer() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center justify-between">
               <span>Distribuzione Animali</span>
-              <div className="flex gap-2">
+              <div className="flex flex-col items-end gap-1">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={distributeEqually}
                   className="text-xs h-7"
+                  title={
+                    mode === "total"
+                      ? "Divide tutti gli animali sorgente equamente tra le ceste"
+                      : totalAssigned > 0
+                        ? "Redistribuisce equamente il totale già inserito (non modifica il totale complessivo)"
+                        : "Divide tutti gli animali sorgente equamente tra le ceste"
+                  }
                 >
                   <Scale className="h-3.5 w-3.5 mr-1" /> Distribuisci equamente
                 </Button>
+                {mode === "partial" && totalAssigned > 0 && (
+                  <span className="text-xs text-gray-400 italic">
+                    Ridistribuisce {formatNumber(totalAssigned)} animali già assegnati
+                  </span>
+                )}
               </div>
             </CardTitle>
           </CardHeader>
