@@ -411,7 +411,7 @@ export default function BasketTransfer() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-50">
+                  <tr className="bg-gray-50 border-t">
                     <td colSpan={2} className="py-2 px-2 text-xs font-medium text-gray-600">
                       Totale assegnato
                     </td>
@@ -424,11 +424,37 @@ export default function BasketTransfer() {
                       </span>
                     </td>
                     <td colSpan={2} className="py-2 px-2 text-center text-xs text-gray-500">
-                      {remaining > 0 && mode === "partial" && (
-                        <span className="text-blue-600">{formatNumber(remaining)} rimangono nella cesta</span>
-                      )}
                       {remaining === 0 && <CheckCircle2 className="h-4 w-4 text-green-500 inline" />}
                       {remaining < 0 && <XCircle className="h-4 w-4 text-red-500 inline" />}
+                    </td>
+                  </tr>
+                  <tr className={`border-t-2 ${
+                    remaining < 0 ? "bg-red-50" :
+                    remaining === 0 ? "bg-green-50" :
+                    "bg-blue-50"
+                  }`}>
+                    <td colSpan={2} className="py-2 px-2 text-xs font-semibold text-gray-700">
+                      Da assegnare
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      <span className={`font-bold text-base ${
+                        remaining < 0 ? "text-red-600" :
+                        remaining === 0 ? "text-green-600" :
+                        "text-blue-700"
+                      }`}>
+                        {remaining < 0 ? "−" : ""}{formatNumber(Math.abs(remaining))}
+                      </span>
+                    </td>
+                    <td colSpan={2} className="py-2 px-2 text-xs text-gray-500">
+                      {remaining > 0 && (
+                        <span className="text-blue-600">animali ancora da distribuire</span>
+                      )}
+                      {remaining === 0 && (
+                        <span className="text-green-600 font-medium">distribuzione completa</span>
+                      )}
+                      {remaining < 0 && (
+                        <span className="text-red-600 font-medium">superato di {formatNumber(Math.abs(remaining))}</span>
+                      )}
                     </td>
                   </tr>
                 </tfoot>
