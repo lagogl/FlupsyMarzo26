@@ -94,7 +94,7 @@ export default function BasketTransfer() {
 
   const executeTransfer = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/basket-transfer/execute", {
+      return apiRequest("/api/basket-transfer/execute", "POST", {
         sourceBasketId: selectedSource!.id,
         date,
         mode,
