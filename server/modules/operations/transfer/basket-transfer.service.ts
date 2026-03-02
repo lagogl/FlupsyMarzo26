@@ -206,7 +206,7 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
     // ── 5. Operazione "trasferimento" sul vecchio ciclo sorgente ────────────
     const sourceTotalWeight = animalsPerKg && animalsPerKg > 0
       ? Math.round((totalTransferred * 1000000) / animalsPerKg)
-      : (lastOp.total_weight ?? 0);
+      : Math.round((totalTransferred / sourceAnimalCount) * (lastOp.total_weight ?? 0));
 
     const sourceTransferNotes = mode === 'total'
       ? `Trasferimento totale del ${dateFormatted} → ${destListShort} | Tot. animali ceduti: ${totalTransferred.toLocaleString('it-IT')} su ${sourceAnimalCount.toLocaleString('it-IT')}`
@@ -353,7 +353,7 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
 
       const destWeight = animalsPerKg && animalsPerKg > 0
         ? Math.round((dest.animalCount * 1000000) / animalsPerKg)
-        : Math.round((dest.animalCount / totalTransferred) * sourceTotalWeight);
+        : Math.round((dest.animalCount / sourceAnimalCount) * (lastOp.total_weight ?? 0));
 
       const pctOnSource = sourceAnimalCount > 0
         ? ((dest.animalCount / sourceAnimalCount) * 100).toFixed(1)
