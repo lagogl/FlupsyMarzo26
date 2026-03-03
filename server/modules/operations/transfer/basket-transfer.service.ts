@@ -204,9 +204,10 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
     const allBasketNums = destBasketDetails.map(d => `#${d.physicalNumber}`).join(', ');
 
     // ── 5. Operazione "trasferimento" sul vecchio ciclo sorgente ────────────
-    const sourceTotalWeight = animalsPerKg && animalsPerKg > 0
-      ? Math.round((totalTransferred * 1000000) / animalsPerKg)
-      : Math.round((totalTransferred / sourceAnimalCount) * (lastOp.total_weight ?? 0));
+    const sourceWeightGrams = lastOp.total_weight ?? 0;
+    const sourceTotalWeight = sourceWeightGrams > 0
+      ? Math.round((totalTransferred / sourceAnimalCount) * sourceWeightGrams)
+      : (animalsPerKg && animalsPerKg > 0 ? Math.round((totalTransferred * 1000000) / animalsPerKg) : 0);
 
     const sourceTransferNotes = mode === 'total'
       ? `Trasferimento totale del ${dateFormatted} → ${destListShort} | Tot. animali ceduti: ${totalTransferred.toLocaleString('it-IT')} su ${sourceAnimalCount.toLocaleString('it-IT')}`
@@ -270,9 +271,9 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
     let sourceNewOpId: number | null = null;
 
     if (mode === 'partial') {
-      const sourceRetentionWeight = animalsPerKg && animalsPerKg > 0
-        ? Math.round((sourceRetention * 1000000) / animalsPerKg)
-        : Math.round((sourceRetention / sourceAnimalCount) * (lastOp.total_weight ?? 0));
+      const sourceRetentionWeight = sourceWeightGrams > 0
+        ? Math.round((sourceRetention / sourceAnimalCount) * sourceWeightGrams)
+        : (animalsPerKg && animalsPerKg > 0 ? Math.round((sourceRetention * 1000000) / animalsPerKg) : 0);
 
       // Nuovo ciclo sulla sorgente
       const [newSourceCycle] = await tx.insert(cycles).values({
@@ -351,9 +352,12 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         throw new Error(`La cesta #${dest.physicalNumber} non è disponibile per il trasferimento`);
       }
 
-      const destWeight = animalsPerKg && animalsPerKg > 0
-        ? Math.round((dest.animalCount * 1000000) / animalsPerKg)
-        : Math.round((dest.animalCount / sourceAnimalCount) * (lastOp.total_weight ?? 0));
+      const destWeight = sourceWeightGrams > 0
+        ? Math.round((dest.animalCount / sourceAnimalCount) * sourceWeightGrams)
+        : (animalsPerKg && animalsPerKg > 0 ? Math.round((dest.animalCount * 1000000) / animalsPerKg) : 0);
+      const destAnimalsPerKg = destWeight > 0
+        ? Math.round((dest.animalCount * 1000000) / destWeight)
+        : (animalsPerKg ?? null);
 
       const pctOnSource = sourceAnimalCount > 0
         ? ((dest.animalCount / sourceAnimalCount) * 100).toFixed(1)
@@ -388,7 +392,7 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         lotId: lotId!,
         animalCount: dest.animalCount,
         totalWeight: destWeight,
-        animalsPerKg: animalsPerKg ?? null,
+        animalsPerKg: destAnimalsPerKg,
         averageWeight: lastOp.average_weight ?? null,
         sizeId: sizeId ?? null,
         mortalityRate: mortalityRate ?? null,
