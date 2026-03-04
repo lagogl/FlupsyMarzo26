@@ -209,9 +209,11 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       ? Math.round((totalTransferred / sourceAnimalCount) * sourceWeightGrams)
       : (animalsPerKg && animalsPerKg > 0 ? Math.round((totalTransferred * 1000000) / animalsPerKg) : 0);
 
-    const sourceTransferNotes = mode === 'total'
+    const inheritedNotesSuffix = lastOp.notes ? ` (${lastOp.notes})` : '';
+
+    const sourceTransferNotes = (mode === 'total'
       ? `Trasferimento totale del ${dateFormatted} → ${destListShort} | Tot. animali ceduti: ${totalTransferred.toLocaleString('it-IT')} su ${sourceAnimalCount.toLocaleString('it-IT')}`
-      : `Suddivisione ciclo #${oldSourceCycleId} del ${dateFormatted}: ceduti ${totalTransferred.toLocaleString('it-IT')} animali a ceste ${allBasketNums}. Quota trattenuta: ${sourceRetention.toLocaleString('it-IT')}. Ciclo chiuso.`;
+      : `Suddivisione ciclo #${oldSourceCycleId} del ${dateFormatted}: ceduti ${totalTransferred.toLocaleString('it-IT')} animali a ceste ${allBasketNums}. Quota trattenuta: ${sourceRetention.toLocaleString('it-IT')}. Ciclo chiuso.`) + inheritedNotesSuffix;
 
     const [sourceOp] = await tx.insert(operations).values({
       type: 'trasferimento',
@@ -293,7 +295,8 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       const sourceNewCycleNotes =
         `Nuovo ciclo da suddivisione del ${dateFormatted} (vecchio ciclo #${oldSourceCycleId}). ` +
         `Quota trattenuta: ${sourceRetention.toLocaleString('it-IT')} animali su ${sourceAnimalCount.toLocaleString('it-IT')} totali. ` +
-        `Ceste coinvolte nella suddivisione: #${sourcePhysical.physicalNumber} (sorgente), ${allBasketNums}.`;
+        `Ceste coinvolte nella suddivisione: #${sourcePhysical.physicalNumber} (sorgente), ${allBasketNums}.` +
+        inheritedNotesSuffix;
 
       const [sourceNewOp] = await tx.insert(operations).values({
         type: 'prima-attivazione',
@@ -363,12 +366,12 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         ? ((dest.animalCount / sourceAnimalCount) * 100).toFixed(1)
         : '0';
 
-      const destNotes = mode === 'total'
+      const destNotes = (mode === 'total'
         ? `Trasferimento totale da cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName}) del ${dateFormatted}. ` +
           `Ricevuti: ${dest.animalCount.toLocaleString('it-IT')} animali su ${totalTransferred.toLocaleString('it-IT')} totali trasferiti (${pctOnSource}% del totale sorgente).`
         : `Suddivisione da cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName}) del ${dateFormatted} (vecchio ciclo #${oldSourceCycleId}). ` +
           `Quota ricevuta: ${dest.animalCount.toLocaleString('it-IT')} animali = ${pctOnSource}% del totale sorgente (${sourceAnimalCount.toLocaleString('it-IT')}). ` +
-          `Ceste coinvolte: #${sourcePhysical.physicalNumber} (sorgente), ${allBasketNums}.`;
+          `Ceste coinvolte: #${sourcePhysical.physicalNumber} (sorgente), ${allBasketNums}.`) + inheritedNotesSuffix;
 
       const [newCycle] = await tx.insert(cycles).values({
         basketId: dest.basketId,
