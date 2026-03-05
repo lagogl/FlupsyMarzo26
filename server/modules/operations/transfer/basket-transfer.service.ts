@@ -207,7 +207,7 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
     const sourceWeightGrams = lastOp.total_weight ?? 0;
     const sourceTotalWeight = sourceWeightGrams > 0
       ? Math.round((totalTransferred / sourceAnimalCount) * sourceWeightGrams)
-      : (animalsPerKg && animalsPerKg > 0 ? Math.round((totalTransferred * 1000000) / animalsPerKg) : 0);
+      : (animalsPerKg && animalsPerKg > 0 ? Math.round((totalTransferred * 1000) / animalsPerKg) : 0);
 
     const inheritedNotesSuffix = lastOp.notes ? ` (${lastOp.notes})` : '';
 
@@ -275,7 +275,7 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
     if (mode === 'partial') {
       const sourceRetentionWeight = sourceWeightGrams > 0
         ? Math.round((sourceRetention / sourceAnimalCount) * sourceWeightGrams)
-        : (animalsPerKg && animalsPerKg > 0 ? Math.round((sourceRetention * 1000000) / animalsPerKg) : 0);
+        : (animalsPerKg && animalsPerKg > 0 ? Math.round((sourceRetention * 1000) / animalsPerKg) : 0);
 
       // Nuovo ciclo sulla sorgente
       const [newSourceCycle] = await tx.insert(cycles).values({
@@ -357,9 +357,9 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
 
       const destWeight = sourceWeightGrams > 0
         ? Math.round((dest.animalCount / sourceAnimalCount) * sourceWeightGrams)
-        : (animalsPerKg && animalsPerKg > 0 ? Math.round((dest.animalCount * 1000000) / animalsPerKg) : 0);
+        : (animalsPerKg && animalsPerKg > 0 ? Math.round((dest.animalCount * 1000) / animalsPerKg) : 0);
       const destAnimalsPerKg = destWeight > 0
-        ? Math.round((dest.animalCount * 1000000) / destWeight)
+        ? Math.round((dest.animalCount * 1000) / destWeight)
         : (animalsPerKg ?? null);
 
       const pctOnSource = sourceAnimalCount > 0
