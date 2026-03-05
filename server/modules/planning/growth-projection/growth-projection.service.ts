@@ -95,7 +95,7 @@ export class GrowthProjectionService {
     return lookup;
   }
 
-  async project(targetSize: string = 'TP-3000', year?: number, mortalityPercent?: number): Promise<GrowthProjectionResult> {
+  async project(targetSize: string = 'TP-3000', year?: number, mortalityPercent?: number, startMonth?: number): Promise<GrowthProjectionResult> {
     const now = new Date();
     const startYear = year || now.getFullYear();
     const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
@@ -104,7 +104,8 @@ export class GrowthProjectionService {
     if (!threshold) throw new Error(`Taglia target ${targetSize} non trovata`);
     const targetMaxAnimalsPerKg = threshold.maxAnimalsPerKg;
 
-    const currentMonth0 = now.getMonth();
+    // startMonth è 1-based (1=Gennaio…12=Dicembre); se non passato usa il mese corrente
+    const currentMonth0 = startMonth != null ? startMonth - 1 : now.getMonth();
     const currentDay = now.getDate();
 
     const monthSteps = this.buildMonthSteps(currentMonth0, startYear, 12);

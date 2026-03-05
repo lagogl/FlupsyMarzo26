@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useCallback, useRef, useMemo } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -748,8 +748,10 @@ export default function ProiezioneCrescita() {
   const [budgetInputs, setBudgetInputs] = useState<Record<string, string>>({});
   const [mortalityInput, setMortalityInput] = useState<string>("");
   const [activeMortality, setActiveMortality] = useState<number | undefined>(undefined);
+  const [startMonth, setStartMonth] = useState<number>(new Date().getMonth() + 1);
+  const [startYear, setStartYear] = useState<number>(new Date().getFullYear());
 
-  const queryParams: Record<string, any> = {};
+  const queryParams: Record<string, any> = { startMonth, year: startYear };
   if (activeMortality !== undefined) {
     queryParams.mortalityPercent = activeMortality;
   }
@@ -930,7 +932,29 @@ export default function ProiezioneCrescita() {
         toast={toast}
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1.5 border rounded-md px-2 py-1 bg-white text-xs text-gray-700">
+          <CalendarDays className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+          <span className="text-gray-500 shrink-0">Avvio:</span>
+          <select
+            value={startMonth}
+            onChange={e => setStartMonth(Number(e.target.value))}
+            className="border-0 bg-transparent text-xs font-medium focus:outline-none cursor-pointer pr-1"
+          >
+            {["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"].map((name, i) => (
+              <option key={i+1} value={i+1}>{name}</option>
+            ))}
+          </select>
+          <select
+            value={startYear}
+            onChange={e => setStartYear(Number(e.target.value))}
+            className="border-0 bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
+          >
+            {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
         <Button
           variant={showBudgetForm ? "default" : "outline"}
           size="sm"

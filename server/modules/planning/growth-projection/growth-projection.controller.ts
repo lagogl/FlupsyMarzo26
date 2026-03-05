@@ -17,8 +17,15 @@ router.get("/", async (req: Request, res: Response) => {
         mortalityPercent = parsed;
       }
     }
+    let startMonth: number | undefined = undefined;
+    if (req.query.startMonth !== undefined) {
+      const parsed = parseInt(req.query.startMonth as string);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 12) {
+        startMonth = parsed;
+      }
+    }
 
-    const result = await growthProjectionService.project(targetSize, year, mortalityPercent);
+    const result = await growthProjectionService.project(targetSize, year, mortalityPercent, startMonth);
     res.json(result);
   } catch (error) {
     console.error("Errore proiezione crescita:", error);
