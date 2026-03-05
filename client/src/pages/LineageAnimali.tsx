@@ -144,6 +144,153 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
   );
 }
 
+function computeGroupStats(group: any) {
+  const cycles = group.cycles as any[];
+  const rootCycles = cycles.filter((c: any) => !c.parent_cycle_id);
+
+  const initialAnimals = rootCycles.reduce((sum: number, c: any) => {
+    const fa = (c.operations || []).find((op: any) => op.type === 'prima-attivazione');
+    return sum + (fa?.animal_count || 0);
+  }, 0);
+
+  const rootCycleLosses = rootCycles.reduce((sum: number, c: any) => {
+    const ops = [...(c.operations || [])].sort((a: any, b: any) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    if (ops.length < 1) return sum;
+    return sum + Math.max(0, (ops[0].animal_count || 0) - (ops[ops.length - 1].animal_count || 0));
+  }, 0);
+
+  const vagliaturaDeaths = cycles.reduce((sum: number, c: any) => {
+    const closeOp = (c.operations || []).find((op: any) => op.type === 'chiusura-ciclo-vagliatura');
+    if (!closeOp) return sum;
+    const parsed = parseVagliaturaNote(closeOp.notes);
+    if (!parsed || parsed.mortality <= 0) return sum;
+    const totalOrigin = parsed.distributed + parsed.mortality;
+    if (totalOrigin <= 0) return sum;
+    return sum + Math.round(parsed.mortality * ((closeOp.animal_count || 0) / totalOrigin));
+  }, 0);
+
+  const allOps = cycles.flatMap((c: any) => c.operations || []);
+  const salesOps = allOps.filter((op: any) => op.type === 'vendita');
+  const totalSold = salesOps.reduce((sum: number, op: any) => sum + (op.animal_count || 0), 0);
+  const activeCycles = cycles.filter((c: any) => c.state === 'active');
+  const totalActive = activeCycles.reduce((sum: number, c: any) => sum + (c.last_animal_count || 0), 0);
+
+  const allDates = allOps.map((op: any) => op.date).filter(Boolean).sort();
+  const firstDate = allDates[0] ?? null;
+  const lastDate = allDates[allDates.length - 1] ?? null;
+
+  return {
+    initialAnimals,
+    rootCycleLosses,
+    vagliaturaDeaths,
+    totalDeaths: rootCycleLosses + vagliaturaDeaths,
+    totalSold,
+    totalActive,
+    activeCycleCount: activeCycles.length,
+    totalCycles: cycles.length,
+    firstDate,
+    lastDate,
+  };
+}
+
+function LotSummary({ groups, selectedItems }: { groups: any[]; selectedItems: any[] }) {
+  const lotLabels = selectedItems.filter((s: any) => s.type === 'lot').map((s: any) => s.label);
+
+  const agg = groups.reduce(
+    (acc, g) => {
+      const s = computeGroupStats(g);
+      acc.initialAnimals += s.initialAnimals;
+      acc.totalDeaths += s.totalDeaths;
+      acc.rootCycleLosses += s.rootCycleLosses;
+      acc.vagliaturaDeaths += s.vagliaturaDeaths;
+      acc.totalSold += s.totalSold;
+      acc.totalActive += s.totalActive;
+      acc.activeCycleCount += s.activeCycleCount;
+      acc.totalCycles += s.totalCycles;
+      if (!acc.firstDate || (s.firstDate && s.firstDate < acc.firstDate)) acc.firstDate = s.firstDate;
+      if (!acc.lastDate || (s.lastDate && s.lastDate > acc.lastDate)) acc.lastDate = s.lastDate;
+      return acc;
+    },
+    {
+      initialAnimals: 0,
+      totalDeaths: 0,
+      rootCycleLosses: 0,
+      vagliaturaDeaths: 0,
+      totalSold: 0,
+      totalActive: 0,
+      activeCycleCount: 0,
+      totalCycles: 0,
+      firstDate: null as string | null,
+      lastDate: null as string | null,
+    }
+  );
+
+  const mortalityPct = agg.initialAnimals > 0 ? (agg.totalDeaths / agg.initialAnimals * 100) : 0;
+  const soldPct = agg.initialAnimals > 0 ? (agg.totalSold / agg.initialAnimals * 100) : 0;
+  const activePct = agg.initialAnimals > 0 ? (agg.totalActive / agg.initialAnimals * 100) : 0;
+  const mortalityColor = mortalityPct > 30 ? 'text-red-700' : mortalityPct > 10 ? 'text-orange-600' : 'text-green-700';
+
+  return (
+    <Card className="mb-5 border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-blue-800">
+          <Package className="w-5 h-5" />
+          <span>Riepilogo Lotto</span>
+          {lotLabels.length > 0 && (
+            <span className="text-sm font-normal text-blue-600">— {lotLabels.join(', ')}</span>
+          )}
+          <span className="ml-auto text-sm font-normal text-blue-500">
+            {groups.length} {groups.length === 1 ? 'gruppo genealogico' : 'gruppi genealogici'}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-lg border border-blue-100 p-3 text-center">
+            <div className="text-xs text-gray-500 mb-1">Animali in ingresso</div>
+            <div className="text-xl font-bold text-blue-700">{formatNum(agg.initialAnimals)}</div>
+            {agg.firstDate && (
+              <div className="text-xs text-gray-400 mt-1">dal {formatDate(agg.firstDate)}</div>
+            )}
+          </div>
+          <div className="bg-white rounded-lg border border-red-100 p-3 text-center">
+            <div className="text-xs text-gray-500 mb-1">Mortalità totale</div>
+            <div className={`text-xl font-bold ${mortalityColor}`}>{formatNum(agg.totalDeaths)}</div>
+            <div className={`text-xs font-semibold mt-1 ${mortalityColor}`}>{mortalityPct.toFixed(1)}% degli iniziali</div>
+          </div>
+          <div className="bg-white rounded-lg border border-green-100 p-3 text-center">
+            <div className="text-xs text-gray-500 mb-1">Venduti</div>
+            <div className="text-xl font-bold text-green-700">{formatNum(agg.totalSold)}</div>
+            {soldPct > 0 && (
+              <div className="text-xs text-green-500 mt-1">{soldPct.toFixed(1)}% degli iniziali</div>
+            )}
+          </div>
+          <div className="bg-white rounded-lg border border-emerald-100 p-3 text-center">
+            <div className="text-xs text-gray-500 mb-1">In produzione</div>
+            <div className="text-xl font-bold text-emerald-700">{formatNum(agg.totalActive)}</div>
+            <div className="text-xs text-emerald-500 mt-1">{agg.activeCycleCount} {agg.activeCycleCount === 1 ? 'cesta attiva' : 'ceste attive'}</div>
+          </div>
+        </div>
+
+        <div className="text-xs text-gray-600 space-y-1 border-t border-blue-100 pt-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <span><strong>Cicli totali:</strong> {agg.totalCycles}</span>
+            <span><strong>Bilancio:</strong> {formatNum(agg.initialAnimals)} ingresso → {formatNum(agg.totalDeaths)} morti ({mortalityPct.toFixed(1)}%) · {formatNum(agg.totalSold)} venduti ({soldPct.toFixed(1)}%) · {formatNum(agg.totalActive)} in crescita ({activePct.toFixed(1)}%)</span>
+          </div>
+          {agg.totalDeaths > 0 && (
+            <div className="text-gray-400">
+              Breakdown mortalità: {formatNum(agg.rootCycleLosses)} da misure ({agg.initialAnimals > 0 ? (agg.rootCycleLosses / agg.initialAnimals * 100).toFixed(1) : 0}%)
+              {agg.vagliaturaDeaths > 0 && <> · {formatNum(agg.vagliaturaDeaths)} alla vagliatura (quota proporzionale, {agg.initialAnimals > 0 ? (agg.vagliaturaDeaths / agg.initialAnimals * 100).toFixed(1) : 0}%)</>}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function parseVagliaturaNote(notes: string | null | undefined): { distributed: number; mortality: number } | null {
   if (!notes) return null;
   const distMatch = notes.match(/Animali distribuiti: (\d+)/);
@@ -726,6 +873,10 @@ export default function LineageAnimali() {
         <div className="text-center py-8 text-gray-400">
           Nessun dato genealogico trovato.
         </div>
+      )}
+
+      {lotIds.length > 0 && data?.groups?.length > 0 && (
+        <LotSummary groups={data.groups} selectedItems={selectedItems} />
       )}
 
       {data?.groups?.map((group: any) => (
