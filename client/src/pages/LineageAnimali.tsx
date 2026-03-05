@@ -144,6 +144,17 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
   );
 }
 
+function parseVagliaturaNote(notes: string | null | undefined): { distributed: number; mortality: number } | null {
+  if (!notes) return null;
+  const distMatch = notes.match(/Animali distribuiti: (\d+)/);
+  const mortMatch = notes.match(/Mortalità: (-?\d+)/);
+  if (!distMatch || !mortMatch) return null;
+  return {
+    distributed: parseInt(distMatch[1]),
+    mortality: parseInt(mortMatch[1]),
+  };
+}
+
 function LineageSummary({ group }: { group: any }) {
   const cycles = group.cycles as any[];
   const rootCycles = cycles.filter(c => !c.parent_cycle_id);
@@ -159,7 +170,9 @@ function LineageSummary({ group }: { group: any }) {
 
   // MORTALITÀ CORRETTA:
   // - Cicli radice: differenza animal_count (prima op → ultima op) = morti proiettati sul totale
-  // - Cicli figli (prima-attivazione da vagliatura): dead_count assoluto (conteggio fisico)
+  // - Cicli con chiusura-vagliatura: quota proporzionale della mortalità globale della vagliatura,
+  //   calcolata dalla nota "Animali distribuiti: X. Mortalità: Y" salvata dal sistema al momento della vagliatura.
+  //   Proporzione = animalCount di questo ciclo / (X + Y) = quota di questo lotto sul totale origine.
   const rootCycleLosses = rootCycles.reduce((sum: number, c: any) => {
     const ops = [...(c.operations || [])].sort((a: any, b: any) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -170,10 +183,15 @@ function LineageSummary({ group }: { group: any }) {
     return sum + Math.max(0, first - last);
   }, 0);
 
-  const childCycles = cycles.filter((c: any) => c.parent_cycle_id !== null);
-  const vagliaturaDeaths = childCycles.reduce((sum: number, c: any) => {
-    const fa = (c.operations || []).find((op: any) => op.type === 'prima-attivazione');
-    return sum + (fa?.dead_count || 0);
+  const vagliaturaDeaths = cycles.reduce((sum: number, c: any) => {
+    const closeOp = (c.operations || []).find((op: any) => op.type === 'chiusura-ciclo-vagliatura');
+    if (!closeOp) return sum;
+    const parsed = parseVagliaturaNote(closeOp.notes);
+    if (!parsed || parsed.mortality <= 0) return sum;
+    const totalOrigin = parsed.distributed + parsed.mortality;
+    if (totalOrigin <= 0) return sum;
+    const thisBasketAnimals = closeOp.animal_count || 0;
+    return sum + Math.round(parsed.mortality * (thisBasketAnimals / totalOrigin));
   }, 0);
 
   const totalDeaths = rootCycleLosses + vagliaturaDeaths;
@@ -200,11 +218,7 @@ function LineageSummary({ group }: { group: any }) {
     .filter(c => (c.operations || []).some((op: any) => op.type === 'chiusura-ciclo-vagliatura'))
     .map(c => {
       const op = (c.operations || []).find((op: any) => op.type === 'chiusura-ciclo-vagliatura');
-      const children = cycles.filter(ch => ch.parent_cycle_id === c.id);
-      const childDeaths = children.reduce((sum: number, ch: any) => {
-        const fa = (ch.operations || []).find((o: any) => o.type === 'prima-attivazione');
-        return sum + (fa?.dead_count || 0);
-      }, 0);
+      const children = cycles.filter((ch: any) => ch.parent_cycle_id === c.id);
       const childAnimals = children.reduce((sum: number, ch: any) => {
         const fa = (ch.operations || []).find((o: any) => o.type === 'prima-attivazione');
         return sum + (fa?.animal_count || 0);
@@ -213,7 +227,31 @@ function LineageSummary({ group }: { group: any }) {
         const fa = (ch.operations || []).find((o: any) => o.type === 'prima-attivazione');
         return fa?.size_code;
       }).filter(Boolean))] as string[];
-      return { parentId: c.id, date: op?.date, childCount: children.length, childDeaths, childAnimals, sizes };
+
+      const parsed = parseVagliaturaNote(op?.notes);
+      let proportionalMortality = 0;
+      let totalVagliaturaOrigin = 0;
+      let totalVagliatraMortality = 0;
+      let proportion = 0;
+      if (parsed && parsed.mortality > 0) {
+        totalVagliaturaOrigin = parsed.distributed + parsed.mortality;
+        totalVagliatraMortality = parsed.mortality;
+        const thisBasketAnimals = op?.animal_count || 0;
+        proportion = totalVagliaturaOrigin > 0 ? thisBasketAnimals / totalVagliaturaOrigin : 0;
+        proportionalMortality = Math.round(parsed.mortality * proportion);
+      }
+
+      return {
+        parentId: c.id,
+        date: op?.date,
+        childCount: children.length,
+        proportionalMortality,
+        totalVagliaturaOrigin,
+        totalVagliatraMortality,
+        proportion,
+        childAnimals,
+        sizes,
+      };
     });
 
   const salesOps = allOps.filter(op => op.type === 'vendita');
@@ -277,11 +315,11 @@ function LineageSummary({ group }: { group: any }) {
             <strong>{v.childCount} {v.childCount === 1 ? 'cesta' : 'ceste'}</strong>
             {v.sizes.length > 0 ? ` (taglie: ${v.sizes.join(', ')})` : ''}.
             {v.childAnimals > 0 && <> Totale consegnato: <strong>{formatNum(v.childAnimals)}</strong> animali.</>}
-            {v.childDeaths > 0 && (
+            {v.proportionalMortality > 0 && (
               <span className="text-red-600">
-                {' '}Morti durante vagliatura: <strong>{formatNum(v.childDeaths)}</strong>
-                {v.childAnimals > 0
-                  ? ` (${(v.childDeaths / (v.childAnimals + v.childDeaths) * 100).toFixed(2)}%)`
+                {' '}Morti stimati (quota proporzionale): <strong>{formatNum(v.proportionalMortality)}</strong>
+                {v.totalVagliaturaOrigin > 0
+                  ? ` (${(v.proportion * 100).toFixed(1)}% del totale vagliatura · globale: ${formatNum(v.totalVagliatraMortality)} su ${formatNum(v.totalVagliaturaOrigin)} origine)`
                   : ''}.
               </span>
             )}
@@ -326,15 +364,15 @@ function LineageSummary({ group }: { group: any }) {
           )}.
           {rootCycleLosses > 0 && vagliaturaDeaths > 0 && (
             <span className="text-gray-500 text-xs ml-1">
-              (in produzione: {formatNum(rootCycleLosses)} per proiezione campioni{initialAnimals > 0 ? ` = ${(rootCycleLosses / initialAnimals * 100).toFixed(2)}%` : ''}
-              {' '}· alla vagliatura: {formatNum(vagliaturaDeaths)} fisici{initialAnimals > 0 ? ` = ${(vagliaturaDeaths / initialAnimals * 100).toFixed(2)}%` : ''})
+              (in produzione: {formatNum(rootCycleLosses)} da proiezione campioni{initialAnimals > 0 ? ` = ${(rootCycleLosses / initialAnimals * 100).toFixed(2)}%` : ''}
+              {' '}· alla vagliatura: {formatNum(vagliaturaDeaths)} stimati proporzionalmente{initialAnimals > 0 ? ` = ${(vagliaturaDeaths / initialAnimals * 100).toFixed(2)}%` : ''})
             </span>
           )}
           {rootCycleLosses > 0 && vagliaturaDeaths === 0 && (
-            <span className="text-gray-500 text-xs ml-1">(per proiezione campioni di misura)</span>
+            <span className="text-gray-500 text-xs ml-1">(da proiezione campioni di misura)</span>
           )}
           {vagliaturaDeaths > 0 && rootCycleLosses === 0 && (
-            <span className="text-gray-500 text-xs ml-1">(conteggio fisico alla vagliatura)</span>
+            <span className="text-gray-500 text-xs ml-1">(stimati proporzionalmente dalla mortalità globale della vagliatura)</span>
           )}.
           {' '}<span className="text-gray-500 text-xs">
             Cicli totali: {cycles.length} · Durata complessiva: {daysTotal > 0 ? `${daysTotal} giorni` : '—'}.
