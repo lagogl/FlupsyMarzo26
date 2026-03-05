@@ -230,11 +230,23 @@ export default function LineageAnimali() {
 
   const filteredLots = useMemo(() => {
     if (searchMode !== 'lot' || !searchInput || searchInput.length < 1) return [];
-    const q = searchInput.toLowerCase();
+    const q = searchInput.trim();
+
+    // Ricerca per ID lotto (solo numeri): corrispondenza esatta o prefisso
+    if (/^\d+$/.test(q)) {
+      return allLots.filter(l => String(l.id) === q || String(l.id).startsWith(q)).slice(0, 12);
+    }
+
+    // Ricerca testuale: corrispondenza solo all'inizio del testo o di una parola
+    // (evita di trovare "3" dentro "0.35" o "T0.3")
+    const ql = q.toLowerCase();
+    const matchesWord = (text: string) => {
+      const t = text.toLowerCase();
+      return t.startsWith(ql) || t.includes(' ' + ql);
+    };
     return allLots.filter(l =>
-      (l.supplier ?? '').toLowerCase().includes(q) ||
-      (l.supplierLotNumber ?? '').toLowerCase().includes(q) ||
-      String(l.id).includes(q)
+      matchesWord(l.supplier ?? '') ||
+      matchesWord(l.supplierLotNumber ?? '')
     ).slice(0, 12);
   }, [searchInput, allLots, searchMode]);
 
@@ -370,7 +382,7 @@ export default function LineageAnimali() {
               <Input
                 className="pl-9"
                 placeholder={searchMode === 'lot'
-                  ? 'Fornitore o numero lotto (es. Ca Pisani, Ecotapes, T0.3)...'
+                  ? 'Fornitore (es. Ca Pisani, Ecotapes) oppure ID lotto (es. 11, 5)...'
                   : 'Numero ciclo (es. 92, 197)...'}
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
@@ -388,6 +400,7 @@ export default function LineageAnimali() {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-400 font-mono">#{lot.id}</span>
                           <Package className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                           <span className="font-semibold text-sm">{lot.supplier ?? '—'}</span>
                           {lot.supplierLotNumber && (
