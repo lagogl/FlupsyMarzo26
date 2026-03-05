@@ -9,14 +9,28 @@ function intsToSql(ids: number[]) {
 
 export async function getLineageData(req: Request, res: Response) {
   try {
-    const { basketIds, cycleIds } = req.query;
+    const { basketIds, cycleIds, lotIds } = req.query;
 
-    if (!basketIds && !cycleIds) {
-      return res.status(400).json({ error: "Fornire basketIds o cycleIds" });
+    if (!basketIds && !cycleIds && !lotIds) {
+      return res.status(400).json({ error: "Fornire lotIds, cycleIds o basketIds" });
     }
 
     let lineageGroupIds: number[] = [];
 
+    // Ricerca per LOTTO: trova tutti i gruppi genealogici che contengono animali di quel lotto
+    if (lotIds) {
+      const ids = String(lotIds).split(',').map(Number).filter(Boolean);
+      if (ids.length > 0) {
+        const rows = await db.execute(sql`
+          SELECT DISTINCT COALESCE(lineage_group_id, id) AS group_id
+          FROM cycles
+          WHERE lot_id IN (${intsToSql(ids)})
+        `);
+        lineageGroupIds.push(...(rows.rows as any[]).map(r => r.group_id));
+      }
+    }
+
+    // Ricerca per CICLO: trova il gruppo genealogico di quel ciclo
     if (cycleIds) {
       const ids = String(cycleIds).split(',').map(Number).filter(Boolean);
       if (ids.length > 0) {
@@ -32,6 +46,7 @@ export async function getLineageData(req: Request, res: Response) {
       }
     }
 
+    // Ricerca per CESTA (retrocompatibilità, usa ID interno)
     if (basketIds) {
       const bids = String(basketIds).split(',').map(Number).filter(Boolean);
       if (bids.length > 0) {

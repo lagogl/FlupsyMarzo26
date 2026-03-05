@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers, Hash } from "lucide-react";
+import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers, Hash, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const OP_TYPE_LABELS: Record<string, string> = {
@@ -42,7 +41,7 @@ function formatNum(n: number | null | undefined) {
 }
 
 type SelectedItem =
-  | { type: 'basket'; basketId: number; physicalNumber: number; flupsyName: string }
+  | { type: 'lot'; lotId: number; label: string }
   | { type: 'cycle'; cycleId: number };
 
 function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allCycles: any[] }) {
@@ -209,44 +208,46 @@ function LineageGroup({ group }: { group: any }) {
 export default function LineageAnimali() {
   const { toast } = useToast();
   const [searchInput, setSearchInput] = useState('');
-  const [searchMode, setSearchMode] = useState<'basket' | 'cycle'>('basket');
+  const [searchMode, setSearchMode] = useState<'lot' | 'cycle'>('lot');
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [exporting, setExporting] = useState(false);
 
-  const { data: baskets } = useQuery<any[]>({ queryKey: ['/api/baskets'] });
+  const { data: lotsData } = useQuery<any[]>({ queryKey: ['/api/lots?includeAll=true'] });
 
-  const activeBaskets = useMemo(() => {
-    if (!baskets) return [];
-    return (baskets as any[])
-      .filter(b => b.state === 'active' && b.currentCycleId)
-      .sort((a, b) => a.physicalNumber - b.physicalNumber);
-  }, [baskets]);
+  const allLots = useMemo(() => {
+    if (!lotsData) return [];
+    return (lotsData as any[]).sort((a, b) => {
+      const da = new Date(b.arrivalDate ?? 0).getTime();
+      const db2 = new Date(a.arrivalDate ?? 0).getTime();
+      return da - db2;
+    });
+  }, [lotsData]);
 
-  const filteredSuggestions = useMemo(() => {
-    if (searchMode !== 'basket' || !searchInput || searchInput.length < 1) return [];
-    return activeBaskets.filter(b =>
-      String(b.physicalNumber).includes(searchInput)
-    ).slice(0, 20);
-  }, [searchInput, activeBaskets, searchMode]);
+  function lotLabel(lot: any) {
+    const parts = [lot.supplier, lot.supplierLotNumber].filter(Boolean);
+    return parts.join(' — ') || `Lotto #${lot.id}`;
+  }
 
-  function addBasket(b: any) {
-    const already = selectedItems.some(
-      s => s.type === 'basket' && s.basketId === b.id
-    );
-    if (!already) {
-      setSelectedItems(prev => [...prev, {
-        type: 'basket',
-        basketId: b.id,
-        physicalNumber: b.physicalNumber,
-        flupsyName: b.flupsyName ?? b.flupsy_name ?? '',
-      }]);
+  const filteredLots = useMemo(() => {
+    if (searchMode !== 'lot' || !searchInput || searchInput.length < 1) return [];
+    const q = searchInput.toLowerCase();
+    return allLots.filter(l =>
+      (l.supplier ?? '').toLowerCase().includes(q) ||
+      (l.supplierLotNumber ?? '').toLowerCase().includes(q) ||
+      String(l.id).includes(q)
+    ).slice(0, 12);
+  }, [searchInput, allLots, searchMode]);
+
+  function addLot(lot: any) {
+    const id = lot.id;
+    if (!selectedItems.some(s => s.type === 'lot' && s.lotId === id)) {
+      setSelectedItems(prev => [...prev, { type: 'lot', lotId: id, label: lotLabel(lot) }]);
     }
     setSearchInput('');
   }
 
   function addCycle(cycleId: number) {
-    const already = selectedItems.some(s => s.type === 'cycle' && s.cycleId === cycleId);
-    if (!already) {
+    if (!selectedItems.some(s => s.type === 'cycle' && s.cycleId === cycleId)) {
       setSelectedItems(prev => [...prev, { type: 'cycle', cycleId }]);
     }
     setSearchInput('');
@@ -255,18 +256,18 @@ export default function LineageAnimali() {
   function removeItem(item: SelectedItem) {
     setSelectedItems(prev => prev.filter(s => {
       if (s.type !== item.type) return true;
-      if (s.type === 'basket' && item.type === 'basket') return s.basketId !== item.basketId;
+      if (s.type === 'lot' && item.type === 'lot') return s.lotId !== item.lotId;
       if (s.type === 'cycle' && item.type === 'cycle') return s.cycleId !== item.cycleId;
       return true;
     }));
   }
 
-  const basketIds = selectedItems.filter(s => s.type === 'basket').map(s => (s as any).basketId);
+  const lotIds = selectedItems.filter(s => s.type === 'lot').map(s => (s as any).lotId);
   const cycleIds = selectedItems.filter(s => s.type === 'cycle').map(s => (s as any).cycleId);
 
   const queryEnabled = selectedItems.length > 0;
   const queryParams = [
-    basketIds.length > 0 ? `basketIds=${basketIds.join(',')}` : '',
+    lotIds.length > 0 ? `lotIds=${lotIds.join(',')}` : '',
     cycleIds.length > 0 ? `cycleIds=${cycleIds.join(',')}` : '',
   ].filter(Boolean).join('&');
   const queryUrl = `/api/lineage?${queryParams}`;
@@ -281,8 +282,7 @@ export default function LineageAnimali() {
     if (!queryEnabled) return;
     setExporting(true);
     try {
-      const url = `/api/lineage/export?${queryParams}`;
-      const resp = await fetch(url);
+      const resp = await fetch(`/api/lineage/export?${queryParams}`);
       if (!resp.ok) throw new Error('Export fallito');
       const blob = await resp.blob();
       const a = document.createElement('a');
@@ -300,12 +300,7 @@ export default function LineageAnimali() {
     if (e.key !== 'Enter') return;
     const num = parseInt(searchInput);
     if (!num) return;
-    if (searchMode === 'cycle') {
-      addCycle(num);
-    } else {
-      const match = activeBaskets.find(b => b.physicalNumber === num);
-      if (match) addBasket(match);
-    }
+    if (searchMode === 'cycle') addCycle(num);
   }
 
   return (
@@ -317,7 +312,7 @@ export default function LineageAnimali() {
             Storia Animali
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Traccia la genealogia completa degli animali dalla semina alla vendita
+            Segui gli animali dalla semina alla vendita — cerca per lotto o per ciclo
           </p>
         </div>
         <Button
@@ -330,22 +325,22 @@ export default function LineageAnimali() {
         </Button>
       </div>
 
-      {/* Search box */}
       <Card className="mb-4">
         <CardContent className="pt-4">
           <div className="flex flex-col gap-3">
+
             {/* Mode toggle */}
             <div className="flex gap-2">
               <button
-                onClick={() => { setSearchMode('basket'); setSearchInput(''); }}
+                onClick={() => { setSearchMode('lot'); setSearchInput(''); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  searchMode === 'basket'
+                  searchMode === 'lot'
                     ? 'bg-emerald-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                <Search className="w-3.5 h-3.5" />
-                Cerca per cesta
+                <Package className="w-3.5 h-3.5" />
+                Cerca per lotto
               </button>
               <button
                 onClick={() => { setSearchMode('cycle'); setSearchInput(''); }}
@@ -360,65 +355,84 @@ export default function LineageAnimali() {
               </button>
             </div>
 
+            {/* Spiegazione contestuale */}
+            <p className="text-xs text-gray-400 italic -mt-1">
+              {searchMode === 'lot'
+                ? 'Seleziona il lotto di origine degli animali → vedrai tutti i cicli di quella partita, dalle ceste iniziali fino alla destinazione finale.'
+                : 'Inserisci il numero di un ciclo specifico → vedrai quel ramo genealogico con tutta la sua discendenza.'}
+            </p>
+
             <div className="relative">
-              {searchMode === 'basket'
+              {searchMode === 'lot'
                 ? <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                 : <Hash className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
               }
               <Input
                 className="pl-9"
-                placeholder={searchMode === 'basket'
-                  ? 'Numero cesta (es. 3, 11, 14)...'
+                placeholder={searchMode === 'lot'
+                  ? 'Fornitore o numero lotto (es. Ca Pisani, Ecotapes, T0.3)...'
                   : 'Numero ciclo (es. 92, 197)...'}
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={handleKeyDown}
               />
-              {filteredSuggestions.length > 0 && searchMode === 'basket' && (
-                <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg max-h-56 overflow-y-auto">
-                  {filteredSuggestions.map(b => (
+
+              {/* Dropdown lotti */}
+              {filteredLots.length > 0 && searchMode === 'lot' && (
+                <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg max-h-64 overflow-y-auto">
+                  {filteredLots.map(lot => (
                     <div
-                      key={b.id}
-                      className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex justify-between items-center"
-                      onClick={() => addBasket(b)}
+                      key={lot.id}
+                      className="px-4 py-2.5 hover:bg-emerald-50 cursor-pointer border-b last:border-0"
+                      onClick={() => addLot(lot)}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">Cesta #{b.physicalNumber}</span>
-                        <Badge className="text-[10px] bg-green-100 text-green-800 font-normal">
-                          {b.flupsyName ?? b.flupsy_name ?? ''}
-                        </Badge>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          <span className="font-semibold text-sm">{lot.supplier ?? '—'}</span>
+                          {lot.supplierLotNumber && (
+                            <span className="text-gray-500 text-xs">· {lot.supplierLotNumber}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={`text-[10px] ${lot.state === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                            {lot.state === 'active' ? 'Attivo' : 'Archiviato'}
+                          </Badge>
+                          <span className="text-xs text-gray-400">{formatDate(lot.arrivalDate)}</span>
+                        </div>
                       </div>
-                      <span className="text-gray-400 text-xs">{b.cycleCode ?? ''}</span>
                     </div>
                   ))}
                 </div>
               )}
-              {searchMode === 'cycle' && searchInput.length > 0 && (
+
+              {/* Dropdown ciclo */}
+              {searchMode === 'cycle' && searchInput.length > 0 && parseInt(searchInput) > 0 && (
                 <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg">
                   <div
                     className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center gap-2"
                     onClick={() => { const n = parseInt(searchInput); if (n) addCycle(n); }}
                   >
                     <Hash className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm">Cerca ciclo <strong>#{searchInput}</strong></span>
-                    <span className="text-xs text-gray-400 ml-auto">Premi Invio</span>
+                    <span className="text-sm">Segui ciclo <strong>#{searchInput}</strong> e tutta la sua discendenza</span>
+                    <span className="text-xs text-gray-400 ml-auto">↵ Invio</span>
                   </div>
                 </div>
               )}
             </div>
 
+            {/* Chips selezionati */}
             {selectedItems.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-gray-500 self-center">Selezionati:</span>
+              <div className="flex flex-wrap gap-2 pt-1">
                 {selectedItems.map((item, i) => (
-                  <Badge key={i} className={`flex items-center gap-1 px-2 py-1 ${
-                    item.type === 'basket' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                  <Badge key={i} className={`flex items-center gap-1.5 px-2.5 py-1 text-sm font-normal ${
+                    item.type === 'lot' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
                   }`}>
-                    {item.type === 'basket'
-                      ? <>Cesta #{(item as any).physicalNumber} — {(item as any).flupsyName}</>
-                      : <>Ciclo #{(item as any).cycleId}</>
+                    {item.type === 'lot'
+                      ? <><Package className="w-3 h-3" />{(item as any).label}</>
+                      : <><Hash className="w-3 h-3" />Ciclo #{(item as any).cycleId}</>
                     }
-                    <button onClick={() => removeItem(item)} className="ml-1 hover:text-red-600">
+                    <button onClick={() => removeItem(item)} className="ml-0.5 hover:text-red-600">
                       <X className="w-3 h-3" />
                     </button>
                   </Badge>
@@ -427,25 +441,25 @@ export default function LineageAnimali() {
                   onClick={() => setSelectedItems([])}
                   className="text-xs text-red-500 hover:underline self-center"
                 >
-                  Rimuovi tutti
+                  Cancella tutto
                 </button>
               </div>
             )}
 
             {!queryEnabled && (
               <p className="text-sm text-gray-400 italic">
-                Seleziona una cesta (specifica anche il FLUPSY) oppure cerca direttamente per numero ciclo.
+                Seleziona un lotto per vedere la storia completa di quella partita di animali, oppure cerca un ciclo specifico.
               </p>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Results */}
+      {/* Risultati */}
       {isLoading && (
         <div className="text-center py-12 text-gray-400">
           <GitBranch className="w-10 h-10 mx-auto mb-3 animate-pulse" />
-          <p>Caricamento genealogia...</p>
+          <p>Caricamento genealogia animali...</p>
         </div>
       )}
 
