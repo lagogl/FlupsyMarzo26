@@ -366,8 +366,54 @@ export default function Lots() {
   const exportToExcel = async () => {
     setIsExporting(true);
     try {
+      // Recupera TUTTI i lotti con i filtri attivi (nessuna paginazione)
+      const exportParams = new URLSearchParams();
+      exportParams.append('page', '1');
+      exportParams.append('pageSize', '9999');
+      if (filterValues.id) exportParams.append('id', filterValues.id);
+      if (filterValues.supplier) exportParams.append('supplier', filterValues.supplier);
+      if (filterValues.quality) exportParams.append('quality', filterValues.quality);
+      if (filterValues.dateFrom) exportParams.append('dateFrom', filterValues.dateFrom);
+      if (filterValues.dateTo) exportParams.append('dateTo', filterValues.dateTo);
+      if (filterValues.sizeId) exportParams.append('sizeId', filterValues.sizeId);
+
+      const allLotsResp = await fetch(`/api/lots/optimized?${exportParams.toString()}`);
+      if (!allLotsResp.ok) throw new Error('Errore recupero dati');
+      const allLotsData = await allLotsResp.json();
+      const allLots: any[] = allLotsData?.lots || [];
+
+      // Applica filtro ricerca rapida e ordinamento (come a video)
+      const filtered = allLots
+        .filter((lot: any) => {
+          const matchesSearch = searchTerm === '' ||
+            `${lot.id}`.includes(searchTerm) ||
+            lot.supplier.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesStatus = statusFilter === 'all' ||
+            (statusFilter === 'active' && lot.state === 'active') ||
+            (statusFilter === 'exhausted' && lot.state === 'exhausted');
+          return matchesSearch && matchesStatus;
+        })
+        .sort((a: any, b: any) => {
+          if (sortField === 'arrivalDate') {
+            return sortDirection === 'asc'
+              ? new Date(a.arrivalDate).getTime() - new Date(b.arrivalDate).getTime()
+              : new Date(b.arrivalDate).getTime() - new Date(a.arrivalDate).getTime();
+          }
+          if (sortField === 'size') {
+            const sA = a.size?.code || '', sB = b.size?.code || '';
+            return sortDirection === 'asc' ? sA.localeCompare(sB) : sB.localeCompare(sA);
+          }
+          if (typeof a[sortField] === 'string') {
+            return sortDirection === 'asc'
+              ? a[sortField].localeCompare(b[sortField])
+              : b[sortField].localeCompare(a[sortField]);
+          }
+          const vA = a[sortField] || 0, vB = b[sortField] || 0;
+          return sortDirection === 'asc' ? vA - vB : vB - vA;
+        });
+
       // Prepara i dati con inventario e mortalità
-      const lotsData = sortedLots.map((lot: any) => {
+      const lotsData = filtered.map((lot: any) => {
         const ageDays = lot.arrivalDate 
           ? differenceInDays(new Date(), new Date(lot.arrivalDate))
           : 0;
