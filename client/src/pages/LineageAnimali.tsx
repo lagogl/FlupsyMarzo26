@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers, Hash, Package } from "lucide-react";
+import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers, Hash, Package, BookOpen, TrendingUp, AlertTriangle, ShoppingCart, Activity } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const OP_TYPE_LABELS: Record<string, string> = {
@@ -144,6 +144,176 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
   );
 }
 
+function LineageSummary({ group }: { group: any }) {
+  const cycles = group.cycles as any[];
+  const rootCycles = cycles.filter(c => !c.parent_cycle_id);
+
+  const allOps = cycles.flatMap(c =>
+    (c.operations || []).map((op: any) => ({
+      ...op,
+      cycleId: c.id,
+      basketNum: c.basket_physical_number,
+      flupsyName: c.flupsy_name,
+    }))
+  );
+
+  const totalDeaths = allOps.reduce((sum: number, op: any) => sum + (op.dead_count || 0), 0);
+  const initialAnimals = rootCycles.reduce((sum: number, c: any) => {
+    const firstAct = (c.operations || []).find((op: any) => op.type === 'prima-attivazione');
+    return sum + (firstAct?.animal_count || 0);
+  }, 0);
+  const mortalityPct = initialAnimals > 0 ? (totalDeaths / initialAnimals * 100) : 0;
+
+  const rootOps = rootCycles
+    .flatMap(c => c.operations || [])
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const sizeMilestones: { size: string; date: string; animalsPerKg: number }[] = [];
+  let lastSize = '';
+  for (const op of rootOps) {
+    if (op.size_code && op.size_code !== lastSize) {
+      sizeMilestones.push({ size: op.size_code, date: op.date, animalsPerKg: op.animals_per_kg });
+      lastSize = op.size_code;
+    }
+  }
+
+  const vagliaturaEvents = cycles
+    .filter(c => (c.operations || []).some((op: any) => op.type === 'chiusura-ciclo-vagliatura'))
+    .map(c => {
+      const op = (c.operations || []).find((op: any) => op.type === 'chiusura-ciclo-vagliatura');
+      const children = cycles.filter(ch => ch.parent_cycle_id === c.id);
+      const childDeaths = children.reduce((sum: number, ch: any) => {
+        const fa = (ch.operations || []).find((o: any) => o.type === 'prima-attivazione');
+        return sum + (fa?.dead_count || 0);
+      }, 0);
+      const childAnimals = children.reduce((sum: number, ch: any) => {
+        const fa = (ch.operations || []).find((o: any) => o.type === 'prima-attivazione');
+        return sum + (fa?.animal_count || 0);
+      }, 0);
+      const sizes = [...new Set(children.map((ch: any) => {
+        const fa = (ch.operations || []).find((o: any) => o.type === 'prima-attivazione');
+        return fa?.size_code;
+      }).filter(Boolean))] as string[];
+      return { parentId: c.id, date: op?.date, childCount: children.length, childDeaths, childAnimals, sizes };
+    });
+
+  const salesOps = allOps.filter(op => op.type === 'vendita');
+  const totalSold = salesOps.reduce((sum: number, op: any) => sum + (op.animal_count || 0), 0);
+  const activeCycles = cycles.filter(c => c.state === 'active');
+  const totalActiveAnimals = activeCycles.reduce((sum: number, c: any) => sum + (c.last_animal_count || 0), 0);
+
+  const rootStart = rootCycles[0]?.start_date;
+  const rootEnd = rootCycles[0]?.end_date;
+  const rootDays = rootStart && rootEnd
+    ? Math.floor((new Date(rootEnd).getTime() - new Date(rootStart).getTime()) / 86400000)
+    : null;
+  const today = new Date().toISOString().split('T')[0];
+  const daysTotal = rootStart
+    ? Math.floor((new Date(today).getTime() - new Date(rootStart).getTime()) / 86400000)
+    : 0;
+
+  return (
+    <div className="mx-4 mt-3 mb-1 rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-200">
+        <BookOpen className="w-4 h-4 text-amber-700" />
+        <span className="font-semibold text-amber-800 text-sm">Riepilogo Analitico</span>
+      </div>
+      <div className="px-4 py-3 space-y-2 text-sm text-gray-700 leading-relaxed">
+
+        {rootCycles.map(rc => {
+          const fa = (rc.operations || []).find((op: any) => op.type === 'prima-attivazione');
+          const weightMg = fa?.animals_per_kg ? Math.round(1000000 / fa.animals_per_kg) : null;
+          return (
+            <p key={rc.id}>
+              <TrendingUp className="w-3.5 h-3.5 inline text-blue-600 mr-1" />
+              <span className="font-semibold text-blue-700">Arrivo:</span>{' '}
+              Il <strong>{formatDate(rc.start_date)}</strong>, <strong>{formatNum(fa?.animal_count)}</strong> animali
+              entrano in Cesta #{rc.basket_physical_number} ({rc.flupsy_name}) alla taglia <strong>{fa?.size_code ?? '—'}</strong>
+              {fa?.animals_per_kg ? ` — ${formatNum(fa.animals_per_kg)}/kg` : ''}
+              {weightMg ? ` (peso medio ~${weightMg < 1000 ? weightMg + ' mg' : (weightMg / 1000).toFixed(1) + ' g'})` : ''}.
+              {' '}<em className="text-gray-500">Lotto: {rc.lot_name ?? '—'} / {rc.lot_supplier ?? '—'}</em>
+            </p>
+          );
+        })}
+
+        {sizeMilestones.length > 1 && (
+          <p>
+            <Activity className="w-3.5 h-3.5 inline text-indigo-600 mr-1" />
+            <span className="font-semibold text-indigo-700">Crescita{rootDays ? ` (${rootDays} giorni)` : ''}:</span>{' '}
+            {sizeMilestones.map((m, i) => (
+              <span key={i}>
+                {i > 0 && <span className="text-gray-400 mx-1">→</span>}
+                <strong>{m.size}</strong>{' '}
+                <span className="text-gray-500 text-xs">({formatDate(m.date)}{m.animalsPerKg ? `, ${formatNum(m.animalsPerKg)}/kg` : ''})</span>
+              </span>
+            ))}.
+          </p>
+        )}
+
+        {vagliaturaEvents.map((v, i) => (
+          <p key={i}>
+            <GitBranch className="w-3.5 h-3.5 inline text-orange-600 mr-1" />
+            <span className="font-semibold text-orange-700">Vagliatura{vagliaturaEvents.length > 1 ? ` #${i + 1}` : ''}:</span>{' '}
+            Il <strong>{formatDate(v.date)}</strong> — animali distribuiti in{' '}
+            <strong>{v.childCount} {v.childCount === 1 ? 'cesta' : 'ceste'}</strong>
+            {v.sizes.length > 0 ? ` (taglie: ${v.sizes.join(', ')})` : ''}.
+            {v.childAnimals > 0 && <> Totale consegnato: <strong>{formatNum(v.childAnimals)}</strong> animali.</>}
+            {v.childDeaths > 0 && (
+              <span className="text-red-600">
+                {' '}Morti durante vagliatura: <strong>{formatNum(v.childDeaths)}</strong>
+                {v.childAnimals > 0
+                  ? ` (${(v.childDeaths / (v.childAnimals + v.childDeaths) * 100).toFixed(2)}%)`
+                  : ''}.
+              </span>
+            )}
+          </p>
+        ))}
+
+        {salesOps.length > 0 && (
+          <p>
+            <ShoppingCart className="w-3.5 h-3.5 inline text-green-600 mr-1" />
+            <span className="font-semibold text-green-700">Vendita{salesOps.length > 1 ? `e (${salesOps.length})` : ''}:</span>{' '}
+            {salesOps.map((op, i) => (
+              <span key={i}>
+                {i > 0 && ' · '}
+                Il <strong>{formatDate(op.date)}</strong>: <strong>{formatNum(op.animal_count)}</strong> animali
+                {op.size_code ? <> taglia <strong>{op.size_code}</strong></> : ''}
+                {op.animals_per_kg ? ` (${formatNum(op.animals_per_kg)}/kg` + (op.animals_per_kg > 0 ? `, ~${(1000000 / op.animals_per_kg / 1000).toFixed(0)}g cad.)` : ')') : ''}
+                {' '}— Cesta #{op.basketNum} ({op.flupsyName})
+              </span>
+            ))}.
+            {' '}Totale venduto: <strong>{formatNum(totalSold)}</strong> animali.
+          </p>
+        )}
+
+        {activeCycles.length > 0 && (
+          <p>
+            <Activity className="w-3.5 h-3.5 inline text-emerald-600 mr-1" />
+            <span className="font-semibold text-emerald-700">In produzione:</span>{' '}
+            <strong>{activeCycles.length} {activeCycles.length === 1 ? 'cesta attiva' : 'ceste attive'}</strong> con{' '}
+            <strong>{formatNum(totalActiveAnimals)}</strong> animali in crescita.{' '}
+            <span className="text-gray-500 text-xs">
+              ({activeCycles.map((c: any) => `Cesta #${c.basket_physical_number} ${c.flupsy_name} — ${c.last_size_code ?? '?'}`).join(', ')})
+            </span>
+          </p>
+        )}
+
+        <p>
+          <AlertTriangle className="w-3.5 h-3.5 inline text-red-500 mr-1" />
+          <span className="font-semibold text-red-700">Mortalità totale:</span>{' '}
+          <strong>{formatNum(totalDeaths)}</strong> animali morti
+          {initialAnimals > 0
+            ? <> — <strong className={mortalityPct > 5 ? 'text-red-600' : 'text-orange-600'}>{mortalityPct.toFixed(3)}%</strong> degli animali iniziali ({formatNum(initialAnimals)})</>
+            : ''}.
+          {' '}<span className="text-gray-500 text-xs">
+            Cicli totali: {cycles.length} · Durata complessiva: {daysTotal > 0 ? `${daysTotal} giorni` : '—'}.
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function LineageGroup({ group }: { group: any }) {
   const rootCycles = group.cycles.filter((c: any) => !c.parent_cycle_id || c.parent_cycle_id === null);
   const totalAnimals = group.cycles.reduce((sum: number, c: any) => {
@@ -174,7 +344,8 @@ function LineageGroup({ group }: { group: any }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        <LineageSummary group={group} />
+        <div className="overflow-x-auto mt-3">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b">
