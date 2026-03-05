@@ -171,6 +171,21 @@ function computeGroupStats(group: any) {
     return sum + Math.round(parsed.mortality * ((closeOp.animal_count || 0) / totalOrigin));
   }, 0);
 
+  // Perdite organiche nei cicli FIGLI (non radice): animali che muoiono naturalmente
+  // tra la prima-attivazione del figlio e la sua ultima operazione, non catturate
+  // da rootCycleLosses (che copre solo i radici) né da vagliaturaDeaths (che copre
+  // solo le morti nel setaccio, non quelle organiche tra una vagliatura e l'altra).
+  const nonRootCycles = cycles.filter((c: any) => !!c.parent_cycle_id);
+  const childOrganicLosses = nonRootCycles.reduce((sum: number, c: any) => {
+    const ops = [...(c.operations || [])].sort((a: any, b: any) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    const primaAtt = ops.find((op: any) => op.type === 'prima-attivazione');
+    if (!primaAtt || ops.length < 1) return sum;
+    const lastOp = ops[ops.length - 1];
+    return sum + Math.max(0, (primaAtt.animal_count || 0) - (lastOp.animal_count || 0));
+  }, 0);
+
   const allOps = cycles.flatMap((c: any) => c.operations || []);
   const salesOps = allOps.filter((op: any) => op.type === 'vendita');
   const totalSold = salesOps.reduce((sum: number, op: any) => sum + (op.animal_count || 0), 0);
@@ -185,7 +200,8 @@ function computeGroupStats(group: any) {
     initialAnimals,
     rootCycleLosses,
     vagliaturaDeaths,
-    totalDeaths: rootCycleLosses + vagliaturaDeaths,
+    childOrganicLosses,
+    totalDeaths: rootCycleLosses + vagliaturaDeaths + childOrganicLosses,
     totalSold,
     totalActive,
     activeCycleCount: activeCycles.length,
@@ -205,6 +221,7 @@ function LotSummary({ groups, selectedItems }: { groups: any[]; selectedItems: a
       acc.totalDeaths += s.totalDeaths;
       acc.rootCycleLosses += s.rootCycleLosses;
       acc.vagliaturaDeaths += s.vagliaturaDeaths;
+      acc.childOrganicLosses += s.childOrganicLosses;
       acc.totalSold += s.totalSold;
       acc.totalActive += s.totalActive;
       acc.activeCycleCount += s.activeCycleCount;
@@ -218,6 +235,7 @@ function LotSummary({ groups, selectedItems }: { groups: any[]; selectedItems: a
       totalDeaths: 0,
       rootCycleLosses: 0,
       vagliaturaDeaths: 0,
+      childOrganicLosses: 0,
       totalSold: 0,
       totalActive: 0,
       activeCycleCount: 0,
@@ -282,7 +300,8 @@ function LotSummary({ groups, selectedItems }: { groups: any[]; selectedItems: a
           {agg.totalDeaths > 0 && (
             <div className="text-gray-400">
               Breakdown mortalità: {formatNum(agg.rootCycleLosses)} da misure ({agg.initialAnimals > 0 ? (agg.rootCycleLosses / agg.initialAnimals * 100).toFixed(1) : 0}%)
-              {agg.vagliaturaDeaths > 0 && <> · {formatNum(agg.vagliaturaDeaths)} alla vagliatura (quota proporzionale, {agg.initialAnimals > 0 ? (agg.vagliaturaDeaths / agg.initialAnimals * 100).toFixed(1) : 0}%)</>}
+              {agg.vagliaturaDeaths > 0 && <> · {formatNum(agg.vagliaturaDeaths)} alla vagliatura ({agg.initialAnimals > 0 ? (agg.vagliaturaDeaths / agg.initialAnimals * 100).toFixed(1) : 0}%)</>}
+              {agg.childOrganicLosses > 0 && <> · {formatNum(agg.childOrganicLosses)} organiche post-vagliatura ({agg.initialAnimals > 0 ? (agg.childOrganicLosses / agg.initialAnimals * 100).toFixed(1) : 0}%)</>}
             </div>
           )}
         </div>
@@ -302,6 +321,7 @@ function PlantSummary({ groups }: { groups: any[] }) {
       acc.totalDeaths += s.totalDeaths;
       acc.rootCycleLosses += s.rootCycleLosses;
       acc.vagliaturaDeaths += s.vagliaturaDeaths;
+      acc.childOrganicLosses += s.childOrganicLosses;
       acc.totalSold += s.totalSold;
       acc.totalActive += s.totalActive;
       acc.activeCycleCount += s.activeCycleCount;
@@ -313,6 +333,7 @@ function PlantSummary({ groups }: { groups: any[] }) {
     },
     {
       initialAnimals: 0, totalDeaths: 0, rootCycleLosses: 0, vagliaturaDeaths: 0,
+      childOrganicLosses: 0,
       totalSold: 0, totalActive: 0, activeCycleCount: 0, totalCycles: 0, totalGroups: 0,
       firstDate: null as string | null, lastDate: null as string | null,
     }
@@ -397,6 +418,7 @@ function PlantSummary({ groups }: { groups: any[] }) {
               <div className="text-gray-400">
                 Breakdown mortalità: {formatNum(agg.rootCycleLosses)} da misure ({agg.initialAnimals > 0 ? (agg.rootCycleLosses / agg.initialAnimals * 100).toFixed(1) : 0}%)
                 {agg.vagliaturaDeaths > 0 && <> · {formatNum(agg.vagliaturaDeaths)} alla vagliatura ({agg.initialAnimals > 0 ? (agg.vagliaturaDeaths / agg.initialAnimals * 100).toFixed(1) : 0}%)</>}
+                {agg.childOrganicLosses > 0 && <> · {formatNum(agg.childOrganicLosses)} organiche post-vagliatura ({agg.initialAnimals > 0 ? (agg.childOrganicLosses / agg.initialAnimals * 100).toFixed(1) : 0}%)</>}
               </div>
             )}
           </div>
