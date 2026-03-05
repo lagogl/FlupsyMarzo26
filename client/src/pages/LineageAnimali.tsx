@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers } from "lucide-react";
+import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers, Hash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const OP_TYPE_LABELS: Record<string, string> = {
@@ -40,6 +40,10 @@ function formatNum(n: number | null | undefined) {
   if (n == null) return '—';
   return n.toLocaleString('it-IT');
 }
+
+type SelectedItem =
+  | { type: 'basket'; basketId: number; physicalNumber: number; flupsyName: string }
+  | { type: 'cycle'; cycleId: number };
 
 function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allCycles: any[] }) {
   const [open, setOpen] = useState(true);
@@ -78,24 +82,26 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
         <td className="py-2 px-3 text-sm font-medium text-emerald-700">{cycle.last_size_code ?? '—'}</td>
         <td className="py-2 px-3 text-sm">{formatNum(cycle.last_animal_count)}</td>
         <td className="py-2 px-3 text-sm">{cycle.last_total_weight ? `${(cycle.last_total_weight / 1000).toFixed(2)} kg` : '—'}</td>
-        <td className="py-2 px-3 text-sm text-gray-500">{cycle.operation_count}</td>
+        <td className="py-2 px-3 text-sm text-gray-500">{cycle.operations?.length ?? 0}</td>
         <td className="py-2 px-3">
-          <button
-            onClick={() => setOpsOpen(!opsOpen)}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            {opsOpen ? 'Nascondi' : 'Operazioni'}
-          </button>
+          {cycle.operations?.length > 0 && (
+            <button
+              onClick={() => setOpsOpen(!opsOpen)}
+              className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+            >
+              {opsOpen ? 'Nascondi' : 'Mostra'}
+            </button>
+          )}
         </td>
       </tr>
 
       {opsOpen && cycle.operations?.length > 0 && (
         <tr>
-          <td colSpan={13} className="p-0">
-            <div className="bg-white border-l-4 border-blue-200 mx-2 mb-2 rounded-r-lg overflow-hidden">
+          <td colSpan={13} className="p-0 bg-white">
+            <div className="mx-4 my-2 border rounded-lg overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-gray-100">
+                  <tr className="bg-gray-100 border-b">
                     <th className="py-1 px-3 text-left font-medium text-gray-600">Data</th>
                     <th className="py-1 px-3 text-left font-medium text-gray-600">Tipo</th>
                     <th className="py-1 px-3 text-right font-medium text-gray-600">N° Animali</th>
@@ -203,7 +209,8 @@ function LineageGroup({ group }: { group: any }) {
 export default function LineageAnimali() {
   const { toast } = useToast();
   const [searchInput, setSearchInput] = useState('');
-  const [selectedBaskets, setSelectedBaskets] = useState<number[]>([]);
+  const [searchMode, setSearchMode] = useState<'basket' | 'cycle'>('basket');
+  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [exporting, setExporting] = useState(false);
 
   const { data: baskets } = useQuery<any[]>({ queryKey: ['/api/baskets'] });
@@ -216,28 +223,56 @@ export default function LineageAnimali() {
   }, [baskets]);
 
   const filteredSuggestions = useMemo(() => {
-    if (!searchInput || searchInput.length < 1) return [];
+    if (searchMode !== 'basket' || !searchInput || searchInput.length < 1) return [];
     return activeBaskets.filter(b =>
       String(b.physicalNumber).includes(searchInput)
-    ).slice(0, 15);
-  }, [searchInput, activeBaskets]);
+    ).slice(0, 20);
+  }, [searchInput, activeBaskets, searchMode]);
 
-  function addBasket(physNum: number) {
-    if (!selectedBaskets.includes(physNum)) {
-      setSelectedBaskets(prev => [...prev, physNum]);
+  function addBasket(b: any) {
+    const already = selectedItems.some(
+      s => s.type === 'basket' && s.basketId === b.id
+    );
+    if (!already) {
+      setSelectedItems(prev => [...prev, {
+        type: 'basket',
+        basketId: b.id,
+        physicalNumber: b.physicalNumber,
+        flupsyName: b.flupsyName ?? b.flupsy_name ?? '',
+      }]);
     }
     setSearchInput('');
   }
 
-  function removeBasket(physNum: number) {
-    setSelectedBaskets(prev => prev.filter(n => n !== physNum));
+  function addCycle(cycleId: number) {
+    const already = selectedItems.some(s => s.type === 'cycle' && s.cycleId === cycleId);
+    if (!already) {
+      setSelectedItems(prev => [...prev, { type: 'cycle', cycleId }]);
+    }
+    setSearchInput('');
   }
 
-  const queryEnabled = selectedBaskets.length > 0;
-  const queryUrl = `/api/lineage?basketIds=${selectedBaskets.join(',')}`;
+  function removeItem(item: SelectedItem) {
+    setSelectedItems(prev => prev.filter(s => {
+      if (s.type !== item.type) return true;
+      if (s.type === 'basket' && item.type === 'basket') return s.basketId !== item.basketId;
+      if (s.type === 'cycle' && item.type === 'cycle') return s.cycleId !== item.cycleId;
+      return true;
+    }));
+  }
+
+  const basketIds = selectedItems.filter(s => s.type === 'basket').map(s => (s as any).basketId);
+  const cycleIds = selectedItems.filter(s => s.type === 'cycle').map(s => (s as any).cycleId);
+
+  const queryEnabled = selectedItems.length > 0;
+  const queryParams = [
+    basketIds.length > 0 ? `basketIds=${basketIds.join(',')}` : '',
+    cycleIds.length > 0 ? `cycleIds=${cycleIds.join(',')}` : '',
+  ].filter(Boolean).join('&');
+  const queryUrl = `/api/lineage?${queryParams}`;
 
   const { data, isLoading, error } = useQuery<any>({
-    queryKey: ['/api/lineage', selectedBaskets.join(',')],
+    queryKey: ['/api/lineage', queryParams],
     queryFn: () => fetch(queryUrl).then(r => r.json()),
     enabled: queryEnabled,
   });
@@ -246,7 +281,7 @@ export default function LineageAnimali() {
     if (!queryEnabled) return;
     setExporting(true);
     try {
-      const url = `/api/lineage/export?basketIds=${selectedBaskets.join(',')}`;
+      const url = `/api/lineage/export?${queryParams}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('Export fallito');
       const blob = await resp.blob();
@@ -258,6 +293,18 @@ export default function LineageAnimali() {
       toast({ title: 'Errore export', description: e.message, variant: 'destructive' });
     } finally {
       setExporting(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== 'Enter') return;
+    const num = parseInt(searchInput);
+    if (!num) return;
+    if (searchMode === 'cycle') {
+      addCycle(num);
+    } else {
+      const match = activeBaskets.find(b => b.physicalNumber === num);
+      if (match) addBasket(match);
     }
   }
 
@@ -287,59 +334,107 @@ export default function LineageAnimali() {
       <Card className="mb-4">
         <CardContent className="pt-4">
           <div className="flex flex-col gap-3">
+            {/* Mode toggle */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setSearchMode('basket'); setSearchInput(''); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  searchMode === 'basket'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5" />
+                Cerca per cesta
+              </button>
+              <button
+                onClick={() => { setSearchMode('cycle'); setSearchInput(''); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  searchMode === 'cycle'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Hash className="w-3.5 h-3.5" />
+                Cerca per ciclo #
+              </button>
+            </div>
+
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+              {searchMode === 'basket'
+                ? <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                : <Hash className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+              }
               <Input
                 className="pl-9"
-                placeholder="Cerca per numero cesta (es. 3, 11, 14)..."
+                placeholder={searchMode === 'basket'
+                  ? 'Numero cesta (es. 3, 11, 14)...'
+                  : 'Numero ciclo (es. 92, 197)...'}
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    const num = parseInt(searchInput);
-                    if (num) addBasket(num);
-                  }
-                }}
+                onKeyDown={handleKeyDown}
               />
-              {filteredSuggestions.length > 0 && (
-                <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg max-h-48 overflow-y-auto">
+              {filteredSuggestions.length > 0 && searchMode === 'basket' && (
+                <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg max-h-56 overflow-y-auto">
                   {filteredSuggestions.map(b => (
                     <div
                       key={b.id}
-                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer flex justify-between items-center text-sm"
-                      onClick={() => addBasket(b.physicalNumber)}
+                      className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex justify-between items-center"
+                      onClick={() => addBasket(b)}
                     >
-                      <span className="font-semibold">Cesta #{b.physicalNumber}</span>
-                      <span className="text-gray-500 text-xs">{b.cycleCode ?? ''}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm">Cesta #{b.physicalNumber}</span>
+                        <Badge className="text-[10px] bg-green-100 text-green-800 font-normal">
+                          {b.flupsyName ?? b.flupsy_name ?? ''}
+                        </Badge>
+                      </div>
+                      <span className="text-gray-400 text-xs">{b.cycleCode ?? ''}</span>
                     </div>
                   ))}
                 </div>
               )}
+              {searchMode === 'cycle' && searchInput.length > 0 && (
+                <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg">
+                  <div
+                    className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center gap-2"
+                    onClick={() => { const n = parseInt(searchInput); if (n) addCycle(n); }}
+                  >
+                    <Hash className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm">Cerca ciclo <strong>#{searchInput}</strong></span>
+                    <span className="text-xs text-gray-400 ml-auto">Premi Invio</span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {selectedBaskets.length > 0 && (
+            {selectedItems.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-gray-500 self-center">Ceste selezionate:</span>
-                {selectedBaskets.map(num => (
-                  <Badge key={num} className="bg-blue-100 text-blue-800 flex items-center gap-1 px-2 py-1">
-                    Cesta #{num}
-                    <button onClick={() => removeBasket(num)} className="ml-1 hover:text-red-600">
+                <span className="text-sm text-gray-500 self-center">Selezionati:</span>
+                {selectedItems.map((item, i) => (
+                  <Badge key={i} className={`flex items-center gap-1 px-2 py-1 ${
+                    item.type === 'basket' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                  }`}>
+                    {item.type === 'basket'
+                      ? <>Cesta #{(item as any).physicalNumber} — {(item as any).flupsyName}</>
+                      : <>Ciclo #{(item as any).cycleId}</>
+                    }
+                    <button onClick={() => removeItem(item)} className="ml-1 hover:text-red-600">
                       <X className="w-3 h-3" />
                     </button>
                   </Badge>
                 ))}
                 <button
-                  onClick={() => setSelectedBaskets([])}
+                  onClick={() => setSelectedItems([])}
                   className="text-xs text-red-500 hover:underline self-center"
                 >
-                  Rimuovi tutte
+                  Rimuovi tutti
                 </button>
               </div>
             )}
 
             {!queryEnabled && (
               <p className="text-sm text-gray-400 italic">
-                Seleziona una o più ceste per vedere la loro storia genealogica completa.
+                Seleziona una cesta (specifica anche il FLUPSY) oppure cerca direttamente per numero ciclo.
               </p>
             )}
           </div>
@@ -362,7 +457,7 @@ export default function LineageAnimali() {
 
       {data?.groups?.length === 0 && !isLoading && (
         <div className="text-center py-8 text-gray-400">
-          Nessun dato genealogico trovato per le ceste selezionate.
+          Nessun dato genealogico trovato.
         </div>
       )}
 

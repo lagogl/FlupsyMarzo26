@@ -33,13 +33,13 @@ export async function getLineageData(req: Request, res: Response) {
     }
 
     if (basketIds) {
-      const physNums = String(basketIds).split(',').map(Number).filter(Boolean);
-      if (physNums.length > 0) {
+      const bids = String(basketIds).split(',').map(Number).filter(Boolean);
+      if (bids.length > 0) {
         const rows = await db.execute(sql`
           SELECT DISTINCT c.lineage_group_id, c.id
           FROM cycles c
           JOIN baskets b ON b.id = c.basket_id
-          WHERE b.physical_number IN (${intsToSql(physNums)})
+          WHERE b.id IN (${intsToSql(bids)})
             AND b.current_cycle_id = c.id
         `);
         for (const r of rows.rows as any[]) {
