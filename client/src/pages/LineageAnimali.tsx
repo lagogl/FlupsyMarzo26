@@ -157,7 +157,26 @@ function LineageSummary({ group }: { group: any }) {
     }))
   );
 
-  const totalDeaths = allOps.reduce((sum: number, op: any) => sum + (op.dead_count || 0), 0);
+  // MORTALITÀ CORRETTA:
+  // - Cicli radice: differenza animal_count (prima op → ultima op) = morti proiettati sul totale
+  // - Cicli figli (prima-attivazione da vagliatura): dead_count assoluto (conteggio fisico)
+  const rootCycleLosses = rootCycles.reduce((sum: number, c: any) => {
+    const ops = [...(c.operations || [])].sort((a: any, b: any) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    if (ops.length < 1) return sum;
+    const first = ops[0].animal_count || 0;
+    const last = ops[ops.length - 1].animal_count || 0;
+    return sum + Math.max(0, first - last);
+  }, 0);
+
+  const childCycles = cycles.filter((c: any) => c.parent_cycle_id !== null);
+  const vagliaturaDeaths = childCycles.reduce((sum: number, c: any) => {
+    const fa = (c.operations || []).find((op: any) => op.type === 'prima-attivazione');
+    return sum + (fa?.dead_count || 0);
+  }, 0);
+
+  const totalDeaths = rootCycleLosses + vagliaturaDeaths;
   const initialAnimals = rootCycles.reduce((sum: number, c: any) => {
     const firstAct = (c.operations || []).find((op: any) => op.type === 'prima-attivazione');
     return sum + (firstAct?.animal_count || 0);
@@ -301,10 +320,22 @@ function LineageSummary({ group }: { group: any }) {
         <p>
           <AlertTriangle className="w-3.5 h-3.5 inline text-red-500 mr-1" />
           <span className="font-semibold text-red-700">Mortalità totale:</span>{' '}
-          <strong>{formatNum(totalDeaths)}</strong> animali morti
-          {initialAnimals > 0
-            ? <> — <strong className={mortalityPct > 5 ? 'text-red-600' : 'text-orange-600'}>{mortalityPct.toFixed(3)}%</strong> degli animali iniziali ({formatNum(initialAnimals)})</>
-            : ''}.
+          <strong>{formatNum(totalDeaths)}</strong> animali persi
+          {initialAnimals > 0 && (
+            <> — <strong className={mortalityPct > 10 ? 'text-red-600' : mortalityPct > 3 ? 'text-orange-600' : 'text-green-700'}>{mortalityPct.toFixed(2)}%</strong> degli animali iniziali</>
+          )}.
+          {rootCycleLosses > 0 && vagliaturaDeaths > 0 && (
+            <span className="text-gray-500 text-xs ml-1">
+              (in produzione: {formatNum(rootCycleLosses)} per proiezione campioni{initialAnimals > 0 ? ` = ${(rootCycleLosses / initialAnimals * 100).toFixed(2)}%` : ''}
+              {' '}· alla vagliatura: {formatNum(vagliaturaDeaths)} fisici{initialAnimals > 0 ? ` = ${(vagliaturaDeaths / initialAnimals * 100).toFixed(2)}%` : ''})
+            </span>
+          )}
+          {rootCycleLosses > 0 && vagliaturaDeaths === 0 && (
+            <span className="text-gray-500 text-xs ml-1">(per proiezione campioni di misura)</span>
+          )}
+          {vagliaturaDeaths > 0 && rootCycleLosses === 0 && (
+            <span className="text-gray-500 text-xs ml-1">(conteggio fisico alla vagliatura)</span>
+          )}.
           {' '}<span className="text-gray-500 text-xs">
             Cicli totali: {cycles.length} · Durata complessiva: {daysTotal > 0 ? `${daysTotal} giorni` : '—'}.
           </span>
