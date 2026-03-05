@@ -1534,7 +1534,10 @@ export default function VagliaturaConMappa() {
                             basketId: basket.basketId,
                             animalCount: basket.animalCount || 0,
                             animalsPerKg: finalAnimalsPerKg,
-                            sizeCode: basketSize?.code
+                            sizeCode: basketSize?.code,
+                            sieveUp: basket.sieveUp ?? null,
+                            sieveDown: basket.sieveDown ?? null,
+                            sieveDate: selection?.date ?? null,
                           };
                         })}
                       />
