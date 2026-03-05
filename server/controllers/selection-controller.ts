@@ -794,7 +794,9 @@ export async function addDestinationBaskets(req: Request, res: Response) {
         mortalityRate: destBasket.mortalityRate || 0,
         sampleWeight: destBasket.sampleWeight || null,
         sampleCount: destBasket.sampleCount || null,
-        notes: destBasket.notes || null
+        notes: destBasket.notes || null,
+        sieveUp: destBasket.sieveUp ?? null,
+        sieveDown: destBasket.sieveDown ?? null,
       });
       
       console.log(`✅ Cestello destinazione ${destBasket.basketId} aggiunto (${destBasket.animalCount} animali) - ${category}`);
@@ -1119,7 +1121,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           basketId: destBasket.basketId,
           lotId: primaryLotId, // ✅ LOTTO PRINCIPALE per compatibilità DB
           startDate: selection[0].date,
-          state: 'active'
+          state: 'active',
+          sieveUp: destBasket.sieveUp ?? null,
+          sieveDown: destBasket.sieveDown ?? null,
         }).returning();
 
         // 1.1. AGGIORNA cycle_id in selection_destination_baskets
@@ -1324,11 +1328,14 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             const row = match[1];
             const position = parseInt(match[2]);
             
-            // Genera cycleCode nel formato: numeroCesta-numeroFlupsy-YYMM
+            // Genera cycleCode nel formato: numeroCesta-numeroFlupsy-YYMM [+UP -DOWN]
             const selectionDate = new Date(selection[0].date);
             const yearMonth = `${selectionDate.getFullYear().toString().slice(-2)}${(selectionDate.getMonth() + 1).toString().padStart(2, '0')}`;
             const [destBasketInfo] = await tx.select({ physicalNumber: baskets.physicalNumber }).from(baskets).where(eq(baskets.id, destBasket.basketId));
-            const cycleCode = `${destBasketInfo?.physicalNumber || destBasket.basketId}-${destBasket.flupsyId || 1}-${yearMonth}`;
+            const sieveSuffix = destBasket.sieveUp || destBasket.sieveDown
+              ? ` [${[destBasket.sieveUp ? `+${destBasket.sieveUp}` : '', destBasket.sieveDown ? `-${destBasket.sieveDown}` : ''].filter(Boolean).join(' ')}]`
+              : '';
+            const cycleCode = `${destBasketInfo?.physicalNumber || destBasket.basketId}-${destBasket.flupsyId || 1}-${yearMonth}${sieveSuffix}`;
             
             // FIX: Dissocia dal gruppo anche le ceste destinazione posizionate
             await tx.update(baskets)

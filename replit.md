@@ -62,6 +62,7 @@ Preferred communication style: Simple, everyday language.
 - **Order Coverage Verification Module**: Dynamic simulation module verifying inventory sufficiency for orders over time, accounting for growth, with monthly snapshots and gap/coverage analysis.
 - **Growth Projection Module**: Planning module showing month-by-month progression of current inventory toward a target sale size (default TP-3000), simulating day-by-day growth with mortality.
 - **Basket Transfer Module**: Atomic transfer of animals from one active basket to one or more available baskets, with total or partial transfer modes and atomic database transactions.
+- **Sieve Selection System (Setacci Vagliatura)**: DraggableCalculator extended with optional `showSieve` prop showing two dropdowns (maglia sup. +, maglia inf. -) from predefined micron sizes. Selected sieves stored in `selection_destination_baskets.sieve_up/sieve_down` and propagated to new `cycles.sieve_up/sieve_down` columns. cycleCode automatically includes sieve suffix `[+UP -DOWN]`. Utility: `client/src/lib/sieveUtils.ts`.
 
 ### Weight Unit Conventions
 - **Database Storage**: All weights are stored in **GRAMS**.

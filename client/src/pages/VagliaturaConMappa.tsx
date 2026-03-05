@@ -936,7 +936,10 @@ export default function VagliaturaConMappa() {
           // FIX: Usa il flupsyId del cestello (già corretto), con derivato come fallback
           flupsyId: basketFlupsyId && basketFlupsyId > 0 ? basketFlupsyId : derivedDestFlupsyIdFromBaskets,
           // Note operative opzionali
-          notes: finalNotes
+          notes: finalNotes,
+          // Setacci vagliatura
+          sieveUp: basket.sieveUp ?? null,
+          sieveDown: basket.sieveDown ?? null,
         };
       });
       
@@ -2730,6 +2733,7 @@ export default function VagliaturaConMappa() {
       <DraggableCalculator
         isOpen={isCalculatorOpen}
         onClose={() => setIsCalculatorOpen(false)}
+        showSieve={true}
         onConfirm={(data) => {
           // Crea un nuovo cestello destinazione con i dati calcolati
           // CRITICAL FIX: Converti totalWeight da kg a grammi (il database si aspetta grammi)
@@ -2755,7 +2759,9 @@ export default function VagliaturaConMappa() {
             isAlsoSource: measurementData.isAlsoSource,
             screeningPosition: data.screeningPosition,
             qualityNote: data.qualityNote,
-            customNote: data.customNote
+            customNote: data.customNote,
+            sieveUp: data.sieveUp,
+            sieveDown: data.sieveDown,
           };
           
           setDestinationBaskets(prev => [...prev, newDestinationBasket]);
