@@ -314,7 +314,20 @@ export default function BackupPage() {
             </p>
           </div>
           
-          <div className="mt-4 md:mt-0">
+          <div className="mt-4 md:mt-0 flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const a = document.createElement('a');
+                a.href = '/api/database/download';
+                a.download = `dump_${new Date().toISOString().slice(0,10)}.sql`;
+                a.click();
+              }}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Scarica dump attuale
+            </Button>
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
@@ -423,36 +436,19 @@ export default function BackupPage() {
                             <TableCell>{formatFileSize(backup.size)}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button size="icon" variant="outline">
-                                      <Download className="h-4 w-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Scarica backup</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Stai per scaricare questo backup sul tuo dispositivo.
-                                        Il file è in formato SQL e può essere utilizzato per ripristinare il database in futuro.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Annulla</AlertDialogCancel>
-                                      <AlertDialogAction asChild>
-                                        <a 
-                                          href="/api/database/download" 
-                                          target="_blank" 
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-                                        >
-                                          <Download className="mr-2 h-4 w-4" />
-                                          Scarica
-                                        </a>
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  title="Scarica file SQL"
+                                  onClick={() => {
+                                    const a = document.createElement('a');
+                                    a.href = `/api/database/backups/${backup.id}/download`;
+                                    a.download = backup.filename;
+                                    a.click();
+                                  }}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
                                 
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>

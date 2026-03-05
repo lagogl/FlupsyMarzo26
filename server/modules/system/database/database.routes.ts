@@ -14,6 +14,9 @@ router.post('/restore/:backupId', (req, res) => databaseController.restoreFromBa
 router.post('/restore', (req, res) => databaseController.restoreFromFile(req, res));
 router.delete('/backups/:backupId', (req, res) => databaseController.deleteBackup(req, res));
 
+// Download backup specifico per ID
+router.get('/backups/:backupId/download', (req, res) => databaseController.downloadBackupById(req, res));
+
 // Database operations
 router.get('/download', (req, res) => databaseController.downloadDump(req, res));
 router.get('/integrity-check', (req, res) => databaseController.checkIntegrity(req, res));

@@ -146,7 +146,39 @@ class DatabaseController {
   }
 
   /**
-   * GET /api/database/download - Scarica dump del database
+   * GET /api/database/backups/:backupId/download - Scarica file di backup specifico
+   */
+  async downloadBackupById(req: Request, res: Response) {
+    try {
+      const { backupId } = req.params;
+      const backups = databaseService.getBackups();
+      const backup = backups.find(b => b.id === backupId);
+
+      if (!backup) {
+        return res.status(404).json({ success: false, message: 'Backup non trovato' });
+      }
+
+      const backupDir = path.resolve('./database_backups');
+      const filePath = path.join(backupDir, backup.filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, message: 'File di backup non trovato sul disco' });
+      }
+
+      res.download(filePath, backup.filename, (err) => {
+        if (err && !res.headersSent) {
+          console.error("Errore durante il download del backup:", err);
+          res.status(500).json({ success: false, message: "Errore durante il download" });
+        }
+      });
+    } catch (error) {
+      console.error("Errore durante il download del backup:", error);
+      res.status(500).json({ success: false, message: "Errore durante il download del backup" });
+    }
+  }
+
+  /**
+   * GET /api/database/download - Scarica dump live del database (genera nuovo dump)
    */
   async downloadDump(req: Request, res: Response) {
     try {
