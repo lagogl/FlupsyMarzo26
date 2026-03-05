@@ -3,6 +3,10 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import ExcelJS from 'exceljs';
 
+function intsToSql(ids: number[]) {
+  return sql.raw(ids.join(', '));
+}
+
 export async function getLineageData(req: Request, res: Response) {
   try {
     const { basketIds, cycleIds } = req.query;
@@ -15,40 +19,43 @@ export async function getLineageData(req: Request, res: Response) {
 
     if (cycleIds) {
       const ids = String(cycleIds).split(',').map(Number).filter(Boolean);
-      const rows = await db.execute(sql`
-        SELECT DISTINCT lineage_group_id FROM cycles
-        WHERE id = ANY(${ids}::int[]) AND lineage_group_id IS NOT NULL
-      `);
-      lineageGroupIds = (rows.rows as any[]).map(r => r.lineage_group_id);
-      // Anche il ciclo stesso se non ha lineage_group_id (è radice)
-      const selfRows = await db.execute(sql`
-        SELECT id FROM cycles WHERE id = ANY(${ids}::int[]) AND lineage_group_id IS NULL
-      `);
-      lineageGroupIds.push(...(selfRows.rows as any[]).map(r => r.id));
+      if (ids.length > 0) {
+        const rows = await db.execute(sql`
+          SELECT DISTINCT lineage_group_id FROM cycles
+          WHERE id IN (${intsToSql(ids)}) AND lineage_group_id IS NOT NULL
+        `);
+        lineageGroupIds.push(...(rows.rows as any[]).map(r => r.lineage_group_id));
+        const selfRows = await db.execute(sql`
+          SELECT id FROM cycles WHERE id IN (${intsToSql(ids)}) AND lineage_group_id IS NULL
+        `);
+        lineageGroupIds.push(...(selfRows.rows as any[]).map(r => r.id));
+      }
     }
 
     if (basketIds) {
       const physNums = String(basketIds).split(',').map(Number).filter(Boolean);
-      const rows = await db.execute(sql`
-        SELECT DISTINCT c.lineage_group_id, c.id
-        FROM cycles c
-        JOIN baskets b ON b.id = c.basket_id
-        WHERE b.physical_number = ANY(${physNums}::int[])
-          AND b.current_cycle_id = c.id
-      `);
-      for (const r of rows.rows as any[]) {
-        lineageGroupIds.push(r.lineage_group_id ?? r.id);
+      if (physNums.length > 0) {
+        const rows = await db.execute(sql`
+          SELECT DISTINCT c.lineage_group_id, c.id
+          FROM cycles c
+          JOIN baskets b ON b.id = c.basket_id
+          WHERE b.physical_number IN (${intsToSql(physNums)})
+            AND b.current_cycle_id = c.id
+        `);
+        for (const r of rows.rows as any[]) {
+          lineageGroupIds.push(r.lineage_group_id ?? r.id);
+        }
       }
     }
 
-    // Deduplica
     lineageGroupIds = [...new Set(lineageGroupIds.filter(Boolean))];
 
     if (lineageGroupIds.length === 0) {
       return res.json({ groups: [] });
     }
 
-    // Recupera tutti i cicli dei gruppi, con dati aggregati
+    const gidSql = intsToSql(lineageGroupIds);
+
     const cyclesData = await db.execute(sql`
       SELECT
         c.id,
@@ -62,17 +69,10 @@ export async function getLineageData(req: Request, res: Response) {
         b.physical_number AS basket_physical_number,
         f.name AS flupsy_name,
         b.flupsy_id,
-        l.name AS lot_name,
+        l.supplier_lot_number AS lot_name,
         l.supplier AS lot_supplier,
-        -- Prima operazione del ciclo (tipo evento di apertura)
         (SELECT o.type FROM operations o WHERE o.cycle_id = c.id
          ORDER BY o.date ASC, o.id ASC LIMIT 1) AS opening_type,
-        -- Ultima operazione
-        (SELECT o.date FROM operations o WHERE o.cycle_id = c.id
-         ORDER BY o.date DESC, o.id DESC LIMIT 1) AS last_op_date,
-        (SELECT o.type FROM operations o WHERE o.cycle_id = c.id
-         ORDER BY o.date DESC, o.id DESC LIMIT 1) AS last_op_type,
-        -- Animali e taglia dall'ultima operazione utile
         (SELECT o.animal_count FROM operations o WHERE o.cycle_id = c.id
          AND o.type IN ('prima-attivazione','misura','peso','trasferimento')
          AND o.cancelled_at IS NULL
@@ -89,19 +89,17 @@ export async function getLineageData(req: Request, res: Response) {
          AND o.type IN ('prima-attivazione','misura','peso','trasferimento')
          AND o.cancelled_at IS NULL
          ORDER BY o.date DESC, o.id DESC LIMIT 1) AS last_total_weight,
-        -- Conteggio operazioni
         (SELECT COUNT(*) FROM operations o WHERE o.cycle_id = c.id
          AND o.cancelled_at IS NULL) AS operation_count
       FROM cycles c
       JOIN baskets b ON b.id = c.basket_id
       JOIN flupsys f ON f.id = b.flupsy_id
       LEFT JOIN lots l ON l.id = c.lot_id
-      WHERE c.lineage_group_id = ANY(${lineageGroupIds}::int[])
-         OR c.id = ANY(${lineageGroupIds}::int[])
+      WHERE c.lineage_group_id IN (${gidSql})
+         OR c.id IN (${gidSql})
       ORDER BY c.lineage_group_id NULLS LAST, c.id ASC
     `);
 
-    // Recupera le operazioni dettagliate per ogni ciclo
     const cycleIdsAll = (cyclesData.rows as any[]).map(r => r.id);
     let operationsData: any[] = [];
 
@@ -123,14 +121,13 @@ export async function getLineageData(req: Request, res: Response) {
           o.operator_name
         FROM operations o
         LEFT JOIN sizes s ON s.id = o.size_id
-        WHERE o.cycle_id = ANY(${cycleIdsAll}::int[])
+        WHERE o.cycle_id IN (${intsToSql(cycleIdsAll)})
           AND o.cancelled_at IS NULL
         ORDER BY o.cycle_id, o.date ASC, o.id ASC
       `);
       operationsData = opsResult.rows as any[];
     }
 
-    // Raggruppa per lineage_group_id
     const groupMap = new Map<number, any[]>();
     for (const cycle of cyclesData.rows as any[]) {
       const gid = cycle.lineage_group_id ?? cycle.id;
@@ -156,17 +153,15 @@ export async function getLineageData(req: Request, res: Response) {
 
 export async function exportLineageExcel(req: Request, res: Response) {
   try {
-    const { basketIds, cycleIds } = req.query;
-
-    const lineageRes = await new Promise<any>((resolve) => {
+    const innerData = await new Promise<any>((resolve, reject) => {
       const fakeRes = {
         json: resolve,
-        status: () => ({ json: resolve })
+        status: () => ({ json: reject })
       };
       getLineageData(req, fakeRes as any);
     });
 
-    const { groups } = lineageRes;
+    const { groups } = innerData;
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'FLUPSY Management System';
@@ -179,21 +174,16 @@ export async function exportLineageExcel(req: Request, res: Response) {
       const sheetName = rootName.substring(0, 31);
       const sheet = workbook.addWorksheet(sheetName);
 
-      // Titolo
       const titleRow = sheet.addRow([`STORIA ANIMALI — Gruppo Genealogico #${group.lineageGroupId}`]);
       titleRow.font = { bold: true, size: 14 };
       sheet.mergeCells(`A1:N1`);
       sheet.addRow([]);
 
-      // Intestazioni cicli
-      const headers = [
+      const headerRow = sheet.addRow([
         'Ciclo #', 'Cesta Fisica', 'FLUPSY', 'Lotto', 'Fornitore',
         'Data Inizio', 'Data Fine', 'Stato', 'Ciclo Genitore',
-        'Tipo Apertura', 'N° Operazioni',
-        'Ultimi Animali', 'Peso Tot. (g)', 'Ultima Taglia'
-      ];
-      const headerRow = sheet.addRow(headers);
-      headerRow.font = { bold: true };
+        'Tipo Apertura', 'N° Operazioni', 'Ultimi Animali', 'Peso Tot. (g)', 'Ultima Taglia'
+      ]);
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A56DB' } };
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
@@ -214,8 +204,6 @@ export async function exportLineageExcel(req: Request, res: Response) {
           cycle.last_total_weight ?? '',
           cycle.last_size_code ?? ''
         ]);
-
-        // Colora radice in verde, figli in azzurro
         const isRoot = !cycle.parent_cycle_id;
         dataRow.fill = {
           type: 'pattern', pattern: 'solid',
@@ -223,7 +211,6 @@ export async function exportLineageExcel(req: Request, res: Response) {
         };
       }
 
-      // Autowidth
       sheet.columns.forEach(col => {
         col.width = Math.max(12, Math.min(35, (col.header?.toString().length ?? 10) + 4));
       });
@@ -231,7 +218,6 @@ export async function exportLineageExcel(req: Request, res: Response) {
       sheet.addRow([]);
       sheet.addRow([]);
 
-      // === FOGLIO OPERAZIONI PER OGNI CICLO ===
       const opSheetName = `Op_${sheetName}`.substring(0, 31);
       const opSheet = workbook.addWorksheet(opSheetName);
 
@@ -240,13 +226,11 @@ export async function exportLineageExcel(req: Request, res: Response) {
       opSheet.mergeCells(`A1:M1`);
       opSheet.addRow([]);
 
-      const opHeaders = [
+      const opHeaderRow = opSheet.addRow([
         'Ciclo #', 'Cesta Fisica', 'FLUPSY', 'Data', 'Tipo Operazione',
         'N° Animali', 'Animali/Kg', 'Peso Tot. (g)', 'Peso Medio (mg)',
         'Morti', 'Mortalità %', 'Taglia', 'Note'
-      ];
-      const opHeaderRow = opSheet.addRow(opHeaders);
-      opHeaderRow.font = { bold: true };
+      ]);
       opHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
       opHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
