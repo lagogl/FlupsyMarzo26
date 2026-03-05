@@ -751,13 +751,22 @@ export default function ProiezioneCrescita() {
   const [startMonth, setStartMonth] = useState<number>(new Date().getMonth() + 1);
   const [startYear, setStartYear] = useState<number>(new Date().getFullYear());
 
-  const queryParams: Record<string, any> = { startMonth, year: startYear };
-  if (activeMortality !== undefined) {
-    queryParams.mortalityPercent = activeMortality;
-  }
-
   const { data, isLoading, error } = useQuery<GrowthProjectionResult>({
-    queryKey: ["/api/proiezione-crescita", queryParams],
+    queryKey: ["/api/proiezione-crescita", startMonth, startYear, activeMortality ?? null],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        startMonth: String(startMonth),
+        year: String(startYear),
+      });
+      if (activeMortality !== undefined) {
+        params.append("mortalityPercent", String(activeMortality));
+      }
+      const res = await fetch(`/api/proiezione-crescita?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      return res.json();
+    },
   });
 
   const hatcheryYears = data?.monthlyContext
