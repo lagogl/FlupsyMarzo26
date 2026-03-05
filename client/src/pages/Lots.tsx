@@ -1014,7 +1014,7 @@ export default function Lots() {
       {/* Create Lot Dialog */}
       {/* Filter Dialog */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Filtra lotti</DialogTitle>
             <DialogDescription>

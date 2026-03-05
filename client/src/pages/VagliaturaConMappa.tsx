@@ -2144,7 +2144,7 @@ export default function VagliaturaConMappa() {
       
       {/* Dialogo per la misurazione (posizionamento) */}
       <Dialog open={isMeasurementDialogOpen} onOpenChange={setIsMeasurementDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Aggiungi Cesta Destinazione</DialogTitle>
             <DialogDescription>
@@ -2423,7 +2423,7 @@ export default function VagliaturaConMappa() {
       
       {/* Dialogo per la vendita diretta */}
       <Dialog open={isDirectSaleDialogOpen} onOpenChange={setIsDirectSaleDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Aggiungi Cesta Destinazione</DialogTitle>
             <DialogDescription>

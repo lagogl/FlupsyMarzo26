@@ -119,8 +119,8 @@ export default function DraggableCalculator({
   
   const handleMouseMove = (e: MouseEvent) => {
     if (isDragging) {
-      const newX = Math.max(0, Math.min(window.innerWidth - 300, e.clientX - dragStart.x));
-      const newY = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragStart.y));
+      const newX = Math.max(0, Math.min(window.innerWidth - 320, e.clientX - dragStart.x));
+      const newY = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - dragStart.y));
       setPosition({ x: newX, y: newY });
     }
   };
@@ -170,7 +170,7 @@ export default function DraggableCalculator({
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
-        width: isMinimized ? '200px' : '280px'
+        width: isMinimized ? '200px' : '310px'
       }}
       onMouseDown={handleMouseDown}
     >
@@ -202,7 +202,7 @@ export default function DraggableCalculator({
         </div>
         
         {!isMinimized && (
-          <div className="p-3 space-y-3">
+          <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
             {/* Grid compatto 2x3 */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
