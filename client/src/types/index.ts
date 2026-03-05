@@ -106,9 +106,6 @@ export interface DestinationBasket {
   screeningPosition?: 'sopra' | 'sotto' | null; // Sopra vagliatura / Sotto vagliatura
   qualityNote?: 'belli' | 'brutti' | null; // Belli / Brutti con molti morti
   customNote?: string; // Nota personalizzata libera
-  // Setacci vagliatura
-  sieveUp?: number | null;   // maglia superiore (+)
-  sieveDown?: number | null; // maglia inferiore (-)
 }
 
 // Tipo operazione

@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { InfoIcon, ShoppingCart } from 'lucide-react';
-import { formatSieveName } from '@/lib/sieveUtils';
 
 // Mappa colori per le taglie
 const SIZE_COLORS: Record<string, {bg: string; border: string; text: string; bar: string}> = {
@@ -63,9 +62,6 @@ interface FlupsyMapVisualizerProps {
     animalCount: number;
     animalsPerKg: number;
     sizeCode?: string;
-    sieveUp?: number | null;
-    sieveDown?: number | null;
-    sieveDate?: string | null;
   }>; // Dati ricalcolati dei cestelli destinazione
 }
 
@@ -372,9 +368,6 @@ export default function FlupsyMapVisualizer({
                                   ? destinationData.find(d => d.basketId === basket.id)
                                   : null;
                                 const displaySizeCode = destData?.sizeCode || basket.size?.code;
-                                const sieveLabel = destData?.sieveUp || destData?.sieveDown
-                                  ? formatSieveName(destData.sieveUp, destData.sieveDown, destData.sieveDate, 'full')
-                                  : null;
                                 
                                 return (
                                   <div className="text-center w-full h-full flex flex-col gap-1">
@@ -421,13 +414,6 @@ export default function FlupsyMapVisualizer({
                                         <span className="text-xs text-gray-500">N/D</span>
                                       )}
                                     </div>
-
-                                    {/* Setacci vagliatura */}
-                                    {sieveLabel && (
-                                      <div className="px-1 py-0.5 bg-emerald-100 rounded text-[10px] font-semibold text-emerald-800 truncate" title={sieveLabel}>
-                                        {sieveLabel}
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               })()

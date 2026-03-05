@@ -2442,10 +2442,7 @@ export default function SpreadsheetOperations() {
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <h1 className="text-xl font-bold">Spreadsheet Operazioni</h1>
-          <p className="text-xs text-gray-500">Inserimento rapido a foglio elettronico</p>
-          <div className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-100 border border-blue-300 rounded-full text-xs font-semibold text-blue-700">
-            💡 Doppio click su una riga per inserire dati
-          </div>
+          <p className="text-xs text-gray-600">Inserimento rapido a foglio elettronico</p>
           
           {/* Legenda Performance ottimizzata */}
           <div className="mt-1 flex items-center gap-3 p-1.5 bg-gray-50 rounded-md border text-xs">

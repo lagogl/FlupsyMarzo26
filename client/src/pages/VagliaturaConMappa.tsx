@@ -936,10 +936,7 @@ export default function VagliaturaConMappa() {
           // FIX: Usa il flupsyId del cestello (già corretto), con derivato come fallback
           flupsyId: basketFlupsyId && basketFlupsyId > 0 ? basketFlupsyId : derivedDestFlupsyIdFromBaskets,
           // Note operative opzionali
-          notes: finalNotes,
-          // Setacci vagliatura
-          sieveUp: basket.sieveUp ?? null,
-          sieveDown: basket.sieveDown ?? null,
+          notes: finalNotes
         };
       });
       
@@ -1534,10 +1531,7 @@ export default function VagliaturaConMappa() {
                             basketId: basket.basketId,
                             animalCount: basket.animalCount || 0,
                             animalsPerKg: finalAnimalsPerKg,
-                            sizeCode: basketSize?.code,
-                            sieveUp: basket.sieveUp ?? null,
-                            sieveDown: basket.sieveDown ?? null,
-                            sieveDate: selection?.date ?? null,
+                            sizeCode: basketSize?.code
                           };
                         })}
                       />
@@ -2147,7 +2141,7 @@ export default function VagliaturaConMappa() {
       
       {/* Dialogo per la misurazione (posizionamento) */}
       <Dialog open={isMeasurementDialogOpen} onOpenChange={setIsMeasurementDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Aggiungi Cesta Destinazione</DialogTitle>
             <DialogDescription>
@@ -2426,7 +2420,7 @@ export default function VagliaturaConMappa() {
       
       {/* Dialogo per la vendita diretta */}
       <Dialog open={isDirectSaleDialogOpen} onOpenChange={setIsDirectSaleDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Aggiungi Cesta Destinazione</DialogTitle>
             <DialogDescription>
@@ -2736,7 +2730,6 @@ export default function VagliaturaConMappa() {
       <DraggableCalculator
         isOpen={isCalculatorOpen}
         onClose={() => setIsCalculatorOpen(false)}
-        showSieve={true}
         onConfirm={(data) => {
           // Crea un nuovo cestello destinazione con i dati calcolati
           // CRITICAL FIX: Converti totalWeight da kg a grammi (il database si aspetta grammi)
@@ -2762,9 +2755,7 @@ export default function VagliaturaConMappa() {
             isAlsoSource: measurementData.isAlsoSource,
             screeningPosition: data.screeningPosition,
             qualityNote: data.qualityNote,
-            customNote: data.customNote,
-            sieveUp: data.sieveUp,
-            sieveDown: data.sieveDown,
+            customNote: data.customNote
           };
           
           setDestinationBaskets(prev => [...prev, newDestinationBasket]);

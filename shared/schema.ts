@@ -252,8 +252,6 @@ export const selectionDestinationBaskets = pgTable("selection_destination_basket
   sampleWeight: real("sample_weight"), // Peso del campione in grammi
   sampleCount: integer("sample_count"), // Numero di animali nel campione
   notes: text("notes"), // Note specifiche per questa cesta
-  sieveUp: integer("sieve_up"), // Maglia superiore setaccio (micron)
-  sieveDown: integer("sieve_down"), // Maglia inferiore setaccio (micron)
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di creazione
   updatedAt: timestamp("updated_at"), // Data e ora di ultimo aggiornamento
 });
@@ -373,8 +371,6 @@ export const cycles = pgTable("cycles", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
   state: text("state").notNull().default("active"), // active, closed
-  sieveUp: integer("sieve_up"), // maglia setaccio superiore (+) in micron
-  sieveDown: integer("sieve_down"), // maglia setaccio inferiore (-) in micron
 }, (table) => ({
   stateIdx: index("cycles_state_idx").on(table.state),
   basketIdIdx: index("cycles_basket_id_idx").on(table.basketId),

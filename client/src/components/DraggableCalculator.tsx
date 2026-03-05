@@ -6,12 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { getSizeCodeFromAnimalsPerKg } from '@/lib/sizeUtils';
-import { SIEVE_SIZES, formatSieveName } from '@/lib/sieveUtils';
 
 interface DraggableCalculatorProps {
   isOpen: boolean;
   onClose: () => void;
-  showSieve?: boolean; // Se true, mostra i setacci vagliatura e richiede almeno uno
   onConfirm: (data: {
     sampleWeight: number;
     sampleCount: number;
@@ -23,8 +21,6 @@ interface DraggableCalculatorProps {
     position: number;
     screeningPosition: 'sopra' | 'sotto' | null;
     qualityNote: 'belli' | 'brutti' | null;
-    sieveUp: number | null;
-    sieveDown: number | null;
   }) => void;
   initialData?: {
     sampleWeight?: number;
@@ -36,15 +32,12 @@ interface DraggableCalculatorProps {
     screeningPosition?: 'sopra' | 'sotto' | null;
     qualityNote?: 'belli' | 'brutti' | null;
     customNote?: string;
-    sieveUp?: number | null;
-    sieveDown?: number | null;
   };
 }
 
-export default function DraggableCalculator({
-  isOpen,
-  onClose,
-  showSieve = false,
+export default function DraggableCalculator({ 
+  isOpen, 
+  onClose, 
   onConfirm, 
   initialData = {} 
 }: DraggableCalculatorProps) {
@@ -65,9 +58,6 @@ export default function DraggableCalculator({
   const [screeningPosition, setScreeningPosition] = useState<'sopra' | 'sotto' | null>(initialData.screeningPosition || null);
   const [qualityNote, setQualityNote] = useState<'belli' | 'brutti' | null>(initialData.qualityNote || null);
   const [customNote, setCustomNote] = useState(initialData.customNote || '');
-  // Setacci vagliatura
-  const [sieveUp, setSieveUp] = useState<number | null>(initialData.sieveUp ?? null);
-  const [sieveDown, setSieveDown] = useState<number | null>(initialData.sieveDown ?? null);
   
   const calculatorRef = useRef<HTMLDivElement>(null);
   
@@ -119,8 +109,8 @@ export default function DraggableCalculator({
   
   const handleMouseMove = (e: MouseEvent) => {
     if (isDragging) {
-      const newX = Math.max(0, Math.min(window.innerWidth - 320, e.clientX - dragStart.x));
-      const newY = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - dragStart.y));
+      const newX = Math.max(0, Math.min(window.innerWidth - 300, e.clientX - dragStart.x));
+      const newY = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragStart.y));
       setPosition({ x: newX, y: newY });
     }
   };
@@ -140,9 +130,6 @@ export default function DraggableCalculator({
     }
   }, [isDragging, dragStart]);
   
-  const sievePreview = formatSieveName(sieveUp, sieveDown, new Date(), 'full');
-  const canConfirm = !showSieve || (sieveUp !== null || sieveDown !== null);
-
   const handleConfirm = () => {
     onConfirm({
       sampleWeight,
@@ -155,9 +142,7 @@ export default function DraggableCalculator({
       position: basketPosition,
       screeningPosition,
       qualityNote,
-      customNote: customNote.trim() || undefined,
-      sieveUp,
-      sieveDown,
+      customNote: customNote.trim() || undefined
     });
   };
   
@@ -170,7 +155,7 @@ export default function DraggableCalculator({
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
-        width: isMinimized ? '200px' : '310px'
+        width: isMinimized ? '200px' : '280px'
       }}
       onMouseDown={handleMouseDown}
     >
@@ -202,7 +187,7 @@ export default function DraggableCalculator({
         </div>
         
         {!isMinimized && (
-          <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+          <div className="p-3 space-y-3">
             {/* Grid compatto 2x3 */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
@@ -307,43 +292,6 @@ export default function DraggableCalculator({
               </div>
             </div>
             
-            {/* Setacci vagliatura — visibili solo in modalità vagliatura */}
-            {showSieve && <div className="bg-emerald-50 p-2 rounded border border-emerald-200">
-              <div className="text-xs font-medium mb-2 text-emerald-700">🔲 Setacci vagliatura <span className="text-red-500">*</span></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs text-green-700 font-bold">➕ Maglia sup.</Label>
-                  <select
-                    value={sieveUp ?? ''}
-                    onChange={e => setSieveUp(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full h-7 px-1 text-xs border border-green-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
-                  >
-                    <option value="">— nessuno</option>
-                    {SIEVE_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs text-red-700 font-bold">➖ Maglia inf.</Label>
-                  <select
-                    value={sieveDown ?? ''}
-                    onChange={e => setSieveDown(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full h-7 px-1 text-xs border border-red-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
-                  >
-                    <option value="">— nessuno</option>
-                    {SIEVE_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              </div>
-              {sievePreview && (
-                <div className="mt-1 px-2 py-1 bg-white rounded border border-emerald-200 text-xs text-emerald-800 font-medium truncate" title={sievePreview}>
-                  📋 {sievePreview}
-                </div>
-              )}
-              {showSieve && !canConfirm && (
-                <div className="mt-1 text-[10px] text-red-500">Seleziona almeno un setaccio per confermare</div>
-              )}
-            </div>}
-
             {/* Note operative opzionali */}
             <div className="bg-slate-50 p-2 rounded border border-slate-200">
               <div className="text-xs font-medium mb-2 text-slate-600">📝 Note (opzionali)</div>
@@ -447,9 +395,7 @@ export default function DraggableCalculator({
               <Button 
                 size="sm" 
                 onClick={handleConfirm}
-                disabled={!canConfirm}
                 className="flex-1 h-7 text-xs"
-                title={!canConfirm ? 'Seleziona almeno un setaccio' : ''}
               >
                 Conferma
               </Button>
