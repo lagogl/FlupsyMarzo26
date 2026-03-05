@@ -70,6 +70,8 @@ import LotLedgerStatistics from "@/pages/LotLedgerStatistics";
 import GrowthVariabilityAnalysis from "@/pages/GrowthVariabilityAnalysis";
 // Importazione LCI Module (ECOTAPES)
 import LCIModule from "@/pages/LCIModule";
+// Importazione Storia Animali (Genealogia)
+import LineageAnimali from "@/pages/LineageAnimali";
 // Importazione Task Management (Gestione Attività)
 import TaskManagement from "@/pages/TaskManagement";
 // Importazione Attività Consigliate AI
@@ -161,6 +163,7 @@ function Router() {
       <ProtectedRoute path="/task-management" component={TaskManagement}/>
       <ProtectedRoute path="/operators" component={Operators}/>
       <ProtectedRoute path="/lci" component={LCIModule}/>
+      <ProtectedRoute path="/storia-animali" component={LineageAnimali}/>
       <ProtectedRoute path="/mappa-gis" component={MappaGISLaguna}/>
       
       {/* Redirezione per pagine rimosse */}
