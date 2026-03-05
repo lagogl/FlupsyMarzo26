@@ -55,7 +55,7 @@ import { cyclesRoutes } from "./modules/operations/cycles";
 import { registerScreeningRoutes } from "./modules/screening/screening.routes";
 import { registerAnalyticsRoutes } from "./modules/analytics/analytics.routes";
 import { registerIntegrationsRoutes } from "./modules/integrations/integrations.routes";
-import { getLineageData, exportLineageExcel } from "./controllers/lineage-controller";
+import { getLineageData, exportLineageExcel, getAllLineageGroups } from "./controllers/lineage-controller";
 import { validateBasketRow, validateBasketPosition } from "./utils/validation";
 import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-controller";
 import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
@@ -315,6 +315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerIntegrationsRoutes(app);
 
   // Modulo STORIA ANIMALI (genealogia cicli)
+  app.get('/api/lineage/all', getAllLineageGroups);
   app.get('/api/lineage', getLineageData);
   app.get('/api/lineage/export', exportLineageExcel);
   console.log('✅ Modulo LINEAGE ANIMALI registrato su /api/lineage');

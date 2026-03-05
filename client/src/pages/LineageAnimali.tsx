@@ -291,6 +291,169 @@ function LotSummary({ groups, selectedItems }: { groups: any[]; selectedItems: a
   );
 }
 
+function PlantSummary({ groups }: { groups: any[] }) {
+  const [sortCol, setSortCol] = useState<'mortality' | 'active' | 'initial' | 'date'>('active');
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
+
+  const agg = useMemo(() => groups.reduce(
+    (acc, g) => {
+      const s = computeGroupStats(g);
+      acc.initialAnimals += s.initialAnimals;
+      acc.totalDeaths += s.totalDeaths;
+      acc.rootCycleLosses += s.rootCycleLosses;
+      acc.vagliaturaDeaths += s.vagliaturaDeaths;
+      acc.totalSold += s.totalSold;
+      acc.totalActive += s.totalActive;
+      acc.activeCycleCount += s.activeCycleCount;
+      acc.totalCycles += s.totalCycles;
+      acc.totalGroups += 1;
+      if (!acc.firstDate || (s.firstDate && s.firstDate < acc.firstDate)) acc.firstDate = s.firstDate;
+      if (!acc.lastDate || (s.lastDate && s.lastDate > acc.lastDate)) acc.lastDate = s.lastDate;
+      return acc;
+    },
+    {
+      initialAnimals: 0, totalDeaths: 0, rootCycleLosses: 0, vagliaturaDeaths: 0,
+      totalSold: 0, totalActive: 0, activeCycleCount: 0, totalCycles: 0, totalGroups: 0,
+      firstDate: null as string | null, lastDate: null as string | null,
+    }
+  ), [groups]);
+
+  const mortalityPct = agg.initialAnimals > 0 ? (agg.totalDeaths / agg.initialAnimals * 100) : 0;
+  const soldPct = agg.initialAnimals > 0 ? (agg.totalSold / agg.initialAnimals * 100) : 0;
+  const activePct = agg.initialAnimals > 0 ? (agg.totalActive / agg.initialAnimals * 100) : 0;
+  const mortalityColor = mortalityPct > 30 ? 'text-red-700' : mortalityPct > 10 ? 'text-orange-600' : 'text-green-700';
+
+  const groupRows = useMemo(() => {
+    return groups.map(g => {
+      const s = computeGroupStats(g);
+      const rootCycle = g.rootCycle ?? g.cycles?.find((c: any) => !c.parent_cycle_id);
+      const lotLabel = rootCycle ? [rootCycle.lot_supplier, rootCycle.lot_name].filter(Boolean).join(' ') || `Lotto #${rootCycle.lot_id}` : '—';
+      const mortPct = s.initialAnimals > 0 ? (s.totalDeaths / s.initialAnimals * 100) : 0;
+      return { ...s, mortPct, lotLabel, rootCycle, groupId: g.lineageGroupId };
+    }).sort((a, b) => {
+      let va = 0, vb = 0;
+      if (sortCol === 'mortality') { va = a.mortPct; vb = b.mortPct; }
+      else if (sortCol === 'active') { va = a.totalActive; vb = b.totalActive; }
+      else if (sortCol === 'initial') { va = a.initialAnimals; vb = b.initialAnimals; }
+      else if (sortCol === 'date') { va = a.firstDate ? new Date(a.firstDate).getTime() : 0; vb = b.firstDate ? new Date(b.firstDate).getTime() : 0; }
+      return sortDir === 'desc' ? vb - va : va - vb;
+    });
+  }, [groups, sortCol, sortDir]);
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setSortCol(col); setSortDir('desc'); }
+  }
+
+  const SortTh = ({ col, label }: { col: typeof sortCol; label: string }) => (
+    <th
+      className="py-2 px-3 text-left text-xs font-semibold text-gray-600 cursor-pointer hover:text-indigo-700 select-none"
+      onClick={() => toggleSort(col)}
+    >
+      {label} {sortCol === col ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+    </th>
+  );
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-indigo-800">
+            <Layers className="w-5 h-5" />
+            <span>Situazione Totale Impianto</span>
+            <span className="ml-auto text-sm font-normal text-indigo-500">
+              {agg.totalGroups} gruppi · {agg.totalCycles} cicli totali
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="bg-white rounded-lg border border-indigo-100 p-3 text-center">
+              <div className="text-xs text-gray-500 mb-1">Animali in ingresso</div>
+              <div className="text-xl font-bold text-indigo-700">{formatNum(agg.initialAnimals)}</div>
+              {agg.firstDate && <div className="text-xs text-gray-400 mt-1">dal {formatDate(agg.firstDate)}</div>}
+            </div>
+            <div className="bg-white rounded-lg border border-red-100 p-3 text-center">
+              <div className="text-xs text-gray-500 mb-1">Mortalità totale</div>
+              <div className={`text-xl font-bold ${mortalityColor}`}>{formatNum(agg.totalDeaths)}</div>
+              <div className={`text-xs font-semibold mt-1 ${mortalityColor}`}>{mortalityPct.toFixed(1)}% degli iniziali</div>
+            </div>
+            <div className="bg-white rounded-lg border border-green-100 p-3 text-center">
+              <div className="text-xs text-gray-500 mb-1">Venduti</div>
+              <div className="text-xl font-bold text-green-700">{formatNum(agg.totalSold)}</div>
+              {soldPct > 0 && <div className="text-xs text-green-500 mt-1">{soldPct.toFixed(1)}% degli iniziali</div>}
+            </div>
+            <div className="bg-white rounded-lg border border-emerald-100 p-3 text-center">
+              <div className="text-xs text-gray-500 mb-1">In produzione</div>
+              <div className="text-xl font-bold text-emerald-700">{formatNum(agg.totalActive)}</div>
+              <div className="text-xs text-emerald-500 mt-1">{agg.activeCycleCount} {agg.activeCycleCount === 1 ? 'cesta attiva' : 'ceste attive'}</div>
+            </div>
+          </div>
+          <div className="text-xs text-gray-600 space-y-1 border-t border-indigo-100 pt-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <span><strong>Bilancio globale:</strong> {formatNum(agg.initialAnimals)} ingresso → {formatNum(agg.totalDeaths)} morti ({mortalityPct.toFixed(1)}%) · {formatNum(agg.totalSold)} venduti ({soldPct.toFixed(1)}%) · {formatNum(agg.totalActive)} in crescita ({activePct.toFixed(1)}%)</span>
+            </div>
+            {agg.totalDeaths > 0 && (
+              <div className="text-gray-400">
+                Breakdown mortalità: {formatNum(agg.rootCycleLosses)} da misure ({agg.initialAnimals > 0 ? (agg.rootCycleLosses / agg.initialAnimals * 100).toFixed(1) : 0}%)
+                {agg.vagliaturaDeaths > 0 && <> · {formatNum(agg.vagliaturaDeaths)} alla vagliatura ({agg.initialAnimals > 0 ? (agg.vagliaturaDeaths / agg.initialAnimals * 100).toFixed(1) : 0}%)</>}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-gray-700 flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Dettaglio per gruppo genealogico
+            <span className="ml-auto text-xs font-normal text-gray-400">Clicca intestazione per ordinare</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Gruppo</th>
+                  <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Lotto / Fornitore</th>
+                  <SortTh col="date" label="Inizio" />
+                  <SortTh col="initial" label="Ingresso" />
+                  <SortTh col="mortality" label="Mortalità %" />
+                  <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Morti</th>
+                  <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Venduti</th>
+                  <SortTh col="active" label="Attivi" />
+                  <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Ceste</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupRows.map((row, i) => {
+                  const mortColor = row.mortPct > 30 ? 'text-red-600 font-bold' : row.mortPct > 10 ? 'text-orange-500' : 'text-gray-700';
+                  const hasActive = row.totalActive > 0;
+                  return (
+                    <tr key={row.groupId} className={`border-b last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${hasActive ? '' : 'opacity-60'}`}>
+                      <td className="py-2 px-3 text-xs text-gray-400 font-mono">#{row.groupId}</td>
+                      <td className="py-2 px-3 text-xs max-w-[140px] truncate">{row.lotLabel}</td>
+                      <td className="py-2 px-3 text-xs text-gray-500">{row.firstDate ? formatDate(row.firstDate) : '—'}</td>
+                      <td className="py-2 px-3 text-xs font-medium">{formatNum(row.initialAnimals)}</td>
+                      <td className={`py-2 px-3 text-xs ${mortColor}`}>{row.mortPct.toFixed(1)}%</td>
+                      <td className="py-2 px-3 text-xs text-red-500">{formatNum(row.totalDeaths)}</td>
+                      <td className="py-2 px-3 text-xs text-green-600">{formatNum(row.totalSold)}</td>
+                      <td className="py-2 px-3 text-xs font-semibold text-emerald-700">{formatNum(row.totalActive)}</td>
+                      <td className="py-2 px-3 text-xs text-gray-500">{row.activeCycleCount}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function parseVagliaturaNote(notes: string | null | undefined): { distributed: number; mortality: number } | null {
   if (!notes) return null;
   const distMatch = notes.match(/Animali distribuiti: (\d+)/);
@@ -595,7 +758,7 @@ function LineageGroup({ group }: { group: any }) {
 export default function LineageAnimali() {
   const { toast } = useToast();
   const [searchInput, setSearchInput] = useState('');
-  const [searchMode, setSearchMode] = useState<'lot' | 'cycle'>('lot');
+  const [searchMode, setSearchMode] = useState<'lot' | 'cycle' | 'plant'>('lot');
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [exporting, setExporting] = useState(false);
 
@@ -677,6 +840,13 @@ export default function LineageAnimali() {
     enabled: queryEnabled,
   });
 
+  const { data: plantData, isLoading: plantLoading } = useQuery<any>({
+    queryKey: ['/api/lineage/all'],
+    queryFn: () => fetch('/api/lineage/all').then(r => r.json()),
+    enabled: searchMode === 'plant',
+    staleTime: 60000,
+  });
+
   async function handleExport() {
     if (!queryEnabled) return;
     setExporting(true);
@@ -752,15 +922,29 @@ export default function LineageAnimali() {
                 <Hash className="w-3.5 h-3.5" />
                 Cerca per ciclo #
               </button>
+              <button
+                onClick={() => { setSearchMode('plant'); setSearchInput(''); setSelectedItems([]); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  searchMode === 'plant'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Situazione Impianto
+              </button>
             </div>
 
             {/* Spiegazione contestuale */}
             <p className="text-xs text-gray-400 italic -mt-1">
               {searchMode === 'lot'
                 ? 'Seleziona il lotto di origine degli animali → vedrai tutti i cicli di quella partita, dalle ceste iniziali fino alla destinazione finale.'
-                : 'Inserisci il numero di un ciclo specifico → vedrai quel ramo genealogico con tutta la sua discendenza.'}
+                : searchMode === 'cycle'
+                ? 'Inserisci il numero di un ciclo specifico → vedrai quel ramo genealogico con tutta la sua discendenza.'
+                : 'Visione globale di tutti i gruppi genealogici in impianto — mortalità, vendite e produzione aggregati in tempo reale.'}
             </p>
 
+            {searchMode !== 'plant' && (
             <div className="relative">
               {searchMode === 'lot'
                 ? <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -820,9 +1004,10 @@ export default function LineageAnimali() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Chips selezionati */}
-            {selectedItems.length > 0 && (
+            {searchMode !== 'plant' && selectedItems.length > 0 && (
               <div className="flex flex-wrap gap-2 pt-1">
                 {selectedItems.map((item, i) => (
                   <Badge key={i} className={`flex items-center gap-1.5 px-2.5 py-1 text-sm font-normal ${
@@ -846,7 +1031,7 @@ export default function LineageAnimali() {
               </div>
             )}
 
-            {!queryEnabled && (
+            {searchMode !== 'plant' && !queryEnabled && (
               <p className="text-sm text-gray-400 italic">
                 Seleziona un lotto per vedere la storia completa di quella partita di animali, oppure cerca un ciclo specifico.
               </p>
@@ -856,32 +1041,37 @@ export default function LineageAnimali() {
       </Card>
 
       {/* Risultati */}
-      {isLoading && (
+      {((searchMode !== 'plant' && isLoading) || (searchMode === 'plant' && plantLoading)) && (
         <div className="text-center py-12 text-gray-400">
           <GitBranch className="w-10 h-10 mx-auto mb-3 animate-pulse" />
-          <p>Caricamento genealogia animali...</p>
+          <p>{searchMode === 'plant' ? 'Caricamento situazione impianto...' : 'Caricamento genealogia animali...'}</p>
         </div>
       )}
 
-      {error && (
+      {searchMode !== 'plant' && error && (
         <div className="text-center py-8 text-red-500">
           Errore nel caricamento dei dati.
         </div>
       )}
 
-      {data?.groups?.length === 0 && !isLoading && (
+      {searchMode !== 'plant' && data?.groups?.length === 0 && !isLoading && (
         <div className="text-center py-8 text-gray-400">
           Nessun dato genealogico trovato.
         </div>
       )}
 
-      {lotIds.length > 0 && data?.groups?.length > 0 && (
+      {searchMode !== 'plant' && lotIds.length > 0 && data?.groups?.length > 0 && (
         <LotSummary groups={data.groups} selectedItems={selectedItems} />
       )}
 
-      {data?.groups?.map((group: any) => (
+      {searchMode !== 'plant' && data?.groups?.map((group: any) => (
         <LineageGroup key={group.lineageGroupId} group={group} />
       ))}
+
+      {/* Modalità Situazione Impianto */}
+      {searchMode === 'plant' && !plantLoading && plantData?.groups && (
+        <PlantSummary groups={plantData.groups} />
+      )}
     </div>
   );
 }
