@@ -1111,6 +1111,17 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         }
       }
       
+      // ====== RECUPERO CICLO SORGENTE PER GENEALOGIA ======
+      // Prende il ciclo sorgente principale (più animali) per propagare parent_cycle_id e lineage_group_id
+      const primarySourceBasket = sourceBasketData.sort((a, b) => (b.animalCount || 0) - (a.animalCount || 0))[0];
+      let sourceCycleLineageGroupId: number | null = null;
+      let primarySourceCycleId: number | null = primarySourceBasket?.cycleId ?? null;
+      if (primarySourceCycleId) {
+        const [srcCycle] = await tx.select({ lineageGroupId: cycles.lineageGroupId })
+          .from(cycles).where(eq(cycles.id, primarySourceCycleId)).limit(1);
+        sourceCycleLineageGroupId = srcCycle?.lineageGroupId ?? primarySourceCycleId;
+      }
+
       for (const destBasket of destinationBaskets) {
         console.log(`   Processando cestello destinazione ${destBasket.basketId}...`);
         
@@ -1119,8 +1130,10 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           basketId: destBasket.basketId,
           lotId: primaryLotId, // ✅ LOTTO PRINCIPALE per compatibilità DB
           startDate: selection[0].date,
-          state: 'active'
-        }).returning();
+          state: 'active',
+          parentCycleId: primarySourceCycleId ?? undefined,
+          lineageGroupId: sourceCycleLineageGroupId ?? undefined,
+        } as any).returning();
 
         // 1.1. AGGIORNA cycle_id in selection_destination_baskets
         await tx.update(selectionDestinationBaskets)

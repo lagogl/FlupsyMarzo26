@@ -371,6 +371,8 @@ export const cycles = pgTable("cycles", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
   state: text("state").notNull().default("active"), // active, closed
+  parentCycleId: integer("parent_cycle_id"), // Ciclo genitore (da cui provengono gli animali — vagliatura/trasferimento)
+  lineageGroupId: integer("lineage_group_id"), // ID del ciclo radice della genealogia (uguale per tutti i cicli dello stesso gruppo animali)
 }, (table) => ({
   stateIdx: index("cycles_state_idx").on(table.state),
   basketIdIdx: index("cycles_basket_id_idx").on(table.basketId),

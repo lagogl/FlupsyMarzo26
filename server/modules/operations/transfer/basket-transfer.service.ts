@@ -284,6 +284,8 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         startDate: date,
         state: 'active',
         endDate: null,
+        parentCycleId: oldSourceCycleId,
+        lineageGroupId: sourceCycle.lineageGroupId ?? oldSourceCycleId,
       } as any).returning();
 
       const newSourceCycleCode = generateCycleCode(sourcePhysical.physicalNumber, sourcePhysical.flupsyId, date);
@@ -379,6 +381,8 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         startDate: date,
         state: 'active',
         endDate: null,
+        parentCycleId: oldSourceCycleId,
+        lineageGroupId: sourceCycle.lineageGroupId ?? oldSourceCycleId,
       } as any).returning();
 
       const cycleCode = generateCycleCode(dest.physicalNumber, destBasket.flupsyId, date);
