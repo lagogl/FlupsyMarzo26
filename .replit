@@ -15,6 +15,9 @@ build = ["npm", "run", "build"]
 localPort = 5000
 externalPort = 80
 
+[workflows]
+runButton = "Project"
+
 [[workflows.workflow]]
 name = "Project"
 mode = "parallel"
@@ -30,23 +33,12 @@ author = "agent"
 
 [workflows.workflow.metadata]
 agentRequireRestartOnSave = false
-
-[[workflows.workflow.tasks]]
-task = "packager.installForAll"
+outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
-
-[[workflows.workflow]]
-name = "Run App"
-author = 38785415
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npm run dev"
 
 [agent]
 integrations = ["javascript_database:1.0.0", "google-mail:1.0.0", "javascript_anthropic_ai_integrations:1.0.0", "javascript_openai_ai_integrations:1.0.0", "javascript_openai:1.0.0"]
