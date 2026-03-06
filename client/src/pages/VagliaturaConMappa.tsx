@@ -89,6 +89,35 @@ export default function VagliaturaConMappa() {
     
     return allHavePosition;
   }, [destinationBaskets]);
+
+  // Auto-suggerimento posizione vaglio basato su confronto animalsPerKg tra cestelli fratelli
+  const suggestedPositions = React.useMemo(() => {
+    const result = new Map<number, 'sopra' | 'sotto' | null>();
+    const validBaskets = destinationBaskets.filter(b => b.animalsPerKg && b.animalsPerKg > 0);
+    if (validBaskets.length < 2) return result;
+    const apkValues = validBaskets.map(b => b.animalsPerKg as number);
+    const minApk = Math.min(...apkValues);
+    const maxApk = Math.max(...apkValues);
+    const range = maxApk - minApk;
+    if (range === 0) {
+      for (const b of validBaskets) result.set(b.basketId, 'sopra');
+      return result;
+    }
+    const threshold = range * 0.25;
+    for (const b of validBaskets) {
+      const apk = b.animalsPerKg as number;
+      if (apk <= minApk + threshold) result.set(b.basketId, 'sopra');
+      else if (apk >= maxApk - threshold) result.set(b.basketId, 'sotto');
+      else result.set(b.basketId, null);
+    }
+    return result;
+  }, [destinationBaskets]);
+
+  function getQualityBadgeProps(pos: 'sopra' | 'sotto' | null | undefined): { label: string; className: string } {
+    if (pos === 'sopra') return { label: '★ Premium', className: 'bg-amber-100 text-amber-800 border border-amber-300' };
+    if (pos === 'sotto') return { label: '▼ Sub', className: 'bg-orange-100 text-orange-800 border border-orange-300' };
+    return { label: '● Normal', className: 'bg-blue-100 text-blue-800 border border-blue-300' };
+  }
   
   // FLUPSY separati per origine e destinazione (supporta cross-FLUPSY)
   const [originFlupsyId, setOriginFlupsyId] = useState<string | null>(null);
@@ -614,6 +643,9 @@ export default function VagliaturaConMappa() {
       const targetRow = clickedPosition?.row || basket.row || '';
       const targetPosition = clickedPosition?.position?.toString() || basket.position?.toString() || '';
       
+      // Auto-suggerisci screeningPosition basandosi sui cestelli già inseriti
+      const autoSuggestedPosition = suggestedPositions.get(basket.id) || null;
+
       // Prepara i dati iniziali per il dialogo di misurazione
       const initialMeasurementData = {
         basketId: basket.id,
@@ -632,7 +664,10 @@ export default function VagliaturaConMappa() {
         saleDate: new Date().toISOString().split('T')[0],
         saleClient: 'Cliente',
         isAlsoSource: isAlsoSource,
-        sizeId: calculatedValues.sizeId || 0
+        sizeId: calculatedValues.sizeId || 0,
+        screeningPosition: autoSuggestedPosition,
+        qualityNote: null as 'belli' | 'brutti' | null,
+        customNote: ''
       };
       
       // Apri il calcolatore draggable per posizionamento
@@ -1473,6 +1508,15 @@ export default function VagliaturaConMappa() {
                                     {basket.destinationType === 'sold' && basket.saleClient && (
                                       <div className="text-red-600 font-medium mt-1">Cliente: {basket.saleClient}</div>
                                     )}
+                                    {(() => {
+                                      const pos = basket.screeningPosition || suggestedPositions.get(basket.basketId);
+                                      const badge = getQualityBadgeProps(pos);
+                                      return (
+                                        <div className={`text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block font-medium ${badge.className}`}>
+                                          {badge.label}{!basket.screeningPosition && pos ? ' (auto)' : ''}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                   <div className="ml-2">
                                     <Badge variant={basket.destinationType === 'sold' ? 'destructive' : 'outline'} className="text-[10px]">
@@ -2290,6 +2334,14 @@ export default function VagliaturaConMappa() {
                 {/* Posizione vagliatura */}
                 <div className="space-y-2">
                   <Label className="text-xs text-slate-600">Posizione Vaglio</Label>
+                  {(() => {
+                    const autoPos = suggestedPositions.get(measurementData.basketId);
+                    return autoPos && !measurementData.screeningPosition ? (
+                      <div className={`text-[10px] px-2 py-1 rounded border font-medium ${getQualityBadgeProps(autoPos).className}`}>
+                        Auto: {autoPos === 'sopra' ? '★ Premium (animali grandi)' : '▼ Sub (animali piccoli)'}
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="flex flex-col space-y-2">
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -2299,7 +2351,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sopra' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sopra vagliatura</span>
+                      <span className="text-sm">Sopra → <span className="text-amber-700 font-medium">Premium</span></span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -2309,7 +2361,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sotto' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sotto vagliatura</span>
+                      <span className="text-sm">Sotto → <span className="text-orange-700 font-medium">Sub</span></span>
                     </label>
                     {measurementData.screeningPosition && (
                       <button
@@ -2590,6 +2642,14 @@ export default function VagliaturaConMappa() {
                 {/* Posizione vagliatura */}
                 <div className="space-y-2">
                   <Label className="text-xs text-slate-600">Posizione Vaglio</Label>
+                  {(() => {
+                    const autoPos = suggestedPositions.get(measurementData.basketId);
+                    return autoPos && !measurementData.screeningPosition ? (
+                      <div className={`text-[10px] px-2 py-1 rounded border font-medium ${getQualityBadgeProps(autoPos).className}`}>
+                        Auto: {autoPos === 'sopra' ? '★ Premium (animali grandi)' : '▼ Sub (animali piccoli)'}
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="flex flex-col space-y-2">
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -2599,7 +2659,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sopra' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sopra vagliatura</span>
+                      <span className="text-sm">Sopra → <span className="text-amber-700 font-medium">Premium</span></span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -2609,7 +2669,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sotto' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sotto vagliatura</span>
+                      <span className="text-sm">Sotto → <span className="text-orange-700 font-medium">Sub</span></span>
                     </label>
                     {measurementData.screeningPosition && (
                       <button

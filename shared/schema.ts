@@ -252,6 +252,7 @@ export const selectionDestinationBaskets = pgTable("selection_destination_basket
   sampleWeight: real("sample_weight"), // Peso del campione in grammi
   sampleCount: integer("sample_count"), // Numero di animali nel campione
   notes: text("notes"), // Note specifiche per questa cesta
+  screeningPosition: text("screening_position"), // Posizione al vaglio: 'sopra', 'sotto', 'intermedio' — usata per calcolare qualityClass
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di creazione
   updatedAt: timestamp("updated_at"), // Data e ora di ultimo aggiornamento
 });
@@ -373,6 +374,7 @@ export const cycles = pgTable("cycles", {
   state: text("state").notNull().default("active"), // active, closed
   parentCycleId: integer("parent_cycle_id"), // Ciclo genitore (da cui provengono gli animali — vagliatura/trasferimento)
   lineageGroupId: integer("lineage_group_id"), // ID del ciclo radice della genealogia (uguale per tutti i cicli dello stesso gruppo animali)
+  qualityClass: text("quality_class"), // Classificazione qualitativa: 'premium', 'normal', 'sub' — derivata dalla storia di vagliatura
 }, (table) => ({
   stateIdx: index("cycles_state_idx").on(table.state),
   basketIdIdx: index("cycles_basket_id_idx").on(table.basketId),

@@ -77,9 +77,20 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
         <td className="py-2 px-3 text-sm">{formatDate(cycle.start_date)}</td>
         <td className="py-2 px-3 text-sm">{formatDate(cycle.end_date)}</td>
         <td className="py-2 px-3">
-          <Badge className={cycle.state === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
-            {cycle.state === 'active' ? 'Attivo' : 'Chiuso'}
-          </Badge>
+          <div className="flex flex-col gap-1">
+            <Badge className={cycle.state === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
+              {cycle.state === 'active' ? 'Attivo' : 'Chiuso'}
+            </Badge>
+            {cycle.quality_class && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border inline-block ${
+                cycle.quality_class === 'premium' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                cycle.quality_class === 'sub' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                'bg-blue-100 text-blue-800 border-blue-300'
+              }`}>
+                {cycle.quality_class === 'premium' ? '★ Premium' : cycle.quality_class === 'sub' ? '▼ Sub' : '● Normal'}
+              </span>
+            )}
+          </div>
         </td>
         <td className="py-2 px-3 text-sm">{cycle.parent_cycle_id ? `#${cycle.parent_cycle_id}` : '—'}</td>
         <td className="py-2 px-3 text-sm font-medium text-emerald-700">{cycle.last_size_code ?? '—'}</td>

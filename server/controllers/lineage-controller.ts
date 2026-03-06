@@ -33,6 +33,7 @@ async function fetchAndReturnGroups(gidSql: any, res: Response) {
         c.state,
         c.parent_cycle_id,
         c.lineage_group_id,
+        c.quality_class,
         b.physical_number AS basket_physical_number,
         f.name AS flupsy_name,
         b.flupsy_id,

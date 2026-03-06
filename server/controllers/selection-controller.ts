@@ -794,7 +794,8 @@ export async function addDestinationBaskets(req: Request, res: Response) {
         mortalityRate: destBasket.mortalityRate || 0,
         sampleWeight: destBasket.sampleWeight || null,
         sampleCount: destBasket.sampleCount || null,
-        notes: destBasket.notes || null
+        notes: destBasket.notes || null,
+        screeningPosition: destBasket.screeningPosition || null
       });
       
       console.log(`✅ Cestello destinazione ${destBasket.basketId} aggiunto (${destBasket.animalCount} animali) - ${category}`);
@@ -943,7 +944,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       sizeId: selectionDestinationBaskets.sizeId,
       deadCount: selectionDestinationBaskets.deadCount,
       mortalityRate: selectionDestinationBaskets.mortalityRate,
-      notes: selectionDestinationBaskets.notes
+      notes: selectionDestinationBaskets.notes,
+      screeningPosition: selectionDestinationBaskets.screeningPosition
     })
     .from(selectionDestinationBaskets)
     .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
@@ -1116,15 +1118,53 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       const primarySourceBasket = sourceBasketData.sort((a, b) => (b.animalCount || 0) - (a.animalCount || 0))[0];
       let sourceCycleLineageGroupId: number | null = null;
       let primarySourceCycleId: number | null = primarySourceBasket?.cycleId ?? null;
+      let parentQualityClass: string | null = null;
       if (primarySourceCycleId) {
-        const [srcCycle] = await tx.select({ lineageGroupId: cycles.lineageGroupId })
+        const [srcCycle] = await tx.select({ lineageGroupId: cycles.lineageGroupId, qualityClass: cycles.qualityClass })
           .from(cycles).where(eq(cycles.id, primarySourceCycleId)).limit(1);
         sourceCycleLineageGroupId = srcCycle?.lineageGroupId ?? primarySourceCycleId;
+        parentQualityClass = srcCycle?.qualityClass ?? null;
+      }
+
+      // ====== AUTO-RILEVAMENTO POSIZIONE VAGLIO DA ANIMALS_PER_KG ======
+      // Se un cestello non ha screeningPosition esplicita, la inferisce confrontando animalsPerKg tra fratelli
+      const validApkBaskets = destinationBaskets.filter(b => b.animalsPerKg && b.animalsPerKg > 0);
+      const allApkValues = validApkBaskets.map(b => b.animalsPerKg as number);
+      const minApk = allApkValues.length > 0 ? Math.min(...allApkValues) : 0;
+      const maxApk = allApkValues.length > 0 ? Math.max(...allApkValues) : 0;
+      const apkRange = maxApk - minApk;
+
+      function inferScreeningPosition(destBasket: typeof destinationBaskets[0]): 'sopra' | 'sotto' | null {
+        if (destBasket.screeningPosition) return destBasket.screeningPosition as 'sopra' | 'sotto' | null;
+        if (validApkBaskets.length < 2 || apkRange === 0) return null;
+        const apk = destBasket.animalsPerKg || 0;
+        const threshold = apkRange * 0.25;
+        if (apk <= minApk + threshold) return 'sopra';
+        if (apk >= maxApk - threshold) return 'sotto';
+        return null;
+      }
+
+      function computeQualityClass(screeningPos: 'sopra' | 'sotto' | null, parentClass: string | null): string {
+        if (!screeningPos) return parentClass || 'premium';
+        const thisClass = screeningPos === 'sopra' ? 'premium' : 'sub';
+        if (!parentClass || parentClass === 'premium') {
+          // Primo vaglio o sempre stato sopra: mantiene se sopra, sub se primo sotto, normal se aveva premium e ora sotto
+          if (thisClass === 'premium') return 'premium';
+          return parentClass === 'premium' ? 'normal' : 'sub';
+        }
+        if (parentClass === 'sub') {
+          return thisClass === 'sub' ? 'sub' : 'normal';
+        }
+        return 'normal';
       }
 
       for (const destBasket of destinationBaskets) {
         console.log(`   Processando cestello destinazione ${destBasket.basketId}...`);
         
+        const inferredPosition = inferScreeningPosition(destBasket);
+        const cycleQualityClass = computeQualityClass(inferredPosition, parentQualityClass);
+        console.log(`   🏆 Quality class: ${cycleQualityClass} (posizione: ${inferredPosition || 'auto'}, genitore: ${parentQualityClass || 'nessuno'})`);
+
         // 1. CREA NUOVO CICLO
         const [newCycle] = await tx.insert(cycles).values({
           basketId: destBasket.basketId,
@@ -1133,6 +1173,7 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           state: 'active',
           parentCycleId: primarySourceCycleId ?? undefined,
           lineageGroupId: sourceCycleLineageGroupId ?? undefined,
+          qualityClass: cycleQualityClass,
         } as any).returning();
 
         // 1.1. AGGIORNA cycle_id in selection_destination_baskets
