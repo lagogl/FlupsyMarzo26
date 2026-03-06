@@ -4,8 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers, Hash, Package, BookOpen, TrendingUp, AlertTriangle, ShoppingCart, Activity } from "lucide-react";
+import { Download, X, Search, ChevronDown, ChevronRight, GitBranch, Layers, Hash, Package, BookOpen, TrendingUp, AlertTriangle, ShoppingCart, Activity, BarChart2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+} from "recharts";
 
 const OP_TYPE_LABELS: Record<string, string> = {
   'prima-attivazione': 'Prima Attivazione',
@@ -794,6 +798,30 @@ function computeSGRForCycles(cycles: any[]): { avgSGR: number | null; intervals:
   return { avgSGR: count > 0 ? total / count : null, intervals: count };
 }
 
+const CHART_COLORS = ['#f59e0b','#3b82f6','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899','#84cc16','#14b8a6'];
+
+const LOT_METRICS = [
+  { key: 'initialAnimals', label: 'Ingresso', unit: '', isPercent: false },
+  { key: 'mortalityPct', label: 'Mortalità %', unit: '%', isPercent: true },
+  { key: 'totalDeaths', label: 'Morti totali', unit: '', isPercent: false },
+  { key: 'rootCycleLosses', label: 'Morti da misure', unit: '', isPercent: false },
+  { key: 'vagliaturaDeaths', label: 'Morti vagliatura', unit: '', isPercent: false },
+  { key: 'childOrganicLosses', label: 'Morti organiche', unit: '', isPercent: false },
+  { key: 'totalSold', label: 'Venduti', unit: '', isPercent: false },
+  { key: 'soldPct', label: 'Venduti %', unit: '%', isPercent: true },
+  { key: 'totalActive', label: 'In produzione', unit: '', isPercent: false },
+  { key: 'activePct', label: 'In produzione %', unit: '%', isPercent: true },
+  { key: 'activeCycleCount', label: 'Ceste attive', unit: '', isPercent: false },
+  { key: 'totalCycles', label: 'Cicli totali', unit: '', isPercent: false },
+  { key: 'avgSGR', label: 'SGR medio %/g', unit: '', isPercent: false },
+  { key: 'groupCount', label: 'Gruppi genealogici', unit: '', isPercent: false },
+];
+
+function getLotShortLabel(lotInfo: any) {
+  const sup = lotInfo.supplier ? lotInfo.supplier.substring(0, 14) : '';
+  return `#${lotInfo.id}${sup ? ' · ' + sup : ''}`;
+}
+
 // ── Analisi Lotti ──────────────────────────────────────────────────────────────
 function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] }) {
   const [expandedLots, setExpandedLots] = useState<Set<number>>(new Set());
@@ -801,6 +829,11 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
   const [sortCol, setSortCol] = useState<string>('arrival');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [exporting, setExporting] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
+  const [chartLotIds, setChartLotIds] = useState<Set<number>>(new Set());
+  const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['mortalityPct', 'soldPct', 'activePct']));
+  const [chartType, setChartType] = useState<'bar' | 'radar'>('bar');
+  const [normalize, setNormalize] = useState(false);
 
   const lotGroups = useMemo(() => {
     const map = new Map<number, { lotInfo: any; groups: any[] }>();
@@ -935,6 +968,47 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
     </th>
   );
 
+  function toggleChartLot(id: number) {
+    setChartLotIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleChartMetric(key: string) {
+    setChartMetrics(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+  function getMetricValue(s: any, key: string): number {
+    if (key === 'groupCount') return (s.groups ?? []).length;
+    return (s as any)[key] ?? 0;
+  }
+
+  const activeLots = chartLotIds.size > 0 ? sorted.filter(s => chartLotIds.has(s.lotInfo.id)) : sorted.slice(0, 8);
+  const selectedMetrics = LOT_METRICS.filter(m => chartMetrics.has(m.key));
+
+  const barChartData = activeLots.map(s => {
+    const entry: any = { name: getLotShortLabel(s.lotInfo), isOpen: s.isOpen };
+    for (const m of selectedMetrics) {
+      const raw = getMetricValue(s, m.key);
+      if (normalize) {
+        const maxV = Math.max(...activeLots.map(ss => getMetricValue(ss, m.key)), 0.0001);
+        entry[m.key] = +(raw / maxV * 100).toFixed(2);
+        entry[`${m.key}_raw`] = raw;
+      } else {
+        entry[m.key] = m.isPercent ? +raw.toFixed(2) : raw;
+        entry[`${m.key}_raw`] = raw;
+      }
+    }
+    return entry;
+  });
+
+  const radarChartData = selectedMetrics.map(m => {
+    const entry: any = { metric: m.label };
+    const maxV = Math.max(...activeLots.map(s => getMetricValue(s, m.key)), 0.0001);
+    for (const s of activeLots) {
+      const lotKey = getLotShortLabel(s.lotInfo);
+      entry[lotKey] = +(getMetricValue(s, m.key) / maxV * 100).toFixed(2);
+      entry[`${lotKey}_raw`] = getMetricValue(s, m.key);
+    }
+    return entry;
+  });
+
   const totMortPct = totals.initialAnimals > 0 ? (totals.totalDeaths / totals.initialAnimals * 100) : 0;
 
   return (
@@ -964,6 +1038,194 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
             ))}
           </div>
         </CardContent>
+      </Card>
+
+      {/* ── CONFRONTO GRAFICO ─────────────────────────────────────────────── */}
+      <Card className="border-indigo-200">
+        <CardHeader className="pb-2 cursor-pointer" onClick={() => setChartOpen(o => !o)}>
+          <CardTitle className="text-sm text-gray-700 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-indigo-600" />
+            <span className="text-indigo-700 font-semibold">Confronto Grafico Interattivo</span>
+            <span className="text-xs font-normal text-gray-400 ml-1">
+              {chartOpen ? '— clicca per chiudere' : '— clicca per aprire'}
+            </span>
+            <span className="ml-auto text-xs font-normal text-indigo-500">
+              {activeLots.length} lotti · {selectedMetrics.length} metriche
+            </span>
+            {chartOpen ? <ChevronDown className="w-4 h-4 text-indigo-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+          </CardTitle>
+        </CardHeader>
+
+        {chartOpen && (
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-3 mb-4 p-3 bg-indigo-50/40 rounded-lg border border-indigo-100">
+              {/* Chart type */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500 font-medium">Tipo:</span>
+                {(['bar', 'radar'] as const).map(t => (
+                  <button key={t} onClick={() => setChartType(t)}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${chartType === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-indigo-50'}`}>
+                    {t === 'bar' ? '📊 Barre' : '🕸 Radar'}
+                  </button>
+                ))}
+              </div>
+              {/* Normalize */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500 font-medium">Scala:</span>
+                <button onClick={() => setNormalize(false)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${!normalize ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-indigo-50'}`}>
+                  Valori reali
+                </button>
+                <button onClick={() => setNormalize(true)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${normalize ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-indigo-50'}`}>
+                  Normalizzato %
+                </button>
+              </div>
+              {/* Select all lots */}
+              <div className="flex items-center gap-1.5 ml-auto">
+                <button onClick={() => setChartLotIds(new Set())}
+                  className="px-2 py-1 rounded text-xs text-indigo-600 border border-indigo-200 hover:bg-indigo-50">
+                  Top 8 lotti
+                </button>
+                <button onClick={() => setChartLotIds(new Set(sorted.map(s => s.lotInfo.id)))}
+                  className="px-2 py-1 rounded text-xs text-indigo-600 border border-indigo-200 hover:bg-indigo-50">
+                  Tutti
+                </button>
+                <button onClick={() => setChartMetrics(new Set(LOT_METRICS.map(m => m.key)))}
+                  className="px-2 py-1 rounded text-xs text-indigo-600 border border-indigo-200 hover:bg-indigo-50">
+                  Tutte le metriche
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              {/* Lot selector */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-600 border-b">
+                  Lotti da confrontare
+                  <span className="ml-1 text-gray-400">({activeLots.length} selezionati)</span>
+                </div>
+                <div className="max-h-48 overflow-y-auto p-2 space-y-1">
+                  {sorted.map((s, idx) => {
+                    const id = s.lotInfo.id;
+                    const checked = chartLotIds.size === 0 ? idx < 8 : chartLotIds.has(id);
+                    const color = CHART_COLORS[sorted.indexOf(s) % CHART_COLORS.length];
+                    return (
+                      <label key={id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
+                        <input type="checkbox" checked={checked}
+                          onChange={() => {
+                            if (chartLotIds.size === 0) {
+                              const defaultSet = new Set(sorted.slice(0, 8).map(ss => ss.lotInfo.id));
+                              if (checked) defaultSet.delete(id); else defaultSet.add(id);
+                              setChartLotIds(defaultSet);
+                            } else toggleChartLot(id);
+                          }}
+                          className="rounded" />
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                        <span className="text-[11px] text-gray-700 truncate flex-1">{getLotShortLabel(s.lotInfo)}</span>
+                        <span className={`text-[9px] px-1 rounded ${s.isOpen ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                          {s.isOpen ? '●' : '○'}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Metric selector */}
+              <div className="md:col-span-2 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-600 border-b flex items-center justify-between">
+                  <span>Metriche da visualizzare <span className="text-gray-400">({selectedMetrics.length} selezionate)</span></span>
+                  <div className="flex gap-1">
+                    <button onClick={() => setChartMetrics(new Set(LOT_METRICS.map(m => m.key)))}
+                      className="text-[10px] text-indigo-500 hover:underline">tutte</button>
+                    <span className="text-gray-300">|</span>
+                    <button onClick={() => setChartMetrics(new Set())}
+                      className="text-[10px] text-gray-400 hover:underline">nessuna</button>
+                  </div>
+                </div>
+                <div className="p-2 grid grid-cols-2 md:grid-cols-3 gap-1">
+                  {LOT_METRICS.map(m => (
+                    <label key={m.key} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1">
+                      <input type="checkbox" checked={chartMetrics.has(m.key)}
+                        onChange={() => toggleChartMetric(m.key)} className="rounded" />
+                      <span className="text-[11px] text-gray-700 leading-tight">{m.label}</span>
+                      {m.isPercent && <span className="text-[9px] text-blue-400">%</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Chart */}
+            {selectedMetrics.length === 0 || activeLots.length === 0 ? (
+              <div className="h-32 flex items-center justify-center text-gray-400 text-sm bg-gray-50 rounded-lg border border-dashed">
+                Seleziona almeno un lotto e una metrica
+              </div>
+            ) : chartType === 'bar' ? (
+              <div>
+                <div className="text-xs text-gray-500 mb-2 text-center">
+                  {normalize ? 'Valori normalizzati al massimo per metrica (100% = valore più alto tra i lotti selezionati)' : 'Valori reali per lotto'}
+                </div>
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={barChartData} margin={{ top: 5, right: 20, left: 10, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={v => normalize ? `${v}%` : v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                    <Tooltip
+                      formatter={(value: any, name: string) => {
+                        const m = LOT_METRICS.find(mm => mm.key === name);
+                        if (!m) return [value, name];
+                        if (normalize) return [`${value}% (norm.)`, m.label];
+                        return [m.isPercent ? `${value}%` : Number(value).toLocaleString('it-IT'), m.label];
+                      }}
+                      contentStyle={{ fontSize: 11 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
+                      formatter={(value) => LOT_METRICS.find(m => m.key === value)?.label ?? value} />
+                    {selectedMetrics.map((m, idx) => (
+                      <Bar key={m.key} dataKey={m.key} fill={CHART_COLORS[idx % CHART_COLORS.length]}
+                        radius={[2, 2, 0, 0]} maxBarSize={40} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div>
+                <div className="text-xs text-gray-500 mb-2 text-center">
+                  Radar normalizzato: 100% = valore massimo tra i lotti per ogni asse
+                </div>
+                <ResponsiveContainer width="100%" height={380}>
+                  <RadarChart data={radarChartData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
+                    <PolarGrid stroke="#e5e7eb" />
+                    <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9 }} tickFormatter={v => `${v}%`} />
+                    <Tooltip
+                      formatter={(value: any, name: string) => {
+                        const entry = radarChartData.find(d => d[name] === value);
+                        const raw = entry?.[`${name}_raw`];
+                        const m = LOT_METRICS.find(mm => mm.label === radarChartData[0]?.metric);
+                        if (raw != null) return [`${value}% (val: ${typeof raw === 'number' && raw >= 1000 ? Number(raw).toLocaleString('it-IT') : raw})`, name];
+                        return [`${value}%`, name];
+                      }}
+                      contentStyle={{ fontSize: 11 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {activeLots.map((s, idx) => {
+                      const lotKey = getLotShortLabel(s.lotInfo);
+                      return (
+                        <Radar key={lotKey} name={lotKey} dataKey={lotKey}
+                          stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+                          fill={CHART_COLORS[idx % CHART_COLORS.length]}
+                          fillOpacity={0.12} strokeWidth={2} dot={{ r: 3 }} />
+                      );
+                    })}
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       <Card>
