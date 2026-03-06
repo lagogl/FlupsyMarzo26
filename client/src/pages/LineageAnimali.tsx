@@ -805,9 +805,11 @@ export default function LineageAnimali() {
     if (searchMode !== 'lot' || !searchInput || searchInput.length < 1) return [];
     const q = searchInput.trim();
 
-    // Ricerca per ID lotto (solo numeri): corrispondenza esatta o prefisso
+    // Ricerca per ID lotto (solo numeri): corrispondenza esatta sempre in cima, poi prefisso
     if (/^\d+$/.test(q)) {
-      return allLots.filter(l => String(l.id) === q || String(l.id).startsWith(q)).slice(0, 12);
+      const exact = allLots.filter(l => String(l.id) === q);
+      const prefix = allLots.filter(l => String(l.id) !== q && String(l.id).startsWith(q));
+      return [...exact, ...prefix].slice(0, 15);
     }
 
     // Ricerca testuale: corrispondenza solo all'inizio del testo o di una parola
@@ -833,7 +835,9 @@ export default function LineageAnimali() {
     if (searchMode !== 'cycle' || !searchInput || searchInput.length < 1) return [];
     const q = searchInput.trim();
     if (!/^\d+$/.test(q)) return [];
-    return allCyclesList.filter((c: any) => String(c.id).startsWith(q)).slice(0, 15);
+    const exact = allCyclesList.filter((c: any) => String(c.id) === q);
+    const prefix = allCyclesList.filter((c: any) => String(c.id) !== q && String(c.id).startsWith(q));
+    return [...exact, ...prefix].slice(0, 15);
   }, [searchInput, allCyclesList, searchMode]);
 
   function addLot(lot: any) {
