@@ -785,6 +785,7 @@ export default function LineageAnimali() {
   const [exporting, setExporting] = useState(false);
 
   const { data: lotsData } = useQuery<any[]>({ queryKey: ['/api/lots?includeAll=true'] });
+  const { data: cyclesData } = useQuery<any>({ queryKey: ['/api/cycles?includeAll=true'], staleTime: 30000 });
 
   const allLots = useMemo(() => {
     if (!lotsData) return [];
@@ -821,6 +822,19 @@ export default function LineageAnimali() {
       matchesWord(l.supplierLotNumber ?? '')
     ).slice(0, 12);
   }, [searchInput, allLots, searchMode]);
+
+  const allCyclesList = useMemo(() => {
+    if (!cyclesData) return [];
+    const arr = Array.isArray(cyclesData) ? cyclesData : (cyclesData.cycles ?? []);
+    return arr.sort((a: any, b: any) => b.id - a.id);
+  }, [cyclesData]);
+
+  const filteredCycles = useMemo(() => {
+    if (searchMode !== 'cycle' || !searchInput || searchInput.length < 1) return [];
+    const q = searchInput.trim();
+    if (!/^\d+$/.test(q)) return [];
+    return allCyclesList.filter((c: any) => String(c.id).startsWith(q)).slice(0, 15);
+  }, [searchInput, allCyclesList, searchMode]);
 
   function addLot(lot: any) {
     const id = lot.id;
@@ -1014,15 +1028,37 @@ export default function LineageAnimali() {
 
               {/* Dropdown ciclo */}
               {searchMode === 'cycle' && searchInput.length > 0 && parseInt(searchInput) > 0 && (
-                <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg">
-                  <div
-                    className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center gap-2"
-                    onClick={() => { const n = parseInt(searchInput); if (n) addCycle(n); }}
-                  >
-                    <Hash className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm">Segui ciclo <strong>#{searchInput}</strong> e tutta la sua discendenza</span>
-                    <span className="text-xs text-gray-400 ml-auto">↵ Invio</span>
-                  </div>
+                <div className="absolute z-50 top-full left-0 right-0 bg-white border rounded-b-lg shadow-lg max-h-64 overflow-y-auto">
+                  {filteredCycles.length > 0 ? (
+                    filteredCycles.map((c: any) => (
+                      <div
+                        key={c.id}
+                        className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b last:border-0 flex items-center gap-2"
+                        onClick={() => addCycle(c.id)}
+                      >
+                        <span className="text-[10px] text-gray-400 font-mono w-8 shrink-0">#{c.id}</span>
+                        <Hash className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <span className="text-sm font-medium">Cesta #{c.basketPhysicalNumber}</span>
+                        {c.flupsyName && (
+                          <span className="text-xs text-gray-500 truncate">· {c.flupsyName}</span>
+                        )}
+                        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                          c.state === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {c.state === 'active' ? 'Attivo' : 'Chiuso'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div
+                      className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center gap-2"
+                      onClick={() => { const n = parseInt(searchInput); if (n) addCycle(n); }}
+                    >
+                      <Hash className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm">Segui ciclo <strong>#{searchInput}</strong> e tutta la sua discendenza</span>
+                      <span className="text-xs text-gray-400 ml-auto">↵ Invio</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
