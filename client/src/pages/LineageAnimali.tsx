@@ -1002,25 +1002,27 @@ export default function LineageAnimali() {
                   {filteredLots.map(lot => (
                     <div
                       key={lot.id}
-                      className="px-4 py-2.5 hover:bg-emerald-50 cursor-pointer border-b last:border-0"
+                      className="px-4 py-2.5 hover:bg-emerald-50 cursor-pointer border-b last:border-0 flex items-center gap-2"
                       onClick={() => addLot(lot)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-gray-400 font-mono">#{lot.id}</span>
-                          <Package className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                          <span className="font-semibold text-sm">{lot.supplier ?? '—'}</span>
-                          {lot.supplierLotNumber && (
-                            <span className="text-gray-500 text-xs">· {lot.supplierLotNumber}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={`text-[10px] ${lot.state === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                            {lot.state === 'active' ? 'Attivo' : 'Archiviato'}
-                          </Badge>
-                          <span className="text-xs text-gray-400">{formatDate(lot.arrivalDate)}</span>
-                        </div>
-                      </div>
+                      <span className="text-[10px] text-gray-400 font-mono w-8 shrink-0">#{lot.id}</span>
+                      <Package className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="font-semibold text-sm">{lot.supplier ?? '—'}</span>
+                      {lot.supplierLotNumber && (
+                        <span className="text-gray-500 text-xs shrink-0">· {lot.supplierLotNumber}</span>
+                      )}
+                      {lot.size?.code && (
+                        <span className="text-xs text-blue-600 font-medium shrink-0">{lot.size.code}</span>
+                      )}
+                      {lot.animalCount != null && (
+                        <span className="text-xs text-gray-400 shrink-0">{Number(lot.animalCount).toLocaleString('it-IT')} an.</span>
+                      )}
+                      <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                        lot.state === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {lot.state === 'active' ? 'Attivo' : 'Archiviato'}
+                      </span>
+                      <span className="text-xs text-gray-400 shrink-0">{formatDate(lot.arrivalDate)}</span>
                     </div>
                   ))}
                 </div>
