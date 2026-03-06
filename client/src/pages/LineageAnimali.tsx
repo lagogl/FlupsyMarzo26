@@ -777,10 +777,374 @@ function LineageGroup({ group }: { group: any }) {
   );
 }
 
+// ── SGR helper ────────────────────────────────────────────────────────────────
+function computeSGRForCycles(cycles: any[]): { avgSGR: number | null; intervals: number } {
+  let total = 0, count = 0;
+  for (const c of cycles) {
+    const wOps = (c.operations || [])
+      .filter((op: any) => (op.type === 'peso' || op.type === 'misura') && op.average_weight != null && op.average_weight > 0)
+      .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    for (let i = 1; i < wOps.length; i++) {
+      const days = (new Date(wOps[i].date).getTime() - new Date(wOps[i - 1].date).getTime()) / 86400000;
+      if (days < 3) continue;
+      const sgr = (Math.log(wOps[i].average_weight) - Math.log(wOps[i - 1].average_weight)) / days * 100;
+      if (sgr > 0 && sgr < 15) { total += sgr; count++; }
+    }
+  }
+  return { avgSGR: count > 0 ? total / count : null, intervals: count };
+}
+
+// ── Analisi Lotti ──────────────────────────────────────────────────────────────
+function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] }) {
+  const [expandedLots, setExpandedLots] = useState<Set<number>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
+  const [sortCol, setSortCol] = useState<string>('arrival');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [exporting, setExporting] = useState(false);
+
+  const lotGroups = useMemo(() => {
+    const map = new Map<number, { lotInfo: any; groups: any[] }>();
+    for (const g of allGroups) {
+      const root = g.rootCycle ?? (g.cycles ?? []).find((c: any) => !c.parent_cycle_id);
+      if (!root) continue;
+      const lotId = root.lot_id;
+      if (!map.has(lotId)) {
+        const lotInfo = allLots.find(l => l.id === lotId) ?? { id: lotId, supplier: root.lot_supplier, supplierLotNumber: root.lot_name };
+        map.set(lotId, { lotInfo, groups: [] });
+      }
+      map.get(lotId)!.groups.push(g);
+    }
+    return Array.from(map.values());
+  }, [allGroups, allLots]);
+
+  const lotStats = useMemo(() => lotGroups.map(({ lotInfo, groups }) => {
+    let initialAnimals = 0, totalDeaths = 0, rootCycleLosses = 0;
+    let vagliaturaDeaths = 0, childOrganicLosses = 0;
+    let totalSold = 0, totalActive = 0, activeCycleCount = 0, totalCycles = 0;
+    let firstDate: string | null = null, lastDate: string | null = null;
+    for (const g of groups) {
+      const s = computeGroupStats(g);
+      initialAnimals += s.initialAnimals; totalDeaths += s.totalDeaths;
+      rootCycleLosses += s.rootCycleLosses; vagliaturaDeaths += s.vagliaturaDeaths;
+      childOrganicLosses += s.childOrganicLosses; totalSold += s.totalSold;
+      totalActive += s.totalActive; activeCycleCount += s.activeCycleCount; totalCycles += s.totalCycles;
+      if (!firstDate || (s.firstDate && s.firstDate < firstDate)) firstDate = s.firstDate;
+      if (!lastDate || (s.lastDate && s.lastDate > lastDate)) lastDate = s.lastDate;
+    }
+    const allCycles = groups.flatMap((g: any) => g.cycles ?? []);
+    const { avgSGR, intervals: sgrIntervals } = computeSGRForCycles(allCycles);
+    const mortalityPct = initialAnimals > 0 ? (totalDeaths / initialAnimals * 100) : 0;
+    const soldPct = initialAnimals > 0 ? (totalSold / initialAnimals * 100) : 0;
+    const activePct = initialAnimals > 0 ? (totalActive / initialAnimals * 100) : 0;
+    return {
+      lotInfo, groups, initialAnimals, totalDeaths, rootCycleLosses, vagliaturaDeaths,
+      childOrganicLosses, totalSold, totalActive, activeCycleCount, totalCycles,
+      firstDate, lastDate, avgSGR, sgrIntervals, mortalityPct, soldPct, activePct,
+      isOpen: activeCycleCount > 0,
+    };
+  }), [lotGroups]);
+
+  const sorted = useMemo(() => [...lotStats].sort((a, b) => {
+    let va = 0, vb = 0;
+    if (sortCol === 'mortality') { va = a.mortalityPct; vb = b.mortalityPct; }
+    else if (sortCol === 'initial') { va = a.initialAnimals; vb = b.initialAnimals; }
+    else if (sortCol === 'active') { va = a.totalActive; vb = b.totalActive; }
+    else if (sortCol === 'sgr') { va = a.avgSGR ?? -1; vb = b.avgSGR ?? -1; }
+    else { va = a.lotInfo.arrivalDate ? new Date(a.lotInfo.arrivalDate).getTime() : 0; vb = b.lotInfo.arrivalDate ? new Date(b.lotInfo.arrivalDate).getTime() : 0; }
+    return sortDir === 'desc' ? vb - va : va - vb;
+  }), [lotStats, sortCol, sortDir]);
+
+  const totals = useMemo(() => lotStats.reduce((acc, s) => {
+    acc.initialAnimals += s.initialAnimals; acc.totalDeaths += s.totalDeaths;
+    acc.totalSold += s.totalSold; acc.totalActive += s.totalActive;
+    acc.activeCycleCount += s.activeCycleCount; acc.totalCycles += s.totalCycles;
+    return acc;
+  }, { initialAnimals: 0, totalDeaths: 0, totalSold: 0, totalActive: 0, activeCycleCount: 0, totalCycles: 0 }), [lotStats]);
+
+  function toggleLot(id: number) {
+    setExpandedLots(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleGroup(id: number) {
+    setExpandedGroups(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleSort(col: string) {
+    if (sortCol === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setSortCol(col); setSortDir('desc'); }
+  }
+
+  async function handleExcel() {
+    setExporting(true);
+    try {
+      const XLSX = (await import('xlsx')).default ?? (await import('xlsx'));
+      const wb = XLSX.utils.book_new();
+      const s1 = XLSX.utils.json_to_sheet(sorted.map(s => ({
+        'ID Lotto': s.lotInfo.id, 'Fornitore': s.lotInfo.supplier ?? '—',
+        'N. Lotto Fornitore': s.lotInfo.supplierLotNumber ?? '—',
+        'Taglia Ingresso': s.lotInfo.size?.code ?? '—',
+        'Data Arrivo': s.lotInfo.arrivalDate ? formatDate(s.lotInfo.arrivalDate) : '—',
+        'Stato': s.isOpen ? 'Aperto' : 'Chiuso',
+        'Animali Ingresso': s.initialAnimals, 'Morti Totali': s.totalDeaths,
+        'Mortalità %': +s.mortalityPct.toFixed(2),
+        'Morti da Misure': s.rootCycleLosses, 'Morti Vagliatura': s.vagliaturaDeaths,
+        'Morti Organiche Post-Vag.': s.childOrganicLosses,
+        'Venduti': s.totalSold, 'Venduti %': +s.soldPct.toFixed(2),
+        'In Produzione': s.totalActive, 'In Produzione %': +s.activePct.toFixed(2),
+        'Ceste Attive': s.activeCycleCount, 'Cicli Totali': s.totalCycles,
+        'Gruppi Genealogici': s.groups.length,
+        'SGR Medio %/g': s.avgSGR != null ? +s.avgSGR.toFixed(4) : '',
+        'Intervalli SGR': s.sgrIntervals,
+        'Prima Attività': s.firstDate ? formatDate(s.firstDate) : '—',
+        'Ultima Attività': s.lastDate ? formatDate(s.lastDate) : '—',
+      })));
+      XLSX.utils.book_append_sheet(wb, s1, 'Riepilogo Lotti');
+
+      const cycleRows: any[] = [];
+      for (const s of sorted) {
+        for (const g of s.groups) {
+          for (const c of (g.cycles ?? [])) {
+            const ops = [...(c.operations || [])].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            const pa = ops.find((op: any) => op.type === 'prima-attivazione');
+            const { avgSGR: cSGR } = computeSGRForCycles([c]);
+            cycleRows.push({
+              'ID Lotto': s.lotInfo.id, 'Fornitore': s.lotInfo.supplier ?? '—',
+              'ID Gruppo': g.lineageGroupId, 'ID Ciclo': c.id,
+              'Tipo': c.parent_cycle_id ? 'Figlio' : 'Radice',
+              'Cesta #': c.basket_physical_number, 'FLUPSY': c.flupsy_name ?? '—',
+              'Stato': c.state === 'active' ? 'Attivo' : 'Chiuso',
+              'Data Inizio': c.start_date ? formatDate(c.start_date) : '—',
+              'Data Fine': c.end_date ? formatDate(c.end_date) : '—',
+              'Animali In': pa?.animal_count || 0,
+              'Animali Attivi': c.state === 'active' ? (c.last_animal_count || 0) : 0,
+              'Ultima Taglia': c.last_size_code ?? '—',
+              'Ultimo An/kg': c.last_animals_per_kg ?? '',
+              'SGR %/g': cSGR != null ? +cSGR.toFixed(4) : '',
+              'N. Operazioni': (c.operations || []).length,
+            });
+          }
+        }
+      }
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cycleRows), 'Dettaglio Cicli');
+      XLSX.writeFile(wb, `analisi_lotti_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e: any) { console.error(e); }
+    finally { setExporting(false); }
+  }
+
+  const SortTh = ({ col, label }: { col: string; label: string }) => (
+    <th onClick={() => toggleSort(col)} className="py-2 px-2 text-right text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none whitespace-nowrap">
+      {label}{sortCol === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+
+  const totMortPct = totals.initialAnimals > 0 ? (totals.totalDeaths / totals.initialAnimals * 100) : 0;
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-amber-800">
+            <TrendingUp className="w-5 h-5" />
+            Analisi Lotti — Riepilogo Globale
+            <span className="ml-auto text-sm font-normal text-amber-600">{lotStats.length} lotti · {totals.totalCycles} cicli totali</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { label: 'Lotti', val: lotStats.length, sub: `${lotStats.filter(l => l.isOpen).length} aperti · ${lotStats.filter(l => !l.isOpen).length} chiusi`, color: 'amber' },
+              { label: 'Animali in ingresso', val: formatNum(totals.initialAnimals), sub: null, color: 'blue' },
+              { label: 'Mortalità totale', val: formatNum(totals.totalDeaths), sub: `${totMortPct.toFixed(1)}%`, color: totMortPct > 30 ? 'red' : totMortPct > 10 ? 'orange' : 'green' },
+              { label: 'Venduti', val: formatNum(totals.totalSold), sub: `${totals.initialAnimals > 0 ? (totals.totalSold / totals.initialAnimals * 100).toFixed(1) : 0}%`, color: 'green' },
+              { label: 'In produzione', val: formatNum(totals.totalActive), sub: `${totals.activeCycleCount} ceste attive`, color: 'emerald' },
+            ].map(({ label, val, sub, color }) => (
+              <div key={label} className={`bg-white rounded-lg border border-${color}-100 p-3 text-center`}>
+                <div className="text-xs text-gray-500 mb-1">{label}</div>
+                <div className={`text-xl font-bold text-${color}-700`}>{val}</div>
+                {sub && <div className={`text-xs text-${color}-500 mt-1`}>{sub}</div>}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-gray-700 flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            Dettaglio per lotto
+            <span className="text-xs font-normal text-gray-400 ml-1">▶ per espandere gruppi e cicli</span>
+            <Button size="sm" variant="outline" className="ml-auto text-xs" onClick={handleExcel} disabled={exporting}>
+              <Download className="w-3.5 h-3.5 mr-1" />{exporting ? 'Esportando...' : 'Excel'}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-amber-50 border-b border-amber-100">
+                  <th className="py-2 px-2 w-6"></th>
+                  <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700" onClick={() => toggleSort('arrival')}>
+                    Lotto{sortCol === 'arrival' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+                  </th>
+                  <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Fornitore</th>
+                  <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Stato</th>
+                  <SortTh col="initial" label="Ingresso" />
+                  <SortTh col="mortality" label="Mort.%" />
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Morti</th>
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Misure</th>
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Vagliatura</th>
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Organiche</th>
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Venduti</th>
+                  <SortTh col="active" label="Attivi" />
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Ceste/Cicli</th>
+                  <SortTh col="sgr" label="SGR %/g" />
+                  <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Periodo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((s, i) => {
+                  const lotId = s.lotInfo.id;
+                  const exp = expandedLots.has(lotId);
+                  const mc = s.mortalityPct > 30 ? 'text-red-600 font-bold' : s.mortalityPct > 10 ? 'text-orange-500 font-semibold' : 'text-gray-700';
+                  return (
+                    <> 
+                      <tr key={`lot-${lotId}`}
+                        className={`border-b cursor-pointer ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-amber-50/60 transition-colors`}
+                        onClick={() => toggleLot(lotId)}
+                      >
+                        <td className="py-2 px-2 text-center">
+                          {exp ? <ChevronDown className="w-3.5 h-3.5 text-amber-600 mx-auto" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 mx-auto" />}
+                        </td>
+                        <td className="py-2 px-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-gray-400 font-mono">#{lotId}</span>
+                            {s.lotInfo.size?.code && <span className="text-[10px] text-blue-600 font-medium px-1 bg-blue-50 rounded">{s.lotInfo.size.code}</span>}
+                          </div>
+                          {s.lotInfo.supplierLotNumber && <div className="text-[10px] text-gray-400">{s.lotInfo.supplierLotNumber}</div>}
+                        </td>
+                        <td className="py-2 px-2 font-medium text-gray-800 max-w-[120px] truncate">{s.lotInfo.supplier ?? '—'}</td>
+                        <td className="py-2 px-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${s.isOpen ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {s.isOpen ? '● Aperto' : '○ Chiuso'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-right font-medium">{formatNum(s.initialAnimals)}</td>
+                        <td className={`py-2 px-2 text-right ${mc}`}>{s.mortalityPct.toFixed(1)}%</td>
+                        <td className="py-2 px-2 text-right text-red-500">{formatNum(s.totalDeaths)}</td>
+                        <td className="py-2 px-2 text-right text-red-400">{formatNum(s.rootCycleLosses)}</td>
+                        <td className="py-2 px-2 text-right text-orange-400">{formatNum(s.vagliaturaDeaths)}</td>
+                        <td className="py-2 px-2 text-right text-amber-500">{formatNum(s.childOrganicLosses)}</td>
+                        <td className="py-2 px-2 text-right text-green-600">{formatNum(s.totalSold)}</td>
+                        <td className="py-2 px-2 text-right font-semibold text-emerald-700">{formatNum(s.totalActive)}</td>
+                        <td className="py-2 px-2 text-right text-gray-500">{s.activeCycleCount}/{s.totalCycles}</td>
+                        <td className="py-2 px-2 text-right">
+                          {s.avgSGR != null ? <span className="text-indigo-700 font-medium">{s.avgSGR.toFixed(3)}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="py-2 px-2 text-gray-400 text-[10px] whitespace-nowrap">
+                          {s.firstDate ? formatDate(s.firstDate) : '—'}{s.lastDate && s.lastDate !== s.firstDate ? ` → ${formatDate(s.lastDate)}` : ''}
+                        </td>
+                      </tr>
+                      {exp && (
+                        <tr key={`lot-${lotId}-bk`} className="bg-amber-50/30 border-b">
+                          <td colSpan={15} className="px-10 py-1">
+                            <span className="text-[11px] text-gray-500">
+                              <span className="font-semibold text-gray-700">Breakdown mortalità: </span>
+                              {formatNum(s.rootCycleLosses)} da misure ({s.initialAnimals > 0 ? (s.rootCycleLosses / s.initialAnimals * 100).toFixed(1) : 0}%)
+                              {s.vagliaturaDeaths > 0 && <> · {formatNum(s.vagliaturaDeaths)} vagliatura ({s.initialAnimals > 0 ? (s.vagliaturaDeaths / s.initialAnimals * 100).toFixed(1) : 0}%)</>}
+                              {s.childOrganicLosses > 0 && <> · {formatNum(s.childOrganicLosses)} organiche post-vag. ({s.initialAnimals > 0 ? (s.childOrganicLosses / s.initialAnimals * 100).toFixed(1) : 0}%)</>}
+                              {s.sgrIntervals > 0 && <> · SGR su {s.sgrIntervals} intervalli di crescita</>}
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                      {exp && s.groups.map((g: any) => {
+                        const gs = computeGroupStats(g);
+                        const gm = gs.initialAnimals > 0 ? (gs.totalDeaths / gs.initialAnimals * 100) : 0;
+                        const { avgSGR: gSGR } = computeSGRForCycles(g.cycles ?? []);
+                        const gExp = expandedGroups.has(g.lineageGroupId);
+                        const rootC = g.rootCycle ?? (g.cycles ?? []).find((c: any) => !c.parent_cycle_id);
+                        return (
+                          <>
+                            <tr key={`g-${g.lineageGroupId}`}
+                              className="bg-blue-50/40 border-b cursor-pointer hover:bg-blue-50 transition-colors"
+                              onClick={(e) => { e.stopPropagation(); toggleGroup(g.lineageGroupId); }}
+                            >
+                              <td className="py-1.5 px-2 pl-6 text-center">
+                                {gExp ? <ChevronDown className="w-3 h-3 text-blue-500 mx-auto" /> : <ChevronRight className="w-3 h-3 text-gray-400 mx-auto" />}
+                              </td>
+                              <td className="py-1.5 px-2 font-mono text-[10px] text-blue-500">
+                                Gruppo #{g.lineageGroupId}
+                                {rootC && <span className="text-gray-400 font-sans ml-1">· C#{rootC.basket_physical_number}</span>}
+                              </td>
+                              <td className="py-1.5 px-2 text-[11px] text-gray-600 max-w-[120px] truncate">{rootC?.flupsy_name ?? '—'}</td>
+                              <td className="py-1.5 px-2">
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${gs.activeCycleCount > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                                  {gs.activeCycleCount > 0 ? '● Aperto' : '○ Chiuso'}
+                                </span>
+                              </td>
+                              <td className="py-1.5 px-2 text-right text-[11px]">{formatNum(gs.initialAnimals)}</td>
+                              <td className={`py-1.5 px-2 text-right text-[11px] ${gm > 30 ? 'text-red-500' : gm > 10 ? 'text-orange-400' : 'text-gray-600'}`}>{gm.toFixed(1)}%</td>
+                              <td className="py-1.5 px-2 text-right text-[11px] text-red-400">{formatNum(gs.totalDeaths)}</td>
+                              <td className="py-1.5 px-2 text-right text-[11px] text-red-300">{formatNum(gs.rootCycleLosses)}</td>
+                              <td className="py-1.5 px-2 text-right text-[11px] text-orange-300">{formatNum(gs.vagliaturaDeaths)}</td>
+                              <td className="py-1.5 px-2 text-right text-[11px] text-amber-400">{formatNum(gs.childOrganicLosses)}</td>
+                              <td className="py-1.5 px-2 text-right text-[11px] text-green-500">{formatNum(gs.totalSold)}</td>
+                              <td className="py-1.5 px-2 text-right text-[11px] font-medium text-emerald-600">{formatNum(gs.totalActive)}</td>
+                              <td className="py-1.5 px-2 text-right text-[11px] text-gray-400">{gs.activeCycleCount}/{gs.totalCycles}</td>
+                              <td className="py-1.5 px-2 text-right text-[11px]">
+                                {gSGR != null ? <span className="text-indigo-500">{gSGR.toFixed(3)}</span> : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="py-1.5 px-2 text-[10px] text-gray-400">{gs.firstDate ? formatDate(gs.firstDate) : '—'}</td>
+                            </tr>
+                            {gExp && (g.cycles ?? []).map((c: any) => {
+                              const ops = [...(c.operations || [])].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                              const pa = ops.find((op: any) => op.type === 'prima-attivazione');
+                              const { avgSGR: cSGR } = computeSGRForCycles([c]);
+                              return (
+                                <tr key={`c-${c.id}`} className="bg-indigo-50/20 border-b">
+                                  <td></td>
+                                  <td className="py-1 px-2 pl-10 font-mono text-[10px] text-indigo-500">
+                                    Ciclo #{c.id}
+                                    {c.parent_cycle_id && <span className="text-[9px] text-gray-400 font-sans"> ← #{c.parent_cycle_id}</span>}
+                                  </td>
+                                  <td className="py-1 px-2 text-[10px] text-gray-500">C#{c.basket_physical_number} {c.flupsy_name ?? '—'}</td>
+                                  <td className="py-1 px-2">
+                                    <span className={`px-1 text-[9px] rounded font-medium ${c.state === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                      {c.state === 'active' ? 'Attivo' : 'Chiuso'}
+                                    </span>
+                                  </td>
+                                  <td className="py-1 px-2 text-right text-[10px]">{formatNum(pa?.animal_count)}</td>
+                                  <td colSpan={7}></td>
+                                  <td className="py-1 px-2 text-right text-[10px] text-emerald-600">{c.state === 'active' ? formatNum(c.last_animal_count) : '—'}</td>
+                                  <td className="py-1 px-2 text-right text-[10px] text-gray-400">{(c.operations || []).length} op.</td>
+                                  <td className="py-1 px-2 text-right text-[10px]">
+                                    {cSGR != null ? <span className="text-indigo-400">{cSGR.toFixed(3)}</span> : <span className="text-gray-300">—</span>}
+                                  </td>
+                                  <td className="py-1 px-2 text-[10px] text-gray-400">
+                                    {c.start_date ? formatDate(c.start_date) : '—'}{c.end_date ? ` → ${formatDate(c.end_date)}` : ' → in corso'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </>
+                        );
+                      })}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function LineageAnimali() {
   const { toast } = useToast();
   const [searchInput, setSearchInput] = useState('');
-  const [searchMode, setSearchMode] = useState<'lot' | 'cycle' | 'plant'>('lot');
+  const [searchMode, setSearchMode] = useState<'lot' | 'cycle' | 'plant' | 'lots-analysis'>('lot');
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [exporting, setExporting] = useState(false);
 
@@ -883,7 +1247,7 @@ export default function LineageAnimali() {
   const { data: plantData, isLoading: plantLoading } = useQuery<any>({
     queryKey: ['/api/lineage/all'],
     queryFn: () => fetch('/api/lineage/all').then(r => r.json()),
-    enabled: searchMode === 'plant',
+    enabled: searchMode === 'plant' || searchMode === 'lots-analysis',
     staleTime: 60000,
   });
 
@@ -973,6 +1337,17 @@ export default function LineageAnimali() {
                 <Layers className="w-3.5 h-3.5" />
                 Situazione Impianto
               </button>
+              <button
+                onClick={() => { setSearchMode('lots-analysis'); setSearchInput(''); setSelectedItems([]); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  searchMode === 'lots-analysis'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                Analisi Lotti
+              </button>
             </div>
 
             {/* Spiegazione contestuale */}
@@ -981,10 +1356,12 @@ export default function LineageAnimali() {
                 ? 'Seleziona il lotto di origine degli animali → vedrai tutti i cicli di quella partita, dalle ceste iniziali fino alla destinazione finale.'
                 : searchMode === 'cycle'
                 ? 'Inserisci il numero di un ciclo specifico → vedrai quel ramo genealogico con tutta la sua discendenza.'
-                : 'Visione globale di tutti i gruppi genealogici in impianto — mortalità, vendite e produzione aggregati in tempo reale.'}
+                : searchMode === 'plant'
+                ? 'Visione globale di tutti i gruppi genealogici in impianto — mortalità, vendite e produzione aggregati in tempo reale.'
+                : 'Tabella completa per lotto: mortalità%, breakdown, SGR medio, espandibile per gruppo genealogico e singolo ciclo. Esporta in Excel.'}
             </p>
 
-            {searchMode !== 'plant' && (
+            {searchMode !== 'plant' && searchMode !== 'lots-analysis' && (
             <div className="relative">
               {searchMode === 'lot'
                 ? <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -1105,36 +1482,41 @@ export default function LineageAnimali() {
       </Card>
 
       {/* Risultati */}
-      {((searchMode !== 'plant' && isLoading) || (searchMode === 'plant' && plantLoading)) && (
+      {((searchMode !== 'plant' && searchMode !== 'lots-analysis' && isLoading) || ((searchMode === 'plant' || searchMode === 'lots-analysis') && plantLoading)) && (
         <div className="text-center py-12 text-gray-400">
           <GitBranch className="w-10 h-10 mx-auto mb-3 animate-pulse" />
-          <p>{searchMode === 'plant' ? 'Caricamento situazione impianto...' : 'Caricamento genealogia animali...'}</p>
+          <p>{(searchMode === 'plant' || searchMode === 'lots-analysis') ? 'Caricamento dati...' : 'Caricamento genealogia animali...'}</p>
         </div>
       )}
 
-      {searchMode !== 'plant' && error && (
+      {searchMode !== 'plant' && searchMode !== 'lots-analysis' && error && (
         <div className="text-center py-8 text-red-500">
           Errore nel caricamento dei dati.
         </div>
       )}
 
-      {searchMode !== 'plant' && data?.groups?.length === 0 && !isLoading && (
+      {searchMode !== 'plant' && searchMode !== 'lots-analysis' && data?.groups?.length === 0 && !isLoading && (
         <div className="text-center py-8 text-gray-400">
           Nessun dato genealogico trovato.
         </div>
       )}
 
-      {searchMode !== 'plant' && lotIds.length > 0 && data?.groups?.length > 0 && (
+      {searchMode !== 'plant' && searchMode !== 'lots-analysis' && lotIds.length > 0 && data?.groups?.length > 0 && (
         <LotSummary groups={data.groups} selectedItems={selectedItems} />
       )}
 
-      {searchMode !== 'plant' && data?.groups?.map((group: any) => (
+      {searchMode !== 'plant' && searchMode !== 'lots-analysis' && data?.groups?.map((group: any) => (
         <LineageGroup key={group.lineageGroupId} group={group} />
       ))}
 
       {/* Modalità Situazione Impianto */}
       {searchMode === 'plant' && !plantLoading && plantData?.groups && (
         <PlantSummary groups={plantData.groups} />
+      )}
+
+      {/* Modalità Analisi Lotti */}
+      {searchMode === 'lots-analysis' && !plantLoading && plantData?.groups && (
+        <LotAnalysis allGroups={plantData.groups} allLots={allLots} />
       )}
     </div>
   );
