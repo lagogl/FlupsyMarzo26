@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guida Classificazione Qualità — FLUPSY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    font-family: 'Inter', Arial, sans-serif;
+    background: #f8f9fa;
+    color: #1a1a2e;
+    font-size: 13px;
+  }
+
+  @media print {
+    body { background: white; font-size: 12px; }
+    .page { box-shadow: none !important; page-break-after: always; margin: 0 !important; border-radius: 0 !important; }
+    .page:last-child { page-break-after: avoid; }
+    .no-print { display: none !important; }
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ===== COPERTINA ===== */
+  .cover {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f4c81 100%);
+    min-height: 297mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+    position: relative;
+  }
+  .cover-logo {
+    font-size: 48px;
+    margin-bottom: 20px;
+  }
+  .cover-tag {
+    background: rgba(255,255,255,0.15);
+    color: #93c5fd;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 6px 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(147,197,253,0.3);
+    margin-bottom: 24px;
+  }
+  .cover h1 {
+    color: white;
+    font-size: 36px;
+    font-weight: 900;
+    line-height: 1.2;
+    margin-bottom: 12px;
+  }
+  .cover h1 span {
+    background: linear-gradient(90deg, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .cover-sub {
+    color: #94a3b8;
+    font-size: 16px;
+    font-weight: 400;
+    margin-bottom: 48px;
+  }
+  .cover-badges {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 60px;
+  }
+  .badge-p {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #78350f;
+    font-size: 14px;
+    font-weight: 800;
+    padding: 14px 28px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(245,158,11,0.4);
+    letter-spacing: 1px;
+  }
+  .badge-n {
+    background: linear-gradient(135deg, #94a3b8, #64748b);
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 800;
+    padding: 14px 28px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(100,116,139,0.4);
+    letter-spacing: 1px;
+  }
+  .badge-s {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: #431407;
+    font-size: 14px;
+    font-weight: 800;
+    padding: 14px 28px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(249,115,22,0.4);
+    letter-spacing: 1px;
+  }
+  .cover-footer {
+    position: absolute;
+    bottom: 30px;
+    left: 0; right: 0;
+    text-align: center;
+    color: #475569;
+    font-size: 11px;
+  }
+  .cover-deco {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 20% 80%, rgba(245,158,11,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(59,130,246,0.08) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  /* ===== CONTENUTO ===== */
+  .content {
+    padding: 36px 40px;
+  }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, currentColor, transparent);
+    opacity: 0.15;
+  }
+  .section-sub {
+    color: #64748b;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+
+  .page-header {
+    background: linear-gradient(135deg, #1e293b, #334155);
+    color: white;
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .page-header h2 { font-size: 16px; font-weight: 700; }
+  .page-header span { font-size: 11px; color: #94a3b8; }
+  .page-num {
+    width: 28px; height: 28px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+
+  /* ===== DEFINIZIONI CLASSI ===== */
+  .class-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .class-card {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .class-card-header {
+    padding: 16px;
+    text-align: center;
+  }
+  .class-card-body {
+    padding: 16px;
+    background: white;
+    border: 1px solid;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+  }
+  .class-card-icon { font-size: 24px; margin-bottom: 6px; }
+  .class-card-name { font-size: 15px; font-weight: 800; letter-spacing: 1px; }
+  .class-card-desc { font-size: 11px; margin-top: 4px; opacity: 0.8; }
+
+  .cc-premium .class-card-header { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; border: 2px solid #f59e0b; border-bottom: none; }
+  .cc-premium .class-card-body { border-color: #fde68a; }
+  .cc-normal .class-card-header { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); color: #334155; border: 2px solid #94a3b8; border-bottom: none; }
+  .cc-normal .class-card-body { border-color: #e2e8f0; }
+  .cc-sub .class-card-header { background: linear-gradient(135deg, #fed7aa, #fdba74); color: #7c2d12; border: 2px solid #f97316; border-bottom: none; }
+  .cc-sub .class-card-body { border-color: #fdba74; }
+
+  .class-trait {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    align-items: flex-start;
+  }
+  .trait-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .td-p { background: #f59e0b; }
+  .td-n { background: #64748b; }
+  .td-s { background: #f97316; }
+
+  /* ===== REGOLA VAGLIO ===== */
+  .rule-box {
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .rule-box-p { background: #fffbeb; border: 2px solid #fde68a; }
+  .rule-box-n { background: #f8fafc; border: 2px solid #e2e8f0; }
+  .rule-box-s { background: #fff7ed; border: 2px solid #fed7aa; }
+
+  .rule-title {
+    font-size: 13px;
+    font-weight: 800;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rule-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .rule-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 700;
+    border-bottom: 2px solid rgba(0,0,0,0.1);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .rule-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  .rule-table tr:last-child td { border-bottom: none; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .pill-p { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .pill-n { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+  .pill-s { background: #fff7ed; color: #7c2d12; border: 1px solid #fdba74; }
+  .pill-arrow { color: #94a3b8; font-size: 14px; }
+
+  /* ===== DIAGRAMMA VAGLIATURA ===== */
+  .diagram {
+    margin: 16px 0;
+    position: relative;
+  }
+  .diagram-center {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .basket-mock {
+    display: inline-block;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 110px;
+    text-align: center;
+    position: relative;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  }
+  .bm-p { background: #fef3c7; border: 2px solid #f59e0b; color: #92400e; }
+  .bm-n { background: #f1f5f9; border: 2px solid #94a3b8; color: #334155; }
+  .bm-s { background: #fff7ed; border: 2px solid #f97316; color: #7c2d12; }
+  .bm-src { background: #e0f2fe; border: 2px solid #0284c7; color: #0c4a6e; }
+
+  .bm-label {
+    font-size: 9px;
+    font-weight: 500;
+    opacity: 0.7;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .bm-class {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+  .bm-apk {
+    font-size: 9px;
+    margin-top: 3px;
+    opacity: 0.7;
+  }
+
+  .sieve-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 8px 0;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .sieve-bar {
+    flex: 1;
+    height: 3px;
+    background: repeating-linear-gradient(90deg, #64748b 0px, #64748b 8px, transparent 8px, transparent 12px);
+    border-radius: 2px;
+  }
+
+  .arrow-down {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 20px;
+    line-height: 1;
+    margin: 4px 0;
+  }
+
+  .dest-row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .dest-item {
+    text-align: center;
+  }
+  .dest-label {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ===== CASI PRATICI ===== */
+  .examples-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .example-card {
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+  }
+  .example-header {
+    background: #1e293b;
+    color: white;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .example-header .num {
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+  }
+  .example-body { padding: 14px; background: #f8fafc; }
+  .example-step {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: flex-start;
+    font-size: 12px;
+  }
+  .step-dot {
+    background: #334155;
+    color: white;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .example-result {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid;
+  }
+  .res-p { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+  .res-n { background: #f1f5f9; border-color: #94a3b8; color: #334155; }
+  .res-s { background: #fff7ed; border-color: #f97316; color: #7c2d12; }
+
+  /* ===== SCHERMATA MOCK ===== */
+  .screen-mock {
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  .screen-header {
+    background: #1e293b;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .screen-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+  .screen-title {
+    color: #94a3b8;
+    font-size: 11px;
+    margin-left: 4px;
+  }
+  .screen-body {
+    background: #0f172a;
+    padding: 16px;
+  }
+
+  .mock-flupsy-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .mock-flupsy-name {
+    color: white;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .mock-legend-bar {
+    display: flex;
+    gap: 8px;
+    background: rgba(255,255,255,0.1);
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+  .mock-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+  }
+  .mock-legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+  }
+  .mock-baskets-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .mock-basket {
+    border-radius: 6px;
+    padding: 8px 10px;
+    width: 95px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mock-basket-p {
+    background: rgba(254,243,199,0.9);
+    border: 1.5px solid #f59e0b;
+  }
+  .mock-basket-n {
+    background: rgba(241,245,249,0.9);
+    border: 1.5px solid #94a3b8;
+  }
+  .mock-basket-s {
+    background: rgba(255,247,237,0.9);
+    border: 1.5px solid #f97316;
+  }
+  .mock-basket-inactive {
+    background: rgba(30,41,59,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .mock-basket-label {
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 2px;
+  }
+  .mock-basket-size {
+    font-size: 10px;
+    font-weight: 800;
+    color: #1e293b;
+  }
+  .mock-basket-info {
+    font-size: 8px;
+    color: #475569;
+    margin-top: 2px;
+  }
+  .ribbon-mock {
+    position: absolute;
+    top: 0; right: 0;
+    width: 30px; height: 30px;
+    overflow: hidden;
+  }
+  .ribbon-inner {
+    position: absolute;
+    top: 7px; right: -12px;
+    width: 40px;
+    height: 14px;
+    transform: rotate(45deg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; font-weight: 800;
+  }
+  .ri-p { background: #f59e0b; color: #78350f; }
+  .ri-n { background: #94a3b8; color: #1e293b; }
+  .ri-s { background: #f97316; color: #431407; }
+
+  .mock-inactive-text {
+    font-size: 8px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  /* ===== ALBERO DECISIONALE ===== */
+  .tree {
+    font-size: 12px;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+  }
+  .tree-node {
+    margin-left: 20px;
+    position: relative;
+  }
+  .tree-node::before {
+    content: '';
+    position: absolute;
+    left: -14px; top: 10px;
+    width: 10px; height: 1px;
+    background: #94a3b8;
+  }
+  .tree-root {
+    font-weight: 800;
+    font-size: 13px;
+    color: #1e293b;
+    margin-bottom: 8px;
+  }
+  .tree-q {
+    color: #0284c7;
+    font-weight: 700;
+    margin: 6px 0 4px;
+  }
+  .tree-a {
+    color: #64748b;
+    margin: 3px 0;
+  }
+  .tree-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 11px;
+  }
+  .tr-p { background: #fef3c7; color: #92400e; }
+  .tr-n { background: #f1f5f9; color: #334155; }
+  .tr-s { background: #fff7ed; color: #7c2d12; }
+
+  /* ===== LINEAGE ANIMALI MOCK ===== */
+  .lineage-mock {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 11px;
+    margin-bottom: 12px;
+  }
+  .lineage-header {
+    background: #1e293b;
+    color: white;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .lineage-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .lineage-row:last-child { border-bottom: none; }
+  .lineage-indent { margin-left: 20px; border-left: 2px solid #e2e8f0; padding-left: 12px; }
+  .lineage-cycle-id {
+    background: #f1f5f9;
+    color: #475569;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .lineage-info { flex: 1; }
+  .lineage-code { font-weight: 700; color: #1e293b; }
+  .lineage-meta { color: #94a3b8; font-size: 10px; }
+  .lineage-status {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .ls-active { background: #dcfce7; color: #166534; }
+  .ls-closed { background: #fee2e2; color: #991b1b; }
+  .quality-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .qb-p { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .qb-n { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+  .qb-s { background: #fff7ed; color: #7c2d12; border: 1px solid #fdba74; }
+
+  /* ===== AVVISO ===== */
+  .alert-box {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+  .alert-warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .alert-text { font-size: 12px; line-height: 1.5; }
+  .alert-text strong { font-weight: 700; }
+
+  /* ===== APPENDICE ===== */
+  .glossary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .glossary-item {
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+  }
+  .glossary-term {
+    font-weight: 800;
+    color: #1e293b;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .glossary-def {
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .print-btn {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: #1e293b;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 100;
+    font-family: inherit;
+    transition: transform 0.1s;
+  }
+  .print-btn:hover { transform: scale(1.03); background: #334155; }
+
+  hr.divider {
+    border: none;
+    border-top: 1px dashed #e2e8f0;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">
+  🖨️ Stampa / Salva PDF
+</button>
+
+<!-- ======================== PAGINA 1: COPERTINA ======================== -->
+<div class="page">
+  <div class="cover">
+    <div class="cover-deco"></div>
+    <div class="cover-logo">🦪</div>
+    <div class="cover-tag">Sistema FLUPSY — Documentazione Operatori</div>
+    <h1>Classificazione<br><span>Qualità dei Cicli</span></h1>
+    <p class="cover-sub">Come il sistema assegna automaticamente PREMIUM, NORMAL e SUB<br>ad ogni ciclo durante la vagliatura</p>
+    <div class="cover-badges">
+      <div class="badge-p">★ &nbsp;PREMIUM</div>
+      <div class="badge-n">● &nbsp;NORMAL</div>
+      <div class="badge-s">▼ &nbsp;SUB</div>
+    </div>
+    <p style="color:#475569; font-size:13px;">
+      Questo documento spiega le regole di classificazione qualità,<br>
+      come vengono visualizzate nella dashboard e nella storia animali.
+    </p>
+    <div class="cover-footer">
+      FLUPSY Management System &nbsp;·&nbsp; Classificazione Qualità Cicli &nbsp;·&nbsp; Uso Interno
+    </div>
+  </div>
+</div>
+
+<!-- ======================== PAGINA 2: LE TRE CLASSI ======================== -->
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h2>Le tre classi di qualità</h2>
+      <span>Definizioni e caratteristiche</span>
+    </div>
+    <div class="page-num">1</div>
+  </div>
+  <div class="content">
+
+    <p class="section-sub" style="margin-bottom:20px;">Ogni ciclo attivo riceve automaticamente una delle tre classi. La classe dipende da <strong>dove sono finiti gli animali durante la vagliatura</strong> (sopra o sotto il vaglio) e dalla <strong>classe del ciclo genitore</strong>.</p>
+
+    <div class="class-cards">
+      <div class="class-card cc-premium">
+        <div class="class-card-header">
+          <div class="class-card-icon">★</div>
+          <div class="class-card-name">PREMIUM</div>
+          <div class="class-card-desc">La classe più alta</div>
+        </div>
+        <div class="class-card-body">
+          <div class="class-trait"><div class="trait-dot td-p"></div><span>Animali <strong>sopra il vaglio</strong> (i più grandi)</span></div>
+          <div class="class-trait"><div class="trait-dot td-p"></div><span>Genealogia sempre da linee sopra</span></div>
+          <div class="class-trait"><div class="trait-dot td-p"></div><span>Cicli <strong>nuovi o senza genitore</strong> partono da Premium</span></div>
+          <div class="class-trait"><div class="trait-dot td-p"></div><span>Scheda: sfondo <strong>ambra/dorato</strong></span></div>
+        </div>
+      </div>
+      <div class="class-card cc-normal">
+        <div class="class-card-header">
+          <div class="class-card-icon">●</div>
+          <div class="class-card-name">NORMAL</div>
+          <div class="class-card-desc">Classe intermedia</div>
+        </div>
+        <div class="class-card-body">
+          <div class="class-trait"><div class="trait-dot td-n"></div><span>Genitore PREMIUM finito <strong>sotto il vaglio</strong></span></div>
+          <div class="class-trait"><div class="trait-dot td-n"></div><span>Genitore SUB finito <strong>sopra il vaglio</strong></span></div>
+          <div class="class-trait"><div class="trait-dot td-n"></div><span>Ogni ulteriore vagliatura da NORMAL rimane NORMAL</span></div>
+          <div class="class-trait"><div class="trait-dot td-n"></div><span>Scheda: sfondo <strong>grigio-ardesia</strong></span></div>
+        </div>
+      </div>
+      <div class="class-card cc-sub">
+        <div class="class-card-header">
+          <div class="class-card-icon">▼</div>
+          <div class="class-card-name">SUB</div>
+          <div class="class-card-desc">Classe più bassa</div>
+        </div>
+        <div class="class-card-body">
+          <div class="class-trait"><div class="trait-dot td-s"></div><span>Animali <strong>sotto il vaglio</strong> senza genitore (primo vaglio)</span></div>
+          <div class="class-trait"><div class="trait-dot td-s"></div><span>Genitore già SUB, finisce ancora <strong>sotto il vaglio</strong></span></div>
+          <div class="class-trait"><div class="trait-dot td-s"></div><span>Animali consistentemente i più piccoli</span></div>
+          <div class="class-trait"><div class="trait-dot td-s"></div><span>Scheda: sfondo <strong>arancione</strong></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert-box alert-info">
+      <div class="alert-icon">ℹ️</div>
+      <div class="alert-text">
+        <strong>Come nasce un ciclo nuovo?</strong> Ogni cesta appena attivata (prima-attivazione) parte con classe <strong>PREMIUM</strong> di default, poiché non ha ancora storia di vagliatura. La classe verrà aggiornata alla prima vagliatura.
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-title" style="font-size:15px; margin-bottom:16px;">🔍 Come il sistema rileva la posizione</div>
+
+    <p style="margin-bottom:14px; color:#475569; font-size:12px; line-height:1.6;">
+      Il sistema può ricevere la posizione <strong>manualmente dall'operatore</strong> (radio button Sopra/Sotto nel form vagliatura) oppure la <strong>rileva automaticamente</strong> confrontando il numero di animali per kg (APK) tra tutti i cestelli di destinazione della stessa vagliatura.
+    </p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px;">
+        <div style="font-weight:800; color:#166534; margin-bottom:10px; font-size:12px;">📋 Posizione MANUALE</div>
+        <div style="font-size:12px; color:#15803d; line-height:1.6;">
+          L'operatore seleziona esplicitamente <strong>"Sopra → Premium"</strong> o <strong>"Sotto → Sub"</strong> per ogni cestello di destinazione durante la vagliatura con mappa.<br><br>
+          <em>Ha la precedenza sul calcolo automatico.</em>
+        </div>
+      </div>
+      <div style="background:#faf5ff; border:1px solid #e9d5ff; border-radius:10px; padding:16px;">
+        <div style="font-weight:800; color:#6b21a8; margin-bottom:10px; font-size:12px;">🤖 Posizione AUTOMATICA</div>
+        <div style="font-size:12px; color:#7e22ce; line-height:1.6;">
+          Se non specificata, il sistema confronta APK tra i cestelli destinazione:<br>
+          • <strong>25% più basso</strong> di APK = animali grandi = <em>sopra</em><br>
+          • <strong>25% più alto</strong> di APK = animali piccoli = <em>sotto</em><br>
+          • <em>Serve almeno 2 cestelli con APK diverso</em>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ======================== PAGINA 3: REGOLA COMPLETA ======================== -->
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h2>La regola di attribuzione — tutti i casi</h2>
+      <span>Tabella completa genitore × posizione → risultato</span>
+    </div>
+    <div class="page-num">2</div>
+  </div>
+  <div class="content">
+
+    <div class="alert-box alert-warn">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-text">
+        <strong>Regola fondamentale:</strong> la qualità di un ciclo figlio dipende SEMPRE da due fattori: (1) la classe del ciclo <em>genitore</em> (la cesta sorgente) e (2) la <em>posizione</em> al vaglio (sopra = grandi, sotto = piccoli).
+      </div>
+    </div>
+
+    <!-- Tabella principale -->
+    <div style="border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; margin-bottom:24px;">
+      <table class="rule-table" style="width:100%;">
+        <thead style="background:#1e293b; color:white;">
+          <tr>
+            <th style="color:#94a3b8;">Classe Genitore</th>
+            <th style="color:#94a3b8;">Posizione al Vaglio</th>
+            <th style="color:#94a3b8;">Risultato Figlio</th>
+            <th style="color:#94a3b8;">Motivazione</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fffbeb;">
+            <td><span class="pill pill-p">★ PREMIUM</span></td>
+            <td>⬆️ <strong>Sopra</strong> (animali grandi)</td>
+            <td><span class="pill pill-p">★ PREMIUM</span></td>
+            <td style="color:#64748b; font-size:11px;">Animali già buoni, selezionati ancora come grandi</td>
+          </tr>
+          <tr>
+            <td><span class="pill pill-p">★ PREMIUM</span></td>
+            <td>⬇️ <strong>Sotto</strong> (animali piccoli)</td>
+            <td><span class="pill pill-n">● NORMAL</span></td>
+            <td style="color:#64748b; font-size:11px;">Buona origine ma restano indietro nella crescita</td>
+          </tr>
+          <tr style="background:#f8fafc;">
+            <td><span class="pill pill-n">● NORMAL</span></td>
+            <td>⬆️ <strong>Sopra</strong></td>
+            <td><span class="pill pill-n">● NORMAL</span></td>
+            <td style="color:#64748b; font-size:11px;">Non si risale sopra NORMAL una volta scesi</td>
+          </tr>
+          <tr>
+            <td><span class="pill pill-n">● NORMAL</span></td>
+            <td>⬇️ <strong>Sotto</strong></td>
+            <td><span class="pill pill-n">● NORMAL</span></td>
+            <td style="color:#64748b; font-size:11px;">La classe NORMAL non degrada ulteriormente</td>
+          </tr>
+          <tr style="background:#fff7ed;">
+            <td><span class="pill pill-s">▼ SUB</span></td>
+            <td>⬆️ <strong>Sopra</strong></td>
+            <td><span class="pill pill-n">● NORMAL</span></td>
+            <td style="color:#64748b; font-size:11px;">Recupero parziale: i più grandi di una linea SUB</td>
+          </tr>
+          <tr>
+            <td><span class="pill pill-s">▼ SUB</span></td>
+            <td>⬇️ <strong>Sotto</strong></td>
+            <td><span class="pill pill-s">▼ SUB</span></td>
+            <td style="color:#64748b; font-size:11px;">Restano piccoli in una linea già piccola</td>
+          </tr>
+          <tr style="background:#eff6ff;">
+            <td style="color:#1e40af; font-weight:600;">Nessun genitore (primo ciclo)</td>
+            <td>⬆️ <strong>Sopra</strong></td>
+            <td><span class="pill pill-p">★ PREMIUM</span></td>
+            <td style="color:#64748b; font-size:11px;">Prima selezione, animali migliori del lotto</td>
+          </tr>
+          <tr style="background:#eff6ff;">
+            <td style="color:#1e40af; font-weight:600;">Nessun genitore (primo ciclo)</td>
+            <td>⬇️ <strong>Sotto</strong></td>
+            <td><span class="pill pill-s">▼ SUB</span></td>
+            <td style="color:#64748b; font-size:11px;">Prima selezione, animali più piccoli del lotto</td>
+          </tr>
+          <tr style="background:#f8fafc;">
+            <td colspan="2" style="color:#64748b; font-style:italic;">Posizione non rilevabile (1 solo cestello)</td>
+            <td><em>Eredita genitore</em></td>
+            <td style="color:#64748b; font-size:11px;">Senza confronto non si può determinare la posizione</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Albero decisionale -->
+    <div class="section-title" style="font-size:15px; margin-bottom:14px;">🌳 Albero decisionale rapido</div>
+    <div class="tree">
+      <div class="tree-root">🦪 Nuova vagliatura — come viene classificato il ciclo figlio?</div>
+      <div class="tree-node">
+        <div class="tree-q">Il ciclo sorgente ha una classe qualità?</div>
+        <div class="tree-node">
+          <div class="tree-a">❌ No (prima attivazione) → la posizione al vaglio decide:</div>
+          <div class="tree-node">
+            <div class="tree-a">↑ Sopra → <span class="tree-result tr-p">★ PREMIUM</span></div>
+            <div class="tree-a">↓ Sotto → <span class="tree-result tr-s">▼ SUB</span></div>
+            <div class="tree-a">? Indeterminabile → <span class="tree-result tr-p">★ PREMIUM</span> (default)</div>
+          </div>
+          <div class="tree-a">✅ Sì (genitore PREMIUM) → posizione al vaglio:</div>
+          <div class="tree-node">
+            <div class="tree-a">↑ Sopra → <span class="tree-result tr-p">★ PREMIUM</span></div>
+            <div class="tree-a">↓ Sotto → <span class="tree-result tr-n">● NORMAL</span></div>
+          </div>
+          <div class="tree-a">✅ Sì (genitore NORMAL) → posizione al vaglio:</div>
+          <div class="tree-node">
+            <div class="tree-a">↑ Sopra o ↓ Sotto → <span class="tree-result tr-n">● NORMAL</span> (invariato)</div>
+          </div>
+          <div class="tree-a">✅ Sì (genitore SUB) → posizione al vaglio:</div>
+          <div class="tree-node">
+            <div class="tree-a">↑ Sopra → <span class="tree-result tr-n">● NORMAL</span> (recupero parziale)</div>
+            <div class="tree-a">↓ Sotto → <span class="tree-result tr-s">▼ SUB</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ======================== PAGINA 4: ESEMPI PRATICI ======================== -->
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h2>Esempi pratici con diagrammi</h2>
+      <span>Scenari reali di vagliatura</span>
+    </div>
+    <div class="page-num">3</div>
+  </div>
+  <div class="content">
+
+    <div class="examples-grid">
+
+      <!-- Esempio 1 -->
+      <div class="example-card">
+        <div class="example-header" style="background:#065f46;">
+          <div class="num">1</div>
+          Prima vagliatura (nessun genitore)
+        </div>
+        <div class="example-body">
+          <div style="text-align:center; margin-bottom:12px;">
+            <div class="basket-mock bm-src">
+              <div class="bm-label">Sorgente</div>
+              <div class="bm-class">TP-350</div>
+              <div class="bm-apk">Primo ciclo — nessuna classe</div>
+            </div>
+          </div>
+          <div class="sieve-line">
+            <div class="sieve-bar"></div>
+            <span>VAGLIO</span>
+            <div class="sieve-bar"></div>
+          </div>
+          <div class="dest-row">
+            <div class="dest-item">
+              <div class="dest-label">⬆️ Sopra (grandi)</div>
+              <div class="basket-mock bm-p">
+                <div class="bm-label">Dest. A</div>
+                <div class="bm-class">★ PREMIUM</div>
+                <div class="bm-apk">APK basso</div>
+              </div>
+            </div>
+            <div class="dest-item">
+              <div class="dest-label">⬇️ Sotto (piccoli)</div>
+              <div class="basket-mock bm-s">
+                <div class="bm-label">Dest. B</div>
+                <div class="bm-class">▼ SUB</div>
+                <div class="bm-apk">APK alto</div>
+              </div>
+            </div>
+          </div>
+          <div class="example-result res-p" style="margin-top:12px;">
+            📌 Prima vagliatura: sopra = PREMIUM, sotto = SUB
+          </div>
+        </div>
+      </div>
+
+      <!-- Esempio 2 -->
+      <div class="example-card">
+        <div class="example-header" style="background:#1e40af;">
+          <div class="num">2</div>
+          Seconda vagliatura (genitore PREMIUM)
+        </div>
+        <div class="example-body">
+          <div style="text-align:center; margin-bottom:12px;">
+            <div class="basket-mock bm-p">
+              <div class="bm-label">Sorgente</div>
+              <div class="bm-class">★ PREMIUM</div>
+              <div class="bm-apk">Ciclo genitore Premium</div>
+            </div>
+          </div>
+          <div class="sieve-line">
+            <div class="sieve-bar"></div>
+            <span>VAGLIO</span>
+            <div class="sieve-bar"></div>
+          </div>
+          <div class="dest-row">
+            <div class="dest-item">
+              <div class="dest-label">⬆️ Sopra</div>
+              <div class="basket-mock bm-p">
+                <div class="bm-label">Dest. A</div>
+                <div class="bm-class">★ PREMIUM</div>
+                <div class="bm-apk">Rimane Premium</div>
+              </div>
+            </div>
+            <div class="dest-item">
+              <div class="dest-label">⬇️ Sotto</div>
+              <div class="basket-mock bm-n">
+                <div class="bm-label">Dest. B</div>
+                <div class="bm-class">● NORMAL</div>
+                <div class="bm-apk">Diventa Normal</div>
+              </div>
+            </div>
+          </div>
+          <div class="example-result res-n" style="margin-top:12px;">
+            📌 Da Premium: sopra resta Premium, sotto diventa Normal
+          </div>
+        </div>
+      </div>
+
+      <!-- Esempio 3 -->
+      <div class="example-card">
+        <div class="example-header" style="background:#7c2d12;">
+          <div class="num">3</div>
+          Vagliatura da linea SUB
+        </div>
+        <div class="example-body">
+          <div style="text-align:center; margin-bottom:12px;">
+            <div class="basket-mock bm-s">
+              <div class="bm-label">Sorgente</div>
+              <div class="bm-class">▼ SUB</div>
+              <div class="bm-apk">Ciclo genitore Sub</div>
+            </div>
+          </div>
+          <div class="sieve-line">
+            <div class="sieve-bar"></div>
+            <span>VAGLIO</span>
+            <div class="sieve-bar"></div>
+          </div>
+          <div class="dest-row">
+            <div class="dest-item">
+              <div class="dest-label">⬆️ Sopra</div>
+              <div class="basket-mock bm-n">
+                <div class="bm-label">Dest. A</div>
+                <div class="bm-class">● NORMAL</div>
+                <div class="bm-apk">Recupero parziale!</div>
+              </div>
+            </div>
+            <div class="dest-item">
+              <div class="dest-label">⬇️ Sotto</div>
+              <div class="basket-mock bm-s">
+                <div class="bm-label">Dest. B</div>
+                <div class="bm-class">▼ SUB</div>
+                <div class="bm-apk">Rimane Sub</div>
+              </div>
+            </div>
+          </div>
+          <div class="example-result res-n" style="margin-top:12px;">
+            📌 Da SUB: sopra recupera a Normal, sotto rimane Sub
+          </div>
+        </div>
+      </div>
+
+      <!-- Esempio 4 -->
+      <div class="example-card">
+        <div class="example-header" style="background:#4a1d96;">
+          <div class="num">4</div>
+          Vagliatura a 3 destinazioni
+        </div>
+        <div class="example-body">
+          <div style="text-align:center; margin-bottom:8px;">
+            <div class="basket-mock bm-p" style="font-size:10px;">
+              <div class="bm-label">Sorgente ★ PREMIUM</div>
+              <div class="bm-class">TP-700</div>
+            </div>
+          </div>
+          <div class="sieve-line">
+            <div class="sieve-bar"></div>
+            <span>VAGLIO</span>
+            <div class="sieve-bar"></div>
+          </div>
+          <div style="display:flex; gap:6px; justify-content:center; margin-top:8px; flex-wrap:wrap;">
+            <div class="dest-item">
+              <div class="dest-label" style="font-size:9px;">⬆️ Sopra</div>
+              <div class="basket-mock bm-p" style="min-width:70px; padding:6px 8px;">
+                <div class="bm-class" style="font-size:11px;">★ P</div>
+                <div class="bm-apk">APK 500</div>
+              </div>
+            </div>
+            <div class="dest-item">
+              <div class="dest-label" style="font-size:9px;">↔️ Medio</div>
+              <div class="basket-mock bm-p" style="min-width:70px; padding:6px 8px;">
+                <div class="bm-class" style="font-size:11px;">★ P</div>
+                <div class="bm-apk">APK 750</div>
+              </div>
+            </div>
+            <div class="dest-item">
+              <div class="dest-label" style="font-size:9px;">⬇️ Sotto</div>
+              <div class="basket-mock bm-n" style="min-width:70px; padding:6px 8px;">
+                <div class="bm-class" style="font-size:11px;">● N</div>
+                <div class="bm-apk">APK 1200</div>
+              </div>
+            </div>
+          </div>
+          <div class="example-result res-n" style="margin-top:10px; font-size:11px;">
+            📌 Con 3 ceste, solo il 25% più basso APK è "sopra" e il 25% più alto è "sotto". Il centro eredita Premium
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="alert-box alert-info">
+      <div class="alert-icon">💡</div>
+      <div class="alert-text">
+        <strong>Nota sul 25%:</strong> Il rilevamento automatico usa una soglia del 25% dell'intervallo APK. Con 2 ceste, una è sempre "sopra" e l'altra "sotto". Con 3+ ceste, le intermedie potrebbero non ricevere una posizione rilevata automaticamente e <strong>ereditano la classe del genitore</strong>.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ======================== PAGINA 5: VISUALIZZAZIONE DASHBOARD ======================== -->
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h2>Come si vede nella Dashboard</h2>
+      <span>Simulazione delle schermate principali</span>
+    </div>
+    <div class="page-num">4</div>
+  </div>
+  <div class="content">
+
+    <div class="section-title" style="font-size:14px; margin-bottom:8px;">🖥️ Visualizzazione FLUPSY — Vista normale (ribbon angolare)</div>
+    <p style="color:#64748b; font-size:12px; margin-bottom:12px;">In vista normale ogni cesta attiva con ciclo classificato mostra un piccolo <strong>nastro diagonale colorato</strong> nell'angolo in alto a destra.</p>
+
+    <div class="screen-mock">
+      <div class="screen-header">
+        <div class="screen-dot" style="background:#ef4444;"></div>
+        <div class="screen-dot" style="background:#f59e0b;"></div>
+        <div class="screen-dot" style="background:#22c55e;"></div>
+        <span class="screen-title">FLUPSY Management System — Dashboard</span>
+      </div>
+      <div class="screen-body">
+        <div class="mock-flupsy-header">
+          <div class="mock-flupsy-name">RACEWAY DF 2 &nbsp;<span style="color:#64748b; font-size:11px; font-weight:400;">20 ceste</span></div>
+          <div style="color:#64748b; font-size:10px;">Fila DX</div>
+        </div>
+        <div class="mock-baskets-row">
+          <div class="mock-basket mock-basket-p">
+            <div class="ribbon-mock"><div class="ribbon-inner ri-p">★ P</div></div>
+            <div class="mock-basket-label">Cesta #1</div>
+            <div class="mock-basket-size">TP-500</div>
+            <div class="mock-basket-info">0.32 kg</div>
+            <div class="mock-basket-info">1.276.518 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-p">
+            <div class="ribbon-mock"><div class="ribbon-inner ri-p">★ P</div></div>
+            <div class="mock-basket-label">Cesta #2</div>
+            <div class="mock-basket-size">TP-500</div>
+            <div class="mock-basket-info">0.02 kg</div>
+            <div class="mock-basket-info">86.154 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-n">
+            <div class="ribbon-mock"><div class="ribbon-inner ri-n">● N</div></div>
+            <div class="mock-basket-label">Cesta #3</div>
+            <div class="mock-basket-size">TP-450</div>
+            <div class="mock-basket-info">0.07 kg</div>
+            <div class="mock-basket-info">529.841 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-n">
+            <div class="ribbon-mock"><div class="ribbon-inner ri-n">● N</div></div>
+            <div class="mock-basket-label">Cesta #4</div>
+            <div class="mock-basket-size">TP-450</div>
+            <div class="mock-basket-info">0.26 kg</div>
+            <div class="mock-basket-info">2.747.077 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-s">
+            <div class="ribbon-mock"><div class="ribbon-inner ri-s">▼ S</div></div>
+            <div class="mock-basket-label">Cesta #5</div>
+            <div class="mock-basket-size">TP-450</div>
+            <div class="mock-basket-info">0.39 kg</div>
+            <div class="mock-basket-info">3.207.204 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-inactive">
+            <div class="mock-basket-label" style="color:rgba(255,255,255,0.3);">Cesta #6</div>
+            <div class="mock-inactive-text">Non attiva<br>In deposito</div>
+          </div>
+          <div class="mock-basket mock-basket-inactive">
+            <div class="mock-basket-label" style="color:rgba(255,255,255,0.3);">Cesta #7</div>
+            <div class="mock-inactive-text">Non attiva<br>In deposito</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-title" style="font-size:14px; margin-bottom:8px;">🎨 Vista Qualità attiva (fascia diagonale + colori di sfondo)</div>
+    <p style="color:#64748b; font-size:12px; margin-bottom:12px;">Premendo il pulsante <strong>"★ Vista Qualità"</strong> in dashboard, ogni cesta mostra uno sfondo colorato e una fascia diagonale con l'etichetta. Appare anche la legenda sotto la barra dei filtri.</p>
+
+    <div class="screen-mock">
+      <div class="screen-header">
+        <div class="screen-dot" style="background:#ef4444;"></div>
+        <div class="screen-dot" style="background:#f59e0b;"></div>
+        <div class="screen-dot" style="background:#22c55e;"></div>
+        <span class="screen-title">Dashboard — Vista Qualità attiva</span>
+      </div>
+      <div class="screen-body">
+        <!-- Legenda -->
+        <div style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.08); padding:6px 12px; border-radius:6px; margin-bottom:12px; font-size:10px;">
+          <span style="color:#fcd34d; font-weight:700;">Vista Qualità attiva:</span>
+          <span style="background:#d97706; color:#78350f; padding:2px 8px; border-radius:4px; font-weight:700;">★ PREMIUM</span>
+          <span style="background:#64748b; color:#0f172a; padding:2px 8px; border-radius:4px; font-weight:700;">● NORMAL</span>
+          <span style="background:#f97316; color:#431407; padding:2px 8px; border-radius:4px; font-weight:700;">▼ SUB</span>
+          <span style="color:#64748b; font-style:italic;">I colori performance sono sostituiti dai colori di qualità</span>
+        </div>
+        <div class="mock-baskets-row">
+          <!-- Premium con fascia -->
+          <div class="mock-basket mock-basket-p" style="position:relative; overflow:hidden;">
+            <div style="position:absolute;top:50%;left:-40%;width:180%;height:22px;transform:translateY(-50%) rotate(-30deg);background:rgba(245,158,11,0.4);display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:8px;font-weight:800;color:#78350f;white-space:nowrap;">★ PREMIUM</span>
+            </div>
+            <div class="mock-basket-label" style="position:relative;z-index:5;">Cesta #1</div>
+            <div class="mock-basket-size" style="position:relative;z-index:5;">TP-500</div>
+            <div class="mock-basket-info" style="position:relative;z-index:5;">1.276.518 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-p" style="position:relative; overflow:hidden;">
+            <div style="position:absolute;top:50%;left:-40%;width:180%;height:22px;transform:translateY(-50%) rotate(-30deg);background:rgba(245,158,11,0.4);display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:8px;font-weight:800;color:#78350f;white-space:nowrap;">★ PREMIUM</span>
+            </div>
+            <div class="mock-basket-label" style="position:relative;z-index:5;">Cesta #2</div>
+            <div class="mock-basket-size" style="position:relative;z-index:5;">TP-500</div>
+            <div class="mock-basket-info" style="position:relative;z-index:5;">86.154 an.</div>
+          </div>
+          <!-- Normal con fascia -->
+          <div class="mock-basket mock-basket-n" style="position:relative; overflow:hidden;">
+            <div style="position:absolute;top:50%;left:-40%;width:180%;height:22px;transform:translateY(-50%) rotate(-30deg);background:rgba(100,116,139,0.35);display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:8px;font-weight:800;color:#1e293b;white-space:nowrap;">● NORMAL</span>
+            </div>
+            <div class="mock-basket-label" style="position:relative;z-index:5;">Cesta #3</div>
+            <div class="mock-basket-size" style="position:relative;z-index:5;">TP-450</div>
+            <div class="mock-basket-info" style="position:relative;z-index:5;">529.841 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-n" style="position:relative; overflow:hidden;">
+            <div style="position:absolute;top:50%;left:-40%;width:180%;height:22px;transform:translateY(-50%) rotate(-30deg);background:rgba(100,116,139,0.35);display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:8px;font-weight:800;color:#1e293b;white-space:nowrap;">● NORMAL</span>
+            </div>
+            <div class="mock-basket-label" style="position:relative;z-index:5;">Cesta #4</div>
+            <div class="mock-basket-size" style="position:relative;z-index:5;">TP-450</div>
+            <div class="mock-basket-info" style="position:relative;z-index:5;">2.747.077 an.</div>
+          </div>
+          <!-- Sub con fascia -->
+          <div class="mock-basket mock-basket-s" style="position:relative; overflow:hidden;">
+            <div style="position:absolute;top:50%;left:-40%;width:180%;height:22px;transform:translateY(-50%) rotate(-30deg);background:rgba(249,115,22,0.4);display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:8px;font-weight:800;color:#431407;white-space:nowrap;">▼ SUB</span>
+            </div>
+            <div class="mock-basket-label" style="position:relative;z-index:5;">Cesta #5</div>
+            <div class="mock-basket-size" style="position:relative;z-index:5;">TP-450</div>
+            <div class="mock-basket-info" style="position:relative;z-index:5;">3.207.204 an.</div>
+          </div>
+          <div class="mock-basket mock-basket-inactive">
+            <div class="mock-inactive-text">Non attiva</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ======================== PAGINA 6: STORIA ANIMALI ======================== -->
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h2>Storia Animali — Genealogia con qualità</h2>
+      <span>Come leggere l'albero genealogico dei cicli</span>
+    </div>
+    <div class="page-num">5</div>
+  </div>
+  <div class="content">
+
+    <p style="color:#64748b; font-size:12px; margin-bottom:16px; line-height:1.6;">
+      La pagina <strong>Storia Animali / Lineage Animali</strong> mostra la genealogia completa dei cicli. Ogni ciclo visualizza il suo badge di qualità accanto allo stato (Attivo/Chiuso), permettendo di seguire come la qualità si propaga attraverso le generazioni di vagliatura.
+    </p>
+
+    <div class="lineage-mock">
+      <div class="lineage-header">📖 Storia Animali — Cesta #5 (FLUPSY 3)</div>
+      <div class="lineage-row">
+        <div class="lineage-cycle-id">#187</div>
+        <div class="lineage-info">
+          <div class="lineage-code">5-1038-2601 &nbsp;<span style="color:#94a3b8; font-weight:400; font-size:10px;">Prima Attivazione — Gen 2026</span></div>
+          <div class="lineage-meta">TP-300 · 48.000.000 an./kg · Lotto: Ecotapes ZLD 0.35</div>
+        </div>
+        <div class="lineage-status ls-closed">Chiuso</div>
+        <div class="quality-badge qb-p">★ Premium</div>
+      </div>
+      <div class="lineage-indent">
+        <div class="lineage-row">
+          <div class="lineage-cycle-id">#201</div>
+          <div class="lineage-info">
+            <div class="lineage-code">5-1038-2602 &nbsp;<span style="color:#94a3b8; font-weight:400; font-size:10px;">Da vagliatura #12 — Feb 2026</span></div>
+            <div class="lineage-meta">TP-700 · 1.262.493 an./kg · Posizione: Sopra ↑</div>
+          </div>
+          <div class="lineage-status ls-closed">Chiuso</div>
+          <div class="quality-badge qb-p">★ Premium</div>
+        </div>
+        <div class="lineage-indent">
+          <div class="lineage-row">
+            <div class="lineage-cycle-id">#228</div>
+            <div class="lineage-info">
+              <div class="lineage-code">5-1038-2603 &nbsp;<span style="color:#94a3b8; font-weight:400; font-size:10px;">Da vagliatura #29 — Mar 2026</span></div>
+              <div class="lineage-meta">TP-1800 · 1.199.474 an./kg · Posizione: Sotto ↓</div>
+            </div>
+            <div class="lineage-status ls-active">Attivo</div>
+            <div class="quality-badge qb-n">● Normal</div>
+          </div>
+        </div>
+        <div class="lineage-row">
+          <div class="lineage-cycle-id">#202</div>
+          <div class="lineage-info">
+            <div class="lineage-code">6-1038-2602 &nbsp;<span style="color:#94a3b8; font-weight:400; font-size:10px;">Da vagliatura #12 (fratello) — Feb 2026</span></div>
+            <div class="lineage-meta">TP-450 · 3.207.204 an./kg · Posizione: Sotto ↓</div>
+          </div>
+          <div class="lineage-status ls-closed">Chiuso</div>
+          <div class="quality-badge qb-n">● Normal</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert-box alert-info">
+      <div class="alert-icon">📌</div>
+      <div class="alert-text">
+        <strong>Come leggere la genealogia:</strong> Ogni "rientro" verso destra rappresenta una generazione successiva. Il colore del badge segue la progressione: un ciclo PREMIUM che va sotto diventa NORMAL, uno NORMAL non cambia più. La posizione (sopra ↑ / sotto ↓) è visibile nelle note del ciclo.
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-title" style="font-size:14px; margin-bottom:14px;">📌 Riepilogo finale — Regola in 3 punti</div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px;">
+      <div style="background:#fffbeb; border:2px solid #f59e0b; border-radius:12px; padding:16px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">★</div>
+        <div style="font-weight:800; color:#92400e; font-size:13px; margin-bottom:6px;">PREMIUM</div>
+        <div style="font-size:11px; color:#78350f; line-height:1.5;">
+          Sopra il vaglio.<br>Sempre sopra nella storia.<br>O primo ciclo senza genitore.
+        </div>
+      </div>
+      <div style="background:#f8fafc; border:2px solid #94a3b8; border-radius:12px; padding:16px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">●</div>
+        <div style="font-weight:800; color:#334155; font-size:13px; margin-bottom:6px;">NORMAL</div>
+        <div style="font-size:11px; color:#475569; line-height:1.5;">
+          Premium andato sotto.<br>SUB venuto sopra.<br>O già NORMAL (rimane tale).
+        </div>
+      </div>
+      <div style="background:#fff7ed; border:2px solid #f97316; border-radius:12px; padding:16px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">▼</div>
+        <div style="font-weight:800; color:#7c2d12; font-size:13px; margin-bottom:6px;">SUB</div>
+        <div style="font-size:11px; color:#9a3412; line-height:1.5;">
+          Sotto il vaglio al primo ciclo.<br>SUB andato ancora sotto.<br>Animali costantemente piccoli.
+        </div>
+      </div>
+    </div>
+
+    <div class="glossary">
+      <div class="glossary-item">
+        <div class="glossary-term">APK — Animali Per Kg</div>
+        <div class="glossary-def">Numero di animali contenuti in 1 kg di prodotto. APK alto = animali piccoli. APK basso = animali grandi. Il confronto APK tra fratelli determina la posizione automatica.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">Ciclo Genitore (Parent)</div>
+        <div class="glossary-def">Il ciclo della cesta sorgente da cui provengono gli animali durante la vagliatura. La qualità del genitore è il punto di partenza per calcolare la qualità dei cicli figli.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">Lineage Group</div>
+        <div class="glossary-def">Identificativo che raggruppa tutti i cicli fratelli nati dalla stessa vagliatura. Permette al sistema di confrontare APK tra fratelli per determinare le posizioni automatiche.</div>
+      </div>
+      <div class="glossary-item">
+        <div class="glossary-term">Backfill</div>
+        <div class="glossary-def">Processo eseguito una-tantum per calcolare e assegnare la qualità ai cicli storici già presenti nel database prima dell'introduzione del sistema di classificazione.</div>
+      </div>
+    </div>
+
+    <div style="text-align:center; margin-top:30px; color:#94a3b8; font-size:10px; border-top:1px solid #f1f5f9; padding-top:16px;">
+      FLUPSY Management System &nbsp;·&nbsp; Guida Classificazione Qualità &nbsp;·&nbsp; Uso Interno &nbsp;·&nbsp; Pagina 5 di 5
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
