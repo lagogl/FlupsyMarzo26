@@ -564,16 +564,36 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   // Ribbon diagonale in alto a destra che indica la qualità
   const renderQualityRibbon = (quality: string | null) => {
     if (!quality) return null;
-    const config = {
-      premium: { bg: 'bg-amber-400',  text: 'text-amber-900', label: '★ P' },
-      normal:  { bg: 'bg-slate-400',  text: 'text-slate-900', label: '● N' },
-      sub:     { bg: 'bg-orange-400', text: 'text-orange-900', label: '▼ S' },
-    }[quality] ?? null;
-    if (!config) return null;
+    const config: Record<string, { bg: string; text: string; label: string }> = {
+      premium: { bg: '#f59e0b', text: '#78350f', label: '★ P' },
+      normal:  { bg: '#94a3b8', text: '#1e293b', label: '● N' },
+      sub:     { bg: '#f97316', text: '#431407', label: '▼ S' },
+    };
+    const c = config[quality];
+    if (!c) return null;
     return (
-      <div className="absolute top-0 right-0 w-10 h-10 overflow-hidden pointer-events-none z-10">
-        <div className={`${config.bg} ${config.text} text-[8px] font-bold text-center leading-none px-1 py-0.5 rotate-45 translate-x-2 translate-y-2 shadow-sm`}>
-          {config.label}
+      <div
+        className="absolute top-0 right-0 overflow-hidden pointer-events-none z-10"
+        style={{ width: 52, height: 52 }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: -20,
+            width: 72,
+            transform: 'rotate(45deg)',
+            backgroundColor: c.bg,
+            color: c.text,
+            fontSize: 9,
+            fontWeight: 700,
+            textAlign: 'center',
+            padding: '2px 0',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {c.label}
         </div>
       </div>
     );
