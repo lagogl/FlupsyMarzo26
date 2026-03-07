@@ -603,10 +603,8 @@ export default function Operations() {
 
   const { data: cyclesData } = useQuery({
     queryKey: ['/api/cycles', { includeAll: true }],
-    staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
+    staleTime: 30000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    enabled: operations.length > 0, // Solo se abbiamo operazioni
   });
   
   const cycles = cyclesData?.cycles || [];

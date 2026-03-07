@@ -428,7 +428,7 @@ export default function SpreadsheetOperations() {
   });
 
   const { data: cyclesResponse } = useQuery({
-    queryKey: ['/api/cycles'],
+    queryKey: ['/api/cycles', { includeAll: true }],
   });
   
   // Estrai l'array cycles dalla risposta (API restituisce {cycles: [...]})
