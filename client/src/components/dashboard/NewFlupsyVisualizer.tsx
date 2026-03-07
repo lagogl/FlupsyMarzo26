@@ -561,6 +561,59 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     }
   };
 
+  // Fascia diagonale larga semi-trasparente per Vista Qualità
+  const renderQualityDiagonalBand = (quality: string | null) => {
+    if (!quality) return null;
+    const colors: Record<string, string> = {
+      premium: 'rgba(245, 158, 11, 0.35)',   // amber semi-trasparente
+      normal:  'rgba(100, 116, 139, 0.28)',  // slate semi-trasparente
+      sub:     'rgba(249, 115, 22, 0.38)',   // orange semi-trasparente
+    };
+    const labels: Record<string, { text: string; color: string }> = {
+      premium: { text: '★ PREMIUM', color: '#78350f' },
+      normal:  { text: '● NORMAL',  color: '#1e293b' },
+      sub:     { text: '▼ SUB',     color: '#431407' },
+    };
+    const bg = colors[quality];
+    const lbl = labels[quality];
+    if (!bg || !lbl) return null;
+    return (
+      <div
+        className="absolute inset-0 pointer-events-none overflow-hidden"
+        style={{ zIndex: 4 }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '-40%',
+            width: '180%',
+            height: 28,
+            transform: 'translateY(-50%) rotate(-30deg)',
+            backgroundColor: bg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              color: lbl.color,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+              textShadow: '0 1px 2px rgba(255,255,255,0.5)',
+            }}
+          >
+            {lbl.text}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   // Ribbon diagonale in alto a destra che indica la qualità
   const renderQualityRibbon = (quality: string | null) => {
     if (!quality) return null;
@@ -699,8 +752,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 cardColorClass
               } ${highlightClasses} ${opacityClasses} ${blinkClass} cursor-pointer hover:shadow-md transition-all relative overflow-hidden`}
             >
-              {/* Quality ribbon - always visible when basket has an active cycle */}
+              {/* Quality ribbon - visible in normal view */}
               {!qualityView && renderQualityRibbon(basketQuality)}
+              {/* Fascia diagonale larga - visibile in Vista Qualità */}
+              {qualityView && renderQualityDiagonalBand(basketQuality)}
               {/* Star badge for sellable baskets in highlight mode */}
               {highlightLargeSizes && isSellableSize && (
                 <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 shadow-md">
