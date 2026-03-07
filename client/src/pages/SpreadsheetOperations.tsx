@@ -3467,11 +3467,10 @@ export default function SpreadsheetOperations() {
                     <div 
                       style={{
                         width: '70px',
-                        ...(showQualityView && getRowQualityStripeColor(row) !== 'transparent'
-                          ? { borderLeft: `5px solid ${getRowQualityStripeColor(row)}` }
-                          : {}),
+                        paddingLeft: showQualityView && getRowQualityStripeColor(row) !== 'transparent' ? '14px' : undefined,
+                        overflow: 'hidden',
                       }}
-                      className={`px-2 py-1 border-r flex items-center font-medium text-gray-700 sticky left-0 z-10 shadow-r cursor-pointer transition-colors ${
+                      className={`py-1 pr-2 border-r flex items-center font-medium text-gray-700 sticky left-0 z-10 shadow-r cursor-pointer transition-colors ${
                         growthPrediction.willReachTarget 
                           ? 'bg-green-100 hover:bg-green-200' 
                           : 'bg-white hover:bg-blue-50'
@@ -3484,6 +3483,13 @@ export default function SpreadsheetOperations() {
                         return `Doppio click per modificare operazione${qLabel}`;
                       })()}
                     >
+                      {showQualityView && getRowQualityStripeColor(row) !== 'transparent' && (
+                        <span style={{
+                          position: 'absolute', left: 0, top: 0, bottom: 0, width: '8px',
+                          backgroundColor: getRowQualityStripeColor(row),
+                          zIndex: 20, display: 'block', flexShrink: 0,
+                        }} />
+                      )}
                       <div className="flex items-center justify-between w-full">
                         <span>#{row.physicalNumber}</span>
                         {(() => {
