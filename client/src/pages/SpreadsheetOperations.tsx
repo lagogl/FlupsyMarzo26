@@ -277,6 +277,19 @@ export default function SpreadsheetOperations() {
     return !(row as any).isNewRow;
   };
 
+  // Colore banda qualità destra (non aggiunge colonne)
+  const getRowQualityStripeColor = (row: OperationRowData): string => {
+    const cycleId = (row as any).currentCycleId;
+    if (!cycleId) return 'transparent';
+    const cycle = (cycles as any[]).find((c: any) => c.id === cycleId);
+    switch (cycle?.qualityClass) {
+      case 'premium': return '#f59e0b';
+      case 'normal':  return '#94a3b8';
+      case 'sub':     return '#7c3aed';
+      default:        return 'transparent';
+    }
+  };
+
   // Validazione date per evitare duplicati e date anteriori
   const validateOperationDate = (basketId: number, date: string, currentCycleId?: number | null): { valid: boolean; error?: string } => {
     // ✅ FILTRO SOLO OPERAZIONI DEL CICLO ATTIVO (non dei cicli chiusi!)
@@ -3420,6 +3433,18 @@ export default function SpreadsheetOperations() {
                         style={!isOriginalRow(row) ? {
                           background: 'repeating-linear-gradient(to bottom, #10b981 0px, #10b981 3px, transparent 3px, transparent 6px)'
                         } : {}}
+                      />
+                    )}
+                    {/* Banda qualità lato destro */}
+                    {getRowQualityStripeColor(row) !== 'transparent' && (
+                      <div
+                        className="absolute right-0 top-0 bottom-0 z-10"
+                        style={{ width: 4, backgroundColor: getRowQualityStripeColor(row) }}
+                        title={(() => {
+                          const c = (cycles as any[]).find((c: any) => c.id === (row as any).currentCycleId);
+                          const q = c?.qualityClass;
+                          return q === 'premium' ? '★ PREMIUM' : q === 'normal' ? '● NORMAL' : q === 'sub' ? '▼ SUB' : '';
+                        })()}
                       />
                     )}
 

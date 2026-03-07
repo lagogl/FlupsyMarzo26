@@ -1576,6 +1576,29 @@ export default function Operations() {
       .map((cycle: any) => cycle.id);
   }, [cycles, baskets, operations, filters.typeFilter, filters.dateFilter, filters.flupsyFilter, filters.cycleFilter, filters.cycleStateFilter, filters.searchTerm]);
 
+  // Colore banda qualità per riga operazione (box-shadow inset, nessuna colonna aggiuntiva)
+  const getOpQualityBoxShadow = (op: any): string => {
+    if (!op.cycleId) return 'none';
+    const cycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
+    switch (cycle?.qualityClass) {
+      case 'premium': return 'inset -4px 0 0 #f59e0b';
+      case 'normal':  return 'inset -4px 0 0 #94a3b8';
+      case 'sub':     return 'inset -4px 0 0 #7c3aed';
+      default:        return 'none';
+    }
+  };
+
+  const getOpQualityTitle = (op: any): string => {
+    if (!op.cycleId) return '';
+    const cycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
+    switch (cycle?.qualityClass) {
+      case 'premium': return '★ PREMIUM';
+      case 'normal':  return '● NORMAL';
+      case 'sub':     return '▼ SUB';
+      default:        return '';
+    }
+  };
+
   const getOperationTypeBadge = (type: string) => {
     let bgColor = 'bg-blue-100 text-blue-800';
     
@@ -2544,7 +2567,11 @@ export default function Operations() {
                     </tr>
                   ) : (
                     filteredOperations.map((op) => (
-                      <tr key={op.id}>
+                      <tr
+                        key={op.id}
+                        style={{ boxShadow: getOpQualityBoxShadow(op) }}
+                        title={getOpQualityTitle(op) || undefined}
+                      >
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                           {safeFormatDate(op.date, 'dd/MM/yyyy')}
                         </td>
