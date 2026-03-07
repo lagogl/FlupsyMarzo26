@@ -22,6 +22,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   const [, navigate] = useLocation();
   const [selectedTab, setSelectedTab] = useState<string>("all");
   const [isAssignGroupDialogOpen, setIsAssignGroupDialogOpen] = useState(false);
+  const [showQualityView, setShowQualityView] = useState(false);
 
   // Fetch flupsys
   const { data: allFlupsys, isLoading: isLoadingFlupsys } = useQuery({
@@ -543,6 +544,41 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     }
   };
 
+  // Recupera il quality_class del ciclo corrente di una cesta
+  const getBasketQuality = (basket: any): string | null => {
+    if (!basket?.currentCycleId) return null;
+    const cycle = cycles.find((c: any) => c.id === basket.currentCycleId);
+    return cycle?.qualityClass ?? null;
+  };
+
+  // Colore di sfondo in base alla qualità (usato quando showQualityView=true)
+  const getQualityColorClass = (quality: string | null): string => {
+    switch (quality) {
+      case 'premium': return 'bg-amber-200 border-amber-500';
+      case 'normal':  return 'bg-slate-200 border-slate-400';
+      case 'sub':     return 'bg-orange-200 border-orange-500';
+      default:        return 'bg-gray-100 border-gray-300';
+    }
+  };
+
+  // Ribbon diagonale in alto a destra che indica la qualità
+  const renderQualityRibbon = (quality: string | null) => {
+    if (!quality) return null;
+    const config = {
+      premium: { bg: 'bg-amber-400',  text: 'text-amber-900', label: '★ P' },
+      normal:  { bg: 'bg-slate-400',  text: 'text-slate-900', label: '● N' },
+      sub:     { bg: 'bg-orange-400', text: 'text-orange-900', label: '▼ S' },
+    }[quality] ?? null;
+    if (!config) return null;
+    return (
+      <div className="absolute top-0 right-0 w-10 h-10 overflow-hidden pointer-events-none z-10">
+        <div className={`${config.bg} ${config.text} text-[8px] font-bold text-center leading-none px-1 py-0.5 rotate-45 translate-x-2 translate-y-2 shadow-sm`}>
+          {config.label}
+        </div>
+      </div>
+    );
+  };
+
   // Handle basket click to navigate to cycle detail for that basket
   const handleBasketClick = (basket: any) => {
     // Non possiamo procedere se non abbiamo i cicli
@@ -579,7 +615,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Render a basket position within a FLUPSY
-  const renderBasketPosition = (flupsy: any, basket: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false) => {
+  const renderBasketPosition = (flupsy: any, basket: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, qualityView: boolean = false) => {
     if (!basket) return null;
     
     // Get the latest operation for tooltip info
@@ -625,6 +661,12 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     
     // Apply blink even in normal mode if basket has expected size change
     const blinkClass = hasExpectedChange && !highlightLargeSizes && !highlightExpectedSizes ? 'animate-expected-size-blink' : '';
+
+    // Quality class for ribbon and optional background override
+    const basketQuality = getBasketQuality(basket);
+    const cardColorClass = qualityView
+      ? getQualityColorClass(basketQuality)
+      : getBasketColorClass(basket);
     
     // Formato della cesta secondo l'immagine di riferimento
     return (
@@ -634,9 +676,11 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             <div 
               onClick={() => handleBasketClick(basket)}
               className={`border rounded-md p-2 min-w-[140px] ${
-                getBasketColorClass(basket)
-              } ${highlightClasses} ${opacityClasses} ${blinkClass} cursor-pointer hover:shadow-md transition-all relative`}
+                cardColorClass
+              } ${highlightClasses} ${opacityClasses} ${blinkClass} cursor-pointer hover:shadow-md transition-all relative overflow-hidden`}
             >
+              {/* Quality ribbon - always visible when basket has an active cycle */}
+              {!qualityView && renderQualityRibbon(basketQuality)}
               {/* Star badge for sellable baskets in highlight mode */}
               {highlightLargeSizes && isSellableSize && (
                 <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 shadow-md">
@@ -1047,7 +1091,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Function to render a single FLUPSY
-  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, basketFilter?: (basket: any) => boolean) => {
+  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, basketFilter?: (basket: any) => boolean, qualityView: boolean = false) => {
     // Estrai il valore max_positions dal database (accettando varie possibili denominazioni)
     const maxPositionsFromDB = flupsy.max_positions || flupsy.maxPositions || flupsy.maxPosition || flupsy["max-positions"];
     const maxPositions = maxPositionsFromDB || 10; // Fallback se il valore non è presente
@@ -1260,7 +1304,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste DX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {dxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes, qualityView) : (
                     <div 
                       key={`empty-dx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -1295,7 +1339,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste SX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {sxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes, qualityView) : (
                     <div 
                       key={`empty-sx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -1419,6 +1463,30 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    variant={showQualityView ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowQualityView(v => !v)}
+                    className={`flex items-center gap-2 whitespace-nowrap transition-colors ${
+                      showQualityView
+                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500'
+                        : 'border-amber-400 text-amber-700 hover:bg-amber-50'
+                    }`}
+                  >
+                    <span className="text-base leading-none">★</span>
+                    Vista Qualità
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {showQualityView
+                    ? 'Attiva: sfondo colorato per qualità (★ Premium / ● Normal / ▼ Sub). Clicca per tornare alla vista normale'
+                    : 'Mostra i colori di qualità ciclo (★ Premium / ● Normal / ▼ Sub) — in vista normale appare il ribbon angolare'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsAssignGroupDialogOpen(true)}
@@ -1460,58 +1528,78 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 queryClient.invalidateQueries({ queryKey: ['/api/basket-groups'] });
               }}
             />
-            
+
+            {/* Legenda Vista Qualità */}
+            {showQualityView && (
+              <div className="flex items-center gap-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md mb-2 text-xs">
+                <span className="font-semibold text-amber-800">Vista Qualità attiva:</span>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-200 border border-amber-500 rounded">
+                  <span className="font-bold text-amber-900">★</span>
+                  <span className="text-amber-900 font-medium">PREMIUM</span>
+                </span>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-200 border border-slate-400 rounded">
+                  <span className="font-bold text-slate-700">●</span>
+                  <span className="text-slate-700 font-medium">NORMAL</span>
+                </span>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-orange-200 border border-orange-500 rounded">
+                  <span className="font-bold text-orange-800">▼</span>
+                  <span className="text-orange-800 font-medium">SUB</span>
+                </span>
+                <span className="text-gray-500 italic ml-1">I colori performance sono sostituiti dai colori di qualità</span>
+              </div>
+            )}
+
             <TabsContent value="all" className="space-y-4">
-              {flupsys?.map((flupsy: any) => renderFlupsy(flupsy))}
+              {flupsys?.map((flupsy: any) => renderFlupsy(flupsy, false, false, undefined, showQualityView))}
             </TabsContent>
             
             <TabsContent value="active" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => b.state === 'active');
-              }).map((flupsy: any) => renderFlupsy(flupsy))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, undefined, showQualityView))}
             </TabsContent>
             
             <TabsContent value="large" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasLargeSize(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy, true))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, true, false, undefined, showQualityView))}
             </TabsContent>
             
             <TabsContent value="expected" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasExpectedSizeChange(b.id));
-              }).map((flupsy: any) => renderFlupsy(flupsy, false, true))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, true, undefined, showQualityView))}
             </TabsContent>
 
             <TabsContent value="highMortality" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasHighMortality(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, hasHighMortality))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, hasHighMortality, showQualityView))}
             </TabsContent>
 
             <TabsContent value="needsMeasure" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => needsMeasurement(b.id));
-              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, (b: any) => needsMeasurement(b.id)))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, (b: any) => needsMeasurement(b.id), showQualityView))}
             </TabsContent>
 
             <TabsContent value="readyHarvest" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => isReadyForHarvest(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, isReadyForHarvest))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, isReadyForHarvest, showQualityView))}
             </TabsContent>
 
             <TabsContent value="heavyWeight" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
                 return flupsyBaskets?.some((b: any) => hasHeavyWeight(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, hasHeavyWeight))}
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, hasHeavyWeight, showQualityView))}
             </TabsContent>
           </Tabs>
         </>

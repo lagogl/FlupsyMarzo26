@@ -176,6 +176,7 @@ export async function getCycles(options: CyclesOptions = {}) {
         startDate: cycles.startDate,
         endDate: cycles.endDate,
         state: cycles.state,
+        qualityClass: cycles.qualityClass,
         basketPhysicalNumber: baskets.physicalNumber,
         basketState: baskets.state,
         flupsyId: baskets.flupsyId,
