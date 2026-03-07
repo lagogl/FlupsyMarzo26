@@ -2567,12 +2567,22 @@ export default function Operations() {
                     </tr>
                   ) : (
                     filteredOperations.map((op) => (
-                      <tr
-                        key={op.id}
-                        style={{ boxShadow: getOpQualityBoxShadow(op) }}
-                        title={getOpQualityTitle(op) || undefined}
-                      >
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                      <tr key={op.id}>
+                        <td
+                          className="px-3 py-2 whitespace-nowrap text-sm text-gray-500"
+                          style={getOpQualityBoxShadow(op) !== 'none' ? {
+                            borderLeft: `3px solid ${(() => {
+                              const cycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
+                              switch (cycle?.qualityClass) {
+                                case 'premium': return '#f59e0b';
+                                case 'normal':  return '#94a3b8';
+                                case 'sub':     return '#7c3aed';
+                                default:        return 'transparent';
+                              }
+                            })()}`,
+                          } : {}}
+                          title={getOpQualityTitle(op) || undefined}
+                        >
                           {safeFormatDate(op.date, 'dd/MM/yyyy')}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
