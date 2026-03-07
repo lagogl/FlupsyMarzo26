@@ -3435,18 +3435,6 @@ export default function SpreadsheetOperations() {
                         } : {}}
                       />
                     )}
-                    {/* Banda qualità lato destro */}
-                    {getRowQualityStripeColor(row) !== 'transparent' && (
-                      <div
-                        className="absolute right-0 top-0 bottom-0 z-10"
-                        style={{ width: 4, backgroundColor: getRowQualityStripeColor(row) }}
-                        title={(() => {
-                          const c = (cycles as any[]).find((c: any) => c.id === (row as any).currentCycleId);
-                          const q = c?.qualityClass;
-                          return q === 'premium' ? '★ PREMIUM' : q === 'normal' ? '● NORMAL' : q === 'sub' ? '▼ SUB' : '';
-                        })()}
-                      />
-                    )}
 
                     {/* Badge di stato per operazioni associate */}
                     {getAssociatedRows(row.basketId).length > 1 && (
@@ -3464,14 +3452,22 @@ export default function SpreadsheetOperations() {
                     )}
                     {/* Colonna cestello fissa */}
                     <div 
-                      style={{width: '70px'}}
+                      style={{
+                        width: '70px',
+                        borderLeft: `3px solid ${getRowQualityStripeColor(row)}`,
+                      }}
                       className={`px-2 py-1 border-r flex items-center font-medium text-gray-700 sticky left-0 z-10 shadow-r cursor-pointer transition-colors ${
                         growthPrediction.willReachTarget 
                           ? 'bg-green-100 hover:bg-green-200' 
                           : 'bg-white hover:bg-blue-50'
                       }`}
                       onDoubleClick={(e) => handleDoubleClick(row.basketId, e)}
-                      title="Doppio click per modificare operazione"
+                      title={(() => {
+                        const c = (cycles as any[]).find((c: any) => c.id === (row as any).currentCycleId);
+                        const q = c?.qualityClass;
+                        const qLabel = q === 'premium' ? ' | ★ PREMIUM' : q === 'normal' ? ' | ● NORMAL' : q === 'sub' ? ' | ▼ SUB' : '';
+                        return `Doppio click per modificare operazione${qLabel}`;
+                      })()}
                     >
                       <div className="flex items-center justify-between w-full">
                         <span>#{row.physicalNumber}</span>
