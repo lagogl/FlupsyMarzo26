@@ -1591,9 +1591,9 @@ export default function Operations() {
     if (!op.cycleId) return '';
     const cycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
     switch (cycle?.qualityClass) {
-      case 'premium': return '★ PREMIUM';
-      case 'normal':  return '● NORMAL';
-      case 'sub':     return '▼ SUB';
+      case 'premium': return '★ TESTE';
+      case 'normal':  return '● MEDI';
+      case 'sub':     return '▼ CODE';
       default:        return '';
     }
   };

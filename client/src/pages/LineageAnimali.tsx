@@ -87,7 +87,7 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
                 cycle.quality_class === 'sub' ? 'bg-orange-100 text-orange-800 border-orange-300' :
                 'bg-blue-100 text-blue-800 border-blue-300'
               }`}>
-                {cycle.quality_class === 'premium' ? '★ Premium' : cycle.quality_class === 'sub' ? '▼ Sub' : '● Normal'}
+                {cycle.quality_class === 'premium' ? '★ TESTE' : cycle.quality_class === 'sub' ? '▼ CODE' : '● MEDI'}
               </span>
             )}
           </div>

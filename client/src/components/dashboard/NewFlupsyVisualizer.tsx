@@ -570,9 +570,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       sub:     'rgba(249, 115, 22, 0.38)',   // orange semi-trasparente
     };
     const labels: Record<string, { text: string; color: string }> = {
-      premium: { text: '★ PREMIUM', color: '#78350f' },
-      normal:  { text: '● NORMAL',  color: '#1e293b' },
-      sub:     { text: '▼ SUB',     color: '#431407' },
+      premium: { text: '★ TESTE', color: '#78350f' },
+      normal:  { text: '● MEDI',  color: '#1e293b' },
+      sub:     { text: '▼ CODE',  color: '#431407' },
     };
     const bg = colors[quality];
     const lbl = labels[quality];
@@ -618,9 +618,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   const renderQualityRibbon = (quality: string | null) => {
     if (!quality) return null;
     const config: Record<string, { bg: string; text: string; label: string }> = {
-      premium: { bg: '#f59e0b', text: '#78350f', label: '★ P' },
-      normal:  { bg: '#94a3b8', text: '#1e293b', label: '● N' },
-      sub:     { bg: '#f97316', text: '#431407', label: '▼ S' },
+      premium: { bg: '#f59e0b', text: '#78350f', label: '★ T' },
+      normal:  { bg: '#94a3b8', text: '#1e293b', label: '● M' },
+      sub:     { bg: '#f97316', text: '#431407', label: '▼ C' },
     };
     const c = config[quality];
     if (!c) return null;
@@ -1553,8 +1553,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 </TooltipTrigger>
                 <TooltipContent>
                   {showQualityView
-                    ? 'Attiva: sfondo colorato per qualità (★ Premium / ● Normal / ▼ Sub). Clicca per tornare alla vista normale'
-                    : 'Mostra i colori di qualità ciclo (★ Premium / ● Normal / ▼ Sub) — in vista normale appare il ribbon angolare'}
+                    ? 'Attiva: sfondo colorato per qualità (★ TESTE / ● MEDI / ▼ CODE). Clicca per tornare alla vista normale'
+                    : 'Mostra i colori di qualità ciclo (★ TESTE / ● MEDI / ▼ CODE) — in vista normale appare il ribbon angolare'}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1610,15 +1610,15 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                 <span className="font-semibold text-amber-800">Vista Qualità attiva:</span>
                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-200 border border-amber-500 rounded">
                   <span className="font-bold text-amber-900">★</span>
-                  <span className="text-amber-900 font-medium">PREMIUM</span>
+                  <span className="text-amber-900 font-medium">TESTE</span>
                 </span>
                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-200 border border-slate-400 rounded">
                   <span className="font-bold text-slate-700">●</span>
-                  <span className="text-slate-700 font-medium">NORMAL</span>
+                  <span className="text-slate-700 font-medium">MEDI</span>
                 </span>
                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-orange-200 border border-orange-500 rounded">
                   <span className="font-bold text-orange-800">▼</span>
-                  <span className="text-orange-800 font-medium">SUB</span>
+                  <span className="text-orange-800 font-medium">CODE</span>
                 </span>
                 <span className="text-gray-500 italic ml-1">I colori performance sono sostituiti dai colori di qualità</span>
               </div>

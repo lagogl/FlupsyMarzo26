@@ -2338,7 +2338,7 @@ export default function VagliaturaConMappa() {
                     const autoPos = suggestedPositions.get(measurementData.basketId);
                     return autoPos && !measurementData.screeningPosition ? (
                       <div className={`text-[10px] px-2 py-1 rounded border font-medium ${getQualityBadgeProps(autoPos).className}`}>
-                        Auto: {autoPos === 'sopra' ? '★ Premium (animali grandi)' : '▼ Sub (animali piccoli)'}
+                        Auto: {autoPos === 'sopra' ? '★ TESTE (animali grandi)' : '▼ CODE (animali piccoli)'}
                       </div>
                     ) : null;
                   })()}
@@ -2646,7 +2646,7 @@ export default function VagliaturaConMappa() {
                     const autoPos = suggestedPositions.get(measurementData.basketId);
                     return autoPos && !measurementData.screeningPosition ? (
                       <div className={`text-[10px] px-2 py-1 rounded border font-medium ${getQualityBadgeProps(autoPos).className}`}>
-                        Auto: {autoPos === 'sopra' ? '★ Premium (animali grandi)' : '▼ Sub (animali piccoli)'}
+                        Auto: {autoPos === 'sopra' ? '★ TESTE (animali grandi)' : '▼ CODE (animali piccoli)'}
                       </div>
                     ) : null;
                   })()}

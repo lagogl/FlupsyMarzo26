@@ -374,7 +374,7 @@ export const cycles = pgTable("cycles", {
   state: text("state").notNull().default("active"), // active, closed
   parentCycleId: integer("parent_cycle_id"), // Ciclo genitore (da cui provengono gli animali — vagliatura/trasferimento)
   lineageGroupId: integer("lineage_group_id"), // ID del ciclo radice della genealogia (uguale per tutti i cicli dello stesso gruppo animali)
-  qualityClass: text("quality_class"), // Classificazione qualitativa: 'premium', 'normal', 'sub' — derivata dalla storia di vagliatura
+  qualityClass: text("quality_class"), // Classificazione qualitativa: 'premium'=TESTE, 'normal'=MEDI, 'sub'=CODE — derivata dalla storia di vagliatura
 }, (table) => ({
   stateIdx: index("cycles_state_idx").on(table.state),
   basketIdIdx: index("cycles_basket_id_idx").on(table.basketId),

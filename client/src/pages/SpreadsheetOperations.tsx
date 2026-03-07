@@ -3480,7 +3480,7 @@ export default function SpreadsheetOperations() {
                       title={(() => {
                         const c = (cycles as any[]).find((c: any) => c.id === (row as any).currentCycleId);
                         const q = c?.qualityClass;
-                        const qLabel = q === 'premium' ? ' | ★ PREMIUM' : q === 'normal' ? ' | ● NORMAL' : q === 'sub' ? ' | ▼ SUB' : '';
+                        const qLabel = q === 'premium' ? ' | ★ TESTE' : q === 'normal' ? ' | ● MEDI' : q === 'sub' ? ' | ▼ CODE' : '';
                         return `Doppio click per modificare operazione${qLabel}`;
                       })()}
                     >
