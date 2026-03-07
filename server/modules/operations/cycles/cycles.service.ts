@@ -152,6 +152,7 @@ class CyclesService {
           startDate: cycles.startDate,
           endDate: cycles.endDate,
           state: cycles.state,
+          qualityClass: cycles.qualityClass,
           basketPhysicalNumber: baskets.physicalNumber,
           basketState: baskets.state,
           flupsyId: flupsys.id,
