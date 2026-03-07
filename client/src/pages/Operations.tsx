@@ -123,7 +123,7 @@ import {
   ArrowUpDown, ArrowDownUp, MoreVertical, MapPin, ArrowRightCircle,
   BarChart3, Hash, Ruler, Activity, Edit, Trash, Info, FileText, 
   ChevronDown, ChevronUp, Beaker, ShoppingCart, Scissors, Smartphone, Monitor, User,
-  Download, Loader2
+  Download, Loader2, Award
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
@@ -552,6 +552,7 @@ export default function Operations() {
   }>({ key: 'date', direction: 'descending' });
   
   const [expandedCycles, setExpandedCycles] = useState<number[]>([]);
+  const [showQualityView, setShowQualityView] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -1856,6 +1857,15 @@ export default function Operations() {
         
         
         <div className="flex space-x-3">
+          <Button
+            variant="outline"
+            onClick={() => setShowQualityView(!showQualityView)}
+            className={showQualityView ? 'border-amber-500 text-amber-700 bg-amber-50 hover:bg-amber-100' : ''}
+            title="Mostra/nascondi banda colorata qualità (PREMIUM/NORMAL/SUB)"
+          >
+            <Award className="h-4 w-4 mr-1" />
+            {showQualityView ? 'Nascondi Qualità' : 'Vista Qualità'}
+          </Button>
           <Button 
             onClick={exportOperationsToExcel}
             disabled={isExportingOperations || !filteredOperations || filteredOperations.length === 0}
@@ -2570,17 +2580,14 @@ export default function Operations() {
                       <tr key={op.id}>
                         <td
                           className="px-3 py-2 whitespace-nowrap text-sm text-gray-500"
-                          style={getOpQualityBoxShadow(op) !== 'none' ? {
-                            borderLeft: `3px solid ${(() => {
-                              const cycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
-                              switch (cycle?.qualityClass) {
-                                case 'premium': return '#f59e0b';
-                                case 'normal':  return '#94a3b8';
-                                case 'sub':     return '#7c3aed';
-                                default:        return 'transparent';
-                              }
-                            })()}`,
-                          } : {}}
+                          style={showQualityView ? (() => {
+                            const cycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
+                            const color = cycle?.qualityClass === 'premium' ? '#f59e0b'
+                              : cycle?.qualityClass === 'normal' ? '#94a3b8'
+                              : cycle?.qualityClass === 'sub' ? '#7c3aed'
+                              : null;
+                            return color ? { borderLeft: `5px solid ${color}` } : {};
+                          })() : {}}
                           title={getOpQualityTitle(op) || undefined}
                         >
                           {safeFormatDate(op.date, 'dd/MM/yyyy')}

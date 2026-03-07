@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download, PieChart, X } from "lucide-react";
+import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download, PieChart, X, Award } from "lucide-react";
 import ExcelJS from 'exceljs';
 import PivotTableUI from 'react-pivottable/PivotTableUI';
 import 'react-pivottable/pivottable.css';
@@ -184,6 +184,7 @@ export default function SpreadsheetOperations() {
   const [selectedSizeFilter, setSelectedSizeFilter] = useState<string>("all");
   const [showActivationDate, setShowActivationDate] = useState<boolean>(false);  // Toggle Ult.Op / Data Attiv.
   const [showPivotPanel, setShowPivotPanel] = useState<boolean>(false);  // Toggle pannello pivot
+  const [showQualityView, setShowQualityView] = useState<boolean>(false); // Toggle vista qualità
   const [pivotState, setPivotState] = useState<any>({});  // Stato react-pivottable
   const [sortColumn, setSortColumn] = useState<string>("physicalNumber");
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -2647,6 +2648,18 @@ export default function SpreadsheetOperations() {
               <RotateCcw className="h-3 w-3" />
               Undo Generale
             </button>
+            <button
+              onClick={() => setShowQualityView(!showQualityView)}
+              className={`h-8 px-3 text-xs rounded flex items-center gap-1 transition-colors ${
+                showQualityView
+                  ? 'bg-amber-500 text-white hover:bg-amber-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+              title="Mostra/nascondi banda colorata qualità (PREMIUM/NORMAL/SUB)"
+            >
+              <Award className="h-3 w-3" />
+              {showQualityView ? 'Qualità ON' : 'Qualità OFF'}
+            </button>
           </div>
         </div>
       </div>
@@ -3454,7 +3467,9 @@ export default function SpreadsheetOperations() {
                     <div 
                       style={{
                         width: '70px',
-                        borderLeft: `3px solid ${getRowQualityStripeColor(row)}`,
+                        ...(showQualityView && getRowQualityStripeColor(row) !== 'transparent'
+                          ? { borderLeft: `5px solid ${getRowQualityStripeColor(row)}` }
+                          : {}),
                       }}
                       className={`px-2 py-1 border-r flex items-center font-medium text-gray-700 sticky left-0 z-10 shadow-r cursor-pointer transition-colors ${
                         growthPrediction.willReachTarget 
