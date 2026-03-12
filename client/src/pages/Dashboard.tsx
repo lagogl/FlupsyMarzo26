@@ -79,9 +79,9 @@ export default function Dashboard() {
     queryKey: ['/api/lots', { includeAll: true }],
   });
 
-  // Query per il totale animali (calcolo autoritativo dal backend)
+  // Query per il totale animali (calcolo autoritativo dal backend), filtrata per FLUPSY selezionati
   const { data: animalsStats } = useQuery<{ success: boolean; totalAnimals: number; basketCount: number }>({
-    queryKey: ['/api/stats/active-baskets-animals'],
+    queryKey: ['/api/stats/active-baskets-animals', selectedFlupsyIds.length > 0 ? { flupsyIds: selectedFlupsyIds.join(',') } : {}],
   });
 
   // Query for tasks (for ticker)
@@ -436,7 +436,7 @@ export default function Dashboard() {
                   changeType={activeBasketsWithoutCycle.length > 0 ? 'warning' : lastMonthBaskets >= 0 ? 'success' : 'error'}
                   linkTo="/baskets"
                   cardColor="from-blue-50 to-blue-100 border-l-4 border-blue-500"
-                  secondaryInfo={`${totalAnimalsInActiveBaskets.toLocaleString('it-IT')} animali`}
+                  secondaryInfo={`${(animalsStats?.totalAnimals || 0).toLocaleString('it-IT')} animali`}
                 />
               </div>
             </HoverCardTrigger>

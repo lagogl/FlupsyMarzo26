@@ -521,23 +521,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint per totale animali nei cestelli attivi (calcolo autoritativo dal database)
   app.get("/api/stats/active-baskets-animals", async (req: Request, res: Response) => {
     try {
-      const result = await db.execute(sql`
-        WITH latest_ops AS (
-          SELECT DISTINCT ON (o.basket_id) 
-            o.basket_id,
-            o.animal_count
-          FROM operations o
-          JOIN baskets b ON b.id = o.basket_id
-          WHERE b.state = 'active'
-            AND o.type IN ('misura', 'peso', 'prima-attivazione')
-            AND o.animal_count > 0
-          ORDER BY o.basket_id, o.date DESC, o.id DESC
-        )
-        SELECT 
-          COALESCE(SUM(animal_count), 0) as total_animals,
-          COUNT(*) as basket_count
-        FROM latest_ops
-      `);
+      const flupsyIdsParam = req.query.flupsyIds as string | undefined;
+      const flupsyIds = flupsyIdsParam
+        ? flupsyIdsParam.split(',').map(Number).filter(n => !isNaN(n))
+        : [];
+
+      let result;
+      if (flupsyIds.length > 0) {
+        const idsLiteral = flupsyIds.join(',');
+        result = await db.execute(sql`
+          WITH latest_ops AS (
+            SELECT DISTINCT ON (o.basket_id) 
+              o.basket_id,
+              o.animal_count
+            FROM operations o
+            JOIN baskets b ON b.id = o.basket_id
+            WHERE b.state = 'active'
+              AND b.flupsy_id IN (${sql.raw(idsLiteral)})
+              AND o.type IN ('misura', 'peso', 'prima-attivazione')
+              AND o.animal_count > 0
+            ORDER BY o.basket_id, o.date DESC, o.id DESC
+          )
+          SELECT 
+            COALESCE(SUM(animal_count), 0) as total_animals,
+            COUNT(*) as basket_count
+          FROM latest_ops
+        `);
+      } else {
+        result = await db.execute(sql`
+          WITH latest_ops AS (
+            SELECT DISTINCT ON (o.basket_id) 
+              o.basket_id,
+              o.animal_count
+            FROM operations o
+            JOIN baskets b ON b.id = o.basket_id
+            WHERE b.state = 'active'
+              AND o.type IN ('misura', 'peso', 'prima-attivazione')
+              AND o.animal_count > 0
+            ORDER BY o.basket_id, o.date DESC, o.id DESC
+          )
+          SELECT 
+            COALESCE(SUM(animal_count), 0) as total_animals,
+            COUNT(*) as basket_count
+          FROM latest_ops
+        `);
+      }
       
       const row = result.rows[0] as any;
       res.json({
