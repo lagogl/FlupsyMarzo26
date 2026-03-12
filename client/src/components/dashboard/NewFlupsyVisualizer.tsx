@@ -1456,7 +1456,25 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
           <div className="mb-4">
             <h2 className="text-lg font-bold mb-2">Visualizzazione FLUPSY</h2>
             <p className="text-sm text-gray-500 mb-2">Disposizione delle ceste attive con dati</p>
-            
+            {/* Totale animali per filtro + FLUPSY correnti */}
+            {(() => {
+              const fd = getFilteredBasketsForExport();
+              const activeFd = fd.filter((d: any) => d.basket.state === 'active');
+              const totalAnimals = activeFd.reduce((sum: number, d: any) => sum + (d.latestOp?.animalCount || 0), 0);
+              const basketCount = activeFd.length;
+              return (
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 font-medium">
+                    {basketCount} ceste attive
+                  </span>
+                  <span className="text-gray-400">·</span>
+                  <span className="px-2 py-0.5 rounded bg-green-50 border border-green-200 text-green-800 font-medium">
+                    {totalAnimals.toLocaleString('it-IT')} animali
+                  </span>
+                  <span className="text-xs text-gray-400 italic">({getFilterLabel(selectedTab)})</span>
+                </div>
+              );
+            })()}
           </div>
           
           {/* Tab filter for FLUPSY status */}
