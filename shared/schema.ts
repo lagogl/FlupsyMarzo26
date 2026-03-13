@@ -1345,6 +1345,9 @@ export const ddt = pgTable("ddt", {
   ddtStato: text("ddt_stato", { enum: ["nessuno", "locale", "inviato"] }).notNull().default("nessuno"),
   fattureInCloudId: integer("fatture_in_cloud_id"),
   fattureInCloudNumero: text("fatture_in_cloud_numero"), // Numero DDT in FIC
+  fcloudDdtId: text("fcloud_ddt_id"),     // ID DDT nell'app esterna FCloud
+  fcloudDdtNumero: text("fcloud_ddt_numero"), // Numero DDT nell'app esterna FCloud
+  fcloudStato: text("fcloud_stato"),       // Stato sincronizzazione FCloud: 'inviato'|'errore'|null
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
 });

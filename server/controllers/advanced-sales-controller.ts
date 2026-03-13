@@ -35,6 +35,7 @@ import {
 import { format } from "date-fns";
 import { apiRequest, getConfigValue } from "./fatture-in-cloud-controller";
 import { OperationsCache } from "../operations-cache-service.js";
+import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
 
 /**
@@ -1826,13 +1827,43 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       dn_ai_weight: ficResponse.data.data.dn_ai_weight
     }, null, 2));
     
-    // Aggiorna DDT con ID esterno
+    // Aggiorna DDT con ID esterno FIC
     await db.update(ddt).set({
       fattureInCloudId: ficResponse.data.data.id?.toString(),
       fattureInCloudNumero: ficResponse.data.data.numeration || ddtData.numero,
       ddtStato: 'inviato',
       updatedAt: new Date()
     }).where(eq(ddt.id, parseInt(ddtId)));
+
+    // ── DOPPIA SCRITTURA FCloud (non bloccante) ──────────────────────────────
+    // Invia il DDT anche all'app esterna FCloud in parallelo con FIC.
+    // Se FCloud fallisce, il flusso FIC rimane intatto.
+    sendDDTToFCloud(parseInt(ddtId))
+      .then(async (fcloudResult) => {
+        if (fcloudResult.success && fcloudResult.fcloudDdtId) {
+          await db.update(ddt).set({
+            fcloudDdtId: fcloudResult.fcloudDdtId,
+            fcloudDdtNumero: fcloudResult.fcloudNumero,
+            fcloudStato: 'inviato',
+            updatedAt: new Date()
+          }).where(eq(ddt.id, parseInt(ddtId)));
+          console.log(`✅ FCloud: DDT ${ddtId} sincronizzato → ID ${fcloudResult.fcloudDdtId}, N. ${fcloudResult.fcloudNumero}`);
+        } else {
+          console.warn(`⚠️ FCloud: DDT ${ddtId} non sincronizzato — ${fcloudResult.error}`);
+          await db.update(ddt).set({
+            fcloudStato: 'errore',
+            updatedAt: new Date()
+          }).where(eq(ddt.id, parseInt(ddtId)));
+        }
+      })
+      .catch(async (err) => {
+        console.error(`❌ FCloud: errore invio DDT ${ddtId}:`, err.message);
+        await db.update(ddt).set({
+          fcloudStato: 'errore',
+          updatedAt: new Date()
+        }).where(eq(ddt.id, parseInt(ddtId))).catch(() => {});
+      });
+    // ────────────────────────────────────────────────────────────────────────
 
     // Recupera advancedSaleId dalla prima riga DDT per aggiornare anche la vendita
     let advancedSaleId: number | null = null;
