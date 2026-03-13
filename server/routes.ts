@@ -9245,6 +9245,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // ── ENDPOINT TEST FCLOUD (solo sviluppo) ──────────────────────────────────
+  // Invia un DDT esistente all'app esterna FCloud senza creare nulla in FLUPSY
+  app.post("/api/test/fcloud-ddt/:ddtId", async (req: Request, res: Response) => {
+    try {
+      const ddtId = parseInt(req.params.ddtId);
+      if (isNaN(ddtId)) {
+        return res.status(400).json({ success: false, error: "ddtId non valido" });
+      }
+      const { sendDDTToFCloud } = await import('./services/fcloud-ddt-service.js');
+      const result = await sendDDTToFCloud(ddtId);
+      return res.json(result);
+    } catch (error: any) {
+      console.error("❌ Test FCloud DDT error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  // ──────────────────────────────────────────────────────────────────────────
+
   // Serve static PDF files
   const express = await import('express');
   app.use('/generated-pdfs', (req, res, next) => {
