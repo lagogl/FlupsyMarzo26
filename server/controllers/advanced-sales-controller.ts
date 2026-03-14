@@ -710,12 +710,12 @@ export async function generateSalePDF(req: Request, res: Response) {
 
     // Crea directory per PDF se non esiste
     const pdfDir = path.join(process.cwd(), 'generated-pdfs');
-    await fs.mkdir(pdfDir, { recursive: true });
+    await fsPromises.mkdir(pdfDir, { recursive: true });
 
     // Salva PDF su file system
     const fileName = `vendita-${sale[0].saleNumber}-${Date.now()}.pdf`;
     const filePath = path.join(pdfDir, fileName);
-    await fs.writeFile(filePath, pdfBuffer);
+    await fsPromises.writeFile(filePath, pdfBuffer);
 
     // Aggiorna record vendita con percorso PDF
     await db.update(advancedSales)
