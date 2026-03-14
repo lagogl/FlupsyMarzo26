@@ -329,12 +329,16 @@ class OperationsLifecycleService {
       console.warn(`⚠️ [LIFECYCLE] Errore pulizia screening_lot_references:`, e);
     }
 
-    // 9. selection_source_baskets
+    // 9. selection_source_baskets (cycle_id è NOT NULL → elimina le righe invece di nullificare)
     try {
-      await db.update(selectionSourceBaskets)
-        .set({ cycleId: null })
-        .where(eq(selectionSourceBaskets.cycleId, cycleId));
-      result.cleanedTables.push('selection_source_baskets');
+      const deleted = await db.delete(selectionSourceBaskets)
+        .where(eq(selectionSourceBaskets.cycleId, cycleId))
+        .returning({ id: selectionSourceBaskets.id });
+      if (deleted.length > 0) {
+        result.cleanedTables.push(`selection_source_baskets (${deleted.length} eliminati)`);
+      } else {
+        result.cleanedTables.push('selection_source_baskets (nessun record)');
+      }
     } catch (e) {
       console.warn(`⚠️ [LIFECYCLE] Errore pulizia selection_source_baskets:`, e);
     }

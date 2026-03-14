@@ -995,10 +995,9 @@ export class DbStorage implements IStorage {
         try {
           const { selectionSourceBaskets, selectionDestinationBaskets, selectionBasketHistory } = await import('@shared/schema');
           
-          // Elimina riferimenti nelle ceste di origine della selezione
+          // Elimina righe nelle ceste di origine della selezione (cycle_id è NOT NULL → delete invece di null)
           console.log(`Pulizia riferimenti al ciclo ${cycleId} nelle ceste di origine della selezione`);
-          await db.update(selectionSourceBaskets)
-            .set({ cycleId: null })
+          await db.delete(selectionSourceBaskets)
             .where(eq(selectionSourceBaskets.cycleId, cycleId));
           
           // Elimina riferimenti nelle ceste di destinazione della selezione
