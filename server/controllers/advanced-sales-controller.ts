@@ -1812,32 +1812,9 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       }
     };
     
-    // Invia a Fatture in Cloud
-    console.log(`🚀 Invio DDT ${ddtData.numero} a Fatture in Cloud...`);
-    console.log(`📦 Payload FIC DN_AI:`, JSON.stringify({
-      dn_ai_packages_number: ddtPayload.data.dn_ai_packages_number,
-      dn_ai_weight: ddtPayload.data.dn_ai_weight,
-      items_count: ddtPayload.data.items_list.length
-    }, null, 2));
-    const ficResponse = await ficApiRequest('POST', companyId, accessToken, '/issued_documents', ddtPayload);
-    
-    console.log(`✅ DDT inviato con successo! FIC ID: ${ficResponse.data.data.id}`);
-    console.log(`📊 Risposta FIC DN_AI:`, JSON.stringify({
-      dn_ai_packages_number: ficResponse.data.data.dn_ai_packages_number,
-      dn_ai_weight: ficResponse.data.data.dn_ai_weight
-    }, null, 2));
-    
-    // Aggiorna DDT con ID esterno FIC
-    await db.update(ddt).set({
-      fattureInCloudId: ficResponse.data.data.id?.toString(),
-      fattureInCloudNumero: ficResponse.data.data.numeration || ddtData.numero,
-      ddtStato: 'inviato',
-      updatedAt: new Date()
-    }).where(eq(ddt.id, parseInt(ddtId)));
-
-    // ── DOPPIA SCRITTURA FCloud (non bloccante) ──────────────────────────────
-    // Invia il DDT anche all'app esterna FCloud in parallelo con FIC.
-    // Se FCloud fallisce, il flusso FIC rimane intatto.
+    // ── CANALE FCLOUD: indipendente da FIC ───────────────────────────────────
+    // Parte subito, senza aspettare l'esito FIC.
+    // Quando FIC verrà disattivato, questo blocco continuerà a funzionare da solo.
     sendDDTToFCloud(parseInt(ddtId))
       .then(async (fcloudResult) => {
         if (fcloudResult.success && fcloudResult.fcloudDdtId) {
@@ -1850,20 +1827,38 @@ export async function sendDDTToFIC(req: Request, res: Response) {
           console.log(`✅ FCloud: DDT ${ddtId} sincronizzato → ID ${fcloudResult.fcloudDdtId}, N. ${fcloudResult.fcloudNumero}`);
         } else {
           console.warn(`⚠️ FCloud: DDT ${ddtId} non sincronizzato — ${fcloudResult.error}`);
-          await db.update(ddt).set({
-            fcloudStato: 'errore',
-            updatedAt: new Date()
-          }).where(eq(ddt.id, parseInt(ddtId)));
+          await db.update(ddt).set({ fcloudStato: 'errore', updatedAt: new Date() }).where(eq(ddt.id, parseInt(ddtId)));
         }
       })
       .catch(async (err) => {
         console.error(`❌ FCloud: errore invio DDT ${ddtId}:`, err.message);
-        await db.update(ddt).set({
-          fcloudStato: 'errore',
-          updatedAt: new Date()
-        }).where(eq(ddt.id, parseInt(ddtId))).catch(() => {});
+        await db.update(ddt).set({ fcloudStato: 'errore', updatedAt: new Date() }).where(eq(ddt.id, parseInt(ddtId))).catch(() => {});
       });
-    // ────────────────────────────────────────────────────────────────────────
+    // ── FINE CANALE FCLOUD ───────────────────────────────────────────────────
+
+    // ── CANALE FIC (Fatture in Cloud): indipendente da FCloud ────────────────
+    // Quando non sarà più necessario, basterà rimuovere questo blocco.
+    console.log(`🚀 Invio DDT ${ddtData.numero} a Fatture in Cloud...`);
+    console.log(`📦 Payload FIC DN_AI:`, JSON.stringify({
+      dn_ai_packages_number: ddtPayload.data.dn_ai_packages_number,
+      dn_ai_weight: ddtPayload.data.dn_ai_weight,
+      items_count: ddtPayload.data.items_list.length
+    }, null, 2));
+    const ficResponse = await ficApiRequest('POST', companyId, accessToken, '/issued_documents', ddtPayload);
+    
+    console.log(`✅ FIC: DDT inviato con successo! ID: ${ficResponse.data.data.id}`);
+    console.log(`📊 Risposta FIC DN_AI:`, JSON.stringify({
+      dn_ai_packages_number: ficResponse.data.data.dn_ai_packages_number,
+      dn_ai_weight: ficResponse.data.data.dn_ai_weight
+    }, null, 2));
+    
+    await db.update(ddt).set({
+      fattureInCloudId: ficResponse.data.data.id?.toString(),
+      fattureInCloudNumero: ficResponse.data.data.numeration || ddtData.numero,
+      ddtStato: 'inviato',
+      updatedAt: new Date()
+    }).where(eq(ddt.id, parseInt(ddtId)));
+    // ── FINE CANALE FIC ──────────────────────────────────────────────────────
 
     // Recupera advancedSaleId dalla prima riga DDT per aggiornare anche la vendita
     let advancedSaleId: number | null = null;
