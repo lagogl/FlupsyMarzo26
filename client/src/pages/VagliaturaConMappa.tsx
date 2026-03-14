@@ -114,9 +114,9 @@ export default function VagliaturaConMappa() {
   }, [destinationBaskets]);
 
   function getQualityBadgeProps(pos: 'sopra' | 'sotto' | null | undefined): { label: string; className: string } {
-    if (pos === 'sopra') return { label: '★ Premium', className: 'bg-amber-100 text-amber-800 border border-amber-300' };
-    if (pos === 'sotto') return { label: '▼ Sub', className: 'bg-orange-100 text-orange-800 border border-orange-300' };
-    return { label: '● Normal', className: 'bg-blue-100 text-blue-800 border border-blue-300' };
+    if (pos === 'sopra') return { label: '★ TESTE', className: 'bg-amber-100 text-amber-800 border border-amber-300' };
+    if (pos === 'sotto') return { label: '▼ CODE', className: 'bg-purple-100 text-purple-800 border border-purple-300' };
+    return { label: '● MEDI', className: 'bg-slate-100 text-slate-700 border border-slate-300' };
   }
   
   // FLUPSY separati per origine e destinazione (supporta cross-FLUPSY)
