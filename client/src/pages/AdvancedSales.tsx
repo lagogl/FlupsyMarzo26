@@ -13,7 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 import AdvancedSalesConfigTab from "./AdvancedSalesConfigTab";
@@ -91,6 +92,7 @@ export default function AdvancedSales() {
   const [baseSupplyByBasket, setBaseSupplyByBasket] = useState<Record<number, BasketSupply>>({});
   const [openCustomerCombobox, setOpenCustomerCombobox] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [saleToDelete, setSaleToDelete] = useState<{ id: number; saleNumber: string } | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -221,6 +223,25 @@ export default function AdvancedSales() {
         description: error.message || "Errore nell'aggiornamento dello stato",
         variant: "destructive" 
       });
+    }
+  });
+
+  // Mutation per eliminare vendita in Bozza
+  const deleteSaleMutation = useMutation({
+    mutationFn: (saleId: number) =>
+      apiRequest(`/api/advanced-sales/${saleId}`, 'DELETE'),
+    onSuccess: () => {
+      toast({ variant: "success", title: "Bozza eliminata", description: "La vendita è stata eliminata. La vagliatura e i cestelli rimangono invariati." });
+      setSaleToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Errore",
+        description: error.message || "Impossibile eliminare la vendita",
+        variant: "destructive"
+      });
+      setSaleToDelete(null);
     }
   });
 
@@ -1023,15 +1044,26 @@ export default function AdvancedSales() {
                             )}
 
                             {sale.status === 'draft' && (
-                              <Button 
-                                variant="default" 
-                                size="sm"
-                                onClick={() => handleUpdateStatus(sale.id, 'confirmed')}
-                                className="bg-green-600 hover:bg-green-700"
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Conferma
-                              </Button>
+                              <>
+                                <Button 
+                                  variant="default" 
+                                  size="sm"
+                                  onClick={() => handleUpdateStatus(sale.id, 'confirmed')}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Conferma
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSaleToDelete({ id: sale.id, saleNumber: sale.saleNumber })}
+                                  className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Elimina
+                                </Button>
+                              </>
                             )}
                           </div>
                         </TableCell>
@@ -1044,6 +1076,50 @@ export default function AdvancedSales() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!saleToDelete} onOpenChange={(open) => { if (!open) setSaleToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare la bozza {saleToDelete?.saleNumber}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>Stai per eliminare questa vendita in stato <strong>Bozza</strong>. L'operazione è irreversibile.</p>
+                <div className="rounded-md bg-green-50 border border-green-200 p-3 space-y-1">
+                  <p className="font-semibold text-green-800">✅ Cosa viene eliminato:</p>
+                  <ul className="list-disc list-inside text-green-700 space-y-0.5">
+                    <li>Il record della vendita avanzata ({saleToDelete?.saleNumber})</li>
+                    <li>La configurazione dei sacchi e le allocazioni</li>
+                    <li>Il DDT bozza collegato (se presente)</li>
+                  </ul>
+                </div>
+                <div className="rounded-md bg-blue-50 border border-blue-200 p-3 space-y-1">
+                  <p className="font-semibold text-blue-800">🔒 Cosa rimane intatto:</p>
+                  <ul className="list-disc list-inside text-blue-700 space-y-0.5">
+                    <li>La vagliatura sorgente e tutte le operazioni sui cestelli</li>
+                    <li>Lo stato dei cestelli (invariato)</li>
+                    <li>Tutti gli altri dati del sistema</li>
+                  </ul>
+                </div>
+                <p className="text-muted-foreground">Dopo l'eliminazione la situazione tornerà esattamente com'era prima della creazione di questa vendita avanzata.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => saleToDelete && deleteSaleMutation.mutate(saleToDelete.id)}
+              disabled={deleteSaleMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleteSaleMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminazione...</>
+              ) : (
+                <><Trash2 className="h-4 w-4 mr-1" />Elimina definitivamente</>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
