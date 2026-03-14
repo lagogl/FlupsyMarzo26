@@ -9245,8 +9245,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // ── ENDPOINT: Apri DDT in FCloud (crea se non esiste, ritorna deep-link) ──
+  app.post("/api/ddt/:ddtId/open-in-fcloud", async (req: Request, res: Response) => {
+    try {
+      const ddtId = parseInt(req.params.ddtId);
+      if (isNaN(ddtId)) {
+        return res.status(400).json({ success: false, error: "ddtId non valido" });
+      }
+      const { openOrCreateDDTInFCloud } = await import('./services/fcloud-ddt-service.js');
+      const result = await openOrCreateDDTInFCloud(ddtId);
+      if (!result.success) {
+        return res.status(422).json(result);
+      }
+      return res.json(result);
+    } catch (error: any) {
+      console.error("❌ FCloud open-in-fcloud error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  // ──────────────────────────────────────────────────────────────────────────
+
   // ── ENDPOINT TEST FCLOUD (solo sviluppo) ──────────────────────────────────
-  // Invia un DDT esistente all'app esterna FCloud senza creare nulla in FLUPSY
   app.post("/api/test/fcloud-ddt/:ddtId", async (req: Request, res: Response) => {
     try {
       const ddtId = parseInt(req.params.ddtId);

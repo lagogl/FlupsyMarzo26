@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet } from "lucide-react";
+import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 import AdvancedSalesConfigTab from "./AdvancedSalesConfigTab";
@@ -87,6 +87,7 @@ export default function AdvancedSales() {
   const [currentSaleId, setCurrentSaleId] = useState<number | null>(null);
   const [bagConfigs, setBagConfigs] = useState<BagConfiguration[]>([]);
   const [sendingDDTId, setSendingDDTId] = useState<number | null>(null);
+  const [openingFCloudId, setOpeningFCloudId] = useState<number | null>(null);
   const [baseSupplyByBasket, setBaseSupplyByBasket] = useState<Record<number, BasketSupply>>({});
   const [openCustomerCombobox, setOpenCustomerCombobox] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
@@ -534,6 +535,32 @@ export default function AdvancedSales() {
     sendDDTToFICMutation.mutate(ddtId);
   };
 
+  const openInFCloudMutation = useMutation({
+    mutationFn: async (ddtId: number) => {
+      setOpeningFCloudId(ddtId);
+      return await apiRequest(`/api/ddt/${ddtId}/open-in-fcloud`, { method: 'POST' });
+    },
+    onSuccess: (data: any) => {
+      setOpeningFCloudId(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      if (data?.deepLinkUrl) {
+        window.open(data.deepLinkUrl, '_blank');
+      }
+    },
+    onError: (error: any) => {
+      setOpeningFCloudId(null);
+      toast({
+        title: "Errore FCloud",
+        description: error.message || "Impossibile aprire il DDT in FCloud",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleOpenInFCloud = (ddtId: number) => {
+    openInFCloudMutation.mutate(ddtId);
+  };
+
   const handleDownloadDDTPDF = (ddtId: number) => {
     window.open(`/api/ddt/${ddtId}/pdf`, '_blank');
   };
@@ -943,6 +970,20 @@ export default function AdvancedSales() {
                                       <Truck className="h-4 w-4 mr-1" />
                                       {sendingDDTId === sale.ddtId ? 'Invio...' : 'Invia a FIC'}
                                     </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleOpenInFCloud(sale.ddtId!)}
+                                      disabled={openingFCloudId === sale.ddtId}
+                                      className="border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                                      title="Apri DDT in FCloud (crea e apri nel browser)"
+                                    >
+                                      {openingFCloudId === sale.ddtId
+                                        ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                        : <ExternalLink className="h-4 w-4 mr-1" />}
+                                      {openingFCloudId === sale.ddtId ? 'Apertura...' : 'Apri FCloud'}
+                                    </Button>
                                   </>
                                 )}
 
@@ -961,6 +1002,20 @@ export default function AdvancedSales() {
                                     >
                                       <FileText className="h-4 w-4 mr-1" />
                                       PDF DDT
+                                    </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleOpenInFCloud(sale.ddtId!)}
+                                      disabled={openingFCloudId === sale.ddtId}
+                                      className="border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                                      title="Apri DDT in FCloud"
+                                    >
+                                      {openingFCloudId === sale.ddtId
+                                        ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                        : <ExternalLink className="h-4 w-4 mr-1" />}
+                                      {openingFCloudId === sale.ddtId ? 'Apertura...' : 'Apri FCloud'}
                                     </Button>
                                   </>
                                 )}

@@ -1,0 +1,668 @@
+FattureCloud — API DDT per Integrazioni Esterne
+Panoramica
+Questa documentazione descrive le API REST per la gestione completa dei DDT (Documenti di Trasporto) dall'esterno. Le API consentono operazioni CRUD complete: creazione, lettura, aggiornamento, eliminazione, e download XML.
+
+Autenticazione
+Tutte le richieste devono includere l'header X-API-Key con la chiave di accesso.
+
+X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT
+Risposta in caso di chiave mancante o errata:
+
+HTTP 401
+{ "message": "API key non valida" }
+Base URL
+https://fatture-cloud-clone.replit.app
+Aziende Disponibili (companyId)
+Il sistema è multi-azienda. Ogni operazione richiede o restituisce un companyId:
+
+companyId	Ragione Sociale
+ecotapes-001	SOCIETA' AGRICOLA ECOTAPES SRL (P.IVA 04621060278)
+deltafuturo-001	Delta Futuro (P.IVA 02057710382)
+mito-001	Mito srl (P.IVA 02119900385)
+Endpoint DDT
+1. Lista DDT
+GET /api/ext/ddt
+Query Parameters (tutti opzionali):
+
+Parametro	Tipo	Descrizione
+companyId	string	Filtra per azienda (es. ecotapes-001)
+stato	string	Filtra per stato: bozza, emessa, annullata
+clientId	string	Filtra per ID cliente
+dataFrom	string	Data minima (formato YYYY-MM-DD)
+dataTo	string	Data massima (formato YYYY-MM-DD)
+Esempio:
+
+curl -H "X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT" \
+  "https://fatture-cloud-clone.replit.app/api/ext/ddt?companyId=ecotapes-001&stato=emessa"
+Risposta (200):
+
+[
+  {
+    "id": "abc-123-def",
+    "companyId": "ecotapes-001",
+    "numero": "1",
+    "data": "2026-03-10",
+    "clientId": "cli-456",
+    "tipo": "ddt",
+    "stato": "emessa",
+    "subtotale": "1000.00",
+    "totaleIva": "220.00",
+    "totale": "1220.00",
+    "causaleTrasporto": "Vendita",
+    "vettore": "DHL",
+    "destinazione": "Via Roma 1, Milano",
+    "note": null,
+    "client": {
+      "id": "cli-456",
+      "ragioneSociale": "Cliente Srl",
+      "partitaIva": "12345678901",
+      ...
+    }
+  }
+]
+2. Dettaglio DDT
+GET /api/ext/ddt/:id
+Restituisce il DDT completo con tutte le righe (items).
+
+Esempio:
+
+curl -H "X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT" \
+  "https://fatture-cloud-clone.replit.app/api/ext/ddt/abc-123-def"
+Risposta (200):
+
+{
+  "id": "abc-123-def",
+  "companyId": "ecotapes-001",
+  "numero": "1",
+  "data": "2026-03-10",
+  "scadenza": null,
+  "clientId": "cli-456",
+  "tipo": "ddt",
+  "stato": "emessa",
+  "subtotale": "1000.00",
+  "totaleIva": "220.00",
+  "totale": "1220.00",
+  "note": null,
+  "causaleTrasporto": "Vendita",
+  "dataInizioTrasporto": "2026-03-10",
+  "oraInizioTrasporto": "08:30",
+  "mezzoTrasporto": "Autocarro",
+  "aspettoEsteriore": "Scatole",
+  "pesoKg": "150.00",
+  "numeroColli": 5,
+  "vettore": "DHL Express",
+  "destinazione": "Via Roma 1, 20121 Milano (MI)",
+  "orderId": null,
+  "createdAt": "2026-03-10T08:00:00.000Z",
+  "client": {
+    "id": "cli-456",
+    "ragioneSociale": "Cliente Srl",
+    "partitaIva": "12345678901",
+    "codiceFiscale": "12345678901",
+    "indirizzo": "Via Verdi 10",
+    "cap": "20121",
+    "citta": "Milano",
+    "provincia": "MI",
+    "email": "info@cliente.it",
+    "pec": "cliente@pec.it",
+    "codiceDestinatario": "ABC1234"
+  },
+  "items": [
+    {
+      "id": "item-789",
+      "invoiceId": "abc-123-def",
+      "productId": null,
+      "descrizione": "Prodotto A",
+      "quantita": "10",
+      "prezzoUnitario": "50.0000",
+      "aliquotaIva": 22,
+      "natura": null,
+      "sconto": "0.00",
+      "totale": "500.0000"
+    },
+    {
+      "id": "item-790",
+      "descrizione": "Prodotto B",
+      "quantita": "5",
+      "prezzoUnitario": "100.0000",
+      "aliquotaIva": 22,
+      "natura": null,
+      "sconto": "0.00",
+      "totale": "500.0000"
+    }
+  ]
+}
+Errore (404):
+
+{ "message": "DDT non trovato" }
+3. Crea DDT
+POST /api/ext/ddt
+Content-Type: application/json
+Il numero DDT viene assegnato automaticamente in sequenza progressiva per azienda.
+
+Body (JSON):
+
+Campo	Tipo	Obbligatorio	Descrizione
+companyId	string	Si	ID azienda (es. ecotapes-001)
+clientId	string	Si	ID del cliente destinatario
+items	array	Si	Righe del DDT (almeno una)
+data	string	No	Data DDT formato YYYY-MM-DD (default: oggi)
+scadenza	string	No	Data scadenza YYYY-MM-DD
+note	string	No	Note libere
+causaleTrasporto	string	No	Es. "Vendita", "Conto lavorazione"
+dataInizioTrasporto	string	No	Data inizio trasporto YYYY-MM-DD
+oraInizioTrasporto	string	No	Ora inizio trasporto HH:MM
+mezzoTrasporto	string	No	Es. "Autocarro", "Furgone"
+aspettoEsteriore	string	No	Es. "Scatole", "Pallet", "Sfuso"
+pesoKg	string/number	No	Peso totale in kg
+numeroColli	number	No	Numero colli
+vettore	string	No	Nome del vettore/corriere
+destinazione	string	No	Indirizzo di destinazione
+orderId	string	No	ID ordine collegato (se applicabile)
+Struttura di ogni riga (items[]):
+
+Campo	Tipo	Obbligatorio	Descrizione
+descrizione	string	Si	Descrizione del prodotto/servizio
+quantita	number	No	Quantita (default: 1)
+prezzoUnitario	number	No	Prezzo unitario (default: 0)
+aliquotaIva	number	No	Aliquota IVA in % (default: 22)
+natura	string	No	Codice natura IVA se aliquota=0 (es. N2.1, N4)
+sconto	number	No	Sconto riga in % (default: 0)
+codice	string	No	Codice articolo
+unitaMisura	string	No	Unita di misura (es. "PZ", "KG", "MT")
+productId	string	No	ID prodotto dal catalogo
+Esempio:
+
+curl -X POST \
+  -H "X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "companyId": "ecotapes-001",
+    "clientId": "cli-456",
+    "data": "2026-03-15",
+    "causaleTrasporto": "Vendita",
+    "mezzoTrasporto": "Autocarro",
+    "aspettoEsteriore": "Scatole",
+    "pesoKg": 75,
+    "numeroColli": 3,
+    "vettore": "DHL Express",
+    "destinazione": "Via Roma 1, 20121 Milano (MI)",
+    "items": [
+      {
+        "descrizione": "Prodotto Alpha",
+        "quantita": 10,
+        "prezzoUnitario": 50,
+        "aliquotaIva": 22,
+        "unitaMisura": "PZ"
+      },
+      {
+        "descrizione": "Servizio Beta",
+        "quantita": 1,
+        "prezzoUnitario": 200,
+        "aliquotaIva": 22,
+        "sconto": 10
+      }
+    ]
+  }' \
+  "https://fatture-cloud-clone.replit.app/api/ext/ddt"
+Risposta (201):
+
+{
+  "id": "new-ddt-uuid",
+  "companyId": "ecotapes-001",
+  "numero": "2",
+  "data": "2026-03-15",
+  "clientId": "cli-456",
+  "tipo": "ddt",
+  "stato": "emessa",
+  "subtotale": "680.00",
+  "totaleIva": "149.60",
+  "totale": "829.60",
+  ...
+}
+Errori possibili:
+
+HTTP 400: { "message": "companyId obbligatorio" }
+HTTP 400: { "message": "clientId obbligatorio" }
+HTTP 400: { "message": "Almeno una riga (items) è obbligatoria" }
+HTTP 400: { "message": "La data DDT (2026-03-01) non può essere anteriore all'ultimo DDT emesso (2026-03-10)." }
+HTTP 404: { "message": "Cliente non trovato" }
+4. Aggiorna DDT
+PATCH /api/ext/ddt/:id
+Content-Type: application/json
+Aggiorna solo i campi passati nel body. I campi non inclusi restano invariati.
+
+Campi aggiornabili:
+
+Campo	Tipo	Descrizione
+stato	string	bozza, emessa, annullata
+note	string	Note libere
+causaleTrasporto	string	Causale trasporto
+dataInizioTrasporto	string	Data inizio trasporto
+oraInizioTrasporto	string	Ora inizio trasporto
+mezzoTrasporto	string	Mezzo di trasporto
+aspettoEsteriore	string	Aspetto esteriore beni
+pesoKg	string/number	Peso kg
+numeroColli	number	Numero colli
+vettore	string	Vettore
+destinazione	string	Destinazione
+Esempio — annullare un DDT:
+
+curl -X PATCH \
+  -H "X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT" \
+  -H "Content-Type: application/json" \
+  -d '{ "stato": "annullata", "note": "Annullato per errore indirizzo" }' \
+  "https://fatture-cloud-clone.replit.app/api/ext/ddt/abc-123-def"
+Risposta (200): Il DDT aggiornato completo (con items).
+
+5. Elimina DDT
+DELETE /api/ext/ddt/:id
+Elimina il DDT e tutte le sue righe. Operazione irreversibile.
+
+Esempio:
+
+curl -X DELETE \
+  -H "X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT" \
+  "https://fatture-cloud-clone.replit.app/api/ext/ddt/abc-123-def"
+Risposta (200):
+
+{ "success": true, "message": "DDT eliminato" }
+6. Download XML FatturaPA
+GET /api/ext/ddt/:id/xml
+Scarica il file XML in formato FatturaPA (TD24) del DDT.
+
+Esempio:
+
+curl -H "X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT" \
+  -o DDT_1.xml \
+  "https://fatture-cloud-clone.replit.app/api/ext/ddt/abc-123-def/xml"
+Risposta: File XML con Content-Type: application/xml
+
+Endpoint Clienti
+Lista Clienti
+GET /api/ext/clients?companyId=ecotapes-001
+Restituisce l'elenco clienti per ottenere i clientId da usare nella creazione DDT.
+
+Risposta (200):
+
+[
+  {
+    "id": "cli-456",
+    "companyId": "ecotapes-001",
+    "codice": "C001",
+    "tipo": "azienda",
+    "ragioneSociale": "Cliente Srl",
+    "partitaIva": "12345678901",
+    "codiceFiscale": "12345678901",
+    "indirizzo": "Via Verdi 10",
+    "cap": "20121",
+    "citta": "Milano",
+    "provincia": "MI",
+    "nazione": "IT",
+    "telefono": "02 1234567",
+    "email": "info@cliente.it",
+    "pec": "cliente@pec.it",
+    "codiceDestinatario": "ABC1234"
+  }
+]
+Crea/Trova Cliente (Upsert)
+POST /api/ext/clients
+Content-Type: application/json
+Comportamento upsert: se esiste gia un cliente con la stessa partitaIva per la stessa companyId, restituisce il cliente esistente (HTTP 200) senza crearne uno nuovo. Se non esiste, lo crea (HTTP 201).
+
+Body (JSON):
+
+Campo	Tipo	Obbligatorio	Descrizione
+companyId	string	Si	ID azienda (es. ecotapes-001)
+ragioneSociale	string	Si	Denominazione/ragione sociale
+partitaIva	string	No*	Partita IVA (*necessaria per il matching upsert)
+codiceFiscale	string	No	Codice Fiscale
+tipo	string	No	azienda (default), privato, pa
+nome	string	No	Nome (per persone fisiche)
+cognome	string	No	Cognome (per persone fisiche)
+indirizzo	string	No	Indirizzo sede
+cap	string	No	CAP
+citta	string	No	Citta (accetta anche il campo comune)
+provincia	string	No	Sigla provincia (es. VE, MI)
+nazione	string	No	Codice nazione ISO (default: IT)
+telefono	string	No	Telefono
+cellulare	string	No	Cellulare
+email	string	No	Email
+pec	string	No	PEC
+codiceDestinatario	string	No	Codice SDI (default: 0000000)
+codiceEori	string	No	Codice EORI
+splitPayment	boolean	No	Split payment PA (default: false)
+condizioniPagamento	string	No	Codice FatturaPA (default: TP02)
+modalitaPagamento	string	No	Codice FatturaPA (default: MP05)
+iban	string	No	IBAN per pagamenti
+banca	string	No	Nome banca
+sconto	number	No	Sconto abituale %
+note	string	No	Note libere
+Esempio:
+
+curl -X POST \
+  -H "X-API-Key: fcloud-ext-2026-k8Xm9PqR7vLw3NzT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "companyId": "ecotapes-001",
+    "ragioneSociale": "Nuovo Cliente Srl",
+    "partitaIva": "01234567890",
+    "indirizzo": "Via Roma 1",
+    "citta": "Venezia",
+    "cap": "30100",
+    "provincia": "VE"
+  }' \
+  "https://fatture-cloud-clone.replit.app/api/ext/clients"
+Risposta — cliente creato (201):
+
+{
+  "id": "a1b2c3d4-...",
+  "companyId": "ecotapes-001",
+  "tipo": "azienda",
+  "ragioneSociale": "Nuovo Cliente Srl",
+  "partitaIva": "01234567890",
+  "indirizzo": "Via Roma 1",
+  "cap": "30100",
+  "citta": "Venezia",
+  "provincia": "VE",
+  "nazione": "IT",
+  "codiceDestinatario": "0000000",
+  ...
+}
+Risposta — cliente gia esistente con stessa P.IVA (200):
+
+{
+  "id": "x9y8z7w6-...",
+  "ragioneSociale": "Nuovo Cliente Srl",
+  "partitaIva": "01234567890",
+  ...
+}
+Nota: L'upsert confronta solo la partitaIva all'interno della stessa companyId. Se la P.IVA non viene fornita, il cliente viene sempre creato come nuovo.
+
+Lista Prodotti
+GET /api/ext/products?companyId=ecotapes-001
+Restituisce il catalogo prodotti. Utile per popolare le righe DDT con productId.
+
+Risposta (200):
+
+[
+  {
+    "id": "prod-001",
+    "companyId": "ecotapes-001",
+    "codice": "ART001",
+    "descrizione": "Prodotto Alpha",
+    "prezzoUnitario": "50.00",
+    "aliquotaIva": 22,
+    "unitaMisura": "PZ",
+    "categoria": "Materiali"
+  }
+]
+Deep-Link: Aprire un DDT nel Browser
+Dopo aver creato un DDT via API, e possibile reindirizzare l'utente direttamente alla pagina di dettaglio in FattureCloud.
+
+URL di dettaglio DDT
+https://fatture-cloud-clone.replit.app/fatture/{id}
+Dove {id} e il campo id (UUID) restituito dalla POST /api/ext/ddt.
+
+Esempio completo:
+
+https://fatture-cloud-clone.replit.app/fatture/93832ee2-fb8d-401c-a6f5-54560ff496c1
+La pagina mostra:
+
+Intestazione con numero DDT, data, stato
+Dati cedente (azienda) e cessionario (cliente)
+Tabella righe con descrizione, quantita, prezzo, IVA
+Dati trasporto (causale, vettore, colli, peso, destinazione)
+Azioni: modifica, scarica XML, cambia stato
+URL di creazione nuovo DDT (form pre-compilato)
+https://fatture-cloud-clone.replit.app/fatture/nuova?tipo=ddt
+Questo apre il modulo di creazione DDT. Tuttavia, per la pre-compilazione completa dei dati, si consiglia il flusso via API:
+
+Creare il DDT via POST /api/ext/ddt (tutti i campi pre-compilati)
+Reindirizzare al deep-link di dettaglio /fatture/{id}
+Nota importante: L'utente deve essere autenticato in FattureCloud per visualizzare la pagina. Se non lo e, verra reindirizzato alla schermata di login e poi alla pagina richiesta.
+
+Codici di Stato HTTP
+Codice	Significato
+200	Operazione riuscita
+201	DDT creato con successo
+400	Errore di validazione (campo mancante, data non valida)
+401	API key mancante o non valida
+404	DDT o risorsa non trovata
+500	Errore interno del server
+Valori di Stato DDT
+Stato	Descrizione
+bozza	DDT in preparazione, non ancora emesso
+emessa	DDT emesso e valido
+annullata	DDT annullato
+Note Importanti
+Numerazione automatica: Il numero DDT viene assegnato automaticamente in sequenza progressiva per ciascuna azienda. Non va passato nella creazione.
+Date progressive: La data di un nuovo DDT non puo essere anteriore alla data dell'ultimo DDT emesso per la stessa azienda.
+Calcolo totali: Subtotale, IVA e totale vengono calcolati automaticamente dal server in base alle righe fornite.
+Sconto riga: Lo sconto e in percentuale (es. 10 = 10%) e viene applicato all'importo riga.
+IVA a 0%: Se aliquotaIva e 0, il campo natura diventa obbligatorio (es. N2.1, N4).
+Ordine collegato: Se il DDT e collegato a un ordine esistente, passare orderId per il tracciamento.
+Flusso Tipico di Integrazione (es. FLUPSY)
+1. POST /api/ext/clients   (upsert)
+   → Crea il cliente se non esiste, oppure recupera l'esistente via P.IVA
+   → Ottieni il clientId dalla risposta
+2. POST /api/ext/ddt
+   → Crea il DDT con il clientId ottenuto, items[], dati trasporto
+   → Ottieni l'id del DDT dalla risposta
+3. Apri nel browser:  https://fatture-cloud-clone.replit.app/fatture/{id}
+   → L'utente vede il DDT gia pronto in FattureCloud e lo gestisce da li
+4. (Opzionale) GET /api/ext/ddt/:id
+   → Verificare il DDT creato, leggere numero assegnato
+5. (Opzionale) GET /api/ext/ddt/:id/xml
+   → Scaricare l'XML FatturaPA
+6. (Opzionale) PATCH /api/ext/ddt/:id
+   → Aggiornare stato o dati trasporto se necessario
+7. (Opzionale) GET /api/ext/ddt?companyId=ecotapes-001&dataFrom=2026-03-01
+   → Consultare i DDT del periodo
+Esempio Completo (JavaScript/Node.js)
+const BASE_URL = "https://fatture-cloud-clone.replit.app";
+const API_KEY = "fcloud-ext-2026-k8Xm9PqR7vLw3NzT";
+const headers = {
+  "X-API-Key": API_KEY,
+  "Content-Type": "application/json"
+};
+// 1. Upsert cliente (crea se non esiste, trova se gia presente)
+const cliente = await fetch(`${BASE_URL}/api/ext/clients`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    companyId: "ecotapes-001",
+    ragioneSociale: "Cliente da FLUPSY Srl",
+    partitaIva: "01234567890",
+    indirizzo: "Via Roma 1",
+    citta: "Venezia",
+    cap: "30100",
+    provincia: "VE"
+  })
+}).then(r => r.json());
+const clienteId = cliente.id;
+// 2. Creare un DDT
+const nuovoDdt = await fetch(`${BASE_URL}/api/ext/ddt`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    companyId: "ecotapes-001",
+    clientId: clienteId,
+    data: "2026-03-15",
+    causaleTrasporto: "Vendita",
+    vettore: "Corriere Espresso",
+    destinazione: "Via Milano 10, 00100 Roma",
+    items: [
+      { descrizione: "Articolo X", quantita: 5, prezzoUnitario: 100, aliquotaIva: 22 },
+      { descrizione: "Articolo Y", quantita: 2, prezzoUnitario: 50, aliquotaIva: 10 }
+    ]
+  })
+}).then(r => r.json());
+console.log(`DDT creato: N. ${nuovoDdt.numero}, ID: ${nuovoDdt.id}`);
+// 3. Deep-link: aprire il DDT nel browser dell'utente
+const deepLink = `${BASE_URL}/fatture/${nuovoDdt.id}`;
+console.log(`Apri nel browser: ${deepLink}`);
+// In un'app web: window.open(deepLink, '_blank');
+// 4. (Opzionale) Leggere il dettaglio con le righe via API
+const dettaglio = await fetch(`${BASE_URL}/api/ext/ddt/${nuovoDdt.id}`, { headers })
+  .then(r => r.json());
+console.log(`Totale: €${dettaglio.totale}, Righe: ${dettaglio.items.length}`);
+// 4. Scaricare l'XML
+const xml = await fetch(`${BASE_URL}/api/ext/ddt/${nuovoDdt.id}/xml`, { headers })
+  .then(r => r.text());
+// 5. Aggiornare il DDT
+await fetch(`${BASE_URL}/api/ext/ddt/${nuovoDdt.id}`, {
+  method: "PATCH",
+  headers,
+  body: JSON.stringify({ note: "Consegnato regolarmente" })
+});
+// 6. Lista DDT del mese
+const ddtMese = await fetch(
+  `${BASE_URL}/api/ext/ddt?companyId=ecotapes-001&dataFrom=2026-03-01&dataTo=2026-03-31`,
+  { headers }
+).then(r => r.json());
+console.log(`DDT nel mese: ${ddtMese.length}`);
+Esempio Completo (Python)
+import requests
+import webbrowser  # per aprire il browser
+BASE_URL = "https://fatture-cloud-clone.replit.app"
+API_KEY = "fcloud-ext-2026-k8Xm9PqR7vLw3NzT"
+HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
+# 1. Upsert cliente (crea o trova per P.IVA)
+cliente = requests.post(f"{BASE_URL}/api/ext/clients", headers=HEADERS, json={
+    "companyId": "ecotapes-001",
+    "ragioneSociale": "Cliente da FLUPSY Srl",
+    "partitaIva": "01234567890",
+    "indirizzo": "Via Roma 1",
+    "citta": "Venezia",
+    "cap": "30100",
+    "provincia": "VE"
+}).json()
+cliente_id = cliente["id"]
+print(f"Cliente: {cliente['ragioneSociale']} (ID: {cliente_id})")
+# 2. Creare un DDT
+risposta = requests.post(f"{BASE_URL}/api/ext/ddt", headers=HEADERS, json={
+    "companyId": "ecotapes-001",
+    "clientId": cliente_id,
+    "data": "2026-03-15",
+    "causaleTrasporto": "Vendita",
+    "vettore": "Corriere Espresso",
+    "items": [
+        {"descrizione": "Articolo X", "quantita": 5, "prezzoUnitario": 100, "aliquotaIva": 22},
+        {"descrizione": "Articolo Y", "quantita": 2, "prezzoUnitario": 50, "aliquotaIva": 10}
+    ]
+})
+ddt = risposta.json()
+print(f"DDT creato: N. {ddt['numero']}, Totale: {ddt['totale']}")
+# 3. Deep-link: aprire il DDT nel browser dell'utente
+deep_link = f"{BASE_URL}/fatture/{ddt['id']}"
+print(f"Deep-link: {deep_link}")
+webbrowser.open(deep_link)  # apre nel browser predefinito
+# 4. (Opzionale) Dettaglio con righe via API
+dettaglio = requests.get(f"{BASE_URL}/api/ext/ddt/{ddt['id']}", headers=HEADERS).json()
+# 5. (Opzionale) Download XML
+xml = requests.get(f"{BASE_URL}/api/ext/ddt/{ddt['id']}/xml", headers=HEADERS)
+with open(f"DDT_{ddt['numero']}.xml", "w") as f:
+    f.write(xml.text)
+# 6. (Opzionale) Aggiornare stato
+requests.patch(f"{BASE_URL}/api/ext/ddt/{ddt['id']}", headers=HEADERS, 
+    json={"stato": "annullata", "note": "Annullato su richiesta cliente"})
+Add ability to create and link clients directly and open documents in-app
+The Autofatture feature is fully implemented. Would you like to try creating an autofattura, or is there anything else you'd like to adjust?
+
+hai inserito tutte le possibili Tipi documento SDI come autofattura?
+
+Ho aggiunto tutti i tipi documento SDI mancanti (TD22, TD23, TD26, TD28). Vuoi aggiungere o modificare qualcosa?
+
+ho bisogno che una app esterna possa accedere alla procedura DDT dall'esterno. Cosa proponi?
+
+Quale di queste operazioni ti serve per l'app esterna?
+
+Le API DDT esterne sono pronte. Vuoi che configuri la chiave API (EXT_API_KEY) o c'è qualcos'altro da aggiungere?
+
+dammi tutta la documentazione necessaria alla app esterna per poter realizzare la gestione dei DDT (in modalità CRUD). questa documentazione deve essere letta dallo sviluppatore per poter realizzare la integrazione. fornisci anche EXT_API_KEY
+
+Documentazione API DDT per Integrazioni Esterne
+Text
+# FattureCloud — API DDT per Integrazioni Esterne ## Panoramica...
+mi arriva la ricchiesta della sviluppatore esterno per poter emettere i DDT direttamente dalla sua app e mi chiede se possibile questo: Ciao,
+
+abbiamo bisogno di due cose per integrare FLUPSY con FCloud in modo che l'utente possa aprire direttamente il modulo DDT di FCloud con i dati già precompilati.
+
+Endpoint API per creare un cliente se non esiste (upsert)
+Attualmente GET /api/ext/clients?companyId=... restituisce array vuoto perché non c'è modo di creare clienti via API. Serve:
+
+POST /api/ext/clients
+Body: {
+"companyId": "ecotapes-001",
+"ragioneSociale": "Nome Cliente Srl",
+"partitaIva": "01234567890",
+"indirizzo": "Via Roma 1",
+"comune": "Venezia",
+"cap": "30100",
+"provincia": "VE"
+}
+Risposta: { "id": "cliente-xyz", ... }
+Comportamento atteso: se esiste già un cliente con quella P.IVA per quella company, restituisce il cliente esistente (upsert). Altrimenti lo crea.
+
+URL di deep-link per aprire DDT pre-compilato
+Dopo aver creato il DDT via API (POST /api/ext/ddt), vogliamo reindirizzare l'utente direttamente alla sua pagina in FCloud. Serve sapere:
+
+Qual è l'URL della pagina di dettaglio/modifica di un DDT? Es: /ddt/{id} oppure /documenti/{id}?
+Oppure, in alternativa: esiste un URL di "nuovo DDT" che accetta parametri in querystring per pre-compilare i campi?
+
+Struttura corrente che già funziona (per riferimento)
+GET /api/ext/clients?companyId=... → funziona, restituisce []
+POST /api/ext/ddt → funziona, richiede clientId obbligatorio
+GET /api/ext/ddt → da verificare se esiste
+Auth: header X-API-Key
+Con queste due aggiunte il flusso completo sarebbe:
+
+FLUPSY crea/trova il cliente via upsert
+FLUPSY crea il DDT via API
+FLUPSY apre fatture-cloud-clone.replit.app/ddt/{id} in una nuova scheda
+L'utente vede il DDT già pronto in FCloud e lo gestisce da lì
+
+Perfetto, lo sviluppatore FLUPSY ha bisogno di due cose specifiche. Implemento entrambe subito.
+
+Ora ho tutto il contesto. Serve:
+
+POST /api/ext/clients con logica upsert (P.IVA + companyId)
+Deep-link: il DDT è già accessibile su /fatture/:id — devo solo confermare e documentare
+Vediamo come è implementato il createClient e il schema per costruire l'upsert:
+
+Ora aggiungo i due endpoint. Li inserisco dopo il blocco /api/ext/products:
+
+Ora verifico che il server si riavvii correttamente e testo entrambi i nuovi endpoint:
+
+Upsert funziona perfettamente: la seconda chiamata con la stessa P.IVA restituisce lo stesso ID senza creare duplicati. Ora testo anche il flusso completo DDT + deep-link:
+
+Tutto funziona. Ora pulisco i dati di test e aggiorno la documentazione:
+
+Ora aggiorno il documento di integrazione con le aggiunte richieste da FLUPSY:
+
+Now I'll rewrite the entire document with the new sections added:
+
+Now I'll replace the relevant sections with the updated content including the client upsert and deep-link:
+
+Now let me update the "Flusso tipico" section and the examples to reflect the FLUPSY workflow:
+
+Now let me update the JavaScript and Python examples to show the FLUPSY flow with upsert + deep-link:
+
+Now update the JS example to add the deep-link step:
+
+Now update the Python example too:
+
+Ora aggiorno anche il replit.md con le nuove API:
+
+Tutto implementato e testato. Presento la documentazione aggiornata:
+
+Documentazione API DDT Aggiornata (con Upsert Clienti + Deep-Link)
+Text
+# FattureCloud — API DDT per Integrazioni Esterne ## Panoramica...
+
+Scroll to latest
+
+Make, test, iterate…
+Fatture Cloud Clone - Replit
+Impossibile connettersi al servizio reCAPTCHA. Controlla la connessione a Internet e ricarica la pagina per generare un test reCAPTCHA.
