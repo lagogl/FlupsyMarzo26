@@ -1058,10 +1058,10 @@ export default function AdvancedSales() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => setSaleToDelete({ id: sale.id, saleNumber: sale.saleNumber })}
-                                  className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                  className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 px-2"
+                                  title="Elimina bozza"
                                 >
-                                  <Trash2 className="h-4 w-4 mr-1" />
-                                  Elimina
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </>
                             )}
