@@ -146,7 +146,7 @@ export async function sendDDTToFCloud(ddtId: number): Promise<FCloudDdtResult> {
     data:              ddtData.data,
     causaleTrasporto:  'Vendita',
     aspettoEsteriore:  'Colli',
-    pesoKg:            ddtData.pesoTotale  ? parseFloat(ddtData.pesoTotale)  : undefined,
+    pesoKg:            ddtData.pesoTotale  ? parseFloat(ddtData.pesoTotale) / 1000  : undefined,
     numeroColli:       ddtData.totaleColli || undefined,
     note:              ddtData.note        || undefined,
     items,

@@ -694,6 +694,7 @@ export async function generateSalePDF(req: Request, res: Response) {
         notes: bag.notes || undefined, // Coerce null to undefined
         allocations: bag.allocations.map(alloc => ({
           ...alloc,
+          allocatedWeight: (alloc.allocatedWeight || 0) / 1000, // DB in grammi → converti in kg per display
           sourceAnimalsPerKg: alloc.sourceAnimalsPerKg || 0, // Coerce null to 0
           sourceSizeCode: alloc.sourceSizeCode || '', // Coerce null to empty string
           basketPhysicalNumber: alloc.basketPhysicalNumber || undefined // Coerce null to undefined
@@ -1010,7 +1011,7 @@ export async function generateDDT(req: Request, res: Response) {
       mittenteLogoPath: fiscalData?.logoPath || null,
       // Totali
       totaleColli: saleData.totalBags || 0,
-      pesoTotale: saleData.totalWeight?.toString() || '0',
+      pesoTotale: saleData.totalWeight ? Math.round(saleData.totalWeight * 1000).toString() : '0',
       note: saleData.notes,
       ddtStato: 'locale'
     }).returning();
