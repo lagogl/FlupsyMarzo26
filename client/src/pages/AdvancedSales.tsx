@@ -373,7 +373,7 @@ export default function AdvancedSales() {
       animalCount,
       originalWeight: originalWeightGrams,
       weightLoss: 0,
-      wastePercentage: 2,
+      wastePercentage: 0,
       originalAnimalsPerKg: supply.animalsPerKg,
       notes: [identifier, section].filter(Boolean).join(' - ') || undefined,
       allocations: [{

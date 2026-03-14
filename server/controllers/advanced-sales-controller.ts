@@ -371,14 +371,8 @@ export async function configureBags(req: Request, res: Response) {
         const originalWeightKg = bag.originalWeight / 1000;
         const weightLossKg = weightLossGrams / 1000;
         
-        // Ricalcola animals per kg con limite 5%
-        let newAnimalsPerKg = bag.animalCount / finalWeightKg;
-        const maxVariation = bag.originalAnimalsPerKg * 0.05;
-        
-        if (Math.abs(newAnimalsPerKg - bag.originalAnimalsPerKg) > maxVariation) {
-          newAnimalsPerKg = bag.originalAnimalsPerKg + 
-            (newAnimalsPerKg > bag.originalAnimalsPerKg ? maxVariation : -maxVariation);
-        }
+        // Calcola animals per kg dal conteggio e peso reali del sacco
+        const newAnimalsPerKg = finalWeightKg > 0 ? bag.animalCount / finalWeightKg : bag.originalAnimalsPerKg;
 
         // Calcola automaticamente la taglia in base agli animali/kg
         const calculatedSizeCode = await calculateSizeCode(Math.round(newAnimalsPerKg));
