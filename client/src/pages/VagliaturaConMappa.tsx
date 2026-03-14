@@ -2351,7 +2351,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sopra' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sopra → <span className="text-amber-700 font-medium">Premium</span></span>
+                      <span className="text-sm">Sopra → <span className="text-amber-700 font-medium">★ TESTE</span></span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -2361,7 +2361,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sotto' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sotto → <span className="text-orange-700 font-medium">Sub</span></span>
+                      <span className="text-sm">Sotto → <span className="text-purple-700 font-medium">▼ CODE</span></span>
                     </label>
                     {measurementData.screeningPosition && (
                       <button
@@ -2659,7 +2659,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sopra' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sopra → <span className="text-amber-700 font-medium">Premium</span></span>
+                      <span className="text-sm">Sopra → <span className="text-amber-700 font-medium">★ TESTE</span></span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -2669,7 +2669,7 @@ export default function VagliaturaConMappa() {
                         onChange={() => setMeasurementData(prev => ({ ...prev, screeningPosition: 'sotto' }))}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">Sotto → <span className="text-orange-700 font-medium">Sub</span></span>
+                      <span className="text-sm">Sotto → <span className="text-purple-700 font-medium">▼ CODE</span></span>
                     </label>
                     {measurementData.screeningPosition && (
                       <button
