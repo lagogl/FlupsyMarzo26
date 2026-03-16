@@ -14,9 +14,10 @@ import BuoyDataBadge from "./BuoyDataBadge";
 
 interface FlupsyCenterFilterProps {
   onFilterChange: (selectedCenter: string, selectedFlupsyIds: number[]) => void;
+  hasExistingSelection?: boolean;
 }
 
-export default function FlupsyCenterFilter({ onFilterChange }: FlupsyCenterFilterProps) {
+export default function FlupsyCenterFilter({ onFilterChange, hasExistingSelection = false }: FlupsyCenterFilterProps) {
   // Stato per il centro di produzione selezionato
   const [selectedCenter, setSelectedCenter] = useState<string>("");
   
@@ -31,11 +32,14 @@ export default function FlupsyCenterFilter({ onFilterChange }: FlupsyCenterFilte
     queryKey: ['/api/flupsys'] 
   });
 
-  // All'inizializzazione, carica le preferenze salvate
+  // All'inizializzazione, ripristina solo il centro salvato (senza sovrascrivere la selezione FLUPSY)
   useEffect(() => {
     const savedCenter = localStorage.getItem("selectedProductionCenter") || "";
     setSelectedCenter(savedCenter);
     
+    // Se l'utente ha già una selezione FLUPSY personalizzata, non sovrascriverla
+    if (hasExistingSelection) return;
+
     // Calcola gli ID dei FLUPSY appartenenti al centro salvato
     if (flupsys && savedCenter) {
       const ids = flupsys

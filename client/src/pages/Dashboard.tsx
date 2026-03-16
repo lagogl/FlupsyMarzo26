@@ -397,7 +397,8 @@ export default function Dashboard() {
           onFilterChange={(center, flupsyIds) => {
             setSelectedCenter(center);
             setSelectedFlupsyIds(flupsyIds);
-          }} 
+          }}
+          hasExistingSelection={flupsySelectionReady}
         />
         
         {/* Filtro per FLUPSY specifici */}
