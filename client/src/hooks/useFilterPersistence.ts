@@ -1,68 +1,52 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
-// Definizione di tipi per i filtri
 export type FilterState = Record<string, any>;
 
+function loadFromStorage(storageKey: string): FilterState | null {
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) return JSON.parse(saved);
+  } catch (err) {
+    console.error("Errore nel caricamento dei filtri salvati:", err);
+  }
+  return null;
+}
+
 /**
- * Hook personalizzato per gestire la persistenza dei filtri per pagina
- * 
- * @param pageKey Identificatore univoco della pagina
- * @param defaultFilters Valori di default per i filtri
- * @returns [filters, setFilters] - State e setter per i filtri
+ * Hook per la persistenza dei filtri per pagina, con supporto chiave dinamica (es. per utente).
  */
 export function useFilterPersistence(pageKey: string, defaultFilters: FilterState) {
-  // Genera chiave univoca per il localStorage
   const storageKey = `app_filters_${pageKey}`;
-  
-  // Inizializza lo stato con filtri vuoti per i FLUPSY nella dashboard
+  const prevKeyRef = useRef(storageKey);
+
   const [filters, setFiltersState] = useState<FilterState>(() => {
-    try {
-      // Tenta di caricare i filtri dal localStorage
-      const savedFilters = localStorage.getItem(storageKey);
-      
-      // Per la dashboard, assicuriamoci che selectedFlupsyIds sia vuoto all'inizio
-      // per accelerare il caricamento iniziale
-      if (savedFilters) {
-        const parsedFilters = JSON.parse(savedFilters);
-        
-        // Se è la dashboard, resetta i FLUPSY selezionati
-        if (pageKey === 'dashboard' && parsedFilters.selectedFlupsyIds) {
-          return {
-            ...parsedFilters,
-            selectedFlupsyIds: []
-          };
-        }
-        
-        return parsedFilters;
-      }
-    } catch (err) {
-      console.error("Errore nel caricamento dei filtri salvati:", err);
-    }
-    
-    // Se non ci sono filtri salvati o c'è un errore, usa i default
-    return defaultFilters;
+    return loadFromStorage(storageKey) ?? defaultFilters;
   });
-  
-  // Funzione per aggiornare i filtri
+
+  // Quando la chiave cambia (es. utente caricato dopo il primo render) rilegge lo storage
+  useEffect(() => {
+    if (prevKeyRef.current !== storageKey) {
+      prevKeyRef.current = storageKey;
+      const saved = loadFromStorage(storageKey);
+      setFiltersState(saved ?? defaultFilters);
+    }
+  }, [storageKey]);
+
   const setFilters = (newFilters: FilterState | ((prev: FilterState) => FilterState)) => {
     setFiltersState((prevFilters) => {
-      // Se newFilters è una funzione, chiamala con i filtri precedenti
-      const updatedFilters = typeof newFilters === 'function' 
-        ? newFilters(prevFilters) 
+      const updatedFilters = typeof newFilters === 'function'
+        ? newFilters(prevFilters)
         : newFilters;
-      
       try {
-        // Salva i nuovi filtri nel localStorage
         localStorage.setItem(storageKey, JSON.stringify(updatedFilters));
       } catch (err) {
         console.error("Errore nel salvataggio dei filtri:", err);
       }
-      
       return updatedFilters;
     });
   };
-  
-  // Effetto per reagire a eventuali cambiamenti nei filtri da altre schede
+
+  // Sincronizza con altre schede
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === storageKey && e.newValue) {
@@ -73,14 +57,9 @@ export function useFilterPersistence(pageKey: string, defaultFilters: FilterStat
         }
       }
     };
-    
-    // Ascolta gli eventi di modifica dello storage
     window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [storageKey]);
-  
+
   return [filters, setFilters] as const;
 }

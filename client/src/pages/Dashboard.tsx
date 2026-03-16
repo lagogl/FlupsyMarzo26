@@ -36,20 +36,24 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [needsRefresh, setNeedsRefresh] = useState<boolean>(false);
   const [prefsLoaded, setPrefsLoaded] = useState<boolean>(false);
-  
-  const [filters, setFilters] = useFilterPersistence('dashboard', {
+
+  // Chiave per-utente: la selezione persiste separatamente per ogni operatore
+  const dashboardKey = `dashboard-${user?.id ?? 'default'}`;
+  const [filters, setFilters] = useFilterPersistence(dashboardKey, {
     selectedCenter: '',
-    selectedFlupsyIds: [] as number[]
+    selectedFlupsyIds: [] as number[],
+    flupsySelectionReady: false
   });
   
   const selectedCenter = filters.selectedCenter;
   const selectedFlupsyIds = filters.selectedFlupsyIds as number[];
-  
-  const setSelectedCenter = (value: string) => 
+  const flupsySelectionReady = filters.flupsySelectionReady as boolean;
+
+  const setSelectedCenter = (value: string) =>
     setFilters(prev => ({ ...prev, selectedCenter: value }));
-  
-  const setSelectedFlupsyIds = (value: number[]) => 
-    setFilters(prev => ({ ...prev, selectedFlupsyIds: value }));
+
+  const setSelectedFlupsyIds = (value: number[]) =>
+    setFilters(prev => ({ ...prev, selectedFlupsyIds: value, flupsySelectionReady: true }));
   
   // Riferimenti agli elementi che avranno tooltip
   const dashboardTitleRef = useRef<HTMLHeadingElement>(null);
@@ -163,13 +167,18 @@ export default function Dashboard() {
   }, [isFirstTimeUser]); // Rimuoviamo registerTooltip e showTooltip dalle dipendenze
 
   useEffect(() => {
-    if (preferredFlupsyIds.length > 0 && !prefsLoaded && selectedFlupsyIds.length === 0) {
-      setSelectedFlupsyIds(preferredFlupsyIds);
+    if (prefsLoaded) return;
+    // Se l'utente ha già fatto una selezione esplicita (salvata in localStorage) → la rispettiamo
+    if (flupsySelectionReady) {
       setPrefsLoaded(true);
-    } else if (preferredFlupsyIds.length === 0 && !prefsLoaded) {
-      setPrefsLoaded(true);
+      return;
     }
-  }, [preferredFlupsyIds, prefsLoaded]);
+    // Altrimenti, se esistono preferenze server, le carichiamo come punto di partenza
+    if (preferredFlupsyIds.length > 0) {
+      setSelectedFlupsyIds(preferredFlupsyIds);
+    }
+    setPrefsLoaded(true);
+  }, [preferredFlupsyIds, prefsLoaded, flupsySelectionReady]);
 
   const filteredBaskets = useMemo(() => {
     if (!baskets) return [];
