@@ -4,6 +4,8 @@ import { sgrAiQualityService } from "./sgr-ai-quality.service";
 
 /**
  * Service for calculating SGR from historical operations data
+ * Supports both same-cycle consecutive measurements and cross-cycle lineage pairs
+ * (prima-attivazione parent → prima-attivazione child, via vagliatura)
  */
 export class SgrCalculationService {
   
@@ -14,8 +16,6 @@ export class SgrCalculationService {
   private async findSizeForAnimalsPerKg(animalsPerKg: number): Promise<Size | null> {
     const sizes = await storage.getAllSizes();
     
-    // Find size where animalsPerKg falls within range
-    // Use 0 for missing minBound and Infinity for missing maxBound
     const matchingSize = sizes.find(size => {
       const minBound = size.minAnimalsPerKg || 0;
       const maxBound = size.maxAnimalsPerKg || Infinity;
@@ -26,36 +26,130 @@ export class SgrCalculationService {
   }
 
   /**
-   * Calculate SGR between two weighing operations
+   * Calculate SGR between two weight values
    * Formula: SGR = [(ln(W2) - ln(W1)) / Days] × 100
+   * For same-cycle: use totalWeight. For cross-cycle: use averageWeight (g/animal).
    */
-  private calculateSgrBetweenOperations(
+  private calculateSgrBetweenWeights(
     weight1: number,
     weight2: number,
     days: number
   ): number | null {
     if (days < 5 || weight1 <= 0 || weight2 <= 0 || weight2 <= weight1) {
-      return null; // Skip invalid data
+      return null;
     }
-    
-    const sgr = ((Math.log(weight2) - Math.log(weight1)) / days) * 100;
-    return sgr;
+    return ((Math.log(weight2) - Math.log(weight1)) / days) * 100;
   }
 
   /**
-   * Calculate SGR for a specific month and year from historical operations
+   * Collects cross-cycle SGR pairs via cycle lineage (parentCycleId).
+   *
+   * A valid cross-cycle pair is:
+   *   op1 = prima-attivazione of the PARENT cycle (any date)
+   *   op2 = prima-attivazione of the CHILD cycle  (date in target window)
+   *
+   * Uses averageWeight (grams/animal) to measure growth of individuals
+   * regardless of how the population was split by vagliatura.
+   * The SGR is attributed to the parent's size class at op1.
+   */
+  private async collectCrossCyclePairs(
+    allOperations: Operation[],
+    windowStart: Date,
+    windowEnd: Date
+  ): Promise<Array<{ sizeId: number; sgr: number; parentCycleId: number; childCycleId: number }>> {
+    const results: Array<{ sizeId: number; sgr: number; parentCycleId: number; childCycleId: number }> = [];
+
+    // Build fast lookup: cycleId → list of prima-attivazioni sorted by date
+    const primaByParentCycle = new Map<number, Operation>();
+    const primaByChildCycle = new Map<number, Operation>();
+
+    for (const op of allOperations) {
+      if (op.type !== 'prima-attivazione' || !op.cycleId) continue;
+      if (!op.averageWeight || op.averageWeight <= 0) continue;
+      // Keep the earliest prima-attivazione per cycle
+      if (!primaByParentCycle.has(op.cycleId)) {
+        primaByParentCycle.set(op.cycleId, op);
+      } else {
+        const existing = primaByParentCycle.get(op.cycleId)!;
+        if (new Date(op.date) < new Date(existing.date)) {
+          primaByParentCycle.set(op.cycleId, op);
+        }
+      }
+    }
+    // child cycle lookup is the same dataset
+    primaByParentCycle.forEach((op, cycleId) => primaByChildCycle.set(cycleId, op));
+
+    // Get all cycles that have a parentCycleId (child cycles from vagliatura/transfer)
+    const allCycles = await storage.getCycles();
+    const childCycles = allCycles.filter(c => c.parentCycleId != null);
+
+    console.log(`🔗 SGR CROSS-CYCLE: Trovati ${childCycles.length} cicli figli da analizzare`);
+
+    for (const childCycle of childCycles) {
+      const parentCycleId = childCycle.parentCycleId!;
+
+      const parentPA = primaByChildCycle.get(parentCycleId);
+      const childPA  = primaByChildCycle.get(childCycle.id);
+
+      if (!parentPA || !childPA) continue;
+
+      // The child's prima-attivazione must fall within the target window
+      const childDate = new Date(childPA.date);
+      if (childDate < windowStart || childDate > windowEnd) continue;
+
+      // We need animalsPerKg on the parent op to determine size class
+      if (!parentPA.animalsPerKg) continue;
+
+      const days = Math.floor(
+        (new Date(childPA.date).getTime() - new Date(parentPA.date).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Use averageWeight (g/animal) for cross-cycle — immune to population split
+      const sgr = this.calculateSgrBetweenWeights(
+        Number(parentPA.averageWeight),
+        Number(childPA.averageWeight!),
+        days
+      );
+
+      if (sgr === null || sgr <= 0 || sgr >= 10) continue;
+
+      // Attribute SGR to the parent's size class (where the animals were at T1)
+      const parentSize = await this.findSizeForAnimalsPerKg(parentPA.animalsPerKg);
+      if (!parentSize) continue;
+
+      results.push({
+        sizeId: parentSize.id,
+        sgr,
+        parentCycleId,
+        childCycleId: childCycle.id
+      });
+
+      console.log(
+        `✅ SGR CROSS-CYCLE: Ciclo ${parentCycleId} → ${childCycle.id} | ` +
+        `${String(parentPA.date).substring(0, 10)} → ${String(childPA.date).substring(0, 10)} ` +
+        `(${days}gg) | ${parentSize.name} | SGR=${sgr.toFixed(3)}%`
+      );
+    }
+
+    console.log(`🔗 SGR CROSS-CYCLE: ${results.length} coppie valide trovate nella finestra temporale`);
+    return results;
+  }
+
+  /**
+   * Calculate SGR for a specific month and year from historical operations.
+   * Combines:
+   *   1. Same-cycle consecutive pairs (existing logic, uses totalWeight)
+   *   2. Cross-cycle lineage pairs via parentCycleId (new, uses averageWeight)
    */
   async calculateSgrForMonth(month: string, year: number): Promise<Map<number, { sgr: number; sampleCount: number }>> {
     console.log(`📊 SGR CALCULATION: Starting calculation for ${month} ${year}`);
     
-    // Get all weighing operations for the target month/year
     const monthNumber = this.getMonthNumber(month);
     const startDate = new Date(year, monthNumber, 1);
-    const endDate = new Date(year, monthNumber + 1, 0); // Last day of month
+    const endDate = new Date(year, monthNumber + 1, 0);
     
     console.log(`📅 SGR CALCULATION: Date range ${startDate.toISOString()} to ${endDate.toISOString()}`);
     
-    // Get all operations (we'll filter in memory)
     const allOperations = await storage.getOperations();
     
     // Filter weighing operations in the target month
@@ -76,10 +170,9 @@ export class SgrCalculationService {
       console.log(`⚠️  AI QUALITY: Found ${qualityCheck.anomalies.length} anomalies`);
     }
     
-    // Use only valid operations
     const validTargetOperations = qualityCheck.validOperations;
     
-    // Group operations by basket to find consecutive weighings
+    // Group operations by basket to find consecutive weighings (same-cycle logic)
     const basketOperations = new Map<number, Operation[]>();
     for (const op of validTargetOperations) {
       if (!basketOperations.has(op.basketId)) {
@@ -88,9 +181,8 @@ export class SgrCalculationService {
       basketOperations.get(op.basketId)!.push(op);
     }
     
-    // For each basket, we need to find operations BEFORE the target month too
-    // to calculate growth INTO the target month
-    const extendedStartDate = new Date(year, monthNumber - 2, 1); // 2 months before
+    // Also include operations 2 months before target to find cross-month pairs
+    const extendedStartDate = new Date(year, monthNumber - 2, 1);
     const previousOperations = allOperations.filter(op => {
       const opDate = new Date(op.date);
       return opDate >= extendedStartDate && 
@@ -99,7 +191,6 @@ export class SgrCalculationService {
              op.animalsPerKg;
     });
     
-    // Add previous operations to basket groups
     for (const op of previousOperations) {
       if (!basketOperations.has(op.basketId)) {
         basketOperations.set(op.basketId, []);
@@ -107,52 +198,61 @@ export class SgrCalculationService {
       basketOperations.get(op.basketId)!.push(op);
     }
     
-    // Sort operations by date for each basket
     for (const [basketId, ops] of basketOperations.entries()) {
       ops.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }
     
-    // Calculate SGR for each basket and group by size
-    const sgrBySize = new Map<number, number[]>(); // sizeId -> array of SGR values
+    // ── 1. Same-cycle SGR ────────────────────────────────────────────────────
+    const sgrBySize = new Map<number, number[]>();
     
     for (const [basketId, ops] of basketOperations.entries()) {
-      // Find consecutive pairs of operations
       for (let i = 0; i < ops.length - 1; i++) {
         const op1 = ops[i];
         const op2 = ops[i + 1];
         
-        // Calculate days between operations
         const days = Math.floor(
           (new Date(op2.date).getTime() - new Date(op1.date).getTime()) / (1000 * 60 * 60 * 24)
         );
         
-        if (days < 5) continue; // Skip if too close together
+        if (days < 5) continue;
         
-        // Both operations must have same size (no transition)
         const size1 = await this.findSizeForAnimalsPerKg(op1.animalsPerKg!);
         const size2 = await this.findSizeForAnimalsPerKg(op2.animalsPerKg!);
         
-        if (!size1 || !size2 || size1.id !== size2.id) {
-          continue; // Skip if size changed
-        }
+        if (!size1 || !size2 || size1.id !== size2.id) continue;
         
-        // Calculate SGR
-        const sgr = this.calculateSgrBetweenOperations(
+        const sgr = this.calculateSgrBetweenWeights(
           op1.totalWeight!,
           op2.totalWeight!,
           days
         );
         
-        if (sgr !== null && sgr > 0 && sgr < 10) { // Reasonable bounds (0-10% daily growth)
-          if (!sgrBySize.has(size1.id)) {
-            sgrBySize.set(size1.id, []);
-          }
+        if (sgr !== null && sgr > 0 && sgr < 10) {
+          if (!sgrBySize.has(size1.id)) sgrBySize.set(size1.id, []);
           sgrBySize.get(size1.id)!.push(sgr);
         }
       }
     }
+
+    // ── 2. Cross-cycle SGR via lineage ───────────────────────────────────────
+    // Extended window: child prima-attivazione must fall in target month
+    // Parent prima-attivazione can be from any time (we use allOperations)
+    const crossCyclePairs = await this.collectCrossCyclePairs(
+      allOperations,
+      startDate,
+      endDate
+    );
+
+    for (const pair of crossCyclePairs) {
+      if (!sgrBySize.has(pair.sizeId)) sgrBySize.set(pair.sizeId, []);
+      sgrBySize.get(pair.sizeId)!.push(pair.sgr);
+    }
     
-    // Calculate average SGR for each size
+    console.log(
+      `📊 SGR CALCULATION: Same-cycle coppie analizzate, ${crossCyclePairs.length} coppie cross-ciclo aggiunte`
+    );
+
+    // ── 3. Aggregate results ─────────────────────────────────────────────────
     const results = new Map<number, { sgr: number; sampleCount: number }>();
     
     for (const [sizeId, sgrValues] of sgrBySize.entries()) {
@@ -196,21 +296,16 @@ export class SgrCalculationService {
     
     console.log(`🚀 SGR CALCULATION: Calculating SGR for ${currentMonth} based on ${currentMonth} ${lastYear} data`);
     
-    // Calculate SGR from last year's data
     const sgrBySize = await this.calculateSgrForMonth(currentMonth, lastYear);
-    
-    // Get all sizes for naming
     const sizes = await storage.getAllSizes();
     const sizeMap = new Map(sizes.map(s => [s.id, s]));
     
-    // Store results in database
     const results: Array<{ sizeId: number; sizeName: string; sgr: number; sampleCount: number }> = [];
     
     for (const [sizeId, data] of sgrBySize.entries()) {
       const size = sizeMap.get(sizeId);
       if (!size) continue;
       
-      // Upsert SGR per taglia
       await storage.upsertSgrPerTaglia(
         currentMonth,
         sizeId,
@@ -229,11 +324,7 @@ export class SgrCalculationService {
     
     console.log(`✅ SGR CALCULATION: Stored ${results.length} SGR values for ${currentMonth}`);
     
-    return {
-      month: currentMonth,
-      year: lastYear,
-      results
-    };
+    return { month: currentMonth, year: lastYear, results };
   }
 
   /**
@@ -249,21 +340,16 @@ export class SgrCalculationService {
     
     console.log(`🚀 SGR CALCULATION: Calculating SGR for ${targetMonth} based on ${targetMonth} ${lastYear} data`);
     
-    // Calculate SGR from last year's data
     const sgrBySize = await this.calculateSgrForMonth(targetMonth, lastYear);
-    
-    // Get all sizes for naming
     const sizes = await storage.getAllSizes();
     const sizeMap = new Map(sizes.map(s => [s.id, s]));
     
-    // Store results in database
     const results: Array<{ sizeId: number; sizeName: string; sgr: number; sampleCount: number }> = [];
     
     for (const [sizeId, data] of sgrBySize.entries()) {
       const size = sizeMap.get(sizeId);
       if (!size) continue;
       
-      // Upsert SGR per taglia
       await storage.upsertSgrPerTaglia(
         targetMonth,
         sizeId,
@@ -282,11 +368,7 @@ export class SgrCalculationService {
     
     console.log(`✅ SGR CALCULATION: Stored ${results.length} SGR values for ${targetMonth}`);
     
-    return {
-      month: targetMonth,
-      year: lastYear,
-      results
-    };
+    return { month: targetMonth, year: lastYear, results };
   }
 }
 
