@@ -185,6 +185,7 @@ export default function SpreadsheetOperations() {
   const [selectedSizeFilter, setSelectedSizeFilter] = useState<string>("all");
   const [showActivationDate, setShowActivationDate] = useState<boolean>(false);  // Toggle Ult.Op / Data Attiv.
   const [showPivotPanel, setShowPivotPanel] = useState<boolean>(false);  // Toggle pannello pivot
+  const [showClosedCycles, setShowClosedCycles] = useState<boolean>(false); // Toggle cicli chiusi
   const [showQualityView, setShowQualityView] = useState<boolean>(false); // Toggle vista qualità
   const [pivotState, setPivotState] = useState<any>({});  // Stato react-pivottable
   const [sortColumn, setSortColumn] = useState<string>("physicalNumber");
@@ -414,7 +415,7 @@ export default function SpreadsheetOperations() {
     queryKey: ['/api/operations', 'spreadsheet', 'full'],
     queryFn: () => {
       // Carica tutte le operazioni per garantire che i cestelli mostrino i dati corretti
-      return apiRequest('/api/operations?pageSize=500&sortBy=id&sortOrder=desc');
+      return apiRequest('/api/operations?pageSize=9999&sortBy=id&sortOrder=desc');
     },
     staleTime: 120000, // Cache for 2 minuti per performance
     refetchOnWindowFocus: false
@@ -2605,6 +2606,18 @@ export default function SpreadsheetOperations() {
               onChange={(e) => setOperationDate(e.target.value)}
               className="w-32 h-8 px-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
+          </div>
+
+          {/* Toggle cicli chiusi */}
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setShowClosedCycles(!showClosedCycles)}
+              className={`h-8 px-3 text-xs rounded flex items-center gap-1 transition-colors font-medium border ${showClosedCycles ? 'bg-gray-700 text-white border-gray-700' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'}`}
+              title="Mostra anche i cicli chiusi (sola lettura) per verificare gli SGR storici"
+            >
+              <span className="text-xs">{showClosedCycles ? '📂' : '📁'}</span>
+              Cicli chiusi
+            </button>
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
@@ -4889,6 +4902,128 @@ export default function SpreadsheetOperations() {
           </div>
         </div>
       )}
+
+      {/* ========== SEZIONE CICLI CHIUSI (sola lettura) ========== */}
+      {showClosedCycles && (() => {
+        const allOps = (operations as any[]) || [];
+        const allCycles = (cycles as any[]) || [];
+        const allBaskets = (baskets as any[]) || [];
+        const sizesArr = (sizes as any[]) || [];
+
+        // Filtra cicli chiusi rispettando i filtri FLUPSY/Sito attivi
+        const closedCycles = allCycles.filter((c: any) => {
+          if (c.state !== 'closed') return false;
+          if (selectedFlupsyId !== 'all' && c.flupsyId !== parseInt(selectedFlupsyId)) return false;
+          if (selectedSiteFilter !== 'all' && c.flupsyLocation !== selectedSiteFilter) return false;
+          return true;
+        }).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+
+        if (closedCycles.length === 0) {
+          return (
+            <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-6 text-center text-gray-500 text-sm">
+              Nessun ciclo chiuso trovato con i filtri correnti.
+            </div>
+          );
+        }
+
+        // Calcola SGR-M per ogni ciclo chiuso
+        const closedRows = closedCycles.map((cycle: any) => {
+          const cycleOps = allOps
+            .filter((op: any) => op.cycleId === cycle.id && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          let sgrM: number | null = null;
+          if (cycleOps.length >= 2) {
+            const latest = cycleOps[0];
+            const prev = cycleOps[1];
+            const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(prev.date).getTime()) / (1000 * 60 * 60 * 24)));
+            if (latest.averageWeight > 0 && prev.averageWeight > 0) {
+              sgrM = ((Math.log(latest.averageWeight) - Math.log(prev.averageWeight)) / days) * 100;
+            }
+          }
+
+          // Taglia dall'ultima operazione del ciclo con animalsPerKg
+          const lastOpWithSize = allOps
+            .filter((op: any) => op.cycleId === cycle.id && op.animalsPerKg && op.animalsPerKg > 0 && (op.type === 'misura' || op.type === 'prima-attivazione'))
+            .sort((a: any, b: any) => b.id - a.id)[0];
+          const sizeObj = lastOpWithSize?.sizeId ? sizesArr.find((s: any) => s.id === lastOpWithSize.sizeId) : null;
+          const sizeCode = sizeObj?.code || lastOpWithSize?.size?.code || '-';
+
+          // Ultimo peso medio in mg
+          const lastOpWeight = cycleOps[0];
+          const avgWeightMg = lastOpWeight ? (lastOpWeight.averageWeight * 1000).toFixed(1) : '-';
+
+          const basket = allBaskets.find((b: any) => b.id === cycle.basketId);
+          const qualityLabel = cycle.qualityClass === 'premium' ? 'TESTE' : cycle.qualityClass === 'normal' ? 'MEDI' : cycle.qualityClass === 'sub' ? 'CODE' : '-';
+          const qualityColor = cycle.qualityClass === 'premium' ? 'text-amber-700 bg-amber-50' : cycle.qualityClass === 'normal' ? 'text-slate-700 bg-slate-100' : cycle.qualityClass === 'sub' ? 'text-purple-700 bg-purple-50' : 'text-gray-500';
+
+          const durationDays = cycle.endDate ? Math.round((new Date(cycle.endDate).getTime() - new Date(cycle.startDate).getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+          return { cycle, sgrM, sizeCode, avgWeightMg, qualityLabel, qualityColor, durationDays, basket, cycleOpsCount: cycleOps.length };
+        });
+
+        return (
+          <div className="mt-4 border border-gray-300 rounded-lg overflow-hidden shadow-sm">
+            <div className="bg-gray-700 text-white px-4 py-2 flex items-center gap-2">
+              <span>📂</span>
+              <span className="font-semibold text-sm">Cicli Chiusi — Verifica SGR (sola lettura)</span>
+              <span className="ml-2 text-xs bg-gray-600 px-2 py-0.5 rounded">{closedRows.length} cicli</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead className="bg-gray-100 sticky top-0">
+                  <tr>
+                    <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">Cesta #</th>
+                    <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">FLUPSY</th>
+                    <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">Ciclo</th>
+                    <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Inizio</th>
+                    <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Fine</th>
+                    <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Giorni</th>
+                    <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Qualità</th>
+                    <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Ult. Taglia</th>
+                    <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Peso Med (mg)</th>
+                    <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-green-700">SGR-M (%/g)</th>
+                    <th className="px-2 py-2 text-center border-b border-gray-200 font-semibold text-gray-700">Op. Misura</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {closedRows.map(({ cycle, sgrM, sizeCode, avgWeightMg, qualityLabel, qualityColor, durationDays, cycleOpsCount }, idx) => (
+                    <tr key={cycle.id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                      <td className="px-2 py-1.5 border-r border-gray-100 font-medium text-gray-700">#{cycle.basketPhysicalNumber}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-gray-600 max-w-28 truncate">{cycle.flupsyName}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-gray-500 font-mono text-xs">{cycle.id}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-600">{cycle.startDate ? new Date(cycle.startDate).toLocaleDateString('it-IT') : '-'}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-600">{cycle.endDate ? new Date(cycle.endDate).toLocaleDateString('it-IT') : '-'}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-500">{durationDays ?? '-'}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-center">
+                        {cycle.qualityClass ? (
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${qualityColor}`}>{qualityLabel}</span>
+                        ) : <span className="text-gray-400">-</span>}
+                      </td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-center">
+                        <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700">{sizeCode}</span>
+                      </td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-600">{avgWeightMg}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100 text-center font-semibold">
+                        {sgrM !== null ? (
+                          <span className={sgrM >= 0 ? 'text-green-700' : 'text-red-600'}>{sgrM.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-gray-400 text-xs" title="Meno di 2 operazioni misura nel ciclo">—</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-center text-gray-500">{cycleOpsCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 border-t border-gray-200">
+              SGR-M calcolato dalle ultime 2 operazioni Misura/Prima Attivazione con peso registrato nel ciclo. Solo lettura — nessuna modifica possibile.
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 }
