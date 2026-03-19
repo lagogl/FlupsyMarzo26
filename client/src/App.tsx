@@ -72,6 +72,7 @@ import GrowthVariabilityAnalysis from "@/pages/GrowthVariabilityAnalysis";
 import LCIModule from "@/pages/LCIModule";
 // Importazione Storia Animali (Genealogia)
 import LineageAnimali from "@/pages/LineageAnimali";
+import SgrLineage from "@/pages/SgrLineage";
 // Importazione Task Management (Gestione Attività)
 import TaskManagement from "@/pages/TaskManagement";
 // Importazione Attività Consigliate AI
@@ -135,6 +136,7 @@ function Router() {
       <ProtectedRoute path="/inventory" component={Inventory}/>
       <ProtectedRoute path="/sizes" component={Sizes}/>
       <ProtectedRoute path="/sgr" component={Sgr}/>
+      <ProtectedRoute path="/sgr-lineage" component={SgrLineage}/>
       <ProtectedRoute path="/settings" component={Settings} requiredRole="admin" />
       <ProtectedRoute path="/test" component={TestView}/>
       <ProtectedRoute path="/nfc-prima-attivazione" component={NFCPrimaAttivazione}/>

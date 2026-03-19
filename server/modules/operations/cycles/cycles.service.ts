@@ -153,6 +153,8 @@ class CyclesService {
           endDate: cycles.endDate,
           state: cycles.state,
           qualityClass: cycles.qualityClass,
+          parentCycleId: cycles.parentCycleId,
+          lineageGroupId: cycles.lineageGroupId,
           basketPhysicalNumber: baskets.physicalNumber,
           basketState: baskets.state,
           flupsyId: flupsys.id,

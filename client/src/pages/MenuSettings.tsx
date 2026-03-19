@@ -36,6 +36,7 @@ const allMenuItems = [
   { path: "/flupsy-comparison", label: "Confronto FLUPSY", category: "Monitoraggio", icon: <GitCompare className="h-4 w-4" /> },
   { path: "/grow-journey", label: "Percorso Crescita", category: "Monitoraggio", icon: <LineChart className="h-4 w-4" /> },
   { path: "/basket-selection", label: "Selezione Avanzata", category: "Monitoraggio", icon: <BarChart2 className="h-4 w-4" /> },
+  { path: "/sgr-lineage", label: "SGR per Lotto", category: "Monitoraggio", icon: <TrendingUp className="h-4 w-4" /> },
   { path: "/task-management", label: "Gestione Attività", category: "Monitoraggio", icon: <ClipboardList className="h-4 w-4" /> },
   { path: "/operators", label: "Operatori", category: "Monitoraggio", icon: <Users className="h-4 w-4" /> },
   { path: "/cycles", label: "Cicli Produttivi", category: "Giacenze", icon: <RefreshCw className="h-4 w-4" /> },
