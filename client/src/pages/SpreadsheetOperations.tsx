@@ -1943,7 +1943,7 @@ export default function SpreadsheetOperations() {
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.animalsPerKg && op.animalsPerKg > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue = null;
@@ -1951,8 +1951,10 @@ export default function SpreadsheetOperations() {
           const latest = basketOps[0];
           const previous = basketOps[1];
           const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
-          if (latest.averageWeight > 0 && previous.averageWeight > 0) {
-            sgrMisuraValue = ((Math.log(latest.averageWeight) - Math.log(previous.averageWeight)) / days) * 100;
+          if (latest.animalsPerKg > 0 && previous.animalsPerKg > 0 && latest.animalsPerKg !== previous.animalsPerKg) {
+            sgrMisuraValue = (Math.log(previous.animalsPerKg / latest.animalsPerKg) / days) * 100;
+          } else if (latest.animalsPerKg > 0 && previous.animalsPerKg > 0) {
+            sgrMisuraValue = 0;
           }
         }
         
@@ -2123,7 +2125,7 @@ export default function SpreadsheetOperations() {
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.animalsPerKg && op.animalsPerKg > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue: number | null = null;
@@ -2131,8 +2133,10 @@ export default function SpreadsheetOperations() {
           const latest = basketOps[0];
           const previous = basketOps[1];
           const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
-          if (latest.averageWeight > 0 && previous.averageWeight > 0) {
-            sgrMisuraValue = ((Math.log(latest.averageWeight) - Math.log(previous.averageWeight)) / days) * 100;
+          if (latest.animalsPerKg > 0 && previous.animalsPerKg > 0 && latest.animalsPerKg !== previous.animalsPerKg) {
+            sgrMisuraValue = (Math.log(previous.animalsPerKg / latest.animalsPerKg) / days) * 100;
+          } else if (latest.animalsPerKg > 0 && previous.animalsPerKg > 0) {
+            sgrMisuraValue = 0;
           }
         }
         
@@ -4128,15 +4132,15 @@ export default function SpreadsheetOperations() {
                         const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
                         const sgrPeso = sgrPesoData?.sgrPesoMedio;
                         const sgrMisuraOps = ((operations as any[]) || [])
-                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.animalsPerKg && op.animalsPerKg > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         let sgrMisura: number | null = null;
                         if (sgrMisuraOps.length >= 2) {
                           const lat = sgrMisuraOps[0];
                           const prev = sgrMisuraOps[1];
                           const d = Math.max(1, Math.round((new Date(lat.date).getTime() - new Date(prev.date).getTime()) / (1000 * 60 * 60 * 24)));
-                          if (lat.averageWeight > 0 && prev.averageWeight > 0) {
-                            sgrMisura = ((Math.log(lat.averageWeight) - Math.log(prev.averageWeight)) / d) * 100;
+                          if (lat.animalsPerKg > 0 && prev.animalsPerKg > 0) {
+                            sgrMisura = (Math.log(prev.animalsPerKg / lat.animalsPerKg) / d) * 100;
                           }
                         }
                         let sgrMedio = null;
@@ -4159,15 +4163,15 @@ export default function SpreadsheetOperations() {
                     <div style={{width: '55px'}} className="px-1 py-1 border-r bg-green-50">
                       {(() => {
                         const basketOps = ((operations as any[]) || [])
-                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.animalsPerKg && op.animalsPerKg > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         
                         if (basketOps.length >= 2) {
                           const latest = basketOps[0];
                           const previous = basketOps[1];
                           const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
-                          if (latest.averageWeight > 0 && previous.averageWeight > 0) {
-                            const sgr = ((Math.log(latest.averageWeight) - Math.log(previous.averageWeight)) / days) * 100;
+                          if (latest.animalsPerKg > 0 && previous.animalsPerKg > 0) {
+                            const sgr = (Math.log(previous.animalsPerKg / latest.animalsPerKg) / days) * 100;
                             return (
                               <div className={`w-full h-6 px-1 text-xs rounded flex items-center justify-end font-medium ${sgr >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                                 {sgr.toFixed(2)}
@@ -4929,7 +4933,7 @@ export default function SpreadsheetOperations() {
         // Calcola SGR-M per ogni ciclo chiuso
         const closedRows = closedCycles.map((cycle: any) => {
           const cycleOps = allOps
-            .filter((op: any) => op.cycleId === cycle.id && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+            .filter((op: any) => op.cycleId === cycle.id && (op.type === 'misura' || op.type === 'prima-attivazione') && op.animalsPerKg && op.animalsPerKg > 0)
             .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
           let sgrM: number | null = null;
@@ -4937,8 +4941,8 @@ export default function SpreadsheetOperations() {
             const latest = cycleOps[0];
             const prev = cycleOps[1];
             const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(prev.date).getTime()) / (1000 * 60 * 60 * 24)));
-            if (latest.averageWeight > 0 && prev.averageWeight > 0) {
-              sgrM = ((Math.log(latest.averageWeight) - Math.log(prev.averageWeight)) / days) * 100;
+            if (latest.animalsPerKg > 0 && prev.animalsPerKg > 0) {
+              sgrM = (Math.log(prev.animalsPerKg / latest.animalsPerKg) / days) * 100;
             }
           }
 
