@@ -1943,7 +1943,7 @@ export default function SpreadsheetOperations() {
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura') && op.animalsPerKg && op.animalsPerKg > 0)
+          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue = null;
@@ -2125,7 +2125,7 @@ export default function SpreadsheetOperations() {
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura') && op.animalsPerKg && op.animalsPerKg > 0)
+          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue: number | null = null;
@@ -4132,7 +4132,7 @@ export default function SpreadsheetOperations() {
                         const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
                         const sgrPeso = sgrPesoData?.sgrPesoMedio;
                         const sgrMisuraOps = ((operations as any[]) || [])
-                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura') && op.animalsPerKg && op.animalsPerKg > 0)
+                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         let sgrMisura: number | null = null;
                         if (sgrMisuraOps.length >= 2) {
@@ -4163,7 +4163,7 @@ export default function SpreadsheetOperations() {
                     <div style={{width: '55px'}} className="px-1 py-1 border-r bg-green-50">
                       {(() => {
                         const basketOps = ((operations as any[]) || [])
-                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura') && op.animalsPerKg && op.animalsPerKg > 0)
+                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         
                         if (basketOps.length >= 2) {
@@ -4933,7 +4933,7 @@ export default function SpreadsheetOperations() {
         // Calcola SGR-M per ogni ciclo chiuso
         const closedRows = closedCycles.map((cycle: any) => {
           const cycleOps = allOps
-            .filter((op: any) => op.cycleId === cycle.id && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura') && op.animalsPerKg && op.animalsPerKg > 0)
+            .filter((op: any) => op.cycleId === cycle.id && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
             .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
           let sgrM: number | null = null;
@@ -4948,7 +4948,7 @@ export default function SpreadsheetOperations() {
 
           // Taglia dall'ultima operazione del ciclo con animalsPerKg
           const lastOpWithSize = allOps
-            .filter((op: any) => op.cycleId === cycle.id && op.animalsPerKg && op.animalsPerKg > 0 && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura'))
+            .filter((op: any) => op.cycleId === cycle.id && op.animalsPerKg && op.animalsPerKg > 0 && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo'))
             .sort((a: any, b: any) => b.id - a.id)[0];
           const sizeObj = lastOpWithSize?.sizeId ? sizesArr.find((s: any) => s.id === lastOpWithSize.sizeId) : null;
           const sizeCode = sizeObj?.code || lastOpWithSize?.size?.code || '-';
