@@ -955,6 +955,7 @@ export default function VagliaturaConMappa() {
         if (basket.screeningPosition === 'sotto') operativeNotes.push('SOTTO VAGLIATURA');
         if (basket.qualityNote === 'belli') operativeNotes.push('BELLI');
         if (basket.qualityNote === 'brutti') operativeNotes.push('BRUTTI CON MOLTI MORTI');
+        if (basket.customNote) operativeNotes.push(basket.customNote);
         
         // Concatena le note operative alle note esistenti
         const finalNotes = operativeNotes.length > 0 
