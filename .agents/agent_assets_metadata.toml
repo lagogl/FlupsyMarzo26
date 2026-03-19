@@ -6,3 +6,9 @@ id = "YkMo4aExHXSPEb1QxCXMc"
 uri = "file://riepilogo_modifiche_19marzo2026.pdf"
 type = "pdf"
 title = "Riepilogo Modifiche — 19 Marzo 2026 (verificato da git)"
+
+[[outputs]]
+id = "V1sA1O4mRfkUbIORj6DdB"
+uri = "file://riepilogo_operatori_19marzo2026.pdf"
+type = "pdf"
+title = "Novita per gli Operatori — 19 Marzo 2026"
