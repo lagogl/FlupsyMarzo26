@@ -9,7 +9,7 @@ import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus, Download, Users } from 'lucide-react';
+import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus, Download, Users, StickyNote } from 'lucide-react';
 import { getOperationTypeLabel } from '@/lib/utils';
 import * as ExcelJS from 'exceljs';
 import { AssignGroupDialog } from '@/components/AssignGroupDialog';
@@ -782,6 +782,15 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   </div>
                 );
               })()}
+              {/* Vagliatura note indicator */}
+              {basket.vagliatureNote && (
+                <div
+                  className="absolute top-0 right-0 bg-violet-100 dark:bg-violet-900 rounded-bl-md px-1 py-0.5"
+                  title={basket.vagliatureNote}
+                >
+                  <StickyNote className="h-3 w-3 text-violet-600 dark:text-violet-400" />
+                </div>
+              )}
               <div className="text-xs text-center text-gray-500 font-medium">CESTA #{basket.physicalNumber}</div>
               
               {latestOperation && (
@@ -924,6 +933,12 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   <div className="mt-1 pt-1 border-t">
                     <span className="font-medium">Note:</span>
                     <p className="text-xs mt-1">{latestOperation.notes}</p>
+                  </div>
+                )}
+                {basket.vagliatureNote && (
+                  <div className="mt-1 pt-1 border-t">
+                    <span className="font-medium text-violet-700">Nota vagliatura:</span>
+                    <p className="text-xs mt-1 text-violet-600">{basket.vagliatureNote}</p>
                   </div>
                 )}
               </div>

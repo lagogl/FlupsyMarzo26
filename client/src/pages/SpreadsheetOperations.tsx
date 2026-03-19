@@ -103,6 +103,7 @@ interface OperationRowData {
   sgrMisura?: number | null;      // SGR calcolato da operazioni MISURA
   // Storico note del ciclo per tooltip
   allCycleNotes?: { date: string; note: string; type: string }[];
+  vagliatureNote?: string | null;
 }
 
 // Tipi operazione per il modulo Spreadsheet
@@ -707,6 +708,7 @@ export default function SpreadsheetOperations() {
           deadCount: fullOp?.deadCount || null,
           mortalityRate: fullOp?.mortalityRate || null,
           notes: fullOp?.notes || '',
+          vagliatureNote: (basket as any).vagliatureNote || null,
           // Campi specifici per misura - usa dati reali se disponibili
           liveAnimals: (selectedOperationType === 'misura' && fullOp?.liveAnimals) ? fullOp.liveAnimals : null,
           sampleWeight: ((selectedOperationType === 'misura' || selectedOperationType === 'peso') && fullOp?.sampleWeight) ? fullOp.sampleWeight : null,
@@ -4268,23 +4270,36 @@ export default function SpreadsheetOperations() {
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="w-full h-6 px-1 text-xs rounded bg-gray-100 cursor-help flex items-center overflow-hidden">
+                              <div className="w-full h-6 px-1 text-xs rounded bg-gray-100 cursor-help flex items-center gap-1 overflow-hidden">
+                                {row.vagliatureNote && (
+                                  <span className="flex-shrink-0 w-2 h-2 rounded-full bg-violet-500" title="Nota vagliatura presente" />
+                                )}
                                 <span className="truncate">{row.notes || '-'}</span>
                               </div>
                             </TooltipTrigger>
-                            {(row.allCycleNotes && row.allCycleNotes.length > 0) && (
+                            {((row.allCycleNotes && row.allCycleNotes.length > 0) || row.vagliatureNote) && (
                               <TooltipContent side="left" className="max-w-md p-3">
-                                <div className="text-xs font-semibold mb-2 border-b pb-1">Storico Note Ciclo</div>
-                                <div className="space-y-2 max-h-60 overflow-y-auto">
-                                  {row.allCycleNotes.map((noteItem, idx) => (
-                                    <div key={idx} className="text-xs border-l-2 border-blue-400 pl-2">
-                                      <div className="font-medium text-gray-700">
-                                        {new Date(noteItem.date).toLocaleDateString('it-IT')} - {noteItem.type}
-                                      </div>
-                                      <div className="text-gray-600 mt-0.5">{noteItem.note}</div>
+                                {row.vagliatureNote && (
+                                  <div className="mb-2 pb-2 border-b border-violet-200">
+                                    <div className="text-xs font-semibold text-violet-700 mb-1">Nota Vagliatura</div>
+                                    <div className="text-xs text-violet-600 border-l-2 border-violet-400 pl-2">{row.vagliatureNote}</div>
+                                  </div>
+                                )}
+                                {row.allCycleNotes && row.allCycleNotes.length > 0 && (
+                                  <>
+                                    <div className="text-xs font-semibold mb-2 border-b pb-1">Storico Note Ciclo</div>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                                      {row.allCycleNotes.map((noteItem, idx) => (
+                                        <div key={idx} className="text-xs border-l-2 border-blue-400 pl-2">
+                                          <div className="font-medium text-gray-700">
+                                            {new Date(noteItem.date).toLocaleDateString('it-IT')} - {noteItem.type}
+                                          </div>
+                                          <div className="text-gray-600 mt-0.5">{noteItem.note}</div>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
-                                </div>
+                                  </>
+                                )}
                               </TooltipContent>
                             )}
                           </Tooltip>

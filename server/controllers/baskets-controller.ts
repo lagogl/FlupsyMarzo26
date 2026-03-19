@@ -241,10 +241,12 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
         NULL as op_animal_count, NULL as op_total_weight, NULL as op_animals_per_kg,
         NULL as op_average_weight, NULL as op_dead_count, NULL as op_mortality_rate,
         NULL as op_notes, NULL as op_metadata,
-        c.lot_id as cycle_lot_id, c.start_date as cycle_start_date, c.end_date as cycle_end_date, c.state as cycle_state
+        c.lot_id as cycle_lot_id, c.start_date as cycle_start_date, c.end_date as cycle_end_date, c.state as cycle_state,
+        sdb.notes as vagliature_note
       FROM baskets b
       LEFT JOIN flupsys f ON b.flupsy_id = f.id
       LEFT JOIN cycles c ON b.current_cycle_id = c.id
+      LEFT JOIN selection_destination_baskets sdb ON sdb.basket_id = b.id AND sdb.cycle_id = b.current_cycle_id
       ${whereClause}
       ${orderByClause}
       ${limitClause}
@@ -323,7 +325,8 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
         row: row.row,
         position: row.position,
         groupId: row.group_id,
-        flupsyName: row.flupsy_name
+        flupsyName: row.flupsy_name,
+        vagliatureNote: row.vagliature_note || null
       };
       
       // Costruisci oggetto posizione corrente

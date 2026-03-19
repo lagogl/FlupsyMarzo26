@@ -182,6 +182,7 @@ export default function ScreeningsList() {
                       <TableHead>Numero</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead>Scopo</TableHead>
+                      <TableHead>Note</TableHead>
                       <TableHead>Taglia Rif.</TableHead>
                       <TableHead className="text-right">Cest. Origine</TableHead>
                       <TableHead className="text-right">Cest. Dest.</TableHead>
@@ -209,6 +210,13 @@ export default function ScreeningsList() {
                           </TableCell>
                           <TableCell data-testid={`text-purpose-${screening.id}`}>
                             {screening.purpose || '-'}
+                          </TableCell>
+                          <TableCell data-testid={`text-notes-${screening.id}`} className="max-w-[200px]">
+                            {screening.notes ? (
+                              <span className="text-xs text-muted-foreground italic truncate block" title={screening.notes}>
+                                {screening.notes}
+                              </span>
+                            ) : <span className="text-xs text-muted-foreground">—</span>}
                           </TableCell>
                           <TableCell data-testid={`text-size-${screening.id}`}>
                             {screening.referenceSize?.code || '-'}

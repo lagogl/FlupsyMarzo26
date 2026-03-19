@@ -302,6 +302,7 @@ export default function ScreeningDetail() {
                 <TableHead className="text-right">Peso (kg)</TableHead>
                 <TableHead className="text-right">Animali/kg</TableHead>
                 <TableHead>Posizione</TableHead>
+                <TableHead>Note</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -334,6 +335,13 @@ export default function ScreeningDetail() {
                       ) : (
                         <span className="text-muted-foreground text-sm">Non assegnata</span>
                       )}
+                    </TableCell>
+                    <TableCell className="max-w-[200px]">
+                      {basket.notes ? (
+                        <span className="text-xs italic text-muted-foreground truncate block" title={basket.notes}>
+                          {basket.notes}
+                        </span>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
                   </TableRow>
                 );

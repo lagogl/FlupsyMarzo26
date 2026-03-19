@@ -4,7 +4,7 @@
  */
 
 import { db } from '../../../db';
-import { operations, baskets, flupsys, lots, sizes, basketLotComposition, cycles } from '../../../../shared/schema';
+import { operations, baskets, flupsys, lots, sizes, basketLotComposition, cycles, selectionDestinationBaskets } from '../../../../shared/schema';
 import { sql, eq, and, or, between, desc, inArray } from 'drizzle-orm';
 import { OperationsCache } from '../../../operations-cache-service';
 import { isBasketMixedLot, getBasketLotComposition } from '../../../services/basket-lot-composition.service';
@@ -39,7 +39,9 @@ const OPERATION_COLUMNS = {
   // Aggiungi campi per size
   size_id: sizes.id,
   size_code: sizes.code,
-  size_name: sizes.name
+  size_name: sizes.name,
+  // Nota vagliatura dalla cesta di destinazione
+  vagliatureNote: selectionDestinationBaskets.notes
 };
 
 export interface OperationsOptions {
@@ -162,6 +164,10 @@ class OperationsService {
         .leftJoin(baskets, eq(operations.basketId, baskets.id))
         .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
         .leftJoin(sizes, eq(operations.sizeId, sizes.id))
+        .leftJoin(selectionDestinationBaskets, and(
+          eq(selectionDestinationBaskets.basketId, operations.basketId),
+          eq(selectionDestinationBaskets.cycleId, operations.cycleId)
+        ))
         .orderBy(desc(operations.date))
         .limit(pageSize)
         .offset(offset);
@@ -316,7 +322,8 @@ class OperationsService {
           mortalityRate: row.mortalityRate,
           notes: row.notes,
           metadata: row.metadata,
-          flupsyName: row.flupsyName
+          flupsyName: row.flupsyName,
+          vagliatureNote: row.vagliatureNote || null
         };
         
         // Aggiungi oggetto size se presente
