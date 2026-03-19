@@ -1941,7 +1941,7 @@ export default function SpreadsheetOperations() {
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue = null;
@@ -2121,7 +2121,7 @@ export default function SpreadsheetOperations() {
         const sgrPesoValue = sgrPesoData?.sgrPesoMedio;
         
         const basketOps = ((operations as any[]) || [])
-          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         let sgrMisuraValue: number | null = null;
@@ -4114,7 +4114,7 @@ export default function SpreadsheetOperations() {
                         const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
                         const sgrPeso = sgrPesoData?.sgrPesoMedio;
                         const sgrMisuraOps = ((operations as any[]) || [])
-                          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         let sgrMisura: number | null = null;
                         if (sgrMisuraOps.length >= 2) {
@@ -4145,7 +4145,7 @@ export default function SpreadsheetOperations() {
                     <div style={{width: '55px'}} className="px-1 py-1 border-r bg-green-50">
                       {(() => {
                         const basketOps = ((operations as any[]) || [])
-                          .filter((op: any) => op.basketId === row.basketId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
+                          .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione') && op.averageWeight && op.averageWeight > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
                         
                         if (basketOps.length >= 2) {
