@@ -1705,24 +1705,88 @@ export default function Operations() {
     }
   };
 
-  // Esportazione operazioni filtrate in Excel
+  // Esportazione operazioni filtrate in Excel - recupera TUTTE le operazioni corrispondenti al filtro attuale
   const exportOperationsToExcel = async () => {
-    if (!filteredOperations || filteredOperations.length === 0) {
-      toast({
-        title: "Nessuna operazione",
-        description: "Non ci sono operazioni da esportare.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     setIsExportingOperations(true);
     try {
-      const operationsData = filteredOperations.map((op: any) => ({
+      // 1. Fetch TUTTE le operazioni (nessun limite di paginazione)
+      const allOpsResponse = await fetch('/api/operations?includeAll=true&pageSize=9999');
+      if (!allOpsResponse.ok) throw new Error('Errore recupero operazioni');
+      const allOpsRaw: any[] = await allOpsResponse.json();
+
+      // 2. Arricchisci con dati di basket/lot/size già caricati
+      const enrichedAll = allOpsRaw
+        .filter((op: any) => isValidDate(op.date))
+        .map((op: any) => {
+          let enrichedOp = { ...op };
+          if (!enrichedOp.basket && enrichedOp.basketId && baskets) {
+            const matchingBasket = (baskets as any[]).find((b: any) => b.id === enrichedOp.basketId);
+            if (matchingBasket) enrichedOp.basket = matchingBasket;
+          }
+          if (!enrichedOp.lot && enrichedOp.lotId && lots) {
+            const matchingLot = (lots as any[]).find((l: any) => l.id === enrichedOp.lotId);
+            if (matchingLot) enrichedOp.lot = matchingLot;
+          }
+          if (!enrichedOp.size && enrichedOp.sizeId && sizes) {
+            enrichedOp.size = (sizes as any[]).find((s: any) => s.id === enrichedOp.sizeId);
+          }
+          return enrichedOp;
+        });
+
+      // 3. Applica gli stessi filtri della vista corrente
+      const exportOps = enrichedAll.filter((op: any) => {
+        if (filters.searchTerm && filters.searchTerm.trim() !== '') {
+          const searchLower = filters.searchTerm.toLowerCase();
+          const matchesSearch =
+            op.basket?.physicalNumber?.toString().includes(searchLower) ||
+            op.type?.toLowerCase().includes(searchLower) ||
+            op.notes?.toLowerCase().includes(searchLower) ||
+            op.lot?.supplier?.toLowerCase().includes(searchLower) ||
+            (op.flupsyName || op.basket?.flupsyName)?.toLowerCase().includes(searchLower);
+          if (!matchesSearch) return false;
+        }
+        if (filters.typeFilter !== 'all' && op.type !== filters.typeFilter) return false;
+        if (filters.dateFilter && filters.dateFilter.trim() !== '') {
+          if (!isValidDate(filters.dateFilter) || !isValidDate(op.date)) return false;
+          if (new Date(filters.dateFilter).toDateString() !== new Date(op.date).toDateString()) return false;
+        }
+        if (filters.flupsyFilter !== 'all') {
+          const selectedFlupsyId = parseInt(filters.flupsyFilter);
+          const selectedFlupsy = (flupsys as any[])?.find((f: any) => f.id === selectedFlupsyId);
+          if (!selectedFlupsy) return false;
+          const opFlupsyName = op.flupsyName?.trim();
+          const selectedFlupsyName = selectedFlupsy.name?.trim();
+          if (opFlupsyName) {
+            if (opFlupsyName !== selectedFlupsyName) return false;
+          } else if (op.basket?.flupsyId !== selectedFlupsyId) return false;
+        }
+        if (filters.cycleFilter !== 'all') {
+          if (op.cycleId !== parseInt(filters.cycleFilter)) return false;
+        }
+        if (filters.cycleStateFilter !== 'all' && cycles && (cycles as any[]).length > 0) {
+          const operationCycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
+          if (operationCycle) {
+            if (filters.cycleStateFilter === 'active' && operationCycle.state !== 'active') return false;
+            if (filters.cycleStateFilter === 'closed' && operationCycle.state !== 'closed') return false;
+          }
+        }
+        if (filters.lotFilter && filters.lotFilter !== 'all') {
+          if (op.lotId !== parseInt(filters.lotFilter)) return false;
+        }
+        return true;
+      });
+
+      if (exportOps.length === 0) {
+        toast({ title: "Nessuna operazione", description: "Non ci sono operazioni da esportare con i filtri correnti.", variant: "destructive" });
+        return;
+      }
+
+      // 4. Prepara i dati per l'export
+      const operationsData = exportOps.map((op: any) => ({
         date: op.date,
         type: op.type,
         basketNumber: op.basket?.physicalNumber || op.basketNumber || '',
-        flupsyName: op.basket?.flupsy?.name || '',
+        flupsyName: op.flupsyName || op.basket?.flupsy?.name || op.basket?.flupsyName || '',
         cycleId: op.cycleId,
         lotName: op.lot?.name || '',
         lotArrivalDate: op.lot?.arrivalDate || null,
@@ -1732,15 +1796,15 @@ export default function Operations() {
         totalWeightKg: op.totalWeight ? op.totalWeight / 1000 : null,
         avgWeightMg: op.averageWeight ? op.averageWeight * 1000 : null,
       }));
-      
+
       const response = await fetch('/api/operations/export-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ operations: operationsData })
       });
-      
+
       if (!response.ok) throw new Error('Errore esportazione');
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1750,10 +1814,10 @@ export default function Operations() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      
+
       toast({
         title: "Esportazione completata",
-        description: `Esportate ${filteredOperations.length} operazioni in formato Excel.`,
+        description: `Esportate ${exportOps.length} operazioni in formato Excel.`,
       });
     } catch (error) {
       console.error('Errore durante esportazione:', error);
