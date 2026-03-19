@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "YkMo4aExHXSPEb1QxCXMc"
+uri = "file://riepilogo_modifiche_19marzo2026.pdf"
+type = "pdf"
+title = "Riepilogo Modifiche — 19 Marzo 2026"
