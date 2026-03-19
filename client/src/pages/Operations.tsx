@@ -3875,10 +3875,14 @@ export default function Operations() {
                                     const lastOp = cycleOps[cycleOps.length - 1];
                                     
                                     if (firstOp.animalsPerKg && lastOp.animalsPerKg) {
-                                      const firstWeight = parseFloat(firstOp.averageWeight);
-                                      const lastWeight = parseFloat(lastOp.averageWeight);
+                                      // Deriva il peso medio da animalsPerKg (più affidabile di averageWeight che può essere stale)
+                                      // peso_mg = 1,000,000 / animalsPerKg
+                                      const firstApk = parseFloat(firstOp.animalsPerKg);
+                                      const lastApk  = parseFloat(lastOp.animalsPerKg);
+                                      const firstWeight = firstApk > 0 ? 1000000 / firstApk : parseFloat(firstOp.averageWeight);
+                                      const lastWeight  = lastApk  > 0 ? 1000000 / lastApk  : parseFloat(lastOp.averageWeight);
                                       const weightGain = lastWeight - firstWeight;
-                                      const percentGain = ((lastWeight - firstWeight) / firstWeight) * 100;
+                                      const percentGain = firstWeight > 0 ? ((lastWeight - firstWeight) / firstWeight) * 100 : 0;
                                       
                                       const startDate = new Date(firstOp.date);
                                       const endDate = new Date(lastOp.date);
@@ -4101,9 +4105,16 @@ export default function Operations() {
                           // Find previous operation to calculate growth
                           const prevOp = index > 0 ? cycleOps[index - 1] : null;
                           
-                          // Calcola il cambio di peso e i giorni tra le operazioni
-                          const prevWeight = prevOp && prevOp.averageWeight ? parseFloat(prevOp.averageWeight) : null;
-                          const currWeight = op.averageWeight ? parseFloat(op.averageWeight) : null;
+                          // Calcola il cambio di peso - usa animalsPerKg per derivare il peso (averageWeight può essere stale)
+                          // peso_mg = 1,000,000 / animalsPerKg
+                          const prevWeight = prevOp
+                            ? (prevOp.animalsPerKg && parseFloat(prevOp.animalsPerKg) > 0
+                               ? 1000000 / parseFloat(prevOp.animalsPerKg)
+                               : (prevOp.averageWeight ? parseFloat(prevOp.averageWeight) : null))
+                            : null;
+                          const currWeight = op.animalsPerKg && parseFloat(op.animalsPerKg) > 0
+                            ? 1000000 / parseFloat(op.animalsPerKg)
+                            : (op.averageWeight ? parseFloat(op.averageWeight) : null);
                           const weightChange = prevWeight && currWeight ? Math.round(currWeight - prevWeight) : null;
                           
                           const prevDate = (prevOp && isValidDate(prevOp.date)) ? new Date(prevOp.date) : null;
