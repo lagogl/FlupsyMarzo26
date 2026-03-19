@@ -575,7 +575,8 @@ export default function SpreadsheetOperations() {
           state: basket.state,
           flupsyName: flupsy?.name,
           lastOperation: lastOp,
-          activationOperation: activationOp
+          activationOperation: activationOp,
+          vagliatureNote: basket.vagliatureNote || null
         };
       })
       .sort((a, b) => {
