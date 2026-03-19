@@ -12,22 +12,22 @@ const AMBER = '#b45309';
 const GREEN_D = '#166534';
 const PURPLE = '#5b21b6';
 const DARK = '#374151';
+const TEAL = '#0f766e';
 const LEFT = 50;
-const RIGHT = W - 50;
-const CONTENT_W = RIGHT - LEFT;
+const CONTENT_W = W - 100;
 
+// HEADER
 doc.rect(0, 0, W, 78).fill(PRIMARY);
 doc.fillColor('white').fontSize(20).font('Helvetica-Bold')
    .text('FLUPSY Management System', LEFT, 20, { width: CONTENT_W });
 doc.fontSize(11).font('Helvetica')
-   .text('Riepilogo Modifiche — 19 Marzo 2026', LEFT, 48, { width: CONTENT_W });
-
+   .text('Riepilogo Modifiche Operative — 19 Marzo 2026', LEFT, 48, { width: CONTENT_W });
 doc.y = 95;
 
 doc.fillColor('#111827').fontSize(10.5).font('Helvetica')
    .text(
-     "Di seguito sono elencate tutte le modifiche tecniche implementate nella giornata odierna, " +
-     "con descrizione dell'impatto funzionale per gli operatori.",
+     'Riepilogo verificato dai commit git della giornata. Sono elencate le modifiche effettive ' +
+     'implementate nel sistema, con descrizione operativa per gli utenti.',
      LEFT, doc.y, { align: 'justify', width: CONTENT_W }
    );
 doc.moveDown(0.8);
@@ -58,73 +58,123 @@ function sub(text) {
   doc.moveDown(0.25);
 }
 
-section('1. Nuova Pagina: SGR per Lotto', PRIMARY);
+// =========================================================
+// 1. NOTE VAGLIATURA
+// =========================================================
+section('1. Note Vagliatura — Visualizzazione in piu moduli', PURPLE);
 
 bullet('Cosa e stato aggiunto');
-sub('Nuova pagina "SGR per Lotto" accessibile dal menu Monitoraggio.');
-sub('Calcola il tasso di crescita specifico (SGR) per ogni lotto seguendo l\'intera catena di lineage.');
-sub('Formula applicata: ln(APK iniziale / APK finale) / giorni totali x 100');
-sub('Mostra schede espandibili per lotto con dettaglio catena e statistiche globali.');
-sub('Include filtri per lotto e per intervallo di date.');
-
+sub('Nelle operazioni di tipo "Scheda" (dettaglio operazione): appare una nuova sezione viola "Nota Vagliatura" se presente.');
+sub('Nel modulo SpreadsheetOperations: la cella nota mostra un pallino viola se esiste una nota vagliatura, con tooltip che espone il testo e lo storico note del ciclo.');
+sub('Nella Dashboard FLUPSY Visualizer: i cestelli con nota vagliatura mostrano un\'icona StickyNote viola nell\'angolo in alto a destra con tooltip al passaggio del mouse.');
 doc.moveDown(0.15);
-bullet('Impatto per l\'operatore');
-sub('E possibile confrontare le performance di crescita tra lotti in una vista dedicata.');
-sub('Il calcolo usa sempre animalsPerKg (affidabile), non il peso medio memorizzato nel database.');
+
+bullet('Moduli toccati');
+sub('SpreadsheetOperations — cella nota con indicatore viola e popup storico');
+sub('Operations — card "Nota Vagliatura" nel dettaglio operazione');
+sub('NewFlupsyVisualizer — icona nota sui cestelli nella dashboard');
+sub('operations.service.ts — aggiunto campo vagliatureNote alla query');
+sub('baskets-controller.ts — aggiunto vagliatureNote nella risposta API cestelli');
 doc.moveDown(0.25);
 
-section('2. Correzione: Performance di Crescita (pagina Operazioni)', AMBER);
+// =========================================================
+// 2. SGR CICLI CHIUSI IN SPREADSHEETOPERATIONS
+// =========================================================
+section('2. SGR Cicli Chiusi — Modulo Foglio Operativo', TEAL);
 
-bullet('Problema rilevato');
-sub('La sezione "Performance di crescita" mostrava sempre 0.0% totale e 0.00% al giorno.');
-sub('Causa: il campo average_weight era rimasto stale anche dopo aggiornamenti di animalsPerKg.');
+bullet('Cosa e stato aggiunto');
+sub('Nel modulo SpreadsheetOperations e apparso un nuovo pulsante "Cicli chiusi" (icona cartella) nella barra filtri.');
+sub('Cliccando il pulsante si espande una sezione sola lettura che elenca tutti i cicli chiusi del FLUPSY selezionato.');
+sub('Per ogni ciclo chiuso viene calcolato e mostrato l\'SGR-M (tasso di crescita mensile) basato sulle operazioni di misura.');
+sub('La sezione rispetta i filtri attivi (FLUPSY e Sito) e mostra i cicli in ordine cronologico inverso.');
+sub('Sono incluse operazioni di tipo misura, prima-attivazione, chiusura-ciclo-vagliatura e vagliatura-con-mappa.');
 doc.moveDown(0.15);
 
-bullet('Correzione applicata');
-sub('Sostituito averageWeight con calcolo diretto: peso_mg = 1.000.000 / animalsPerKg');
-sub('Fix applicato in DUE punti: riepilogo del ciclo e dettaglio per singola operazione.');
-doc.moveDown(0.15);
-
-bullet('Esempio concreto — Ciclo #194');
-sub('PRIMA: Crescita totale 0.0% — giornaliera 0.00%');
-sub('DOPO:  Peso 0.23 mg -> 1.54 mg — Crescita +562% — circa 24% al giorno');
+bullet('Impatto operativo');
+sub('Gli operatori possono confrontare la performance storica dei cicli chiusi con quella dei cicli attivi senza uscire dal foglio operativo.');
+sub('I dati sono in sola lettura: nessuna modifica accidentale possibile.');
 doc.moveDown(0.25);
 
-section('3. Correzione: Pagina Dettaglio Ciclo', GREEN_D);
+// =========================================================
+// 3. NUOVA PAGINA: SGR PER LOTTO
+// =========================================================
+section('3. Nuova Pagina: SGR per Lotto (menu Monitoraggio)', PRIMARY);
 
-bullet('Problema rilevato');
-sub('La pagina di dettaglio mostrava il peso medio stale (0.23 mg) per tutte le operazioni.');
+bullet('Cosa e stato aggiunto');
+sub('Nuova pagina dedicata "SGR per Lotto" accessibile dal menu Monitoraggio -> SGR per Lotto.');
+sub('Calcola il tasso SGR percorrendo l\'intera catena di discendenza (lineage) a partire dal lineage_group_id.');
+sub('Formula: ln(APK radice / APK foglia) / giorni totali x 100');
+sub('Schede espandibili per ogni lotto con dettaglio per catena di lineage e statistiche globali comparative.');
+sub('Filtri per lotto specifico e per intervallo di date.');
 doc.moveDown(0.15);
 
-bullet('Quattro correzioni applicate');
-sub('Card "Peso Medio" in alto a destra: ora mostra il peso reale dell\'ultima operazione.');
-sub('Sezione "Andamento della Crescita": Peso iniziale, attuale, Crescita totale e giornaliera corretti.');
-sub('Grafico di crescita: punti ora corretti, curva non piu piatta.');
-sub('Tabella Cronologia Operazioni, colonna "Peso Medio (mg)": ogni riga mostra il valore corretto.');
+bullet('Modifiche tecniche collegate');
+sub('SgrLineage.tsx — nuova pagina (425 righe aggiunte)');
+sub('App.tsx — registrata la rotta /sgr-lineage');
+sub('MainLayout.tsx — aggiunta voce di menu nel gruppo Monitoraggio');
+sub('MenuSettings.tsx — aggiunta voce nelle impostazioni menu');
+sub('cycles.service.ts — aggiunti i campi parentCycleId e lineageGroupId nella query cicli');
+doc.moveDown(0.25);
+
+// =========================================================
+// 4. FIX PESO MEDIO / SGR — CORREZIONI BUG
+// =========================================================
+section('4. Correzione Bug: Peso Medio e SGR (dato stale)', AMBER);
+
+bullet('Problema individuato');
+sub('Il campo average_weight nel database conservava il valore della prima inserzione e non veniva aggiornato quando animalsPerKg cambiava.');
+sub('Conseguenza: "Performance di crescita" mostrava 0.0% e il "Peso Medio" nella pagina ciclo mostrava lo stesso valore per tutte le operazioni.');
 doc.moveDown(0.15);
 
-bullet('Risultato visivo — Ciclo #194');
-sub('Prima Attivazione (24/02): 4.307.692 an/kg -> 0.23 mg (invariato, era gia corretto)');
-sub('Misura (19/03): 651.163 an/kg -> 1.54 mg (prima mostrava erroneamente 0.23 mg)');
+bullet('Correzioni applicate — Operations.tsx');
+sub('Riepilogo ciclo: calcolo peso sostituito con formula 1.000.000 / animalsPerKg (sempre aggiornata).');
+sub('Dettaglio per operazione: stessa formula applicata alla singola operazione.');
+doc.moveDown(0.15);
+
+bullet('Correzioni applicate — CycleDetail.tsx');
+sub('Card "Peso Medio" in cima alla pagina ciclo: ora mostra il peso reale derivato da animalsPerKg.');
+sub('Sezione "Andamento della Crescita": Peso iniziale, Peso attuale e percentuali di crescita corretti.');
+sub('Grafico di crescita: punti aggiornati, la curva non e piu piatta.');
+sub('Tabella Cronologia Operazioni, colonna "Peso Medio (mg)": ogni riga mostra il peso specifico di quella operazione.');
+doc.moveDown(0.15);
+
+bullet('Risultato concreto — Ciclo #194 (esempio)');
+sub('Prima: tutte le righe mostravano 0.23 mg, crescita 0.0%');
+sub('Dopo: Prima Attivazione 0.23 mg, Misura 1.54 mg, Crescita +562% totale');
 doc.moveDown(0.25);
 
-section('Nota Tecnica — Root Cause del Bug', PURPLE);
+// =========================================================
+// 5. NOTE NELLE LISTE SCREENING
+// =========================================================
+section('5. Colonna Note nelle Liste Screening', GREEN_D);
 
-bullet('Perche average_weight era stale?');
-sub('Il campo average_weight viene scritto all\'inserimento e non sempre ricalcolato quando animalsPerKg cambia.');
-sub('Soluzione permanente adottata: derivare il peso sempre da 1.000.000 / animalsPerKg.');
-sub('animalsPerKg e il valore primario e canonico; average_weight e solo un campo derivato.');
-doc.moveDown(0.25);
+bullet('Cosa e stato aggiunto');
+sub('ScreeningsList.tsx: aggiunta colonna "Note" nella tabella lista screening (troncata con tooltip).');
+sub('ScreeningDetail.tsx: aggiunta colonna "Note" nella tabella ceste della vagliatura.');
+doc.moveDown(0.15);
 
-section('File Modificati', DARK);
+bullet('Impatto operativo');
+sub('Le note associate agli screening sono ora visibili direttamente dalla lista senza dover aprire ogni record.');
+doc.moveDown(0.3);
+
+// =========================================================
+// RIEPILOGO FILE
+// =========================================================
+section('Riepilogo File Modificati', DARK);
 
 const files = [
-  ['client/src/pages/SgrLineage.tsx', 'NUOVO — pagina SGR per Lotto con calcoli lineage'],
-  ['client/src/layouts/MainLayout.tsx', 'MODIFICA — aggiunta voce menu "SGR per Lotto"'],
-  ['client/src/pages/MenuSettings.tsx', 'MODIFICA — aggiunta voce nelle impostazioni menu'],
-  ['server/modules/.../cycles.service.ts', 'MODIFICA — aggiunti parentCycleId e lineageGroupId alla query'],
-  ['client/src/pages/Operations.tsx', 'MODIFICA — fix calcolo peso in 2 punti (Performance di crescita)'],
+  ['client/src/pages/SpreadsheetOperations.tsx', 'MODIFICA — note vagliatura + sezione cicli chiusi con SGR storico'],
+  ['client/src/pages/Operations.tsx', 'MODIFICA — nota vagliatura nel dettaglio + fix calcolo peso (2 punti)'],
   ['client/src/pages/CycleDetail.tsx', 'MODIFICA — fix peso medio in 4 punti (card, crescita, grafico, tabella)'],
+  ['client/src/pages/ScreeningsList.tsx', 'MODIFICA — colonna Note aggiunta alla lista'],
+  ['client/src/pages/ScreeningDetail.tsx', 'MODIFICA — colonna Note aggiunta al dettaglio ceste'],
+  ['client/src/pages/SgrLineage.tsx', 'NUOVO — pagina SGR per Lotto con calcoli lineage (425 righe)'],
+  ['client/src/layouts/MainLayout.tsx', 'MODIFICA — voce menu SGR per Lotto'],
+  ['client/src/pages/MenuSettings.tsx', 'MODIFICA — voce menu nelle impostazioni'],
+  ['client/src/components/dashboard/NewFlupsyVisualizer.tsx', 'MODIFICA — icona nota vagliatura sui cestelli'],
+  ['server/modules/.../operations.service.ts', 'MODIFICA — aggiunto campo vagliatureNote nella query'],
+  ['server/controllers/baskets-controller.ts', 'MODIFICA — aggiunto vagliatureNote nella risposta API'],
+  ['server/modules/.../cycles.service.ts', 'MODIFICA — aggiunti parentCycleId e lineageGroupId'],
 ];
 
 files.forEach(function(item) {
@@ -136,6 +186,7 @@ files.forEach(function(item) {
   doc.moveDown(0.4);
 });
 
+// FOOTER
 const range = doc.bufferedPageRange();
 for (let i = range.start; i < range.start + range.count; i++) {
   doc.switchToPage(i);
@@ -143,7 +194,7 @@ for (let i = range.start; i < range.start + range.count; i++) {
   doc.rect(0, footerY - 6, W, 44).fill('#f3f4f6');
   doc.fillColor(GRAY).fontSize(8).font('Helvetica')
      .text(
-       'FLUPSY Management System  \u2014  Riepilogo tecnico del 19/03/2026  \u2014  Uso interno',
+       'FLUPSY Management System  \u2014  Riepilogo verificato da git log del 19/03/2026  \u2014  Uso interno',
        LEFT, footerY, { align: 'center', width: CONTENT_W }
      );
   doc.fillColor(GRAY).fontSize(8)
@@ -151,5 +202,5 @@ for (let i = range.start; i < range.start + range.count; i++) {
 }
 
 doc.end();
-out.on('finish', function() { console.log('PDF creato con successo'); });
-out.on('error', function(e) { console.error('Errore:', e); });
+out.on('finish', function() { console.log('OK'); });
+out.on('error', function(e) { console.error(e); });
