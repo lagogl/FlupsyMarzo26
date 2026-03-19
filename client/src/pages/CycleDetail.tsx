@@ -529,7 +529,9 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                       {op.totalWeight ? op.totalWeight.toLocaleString('it-IT', { maximumFractionDigits: 0 }) : '-'}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-right font-mono text-blue-700 font-semibold">
-                      {op.averageWeight ? parseFloat(op.averageWeight).toFixed(2) : (op.animalsPerKg ? (1000000 / op.animalsPerKg).toFixed(2) : '-')}
+                      {op.animalsPerKg && parseFloat(op.animalsPerKg) > 0
+                        ? (1000000 / parseFloat(op.animalsPerKg)).toFixed(2)
+                        : (op.averageWeight ? parseFloat(op.averageWeight).toFixed(2) : '-')}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-center font-medium">
                       {op.size ? (typeof op.size === 'object' ? op.size.code : op.size) : '-'}
@@ -851,27 +853,36 @@ export default function CycleDetail() {
   const firstOp = sortedOperations.length > 0 ? sortedOperations[sortedOperations.length - 1] : null;
   const lastOp = sortedOperations.length > 0 ? sortedOperations[0] : null;
   
+  // Helper: deriva peso_mg da animalsPerKg (più affidabile di averageWeight che può essere stale)
+  const weightFromOp = (op: any): number | null => {
+    if (op.animalsPerKg && parseFloat(op.animalsPerKg) > 0) return 1000000 / parseFloat(op.animalsPerKg);
+    if (op.averageWeight && parseFloat(op.averageWeight) > 0) return parseFloat(op.averageWeight);
+    return null;
+  };
+
   // Calculate growth rate if we have at least two operations with weight data
   let growthRate = null;
-  if (firstOp && lastOp && firstOp.averageWeight && lastOp.averageWeight && firstOp.id !== lastOp.id) {
-    const firstWeight = parseFloat(firstOp.averageWeight); // already in mg
-    const lastWeight = parseFloat(lastOp.averageWeight); // already in mg
-    const growthPercentage = ((lastWeight - firstWeight) / firstWeight) * 100;
-    growthRate = {
-      startWeight: firstWeight,
-      endWeight: lastWeight,
-      growthPercentage: growthPercentage,
-      dailyGrowth: growthPercentage / durationDays
-    };
+  if (firstOp && lastOp && firstOp.id !== lastOp.id) {
+    const firstWeight = weightFromOp(firstOp);
+    const lastWeight  = weightFromOp(lastOp);
+    if (firstWeight && lastWeight && firstWeight > 0) {
+      const growthPercentage = ((lastWeight - firstWeight) / firstWeight) * 100;
+      growthRate = {
+        startWeight: firstWeight,
+        endWeight: lastWeight,
+        growthPercentage: growthPercentage,
+        dailyGrowth: growthPercentage / durationDays
+      };
+    }
   }
   
   // Prepare chart data from operations with weight measurements
   const growthChartData = sortedOperations
-    .filter((op: any) => op.averageWeight && parseFloat(op.averageWeight) > 0)
+    .filter((op: any) => weightFromOp(op) !== null)
     .map((op: any) => ({
       date: format(new Date(op.date), 'dd/MM', { locale: it }),
       fullDate: format(new Date(op.date), 'dd MMM yyyy', { locale: it }),
-      peso: parseFloat(parseFloat(op.averageWeight).toFixed(2)),
+      peso: parseFloat((weightFromOp(op) as number).toFixed(2)),
       type: op.type
     }))
     .reverse(); // chronological order
@@ -1069,7 +1080,9 @@ export default function CycleDetail() {
           <CardContent>
             <div className="flex justify-between items-center">
               <span className="text-2xl font-bold">
-                {latestOperation?.averageWeight ? formatNumberWithCommas(parseFloat(latestOperation.averageWeight)) : "N/A"} mg
+                {latestOperation
+                  ? formatNumberWithCommas(parseFloat((weightFromOp(latestOperation) ?? 0).toFixed(3)))
+                  : "N/A"} mg
               </span>
               <Droplets className="h-5 w-5 text-muted-foreground" />
             </div>
