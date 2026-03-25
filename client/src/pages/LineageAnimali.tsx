@@ -97,6 +97,18 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
         <td className="py-2 px-3 text-sm">{formatNum(cycle.last_animal_count)}</td>
         <td className="py-2 px-3 text-sm">{cycle.last_total_weight ? `${(cycle.last_total_weight / 1000).toFixed(2)} kg` : '—'}</td>
         <td className="py-2 px-3 text-sm text-gray-500">{cycle.operations?.length ?? 0}</td>
+        <td className="py-2 px-3 text-right">
+          {(() => {
+            const sgr = computeSGRForSingleCycle(cycle);
+            if (sgr === null) return <span className="text-gray-300 text-xs">—</span>;
+            const color = sgr >= 3 ? 'text-emerald-600' : sgr >= 1 ? 'text-amber-600' : 'text-red-500';
+            return (
+              <span className={`font-semibold text-sm ${color}`} title={`SGR calcolato su ${(cycle.operations || []).filter((op: any) => SGR_VALID_TYPES.has(op.type) && op.animals_per_kg > 0).length} operazioni`}>
+                {sgr.toFixed(2)}%
+              </span>
+            );
+          })()}
+        </td>
         <td className="py-2 px-3">
           {cycle.operations?.length > 0 && (
             <button
@@ -111,7 +123,7 @@ function CycleRow({ cycle, depth, allCycles }: { cycle: any; depth: number; allC
 
       {opsOpen && cycle.operations?.length > 0 && (
         <tr>
-          <td colSpan={13} className="p-0 bg-white">
+          <td colSpan={14} className="p-0 bg-white">
             <div className="mx-4 my-2 border rounded-lg overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
@@ -777,6 +789,7 @@ function LineageGroup({ group }: { group: any }) {
                 <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">N° Animali</th>
                 <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Peso Tot.</th>
                 <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Op.</th>
+                <th className="py-2 px-3 text-right text-xs font-semibold text-indigo-600">SGR %/g</th>
                 <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Dettaglio</th>
               </tr>
             </thead>
@@ -793,16 +806,33 @@ function LineageGroup({ group }: { group: any }) {
 }
 
 // ── SGR helper ────────────────────────────────────────────────────────────────
+// SGR per singolo ciclo: ln(APK_prima / APK_ultima) / giorni × 100
+// Usa animals_per_kg (sempre aggiornato) invece di average_weight (può essere stale)
+const SGR_VALID_TYPES = new Set(['prima-attivazione', 'misura', 'peso', 'chiusura-ciclo-vagliatura', 'chiusura-ciclo']);
+
+function computeSGRForSingleCycle(cycle: any): number | null {
+  const ops = (cycle.operations || [])
+    .filter((op: any) => SGR_VALID_TYPES.has(op.type) && op.animals_per_kg != null && op.animals_per_kg > 0)
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  if (ops.length < 2) return null;
+  const first = ops[0];
+  const last  = ops[ops.length - 1];
+  const days  = (new Date(last.date).getTime() - new Date(first.date).getTime()) / 86400000;
+  if (days < 1) return null;
+  // APK decresce quando gli animali crescono → ln(APK_first/APK_last) > 0 se c'è crescita
+  return Math.log(first.animals_per_kg / last.animals_per_kg) / days * 100;
+}
+
 function computeSGRForCycles(cycles: any[]): { avgSGR: number | null; intervals: number } {
   let total = 0, count = 0;
   for (const c of cycles) {
     const wOps = (c.operations || [])
-      .filter((op: any) => (op.type === 'peso' || op.type === 'misura') && op.average_weight != null && op.average_weight > 0)
+      .filter((op: any) => SGR_VALID_TYPES.has(op.type) && op.animals_per_kg != null && op.animals_per_kg > 0)
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
     for (let i = 1; i < wOps.length; i++) {
       const days = (new Date(wOps[i].date).getTime() - new Date(wOps[i - 1].date).getTime()) / 86400000;
       if (days < 3) continue;
-      const sgr = (Math.log(wOps[i].average_weight) - Math.log(wOps[i - 1].average_weight)) / days * 100;
+      const sgr = Math.log(wOps[i - 1].animals_per_kg / wOps[i].animals_per_kg) / days * 100;
       if (sgr > 0 && sgr < 15) { total += sgr; count++; }
     }
   }
