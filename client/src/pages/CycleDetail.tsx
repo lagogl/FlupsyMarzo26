@@ -849,10 +849,6 @@ export default function CycleDetail() {
   // Get info about the latest operation (if any)
   const latestOperation = sortedOperations.length > 0 ? sortedOperations[0] : null;
   
-  // Get growth info
-  const firstOp = sortedOperations.length > 0 ? sortedOperations[sortedOperations.length - 1] : null;
-  const lastOp = sortedOperations.length > 0 ? sortedOperations[0] : null;
-  
   // Helper: deriva peso_mg da animalsPerKg (più affidabile di averageWeight che può essere stale)
   const weightFromOp = (op: any): number | null => {
     if (op.animalsPerKg && parseFloat(op.animalsPerKg) > 0) return 1000000 / parseFloat(op.animalsPerKg);
@@ -860,18 +856,30 @@ export default function CycleDetail() {
     return null;
   };
 
+  // Considera solo operazioni con dati di peso validi (in ordine cronologico)
+  const weightOps = [...sortedOperations]
+    .filter((op: any) => weightFromOp(op) !== null)
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const firstOp = weightOps.length > 0 ? weightOps[0] : null;
+  const lastOp  = weightOps.length > 0 ? weightOps[weightOps.length - 1] : null;
+
   // Calculate growth rate if we have at least two operations with weight data
+  // SGR = ln(W_last / W_first) / giorni_tra_operazioni × 100  (formula logaritmica corretta)
   let growthRate = null;
   if (firstOp && lastOp && firstOp.id !== lastOp.id) {
-    const firstWeight = weightFromOp(firstOp);
-    const lastWeight  = weightFromOp(lastOp);
-    if (firstWeight && lastWeight && firstWeight > 0) {
+    const firstWeight = weightFromOp(firstOp)!;
+    const lastWeight  = weightFromOp(lastOp)!;
+    const daysBetweenOps = differenceInDays(new Date(lastOp.date), new Date(firstOp.date));
+    if (firstWeight > 0 && lastWeight > 0 && daysBetweenOps > 0) {
       const growthPercentage = ((lastWeight - firstWeight) / firstWeight) * 100;
+      const sgr = (Math.log(lastWeight / firstWeight) / daysBetweenOps) * 100;
       growthRate = {
         startWeight: firstWeight,
         endWeight: lastWeight,
         growthPercentage: growthPercentage,
-        dailyGrowth: growthPercentage / durationDays
+        dailyGrowth: sgr,
+        daysBetweenOps
       };
     }
   }
@@ -1118,8 +1126,8 @@ export default function CycleDetail() {
                   <span className="font-bold text-green-600">+{growthRate.growthPercentage.toFixed(2)}%</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Crescita giornaliera</span>
-                  <span className="font-bold text-green-600">+{growthRate.dailyGrowth.toFixed(2)}%</span>
+                  <span className="text-sm font-medium text-muted-foreground" title={`Formula SGR: ln(peso_finale/peso_iniziale) / ${growthRate.daysBetweenOps} giorni × 100`}>SGR (%/giorno)</span>
+                  <span className="font-bold text-green-600" title={`Calcolato su ${growthRate.daysBetweenOps} giorni`}>+{growthRate.dailyGrowth.toFixed(3)}%</span>
                 </div>
               </div>
               
