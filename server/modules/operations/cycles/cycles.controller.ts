@@ -356,6 +356,21 @@ export class CyclesController {
         views: [{ state: 'frozen', xSplit: 0, ySplit: 3, activeCell: 'A4' }]
       });
 
+      // Definisci larghezze colonne PRIMA di aggiungere righe (evita sovrascrittura ExcelJS)
+      sheet.columns = [
+        { key: 'id', width: 8 },
+        { key: 'cycleCode', width: 12 },
+        { key: 'basketNumber', width: 10 },
+        { key: 'flupsyName', width: 22 },
+        { key: 'lotSupplier', width: 24 },
+        { key: 'startDate', width: 14 },
+        { key: 'endDate', width: 14 },
+        { key: 'state', width: 10 },
+        { key: 'sizeCode', width: 10 },
+        { key: 'sgr', width: 8 },
+        { key: 'animalCount', width: 15 }
+      ];
+
       // Riga 1 – Titolo
       const titleRow = sheet.addRow(['CICLI PRODUTTIVI — Elenco completo cicli con stato, date, lotti e performance SGR']);
       sheet.mergeCells(`A1:${LAST_COL_CYCLES}1`);
@@ -370,20 +385,7 @@ export class CyclesController {
       subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF6B7280' } };
       subtitleRow.height = 18;
       subtitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
-
-      sheet.columns = [
-        { key: 'id', width: 8 },
-        { key: 'cycleCode', width: 12 },
-        { key: 'basketNumber', width: 10 },
-        { key: 'flupsyName', width: 22 },
-        { key: 'lotSupplier', width: 24 },
-        { key: 'startDate', width: 14 },
-        { key: 'endDate', width: 14 },
-        { key: 'state', width: 10 },
-        { key: 'sizeCode', width: 10 },
-        { key: 'sgr', width: 8 },
-        { key: 'animalCount', width: 15 }
-      ];
+      subtitleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
 
       // Riga 3 – Intestazioni
       const headerRow = sheet.addRow(['ID', 'Nr. Ciclo', 'Cestello', 'FLUPSY', 'Lotto', 'Data Inizio', 'Data Fine', 'Stato', 'Taglia', 'SGR', 'Nr. Animali']);
