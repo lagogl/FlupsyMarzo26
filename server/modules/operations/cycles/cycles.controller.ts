@@ -348,24 +348,35 @@ export class CyclesController {
       workbook.creator = 'FLUPSY Management System';
       workbook.created = new Date();
       
+      const LAST_COL_CYCLES = 'K'; // 11 colonne A..K
+      const exportDate = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
       // ========== FOGLIO 1: CICLI PRODUTTIVI ==========
       const sheet = workbook.addWorksheet('Cicli Produttivi', {
-        views: [{ state: 'frozen', ySplit: 2 }]
+        views: [{ state: 'frozen', xSplit: 0, ySplit: 3, activeCell: 'A4' }]
       });
-      
-      // Riga titolo
-      const titleRow = sheet.addRow(['CICLI PRODUTTIVI - Elenco completo cicli con stato, date, lotti e performance SGR']);
-      sheet.mergeCells('A1:K1');
+
+      // Riga 1 – Titolo
+      const titleRow = sheet.addRow(['CICLI PRODUTTIVI — Elenco completo cicli con stato, date, lotti e performance SGR']);
+      sheet.mergeCells(`A1:${LAST_COL_CYCLES}1`);
       titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
-      titleRow.height = 30;
+      titleRow.height = 32;
       titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
-      
+      titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7FF' } };
+
+      // Riga 2 – Data esportazione
+      const subtitleRow = sheet.addRow([`Esportato il: ${exportDate}    |    Totale cicli: ${cycles.length}`]);
+      sheet.mergeCells(`A2:${LAST_COL_CYCLES}2`);
+      subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF6B7280' } };
+      subtitleRow.height = 18;
+      subtitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+
       sheet.columns = [
         { key: 'id', width: 8 },
         { key: 'cycleCode', width: 12 },
         { key: 'basketNumber', width: 10 },
-        { key: 'flupsyName', width: 18 },
-        { key: 'lotSupplier', width: 20 },
+        { key: 'flupsyName', width: 22 },
+        { key: 'lotSupplier', width: 24 },
         { key: 'startDate', width: 14 },
         { key: 'endDate', width: 14 },
         { key: 'state', width: 10 },
@@ -373,10 +384,11 @@ export class CyclesController {
         { key: 'sgr', width: 8 },
         { key: 'animalCount', width: 15 }
       ];
-      
+
+      // Riga 3 – Intestazioni
       const headerRow = sheet.addRow(['ID', 'Nr. Ciclo', 'Cestello', 'FLUPSY', 'Lotto', 'Data Inizio', 'Data Fine', 'Stato', 'Taglia', 'SGR', 'Nr. Animali']);
       headerRow.eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
         cell.border = {
@@ -386,8 +398,8 @@ export class CyclesController {
           right: { style: 'thin', color: { argb: 'FF1E40AF' } }
         };
       });
-      headerRow.height = 25;
-      
+      headerRow.height = 26;
+
       cycles.forEach((cycle: any, index: number) => {
         const row = sheet.addRow({
           id: cycle.id,
@@ -402,11 +414,18 @@ export class CyclesController {
           sgr: cycle.sgr ? parseFloat(cycle.sgr.toFixed(2)) : null,
           animalCount: cycle.animalCount || null
         });
-        
-        if (index % 2 === 1) {
-          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-        }
-        
+
+        const bgColor = index % 2 === 0 ? 'FFFFFFFF' : 'FFF0F4FF';
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
+          };
+        });
+
         const stateCell = row.getCell('state');
         if (cycle.state === 'active') {
           stateCell.font = { color: { argb: 'FF16A34A' }, bold: true };
@@ -414,19 +433,10 @@ export class CyclesController {
           stateCell.font = { color: { argb: 'FF6B7280' } };
         }
       });
-      
-      sheet.eachRow((row) => {
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-          };
-        });
-      });
-      
-      sheet.autoFilter = { from: 'A1', to: `K${cycles.length + 1}` };
+
+      // AutoFilter sulla riga intestazioni (riga 3)
+      const lastDataRow = sheet.rowCount;
+      sheet.autoFilter = { from: 'A3', to: `${LAST_COL_CYCLES}${lastDataRow}` };
       
       // ========== FOGLIO 2: OPERAZIONI PER CICLO (con righe collassabili) ==========
       if (operations && Array.isArray(operations) && operations.length > 0) {

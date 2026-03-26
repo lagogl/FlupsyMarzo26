@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -125,6 +125,9 @@ export default function CyclesPaginated() {
   // State per esportazione Excel
   const [isExporting, setIsExporting] = useState(false);
   
+  // Ref per garantire che l'inizializzazione dal dashboard avvenga una sola volta
+  const flupsyInitialized = useRef(false);
+  
   // Query per i dati necessari - passa flupsyId al server per filtrare correttamente
   const { data: cyclesResponse, isLoading: isAllCyclesLoading } = useQuery<{cycles: Cycle[], totalCount: number}>({
     queryKey: ['/api/cycles', { flupsyId: flupsyFilter, includeAll: true }],
@@ -167,15 +170,16 @@ export default function CyclesPaginated() {
     queryKey: ['/api/sizes'],
   });
   
-  // Inizializza il filtro FLUPSY dalla dashboard quando i dati sono pronti
+  // Inizializza il filtro FLUPSY dalla dashboard una sola volta all'avvio
   useEffect(() => {
-    if (flupsys.length > 0 && !flupsyFilter) {
-      const dashboardSelectedFlupsys = dashboardFilters.selectedFlupsyIds as number[];
-      if (dashboardSelectedFlupsys && dashboardSelectedFlupsys.length > 0) {
-        setFlupsyFilter(dashboardSelectedFlupsys[0]);
-      }
+    if (flupsyInitialized.current) return;
+    if (flupsys.length === 0) return;
+    flupsyInitialized.current = true;
+    const dashboardSelectedFlupsys = dashboardFilters.selectedFlupsyIds as number[];
+    if (dashboardSelectedFlupsys && dashboardSelectedFlupsys.length > 0) {
+      setFlupsyFilter(dashboardSelectedFlupsys[0]);
     }
-  }, [flupsys, dashboardFilters, flupsyFilter]);
+  }, [flupsys, dashboardFilters]);
   
   // Calcola la taglia in base al peso e al numero di animali (come nella dashboard)
   const calculateDisplaySize = (cycle: Cycle) => {
@@ -615,8 +619,8 @@ export default function CyclesPaginated() {
           {/* Filtro FLUPSY */}
           <div className="w-full md:w-auto">
             <Select 
-              value={flupsyFilter?.toString() || ''}
-              onValueChange={(value) => setFlupsyFilter(value ? parseInt(value, 10) : null)}
+              value={flupsyFilter?.toString() || '0'}
+              onValueChange={(value) => setFlupsyFilter(value && value !== '0' ? parseInt(value, 10) : null)}
             >
               <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="FLUPSY" />
