@@ -5303,21 +5303,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sheet = workbook.addWorksheet('Operazioni');
       
       const { operations } = req.body as { operations: any[] };
-      
-      // Riga titolo
-      const titleRow = sheet.addRow(['REGISTRO OPERAZIONI - Storico movimenti produttivi: attivazioni, misure, vendite e chiusure cicli']);
-      sheet.mergeCells('A1:L1');
+      const exportDate = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const LAST_COL = 'M'; // 13 colonne: A..M
+
+      // Riga 1 – Titolo principale
+      const titleRow = sheet.addRow([`REGISTRO OPERAZIONI — Storico movimenti produttivi: attivazioni, misure, vendite e chiusure cicli`]);
+      sheet.mergeCells(`A1:${LAST_COL}1`);
       titleRow.font = { bold: true, size: 14, color: { argb: 'FF1E3A8A' } };
-      titleRow.height = 30;
+      titleRow.height = 32;
       titleRow.alignment = { vertical: 'middle', horizontal: 'left' };
-      
-      // Headers
-      const headers = ['Data', 'Tipo', 'Cesta', 'FLUPSY', 'Ciclo', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)'];
+      titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7FF' } };
+
+      // Riga 2 – Data esportazione + conteggio
+      const subtitleRow = sheet.addRow([`Esportato il: ${exportDate}    |    Totale righe: ${operations.length}`]);
+      sheet.mergeCells(`A2:${LAST_COL}2`);
+      subtitleRow.font = { italic: true, size: 10, color: { argb: 'FF6B7280' } };
+      subtitleRow.height = 18;
+      subtitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
+
+      // Riga 3 – Intestazioni colonne
+      const headers = ['Data', 'Tipo', 'Cesta', 'FLUPSY', 'Ciclo', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)', 'Note'];
       const headerRow = sheet.addRow(headers);
       
       // Blue header style
       headerRow.eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
         cell.border = {
@@ -5327,7 +5337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           right: { style: 'thin', color: { argb: 'FF1E40AF' } }
         };
       });
-      headerRow.height = 25;
+      headerRow.height = 26;
       
       // Type translation
       const typeLabels: Record<string, string> = {
@@ -5336,57 +5346,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'peso': 'Peso',
         'vendita': 'Vendita',
         'chiusura-ciclo': 'Chiusura Ciclo',
-        'chiusura-ciclo-vagliatura': 'Chiusura Vagliatura'
+        'chiusura-ciclo-vagliatura': 'Chiusura Vagliatura',
+        'trasferimento': 'Trasferimento'
       };
       
-      // Data rows - use numeric values for Cesta and Ciclo to enable proper sorting
+      // Data rows
       operations.forEach((op, idx) => {
         const row = sheet.addRow([
           op.date ? new Date(op.date).toLocaleDateString('it-IT') : '',
           typeLabels[op.type] || op.type || '',
-          op.basketNumber || null, // Numeric value for sorting
+          op.basketNumber || null,
           op.flupsyName || '',
-          op.cycleId || null, // Numeric value for sorting
+          op.cycleId || null,
           op.lotName || '',
           op.lotArrivalDate ? new Date(op.lotArrivalDate).toLocaleDateString('it-IT') : '',
           op.lotSupplier || '',
           op.sizeCode || '',
-          op.animalCount || null, // Numeric value
-          op.totalWeightKg ? parseFloat(op.totalWeightKg.toFixed(2)) : null, // Numeric value
-          op.avgWeightMg ? Math.round(op.avgWeightMg) : null // Numeric value
+          op.animalCount || null,
+          op.totalWeightKg ? parseFloat(op.totalWeightKg.toFixed(2)) : null,
+          op.avgWeightMg ? parseFloat(op.avgWeightMg.toFixed(3)) : null,
+          op.notes || ''
         ]);
         
         // Alternating rows
-        const bgColor = idx % 2 === 0 ? 'FFFFFFFF' : 'FFF3F4F6';
-        row.eachCell((cell) => {
+        const bgColor = idx % 2 === 0 ? 'FFFFFFFF' : 'FFF0F4FF';
+        row.eachCell({ includeEmpty: true }, (cell) => {
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
           cell.border = {
-            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+            top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
           };
         });
         
-        // Color type cell based on operation type
+        // Color type cell
         const typeCell = row.getCell(2);
         if (op.type === 'vendita') {
-          typeCell.font = { color: { argb: 'FF059669' } }; // Green for sales
+          typeCell.font = { bold: true, color: { argb: 'FF059669' } };
+        } else if (op.type === 'prima-attivazione') {
+          typeCell.font = { color: { argb: 'FF7C3AED' } };
         } else if (op.type === 'chiusura-ciclo' || op.type === 'chiusura-ciclo-vagliatura') {
-          typeCell.font = { color: { argb: 'FF6B7280' } }; // Gray for closures
+          typeCell.font = { color: { argb: 'FF6B7280' } };
         }
       });
       
       // Column widths
       sheet.columns = [
-        { width: 12 }, { width: 18 }, { width: 10 }, { width: 20 },
-        { width: 8 }, { width: 18 }, { width: 12 }, { width: 18 },
-        { width: 10 }, { width: 14 }, { width: 12 }, { width: 12 }
+        { width: 12 }, { width: 22 }, { width: 8 }, { width: 24 },
+        { width: 7 }, { width: 30 }, { width: 13 }, { width: 20 },
+        { width: 10 }, { width: 13 }, { width: 11 }, { width: 11 }, { width: 45 }
       ];
       
-      // Auto-filter (start from row 2 because row 1 is title)
+      // Auto-filter su riga 3 (intestazioni) fino all'ultima riga
       const lastRow = sheet.rowCount;
-      sheet.autoFilter = { from: 'A2', to: `L${lastRow}` };
+      sheet.autoFilter = { from: 'A3', to: `${LAST_COL}${lastRow}` };
+      
+      // Freeze: blocca le prime 3 righe (titolo + sottotitolo + intestazioni)
+      sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 3, activeCell: 'A4' }];
       
       const buffer = await workbook.xlsx.writeBuffer();
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

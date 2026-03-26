@@ -1,6 +1,4 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import * as XLSX from 'xlsx';
-
 // Versione aggiornata Operations.tsx v3 - fix cache completo
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, addDays, parseISO, differenceInDays } from 'date-fns';
@@ -1782,46 +1780,42 @@ export default function Operations() {
         return;
       }
 
-      // 4. Genera Excel direttamente nel browser (evita il limite di payload del server)
-      const typeLabels: Record<string, string> = {
-        'prima-attivazione': 'Prima Attivazione',
-        'misura': 'Misura',
-        'peso': 'Peso',
-        'vendita': 'Vendita',
-        'chiusura-ciclo': 'Chiusura Ciclo',
-        'chiusura-ciclo-vagliatura': 'Chiusura Vagliatura',
-        'trasferimento': 'Trasferimento',
-      };
-
-      const rows = exportOps.map((op: any) => ({
-        'Data': op.date ? new Date(op.date).toLocaleDateString('it-IT') : '',
-        'Tipo': typeLabels[op.type] || op.type || '',
-        'Cesta': op.basket?.physicalNumber || op.basketNumber || null,
-        'FLUPSY': op.flupsyName || op.basket?.flupsyName || '',
-        'Ciclo': op.cycleId || null,
-        'Lotto': op.lot?.supplierLotNumber || op.lot?.name || '',
-        'Arrivo Lotto': op.lot?.arrivalDate ? new Date(op.lot.arrivalDate).toLocaleDateString('it-IT') : '',
-        'Fornitore': op.lot?.supplier || '',
-        'Taglia': op.size?.code || (op.animalsPerKg ? determineSizeFromAnimalsPerKg(op.animalsPerKg)?.code : '') || '',
-        'N° Animali': op.animalCount || null,
-        'Peso (Kg)': op.totalWeight ? parseFloat((op.totalWeight / 1000).toFixed(2)) : null,
-        'P.M. (mg)': op.animalsPerKg && op.animalsPerKg > 0
-          ? parseFloat((1000000 / op.animalsPerKg).toFixed(3))
-          : (op.averageWeight ? op.averageWeight : null),
-        'Note': op.notes || '',
+      // 4. Prepara dati e invia al server per generazione Excel formattato
+      const operationsData = exportOps.map((op: any) => ({
+        date: op.date,
+        type: op.type,
+        basketNumber: op.basket?.physicalNumber || op.basketNumber || null,
+        flupsyName: op.flupsyName || op.basket?.flupsyName || '',
+        cycleId: op.cycleId,
+        lotName: op.lot?.supplierLotNumber || op.lot?.name || '',
+        lotArrivalDate: op.lot?.arrivalDate || null,
+        lotSupplier: op.lot?.supplier || '',
+        sizeCode: op.size?.code || (op.animalsPerKg ? determineSizeFromAnimalsPerKg(op.animalsPerKg)?.code : null) || '',
+        animalCount: op.animalCount,
+        totalWeightKg: op.totalWeight ? op.totalWeight / 1000 : null,
+        avgWeightMg: op.animalsPerKg && op.animalsPerKg > 0
+          ? 1000000 / op.animalsPerKg
+          : (op.averageWeight || null),
+        notes: op.notes || '',
       }));
 
-      const ws = XLSX.utils.json_to_sheet(rows);
-      // Larghezze colonne
-      ws['!cols'] = [
-        { wch: 12 }, { wch: 22 }, { wch: 8 }, { wch: 28 }, { wch: 8 },
-        { wch: 30 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 14 },
-        { wch: 11 }, { wch: 11 }, { wch: 40 },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Operazioni');
-      const fileName = `operazioni-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const response = await fetch('/api/operations/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operations: operationsData })
+      });
+
+      if (!response.ok) throw new Error('Errore esportazione');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `operazioni-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
 
       toast({
         title: "Esportazione completata",
