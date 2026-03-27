@@ -1,14 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Cloud, Sun, CloudRain, CloudSnow, CloudFog, CloudLightning, Wind, Droplets } from 'lucide-react';
+import { Cloud, CloudSun, Sun, CloudRain, CloudSnow, CloudFog, CloudLightning, Wind, Droplets } from 'lucide-react';
 
 interface WeatherData {
   daily: {
     time: string[];
     temperature_2m_max: number[];
     temperature_2m_min: number[];
-    weathercode: number[];
+    weathercode?: number[];
+    weather_code?: number[];
     precipitation_probability_max: number[];
     windspeed_10m_max: number[];
   };
@@ -19,9 +20,11 @@ const locations = [
   { name: 'Goro', lat: 44.8500, lon: 12.3167 }
 ];
 
-const getWeatherIcon = (code: number, className = "w-5 h-5") => {
-  if (code === 0) return <Sun className={`${className} text-yellow-500`} />;
-  if (code >= 1 && code <= 3) return <Cloud className={`${className} text-gray-400`} />;
+const getWeatherIcon = (code: number | null | undefined, className = "w-5 h-5") => {
+  if (code == null) return <Cloud className={`${className} text-gray-400`} />;
+  if (code === 0) return <Sun className={`${className} text-yellow-400`} />;
+  if (code === 1 || code === 2) return <CloudSun className={`${className} text-yellow-400`} />;
+  if (code === 3) return <Cloud className={`${className} text-gray-400`} />;
   if (code >= 45 && code <= 48) return <CloudFog className={`${className} text-gray-500`} />;
   if (code >= 51 && code <= 67) return <CloudRain className={`${className} text-blue-400`} />;
   if (code >= 71 && code <= 77) return <CloudSnow className={`${className} text-blue-200`} />;
@@ -44,7 +47,7 @@ export default function WeatherForecast() {
   const { data: weather, isLoading } = useQuery<WeatherData>({
     queryKey: ['weather-forecast'],
     queryFn: async () => {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${avgLat}&longitude=${avgLon}&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&timezone=Europe/Rome&forecast_days=7`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${avgLat}&longitude=${avgLon}&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,windspeed_10m_max&timezone=Europe/Rome&forecast_days=7`;
       const res = await fetch(url);
       return res.json();
     },
@@ -61,7 +64,8 @@ export default function WeatherForecast() {
     );
   }
 
-  const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_max } = weather.daily;
+  const { time, temperature_2m_max, temperature_2m_min, precipitation_probability_max } = weather.daily;
+  const weathercodes = weather.daily.weather_code ?? weather.daily.weathercode ?? [];
 
   return (
     <div className="flex items-center gap-1">
@@ -73,7 +77,7 @@ export default function WeatherForecast() {
           title={`${format(new Date(date), 'EEEE d MMMM', { locale: it })}\nMax: ${Math.round(temperature_2m_max[i])}°C | Min: ${Math.round(temperature_2m_min[i])}°C\nPrecipitazioni: ${precipitation_probability_max[i]}%`}
         >
           <span className="text-[10px] text-gray-500 font-medium">{getDayName(date, i)}</span>
-          {getWeatherIcon(weathercode[i], "w-4 h-4")}
+          {getWeatherIcon(weathercodes[i], "w-4 h-4")}
           <div className="flex items-center gap-0.5 text-[10px]">
             <span className="font-semibold text-gray-700">{Math.round(temperature_2m_max[i])}°</span>
             <span className="text-gray-400">{Math.round(temperature_2m_min[i])}°</span>
