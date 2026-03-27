@@ -1,8 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
@@ -29,7 +28,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { RefreshCw, Download, Thermometer, Waves, Droplets, Wind, Activity } from 'lucide-react';
+import { RefreshCw, Download, Thermometer, Waves, Droplets, Wind, Activity, CloudSun } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { EnvironmentalLog } from '@shared/schema';
 
@@ -54,28 +53,67 @@ function fmtDate(d: string): string {
   return `${day}/${m}/${y}`;
 }
 
-// Colori coerenti per le linee del grafico
+function wmoLabel(code?: number | null): string {
+  if (code == null) return '—';
+  if (code === 0) return '☀️ Sereno';
+  if (code <= 2) return '🌤 Poco nuvoloso';
+  if (code === 3) return '☁️ Coperto';
+  if (code <= 49) return '🌫 Nebbia';
+  if (code <= 59) return '🌧 Pioggerellina';
+  if (code <= 69) return '🌧 Pioggia';
+  if (code <= 79) return '🌨 Neve';
+  if (code <= 84) return '🌦 Rovesci';
+  if (code <= 99) return '⛈ Temporale';
+  return `Cod.${code}`;
+}
+
+// Palette colori per fonte/parametro
 const COLORS = {
-  sst: '#2563eb',
-  waveHeight: '#0891b2',
-  vallonaTempAcqua: '#059669',
+  // Copernicus (dati marini satellitari) — blu
+  sst: '#1d4ed8',
+  chlorophyll: '#15803d',
+  salinity: '#1e40af',
+  waveHeight: '#0284c7',
+  wavePeriod: '#0369a1',
+  // Boa Vallona ARPAV — verde
+  vallonaTempAcqua: '#16a34a',
   vallonaPh: '#7c3aed',
-  vallonaSalinita: '#b45309',
+  vallonaSalinita: '#92400e',
   vallonaOssigenoSat: '#dc2626',
-  vallonaClorofilla: '#16a34a',
+  vallonaClorofilla: '#4d7c0f',
+  // Boa Gorino 2 ARPAE — teal
   gorino2TempAcqua: '#0d9488',
   gorino2Ph: '#9333ea',
   gorino2Salinita: '#d97706',
   gorino2OssigenoSat: '#ef4444',
   gorino2Clorofilla: '#22c55e',
+  // Meteo aria Open-Meteo — arancio/giallo
+  tempAria: '#ea580c',
+  precipitazione: '#0ea5e9',
+  ventoVelocita: '#f59e0b',
+  ventoRaffica: '#b45309',
 };
 
-type ChartParam = keyof typeof COLORS;
+type ChartKey = keyof typeof COLORS;
 
-interface ChartGroup {
-  title: string;
-  icon: React.ReactNode;
-  params: { key: ChartParam; label: string; unit: string; color: string }[];
+interface ChartParam { key: ChartKey; label: string; unit: string; color: string; source?: string }
+interface ChartGroup { title: string; icon: React.ReactNode; params: ChartParam[] }
+
+// Badge sorgente — usato sia nei grafici che in tabella
+const SOURCE_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+  copernicus: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Copernicus' },
+  openmeteo:  { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Open-Meteo' },
+  arpav:      { bg: 'bg-green-100', text: 'text-green-800', label: 'ARPAV Vallona' },
+  arpae:      { bg: 'bg-teal-100', text: 'text-teal-800', label: 'ARPAE Gorino 2' },
+};
+
+function SourceBadge({ src }: { src: keyof typeof SOURCE_BADGE }) {
+  const s = SOURCE_BADGE[src];
+  return (
+    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${s.bg} ${s.text}`}>
+      {s.label}
+    </span>
+  );
 }
 
 const CHART_GROUPS: ChartGroup[] = [
@@ -83,48 +121,66 @@ const CHART_GROUPS: ChartGroup[] = [
     title: 'Temperatura Acqua (°C)',
     icon: <Thermometer className="h-4 w-4 text-blue-600" />,
     params: [
-      { key: 'sst', label: 'SST Copernicus', unit: '°C', color: COLORS.sst },
-      { key: 'vallonaTempAcqua', label: 'Boa Vallona', unit: '°C', color: COLORS.vallonaTempAcqua },
-      { key: 'gorino2TempAcqua', label: 'Boa Gorino 2', unit: '°C', color: COLORS.gorino2TempAcqua },
+      { key: 'sst',             label: 'SST — Copernicus',   unit: '°C', color: COLORS.sst,             source: 'copernicus' },
+      { key: 'vallonaTempAcqua', label: 'Temp — Boa Vallona', unit: '°C', color: COLORS.vallonaTempAcqua, source: 'arpav' },
+      { key: 'gorino2TempAcqua', label: 'Temp — Boa Gorino 2',unit: '°C', color: COLORS.gorino2TempAcqua, source: 'arpae' },
+    ],
+  },
+  {
+    title: 'Temperatura Aria (°C)',
+    icon: <CloudSun className="h-4 w-4 text-orange-500" />,
+    params: [
+      { key: 'tempAria', label: 'Temp aria — Open-Meteo', unit: '°C', color: COLORS.tempAria, source: 'openmeteo' },
     ],
   },
   {
     title: 'pH',
     icon: <Activity className="h-4 w-4 text-purple-600" />,
     params: [
-      { key: 'vallonaPh', label: 'Vallona pH', unit: '', color: COLORS.vallonaPh },
-      { key: 'gorino2Ph', label: 'Gorino 2 pH', unit: '', color: COLORS.gorino2Ph },
+      { key: 'vallonaPh',  label: 'pH — Boa Vallona',  unit: '', color: COLORS.vallonaPh,  source: 'arpav' },
+      { key: 'gorino2Ph',  label: 'pH — Boa Gorino 2', unit: '', color: COLORS.gorino2Ph,  source: 'arpae' },
     ],
   },
   {
     title: 'Salinità (‰)',
     icon: <Droplets className="h-4 w-4 text-amber-600" />,
     params: [
-      { key: 'vallonaSalinita', label: 'Vallona salinità', unit: '‰', color: COLORS.vallonaSalinita },
-      { key: 'gorino2Salinita', label: 'Gorino 2 salinità', unit: '‰', color: COLORS.gorino2Salinita },
+      { key: 'salinity',       label: 'Salinità — Copernicus',  unit: '‰', color: COLORS.salinity,       source: 'copernicus' },
+      { key: 'vallonaSalinita', label: 'Salinità — Boa Vallona', unit: '‰', color: COLORS.vallonaSalinita, source: 'arpav' },
+      { key: 'gorino2Salinita', label: 'Salinità — Boa Gorino 2',unit: '‰', color: COLORS.gorino2Salinita, source: 'arpae' },
     ],
   },
   {
     title: 'Ossigeno Saturazione (%)',
     icon: <Wind className="h-4 w-4 text-red-500" />,
     params: [
-      { key: 'vallonaOssigenoSat', label: 'Vallona O₂ sat.', unit: '%', color: COLORS.vallonaOssigenoSat },
-      { key: 'gorino2OssigenoSat', label: 'Gorino 2 O₂ sat.', unit: '%', color: COLORS.gorino2OssigenoSat },
+      { key: 'vallonaOssigenoSat',  label: 'O₂ sat. — Boa Vallona',  unit: '%', color: COLORS.vallonaOssigenoSat,  source: 'arpav' },
+      { key: 'gorino2OssigenoSat',  label: 'O₂ sat. — Boa Gorino 2', unit: '%', color: COLORS.gorino2OssigenoSat,  source: 'arpae' },
     ],
   },
   {
     title: 'Altezza Onde (m)',
     icon: <Waves className="h-4 w-4 text-cyan-600" />,
     params: [
-      { key: 'waveHeight', label: 'Onde (Open-Meteo)', unit: 'm', color: COLORS.waveHeight },
+      { key: 'waveHeight', label: 'Onde — Open-Meteo Marine', unit: 'm', color: COLORS.waveHeight, source: 'openmeteo' },
     ],
   },
   {
     title: 'Clorofilla (µg/L)',
     icon: <Activity className="h-4 w-4 text-green-600" />,
     params: [
-      { key: 'vallonaClorofilla', label: 'Vallona Chl', unit: 'µg/L', color: COLORS.vallonaClorofilla },
-      { key: 'gorino2Clorofilla', label: 'Gorino 2 Chl', unit: 'µg/L', color: COLORS.gorino2Clorofilla },
+      { key: 'chlorophyll',     label: 'Chl-a — Copernicus',   unit: 'µg/L', color: COLORS.chlorophyll,     source: 'copernicus' },
+      { key: 'vallonaClorofilla', label: 'Chl — Boa Vallona',  unit: 'µg/L', color: COLORS.vallonaClorofilla, source: 'arpav' },
+      { key: 'gorino2Clorofilla', label: 'Chl — Boa Gorino 2', unit: 'µg/L', color: COLORS.gorino2Clorofilla, source: 'arpae' },
+    ],
+  },
+  {
+    title: 'Vento & Precipitazioni',
+    icon: <Wind className="h-4 w-4 text-amber-500" />,
+    params: [
+      { key: 'ventoVelocita',  label: 'Vento km/h — Open-Meteo',   unit: 'km/h', color: COLORS.ventoVelocita,  source: 'openmeteo' },
+      { key: 'ventoRaffica',   label: 'Raffica km/h — Open-Meteo', unit: 'km/h', color: COLORS.ventoRaffica,   source: 'openmeteo' },
+      { key: 'precipitazione', label: 'Pioggia mm — Open-Meteo',   unit: 'mm',   color: COLORS.precipitazione, source: 'openmeteo' },
     ],
   },
 ];
@@ -140,11 +196,16 @@ function MiniChart({ data, group }: { data: EnvironmentalLog[]; group: ChartGrou
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-1">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           {group.icon}
           {group.title}
         </CardTitle>
+        <div className="flex flex-wrap gap-1 mt-0.5">
+          {[...new Set(group.params.map(p => p.source).filter(Boolean))].map(src => (
+            <SourceBadge key={src} src={src as keyof typeof SOURCE_BADGE} />
+          ))}
+        </div>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={180}>
@@ -155,14 +216,21 @@ function MiniChart({ data, group }: { data: EnvironmentalLog[]; group: ChartGrou
               tick={{ fontSize: 10 }}
               interval="preserveStartEnd"
             />
-            <YAxis tick={{ fontSize: 10 }} width={40} />
+            <YAxis tick={{ fontSize: 10 }} width={42} />
             <Tooltip
               formatter={(value: any, name: string) => {
                 const p = group.params.find(pp => pp.key === name);
                 return [`${value != null ? Number(value).toFixed(2) : '—'} ${p?.unit ?? ''}`, p?.label ?? name];
               }}
             />
-            <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+            <Legend
+              iconSize={10}
+              wrapperStyle={{ fontSize: 10 }}
+              formatter={(name: string) => {
+                const p = group.params.find(pp => pp.key === name);
+                return p?.label ?? name;
+              }}
+            />
             {group.params.map(p => (
               <Line
                 key={p.key}
@@ -181,6 +249,64 @@ function MiniChart({ data, group }: { data: EnvironmentalLog[]; group: ChartGrou
     </Card>
   );
 }
+
+// Struttura colonne tabella con raggruppamento per fonte
+const TABLE_GROUPS = [
+  {
+    label: 'Copernicus / Open-Meteo Marine',
+    src: 'copernicus' as const,
+    bg: 'bg-blue-700',
+    cellBg: 'bg-blue-50',
+    cols: [
+      { key: 'sst',        head: 'SST °C' },
+      { key: 'waveHeight', head: 'Onde m' },
+      { key: 'wavePeriod', head: 'Periodo s' },
+      { key: 'chlorophyll',head: 'Chl-a µg/L' },
+      { key: 'salinity',   head: 'Salinità ‰' },
+    ],
+  },
+  {
+    label: 'Boa Vallona (ARPAV)',
+    src: 'arpav' as const,
+    bg: 'bg-green-700',
+    cellBg: 'bg-green-50',
+    cols: [
+      { key: 'vallonaTempAcqua',  head: 'Temp °C' },
+      { key: 'vallonaPh',         head: 'pH' },
+      { key: 'vallonaSalinita',   head: 'Sal ‰' },
+      { key: 'vallonaOssigenoSat',head: 'O₂ %' },
+      { key: 'vallonaTorbidita',  head: 'Torb' },
+      { key: 'vallonaClorofilla', head: 'Chl µg/L' },
+    ],
+  },
+  {
+    label: 'Boa Gorino 2 (ARPAE)',
+    src: 'arpae' as const,
+    bg: 'bg-teal-700',
+    cellBg: 'bg-teal-50',
+    cols: [
+      { key: 'gorino2TempAcqua',  head: 'Temp °C' },
+      { key: 'gorino2Ph',         head: 'pH' },
+      { key: 'gorino2Salinita',   head: 'Sal ‰' },
+      { key: 'gorino2OssigenoSat',head: 'O₂ %' },
+      { key: 'gorino2Torbidita',  head: 'Torb' },
+      { key: 'gorino2Clorofilla', head: 'Chl µg/L' },
+    ],
+  },
+  {
+    label: 'Meteo Aria (Open-Meteo)',
+    src: 'openmeteo' as const,
+    bg: 'bg-orange-600',
+    cellBg: 'bg-orange-50',
+    cols: [
+      { key: 'tempAria',       head: 'T.aria °C' },
+      { key: 'precipitazione', head: 'Pioggia mm' },
+      { key: 'ventoVelocita',  head: 'Vento km/h' },
+      { key: 'ventoRaffica',   head: 'Raffica km/h' },
+      { key: 'condizioneMeteo',head: 'Condizione', fmt: (v: any) => wmoLabel(v) },
+    ],
+  },
+];
 
 export default function DiarioAmbientale() {
   const { toast } = useToast();
@@ -220,20 +346,30 @@ export default function DiarioAmbientale() {
   const totalRecords = logs?.length ?? 0;
   const latest = logs?.[0];
 
-  // Esporta CSV
   function handleExportCSV() {
     if (!logs || logs.length === 0) return;
     const headers = [
       'Data', 'Utente',
-      'SST (°C)', 'Onde (m)', 'Periodo Onde (s)', 'Clorofilla Mar (µg/L)', 'Salinità Mar (‰)',
-      'Vallona Temp (°C)', 'Vallona pH', 'Vallona Salinità (‰)', 'Vallona O₂ (%)', 'Vallona Torbidità', 'Vallona Clorofilla (µg/L)',
-      'Gorino2 Temp (°C)', 'Gorino2 pH', 'Gorino2 Salinità (‰)', 'Gorino2 O₂ (%)', 'Gorino2 Torbidità', 'Gorino2 Clorofilla (µg/L)',
+      // Copernicus
+      '[Copernicus] SST (°C)', '[Open-Meteo] Onde (m)', '[Open-Meteo] Periodo onde (s)',
+      '[Copernicus] Chl-a (µg/L)', '[Copernicus] Salinità (‰)',
+      // Vallona
+      '[ARPAV Vallona] Temp (°C)', '[ARPAV Vallona] pH', '[ARPAV Vallona] Salinità (‰)',
+      '[ARPAV Vallona] O₂ (%)', '[ARPAV Vallona] Torbidità', '[ARPAV Vallona] Chl (µg/L)',
+      // Gorino 2
+      '[ARPAE Gorino2] Temp (°C)', '[ARPAE Gorino2] pH', '[ARPAE Gorino2] Salinità (‰)',
+      '[ARPAE Gorino2] O₂ (%)', '[ARPAE Gorino2] Torbidità', '[ARPAE Gorino2] Chl (µg/L)',
+      // Meteo aria
+      '[Open-Meteo] Temp aria (°C)', '[Open-Meteo] Pioggia (mm)',
+      '[Open-Meteo] Vento (km/h)', '[Open-Meteo] Raffica (km/h)', '[Open-Meteo] Condizione meteo',
     ];
     const rows = logs.map(r => [
       fmtDate(r.date), r.username ?? '',
       r.sst ?? '', r.waveHeight ?? '', r.wavePeriod ?? '', r.chlorophyll ?? '', r.salinity ?? '',
       r.vallonaTempAcqua ?? '', r.vallonaPh ?? '', r.vallonaSalinita ?? '', r.vallonaOssigenoSat ?? '', r.vallonaTorbidita ?? '', r.vallonaClorofilla ?? '',
       r.gorino2TempAcqua ?? '', r.gorino2Ph ?? '', r.gorino2Salinita ?? '', r.gorino2OssigenoSat ?? '', r.gorino2Torbidita ?? '', r.gorino2Clorofilla ?? '',
+      r.tempAria ?? '', r.precipitazione ?? '', r.ventoVelocita ?? '', r.ventoRaffica ?? '',
+      r.condizioneMeteo != null ? wmoLabel(r.condizioneMeteo) : '',
     ]);
     const csv = [headers, ...rows].map(r => r.join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
@@ -252,7 +388,7 @@ export default function DiarioAmbientale() {
         <div>
           <h1 className="text-2xl font-bold text-teal-700">Diario Ambientale</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Monitoraggio quotidiano: boe Vallona (ARPAV) e Gorino 2 (ARPAE), dati marini
+            Monitoraggio quotidiano: Copernicus, Open-Meteo, Boa Vallona (ARPAV), Boa Gorino 2 (ARPAE)
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -287,6 +423,15 @@ export default function DiarioAmbientale() {
         </div>
       </div>
 
+      {/* Legenda fonti */}
+      <div className="flex flex-wrap gap-2 text-xs">
+        {Object.entries(SOURCE_BADGE).map(([k, v]) => (
+          <span key={k} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full ${v.bg} ${v.text} font-medium`}>
+            {v.label}
+          </span>
+        ))}
+      </div>
+
       {/* Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="border-teal-200">
@@ -304,45 +449,45 @@ export default function DiarioAmbientale() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3">
-            <div className="text-xs text-gray-500">SST (ultimo)</div>
+            <div className="text-xs text-gray-500 flex items-center gap-1">
+              SST <SourceBadge src="copernicus" />
+            </div>
             <div className="text-base font-semibold text-blue-700">{fmt(latest?.sst)}°C</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3">
-            <div className="text-xs text-gray-500">Temp. Vallona (ultimo)</div>
-            <div className="text-base font-semibold text-green-700">{fmt(latest?.vallonaTempAcqua)}°C</div>
+            <div className="text-xs text-gray-500 flex items-center gap-1">
+              Temp aria <SourceBadge src="openmeteo" />
+            </div>
+            <div className="text-base font-semibold text-orange-600">{fmt(latest?.tempAria)}°C</div>
+            {latest?.condizioneMeteo != null && (
+              <div className="text-xs text-gray-500">{wmoLabel(latest.condizioneMeteo)}</div>
+            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 border-b">
-        <button
-          onClick={() => setTab('grafici')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === 'grafici'
-              ? 'border-teal-600 text-teal-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Grafici
-        </button>
-        <button
-          onClick={() => setTab('tabella')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === 'tabella'
-              ? 'border-teal-600 text-teal-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Tabella dati
-        </button>
+        {(['grafici', 'tabella'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === t
+                ? 'border-teal-600 text-teal-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t === 'grafici' ? 'Grafici' : 'Tabella dati'}
+          </button>
+        ))}
       </div>
 
       {isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-56 rounded-xl" />
           ))}
         </div>
@@ -372,59 +517,52 @@ export default function DiarioAmbientale() {
             <div className="overflow-auto rounded-lg border">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-teal-700">
-                    <TableHead className="text-white font-bold text-xs">Data</TableHead>
-                    <TableHead className="text-white font-bold text-xs">Utente</TableHead>
-                    <TableHead className="text-white font-bold text-xs">SST °C</TableHead>
-                    <TableHead className="text-white font-bold text-xs">Onde m</TableHead>
-                    <TableHead className="text-white font-bold text-xs">Chl Mar</TableHead>
-                    <TableHead className="text-white font-bold text-xs">Sal Mar</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-green-800">V Temp</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-green-800">V pH</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-green-800">V Sal</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-green-800">V O₂%</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-green-800">V Torb</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-green-800">V Chl</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-teal-900">G Temp</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-teal-900">G pH</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-teal-900">G Sal</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-teal-900">G O₂%</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-teal-900">G Torb</TableHead>
-                    <TableHead className="text-white font-bold text-xs bg-teal-900">G Chl</TableHead>
+                  {/* Riga 1: gruppi fonti */}
+                  <TableRow>
+                    <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Data</TableHead>
+                    <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Utente</TableHead>
+                    {TABLE_GROUPS.map(g => (
+                      <TableHead
+                        key={g.label}
+                        colSpan={g.cols.length}
+                        className={`${g.bg} text-white text-xs font-bold text-center border-x`}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <SourceBadge src={g.src} />
+                          <span className="hidden sm:inline">{g.label}</span>
+                        </div>
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                  {/* Riga 2: intestazioni colonne */}
+                  <TableRow>
+                    {TABLE_GROUPS.map(g =>
+                      g.cols.map(col => (
+                        <TableHead key={col.key} className={`${g.bg} text-white/90 text-[10px] font-medium border-x whitespace-nowrap`}>
+                          {col.head}
+                        </TableHead>
+                      ))
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {logs.map((row, idx) => (
-                    <TableRow
-                      key={row.id}
-                      className={idx % 2 === 0 ? 'bg-white' : 'bg-teal-50/40'}
-                    >
-                      <TableCell className="text-xs font-mono">{fmtDate(row.date)}</TableCell>
-                      <TableCell className="text-xs">{row.username ?? '—'}</TableCell>
-                      <TableCell className="text-xs">{fmt(row.sst)}</TableCell>
-                      <TableCell className="text-xs">{fmt(row.waveHeight)}</TableCell>
-                      <TableCell className="text-xs">{fmt(row.chlorophyll)}</TableCell>
-                      <TableCell className="text-xs">{fmt(row.salinity)}</TableCell>
-                      <TableCell className="text-xs bg-green-50">{fmt(row.vallonaTempAcqua)}</TableCell>
-                      <TableCell className="text-xs bg-green-50">{fmt(row.vallonaPh)}</TableCell>
-                      <TableCell className="text-xs bg-green-50">{fmt(row.vallonaSalinita)}</TableCell>
-                      <TableCell className="text-xs bg-green-50">{fmt(row.vallonaOssigenoSat)}</TableCell>
-                      <TableCell className="text-xs bg-green-50">{fmt(row.vallonaTorbidita)}</TableCell>
-                      <TableCell className="text-xs bg-green-50">{fmt(row.vallonaClorofilla)}</TableCell>
-                      <TableCell className="text-xs bg-teal-50">{fmt(row.gorino2TempAcqua)}</TableCell>
-                      <TableCell className="text-xs bg-teal-50">{fmt(row.gorino2Ph)}</TableCell>
-                      <TableCell className="text-xs bg-teal-50">{fmt(row.gorino2Salinita)}</TableCell>
-                      <TableCell className="text-xs bg-teal-50">{fmt(row.gorino2OssigenoSat)}</TableCell>
-                      <TableCell className="text-xs bg-teal-50">{fmt(row.gorino2Torbidita)}</TableCell>
-                      <TableCell className="text-xs bg-teal-50">{fmt(row.gorino2Clorofilla)}</TableCell>
+                    <TableRow key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
+                      <TableCell className="text-xs font-mono border-r">{fmtDate(row.date)}</TableCell>
+                      <TableCell className="text-xs border-r">{row.username ?? '—'}</TableCell>
+                      {TABLE_GROUPS.map(g =>
+                        g.cols.map(col => (
+                          <TableCell key={col.key} className={`text-xs ${g.cellBg}`}>
+                            {col.fmt
+                              ? col.fmt((row as any)[col.key])
+                              : fmt((row as any)[col.key])}
+                          </TableCell>
+                        ))
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              <div className="p-2 text-xs text-gray-400 border-t flex gap-4">
-                <span><span className="inline-block w-3 h-3 bg-green-100 border border-green-300 rounded-sm mr-1" />V = Boa Vallona (ARPAV)</span>
-                <span><span className="inline-block w-3 h-3 bg-teal-100 border border-teal-300 rounded-sm mr-1" />G = Boa Gorino 2 (ARPAE)</span>
-              </div>
             </div>
           )}
         </>

@@ -4,6 +4,10 @@ import { eq, desc } from 'drizzle-orm';
 import { getAllBuoyStations } from './buoy-data.service';
 import { marineDataService } from './marine-data.service';
 
+// Coordinate rappresentative dell'area di produzione (Ca' Pisani / Delta del Po)
+const METEO_LAT = 44.95;
+const METEO_LON = 12.36;
+
 interface EnvSnapshot {
   date: string;
   userId?: number;
@@ -27,6 +31,12 @@ interface EnvSnapshot {
   gorino2Torbidita?: number | null;
   gorino2Clorofilla?: number | null;
   gorino2Timestamp?: string | null;
+  // Meteo aria (Open-Meteo atmospheric)
+  tempAria?: number | null;
+  precipitazione?: number | null;
+  ventoVelocita?: number | null;
+  ventoRaffica?: number | null;
+  condizioneMeteo?: number | null;
 }
 
 function round2(v?: number | null): number | null {
@@ -41,6 +51,7 @@ function snapshotChanged(existing: any, snap: EnvSnapshot): boolean {
     'vallonaTorbidita', 'vallonaClorofilla',
     'gorino2TempAcqua', 'gorino2Ph', 'gorino2Salinita', 'gorino2OssigenoSat',
     'gorino2Torbidita', 'gorino2Clorofilla',
+    'tempAria', 'precipitazione', 'ventoVelocita', 'ventoRaffica', 'condizioneMeteo',
   ];
   for (const f of fields) {
     const a = round2(existing[f] as number | null);
@@ -66,6 +77,26 @@ async function buildSnapshot(userId?: number, username?: string): Promise<EnvSna
     }
   } catch (e) {
     console.warn('[EnvLog] Marine data non disponibile:', (e as Error).message);
+  }
+
+  // --- Meteo aria (Open-Meteo atmospheric) ---
+  try {
+    const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${METEO_LAT}&longitude=${METEO_LON}` +
+      `&current=temperature_2m,precipitation,windspeed_10m,windgusts_10m,weather_code&timezone=Europe/Rome`;
+    const meteoRes = await fetch(meteoUrl, { signal: AbortSignal.timeout(10000) });
+    if (meteoRes.ok) {
+      const meteoData = await meteoRes.json();
+      const cur = meteoData.current;
+      if (cur) {
+        snap.tempAria = round2(cur.temperature_2m);
+        snap.precipitazione = round2(cur.precipitation);
+        snap.ventoVelocita = round2(cur.windspeed_10m);
+        snap.ventoRaffica = round2(cur.windgusts_10m);
+        snap.condizioneMeteo = cur.weather_code != null ? Math.round(cur.weather_code) : null;
+      }
+    }
+  } catch (e) {
+    console.warn('[EnvLog] Meteo aria non disponibile:', (e as Error).message);
   }
 
   // --- Buoy data ---

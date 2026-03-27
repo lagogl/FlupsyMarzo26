@@ -1650,6 +1650,12 @@ export const environmentalLog = pgTable("environmental_log", {
   gorino2Torbidita: real("gorino2_torbidita"),
   gorino2Clorofilla: real("gorino2_clorofilla"),
   gorino2Timestamp: text("gorino2_timestamp"),
+  // Meteo Aria (Open-Meteo atmospheric)
+  tempAria: real("temp_aria"),
+  precipitazione: real("precipitazione"),
+  ventoVelocita: real("vento_velocita"),
+  ventoRaffica: real("vento_raffica"),
+  condizioneMeteo: integer("condizione_meteo"),
 });
 
 export const insertEnvironmentalLogSchema = createInsertSchema(environmentalLog)
