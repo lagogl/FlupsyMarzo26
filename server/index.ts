@@ -144,6 +144,16 @@ async function runBackgroundInitialization() {
     console.error("⚠️ Errore durante l'inizializzazione dello scheduler dati marini:", error);
   }
 
+  // Inizializza lo scheduler diario ambientale (ogni 12 ore: 06:00 e 18:00)
+  console.log("🌿 Inizializzazione scheduler diario ambientale...");
+  try {
+    const { startEnvironmentalLogScheduler } = await import('./services/environmental-log-scheduler.service');
+    startEnvironmentalLogScheduler();
+    console.log("✅ Scheduler diario ambientale attivo (acquisizione ore 06:00 e 18:00)");
+  } catch (error) {
+    console.error("⚠️ Errore durante l'inizializzazione dello scheduler diario ambientale:", error);
+  }
+
   // Inizializza il modulo LCI (Life Cycle Inventory) per ECOTAPES
   console.log("🌿 Inizializzazione modulo LCI...");
   try {
