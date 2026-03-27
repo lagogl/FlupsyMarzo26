@@ -9308,6 +9308,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Serve static files from public folder (Excel reports, etc.)
   app.use('/public', express.static(path.join(process.cwd(), 'public')));
-  
+
+  // ── DIARIO AMBIENTALE ─────────────────────────────────────────────────────
+  app.get("/api/environmental-log", async (req: Request, res: Response) => {
+    try {
+      const { getEnvironmentalHistory } = await import('./services/environmental-log.service.js');
+      const days = req.query.days ? parseInt(req.query.days as string) : 90;
+      const data = await getEnvironmentalHistory(days);
+      return res.json(data);
+    } catch (error: any) {
+      console.error("Errore recupero diario ambientale:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/environmental-log/refresh", async (req: Request, res: Response) => {
+    try {
+      const { recordEnvironmentalSnapshot } = await import('./services/environmental-log.service.js');
+      await recordEnvironmentalSnapshot(req.body?.userId, req.body?.username);
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Errore refresh diario ambientale:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+  // ──────────────────────────────────────────────────────────────────────────
+
   return httpServer;
 }

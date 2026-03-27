@@ -1620,3 +1620,40 @@ export const insertHatcheryArrivalSchema = createInsertSchema(hatcheryArrivals)
 
 export type HatcheryArrival = typeof hatcheryArrivals.$inferSelect;
 export type InsertHatcheryArrival = z.infer<typeof insertHatcheryArrivalSchema>;
+
+// ===== DIARIO AMBIENTALE =====
+export const environmentalLog = pgTable("environmental_log", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+  userId: integer("user_id").references(() => users.id),
+  username: text("username"),
+  // Dati marini (Copernicus / Open-Meteo)
+  sst: real("sst"),
+  waveHeight: real("wave_height"),
+  wavePeriod: real("wave_period"),
+  chlorophyll: real("chlorophyll"),
+  salinity: real("salinity"),
+  // Boa Vallona (ARPAV)
+  vallonaTempAcqua: real("vallona_temp_acqua"),
+  vallonaPh: real("vallona_ph"),
+  vallonaSalinita: real("vallona_salinita"),
+  vallonaOssigenoSat: real("vallona_ossigeno_sat"),
+  vallonaTorbidita: real("vallona_torbidita"),
+  vallonaClorofilla: real("vallona_clorofilla"),
+  vallonaTimestamp: text("vallona_timestamp"),
+  // Boa Gorino 2 (ARPAE)
+  gorino2TempAcqua: real("gorino2_temp_acqua"),
+  gorino2Ph: real("gorino2_ph"),
+  gorino2Salinita: real("gorino2_salinita"),
+  gorino2OssigenoSat: real("gorino2_ossigeno_sat"),
+  gorino2Torbidita: real("gorino2_torbidita"),
+  gorino2Clorofilla: real("gorino2_clorofilla"),
+  gorino2Timestamp: text("gorino2_timestamp"),
+});
+
+export const insertEnvironmentalLogSchema = createInsertSchema(environmentalLog)
+  .omit({ id: true, recordedAt: true });
+
+export type EnvironmentalLog = typeof environmentalLog.$inferSelect;
+export type InsertEnvironmentalLog = z.infer<typeof insertEnvironmentalLogSchema>;

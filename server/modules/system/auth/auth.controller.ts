@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { authService } from "./auth.service";
 import { insertUserSchema } from "@shared/schema";
+import { recordEnvironmentalSnapshot } from "../../../services/environmental-log.service";
 
 export class AuthController {
   /**
@@ -32,6 +33,11 @@ export class AuthController {
         console.log(`Login riuscito per l'utente: ${username}`);
         
         const userResponse = authService.sanitizeUser(validatedUser);
+
+        // Registra snapshot ambientale in background (non bloccante)
+        recordEnvironmentalSnapshot(validatedUser.id, validatedUser.username).catch(e =>
+          console.warn('[EnvLog] Snapshot background error:', e)
+        );
         
         return res.json({
           success: true,

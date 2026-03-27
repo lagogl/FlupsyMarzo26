@@ -35,6 +35,7 @@ import RFIDUHFTagManager from "@/pages/RFIDUHFTagManager";
 import GrowJourney from "@/pages/GrowJourney";
 import BasketSelection from "@/pages/BasketSelection";
 import DiarioDiBordo from "@/pages/DiarioDiBordo";
+import DiarioAmbientale from "@/pages/DiarioAmbientale";
 import NotificationSettings from "@/pages/NotificationSettings";
 import NotificationManager from "@/pages/NotificationManager";
 import EcoImpact from "@/pages/EcoImpact";
@@ -166,6 +167,7 @@ function Router() {
       <ProtectedRoute path="/operators" component={Operators}/>
       <ProtectedRoute path="/lci" component={LCIModule}/>
       <ProtectedRoute path="/storia-animali" component={LineageAnimali}/>
+      <ProtectedRoute path="/diario-ambientale" component={DiarioAmbientale}/>
       <ProtectedRoute path="/mappa-gis" component={MappaGISLaguna}/>
       
       {/* Redirezione per pagine rimosse */}
