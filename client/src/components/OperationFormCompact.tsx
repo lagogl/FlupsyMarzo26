@@ -737,14 +737,41 @@ export default function OperationFormCompact({
     }
   }, [watchAnimalsPerKg, sizes, form, watchManualCountAdjustment, watchType]);
   
-  // Per operazioni Vendita: calcola animalsPerKg da totalWeight e animalCount
+  // Per operazioni Vendita: calcola animalCount da campione (APK + mortalità)
+  // Formula: (pesoTotale / 1000) × APK × (1 - mortalità%)
+  // APK viene dal campione: liveAnimals / (sampleWeight / 1000)
+  // mortalità dal campione: deadCount / (liveAnimals + deadCount) × 100
   useEffect(() => {
-    if (watchType === 'vendita' && watchTotalWeight && watchAnimalCount &&
-        watchTotalWeight > 0 && watchAnimalCount > 0) {
-      const calculatedAnimalsPerKg = Math.round((watchAnimalCount * 1000000) / watchTotalWeight);
-      form.setValue('animalsPerKg', calculatedAnimalsPerKg);
+    if (watchType !== 'vendita') return;
+
+    // Se abbiamo dati del campione, calcola APK e mortalità
+    if (watchSampleWeight && watchSampleWeight > 0 && watchLiveAnimals && watchLiveAnimals > 0) {
+      const apk = Math.round(watchLiveAnimals / (watchSampleWeight / 1000));
+      form.setValue('animalsPerKg', apk);
+
+      // Calcola mortalità dal campione
+      const dc = deadCount || 0;
+      const totalSample = watchLiveAnimals + dc;
+      const mortRate = totalSample > 0 && dc > 0 ? (dc / totalSample) * 100 : 0;
+      form.setValue('mortalityRate', mortRate > 0 ? mortRate : null);
+      form.setValue('totalSample', totalSample > 0 ? totalSample : null);
+
+      // Calcola numero animali se abbiamo il peso totale
+      if (watchTotalWeight && watchTotalWeight > 0) {
+        const mortalityFactor = mortRate > 0 ? (1 - mortRate / 100) : 1;
+        const calculatedAnimalCount = Math.round((watchTotalWeight / 1000) * apk * mortalityFactor);
+        form.setValue('animalCount', calculatedAnimalCount > 0 ? calculatedAnimalCount : null);
+
+        // Trova e imposta taglia
+        if (sizes && sizes.length > 0) {
+          const size = sizes.find((s: any) =>
+            s.minAnimalsPerKg <= apk && s.maxAnimalsPerKg >= apk
+          );
+          if (size) form.setValue('sizeId', size.id);
+        }
+      }
     }
-  }, [watchType, watchTotalWeight, watchAnimalCount, form]);
+  }, [watchType, watchTotalWeight, watchSampleWeight, watchLiveAnimals, deadCount, sizes, form]);
 
   // Calcola il numero di animali quando cambia il peso totale o animali per kg
   // NOTA: Per operazioni 'misura', il calcolo viene fatto separatamente dalla mortalità
@@ -2272,118 +2299,189 @@ export default function OperationFormCompact({
 
             {/* Sezione Vendita - abilitata solo per 'vendita' */}
             {watchType === 'vendita' && (
-              <div className="bg-red-50 p-4 rounded-md border border-red-200">
-                <h3 className="text-sm font-semibold mb-3 text-red-700 flex items-center">
+              <div className="bg-orange-50 p-4 rounded-md border border-orange-200">
+                <h3 className="text-sm font-semibold mb-3 text-orange-700 flex items-center">
                   <ShoppingCart className="h-4 w-4 mr-1" /> Dati Vendita
                 </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Peso Totale */}
-                  <FormField
-                    control={form.control}
-                    name="totalWeight"
-                    render={({ field }) => (
-                      <FormItem className="mb-1">
-                        <FormLabel className="text-xs font-medium">Peso Totale (g) <span className="text-red-500">*</span></FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="Peso in grammi"
-                            className="h-8 text-sm"
-                            value={field.value === null || field.value === undefined ? '' : field.value}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value === '') {
-                                field.onChange(null);
-                              } else {
-                                const numValue = parseFloat(value);
-                                field.onChange(isNaN(numValue) ? null : numValue);
-                                // Calcola automaticamente animali/kg se abbiamo numero animali
-                                const currentAnimalCount = form.getValues('animalCount');
-                                if (currentAnimalCount && numValue > 0) {
-                                  const animalsPerKg = Math.round((currentAnimalCount / numValue) * 1000);
-                                  form.setValue('animalsPerKg', animalsPerKg);
-                                  // Trova e imposta la taglia
-                                  if (sizes && sizes.length > 0) {
-                                    const size = sizes.find((s: any) => 
-                                      s.minAnimalsPerKg <= animalsPerKg && s.maxAnimalsPerKg >= animalsPerKg
-                                    );
-                                    if (size) {
-                                      form.setValue('sizeId', size.id);
-                                    }
-                                  }
-                                }
-                              }
-                            }}
-                            onBlur={field.onBlur}
-                            name={field.name}
-                            ref={field.ref}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  {/* Numero Animali */}
+
+                {/* Peso Totale venduto */}
+                <FormField
+                  control={form.control}
+                  name="totalWeight"
+                  render={({ field }) => (
+                    <FormItem className="mb-3">
+                      <FormLabel className="text-xs font-medium">Peso Totale venduto (g) <span className="text-red-500">*</span></FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="Es. 26000 per 26 kg"
+                          className="h-8 text-sm"
+                          value={field.value === null || field.value === undefined ? '' : field.value}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '') { field.onChange(null); }
+                            else { const n = parseFloat(value); field.onChange(isNaN(n) ? null : n); }
+                          }}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Campione mortalità */}
+                <div className="bg-orange-100/50 p-3 rounded-md border border-orange-200 mb-3">
+                  <h4 className="text-xs font-semibold text-orange-800 mb-2">Campione per calcolo mortalità</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* Grammi sample */}
+                    <FormField
+                      control={form.control}
+                      name="sampleWeight"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-medium">Gr. campione</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="Grammi"
+                              className="h-7 text-xs"
+                              value={field.value === null || field.value === undefined ? '' : field.value}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === '') { field.onChange(null); }
+                                else { const n = parseFloat(v); field.onChange(isNaN(n) ? null : n); }
+                              }}
+                              onBlur={field.onBlur}
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {/* Animali vivi */}
+                    <FormField
+                      control={form.control}
+                      name="liveAnimals"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-medium">N. Vivi</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="text"
+                              placeholder="Vivi"
+                              className="h-7 text-xs"
+                              value={field.value === null || field.value === undefined ? '' : field.value.toLocaleString('it-IT')}
+                              onChange={(e) => {
+                                const v = e.target.value.replace(/[^0-9]/g, '');
+                                if (v === '') { field.onChange(null); }
+                                else { const n = parseInt(v, 10); field.onChange(isNaN(n) ? null : n); }
+                              }}
+                              onBlur={field.onBlur}
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {/* Animali morti */}
+                    <FormField
+                      control={form.control}
+                      name="deadCount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-medium">N. Morti</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="text"
+                              placeholder="Morti"
+                              className="h-7 text-xs"
+                              value={field.value === null || field.value === undefined ? '' : field.value.toLocaleString('it-IT')}
+                              onChange={(e) => {
+                                const v = e.target.value.replace(/[^0-9]/g, '');
+                                if (v === '') { field.onChange(0); }
+                                else { const n = parseInt(v, 10); field.onChange(isNaN(n) ? 0 : n); }
+                              }}
+                              onBlur={field.onBlur}
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  {/* Risultati campione calcolati */}
+                  {watchSampleWeight && watchSampleWeight > 0 && watchLiveAnimals && watchLiveAnimals > 0 && (
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                      <div className="bg-white/60 rounded px-2 py-1">
+                        <span className="text-gray-500">Totale campione:</span>{' '}
+                        <span className="font-semibold">{(watchLiveAnimals + (deadCount || 0)).toLocaleString('it-IT')}</span>
+                      </div>
+                      <div className="bg-white/60 rounded px-2 py-1">
+                        <span className="text-gray-500">Mortalità:</span>{' '}
+                        <span className="font-semibold text-red-600">
+                          {deadCount && deadCount > 0
+                            ? ((deadCount / (watchLiveAnimals + deadCount)) * 100).toFixed(2) + '%'
+                            : '0%'}
+                        </span>
+                      </div>
+                      <div className="bg-white/60 rounded px-2 py-1">
+                        <span className="text-gray-500">APK:</span>{' '}
+                        <span className="font-semibold text-blue-700">
+                          {Math.round(watchLiveAnimals / (watchSampleWeight / 1000)).toLocaleString('it-IT')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Risultati calcolati */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Numero Animali calcolato */}
                   <FormField
                     control={form.control}
                     name="animalCount"
                     render={({ field }) => (
                       <FormItem className="mb-1">
-                        <FormLabel className="text-xs font-medium">Numero Animali <span className="text-red-500">*</span></FormLabel>
+                        <FormLabel className="text-xs font-medium">Numero Animali <span className="text-amber-600">(calcolato)</span></FormLabel>
                         <FormControl>
-                          <Input 
-                            type="text" 
-                            placeholder="Numero animali venduti"
-                            className="h-8 text-sm"
-                            value={field.value === null || field.value === undefined 
-                              ? '' 
+                          <Input
+                            type="text"
+                            placeholder="Calcolato dal campione"
+                            className="h-8 text-sm bg-amber-50 font-medium"
+                            readOnly
+                            value={field.value === null || field.value === undefined
+                              ? ''
                               : field.value.toLocaleString('it-IT')}
-                            onChange={(e) => {
-                              const value = e.target.value.replace(/[^0-9]/g, '');
-                              if (value === '') {
-                                field.onChange(null);
-                              } else {
-                                const numValue = parseInt(value, 10);
-                                field.onChange(isNaN(numValue) ? null : numValue);
-                                // Calcola automaticamente animali/kg se abbiamo peso
-                                const currentTotalWeight = form.getValues('totalWeight');
-                                if (currentTotalWeight && currentTotalWeight > 0 && numValue > 0) {
-                                  const animalsPerKg = Math.round((numValue / currentTotalWeight) * 1000);
-                                  form.setValue('animalsPerKg', animalsPerKg);
-                                  // Trova e imposta la taglia
-                                  if (sizes && sizes.length > 0) {
-                                    const size = sizes.find((s: any) => 
-                                      s.minAnimalsPerKg <= animalsPerKg && s.maxAnimalsPerKg >= animalsPerKg
-                                    );
-                                    if (size) {
-                                      form.setValue('sizeId', size.id);
-                                    }
-                                  }
-                                }
-                              }
-                            }}
-                            onBlur={field.onBlur}
-                            name={field.name}
-                            ref={field.ref}
                           />
                         </FormControl>
+                        <FormDescription className="text-[10px]">
+                          (g ÷ 1000) × APK × (1 − mort%)
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
-                  {/* Animali per Kg - calcolato automaticamente */}
+
+                  {/* Animali per Kg - calcolato dal campione */}
                   <FormField
                     control={form.control}
                     name="animalsPerKg"
                     render={({ field }) => (
                       <FormItem className="mb-1">
-                        <FormLabel className="text-xs font-medium">Animali per Kg <span className="text-amber-600">(calcolato)</span></FormLabel>
+                        <FormLabel className="text-xs font-medium">Animali/Kg <span className="text-amber-600">(calcolato)</span></FormLabel>
                         <FormControl>
-                          <Input 
-                            type="text" 
-                            placeholder="Calcolato automaticamente"
+                          <Input
+                            type="text"
+                            placeholder="Dal campione"
                             className="h-8 text-sm bg-amber-50"
                             readOnly
                             value={field.value === null || field.value === undefined ? '' : field.value.toLocaleString('it-IT')}
@@ -2393,7 +2491,7 @@ export default function OperationFormCompact({
                       </FormItem>
                     )}
                   />
-                  
+
                   {/* Taglia calcolata */}
                   <FormField
                     control={form.control}
@@ -2402,14 +2500,14 @@ export default function OperationFormCompact({
                       <FormItem className="mb-1">
                         <FormLabel className="text-xs font-medium">Taglia <span className="text-amber-600">(calcolata)</span></FormLabel>
                         <FormControl>
-                          <Input 
-                            type="text" 
+                          <Input
+                            type="text"
                             className="h-8 text-sm bg-amber-50"
                             readOnly
                             value={(() => {
                               if (!field.value || !sizes) return '';
                               const size = sizes.find((s: any) => s.id === field.value);
-                              return size ? `${size.name} (${size.minAnimalsPerKg?.toLocaleString('it-IT')}-${size.maxAnimalsPerKg?.toLocaleString('it-IT')} animali/kg)` : '';
+                              return size ? `${size.name} (${size.minAnimalsPerKg?.toLocaleString('it-IT')}-${size.maxAnimalsPerKg?.toLocaleString('it-IT')})` : '';
                             })()}
                           />
                         </FormControl>
