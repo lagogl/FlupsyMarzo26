@@ -274,6 +274,8 @@ export default function OperationForm({
   const watchDeadCount = form.watch('deadCount');
   const watchTotalWeight = form.watch('totalWeight');
   const watchManualCountAdjustment = form.watch('manualCountAdjustment');
+  const watchMortalityRate = form.watch('mortalityRate');
+  const watchSizeId = form.watch('sizeId');
   // Calcoliamo manualmente l'average weight
   const averageWeight = watchAnimalsPerKg ? (1000000 / Number(watchAnimalsPerKg)) : 0;
   
@@ -431,10 +433,10 @@ export default function OperationForm({
   }, [watchAnimalsPerKg, sizes]);
   
   // Calcola il numero di animali quando cambia il peso totale o animali per kg
-  // NOTA: Per operazioni 'misura', il calcolo del numero animali viene fatto separatamente dalla mortalità
+  // NOTA: Per operazioni 'misura' e 'vendita', il calcolo è gestito da effetti separati
   useEffect(() => {
-    // Per operazioni Misura, non calcolare animalCount dal peso totale (usa la formula mortalità)
-    if (watchType === 'misura') {
+    // Per operazioni Misura e Vendita, non calcolare animalCount con questa formula generica
+    if (watchType === 'misura' || watchType === 'vendita') {
       return;
     }
     
@@ -504,15 +506,23 @@ export default function OperationForm({
     }
   }, [watchSampleWeight, watchLiveAnimals, watchManualCountAdjustment, form]);
 
-  // Per operazioni Vendita: calcola animalsPerKg da totalWeight e animalCount
-  // (non usa sampleWeight/liveAnimals come la Misura)
+  // Per operazioni Vendita: calcola animalCount da totalWeight + APK + mortalityRate
+  // Formula: (grammi totali / 1000) × pezzi/kg × (1 - mortalità%)
+  // APK viene calcolato dal campione (stesso useEffect delle misure sopra)
   useEffect(() => {
-    if (watchType === 'vendita' && watchTotalWeight && watchAnimalCount &&
-        watchTotalWeight > 0 && watchAnimalCount > 0) {
-      const calculatedAnimalsPerKg = Math.round((watchAnimalCount * 1000000) / watchTotalWeight);
-      form.setValue('animalsPerKg', calculatedAnimalsPerKg);
+    if (watchType !== 'vendita') return;
+    if (!watchTotalWeight || !watchAnimalsPerKg || watchTotalWeight <= 0 || watchAnimalsPerKg <= 0) return;
+    if (watchManualCountAdjustment) return;
+
+    const mortalityFactor = watchMortalityRate != null && watchMortalityRate > 0
+      ? (1 - watchMortalityRate / 100)
+      : 1;
+    const calculatedAnimalCount = Math.round((watchTotalWeight / 1000) * watchAnimalsPerKg * mortalityFactor);
+
+    if (calculatedAnimalCount > 0) {
+      form.setValue('animalCount', calculatedAnimalCount);
     }
-  }, [watchType, watchTotalWeight, watchAnimalCount, form]);
+  }, [watchType, watchTotalWeight, watchAnimalsPerKg, watchMortalityRate, watchManualCountAdjustment, form]);
   
   // Calcola automaticamente i dati basati sul campione e aggiorna i campi correlati
   // NOTA: Il calcolo di animalCount dalla mortalità si applica SOLO a operazioni Misura
@@ -1399,8 +1409,10 @@ export default function OperationForm({
           />
 
           {/* Campi standardizzati per inserimento dati di misurazione - Layout compatto */}
-          <div className="col-span-1 md:col-span-3 border rounded-md p-1 mb-0 bg-blue-50 border-blue-100">
-            <h3 className="text-xs font-semibold mb-0.5 text-blue-700">Dati di misurazione standardizzati</h3>
+          <div className={`col-span-1 md:col-span-3 border rounded-md p-1 mb-0 ${watchType === 'vendita' ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-100'}`}>
+            <h3 className={`text-xs font-semibold mb-0.5 ${watchType === 'vendita' ? 'text-orange-700' : 'text-blue-700'}`}>
+              {watchType === 'vendita' ? 'Dati campione vendita' : 'Dati di misurazione standardizzati'}
+            </h3>
             
             <div className="grid grid-cols-3 gap-1">
               {/* Prima colonna */}
@@ -1411,7 +1423,9 @@ export default function OperationForm({
                   name="sampleWeight"
                   render={({ field }) => (
                     <FormItem className="mb-0.5">
-                      <FormLabel className="text-xs leading-none text-gray-600">Gr. Sample</FormLabel>
+                      <FormLabel className="text-xs leading-none text-gray-600">
+                        {watchType === 'vendita' ? 'Grammatura campione (g)' : 'Gr. Sample'}
+                      </FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
@@ -1443,7 +1457,9 @@ export default function OperationForm({
                   name="liveAnimals"
                   render={({ field }) => (
                     <FormItem className="mb-0.5">
-                      <FormLabel className="text-xs text-gray-600">N. Vivi</FormLabel>
+                      <FormLabel className="text-xs text-gray-600">
+                        {watchType === 'vendita' ? 'Animali vivi (campione)' : 'N. Vivi'}
+                      </FormLabel>
                       <FormControl>
                         <Input 
                           type="text" 
@@ -1477,7 +1493,9 @@ export default function OperationForm({
                   name="deadCount"
                   render={({ field }) => (
                     <FormItem className="mb-0.5">
-                      <FormLabel className="text-xs text-gray-600">N. Morti</FormLabel>
+                      <FormLabel className="text-xs text-gray-600">
+                        {watchType === 'vendita' ? 'Morti (campione)' : 'N. Morti'}
+                      </FormLabel>
                       <FormControl>
                         <Input 
                           type="text" 
@@ -1560,27 +1578,29 @@ export default function OperationForm({
                 />
                 
                 {/* FormField per animalCount spostato qui */}
-                <FormField
-                  control={form.control}
-                  name="manualCountAdjustment"
-                  render={({ field }) => (
-                    <div className="flex items-center mt-1">
-                      <input
-                        type="checkbox"
-                        id="manualCountAdjustment"
-                        checked={field.value}
-                        onChange={(e) => field.onChange(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <label
-                        htmlFor="manualCountAdjustment"
-                        className="ml-2 text-xs font-medium text-gray-700"
-                      >
-                        Abilita modifica manuale del conteggio
-                      </label>
-                    </div>
-                  )}
-                />
+                {watchType !== 'vendita' && (
+                  <FormField
+                    control={form.control}
+                    name="manualCountAdjustment"
+                    render={({ field }) => (
+                      <div className="flex items-center mt-1">
+                        <input
+                          type="checkbox"
+                          id="manualCountAdjustment"
+                          checked={field.value}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <label
+                          htmlFor="manualCountAdjustment"
+                          className="ml-2 text-xs font-medium text-gray-700"
+                        >
+                          Abilita modifica manuale del conteggio
+                        </label>
+                      </div>
+                    )}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -1596,9 +1616,9 @@ export default function OperationForm({
                 <FormControl>
                   <Input 
                     type="text" 
-                    placeholder={watchManualCountAdjustment ? "Inserisci numero" : "Calcolato"}
-                    readOnly={!watchManualCountAdjustment}
-                    className={`h-8 text-sm ${!watchManualCountAdjustment ? "bg-amber-50 border-amber-100 font-medium text-amber-700" : ""}`}
+                    placeholder={watchType === 'vendita' ? "Calcolato automaticamente" : watchManualCountAdjustment ? "Inserisci numero" : "Calcolato"}
+                    readOnly={watchType === 'vendita' || !watchManualCountAdjustment}
+                    className={`h-8 text-sm ${(watchType === 'vendita' || !watchManualCountAdjustment) ? "bg-amber-50 border-amber-100 font-medium text-amber-700" : ""}`}
                     value={field.value === null || field.value === undefined 
                       ? '' 
                       : field.value.toLocaleString('it-IT')}
@@ -1618,9 +1638,11 @@ export default function OperationForm({
                   />
                 </FormControl>
                 <FormDescription className="text-[10px]">
-                  {watchManualCountAdjustment 
-                    ? "Inserisci manualmente il numero di animali" 
-                    : "Calcolato automaticamente dalle misurazioni"}
+                  {watchType === 'vendita'
+                    ? "(g totali ÷ 1000) × pezzi/kg × (1 − mortalità%)"
+                    : watchManualCountAdjustment 
+                      ? "Inserisci manualmente il numero di animali" 
+                      : "Calcolato automaticamente dalle misurazioni"}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -1656,11 +1678,13 @@ export default function OperationForm({
                 
                 return (
                   <FormItem>
-                    <FormLabel className="text-xs">Peso Totale (g)</FormLabel>
+                    <FormLabel className="text-xs">
+                      {watchType === 'vendita' ? 'Grammi totali venduto (g)' : 'Peso Totale (g)'}
+                    </FormLabel>
                     <FormControl>
                       <Input 
                         type="text" 
-                        placeholder="Inserisci peso"
+                        placeholder={watchType === 'vendita' ? 'Es. 26000 per 26 kg' : 'Inserisci peso'}
                         className="h-8 text-sm"
                         value={field.value !== null && field.value !== undefined ? field.value.toString() : ''}
                         onChange={(e) => {
@@ -1689,7 +1713,7 @@ export default function OperationForm({
                       />
                     </FormControl>
                     <FormDescription className="text-[10px] space-y-1">
-                      <div>Inserisci peso totale in grammi (max 1.000.000)</div>
+                      <div>{watchType === 'vendita' ? 'Peso totale della merce venduta in grammi (es. 26 kg = 26.000)' : 'Inserisci peso totale in grammi (max 1.000.000)'}</div>
                       {previousWeight && (
                         <div className="text-muted-foreground opacity-60">
                           Peso precedente: {previousWeight.toLocaleString('it-IT')} g 
@@ -1712,7 +1736,9 @@ export default function OperationForm({
               name="animalsPerKg"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs">Animali per Kg</FormLabel>
+                  <FormLabel className="text-xs">
+                    {watchType === 'vendita' ? 'Pezzi/chilo calcolati' : 'Animali per Kg'}
+                  </FormLabel>
                   <FormControl>
                     <Input 
                       type="text" 
@@ -1731,6 +1757,25 @@ export default function OperationForm({
                 </FormItem>
               )}
             />
+
+            {/* Taglia calcolata - visibile solo per vendita */}
+            {watchType === 'vendita' && (
+              <FormItem>
+                <FormLabel className="text-xs">Taglia calcolata</FormLabel>
+                <div className={`h-8 px-3 flex items-center rounded-md border text-sm font-semibold ${
+                  watchSizeId && sizes?.find(s => s.id === watchSizeId)
+                    ? 'bg-green-50 border-green-200 text-green-700'
+                    : 'bg-gray-50 border-gray-200 text-gray-400'
+                }`}>
+                  {watchSizeId && sizes?.find(s => s.id === watchSizeId)
+                    ? sizes.find(s => s.id === watchSizeId)?.code ?? '—'
+                    : '—'}
+                </div>
+                <FormDescription className="text-[10px]">
+                  Determinata automaticamente da pezzi/kg
+                </FormDescription>
+              </FormItem>
+            )}
           </div>
           
           <FormField
