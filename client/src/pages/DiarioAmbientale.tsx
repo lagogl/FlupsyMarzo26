@@ -435,7 +435,7 @@ export default function DiarioAmbientale() {
   }
 
   return (
-    <div className="p-4 space-y-4 max-w-7xl mx-auto">
+    <div className="p-4 space-y-4 w-full max-w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -637,13 +637,13 @@ export default function DiarioAmbientale() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Data</TableHead>
-                        <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Utente</TableHead>
+                        <TableHead rowSpan={2} className="bg-gray-800 text-white text-[11px] font-bold border-r align-middle px-1.5 py-1">Data</TableHead>
+                        <TableHead rowSpan={2} className="bg-gray-800 text-white text-[11px] font-bold border-r align-middle px-1.5 py-1">Utente</TableHead>
                         {TABLE_GROUPS.map(g => (
                           <TableHead
                             key={g.label}
                             colSpan={g.cols.length}
-                            className={`${g.bg} text-white text-xs font-bold text-center border-x`}
+                            className={`${g.bg} text-white text-[11px] font-bold text-center border-x px-1 py-1`}
                           >
                             <div className="flex items-center justify-center gap-1">
                               <SourceBadge src={g.src} />
@@ -655,7 +655,7 @@ export default function DiarioAmbientale() {
                       <TableRow>
                         {TABLE_GROUPS.map(g =>
                           g.cols.map(col => (
-                            <TableHead key={col.key} className={`${g.bg} text-white/90 text-[10px] font-medium border-x whitespace-nowrap`}>
+                            <TableHead key={col.key} className={`${g.bg} text-white/90 text-[10px] font-medium border-x whitespace-nowrap px-1 py-0.5`}>
                               {col.head}
                             </TableHead>
                           ))
@@ -665,11 +665,11 @@ export default function DiarioAmbientale() {
                     <TableBody>
                       {pageRows.map((row, idx) => (
                         <TableRow key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
-                          <TableCell className="text-xs font-mono border-r">{fmtDate(row.date)}</TableCell>
-                          <TableCell className="text-xs border-r">{row.username ?? '—'}</TableCell>
+                          <TableCell className="text-[11px] font-mono border-r px-1.5 py-1 whitespace-nowrap">{fmtDate(row.date)}</TableCell>
+                          <TableCell className="text-[11px] border-r px-1.5 py-1 whitespace-nowrap">{row.username ?? '—'}</TableCell>
                           {TABLE_GROUPS.map(g =>
                             g.cols.map(col => (
-                              <TableCell key={col.key} className={`text-xs ${g.cellBg}`}>
+                              <TableCell key={col.key} className={`text-[11px] px-1.5 py-1 ${g.cellBg}`}>
                                 {col.fmt
                                   ? col.fmt((row as any)[col.key])
                                   : fmt((row as any)[col.key])}
