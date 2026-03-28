@@ -316,6 +316,8 @@ export default function DiarioAmbientale() {
   const queryClient = useQueryClient();
   const [periodo, setPeriodo] = useState<Periodo>('90');
   const [tab, setTab] = useState<'grafici' | 'tabella'>('grafici');
+  const [tablePage, setTablePage] = useState(1);
+  const TABLE_PAGE_SIZE = 50;
 
   const days = periodo === 'all' ? 9999 : parseInt(periodo);
 
@@ -443,7 +445,7 @@ export default function DiarioAmbientale() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Select value={periodo} onValueChange={v => setPeriodo(v as Periodo)}>
+          <Select value={periodo} onValueChange={v => { setPeriodo(v as Periodo); setTablePage(1); }}>
             <SelectTrigger className="w-44">
               <SelectValue />
             </SelectTrigger>
@@ -600,58 +602,136 @@ export default function DiarioAmbientale() {
             </div>
           )}
 
-          {tab === 'tabella' && (
-            <div className="overflow-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  {/* Riga 1: gruppi fonti */}
-                  <TableRow>
-                    <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Data</TableHead>
-                    <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Utente</TableHead>
-                    {TABLE_GROUPS.map(g => (
-                      <TableHead
-                        key={g.label}
-                        colSpan={g.cols.length}
-                        className={`${g.bg} text-white text-xs font-bold text-center border-x`}
-                      >
-                        <div className="flex items-center justify-center gap-1">
-                          <SourceBadge src={g.src} />
-                          <span className="hidden sm:inline">{g.label}</span>
-                        </div>
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                  {/* Riga 2: intestazioni colonne */}
-                  <TableRow>
-                    {TABLE_GROUPS.map(g =>
-                      g.cols.map(col => (
-                        <TableHead key={col.key} className={`${g.bg} text-white/90 text-[10px] font-medium border-x whitespace-nowrap`}>
-                          {col.head}
-                        </TableHead>
-                      ))
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((row, idx) => (
-                    <TableRow key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
-                      <TableCell className="text-xs font-mono border-r">{fmtDate(row.date)}</TableCell>
-                      <TableCell className="text-xs border-r">{row.username ?? '—'}</TableCell>
-                      {TABLE_GROUPS.map(g =>
-                        g.cols.map(col => (
-                          <TableCell key={col.key} className={`text-xs ${g.cellBg}`}>
-                            {col.fmt
-                              ? col.fmt((row as any)[col.key])
-                              : fmt((row as any)[col.key])}
-                          </TableCell>
-                        ))
-                      )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+          {tab === 'tabella' && (() => {
+            const totalPages = Math.ceil(logs.length / TABLE_PAGE_SIZE);
+            const pageStart = (tablePage - 1) * TABLE_PAGE_SIZE;
+            const pageEnd = pageStart + TABLE_PAGE_SIZE;
+            const pageRows = logs.slice(pageStart, pageEnd);
+            return (
+              <>
+                <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                  <span>{logs.length} record totali</span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tablePage <= 1}
+                      onClick={() => setTablePage(p => Math.max(1, p - 1))}
+                    >
+                      ← Prec
+                    </Button>
+                    <span className="text-xs font-medium">
+                      Pagina {tablePage} di {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tablePage >= totalPages}
+                      onClick={() => setTablePage(p => Math.min(totalPages, p + 1))}
+                    >
+                      Succ →
+                    </Button>
+                  </div>
+                </div>
+                <div className="overflow-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Data</TableHead>
+                        <TableHead rowSpan={2} className="bg-gray-800 text-white text-xs font-bold border-r align-middle">Utente</TableHead>
+                        {TABLE_GROUPS.map(g => (
+                          <TableHead
+                            key={g.label}
+                            colSpan={g.cols.length}
+                            className={`${g.bg} text-white text-xs font-bold text-center border-x`}
+                          >
+                            <div className="flex items-center justify-center gap-1">
+                              <SourceBadge src={g.src} />
+                              <span className="hidden sm:inline">{g.label}</span>
+                            </div>
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                      <TableRow>
+                        {TABLE_GROUPS.map(g =>
+                          g.cols.map(col => (
+                            <TableHead key={col.key} className={`${g.bg} text-white/90 text-[10px] font-medium border-x whitespace-nowrap`}>
+                              {col.head}
+                            </TableHead>
+                          ))
+                        )}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pageRows.map((row, idx) => (
+                        <TableRow key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
+                          <TableCell className="text-xs font-mono border-r">{fmtDate(row.date)}</TableCell>
+                          <TableCell className="text-xs border-r">{row.username ?? '—'}</TableCell>
+                          {TABLE_GROUPS.map(g =>
+                            g.cols.map(col => (
+                              <TableCell key={col.key} className={`text-xs ${g.cellBg}`}>
+                                {col.fmt
+                                  ? col.fmt((row as any)[col.key])
+                                  : fmt((row as any)[col.key])}
+                              </TableCell>
+                            ))
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tablePage <= 1}
+                      onClick={() => setTablePage(1)}
+                    >
+                      Prima
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tablePage <= 1}
+                      onClick={() => setTablePage(p => Math.max(1, p - 1))}
+                    >
+                      ← Prec
+                    </Button>
+                    <Select value={String(tablePage)} onValueChange={v => setTablePage(Number(v))}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: totalPages }, (_, i) => (
+                          <SelectItem key={i + 1} value={String(i + 1)}>
+                            Pag. {i + 1} di {totalPages}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tablePage >= totalPages}
+                      onClick={() => setTablePage(p => Math.min(totalPages, p + 1))}
+                    >
+                      Succ →
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tablePage >= totalPages}
+                      onClick={() => setTablePage(totalPages)}
+                    >
+                      Ultima
+                    </Button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
     </div>
