@@ -1356,6 +1356,12 @@ export default function OrdiniCondivisi() {
                         <SortIcon field="quantita" />
                       </div>
                     </th>
+                    <th className="p-2 text-right text-xs font-medium text-muted-foreground border-r">
+                      Consegnato
+                    </th>
+                    <th className="p-2 text-right text-xs font-medium text-muted-foreground border-r">
+                      Residuo
+                    </th>
                     <th 
                       className="p-2 text-left text-xs font-medium text-muted-foreground border-r cursor-pointer hover:bg-muted-foreground/10 transition-colors select-none"
                       onClick={() => handleSort('taglia')}
@@ -1509,6 +1515,20 @@ export default function OrdiniCondivisi() {
                           {/* Quantità */}
                           <td className="p-2 text-sm text-right font-medium border-r">
                             {ordine.quantitaTotale ? ordine.quantitaTotale.toLocaleString('it-IT') : '0'}
+                          </td>
+
+                          {/* Consegnato */}
+                          <td className="p-2 text-sm text-right border-r">
+                            <span className={ordine.quantitaConsegnata > 0 ? 'text-emerald-600 font-medium' : 'text-muted-foreground'}>
+                              {(ordine.quantitaConsegnata || 0).toLocaleString('it-IT')}
+                            </span>
+                          </td>
+
+                          {/* Residuo */}
+                          <td className="p-2 text-sm text-right border-r">
+                            <span className={ordine.quantitaResidua > 0 ? 'text-amber-600 font-medium' : 'text-emerald-600 font-medium'}>
+                              {(ordine.quantitaResidua ?? ordine.quantitaTotale ?? 0).toLocaleString('it-IT')}
+                            </span>
                           </td>
                           
                           {/* Taglia */}
