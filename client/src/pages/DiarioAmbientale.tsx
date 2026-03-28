@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,17 +28,20 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { RefreshCw, Download, Thermometer, Waves, Droplets, Wind, Activity, CloudSun } from 'lucide-react';
+import { RefreshCw, Download, Thermometer, Waves, Droplets, Wind, Activity, CloudSun, Database } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import type { EnvironmentalLog } from '@shared/schema';
 
-type Periodo = '30' | '60' | '90' | '180' | 'all';
+type Periodo = '30' | '60' | '90' | '180' | '365' | '730' | 'all';
 
 const PERIODI: { value: Periodo; label: string }[] = [
   { value: '30', label: 'Ultimi 30 giorni' },
   { value: '60', label: 'Ultimi 60 giorni' },
   { value: '90', label: 'Ultimi 90 giorni' },
-  { value: '180', label: 'Ultimi 180 giorni' },
+  { value: '180', label: 'Ultimi 6 mesi' },
+  { value: '365', label: 'Ultimo anno' },
+  { value: '730', label: 'Ultimi 2 anni' },
   { value: 'all', label: 'Tutto' },
 ];
 
@@ -343,6 +346,54 @@ export default function DiarioAmbientale() {
     },
   });
 
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<any>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  const startBackfill = async () => {
+    const startDate = '2020-01-01';
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const endDate = yesterday.toISOString().split('T')[0];
+
+    setBackfillRunning(true);
+    setBackfillProgress({ status: 'running', message: 'Avvio recupero dati storici...' });
+
+    try {
+      await fetch('/api/environmental-log/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate, endDate }),
+      });
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await fetch('/api/environmental-log/backfill/progress');
+          const prog = await res.json();
+          setBackfillProgress(prog);
+          if (prog.status === 'completed' || prog.status === 'error') {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setBackfillRunning(false);
+            queryClient.invalidateQueries({ queryKey: ['/api/environmental-log'] });
+            toast({
+              title: prog.status === 'completed' ? 'Backfill completato' : 'Errore backfill',
+              description: prog.message,
+              variant: prog.status === 'completed' ? 'default' : 'destructive',
+            });
+          }
+        } catch (e) { /* ignore poll errors */ }
+      }, 2000);
+    } catch (e: any) {
+      setBackfillRunning(false);
+      toast({ title: 'Errore', description: e.message, variant: 'destructive' });
+    }
+  };
+
   const totalRecords = logs?.length ?? 0;
   const latest = logs?.[0];
 
@@ -420,8 +471,44 @@ export default function DiarioAmbientale() {
             <Download className="h-4 w-4 mr-1" />
             CSV
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={startBackfill}
+            disabled={backfillRunning}
+            className="text-teal-700 border-teal-300 hover:bg-teal-50"
+          >
+            <Database className={`h-4 w-4 mr-1 ${backfillRunning ? 'animate-pulse' : ''}`} />
+            Dati Storici
+          </Button>
         </div>
       </div>
+
+      {backfillProgress && backfillProgress.status === 'running' && (
+        <Card className="border-teal-200 bg-teal-50/50">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-3">
+              <Database className="h-5 w-5 text-teal-600 animate-pulse" />
+              <div className="flex-1">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="font-medium text-teal-700">{backfillProgress.message}</span>
+                  <span className="text-teal-600">
+                    {backfillProgress.inserted + backfillProgress.skipped}/{backfillProgress.total}
+                  </span>
+                </div>
+                <Progress
+                  value={backfillProgress.total > 0 ? ((backfillProgress.inserted + backfillProgress.skipped) / backfillProgress.total) * 100 : 0}
+                  className="h-2"
+                />
+                <p className="text-xs text-teal-600 mt-1">
+                  Inseriti: {backfillProgress.inserted} | Saltati: {backfillProgress.skipped} | Errori: {backfillProgress.errors}
+                  {backfillProgress.currentDate && ` | Data: ${fmtDate(backfillProgress.currentDate)}`}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Legenda fonti */}
       <div className="flex flex-wrap gap-2 text-xs">

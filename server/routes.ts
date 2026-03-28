@@ -9332,6 +9332,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ error: error.message });
     }
   });
+
+  app.post("/api/environmental-log/backfill", async (req: Request, res: Response) => {
+    try {
+      const { backfillEnvironmentalData } = await import('./services/environmental-log-backfill.service.js');
+      const { startDate, endDate } = req.body;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: 'startDate e endDate sono obbligatori' });
+      }
+      res.json({ success: true, message: 'Backfill avviato in background' });
+      backfillEnvironmentalData(startDate, endDate).catch(e => console.error('[Backfill] Errore:', e));
+    } catch (error: any) {
+      console.error("Errore backfill diario ambientale:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/environmental-log/backfill/progress", async (req: Request, res: Response) => {
+    try {
+      const { getBackfillProgress } = await import('./services/environmental-log-backfill.service.js');
+      const progress = getBackfillProgress();
+      return res.json(progress || { status: 'idle', message: 'Nessun backfill in corso' });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
   // ──────────────────────────────────────────────────────────────────────────
 
   return httpServer;
