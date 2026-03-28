@@ -37,6 +37,8 @@ import { apiRequest, getConfigValue } from "./fatture-in-cloud-controller";
 import { OperationsCache } from "../operations-cache-service.js";
 import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
+import { dbEsterno, queryEsterno, isDbEsternoAvailable } from "../db-esterno";
+import { consegneCondivise, ordiniCondivisi } from "../schema-esterno";
 
 /**
  * Ottiene il prossimo numero DDT disponibile verificando sia il database locale che Fatture in Cloud
@@ -877,6 +879,101 @@ export async function getAvailableOrders(req: Request, res: Response) {
   }
 }
 
+interface AutoConsegnaParams {
+  clientePiva: string;
+  clienteNome: string;
+  dataConsegna: string;
+  bagsPerSize: Record<string, any[]>;
+}
+
+async function autoRegistraConsegna(params: AutoConsegnaParams): Promise<{ registrate: number; dettagli: string[] } | null> {
+  if (!isDbEsternoAvailable() || !dbEsterno) {
+    console.log('⚠️ Auto-consegna: DB esterno non disponibile, skip');
+    return null;
+  }
+
+  try {
+    const { clientePiva, clienteNome, dataConsegna, bagsPerSize } = params;
+
+    const ordiniAperti = await queryEsterno(
+      `SELECT o.id, o.quantita, o.taglia_richiesta, o.cliente_id,
+              COALESCE(c.denominazione, o.cliente_nome) as cliente_nome,
+              c.piva as cliente_piva,
+              COALESCE(SUM(cc.quantita_consegnata), 0)::INTEGER as gia_consegnata,
+              (COALESCE(o.quantita, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER as quantita_residua
+       FROM ordini o
+       LEFT JOIN clienti c ON c.id = o.cliente_id
+       LEFT JOIN consegne_condivise cc ON cc.ordine_id = o.id
+       WHERE o.stato IN ('Aperto', 'Parziale', 'In Lavorazione')
+         AND o.cancellato = false
+         AND (c.piva = $1 OR o.cliente_nome ILIKE $2)
+       GROUP BY o.id, o.quantita, o.taglia_richiesta, o.cliente_id, c.denominazione, o.cliente_nome, c.piva
+       HAVING (COALESCE(o.quantita, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER > 0
+       ORDER BY o.data ASC`,
+      [clientePiva, `%${clienteNome}%`]
+    );
+
+    if (ordiniAperti.length === 0) {
+      console.log(`ℹ️ Auto-consegna: Nessun ordine aperto trovato per ${clienteNome} (P.IVA: ${clientePiva})`);
+      return { registrate: 0, dettagli: ['Nessun ordine aperto trovato per questo cliente'] };
+    }
+
+    let totalAnimals = 0;
+    for (const [, sizeBags] of Object.entries(bagsPerSize)) {
+      const bagsMap = new Map<number, boolean>();
+      for (const item of sizeBags) {
+        if (!bagsMap.has(item.bag.id)) {
+          bagsMap.set(item.bag.id, true);
+          totalAnimals += item.bag.animalCount;
+        }
+      }
+    }
+
+    const dettagli: string[] = [];
+    let registrate = 0;
+    let animaliRimasti = totalAnimals;
+
+    for (const ordine of ordiniAperti) {
+      if (animaliRimasti <= 0) break;
+
+      const quantitaDaConsegnare = Math.min(animaliRimasti, ordine.quantita_residua);
+
+      await dbEsterno
+        .insert(consegneCondivise)
+        .values({
+          ordineId: ordine.id,
+          dataConsegna: new Date(dataConsegna).toISOString().split('T')[0],
+          quantitaConsegnata: quantitaDaConsegnare,
+          appOrigine: 'delta_futuro',
+          note: `Auto-registrata da DDT del ${dataConsegna}`
+        });
+
+      let nuovoStato = 'Aperto';
+      const nuovoResiduo = ordine.quantita_residua - quantitaDaConsegnare;
+      if (nuovoResiduo <= 0) {
+        nuovoStato = 'Completato';
+      } else if (nuovoResiduo < ordine.quantita) {
+        nuovoStato = 'Parziale';
+      }
+
+      await dbEsterno
+        .update(ordiniCondivisi)
+        .set({ stato: nuovoStato, updatedAt: new Date() })
+        .where(eq(ordiniCondivisi.id, ordine.id));
+
+      animaliRimasti -= quantitaDaConsegnare;
+      registrate++;
+      dettagli.push(`Ordine #${ordine.id}: consegnati ${quantitaDaConsegnare.toLocaleString('it-IT')} animali (stato → ${nuovoStato})`);
+      console.log(`✅ Auto-consegna: Ordine #${ordine.id} → ${quantitaDaConsegnare} animali, stato: ${nuovoStato}`);
+    }
+
+    return { registrate, dettagli };
+  } catch (error) {
+    console.error('❌ Errore auto-registrazione consegna:', error);
+    return null;
+  }
+}
+
 /**
  * Genera DDT per una vendita avanzata e lo invia a Fatture in Cloud
  */
@@ -1090,15 +1187,20 @@ export async function generateDDT(req: Request, res: Response) {
       })
       .where(eq(advancedSales.id, parseInt(id)));
 
-    // TODO: Inviare a Fatture in Cloud
-    // Questo richiede l'integrazione con il controller fatture-in-cloud-controller.ts
-    // Per ora restituiamo il DDT locale creato
+    // Auto-registra consegna negli ordini condivisi
+    const consegnaResult = await autoRegistraConsegna({
+      clientePiva: cliente.piva || '',
+      clienteNome: cliente.denominazione || '',
+      dataConsegna: saleData.saleDate,
+      bagsPerSize
+    });
 
     res.json({
       success: true,
       ddt: ddtCreato,
       righe: righeCreate.length,
-      message: `DDT #${numeroDDT} creato localmente. Implementare invio a Fatture in Cloud.`
+      consegnaAutoRegistrata: consegnaResult,
+      message: `DDT #${numeroDDT} creato localmente.${consegnaResult?.registrate ? ` Consegna registrata per ${consegnaResult.registrate} ordini.` : ''}`
     });
 
   } catch (error) {
