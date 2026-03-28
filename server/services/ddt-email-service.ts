@@ -95,23 +95,27 @@ async function generateDDTPdf(saleId: number): Promise<Buffer> {
         }
       }
       
-      // Totale animali
-      const totalQuantity = lines.reduce((sum, line) => 
-        sum + parseFloat(line.quantita || '0'), 0
-      );
+      const totalQuantity = lines
+        .filter(line => !line.descrizione?.startsWith('SUBTOTALE'))
+        .reduce((sum, line) => sum + parseFloat(line.quantita || '0'), 0);
       
+      const numColli = ddtData.totaleColli || 0;
+
       doc.moveTo(40, yPos).lineTo(800, yPos).stroke();
       yPos += 10;
       doc.fontSize(12).font('Helvetica-Bold');
       doc.text('TOTALE ANIMALI:', 500, yPos);
       doc.text(totalQuantity.toLocaleString('it-IT'), 700, yPos, { width: 100, align: 'right' });
       
-      // Peso totale dal DDT (se disponibile)
       if (ddtData.pesoTotale) {
         yPos += 20;
         doc.text('PESO TOTALE:', 500, yPos);
-        doc.text(`${parseFloat(ddtData.pesoTotale).toFixed(2)} kg`, 700, yPos, { width: 100, align: 'right' });
+        doc.text(`${(parseFloat(ddtData.pesoTotale) / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`, 700, yPos, { width: 100, align: 'right' });
       }
+
+      yPos += 20;
+      doc.text('N° COLLI:', 500, yPos);
+      doc.text(numColli.toString(), 700, yPos, { width: 100, align: 'right' });
       
       // Footer
       doc.fontSize(8).font('Helvetica').text(
@@ -170,9 +174,12 @@ export async function sendDDTConfirmationEmail(saleId: number): Promise<void> {
     const customerData = sale.customerDetails || {};
     const dateFormatted = format(new Date(sale.saleDate), 'dd/MM/yyyy', { locale: it });
     
-    // Calcola totali
-    const totalQuantity = lines.reduce((sum, line) => sum + parseFloat(line.quantita || '0'), 0);
+    const totalQuantity = lines
+      .filter(line => !line.descrizione?.startsWith('SUBTOTALE'))
+      .reduce((sum, line) => sum + parseFloat(line.quantita || '0'), 0);
     const totalWeight = ddtData.pesoTotale ? parseFloat(ddtData.pesoTotale) : 0;
+    const numSacchi = bags.length;
+    const numColli = ddtData.totaleColli || numSacchi;
     
     // Costruisci HTML email
     const html = `
@@ -276,11 +283,15 @@ export async function sendDDTConfirmationEmail(saleId: number): Promise<void> {
             </tr>
             <tr>
               <td style="padding: 8px; border-bottom: 1px solid #fde68a;"><strong>Peso Totale:</strong></td>
-              <td style="padding: 8px; border-bottom: 1px solid #fde68a; font-weight: bold;">${totalWeight.toFixed(2)} kg</td>
+              <td style="padding: 8px; border-bottom: 1px solid #fde68a; font-weight: bold;">${(totalWeight / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg</td>
             </tr>
             <tr>
               <td style="padding: 8px; border-bottom: 1px solid #fde68a;"><strong>N° Sacchi:</strong></td>
-              <td style="padding: 8px; border-bottom: 1px solid #fde68a; font-weight: bold;">${sale.bags?.length || 0}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #fde68a; font-weight: bold;">${numSacchi}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #fde68a;"><strong>N° Colli:</strong></td>
+              <td style="padding: 8px; border-bottom: 1px solid #fde68a; font-weight: bold;">${numColli}</td>
             </tr>
           </table>
         </div>
