@@ -10,7 +10,6 @@ import NewFlupsyVisualizer from '@/components/dashboard/NewFlupsyVisualizer';
 import FlupsyCenterFilter from '@/components/dashboard/FlupsyCenterFilter';
 import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
-import InfoTicker from '@/components/dashboard/InfoTicker';
 import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
 import MortalityTemporalCard from '@/components/dashboard/MortalityTemporalCard';
@@ -88,15 +87,6 @@ export default function Dashboard() {
     queryKey: ['/api/stats/active-baskets-animals', selectedFlupsyIds.length > 0 ? { flupsyIds: selectedFlupsyIds.join(',') } : {}],
   });
 
-  // Query for tasks (for ticker)
-  const { data: tasks } = useQuery<any[]>({
-    queryKey: ['/api/tasks'],
-  });
-
-  // Query for operators (for ticker)
-  const { data: operators } = useQuery<any[]>({
-    queryKey: ['/api/operators', { active: true }],
-  });
   
   // Funzione per aggiornare i dati
   const refreshData = async () => {
@@ -350,14 +340,7 @@ export default function Dashboard() {
           Dashboard {user?.username && <span className="text-gray-500">- {user.username}</span>}
         </h1>
         
-        {/* Info Ticker - Stile Aeroporto - In mezzo */}
-        <div className="flex-1 min-w-0">
-          <InfoTicker 
-            tasks={tasks || []}
-            operationStats={operationStats}
-            activeOperatorsCount={operators?.length || 0}
-          />
-        </div>
+        <div className="flex-1 min-w-0"></div>
         
         <div className="flex items-center gap-2 flex-shrink-0">
           {isLoadingData && (
