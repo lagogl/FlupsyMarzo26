@@ -68,6 +68,26 @@ interface BasketData {
   };
 }
 
+// Separatore tra note di sistema (lotto misto) e note dell'operatore
+export const OPERATOR_NOTE_SEPARATOR = '|✏️|';
+
+// Estrae la parte operatore dalle note (dopo il separatore), o stringa vuota se non presente
+function extractOperatorNote(fullNotes: string | null | undefined): string {
+  if (!fullNotes) return '';
+  const idx = fullNotes.indexOf(OPERATOR_NOTE_SEPARATOR);
+  if (idx === -1) return '';
+  return fullNotes.substring(idx + OPERATOR_NOTE_SEPARATOR.length);
+}
+
+// Estrae le note di sistema (prima del separatore, o intero testo se metadata presente e senza separatore)
+function extractSystemNote(fullNotes: string | null | undefined, hasMixedLot: boolean): string {
+  if (!fullNotes) return '';
+  const idx = fullNotes.indexOf(OPERATOR_NOTE_SEPARATOR);
+  if (idx !== -1) return fullNotes.substring(0, idx);
+  // Se è lotto misto ma ancora nessun separatore, tutto il testo è note di sistema
+  return hasMixedLot ? fullNotes : '';
+}
+
 interface OperationRowData {
   basketId: number;
   physicalNumber: number;
@@ -80,6 +100,7 @@ interface OperationRowData {
   animalsPerKg: number | null;
   deadCount: number | null;
   notes: string;
+  systemNotes?: string;
   // Campi specifici per misura (IDENTICI AL MODULO OPERATIONS)
   liveAnimals?: number | null;     // Animali vivi nel campione - OBBLIGATORIO per misura
   sampleWeight?: number | null;    // Peso campione in grammi - OBBLIGATORIO per misura
@@ -739,7 +760,15 @@ export default function SpreadsheetOperations() {
           animalsPerKg: fullOp?.animalsPerKg || null,
           deadCount: fullOp?.deadCount || null,
           mortalityRate: fullOp?.mortalityRate || null,
-          notes: fullOp?.notes || '',
+          notes: (() => {
+            const hasMixedLot = !!(fullOp?.metadata);
+            if (hasMixedLot) return extractOperatorNote(fullOp?.notes);
+            return fullOp?.notes || '';
+          })(),
+          systemNotes: (() => {
+            const hasMixedLot = !!(fullOp?.metadata);
+            return extractSystemNote(fullOp?.notes, hasMixedLot);
+          })(),
           lastOperationId: fullOp?.id || null,
           vagliatureNote: (basket as any).vagliatureNote || null,
           // Campi specifici per misura - usa dati reali se disponibili
@@ -4323,6 +4352,9 @@ export default function SpreadsheetOperations() {
                                 {row.vagliatureNote && (
                                   <span className="flex-shrink-0 w-2 h-2 rounded-full bg-violet-500" title="Nota vagliatura presente" />
                                 )}
+                                {row.systemNotes && (
+                                  <span className="flex-shrink-0 w-2 h-2 rounded-full bg-amber-500" title="Note sistema lotto misto" />
+                                )}
                                 <input
                                   value={row.notes}
                                   onChange={(e) => {
@@ -4335,12 +4367,18 @@ export default function SpreadsheetOperations() {
                                     }
                                   }}
                                   className="w-full h-6 px-1 text-xs border-0 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-white"
-                                  placeholder="Aggiungi nota..."
+                                  placeholder={row.systemNotes ? "Aggiungi nota operatore..." : "Aggiungi nota..."}
                                 />
                               </div>
                             </TooltipTrigger>
-                            {((row.allCycleNotes && row.allCycleNotes.length > 0) || row.vagliatureNote) && (
+                            {((row.allCycleNotes && row.allCycleNotes.length > 0) || row.vagliatureNote || row.systemNotes) && (
                               <TooltipContent side="left" className="max-w-md p-3">
+                                {row.systemNotes && (
+                                  <div className="mb-2 pb-2 border-b border-amber-200">
+                                    <div className="text-xs font-semibold text-amber-700 mb-1">📋 Note sistema (lotto misto)</div>
+                                    <div className="text-xs text-amber-800 border-l-2 border-amber-400 pl-2 whitespace-pre-wrap">{row.systemNotes}</div>
+                                  </div>
+                                )}
                                 {row.vagliatureNote && (
                                   <div className="mb-2 pb-2 border-b border-violet-200">
                                     <div className="text-xs font-semibold text-violet-700 mb-1">Nota Vagliatura</div>

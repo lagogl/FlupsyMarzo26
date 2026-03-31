@@ -663,7 +663,27 @@ class OperationsService {
       console.log(`✅ Validazione data superata`);
     }
     
-    // 4. Esegui l'aggiornamento
+    // 4. Se è un'operazione con lotto misto (metadata presente) e si aggiornano le note,
+    //    combina le note di sistema con la nota operatore usando il separatore
+    const OPERATOR_NOTE_SEPARATOR = '|✏️|';
+    if (data.notes !== undefined && existingOperation.metadata) {
+      const existingNotes = existingOperation.notes || '';
+      // Estrai la parte di sistema (prima del separatore, o tutto se non c'è separatore)
+      const sepIdx = existingNotes.indexOf(OPERATOR_NOTE_SEPARATOR);
+      const systemPart = sepIdx !== -1 ? existingNotes.substring(0, sepIdx) : existingNotes;
+      const operatorNote = data.notes.trim();
+      
+      if (operatorNote) {
+        // Combina: note di sistema + separatore + nota operatore
+        data.notes = systemPart + OPERATOR_NOTE_SEPARATOR + operatorNote;
+      } else {
+        // Nessuna nota operatore: mantieni solo le note di sistema
+        data.notes = systemPart;
+      }
+      console.log(`📝 Nota lotto misto combinata: sistema="${systemPart.substring(0, 50)}..." + operatore="${operatorNote}"`);
+    }
+
+    // 5. Esegui l'aggiornamento
     const [updated] = await db
       .update(operations)
       .set(data)
@@ -672,10 +692,10 @@ class OperationsService {
     
     console.log(`✅ Operazione ${id} aggiornata con successo`);
     
-    // 5. Invalida cache
+    // 6. Invalida cache
     OperationsCache.clear();
     
-    // 6. Notifica WebSocket se disponibile
+    // 7. Notifica WebSocket se disponibile
     if (typeof (global as any).broadcastUpdate === 'function') {
       console.log("✅ WEBSOCKET: Invio notifica per operazione modificata");
       (global as any).broadcastUpdate('operation_updated', {
