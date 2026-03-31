@@ -520,11 +520,7 @@ export default function SpreadsheetOperations() {
 
   const saveNoteToServer = async (operationId: number, notes: string) => {
     try {
-      await apiRequest('PATCH', `/api/operations/${operationId}`, { notes });
-      toast({
-        title: "Nota salvata",
-        description: "La nota è stata aggiornata correttamente.",
-      });
+      await apiRequest(`/api/operations/${operationId}`, 'PATCH', { notes });
     } catch (error: any) {
       toast({
         title: "Errore",
@@ -543,6 +539,12 @@ export default function SpreadsheetOperations() {
       delete noteTimers.current[operationId];
     }, 1000);
   };
+
+  useEffect(() => {
+    return () => {
+      Object.values(noteTimers.current).forEach(timer => clearTimeout(timer));
+    };
+  }, []);
 
   // Debug per verificare errori nelle operazioni (solo errori critici)
   useEffect(() => {
