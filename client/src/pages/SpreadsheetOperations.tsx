@@ -71,21 +71,22 @@ interface BasketData {
 // Separatore tra note di sistema (lotto misto) e note dell'operatore
 export const OPERATOR_NOTE_SEPARATOR = '|✏️|';
 
-// Estrae la parte operatore dalle note (dopo il separatore), o stringa vuota se non presente
+// Estrae la parte operatore dalle note (dopo il separatore).
+// Se non c'è separatore, l'intero testo è dell'operatore (editabile).
 function extractOperatorNote(fullNotes: string | null | undefined): string {
   if (!fullNotes) return '';
   const idx = fullNotes.indexOf(OPERATOR_NOTE_SEPARATOR);
-  if (idx === -1) return '';
+  if (idx === -1) return fullNotes; // Nessun separatore: tutto il testo va nell'input
   return fullNotes.substring(idx + OPERATOR_NOTE_SEPARATOR.length);
 }
 
-// Estrae le note di sistema (prima del separatore, o intero testo se metadata presente e senza separatore)
+// Estrae le note di sistema (prima del separatore).
+// Se non c'è separatore, non c'è ancora una sezione di sistema separata.
 function extractSystemNote(fullNotes: string | null | undefined, hasMixedLot: boolean): string {
   if (!fullNotes) return '';
   const idx = fullNotes.indexOf(OPERATOR_NOTE_SEPARATOR);
-  if (idx !== -1) return fullNotes.substring(0, idx);
-  // Se è lotto misto ma ancora nessun separatore, tutto il testo è note di sistema
-  return hasMixedLot ? fullNotes : '';
+  if (idx === -1) return ''; // Senza separatore, niente sezione sistema nel tooltip
+  return fullNotes.substring(0, idx);
 }
 
 interface OperationRowData {
