@@ -73,8 +73,8 @@ interface OperationRowData {
   physicalNumber: number;
   type: string;
   date: string;
-  // CAMPI OBBLIGATORI che devono essere compilati
-  lotId: number | null;           // Lotto - OBBLIGATORIO per tutte le operazioni
+  lastOperationId?: number | null;
+  lotId: number | null;
   animalCount: number | null;
   totalWeight: number | null;
   animalsPerKg: number | null;
@@ -516,6 +516,34 @@ export default function SpreadsheetOperations() {
     }
   });
 
+  const noteTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const saveNoteToServer = async (operationId: number, notes: string) => {
+    try {
+      await apiRequest('PATCH', `/api/operations/${operationId}`, { notes });
+      toast({
+        title: "Nota salvata",
+        description: "La nota è stata aggiornata correttamente.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Errore",
+        description: "Impossibile salvare la nota.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const debouncedSaveNote = (operationId: number, notes: string) => {
+    if (noteTimers.current[operationId]) {
+      clearTimeout(noteTimers.current[operationId]);
+    }
+    noteTimers.current[operationId] = setTimeout(() => {
+      saveNoteToServer(operationId, notes);
+      delete noteTimers.current[operationId];
+    }, 1000);
+  };
+
   // Debug per verificare errori nelle operazioni (solo errori critici)
   useEffect(() => {
     if (operationsError) {
@@ -710,6 +738,7 @@ export default function SpreadsheetOperations() {
           deadCount: fullOp?.deadCount || null,
           mortalityRate: fullOp?.mortalityRate || null,
           notes: fullOp?.notes || '',
+          lastOperationId: fullOp?.id || null,
           vagliatureNote: (basket as any).vagliatureNote || null,
           // Campi specifici per misura - usa dati reali se disponibili
           liveAnimals: (selectedOperationType === 'misura' && fullOp?.liveAnimals) ? fullOp.liveAnimals : null,
@@ -4288,11 +4317,24 @@ export default function SpreadsheetOperations() {
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="w-full h-6 px-1 text-xs rounded bg-gray-100 cursor-help flex items-center gap-1 overflow-hidden">
+                              <div className="flex items-center gap-1 w-full">
                                 {row.vagliatureNote && (
                                   <span className="flex-shrink-0 w-2 h-2 rounded-full bg-violet-500" title="Nota vagliatura presente" />
                                 )}
-                                <span className="truncate">{row.notes || '-'}</span>
+                                <input
+                                  value={row.notes}
+                                  onChange={(e) => {
+                                    const newNotes = e.target.value;
+                                    setOperationRows(prev => prev.map(r =>
+                                      r.basketId === row.basketId ? { ...r, notes: newNotes } : r
+                                    ));
+                                    if (row.lastOperationId) {
+                                      debouncedSaveNote(row.lastOperationId, newNotes);
+                                    }
+                                  }}
+                                  className="w-full h-6 px-1 text-xs border-0 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-white"
+                                  placeholder="Aggiungi nota..."
+                                />
                               </div>
                             </TooltipTrigger>
                             {((row.allCycleNotes && row.allCycleNotes.length > 0) || row.vagliatureNote) && (
