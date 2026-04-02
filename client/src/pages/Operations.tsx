@@ -2593,6 +2593,11 @@ export default function Operations() {
                         )}
                       </div>
                     </th>
+                    {showScreeningLabel && (
+                      <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-indigo-600 uppercase tracking-wider whitespace-nowrap">
+                        Etichetta
+                      </th>
+                    )}
                     <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{width:'90px'}}>
                       Flupsy
                     </th>
@@ -2610,11 +2615,6 @@ export default function Operations() {
                         )}
                       </div>
                     </th>
-                    {showScreeningLabel && (
-                      <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-indigo-600 uppercase tracking-wider whitespace-nowrap">
-                        Etichetta
-                      </th>
-                    )}
                     <th 
                       scope="col" 
                       className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -2717,6 +2717,18 @@ export default function Operations() {
                             #{op.basket?.physicalNumber || op.basketId}
                           </span>
                         </td>
+                        {showScreeningLabel && (
+                          <td className="px-1 py-1 whitespace-nowrap text-xs">
+                            {(() => {
+                              const cycle = (cycles as any[])?.find((c: any) => c.id === op.cycleId);
+                              return cycle?.screeningLabel ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                                  {cycle.screeningLabel}
+                                </span>
+                              ) : <span className="text-gray-300">—</span>;
+                            })()}
+                          </td>
+                        )}
                         <td className="px-1 py-1 text-xs text-gray-500" style={{width:'90px'}}>
                           {(() => {
                             // Prima controlla se l'operazione ha già il nome del FLUPSY
@@ -2767,18 +2779,6 @@ export default function Operations() {
                         <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           {op.cycleId ? `#${op.cycleId}` : '-'}
                         </td>
-                        {showScreeningLabel && (
-                          <td className="px-1 py-1 whitespace-nowrap text-xs">
-                            {(() => {
-                              const cycle = (cycles as any[])?.find((c: any) => c.id === op.cycleId);
-                              return cycle?.screeningLabel ? (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
-                                  {cycle.screeningLabel}
-                                </span>
-                              ) : <span className="text-gray-300">—</span>;
-                            })()}
-                          </td>
-                        )}
                         <td className="px-1 py-1 text-xs text-gray-500">
                           {(() => {
                             // Caso speciale: l'operazione ha lotti multipli
