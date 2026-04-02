@@ -3913,10 +3913,13 @@ export default function Operations() {
                                 {/* Quarta riga - Performance di crescita */}
                                 <div className="col-span-4">
                                   {cycleOps.length >= 2 && (() => {
-                                    const firstOp = cycleOps[0];
-                                    const lastOp = cycleOps[cycleOps.length - 1];
+                                    // Solo operazioni di misurazione reale (esclude chiusura-ciclo-vagliatura, vagliatura, vendita, ecc.)
+                                    const MEASURE_TYPES = new Set(['prima-attivazione', 'misura', 'misurazione', 'peso']);
+                                    const measureOps = cycleOps.filter((op: any) => MEASURE_TYPES.has(op.type) && op.animalsPerKg);
+                                    const firstOp = measureOps[0];
+                                    const lastOp = measureOps[measureOps.length - 1];
                                     
-                                    if (firstOp.animalsPerKg && lastOp.animalsPerKg) {
+                                    if (firstOp && lastOp && firstOp !== lastOp && firstOp.animalsPerKg && lastOp.animalsPerKg) {
                                       // Deriva il peso medio da animalsPerKg (più affidabile di averageWeight che può essere stale)
                                       // peso_mg = 1,000,000 / animalsPerKg
                                       const firstApk = parseFloat(firstOp.animalsPerKg);
@@ -3925,6 +3928,9 @@ export default function Operations() {
                                       const lastWeight  = lastApk  > 0 ? 1000000 / lastApk  : parseFloat(lastOp.averageWeight);
                                       const weightGain = lastWeight - firstWeight;
                                       const percentGain = firstWeight > 0 ? ((lastWeight - firstWeight) / firstWeight) * 100 : 0;
+                                      
+                                      // Se i pesi sono identici non mostrare la sezione (nessuna crescita registrata)
+                                      if (firstWeight === lastWeight) return null;
                                       
                                       const startDate = new Date(firstOp.date);
                                       const endDate = new Date(lastOp.date);

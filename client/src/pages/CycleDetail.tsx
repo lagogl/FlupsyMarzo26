@@ -914,22 +914,25 @@ export default function CycleDetail() {
     return null;
   };
 
-  // Considera solo operazioni con dati di peso validi (in ordine cronologico)
+  // Solo operazioni che rappresentano misurazioni reali del peso (esclude vagliatura, chiusura, vendita, ecc.)
+  const MEASUREMENT_OP_TYPES = new Set(['prima-attivazione', 'misura', 'misurazione', 'peso']);
+
+  // Considera solo operazioni di misurazione con dati di peso validi (in ordine cronologico)
   const weightOps = [...sortedOperations]
-    .filter((op: any) => weightFromOp(op) !== null)
+    .filter((op: any) => MEASUREMENT_OP_TYPES.has(op.type) && weightFromOp(op) !== null)
     .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const firstOp = weightOps.length > 0 ? weightOps[0] : null;
   const lastOp  = weightOps.length > 0 ? weightOps[weightOps.length - 1] : null;
 
-  // Calculate growth rate if we have at least two operations with weight data
+  // Calculate growth rate if we have at least two DISTINCT measurement operations with different weights
   // SGR = ln(W_last / W_first) / giorni_tra_operazioni × 100  (formula logaritmica corretta)
   let growthRate = null;
   if (firstOp && lastOp && firstOp.id !== lastOp.id) {
     const firstWeight = weightFromOp(firstOp)!;
     const lastWeight  = weightFromOp(lastOp)!;
     const daysBetweenOps = differenceInDays(new Date(lastOp.date), new Date(firstOp.date));
-    if (firstWeight > 0 && lastWeight > 0 && daysBetweenOps > 0) {
+    if (firstWeight > 0 && lastWeight > 0 && daysBetweenOps > 0 && firstWeight !== lastWeight) {
       const growthPercentage = ((lastWeight - firstWeight) / firstWeight) * 100;
       const sgr = (Math.log(lastWeight / firstWeight) / daysBetweenOps) * 100;
       growthRate = {
@@ -1162,6 +1165,24 @@ export default function CycleDetail() {
       </div>
       
       {/* Growth summary if available */}
+      {!growthRate && sortedOperations.length >= 1 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Andamento della Crescita</CardTitle>
+            <CardDescription>Riepilogo della crescita durante questo ciclo</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+              <span className="text-amber-500 text-lg">⚠️</span>
+              <span>
+                SGR non calcolabile: servono almeno 2 operazioni di <strong>misurazione</strong> (Misura, Peso) con pesi diversi.
+                Le operazioni di chiusura ciclo e vagliatura non sono misurazioni reali.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {growthRate && (
         <Card className="mb-6">
           <CardHeader>
