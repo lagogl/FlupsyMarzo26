@@ -470,8 +470,18 @@ function parseOpNotes(op: any): { vagliatureNote: string | null; systemNote: str
   return { vagliatureNote, systemNote, operatorNote };
 }
 
-function renderOpNotes(op: any, compact = false) {
+function renderOpNotes(op: any, compact = false, onlyVagliature = false) {
   const { vagliatureNote, systemNote, operatorNote } = parseOpNotes(op);
+  if (onlyVagliature) {
+    if (!vagliatureNote) return null;
+    if (compact) return <span className="block text-xs text-violet-700 font-medium">{vagliatureNote}</span>;
+    return (
+      <div className="flex items-start gap-1.5">
+        <span className="mt-0.5 h-2 w-2 rounded-full bg-violet-500 flex-shrink-0" />
+        <span className="text-sm text-violet-700">{vagliatureNote}</span>
+      </div>
+    );
+  }
   if (!vagliatureNote && !systemNote && !operatorNote) return null;
   if (compact) {
     // Versione compatta per tabella: mostra tutto inline con colori
@@ -511,6 +521,7 @@ function renderOpNotes(op: any, compact = false) {
 // Componente per la lista delle operazioni
 function OperationsList({ operations, formatDate, onDeleteOperation }: OperationsListProps) {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
+  const [showOnlyVagliature, setShowOnlyVagliature] = useState(false);
   
   const sortedOperations = operations
     ? [...operations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -525,7 +536,16 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
             Tutte le operazioni effettuate durante questo ciclo
           </CardDescription>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          <Button
+            variant={showOnlyVagliature ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowOnlyVagliature(v => !v)}
+            className={showOnlyVagliature ? 'bg-violet-600 hover:bg-violet-700 text-white border-0' : 'border-violet-300 text-violet-700 hover:bg-violet-50'}
+            title="Filtra note: mostra solo note di vagliatura"
+          >
+            {showOnlyVagliature ? '🔍 Solo vagliatura' : '📋 Tutte le note'}
+          </Button>
           <Button 
             variant={viewMode === 'table' ? 'default' : 'outline'} 
             size="sm"
@@ -606,7 +626,7 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                       })()}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-xs max-w-[220px]">
-                      {renderOpNotes(op, true) || <span className="text-gray-400">-</span>}
+                      {renderOpNotes(op, true, showOnlyVagliature) || <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-center">
                       <div className="flex justify-center gap-1">
@@ -703,10 +723,10 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                         return null;
                       })()}
                       
-                      {(op.notes || op.vagliatureNote) && (
+                      {(op.notes || op.vagliatureNote) && renderOpNotes(op, false, showOnlyVagliature) && (
                         <div className="sm:col-span-3">
                           <div className="text-sm font-medium text-muted-foreground mb-1">Note</div>
-                          {renderOpNotes(op, false)}
+                          {renderOpNotes(op, false, showOnlyVagliature)}
                         </div>
                       )}
                     </div>
