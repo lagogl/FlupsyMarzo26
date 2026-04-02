@@ -2685,16 +2685,9 @@ export default function Operations() {
                           {getOperationTypeBadge(op.type)}
                         </td>
                         <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
-                          <div>
-                            <span className="font-bold text-red-600 text-base">
-                              #{op.basket?.physicalNumber || op.basketId}
-                            </span>
-                            {op.basket?.row && op.basket?.position && (
-                              <span className="text-xs block text-indigo-600">
-                                {op.basket.row}-{op.basket.position}
-                              </span>
-                            )}
-                          </div>
+                          <span className="font-bold text-red-600 text-base">
+                            #{op.basket?.physicalNumber || op.basketId}
+                          </span>
                         </td>
                         <td className="px-1 py-1 text-xs text-gray-500" style={{width:'90px'}}>
                           {(() => {
