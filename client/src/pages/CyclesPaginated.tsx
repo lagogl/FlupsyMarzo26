@@ -80,6 +80,7 @@ interface Cycle {
   startDate: string;
   endDate: string | null;
   state: 'active' | 'closed';
+  screeningLabel?: string | null;
   basket?: {
     physicalNumber: number;
   };
@@ -124,6 +125,10 @@ export default function CyclesPaginated() {
   
   // State per esportazione Excel
   const [isExporting, setIsExporting] = useState(false);
+  
+  const [showScreeningLabel, setShowScreeningLabel] = useState(() => {
+    try { const saved = localStorage.getItem('showScreeningLabel_cycles'); return saved === null ? true : saved === 'true'; } catch { return true; }
+  });
   
   // Ref per garantire che l'inizializzazione dal dashboard avvenga una sola volta
   const flupsyInitialized = useRef(false);
@@ -577,6 +582,18 @@ export default function CyclesPaginated() {
             )}
             Esporta Excel
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const next = !showScreeningLabel;
+              setShowScreeningLabel(next);
+              try { localStorage.setItem('showScreeningLabel_cycles', String(next)); } catch {}
+            }}
+            className={showScreeningLabel ? 'border-indigo-500 text-indigo-700 bg-indigo-50 hover:bg-indigo-100' : ''}
+          >
+            {showScreeningLabel ? 'Etichetta ON' : 'Etichetta OFF'}
+          </Button>
           <Link href="/">
             <Button variant="outline">
               Dashboard
@@ -868,6 +885,11 @@ export default function CyclesPaginated() {
                     Cestello {getSortIcon('basket')}
                   </button>
                 </th>
+                {showScreeningLabel && (
+                  <th className="h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider text-indigo-600">
+                    Etichetta
+                  </th>
+                )}
                 <th className="h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider">
                   <button 
                     className="flex items-center gap-1"
@@ -925,13 +947,13 @@ export default function CyclesPaginated() {
             <tbody className="[&_tr:last-child]:border-0">
               {isAllCyclesLoading ? (
                 <tr>
-                  <td colSpan={11} className="p-4 text-center">
+                  <td colSpan={showScreeningLabel ? 12 : 11} className="p-4 text-center">
                     Caricamento cicli...
                   </td>
                 </tr>
               ) : paginatedCycles.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-4 text-center">
+                  <td colSpan={showScreeningLabel ? 12 : 11} className="p-4 text-center">
                     Nessun ciclo trovato
                   </td>
                 </tr>
@@ -971,6 +993,15 @@ export default function CyclesPaginated() {
                       <td className="py-2 px-3 align-middle font-medium">
                         #{physicalNumber || 'N/D'}
                       </td>
+                      {showScreeningLabel && (
+                        <td className="py-2 px-3 align-middle">
+                          {cycle.screeningLabel ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                              {cycle.screeningLabel}
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                      )}
                       <td className="py-2 px-3 align-middle">
                         {flupsy?.name || 'N/D'}
                       </td>
