@@ -1392,15 +1392,8 @@ export default function VagliaturaConMappa() {
                       <h3 className="text-sm font-semibold mb-3 text-blue-800">📊 Bilancio Vagliatura</h3>
                       
                       {(() => {
-                        // Calcola i totali usando i cestelli marcati come origine nella mappa
-                        const enhancedBaskets = getEnhancedBaskets('source');
-                        const originBaskets = enhancedBaskets.filter(basket => 
-                          sourceBaskets.some(sb => sb.basketId === basket.id)
-                        );
-                        
-                        const totalOriginAnimals = originBaskets.reduce((sum, basket) => {
-                          return sum + (basket.lastOperation?.animalCount || 0);
-                        }, 0);
+                        // Calcola i totali da sourceBaskets direttamente (supporta multi-FLUPSY)
+                        const totalOriginAnimals = sourceBaskets.reduce((sum, b) => sum + (b.animalCount || 0), 0);
                         
                         const totalDestinationAnimals = destinationBaskets.reduce((sum, basket) => {
                           return sum + (basket.animalCount || 0);
