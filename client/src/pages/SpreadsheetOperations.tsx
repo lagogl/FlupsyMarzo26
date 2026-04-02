@@ -89,6 +89,28 @@ function extractSystemNote(fullNotes: string | null | undefined, hasMixedLot: bo
   return fullNotes.substring(0, idx);
 }
 
+// Calcola la nota da visualizzare nella riga secondo priorità:
+// 1. Nota vagliatura (massima priorità)
+// 2. Ultima nota con contenuto nel ciclo (più recente)
+// 3. Note sistema automatiche
+function getNoteDisplayValue(row: {
+  vagliatureNote?: string | null;
+  allCycleNotes?: { date: string; note: string; type: string }[];
+  notes: string;
+  systemNotes?: string;
+}): string {
+  // 1. Nota vagliatura
+  if (row.vagliatureNote) return row.vagliatureNote;
+  // 2. Ultima nota del ciclo (allCycleNotes è ordinato dal più vecchio al più recente)
+  if (row.allCycleNotes && row.allCycleNotes.length > 0) {
+    const lastEntry = row.allCycleNotes[row.allCycleNotes.length - 1];
+    const operatorPart = extractOperatorNote(lastEntry.note);
+    return operatorPart || lastEntry.note;
+  }
+  // 3. Note sistema
+  return row.notes || row.systemNotes || '';
+}
+
 interface OperationRowData {
   basketId: number;
   physicalNumber: number;
@@ -233,6 +255,7 @@ export default function SpreadsheetOperations() {
   const [originalRows, setOriginalRows] = useState<OperationRowData[]>([]);  // Backup per Undo
   const [savedRows, setSavedRows] = useState<Set<number>>(new Set());       // IDs righe già salvate
   const [sessionId] = useState<string>(() => Date.now().toString());       // ID sessione per tracking
+  const [editingNoteRows, setEditingNoteRows] = useState<Set<number>>(new Set()); // Righe in editing nota
   
   // Stati per il nuovo sistema di editing inline
   const [editingRow, setEditingRow] = useState<number | null>(null);
@@ -4357,7 +4380,9 @@ export default function SpreadsheetOperations() {
                                   <span className="flex-shrink-0 w-2 h-2 rounded-full bg-amber-500" title="Note sistema lotto misto" />
                                 )}
                                 <input
-                                  value={row.notes}
+                                  value={editingNoteRows.has(row.basketId) ? row.notes : getNoteDisplayValue(row)}
+                                  onFocus={() => setEditingNoteRows(prev => new Set(prev).add(row.basketId))}
+                                  onBlur={() => setEditingNoteRows(prev => { const s = new Set(prev); s.delete(row.basketId); return s; })}
                                   onChange={(e) => {
                                     const newNotes = e.target.value;
                                     setOperationRows(prev => prev.map(r =>
@@ -4368,7 +4393,7 @@ export default function SpreadsheetOperations() {
                                     }
                                   }}
                                   className="w-full h-6 px-1 text-xs border-0 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-white"
-                                  placeholder={row.systemNotes ? "Aggiungi nota operatore..." : "Aggiungi nota..."}
+                                  placeholder="Aggiungi nota..."
                                 />
                               </div>
                             </TooltipTrigger>
