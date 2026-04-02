@@ -81,6 +81,7 @@ interface Cycle {
   endDate: string | null;
   state: 'active' | 'closed';
   screeningLabel?: string | null;
+  lotId?: number;
   basket?: {
     physicalNumber: number;
   };
@@ -395,6 +396,21 @@ export default function CyclesPaginated() {
             bValue = 0;
           }
           break;
+        case 'cycleCode':
+          aValue = a.id;
+          bValue = b.id;
+          break;
+        case 'screeningLabel':
+          aValue = (a.screeningLabel || '').toLowerCase();
+          bValue = (b.screeningLabel || '').toLowerCase();
+          break;
+        case 'lot': {
+          const lotA2 = lots.find(l => l.id === a.lotId);
+          const lotB2 = lots.find(l => l.id === b.lotId);
+          aValue = (lotA2?.supplier || '').toLowerCase();
+          bValue = (lotB2?.supplier || '').toLowerCase();
+          break;
+        }
         case 'size':
           aValue = a.currentSize?.code || '';
           bValue = b.currentSize?.code || '';
@@ -411,7 +427,7 @@ export default function CyclesPaginated() {
         return aValue < bValue ? 1 : -1;
       }
     });
-  }, [filteredCycles, sortConfig, baskets, flupsys]);
+  }, [filteredCycles, sortConfig, baskets, flupsys, lots]);
   
   // Calcola i cicli da mostrare nella pagina corrente
   const paginatedCycles = useMemo(() => {
@@ -869,13 +885,10 @@ export default function CyclesPaginated() {
                 <th className="h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider">
                   <button 
                     className="flex items-center gap-1"
-                    onClick={() => handleSort('id')}
+                    onClick={() => handleSort('cycleCode')}
                   >
-                    ID {getSortIcon('id')}
+                    Nr. Ciclo {getSortIcon('cycleCode')}
                   </button>
-                </th>
-                <th className="h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider">
-                  Nr. Ciclo
                 </th>
                 <th className="h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider">
                   <button 
@@ -887,7 +900,12 @@ export default function CyclesPaginated() {
                 </th>
                 {showScreeningLabel && (
                   <th className="h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider text-indigo-600">
-                    Etichetta
+                    <button 
+                      className="flex items-center gap-1"
+                      onClick={() => handleSort('screeningLabel')}
+                    >
+                      Etichetta {getSortIcon('screeningLabel')}
+                    </button>
                   </th>
                 )}
                 <th className="h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider">
@@ -947,13 +965,13 @@ export default function CyclesPaginated() {
             <tbody className="[&_tr:last-child]:border-0">
               {isAllCyclesLoading ? (
                 <tr>
-                  <td colSpan={showScreeningLabel ? 12 : 11} className="p-4 text-center">
+                  <td colSpan={showScreeningLabel ? 11 : 10} className="p-4 text-center">
                     Caricamento cicli...
                   </td>
                 </tr>
               ) : paginatedCycles.length === 0 ? (
                 <tr>
-                  <td colSpan={showScreeningLabel ? 12 : 11} className="p-4 text-center">
+                  <td colSpan={showScreeningLabel ? 11 : 10} className="p-4 text-center">
                     Nessun ciclo trovato
                   </td>
                 </tr>
@@ -986,7 +1004,6 @@ export default function CyclesPaginated() {
                       key={cycle.id}
                       className={`border-b transition-colors hover:bg-muted/50 ${cycle.state === 'closed' ? 'bg-red-50' : ''}`}
                     >
-                      <td className="py-2 px-3 align-middle">{cycle.id}</td>
                       <td className="py-2 px-3 align-middle font-medium">
                         C-{cycle.id}
                       </td>
