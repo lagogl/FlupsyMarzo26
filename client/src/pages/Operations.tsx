@@ -2533,13 +2533,13 @@ export default function Operations() {
                   <tr>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                       onClick={() => handleSortClick('date')}
                     >
                       <div className="flex items-center">
                         Data
                         {sortConfig.key === 'date' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
@@ -2547,13 +2547,13 @@ export default function Operations() {
                     </th>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSortClick('type')}
                     >
                       <div className="flex items-center">
                         Tipo
                         {sortConfig.key === 'type' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
@@ -2561,30 +2561,30 @@ export default function Operations() {
                     </th>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                       onClick={() => handleSortClick('basket')}
                     >
                       <div className="flex items-center">
                         Cesta
                         {sortConfig.key === 'basket' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
                       </div>
                     </th>
-                    <th scope="col" className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[110px]">
+                    <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{width:'90px'}}>
                       Flupsy
                     </th>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                       onClick={() => handleSortClick('cycleId')}
                     >
                       <div className="flex items-center">
                         Ciclo
                         {sortConfig.key === 'cycleId' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
@@ -2592,30 +2592,30 @@ export default function Operations() {
                     </th>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSortClick('lot')}
                     >
                       <div className="flex items-center">
                         Lotto
                         {sortConfig.key === 'lot' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
                       </div>
                     </th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       Taglia
                     </th>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                       onClick={() => handleSortClick('animalCount')}
                     >
                       <div className="flex items-center">
                         # Anim.
                         {sortConfig.key === 'animalCount' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
@@ -2623,13 +2623,13 @@ export default function Operations() {
                     </th>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                       onClick={() => handleSortClick('totalWeight')}
                     >
                       <div className="flex items-center">
-                        Peso (Kg)
+                        Peso(Kg)
                         {sortConfig.key === 'totalWeight' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
@@ -2637,22 +2637,22 @@ export default function Operations() {
                     </th>
                     <th 
                       scope="col" 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                       onClick={() => handleSortClick('averageWeight')}
                     >
                       <div className="flex items-center">
-                        P.M. (Mg)
+                        P.M.(Mg)
                         {sortConfig.key === 'averageWeight' && (
-                          <span className="ml-2">
+                          <span className="ml-1">
                             {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           </span>
                         )}
                       </div>
                     </th>
-                    <th scope="col" className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[160px]">
+                    <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{minWidth:'180px'}}>
                       Note
                     </th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       Azioni
                     </th>
                   </tr>
@@ -2668,7 +2668,7 @@ export default function Operations() {
                     filteredOperations.map((op) => (
                       <tr key={op.id}>
                         <td
-                          className="px-3 py-2 whitespace-nowrap text-sm text-gray-500"
+                          className="px-1 py-1 whitespace-nowrap text-xs text-gray-500"
                           style={showQualityView ? (() => {
                             const cycle = (cycles as any[]).find((c: any) => c.id === op.cycleId);
                             const color = cycle?.qualityClass === 'premium' ? '#f59e0b'
@@ -2681,22 +2681,22 @@ export default function Operations() {
                         >
                           {safeFormatDate(op.date, 'dd/MM/yyyy')}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
+                        <td className="px-1 py-1 whitespace-nowrap">
                           {getOperationTypeBadge(op.type)}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           <div>
-                            <span className="font-bold text-red-600 text-lg">
+                            <span className="font-bold text-red-600 text-base">
                               #{op.basket?.physicalNumber || op.basketId}
                             </span>
                             {op.basket?.row && op.basket?.position && (
-                              <span className="text-xs block text-indigo-600 mt-1">
-                                Posizione: {op.basket.row} - {op.basket.position}
+                              <span className="text-xs block text-indigo-600">
+                                {op.basket.row}-{op.basket.position}
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="px-2 py-2 text-sm text-gray-500 max-w-[110px]">
+                        <td className="px-1 py-1 text-xs text-gray-500" style={{width:'90px'}}>
                           {(() => {
                             // Prima controlla se l'operazione ha già il nome del FLUPSY
                             if (op.flupsyName) {
@@ -2743,10 +2743,10 @@ export default function Operations() {
                             return '-';
                           })()}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           {op.cycleId ? `#${op.cycleId}` : '-'}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-1 py-1 text-xs text-gray-500">
                           {(() => {
                             // Caso speciale: l'operazione ha lotti multipli
                             if (op.hasMultipleLots && op.additionalLots && Array.isArray(op.additionalLots) && op.additionalLots.length > 0) {
@@ -2896,7 +2896,7 @@ export default function Operations() {
                             return <span className="text-gray-400 italic">Nessun lotto</span>;
                           })()}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
+                        <td className="px-1 py-1 whitespace-nowrap">
                           {op.size ? (
                             getSizeBadge(op.size)
                           ) : op.sizeId ? (
@@ -2911,13 +2911,13 @@ export default function Operations() {
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           {op.animalCount ? op.animalCount.toLocaleString() : '-'}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           {op.totalWeight ? (parseFloat(op.totalWeight) / 1000).toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           {(() => {
                             // Prima prova con animalsPerKg se disponibile (per retrocompatibilità)
                             if (op.animalsPerKg && op.animalsPerKg > 0) {
@@ -2935,30 +2935,30 @@ export default function Operations() {
                             return '-';
                           })()}
                         </td>
-                        <td className="px-2 py-2 text-sm max-w-[160px]">
+                        <td className="px-1 py-1 text-xs" style={{minWidth:'180px'}}>
                           {(() => {
                             const { text, type } = getOpDisplayNote(op);
-                            if (!text) return <span className="text-gray-300 italic text-xs">—</span>;
-                            const truncated = text.length > 55 ? text.substring(0, 55) + '…' : text;
+                            if (!text) return <span className="text-gray-300 italic">—</span>;
+                            const truncated = text.length > 80 ? text.substring(0, 80) + '…' : text;
                             if (type === 'vagliatura') return (
-                              <span className="text-violet-700 text-xs block overflow-hidden" style={{maxWidth:'155px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
+                              <span className="text-violet-700 block" style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
                             );
                             if (type === 'system') return (
-                              <span className="text-amber-600 text-xs block overflow-hidden" style={{maxWidth:'155px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
+                              <span className="text-amber-600 block" style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
                             );
                             return (
-                              <span className="text-gray-700 text-xs block overflow-hidden" style={{maxWidth:'155px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
+                              <span className="text-gray-700 block" style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
                             );
                           })()}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
+                        <td className="px-1 py-1 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-1">
                             <Popover>
                               <PopoverTrigger asChild>
                                 <Button 
                                   variant="ghost" 
                                   size="icon"
-                                  className="hover:bg-blue-50 transition-colors"
+                                  className="hover:bg-blue-50 transition-colors h-7 w-7"
                                   data-testid="button-view-operation-details"
                                 >
                                   <Eye className={`h-5 w-5 ${(() => {
@@ -3100,9 +3100,9 @@ export default function Operations() {
                                         setSelectedOperation(op);
                                         setIsEditDialogOpen(true);
                                       }}
-                                      className={op.type === 'prima-attivazione' ? 'opacity-50 cursor-not-allowed' : ''}
+                                      className={`h-7 w-7 ${op.type === 'prima-attivazione' ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
-                                      <Pencil className={`h-5 w-5 ${op.type === 'prima-attivazione' ? 'text-gray-400' : 'text-gray-600'}`} />
+                                      <Pencil className={`h-4 w-4 ${op.type === 'prima-attivazione' ? 'text-gray-400' : 'text-gray-600'}`} />
                                     </Button>
                                   </span>
                                 </TooltipTrigger>
@@ -3116,13 +3116,13 @@ export default function Operations() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="text-red-600 hover:text-red-800 hover:bg-red-100"
+                              className="h-7 w-7 text-red-600 hover:text-red-800 hover:bg-red-100"
                               onClick={() => {
                                 setSelectedOperation(op);
                                 setIsDeleteDialogOpen(true);
                               }}
                             >
-                              <Trash2 className="h-5 w-5" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                             <TooltipProvider>
                               <Tooltip>
@@ -3130,6 +3130,7 @@ export default function Operations() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    className="h-7 w-7"
                                     onClick={() => {
                                       // Duplica l'operazione
                                       if (!isValidDate(op.date)) {
@@ -3156,7 +3157,7 @@ export default function Operations() {
                                       setIsCreateDialogOpen(true);
                                     }}
                                   >
-                                    <Copy className="h-5 w-5 text-indigo-600" />
+                                    <Copy className="h-4 w-4 text-indigo-600" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Duplica operazione (rimani sulla stessa cesta)</TooltipContent>
