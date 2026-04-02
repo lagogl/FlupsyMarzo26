@@ -1961,6 +1961,7 @@ export default function SpreadsheetOperations() {
       // Definisci le colonne
       const columns = [
         { header: 'Cesta', key: 'cesta', width: 10 },
+        { header: 'Etichetta Vaglio', key: 'etichettaVaglio', width: 18 },
         { header: 'Performance', key: 'performance', width: 12 },
         { header: 'Trend AI', key: 'trend', width: 14 },
         { header: 'FLUPSY', key: 'flupsy', width: 15 },
@@ -2054,8 +2055,10 @@ export default function SpreadsheetOperations() {
           sgrMedioValue = sgrMisuraValue;
         }
         
+        const cycle = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
         const dataRow = worksheet.addRow({
           cesta: `#${row.physicalNumber}`,
+          etichettaVaglio: cycle?.screeningLabel || '',
           performance: `${perfScore.toFixed(1)}/100 (${performanceLevel})`,
           trend: `${trendData.trend.toUpperCase()} (${(trendData.multiplier * 100).toFixed(0)}%)`,
           flupsy: row.flupsyName || '-',

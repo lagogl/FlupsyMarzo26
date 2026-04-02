@@ -5323,7 +5323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       subtitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
 
       // Riga 3 – Intestazioni colonne
-      const headers = ['Data', 'Tipo', 'Cesta', 'FLUPSY', 'Ciclo', 'Etichetta Vaglio', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)', 'Note'];
+      const headers = ['Data', 'Tipo', 'Cesta', 'Etichetta Vaglio', 'FLUPSY', 'Ciclo', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)', 'Note'];
       const headerRow = sheet.addRow(headers);
       
       // Blue header style
@@ -5357,9 +5357,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           op.date ? new Date(op.date).toLocaleDateString('it-IT') : '',
           typeLabels[op.type] || op.type || '',
           op.basketNumber || null,
+          op.screeningLabel || '',
           op.flupsyName || '',
           op.cycleId || null,
-          op.screeningLabel || '',
           op.lotName || '',
           op.lotArrivalDate ? new Date(op.lotArrivalDate).toLocaleDateString('it-IT') : '',
           op.lotSupplier || '',
@@ -5395,8 +5395,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Column widths
       sheet.columns = [
-        { width: 12 }, { width: 22 }, { width: 8 }, { width: 24 },
-        { width: 7 }, { width: 28 }, { width: 30 }, { width: 13 }, { width: 20 },
+        { width: 12 }, { width: 22 }, { width: 8 }, { width: 20 }, { width: 24 },
+        { width: 7 }, { width: 28 }, { width: 13 }, { width: 20 },
         { width: 10 }, { width: 13 }, { width: 11 }, { width: 11 }, { width: 45 }
       ];
       
