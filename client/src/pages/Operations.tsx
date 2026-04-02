@@ -3647,6 +3647,11 @@ export default function Operations() {
                                 {basket?.row && basket?.position && (
                                   <span className="text-indigo-600 ml-1 font-medium">[Pos: {basket.row} - {basket.position}]</span>
                                 )}
+                                {showScreeningLabel && cycle?.screeningLabel && (
+                                  <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                                    {cycle.screeningLabel}
+                                  </span>
+                                )}
                                 <span className="mx-2">•</span>
                                 {cycle?.state === 'active' ? (
                                   <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium">Attivo</Badge>
