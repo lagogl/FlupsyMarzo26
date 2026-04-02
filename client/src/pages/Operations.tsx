@@ -110,11 +110,33 @@ interface Operation {
   notes: string | null;
   metadata: any | null;
   source?: string | null;
+  vagliatureNote?: string | null;
   basket?: Basket;
   cycle?: Cycle;
   size?: Size | null;
   sgr?: Sgr | null;
   lot?: Lot | null;
+}
+
+// Separatore note sistema/operatore (stesso di SpreadsheetOperations)
+const OP_NOTE_SEPARATOR = '|✏️|';
+
+// Calcola la nota prioritaria da mostrare nella riga operazione
+function getOpDisplayNote(op: { notes?: string | null; vagliatureNote?: string | null }): { text: string; type: 'vagliatura' | 'operator' | 'system' | 'none' } {
+  // 1. Nota vagliatura → priorità massima
+  if (op.vagliatureNote) return { text: op.vagliatureNote, type: 'vagliatura' };
+  if (op.notes) {
+    const sepIdx = op.notes.indexOf(OP_NOTE_SEPARATOR);
+    if (sepIdx !== -1) {
+      // Ha il separatore: mostra la parte operatore se presente, altrimenti la parte sistema
+      const operatorPart = op.notes.substring(sepIdx + OP_NOTE_SEPARATOR.length).trim();
+      if (operatorPart) return { text: operatorPart, type: 'operator' };
+      return { text: op.notes.substring(0, sepIdx).trim(), type: 'system' };
+    }
+    // Senza separatore: tutta la nota è dell'operatore
+    return { text: op.notes, type: 'operator' };
+  }
+  return { text: '', type: 'none' };
 }
 import { 
   Eye, Search, Filter, Pencil, Plus, Trash2, AlertTriangle, Copy, 
@@ -2551,7 +2573,7 @@ export default function Operations() {
                         )}
                       </div>
                     </th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[110px]">
                       Flupsy
                     </th>
                     <th 
@@ -2627,6 +2649,9 @@ export default function Operations() {
                         )}
                       </div>
                     </th>
+                    <th scope="col" className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[160px]">
+                      Note
+                    </th>
                     <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Azioni
                     </th>
@@ -2635,7 +2660,7 @@ export default function Operations() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredOperations.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-3 py-2 whitespace-nowrap text-center text-gray-500">
+                      <td colSpan={12} className="px-3 py-2 whitespace-nowrap text-center text-gray-500">
                         Nessuna operazione trovata
                       </td>
                     </tr>
@@ -2671,13 +2696,13 @@ export default function Operations() {
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-2 py-2 text-sm text-gray-500 max-w-[110px]">
                           {(() => {
                             // Prima controlla se l'operazione ha già il nome del FLUPSY
                             if (op.flupsyName) {
                               return (
                                 <div>
-                                  <span className="font-medium text-blue-600">
+                                  <span className="font-medium text-blue-600 text-xs block truncate" title={op.flupsyName}>
                                     {op.flupsyName}
                                   </span>
                                 </div>
@@ -2693,7 +2718,7 @@ export default function Operations() {
                               if (flupsy) {
                                 return (
                                   <div>
-                                    <span className="font-medium text-blue-600">
+                                    <span className="font-medium text-blue-600 text-xs block truncate" title={flupsy.name}>
                                       {flupsy.name}
                                     </span>
                                   </div>
@@ -2908,6 +2933,22 @@ export default function Operations() {
                             
                             // Se non abbiamo i dati necessari, mostra '-'
                             return '-';
+                          })()}
+                        </td>
+                        <td className="px-2 py-2 text-sm max-w-[160px]">
+                          {(() => {
+                            const { text, type } = getOpDisplayNote(op);
+                            if (!text) return <span className="text-gray-300 italic text-xs">—</span>;
+                            const truncated = text.length > 55 ? text.substring(0, 55) + '…' : text;
+                            if (type === 'vagliatura') return (
+                              <span className="text-violet-700 text-xs block overflow-hidden" style={{maxWidth:'155px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
+                            );
+                            if (type === 'system') return (
+                              <span className="text-amber-600 text-xs block overflow-hidden" style={{maxWidth:'155px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
+                            );
+                            return (
+                              <span className="text-gray-700 text-xs block overflow-hidden" style={{maxWidth:'155px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={text}>{truncated}</span>
+                            );
                           })()}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm font-medium">
