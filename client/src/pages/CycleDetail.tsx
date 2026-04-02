@@ -450,6 +450,64 @@ function getOperationTypeBgColor(type: string): string {
   }
 }
 
+const OP_NOTE_SEPARATOR = '|✏️|';
+
+function parseOpNotes(op: any): { vagliatureNote: string | null; systemNote: string | null; operatorNote: string | null } {
+  const vagliatureNote = op.vagliatureNote || null;
+  let systemNote: string | null = null;
+  let operatorNote: string | null = null;
+  if (op.notes) {
+    const sepIdx = op.notes.indexOf(OP_NOTE_SEPARATOR);
+    if (sepIdx !== -1) {
+      const sysPart = op.notes.substring(0, sepIdx).trim();
+      const opPart = op.notes.substring(sepIdx + OP_NOTE_SEPARATOR.length).trim();
+      if (sysPart) systemNote = sysPart;
+      if (opPart) operatorNote = opPart;
+    } else {
+      operatorNote = op.notes;
+    }
+  }
+  return { vagliatureNote, systemNote, operatorNote };
+}
+
+function renderOpNotes(op: any, compact = false) {
+  const { vagliatureNote, systemNote, operatorNote } = parseOpNotes(op);
+  if (!vagliatureNote && !systemNote && !operatorNote) return null;
+  if (compact) {
+    // Versione compatta per tabella: mostra tutto inline con colori
+    return (
+      <div className="space-y-0.5">
+        {vagliatureNote && <span className="block text-xs text-violet-700 font-medium">{vagliatureNote}</span>}
+        {systemNote && <span className="block text-xs text-amber-600">{systemNote}</span>}
+        {operatorNote && <span className="block text-xs text-gray-700">{operatorNote}</span>}
+      </div>
+    );
+  }
+  // Versione estesa per card
+  return (
+    <div className="space-y-1">
+      {vagliatureNote && (
+        <div className="flex items-start gap-1.5">
+          <span className="mt-0.5 h-2 w-2 rounded-full bg-violet-500 flex-shrink-0" />
+          <span className="text-sm text-violet-700">{vagliatureNote}</span>
+        </div>
+      )}
+      {systemNote && (
+        <div className="flex items-start gap-1.5">
+          <span className="mt-0.5 h-2 w-2 rounded-full bg-amber-400 flex-shrink-0" />
+          <span className="text-sm text-amber-600">{systemNote}</span>
+        </div>
+      )}
+      {operatorNote && (
+        <div className="flex items-start gap-1.5">
+          <span className="mt-0.5 h-2 w-2 rounded-full bg-gray-400 flex-shrink-0" />
+          <span className="text-sm text-gray-700">{operatorNote}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Componente per la lista delle operazioni
 function OperationsList({ operations, formatDate, onDeleteOperation }: OperationsListProps) {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
@@ -547,8 +605,8 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                         return '-';
                       })()}
                     </td>
-                    <td className="px-3 py-2 border border-gray-200 text-xs max-w-[200px] truncate" title={op.notes || ''}>
-                      {op.notes || '-'}
+                    <td className="px-3 py-2 border border-gray-200 text-xs max-w-[220px]">
+                      {renderOpNotes(op, true) || <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2 border border-gray-200 text-center">
                       <div className="flex justify-center gap-1">
@@ -645,10 +703,10 @@ function OperationsList({ operations, formatDate, onDeleteOperation }: Operation
                         return null;
                       })()}
                       
-                      {op.notes && (
+                      {(op.notes || op.vagliatureNote) && (
                         <div className="sm:col-span-3">
-                          <div className="text-sm font-medium text-muted-foreground">Note</div>
-                          <div className="text-sm">{op.notes}</div>
+                          <div className="text-sm font-medium text-muted-foreground mb-1">Note</div>
+                          {renderOpNotes(op, false)}
                         </div>
                       )}
                     </div>
