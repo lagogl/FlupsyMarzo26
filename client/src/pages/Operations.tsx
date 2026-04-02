@@ -4087,7 +4087,32 @@ export default function Operations() {
                                     );
                                   })()}
                                 </div>
-                                
+
+                                {/* Note dell'ultima operazione */}
+                                {(() => {
+                                  if (cycleOps.length === 0) return null;
+                                  for (let i = cycleOps.length - 1; i >= 0; i--) {
+                                    const op = cycleOps[i];
+                                    const { text, type } = getOpDisplayNote(op);
+                                    if (!text) continue;
+                                    const label = op.type === 'prima-attivazione' ? 'Nota (prima attivazione)'
+                                      : op.type === 'misura' ? 'Nota (ultima misura)'
+                                      : `Nota (${op.type})`;
+                                    return (
+                                      <div key={i} className="col-span-4 mt-1 pt-2 border-t border-gray-100">
+                                        <span className="text-xs text-gray-400 uppercase tracking-wide">{label}</span>
+                                        {type === 'vagliatura' ? (
+                                          <p className="text-sm text-violet-700 mt-0.5 break-words">{text}</p>
+                                        ) : type === 'system' ? (
+                                          <p className="text-sm text-amber-600 mt-0.5 break-words">{text}</p>
+                                        ) : (
+                                          <p className="text-sm text-gray-700 mt-0.5 break-words">{text}</p>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
 
                               </div>
                             </div>
