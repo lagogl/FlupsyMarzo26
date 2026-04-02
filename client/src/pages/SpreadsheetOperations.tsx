@@ -3172,6 +3172,11 @@ export default function SpreadsheetOperations() {
                       )}
                     </div>
                   )}
+                  {showScreeningLabel && (
+                    <div style={{width: '110px'}} className="px-1 py-1.5 border-r text-indigo-700 font-semibold">
+                      Etichetta
+                    </div>
+                  )}
                   <div style={{width: '40px'}} className="px-1 py-1.5 border-r text-center">Stato</div>
 
                   <div 
@@ -3194,6 +3199,7 @@ export default function SpreadsheetOperations() {
                       <span className="text-gray-400 text-[8px]">⇅</span>
                     )}
                   </div>
+                  {!showScreeningLabel && (
                   <div 
                     style={{width: '60px'}} 
                     className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
@@ -3214,6 +3220,7 @@ export default function SpreadsheetOperations() {
                       <span className="text-gray-400 text-[8px]">⇅</span>
                     )}
                   </div>
+                  )}
                   <div 
                     style={{width: '50px'}} 
                     className="px-1 py-1.5 border-r flex items-center gap-0.5"
@@ -3248,7 +3255,7 @@ export default function SpreadsheetOperations() {
                       <span className="text-gray-400 text-[8px]">⇅</span>
                     )}
                   </div>
-                  {/* COLONNA LOTTO - OBBLIGATORIO */}
+                  {!showScreeningLabel && (
                   <div 
                     style={{width: '120px'}} 
                     className="px-1 py-1.5 border-r bg-yellow-50 truncate cursor-pointer hover:bg-yellow-100 flex items-center gap-1"
@@ -3269,6 +3276,7 @@ export default function SpreadsheetOperations() {
                       <span className="text-gray-400 text-[8px]">⇅</span>
                     )}
                   </div>
+                  )}
                   <div 
                     style={{width: '70px'}} 
                     className="px-1 py-1.5 border-r cursor-pointer hover:bg-gray-200 flex items-center gap-1"
@@ -3427,11 +3435,6 @@ export default function SpreadsheetOperations() {
                       ) : (
                         <span className="text-gray-400 text-[8px]">⇅</span>
                       )}
-                    </div>
-                  )}
-                  {showScreeningLabel && (
-                    <div style={{width: '110px'}} className="px-1 py-1.5 border-r text-indigo-700 font-semibold">
-                      Etichetta
                     </div>
                   )}
                   <div 
@@ -3827,6 +3830,20 @@ export default function SpreadsheetOperations() {
                         </span>
                       </div>
                     )}
+
+                    {/* Etichetta Vagliatura - subito dopo Cesta/FLUPSY */}
+                    {showScreeningLabel && (
+                      <div style={{width: '110px'}} className="px-1 py-1 border-r flex-shrink-0">
+                        {(() => {
+                          const cycle = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
+                          return cycle?.screeningLabel ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                              {cycle.screeningLabel}
+                            </span>
+                          ) : <span className="text-gray-300 text-xs">—</span>;
+                        })()}
+                      </div>
+                    )}
                     
                     {/* Stato */}
                     <div style={{width: '40px'}} className="px-1 py-1 border-r flex items-center justify-center">
@@ -4012,6 +4029,7 @@ export default function SpreadsheetOperations() {
                       </span>
                     </div>
 
+                    {!showScreeningLabel && (
                     <div style={{width: '60px'}} className="px-1 py-1 border-r flex items-center text-xs text-gray-600">
                       <span className="truncate">
                         {(row as any).isNewRow && row.animalCount && row.totalWeight ? 
@@ -4019,6 +4037,7 @@ export default function SpreadsheetOperations() {
                           : `${row.averageWeight}`}
                       </span>
                     </div>
+                    )}
 
                     <div style={{width: '50px'}} className="px-1 py-1 border-r flex items-center text-xs text-gray-500">
                       <span className="truncate" title={showActivationDate 
@@ -4035,6 +4054,7 @@ export default function SpreadsheetOperations() {
                     </div>
 
                     {/* CAMPO LOTTO - NON MODIFICABILE */}
+                    {!showScreeningLabel && (
                     <div style={{width: '120px'}} className="px-1 py-1 border-r bg-gray-100 overflow-hidden">
                       <TooltipProvider>
                         <Tooltip>
@@ -4164,6 +4184,7 @@ export default function SpreadsheetOperations() {
                         </Tooltip>
                       </TooltipProvider>
                     </div>
+                    )}
 
 
 
@@ -4384,18 +4405,6 @@ export default function SpreadsheetOperations() {
                       </div>
                     )}
 
-                    {showScreeningLabel && (
-                      <div style={{width: '110px'}} className="px-1 py-1 border-r flex-shrink-0">
-                        {(() => {
-                          const cycle = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
-                          return cycle?.screeningLabel ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
-                              {cycle.screeningLabel}
-                            </span>
-                          ) : <span className="text-gray-300 text-xs">—</span>;
-                        })()}
-                      </div>
-                    )}
                     <div className="flex-1 px-1 py-1 border-r" style={{minWidth: '100px'}}>
                       {(row as any).isNewRow ? (
                         <input
