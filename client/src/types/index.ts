@@ -103,9 +103,13 @@ export interface DestinationBasket {
   createdAt?: string;
   isAlsoSource?: boolean; // Flag per identificare cestelli che sono anche origine
   // Note operative opzionali
-  screeningPosition?: 'sopra' | 'sotto' | null; // Sopra vagliatura / Sotto vagliatura
-  qualityNote?: 'belli' | 'brutti' | null; // Belli / Brutti con molti morti
-  customNote?: string; // Nota personalizzata libera
+  screeningPosition?: 'sopra' | 'sotto' | null;
+  qualityNote?: 'belli' | 'brutti' | null;
+  customNote?: string;
+  meshSopra?: number | null;
+  meshSotto?: number | null;
+  meshSopra2?: number | null;
+  meshSotto2?: number | null;
 }
 
 // Tipo operazione

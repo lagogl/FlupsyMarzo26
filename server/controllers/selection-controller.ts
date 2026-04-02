@@ -795,7 +795,11 @@ export async function addDestinationBaskets(req: Request, res: Response) {
         sampleWeight: destBasket.sampleWeight || null,
         sampleCount: destBasket.sampleCount || null,
         notes: destBasket.notes || null,
-        screeningPosition: destBasket.screeningPosition || null
+        screeningPosition: destBasket.screeningPosition || null,
+        meshSopra: destBasket.meshSopra || null,
+        meshSotto: destBasket.meshSotto || null,
+        meshSopra2: destBasket.meshSopra2 || null,
+        meshSotto2: destBasket.meshSotto2 || null
       });
       
       console.log(`✅ Cestello destinazione ${destBasket.basketId} aggiunto (${destBasket.animalCount} animali) - ${category}`);

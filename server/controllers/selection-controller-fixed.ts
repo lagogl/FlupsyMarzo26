@@ -89,7 +89,11 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       animalsPerKg: selectionDestinationBaskets.animalsPerKg,
       sizeId: selectionDestinationBaskets.sizeId,
       deadCount: selectionDestinationBaskets.deadCount,
-      mortalityRate: selectionDestinationBaskets.mortalityRate
+      mortalityRate: selectionDestinationBaskets.mortalityRate,
+      meshSopra: selectionDestinationBaskets.meshSopra,
+      meshSotto: selectionDestinationBaskets.meshSotto,
+      meshSopra2: selectionDestinationBaskets.meshSopra2,
+      meshSotto2: selectionDestinationBaskets.meshSotto2
     })
     .from(selectionDestinationBaskets)
     .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
@@ -270,6 +274,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         }
       }
       
+      const basketToCycleMap = new Map<number, number>();
+      
       for (const destBasket of destinationBaskets) {
         const wasAlsoSource = overlappingBasketIds.has(destBasket.basketId);
         console.log(`   Processando cestello destinazione ${destBasket.basketId}${wasAlsoSource ? ' (era anche origine)' : ''}...`);
@@ -282,6 +288,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           state: 'active'
         }).returning();
 
+        basketToCycleMap.set(destBasket.basketId, newCycle.id);
+        
         // 1.1. AGGIORNA cycle_id in selection_destination_baskets
         await tx.update(selectionDestinationBaskets)
           .set({ cycleId: newCycle.id })
@@ -481,6 +489,59 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           }
           
           console.log(`   ✅ Cestello ${destBasket.basketId} riposizionato con ciclo attivo`);
+        }
+      }
+
+      // ====== FASE 2.5: GENERAZIONE SCREENING LABELS ======
+      console.log(`🏷️ FASE 2.5: Generazione etichette vagliatura`);
+      {
+        const selDate = new Date(selection[0].date);
+        const datePrefix = `${selDate.getDate().toString().padStart(2, '0')}/${(selDate.getMonth() + 1).toString().padStart(2, '0')}`;
+        
+        const labelCounts = new Map<string, number>();
+        const cycleLabels: Array<{ cycleId: number; label: string }> = [];
+        
+        for (const destBasket of destinationBaskets) {
+          const meshUp = destBasket.meshSopra;
+          const meshDown = destBasket.meshSotto;
+          const meshUp2 = destBasket.meshSopra2;
+          const meshDown2 = destBasket.meshSotto2;
+          
+          if (!meshUp && !meshDown) {
+            continue;
+          }
+          
+          let labelBase = datePrefix;
+          if (meshUp) labelBase += ` +${meshUp}`;
+          if (meshDown) labelBase += ` -${meshDown}`;
+          if (meshUp2) labelBase += ` +${meshUp2}`;
+          if (meshDown2) labelBase += ` -${meshDown2}`;
+          
+          const count = (labelCounts.get(labelBase) || 0) + 1;
+          labelCounts.set(labelBase, count);
+          
+          const resolvedCycleId = basketToCycleMap.get(destBasket.basketId);
+          if (!resolvedCycleId) continue;
+          cycleLabels.push({ cycleId: resolvedCycleId, label: labelBase });
+        }
+        
+        const labelTotals = new Map<string, number>(labelCounts);
+        const labelCounters = new Map<string, number>();
+        
+        for (const { cycleId, label } of cycleLabels) {
+          const total = labelTotals.get(label) || 1;
+          let finalLabel = label;
+          if (total > 1) {
+            const counter = (labelCounters.get(label) || 0) + 1;
+            labelCounters.set(label, counter);
+            finalLabel = `${label} (${counter})`;
+          }
+          
+          await tx.update(cycles)
+            .set({ screeningLabel: finalLabel })
+            .where(eq(cycles.id, cycleId));
+          
+          console.log(`   🏷️ Ciclo ${cycleId}: "${finalLabel}"`);
         }
       }
 

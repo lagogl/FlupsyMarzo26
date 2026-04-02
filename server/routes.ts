@@ -106,7 +106,8 @@ import {
   SelectionSourceBasket,
   SelectionDestinationBasket,
   SelectionBasketHistory,
-  SelectionLotReference
+  SelectionLotReference,
+  meshVagliatura
 } from "@shared/schema";
 import { addDays } from "date-fns";
 import { z } from "zod";
@@ -5304,7 +5305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { operations } = req.body as { operations: any[] };
       const exportDate = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      const LAST_COL = 'M'; // 13 colonne: A..M
+      const LAST_COL = 'N'; // 14 colonne: A..N
 
       // Riga 1 – Titolo principale
       const titleRow = sheet.addRow([`REGISTRO OPERAZIONI — Storico movimenti produttivi: attivazioni, misure, vendite e chiusure cicli`]);
@@ -5322,7 +5323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       subtitleRow.alignment = { vertical: 'middle', horizontal: 'left' };
 
       // Riga 3 – Intestazioni colonne
-      const headers = ['Data', 'Tipo', 'Cesta', 'FLUPSY', 'Ciclo', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)', 'Note'];
+      const headers = ['Data', 'Tipo', 'Cesta', 'FLUPSY', 'Ciclo', 'Etichetta Vaglio', 'Lotto', 'Arrivo Lotto', 'Fornitore', 'Taglia', 'N° Animali', 'Peso (Kg)', 'P.M. (mg)', 'Note'];
       const headerRow = sheet.addRow(headers);
       
       // Blue header style
@@ -5358,6 +5359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           op.basketNumber || null,
           op.flupsyName || '',
           op.cycleId || null,
+          op.screeningLabel || '',
           op.lotName || '',
           op.lotArrivalDate ? new Date(op.lotArrivalDate).toLocaleDateString('it-IT') : '',
           op.lotSupplier || '',
@@ -5394,7 +5396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Column widths
       sheet.columns = [
         { width: 12 }, { width: 22 }, { width: 8 }, { width: 24 },
-        { width: 7 }, { width: 30 }, { width: 13 }, { width: 20 },
+        { width: 7 }, { width: 28 }, { width: 30 }, { width: 13 }, { width: 20 },
         { width: 10 }, { width: 13 }, { width: 11 }, { width: 11 }, { width: 45 }
       ];
       
@@ -7510,6 +7512,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(501).json({ message: "Funzionalità di eliminazione backup non implementata" });
   });
   
+  // === Mesh Vagliatura Routes ===
+  
+  app.get("/api/mesh-vagliatura", async (_req, res) => {
+    try {
+      const result = await db.select().from(meshVagliatura).where(eq(meshVagliatura.attivo, true)).orderBy(meshVagliatura.microni);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // === Selection Module Routes ===
   
   // Ottieni tutte le selezioni

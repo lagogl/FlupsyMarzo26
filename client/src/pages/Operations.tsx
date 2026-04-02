@@ -90,6 +90,7 @@ interface Cycle {
   startDate: string;
   endDate: string | null;
   state: string;
+  screeningLabel?: string | null;
 }
 
 interface Operation {
@@ -574,6 +575,9 @@ export default function Operations() {
   
   const [expandedCycles, setExpandedCycles] = useState<number[]>([]);
   const [showQualityView, setShowQualityView] = useState(false);
+  const [showScreeningLabel, setShowScreeningLabel] = useState(() => {
+    try { return localStorage.getItem('showScreeningLabel') === 'true'; } catch { return false; }
+  });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -1803,12 +1807,15 @@ export default function Operations() {
       }
 
       // 4. Prepara dati e invia al server per generazione Excel formattato
-      const operationsData = exportOps.map((op: any) => ({
+      const operationsData = exportOps.map((op: any) => {
+        const cycle = (cycles as any[])?.find((c: any) => c.id === op.cycleId);
+        return {
         date: op.date,
         type: op.type,
         basketNumber: op.basket?.physicalNumber || op.basketNumber || null,
         flupsyName: op.flupsyName || op.basket?.flupsyName || '',
         cycleId: op.cycleId,
+        screeningLabel: cycle?.screeningLabel || '',
         lotName: op.lot?.supplierLotNumber || op.lot?.name || '',
         lotArrivalDate: op.lot?.arrivalDate || null,
         lotSupplier: op.lot?.supplier || '',
@@ -1819,7 +1826,7 @@ export default function Operations() {
           ? 1000000 / op.animalsPerKg
           : (op.averageWeight || null),
         notes: op.notes || '',
-      }));
+      }});
 
       const response = await fetch('/api/operations/export-excel', {
         method: 'POST',
@@ -1951,6 +1958,19 @@ export default function Operations() {
           >
             <Award className="h-4 w-4 mr-1" />
             {showQualityView ? 'Nascondi Qualità' : 'Vista Qualità'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const next = !showScreeningLabel;
+              setShowScreeningLabel(next);
+              try { localStorage.setItem('showScreeningLabel', String(next)); } catch {}
+            }}
+            className={showScreeningLabel ? 'border-indigo-500 text-indigo-700 bg-indigo-50 hover:bg-indigo-100' : ''}
+            title="Mostra/nascondi colonna Etichetta Vagliatura"
+          >
+            🔬
+            {showScreeningLabel ? ' Nascondi Etichetta' : ' Etichetta Vaglio'}
           </Button>
           <Button 
             onClick={exportOperationsToExcel}
@@ -2590,6 +2610,11 @@ export default function Operations() {
                         )}
                       </div>
                     </th>
+                    {showScreeningLabel && (
+                      <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-indigo-600 uppercase tracking-wider whitespace-nowrap">
+                        Etichetta
+                      </th>
+                    )}
                     <th 
                       scope="col" 
                       className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -2742,6 +2767,18 @@ export default function Operations() {
                         <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           {op.cycleId ? `#${op.cycleId}` : '-'}
                         </td>
+                        {showScreeningLabel && (
+                          <td className="px-1 py-1 whitespace-nowrap text-xs">
+                            {(() => {
+                              const cycle = (cycles as any[])?.find((c: any) => c.id === op.cycleId);
+                              return cycle?.screeningLabel ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                                  {cycle.screeningLabel}
+                                </span>
+                              ) : <span className="text-gray-300">—</span>;
+                            })()}
+                          </td>
+                        )}
                         <td className="px-1 py-1 text-xs text-gray-500">
                           {(() => {
                             // Caso speciale: l'operazione ha lotti multipli
@@ -3426,6 +3463,11 @@ export default function Operations() {
                           <div>
                             <div className="text-xs font-medium text-gray-500">Ciclo</div>
                             <div className="font-medium">{cycle ? `#${cycle.id}` : '-'}</div>
+                            {cycle?.screeningLabel && (
+                              <span className="inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                {cycle.screeningLabel}
+                              </span>
+                            )}
                           </div>
                           
                           {/* FLUPSY e posizione */}

@@ -305,6 +305,10 @@ export default function VagliaturaConMappa() {
     enabled: true
   });
 
+  const { data: meshOptions = [] } = useQuery<{ id: number; microni: number; descrizione: string | null }[]>({
+    queryKey: ['/api/mesh-vagliatura']
+  });
+
   // Funzione per ottenere il nome del FLUPSY selezionato (per origine o destinazione)
   const getFlupsyName = (flupsyId: string | null): string | undefined => {
     if (!flupsyId || !flupsys) return undefined;
@@ -532,7 +536,12 @@ export default function VagliaturaConMappa() {
     // Note operative opzionali
     screeningPosition: null as 'sopra' | 'sotto' | null,
     qualityNote: null as 'belli' | 'brutti' | null,
-    customNote: ''
+    customNote: '',
+    meshSopra: null as number | null,
+    meshSotto: null as number | null,
+    meshSopra2: null as number | null,
+    meshSotto2: null as number | null,
+    doppiaVagliatura: false
   });
 
   // Funzione per calcolare i valori basati sui dati di misurazione
@@ -2405,6 +2414,119 @@ export default function VagliaturaConMappa() {
                   </div>
                 </div>
               </div>
+              
+              {/* Sezione Maglia Vagliatura */}
+              {measurementData.screeningPosition && (
+              <div className="mt-3 pt-3 border-t border-slate-300">
+                <h4 className="text-xs font-medium text-indigo-700 mb-2">🔬 Maglia Vagliatura</h4>
+                <div className="grid grid-cols-1 gap-2">
+                  <div>
+                    <Label className="text-xs text-slate-600">
+                      Maglia {measurementData.screeningPosition === 'sopra' ? '(rimasti SOPRA)' : '(passati SOTTO)'}
+                    </Label>
+                    <Select
+                      value={measurementData.screeningPosition === 'sopra' ? (measurementData.meshSopra?.toString() || '') : (measurementData.meshSotto?.toString() || '')}
+                      onValueChange={(val) => {
+                        const v = parseInt(val);
+                        if (measurementData.screeningPosition === 'sopra') {
+                          setMeasurementData(prev => ({ ...prev, meshSopra: v, meshSotto: null }));
+                        } else {
+                          setMeasurementData(prev => ({ ...prev, meshSotto: v, meshSopra: null }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Seleziona maglia..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {meshOptions.map(m => (
+                          <SelectItem key={m.microni} value={m.microni.toString()}>
+                            {m.microni} µm
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={measurementData.doppiaVagliatura}
+                      onChange={(e) => {
+                        setMeasurementData(prev => ({
+                          ...prev,
+                          doppiaVagliatura: e.target.checked,
+                          meshSopra2: e.target.checked ? prev.meshSopra2 : null,
+                          meshSotto2: e.target.checked ? prev.meshSotto2 : null
+                        }));
+                      }}
+                      className="w-3.5 h-3.5 text-indigo-600"
+                    />
+                    <span className="text-xs text-slate-600">Doppia vagliatura (2ª maglia manuale)</span>
+                  </label>
+                  
+                  {measurementData.doppiaVagliatura && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs text-slate-600">2ª posizione</Label>
+                        <div className="flex flex-col space-y-1">
+                          <label className="flex items-center space-x-1 cursor-pointer">
+                            <input type="radio" name="pos2" checked={measurementData.meshSopra2 !== null && measurementData.meshSotto2 === null}
+                              onChange={() => setMeasurementData(prev => ({ ...prev, meshSopra2: prev.meshSopra2 || 0, meshSotto2: null }))}
+                              className="w-3 h-3" />
+                            <span className="text-xs">Sopra (+)</span>
+                          </label>
+                          <label className="flex items-center space-x-1 cursor-pointer">
+                            <input type="radio" name="pos2" checked={measurementData.meshSotto2 !== null && measurementData.meshSopra2 === null}
+                              onChange={() => setMeasurementData(prev => ({ ...prev, meshSotto2: prev.meshSotto2 || 0, meshSopra2: null }))}
+                              className="w-3 h-3" />
+                            <span className="text-xs">Sotto (-)</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-600">Maglia 2ª</Label>
+                        <Select
+                          value={(measurementData.meshSopra2 || measurementData.meshSotto2)?.toString() || ''}
+                          onValueChange={(val) => {
+                            const v = parseInt(val);
+                            if (measurementData.meshSopra2 !== null) {
+                              setMeasurementData(prev => ({ ...prev, meshSopra2: v }));
+                            } else {
+                              setMeasurementData(prev => ({ ...prev, meshSotto2: v }));
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Maglia..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {meshOptions.map(m => (
+                              <SelectItem key={m.microni} value={m.microni.toString()}>
+                                {m.microni} µm
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+
+                  {(measurementData.meshSopra || measurementData.meshSotto) && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded px-2 py-1">
+                      <span className="text-xs font-medium text-indigo-800">Anteprima etichetta: </span>
+                      <span className="text-xs font-mono text-indigo-900">
+                        {new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                        {measurementData.meshSopra ? ` +${measurementData.meshSopra}` : ''}
+                        {measurementData.meshSotto ? ` -${measurementData.meshSotto}` : ''}
+                        {measurementData.meshSopra2 ? ` +${measurementData.meshSopra2}` : ''}
+                        {measurementData.meshSotto2 ? ` -${measurementData.meshSotto2}` : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
             </div>
           </div>
           
@@ -2446,9 +2568,12 @@ export default function VagliaturaConMappa() {
                 selectionId: 0,
                 sizeId: measurementData.sizeId,
                 isAlsoSource: measurementData.isAlsoSource,
-                // Note operative opzionali
                 screeningPosition: measurementData.screeningPosition,
-                qualityNote: measurementData.qualityNote
+                qualityNote: measurementData.qualityNote,
+                meshSopra: measurementData.meshSopra,
+                meshSotto: measurementData.meshSotto,
+                meshSopra2: measurementData.meshSopra2,
+                meshSotto2: measurementData.meshSotto2
               };
               
               setDestinationBaskets(prev => [...prev, newDestinationBasket]);
@@ -2458,6 +2583,7 @@ export default function VagliaturaConMappa() {
                 description: `Cestello #${measurementData.physicalNumber} aggiunto come destinazione`,
               });
               
+              setMeasurementData(prev => ({ ...prev, meshSopra: null, meshSotto: null, meshSopra2: null, meshSotto2: null, doppiaVagliatura: false }));
               setIsMeasurementDialogOpen(false);
             }}>Conferma</Button>
           </DialogFooter>

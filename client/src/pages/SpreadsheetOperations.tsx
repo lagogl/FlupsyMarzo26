@@ -5088,6 +5088,7 @@ export default function SpreadsheetOperations() {
                     <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">Cesta #</th>
                     <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">FLUPSY</th>
                     <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">Ciclo</th>
+                    <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-indigo-700">Etichetta</th>
                     <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Inizio</th>
                     <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Fine</th>
                     <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Giorni</th>
@@ -5104,6 +5105,13 @@ export default function SpreadsheetOperations() {
                       <td className="px-2 py-1.5 border-r border-gray-100 font-medium text-gray-700">#{cycle.basketPhysicalNumber}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-gray-600 max-w-28 truncate">{cycle.flupsyName}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-gray-500 font-mono text-xs">{cycle.id}</td>
+                      <td className="px-2 py-1.5 border-r border-gray-100">
+                        {cycle.screeningLabel ? (
+                          <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200">
+                            {cycle.screeningLabel}
+                          </span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-600">{cycle.startDate ? new Date(cycle.startDate).toLocaleDateString('it-IT') : '-'}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-600">{cycle.endDate ? new Date(cycle.endDate).toLocaleDateString('it-IT') : '-'}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-500">{durationDays ?? '-'}</td>

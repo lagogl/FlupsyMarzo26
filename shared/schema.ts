@@ -253,9 +253,25 @@ export const selectionDestinationBaskets = pgTable("selection_destination_basket
   sampleCount: integer("sample_count"), // Numero di animali nel campione
   notes: text("notes"), // Note specifiche per questa cesta
   screeningPosition: text("screening_position"), // Posizione al vaglio: 'sopra', 'sotto', 'intermedio' — usata per calcolare qualityClass
+  meshSopra: integer("mesh_sopra"), // Maglia dalla quale gli animali sono rimasti SOPRA (micron)
+  meshSotto: integer("mesh_sotto"), // Maglia dalla quale gli animali sono passati SOTTO (micron)
+  meshSopra2: integer("mesh_sopra_2"), // Seconda vagliatura: maglia SOPRA (micron)
+  meshSotto2: integer("mesh_sotto_2"), // Seconda vagliatura: maglia SOTTO (micron)
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di creazione
   updatedAt: timestamp("updated_at"), // Data e ora di ultimo aggiornamento
 });
+
+// Mesh Vagliatura (Tabella lookup per le maglie di vagliatura)
+export const meshVagliatura = pgTable("mesh_vagliatura", {
+  id: serial("id").primaryKey(),
+  microni: integer("microni").notNull().unique(),
+  descrizione: text("descrizione"),
+  attivo: boolean("attivo").notNull().default(true),
+});
+
+export const insertMeshVagliaturaSchema = createInsertSchema(meshVagliatura).omit({ id: true });
+export type InsertMeshVagliatura = z.infer<typeof insertMeshVagliaturaSchema>;
+export type MeshVagliatura = typeof meshVagliatura.$inferSelect;
 
 // Selection Basket History (Storico delle relazioni tra ceste di origine e destinazione)
 export const selectionBasketHistory = pgTable("selection_basket_history", {
@@ -375,6 +391,7 @@ export const cycles = pgTable("cycles", {
   parentCycleId: integer("parent_cycle_id"), // Ciclo genitore (da cui provengono gli animali — vagliatura/trasferimento)
   lineageGroupId: integer("lineage_group_id"), // ID del ciclo radice della genealogia (uguale per tutti i cicli dello stesso gruppo animali)
   qualityClass: text("quality_class"), // Classificazione qualitativa: 'premium'=TESTE, 'normal'=MEDI, 'sub'=CODE — derivata dalla storia di vagliatura
+  screeningLabel: text("screening_label"), // Etichetta parlante vagliatura: es. "31/03 -2500 +1500 (1)"
 }, (table) => ({
   stateIdx: index("cycles_state_idx").on(table.state),
   basketIdIdx: index("cycles_basket_id_idx").on(table.basketId),
