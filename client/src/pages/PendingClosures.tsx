@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import MainLayout from "@/layouts/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -153,7 +152,6 @@ export default function PendingClosures() {
   };
 
   return (
-    <MainLayout>
       <div className="container mx-auto py-6 px-4">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -313,6 +311,5 @@ export default function PendingClosures() {
           </div>
         )}
       </div>
-    </MainLayout>
   );
 }
