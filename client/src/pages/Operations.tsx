@@ -4332,10 +4332,20 @@ export default function Operations() {
                                   </div>
                                 )}
                                 
-                                {op.notes && (
+                                {(op.notes || op.vagliatureNote) && (
                                   <div className="mt-3 text-sm">
-                                    <p className="text-gray-500">Note</p>
-                                    <p>{op.notes}</p>
+                                    <p className="text-gray-500 font-medium mb-0.5">Note</p>
+                                    {(() => {
+                                      const { text, type } = getOpDisplayNote(op);
+                                      if (!text) return null;
+                                      if (type === 'vagliatura') return (
+                                        <p className="text-violet-700 break-words">{text}</p>
+                                      );
+                                      if (type === 'system') return (
+                                        <p className="text-amber-600 break-words">{text}</p>
+                                      );
+                                      return <p className="text-gray-700 break-words">{text}</p>;
+                                    })()}
                                   </div>
                                 )}
                               </CardContent>
