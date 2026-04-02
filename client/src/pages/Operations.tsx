@@ -2649,7 +2649,10 @@ export default function Operations() {
                         )}
                       </div>
                     </th>
-                    <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{minWidth:'180px'}}>
+                    <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      Pezzi/Kg
+                    </th>
+                    <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{minWidth:'150px'}}>
                       Note
                     </th>
                     <th scope="col" className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
@@ -2660,7 +2663,7 @@ export default function Operations() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredOperations.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-3 py-2 whitespace-nowrap text-center text-gray-500">
+                      <td colSpan={13} className="px-3 py-2 whitespace-nowrap text-center text-gray-500">
                         Nessuna operazione trovata
                       </td>
                     </tr>
@@ -2920,7 +2923,6 @@ export default function Operations() {
                             // Altrimenti calcola il peso medio da animalCount e totalWeight
                             if (op.animalCount && op.totalWeight && op.animalCount > 0) {
                               const avgWeightMg = (op.totalWeight / op.animalCount) * 1000;
-                              console.log(`Calcolo peso medio per operazione ${op.id}: ${op.totalWeight}g / ${op.animalCount} animali * 1000 = ${avgWeightMg}mg`);
                               return avgWeightMg.toLocaleString('it-IT', {minimumFractionDigits: 3, maximumFractionDigits: 3});
                             }
                             
@@ -2928,7 +2930,10 @@ export default function Operations() {
                             return '-';
                           })()}
                         </td>
-                        <td className="px-1 py-1 text-xs" style={{minWidth:'180px'}}>
+                        <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
+                          {op.animalsPerKg ? Math.round(op.animalsPerKg).toLocaleString('it-IT') : '-'}
+                        </td>
+                        <td className="px-1 py-1" style={{minWidth:'150px', fontSize:'11px'}}>
                           {(() => {
                             const { text, type } = getOpDisplayNote(op);
                             if (!text) return <span className="text-gray-300 italic">—</span>;
