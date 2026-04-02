@@ -231,6 +231,9 @@ export default function SpreadsheetOperations() {
   const [showPivotPanel, setShowPivotPanel] = useState<boolean>(false);  // Toggle pannello pivot
   const [showClosedCycles, setShowClosedCycles] = useState<boolean>(false); // Toggle cicli chiusi
   const [showQualityView, setShowQualityView] = useState<boolean>(false); // Toggle vista qualità
+  const [showScreeningLabel, setShowScreeningLabel] = useState<boolean>(() => {
+    try { const saved = localStorage.getItem('showScreeningLabel_spreadsheet'); return saved === null ? true : saved === 'true'; } catch { return true; }
+  });
   const [pivotState, setPivotState] = useState<any>({});  // Stato react-pivottable
   const [sortColumn, setSortColumn] = useState<string>("physicalNumber");
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -2764,6 +2767,22 @@ export default function SpreadsheetOperations() {
               <Award className="h-3 w-3" />
               {showQualityView ? 'Qualità ON' : 'Qualità OFF'}
             </button>
+            <button
+              onClick={() => {
+                const next = !showScreeningLabel;
+                setShowScreeningLabel(next);
+                try { localStorage.setItem('showScreeningLabel_spreadsheet', String(next)); } catch {}
+              }}
+              className={`h-8 px-3 text-xs rounded flex items-center gap-1 transition-colors ${
+                showScreeningLabel
+                  ? 'bg-indigo-500 text-white hover:bg-indigo-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+              title="Mostra/nascondi colonna Etichetta Vagliatura"
+            >
+              🔬
+              {showScreeningLabel ? 'Etichetta ON' : 'Etichetta OFF'}
+            </button>
           </div>
         </div>
       </div>
@@ -3408,6 +3427,11 @@ export default function SpreadsheetOperations() {
                       ) : (
                         <span className="text-gray-400 text-[8px]">⇅</span>
                       )}
+                    </div>
+                  )}
+                  {showScreeningLabel && (
+                    <div style={{width: '110px'}} className="px-1 py-1.5 border-r text-indigo-700 font-semibold">
+                      Etichetta
                     </div>
                   )}
                   <div 
@@ -4360,6 +4384,18 @@ export default function SpreadsheetOperations() {
                       </div>
                     )}
 
+                    {showScreeningLabel && (
+                      <div style={{width: '110px'}} className="px-1 py-1 border-r flex-shrink-0">
+                        {(() => {
+                          const cycle = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
+                          return cycle?.screeningLabel ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                              {cycle.screeningLabel}
+                            </span>
+                          ) : <span className="text-gray-300 text-xs">—</span>;
+                        })()}
+                      </div>
+                    )}
                     <div className="flex-1 px-1 py-1 border-r" style={{minWidth: '100px'}}>
                       {(row as any).isNewRow ? (
                         <input
@@ -5088,7 +5124,9 @@ export default function SpreadsheetOperations() {
                     <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">Cesta #</th>
                     <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">FLUPSY</th>
                     <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-gray-700">Ciclo</th>
-                    <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-indigo-700">Etichetta</th>
+                    {showScreeningLabel && (
+                      <th className="px-2 py-2 text-left border-b border-r border-gray-200 font-semibold text-indigo-700">Etichetta</th>
+                    )}
                     <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Inizio</th>
                     <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Fine</th>
                     <th className="px-2 py-2 text-center border-b border-r border-gray-200 font-semibold text-gray-700">Giorni</th>
@@ -5105,13 +5143,15 @@ export default function SpreadsheetOperations() {
                       <td className="px-2 py-1.5 border-r border-gray-100 font-medium text-gray-700">#{cycle.basketPhysicalNumber}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-gray-600 max-w-28 truncate">{cycle.flupsyName}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-gray-500 font-mono text-xs">{cycle.id}</td>
-                      <td className="px-2 py-1.5 border-r border-gray-100">
-                        {cycle.screeningLabel ? (
-                          <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200">
-                            {cycle.screeningLabel}
-                          </span>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
+                      {showScreeningLabel && (
+                        <td className="px-2 py-1.5 border-r border-gray-100">
+                          {cycle.screeningLabel ? (
+                            <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200">
+                              {cycle.screeningLabel}
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                      )}
                       <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-600">{cycle.startDate ? new Date(cycle.startDate).toLocaleDateString('it-IT') : '-'}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-600">{cycle.endDate ? new Date(cycle.endDate).toLocaleDateString('it-IT') : '-'}</td>
                       <td className="px-2 py-1.5 border-r border-gray-100 text-center text-gray-500">{durationDays ?? '-'}</td>
