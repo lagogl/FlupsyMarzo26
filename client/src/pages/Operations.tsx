@@ -4154,6 +4154,61 @@ export default function Operations() {
                             return null;
                           })()}
                           
+                          {/* Bottone note ciclo - eye icon */}
+                          {cycleOps.some((op: any) => op.notes || op.vagliatureNote) && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 hover:bg-violet-50"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Eye className="h-4 w-4 text-violet-600" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-[420px] p-0 shadow-lg border-2"
+                                align="end"
+                                side="left"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="bg-gradient-to-br from-violet-50 to-indigo-50 rounded-lg">
+                                  <div className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-4 py-3 rounded-t-lg">
+                                    <div className="flex items-center gap-2">
+                                      <FileText className="h-4 w-4" />
+                                      <h3 className="font-semibold">Note Ciclo #{cycleId}</h3>
+                                    </div>
+                                  </div>
+                                  <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
+                                    {cycleOps.map((op: any) => {
+                                      const { text, type } = getOpDisplayNote(op);
+                                      if (!text) return null;
+                                      return (
+                                        <div key={op.id} className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            {getOperationTypeBadge(op.type)}
+                                            <span className="text-xs text-gray-400">{safeFormatDate(op.date, 'dd/MM/yyyy')}</span>
+                                          </div>
+                                          {type === 'vagliatura' ? (
+                                            <p className="text-sm text-violet-700 break-words">{text}</p>
+                                          ) : type === 'system' ? (
+                                            <p className="text-sm text-amber-600 break-words">{text}</p>
+                                          ) : (
+                                            <p className="text-sm text-gray-700 break-words">{text}</p>
+                                          )}
+                                        </div>
+                                      );
+                                    }).filter(Boolean)}
+                                    {cycleOps.every((op: any) => !op.notes && !op.vagliatureNote) && (
+                                      <p className="text-sm text-gray-400 italic text-center py-4">Nessuna nota disponibile</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
+
                           <Badge className="mr-2">
                             {cycleOps.length} operazioni
                           </Badge>
