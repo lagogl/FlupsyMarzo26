@@ -4182,20 +4182,35 @@ export default function Operations() {
                                   </div>
                                   <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
                                     {cycleOps.map((op: any) => {
-                                      const { text, type } = getOpDisplayNote(op);
-                                      if (!text) return null;
+                                      if (!op.notes && !op.vagliatureNote) return null;
+                                      // Estrai le parti di op.notes separatamente
+                                      let operatorNote: string | null = null;
+                                      let systemNote: string | null = null;
+                                      if (op.notes) {
+                                        const sepIdx = op.notes.indexOf(OP_NOTE_SEPARATOR);
+                                        if (sepIdx !== -1) {
+                                          const sysPart = op.notes.substring(0, sepIdx).trim();
+                                          const opPart = op.notes.substring(sepIdx + OP_NOTE_SEPARATOR.length).trim();
+                                          if (sysPart) systemNote = sysPart;
+                                          if (opPart) operatorNote = opPart;
+                                        } else {
+                                          operatorNote = op.notes;
+                                        }
+                                      }
                                       return (
-                                        <div key={op.id} className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+                                        <div key={op.id} className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 space-y-1">
                                           <div className="flex items-center gap-2 mb-1">
                                             {getOperationTypeBadge(op.type)}
                                             <span className="text-xs text-gray-400">{safeFormatDate(op.date, 'dd/MM/yyyy')}</span>
                                           </div>
-                                          {type === 'vagliatura' ? (
-                                            <p className="text-sm text-violet-700 break-words">{text}</p>
-                                          ) : type === 'system' ? (
-                                            <p className="text-sm text-amber-600 break-words">{text}</p>
-                                          ) : (
-                                            <p className="text-sm text-gray-700 break-words">{text}</p>
+                                          {op.vagliatureNote && (
+                                            <p className="text-sm text-violet-700 break-words">{op.vagliatureNote}</p>
+                                          )}
+                                          {systemNote && (
+                                            <p className="text-sm text-amber-600 break-words">{systemNote}</p>
+                                          )}
+                                          {operatorNote && (
+                                            <p className="text-sm text-gray-700 break-words">{operatorNote}</p>
                                           )}
                                         </div>
                                       );
