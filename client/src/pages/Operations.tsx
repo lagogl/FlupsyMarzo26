@@ -576,7 +576,7 @@ export default function Operations() {
   const [expandedCycles, setExpandedCycles] = useState<number[]>([]);
   const [showQualityView, setShowQualityView] = useState(false);
   const [showScreeningLabel, setShowScreeningLabel] = useState(() => {
-    try { return localStorage.getItem('showScreeningLabel') === 'true'; } catch { return false; }
+    try { const saved = localStorage.getItem('showScreeningLabel'); return saved === null ? true : saved === 'true'; } catch { return true; }
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
