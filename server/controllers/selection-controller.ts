@@ -949,7 +949,11 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       deadCount: selectionDestinationBaskets.deadCount,
       mortalityRate: selectionDestinationBaskets.mortalityRate,
       notes: selectionDestinationBaskets.notes,
-      screeningPosition: selectionDestinationBaskets.screeningPosition
+      screeningPosition: selectionDestinationBaskets.screeningPosition,
+      meshSopra: selectionDestinationBaskets.meshSopra,
+      meshSotto: selectionDestinationBaskets.meshSotto,
+      meshSopra2: selectionDestinationBaskets.meshSopra2,
+      meshSotto2: selectionDestinationBaskets.meshSotto2
     })
     .from(selectionDestinationBaskets)
     .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
