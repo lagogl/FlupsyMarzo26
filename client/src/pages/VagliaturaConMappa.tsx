@@ -2100,6 +2100,19 @@ export default function VagliaturaConMappa() {
                               if (basket.qualityNote === 'belli') operativeNotes.push('MEDI');
                               if (basket.qualityNote === 'brutti') operativeNotes.push('CODE');
                               if (basket.customNote) operativeNotes.push(basket.customNote);
+
+                              // Anteprima etichetta maglia (stessa logica del backend)
+                              const today = new Date();
+                              const dd = String(today.getDate()).padStart(2, '0');
+                              const mm = String(today.getMonth() + 1).padStart(2, '0');
+                              let meshLabel: string | null = null;
+                              if (basket.meshSopra || basket.meshSotto) {
+                                meshLabel = `${dd}/${mm}`;
+                                if (basket.meshSopra) meshLabel += ` +${basket.meshSopra}`;
+                                if (basket.meshSotto) meshLabel += ` -${basket.meshSotto}`;
+                              } else if (basket.screeningPosition) {
+                                meshLabel = basket.screeningPosition === 'sopra' ? '[+]' : '[-]';
+                              }
                               
                               return (
                                 <TableRow key={basket.basketId} className="bg-green-25 hover:bg-green-100">
@@ -2132,23 +2145,25 @@ export default function VagliaturaConMappa() {
                                     {((basket.totalWeight || 0) / 1000).toFixed(2)}
                                   </TableCell>
                                   <TableCell className="text-green-800 text-xs">
-                                    {operativeNotes.length > 0 ? (
-                                      <div className="flex flex-col gap-1">
-                                        {operativeNotes.map((note, idx) => (
-                                          <Badge key={idx} variant="outline" className={`text-xs ${
-                                            note.includes('SOPRA') ? 'bg-blue-100 text-blue-700 border-blue-300' :
-                                            note.includes('SOTTO') ? 'bg-purple-100 text-purple-700 border-purple-300' :
-                                            note === 'MEDI' ? 'bg-green-100 text-green-700 border-green-300' :
-                                            note === 'CODE' ? 'bg-red-100 text-red-700 border-red-300' :
-                                            'bg-gray-100 text-gray-700 border-gray-300'
-                                          }`}>
-                                            {note}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <span className="text-gray-400 italic">-</span>
-                                    )}
+                                    <div className="flex flex-col gap-1">
+                                      {meshLabel && (
+                                        <span className="font-bold text-blue-600 text-sm font-mono">{meshLabel}</span>
+                                      )}
+                                      {operativeNotes.map((note, idx) => (
+                                        <Badge key={idx} variant="outline" className={`text-xs ${
+                                          note.includes('SOPRA') ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                          note.includes('SOTTO') ? 'bg-purple-100 text-purple-700 border-purple-300' :
+                                          note === 'MEDI' ? 'bg-green-100 text-green-700 border-green-300' :
+                                          note === 'CODE' ? 'bg-red-100 text-red-700 border-red-300' :
+                                          'bg-gray-100 text-gray-700 border-gray-300'
+                                        }`}>
+                                          {note}
+                                        </Badge>
+                                      ))}
+                                      {!meshLabel && operativeNotes.length === 0 && (
+                                        <span className="text-gray-400 italic">-</span>
+                                      )}
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               );
