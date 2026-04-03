@@ -93,7 +93,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       meshSopra: selectionDestinationBaskets.meshSopra,
       meshSotto: selectionDestinationBaskets.meshSotto,
       meshSopra2: selectionDestinationBaskets.meshSopra2,
-      meshSotto2: selectionDestinationBaskets.meshSotto2
+      meshSotto2: selectionDestinationBaskets.meshSotto2,
+      screeningPosition: selectionDestinationBaskets.screeningPosition
     })
     .from(selectionDestinationBaskets)
     .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
@@ -507,7 +508,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           const meshUp2 = destBasket.meshSopra2;
           const meshDown2 = destBasket.meshSotto2;
           
-          if (!meshUp && !meshDown) {
+          const position = destBasket.screeningPosition as string | null;
+          if (!meshUp && !meshDown && !position) {
             continue;
           }
           
@@ -516,6 +518,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           if (meshDown) labelBase += ` -${meshDown}`;
           if (meshUp2) labelBase += ` +${meshUp2}`;
           if (meshDown2) labelBase += ` -${meshDown2}`;
+          if (!meshUp && !meshDown && position) {
+            labelBase += position === 'sopra' ? ' [+]' : ' [-]';
+          }
           
           const count = (labelCounts.get(labelBase) || 0) + 1;
           labelCounts.set(labelBase, count);
