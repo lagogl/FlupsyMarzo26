@@ -2567,20 +2567,6 @@ export default function Operations() {
                     </th>
                     <th 
                       scope="col" 
-                      className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSortClick('type')}
-                    >
-                      <div className="flex items-center">
-                        Tipo
-                        {sortConfig.key === 'type' && (
-                          <span className="ml-1">
-                            {sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                    <th 
-                      scope="col" 
                       className="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                       onClick={() => handleSortClick('basket')}
                     >
@@ -2688,7 +2674,7 @@ export default function Operations() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredOperations.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="px-3 py-2 whitespace-nowrap text-center text-gray-500">
+                      <td colSpan={12} className="px-3 py-2 whitespace-nowrap text-center text-gray-500">
                         Nessuna operazione trovata
                       </td>
                     </tr>
@@ -2708,9 +2694,6 @@ export default function Operations() {
                           title={getOpQualityTitle(op) || undefined}
                         >
                           {safeFormatDate(op.date, 'dd/MM/yyyy')}
-                        </td>
-                        <td className="px-1 py-1 whitespace-nowrap">
-                          {getOperationTypeBadge(op.type)}
                         </td>
                         <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           <span className="font-bold text-red-600 text-base">
