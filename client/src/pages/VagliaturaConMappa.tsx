@@ -2935,7 +2935,9 @@ export default function VagliaturaConMappa() {
             isAlsoSource: measurementData.isAlsoSource,
             screeningPosition: data.screeningPosition,
             qualityNote: data.qualityNote,
-            customNote: data.customNote
+            customNote: data.customNote,
+            meshSopra: data.meshSopra ?? null,
+            meshSotto: data.meshSotto ?? null
           };
           
           setDestinationBaskets(prev => [...prev, newDestinationBasket]);

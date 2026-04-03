@@ -21,6 +21,9 @@ interface DraggableCalculatorProps {
     position: number;
     screeningPosition: 'sopra' | 'sotto' | null;
     qualityNote: 'belli' | 'brutti' | null;
+    meshSopra: number | null;
+    meshSotto: number | null;
+    customNote?: string;
   }) => void;
   initialData?: {
     sampleWeight?: number;
@@ -32,6 +35,8 @@ interface DraggableCalculatorProps {
     screeningPosition?: 'sopra' | 'sotto' | null;
     qualityNote?: 'belli' | 'brutti' | null;
     customNote?: string;
+    meshSopra?: number | null;
+    meshSotto?: number | null;
   };
 }
 
@@ -58,7 +63,9 @@ export default function DraggableCalculator({
   const [screeningPosition, setScreeningPosition] = useState<'sopra' | 'sotto' | null>(initialData.screeningPosition || null);
   const [qualityNote, setQualityNote] = useState<'belli' | 'brutti' | null>(initialData.qualityNote || null);
   const [customNote, setCustomNote] = useState(initialData.customNote || '');
-  
+  const [meshSopra, setMeshSopra] = useState<number | null>(initialData.meshSopra ?? null);
+  const [meshSotto, setMeshSotto] = useState<number | null>(initialData.meshSotto ?? null);
+
   const calculatorRef = useRef<HTMLDivElement>(null);
   
   // Helper per convertire input stringa in numero (accetta virgola e punto)
@@ -77,6 +84,12 @@ export default function DraggableCalculator({
   // Query per ottenere le taglie
   const { data: sizes = [] } = useQuery({
     queryKey: ['/api/sizes'],
+    enabled: isOpen
+  });
+
+  // Query per ottenere le maglie di vagliatura
+  const { data: meshOptions = [] } = useQuery<{ id: number; microni: number; descrizione: string | null }[]>({
+    queryKey: ['/api/mesh-vagliatura'],
     enabled: isOpen
   });
   
@@ -142,6 +155,8 @@ export default function DraggableCalculator({
       position: basketPosition,
       screeningPosition,
       qualityNote,
+      meshSopra,
+      meshSotto,
       customNote: customNote.trim() || undefined
     });
   };
@@ -323,7 +338,7 @@ export default function DraggableCalculator({
                     {screeningPosition && (
                       <button
                         type="button"
-                        onClick={() => setScreeningPosition(null)}
+                        onClick={() => { setScreeningPosition(null); setMeshSopra(null); setMeshSotto(null); }}
                         className="text-red-500 hover:text-red-700 text-left text-[10px]"
                       >
                         ✕ Rimuovi
@@ -369,6 +384,41 @@ export default function DraggableCalculator({
                 </div>
               </div>
               
+              {/* Maglia vagliatura — visibile solo se posizione selezionata */}
+              {screeningPosition && (
+                <div className="mt-2 pt-2 border-t border-indigo-200">
+                  <div className="text-[10px] font-medium text-indigo-700 mb-1">🔬 Maglia Vagliatura</div>
+                  <select
+                    value={screeningPosition === 'sopra' ? (meshSopra?.toString() || '') : (meshSotto?.toString() || '')}
+                    onChange={(e) => {
+                      const v = e.target.value ? parseInt(e.target.value) : null;
+                      if (screeningPosition === 'sopra') {
+                        setMeshSopra(v);
+                        setMeshSotto(null);
+                      } else {
+                        setMeshSotto(v);
+                        setMeshSopra(null);
+                      }
+                    }}
+                    className="w-full px-2 py-1 text-xs border border-indigo-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="">Seleziona maglia (µm)...</option>
+                    {meshOptions.map((m) => (
+                      <option key={m.id} value={m.microni.toString()}>
+                        {m.microni} µm
+                      </option>
+                    ))}
+                  </select>
+                  {(meshSopra || meshSotto) && (
+                    <div className="mt-1 text-[10px] font-mono text-indigo-800 bg-indigo-50 px-1 py-0.5 rounded">
+                      Etichetta: {new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                      {meshSopra ? ` +${meshSopra}` : ''}
+                      {meshSotto ? ` -${meshSotto}` : ''}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Campo testo libero */}
               <div className="mt-2 pt-2 border-t border-slate-200">
                 <input
