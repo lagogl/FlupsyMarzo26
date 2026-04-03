@@ -2722,7 +2722,7 @@ export default function Operations() {
                             {(() => {
                               const cycle = (cycles as any[])?.find((c: any) => c.id === op.cycleId);
                               return cycle?.screeningLabel ? (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                                <span className="font-bold text-blue-600 text-sm" title={cycle.screeningLabel}>
                                   {cycle.screeningLabel}
                                 </span>
                               ) : <span className="text-gray-300">—</span>;
@@ -3464,7 +3464,7 @@ export default function Operations() {
                             <div className="text-xs font-medium text-gray-500">Ciclo</div>
                             <div className="font-medium">{cycle ? `#${cycle.id}` : '-'}</div>
                             {cycle?.screeningLabel && (
-                              <span className="inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200">
+                              <span className="font-bold text-blue-600 text-sm">
                                 {cycle.screeningLabel}
                               </span>
                             )}
@@ -3648,7 +3648,7 @@ export default function Operations() {
                                   <span className="text-indigo-600 ml-1 font-medium">[Pos: {basket.row} - {basket.position}]</span>
                                 )}
                                 {showScreeningLabel && cycle?.screeningLabel && (
-                                  <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                                  <span className="font-bold text-blue-600 text-sm ml-2" title={cycle.screeningLabel}>
                                     {cycle.screeningLabel}
                                   </span>
                                 )}

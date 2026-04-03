@@ -1036,7 +1036,7 @@ export default function CycleDetail() {
               {cycle.screeningLabel && (
                 <>
                   <ChevronRight className="h-3 w-3 mx-1" />
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200">
+                  <span className="font-bold text-blue-600 text-sm">
                     🔬 {cycle.screeningLabel}
                   </span>
                 </>

@@ -1013,7 +1013,7 @@ export default function CyclesPaginated() {
                       {showScreeningLabel && (
                         <td className="py-2 px-3 align-middle">
                           {cycle.screeningLabel ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-800 border border-indigo-200" title={cycle.screeningLabel}>
+                            <span className="font-bold text-blue-600 text-sm" title={cycle.screeningLabel}>
                               {cycle.screeningLabel}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
