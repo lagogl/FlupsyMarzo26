@@ -1623,7 +1623,7 @@ export default function Operations() {
     }
   };
 
-  const getOperationTypeBadge = (type: string) => {
+  const getOperationTypeBadge = (type: string, short?: boolean) => {
     let bgColor = 'bg-blue-100 text-blue-800';
     
     switch (type) {
@@ -1649,12 +1649,25 @@ export default function Operations() {
       default:
         bgColor = 'bg-gray-100 text-gray-800';
     }
+
+    const shortLabels: Record<string, string> = {
+      'prima-attivazione': 'P.Att.',
+      'chiusura-ciclo': 'Chiusura',
+      'chiusura-ciclo-vagliatura': 'Ch.Vagl.',
+      'misura': 'Misura',
+      'peso': 'Peso',
+      'pulizia': 'Pulizia',
+      'vagliatura': 'Vagliatura',
+      'trattamento': 'Tratt.',
+      'vendita': 'Vendita',
+      'selezione-vendita': 'Sel.Vend.',
+      'trasferimento': 'Trasfm.',
+    };
     
     // Format operation type for display
-    const displayType = type
-      .split('-')
-      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    const displayType = short
+      ? (shortLabels[type] ?? type.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
+      : type.split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     
     return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${bgColor}`}>
       {displayType}
@@ -2710,8 +2723,8 @@ export default function Operations() {
                         >
                           {safeFormatDate(op.date, 'dd/MM/yyyy')}
                         </td>
-                        <td className="px-1 py-1 whitespace-nowrap" style={{width: '80px', maxWidth: '80px'}}>
-                          {getOperationTypeBadge(op.type)}
+                        <td className="px-1 py-1 whitespace-nowrap" style={{width: '80px', maxWidth: '80px'}} title={op.type?.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}>
+                          {getOperationTypeBadge(op.type, true)}
                         </td>
                         <td className="px-1 py-1 whitespace-nowrap text-xs text-gray-500">
                           <span className="font-bold text-red-600 text-base">
