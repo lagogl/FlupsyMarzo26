@@ -1162,6 +1162,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         return 'normal';
       }
 
+      const basketToCycleMap = new Map<number, number>();
+
       for (const destBasket of destinationBaskets) {
         console.log(`   Processando cestello destinazione ${destBasket.basketId}...`);
         
@@ -1179,6 +1181,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           lineageGroupId: sourceCycleLineageGroupId ?? undefined,
           qualityClass: cycleQualityClass,
         } as any).returning();
+
+        basketToCycleMap.set(destBasket.basketId, newCycle.id);
 
         // 1.1. AGGIORNA cycle_id in selection_destination_baskets
         await tx.update(selectionDestinationBaskets)
@@ -1422,25 +1426,22 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       for (const [lotId, totalAnimals] of Array.from(lotComposition.entries())) {
         const idempotencyKey = generateIdempotencyKey('transfer_out', Number(id), lotId);
         
-        try {
-          await tx.insert(lotLedger).values({
-            date: selection[0].date,
-            lotId: lotId,
-            type: 'transfer_out',
-            quantity: totalAnimals.toString(),
-            selectionId: Number(id),
-            allocationMethod: 'proportional',
-            allocationBasis: allocationBasis,
-            idempotencyKey: idempotencyKey,
-            notes: `Uscita da vagliatura #${selection[0].selectionNumber} - ${totalAnimals} animali`
-          });
+        const [inserted] = await tx.insert(lotLedger).values({
+          date: selection[0].date,
+          lotId: lotId,
+          type: 'transfer_out',
+          quantity: totalAnimals.toString(),
+          selectionId: Number(id),
+          allocationMethod: 'proportional',
+          allocationBasis: allocationBasis,
+          idempotencyKey: idempotencyKey,
+          notes: `Uscita da vagliatura #${selection[0].selectionNumber} - ${totalAnimals} animali`
+        }).onConflictDoNothing().returning({ id: lotLedger.id });
+        
+        if (inserted) {
           console.log(`      ✅ Transfer_out lotto ${lotId}: ${totalAnimals} animali`);
-        } catch (error: any) {
-          if (error.code === '23505') { // Unique constraint violation
-            console.log(`      ⚠️ Transfer_out lotto ${lotId} già registrato (idempotent)`);
-          } else {
-            throw error;
-          }
+        } else {
+          console.log(`      ⚠️ Transfer_out lotto ${lotId} già registrato (idempotent)`);
         }
       }
       
@@ -1464,28 +1465,24 @@ export async function completeSelectionFixed(req: Request, res: Response) {
               destBasket.basketId
             );
             
-            try {
-              await tx.insert(lotLedger).values({
-                date: selection[0].date,
-                lotId: allocation.lotId,
-                type: ledgerType,
-                quantity: allocation.roundedQuantity.toString(),
-                destCycleId: destBasket.destinationType === 'sold' ? null : undefined,
-                selectionId: Number(id),
-                basketId: destBasket.basketId,
-                allocationMethod: 'proportional',
-                allocationBasis: allocationBasis,
-                idempotencyKey: idempotencyKey,
-                notes: `${ledgerType === 'sale' ? 'Vendita' : 'Ingresso'} da vagliatura #${selection[0].selectionNumber} - ${allocation.roundedQuantity} animali (${(allocation.percentage * 100).toFixed(1)}%)`
-              });
-              
+            const [insertedLedger] = await tx.insert(lotLedger).values({
+              date: selection[0].date,
+              lotId: allocation.lotId,
+              type: ledgerType,
+              quantity: allocation.roundedQuantity.toString(),
+              destCycleId: destBasket.destinationType === 'sold' ? null : undefined,
+              selectionId: Number(id),
+              basketId: destBasket.basketId,
+              allocationMethod: 'proportional',
+              allocationBasis: allocationBasis,
+              idempotencyKey: idempotencyKey,
+              notes: `${ledgerType === 'sale' ? 'Vendita' : 'Ingresso'} da vagliatura #${selection[0].selectionNumber} - ${allocation.roundedQuantity} animali (${(allocation.percentage * 100).toFixed(1)}%)`
+            }).onConflictDoNothing().returning({ id: lotLedger.id });
+            
+            if (insertedLedger) {
               console.log(`         ✅ ${ledgerType} lotto ${allocation.lotId}: ${allocation.roundedQuantity} animali (${(allocation.percentage * 100).toFixed(1)}%)`);
-            } catch (error: any) {
-              if (error.code === '23505') { // Unique constraint violation
-                console.log(`         ⚠️ ${ledgerType} lotto ${allocation.lotId} già registrato (idempotent)`);
-              } else {
-                throw error;
-              }
+            } else {
+              console.log(`         ⚠️ ${ledgerType} lotto ${allocation.lotId} già registrato (idempotent)`);
             }
           }
           
@@ -1507,31 +1504,91 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         for (const allocation of mortalityResult.allocations) {
           const idempotencyKey = generateIdempotencyKey('mortality', Number(id), allocation.lotId);
           
-          try {
-            await tx.insert(lotLedger).values({
-              date: selection[0].date,
-              lotId: allocation.lotId,
-              type: 'mortality',
-              quantity: allocation.roundedQuantity.toString(),
-              selectionId: Number(id),
-              allocationMethod: 'proportional',
-              allocationBasis: allocationBasis,
-              idempotencyKey: idempotencyKey,
-              notes: `Mortalità da vagliatura #${selection[0].selectionNumber} - ${allocation.roundedQuantity} animali (${(allocation.percentage * 100).toFixed(1)}%)`
-            });
-            
+          const [insertedMortality] = await tx.insert(lotLedger).values({
+            date: selection[0].date,
+            lotId: allocation.lotId,
+            type: 'mortality',
+            quantity: allocation.roundedQuantity.toString(),
+            selectionId: Number(id),
+            allocationMethod: 'proportional',
+            allocationBasis: allocationBasis,
+            idempotencyKey: idempotencyKey,
+            notes: `Mortalità da vagliatura #${selection[0].selectionNumber} - ${allocation.roundedQuantity} animali (${(allocation.percentage * 100).toFixed(1)}%)`
+          }).onConflictDoNothing().returning({ id: lotLedger.id });
+          
+          if (insertedMortality) {
             console.log(`      ✅ Mortalità lotto ${allocation.lotId}: ${allocation.roundedQuantity} animali (${(allocation.percentage * 100).toFixed(1)}%)`);
-          } catch (error: any) {
-            if (error.code === '23505') { // Unique constraint violation
-              console.log(`      ⚠️ Mortalità lotto ${allocation.lotId} già registrata (idempotent)`);
-            } else {
-              throw error;
-            }
+          } else {
+            console.log(`      ⚠️ Mortalità lotto ${allocation.lotId} già registrata (idempotent)`);
           }
         }
       }
       
       console.log(`✅ FASE 2.5 COMPLETATA: Lot ledger registrato con arrotondamento bilanciato`);
+
+      // ====== FASE 2.6: GENERAZIONE SCREENING LABELS (ETICHETTE VAGLIATURA) ======
+      console.log(`🏷️ FASE 2.6: Generazione etichette vagliatura`);
+      console.log(`🏷️ DEBUG: destinationBaskets.length=${destinationBaskets.length}, basketToCycleMap.size=${basketToCycleMap.size}`);
+      {
+        const selDate = new Date(selection[0].date);
+        const datePrefix = `${selDate.getDate().toString().padStart(2, '0')}/${(selDate.getMonth() + 1).toString().padStart(2, '0')}`;
+
+        const labelCounts = new Map<string, number>();
+        const cycleLabels: Array<{ cycleId: number; label: string }> = [];
+
+        for (const destBasket of destinationBaskets) {
+          const meshUp = destBasket.meshSopra;
+          const meshDown = destBasket.meshSotto;
+          const meshUp2 = destBasket.meshSopra2;
+          const meshDown2 = destBasket.meshSotto2;
+          const position = destBasket.screeningPosition as string | null;
+          console.log(`🏷️ DEBUG basket ${destBasket.basketId}: meshSopra=${meshUp}, meshSotto=${meshDown}, pos=${position}`);
+
+          if (!meshUp && !meshDown && !position) {
+            console.log(`🏷️ DEBUG: cestello ${destBasket.basketId} SALTATO (no mesh, no position)`);
+            continue;
+          }
+
+          let labelBase = datePrefix;
+          if (meshUp) labelBase += ` +${meshUp}`;
+          if (meshDown) labelBase += ` -${meshDown}`;
+          if (meshUp2) labelBase += ` +${meshUp2}`;
+          if (meshDown2) labelBase += ` -${meshDown2}`;
+          if (!meshUp && !meshDown && position) {
+            labelBase += position === 'sopra' ? ' [+]' : ' [-]';
+          }
+
+          const count = (labelCounts.get(labelBase) || 0) + 1;
+          labelCounts.set(labelBase, count);
+
+          const resolvedCycleId = basketToCycleMap.get(destBasket.basketId);
+          if (!resolvedCycleId) {
+            console.log(`🏷️ WARN: nessun cycleId trovato per basket ${destBasket.basketId}`);
+            continue;
+          }
+          cycleLabels.push({ cycleId: resolvedCycleId, label: labelBase });
+        }
+
+        const labelTotals = new Map<string, number>(labelCounts);
+        const labelCounters = new Map<string, number>();
+
+        for (const { cycleId, label } of cycleLabels) {
+          const total = labelTotals.get(label) || 1;
+          let finalLabel = label;
+          if (total > 1) {
+            const counter = (labelCounters.get(label) || 0) + 1;
+            labelCounters.set(label, counter);
+            finalLabel = `${label} (${counter})`;
+          }
+
+          await tx.update(cycles)
+            .set({ screeningLabel: finalLabel })
+            .where(eq(cycles.id, cycleId));
+
+          console.log(`   🏷️ Ciclo ${cycleId}: "${finalLabel}"`);
+        }
+        console.log(`✅ FASE 2.6 COMPLETATA: ${cycleLabels.length} etichette generate`);
+      }
 
       // ====== FASE 3: GESTIONE MORTALITÀ MISTA AVANZATA ======
       console.log(`🧮 FASE 3: Calcolo composizione aggregata e mortalità proporzionale`);

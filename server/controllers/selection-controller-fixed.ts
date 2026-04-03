@@ -495,6 +495,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
 
       // ====== FASE 2.5: GENERAZIONE SCREENING LABELS ======
       console.log(`🏷️ FASE 2.5: Generazione etichette vagliatura`);
+      console.log(`🏷️ DEBUG: destinationBaskets.length=${destinationBaskets.length}, basketToCycleMap.size=${basketToCycleMap.size}`);
+      console.log(`🏷️ DEBUG: basketToCycleMap entries:`, JSON.stringify(Array.from(basketToCycleMap.entries())));
       {
         const selDate = new Date(selection[0].date);
         const datePrefix = `${selDate.getDate().toString().padStart(2, '0')}/${(selDate.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -509,7 +511,10 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           const meshDown2 = destBasket.meshSotto2;
           
           const position = destBasket.screeningPosition as string | null;
+          console.log(`🏷️ DEBUG basket ${destBasket.basketId} (type=${typeof destBasket.basketId}): meshSopra=${meshUp}, meshSotto=${meshDown}, pos=${position}`);
+          console.log(`🏷️ DEBUG resolvedCycleId=${basketToCycleMap.get(destBasket.basketId)}, mapKey lookup for ${destBasket.basketId}`);
           if (!meshUp && !meshDown && !position) {
+            console.log(`🏷️ DEBUG: cestello ${destBasket.basketId} SALTATO (no mesh, no position)`);
             continue;
           }
           
