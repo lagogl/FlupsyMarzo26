@@ -128,7 +128,9 @@ import {
   removeSourceBasket,
   removeDestinationBasket,
   completeSelection,
-  migrateBasketLotData
+  migrateBasketLotData,
+  cancelSelection,
+  checkSelectionCancellation
 } from "./controllers/selection-controller";
 
 // Import la funzione di completamento corretta dal controller fisso
@@ -7738,6 +7740,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Route per migrazione dati basket-lotto (chiamata una tantum)
   app.post("/api/selections/migrate-basket-lot-data", migrateBasketLotData);
   
+  // Route per cancellazione atomica vagliatura (con rollback completo)
+  app.get("/api/selections/:id/cancellation-check", checkSelectionCancellation);
+  app.post("/api/selections/:id/cancel", cancelSelection);
+
   // Registra le route per cancellare e completare le selezioni
   implementSelectionRoutes(app, db);
   

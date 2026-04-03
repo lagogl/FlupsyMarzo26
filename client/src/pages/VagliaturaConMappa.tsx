@@ -162,6 +162,7 @@ export default function VagliaturaConMappa() {
     description?: string;
   }>>([]);
   const [currentCompletionStep, setCurrentCompletionStep] = useState(0);
+  const [failedSelectionId, setFailedSelectionId] = useState<number | null>(null);
   
   // Query per i dati
   const { data: flupsys = [], isLoading: isLoadingFlupsys } = useQuery<Flupsy[]>({
@@ -1040,7 +1041,6 @@ export default function VagliaturaConMappa() {
       }, 2000);
       
     } catch (error: any) {
-      // In caso di errore, aggiorna lo step corrente come errore
       const currentStep = completionSteps.find(step => step.status === 'in-progress');
       if (currentStep) {
         updateStep(currentStep.id, 'error', completionSteps.findIndex(s => s.id === currentStep.id));
@@ -1052,7 +1052,31 @@ export default function VagliaturaConMappa() {
         variant: "destructive"
       });
       
-      // Chiudi il dialogo di progresso in caso di errore
+      if (selectionId) {
+        setFailedSelectionId(selectionId);
+        try {
+          console.log(`🗑️ Auto-cancellazione vagliatura fallita (ID: ${selectionId})...`);
+          const cancelRes = await fetch(`/api/selections/${selectionId}/cancel`, { method: 'POST' });
+          if (cancelRes.ok) {
+            console.log(`✅ Vagliatura ${selectionId} cancellata con successo`);
+            toast({
+              title: "Pulizia automatica",
+              description: "La vagliatura fallita è stata cancellata. Puoi riprovare.",
+            });
+            setFailedSelectionId(null);
+          } else {
+            console.error(`❌ Errore cancellazione vagliatura ${selectionId}`);
+            toast({
+              title: "Attenzione",
+              description: "La vagliatura fallita non è stata cancellata automaticamente. Usa il pulsante 'Cancella Vagliatura' per pulire.",
+              variant: "destructive"
+            });
+          }
+        } catch (cancelErr) {
+          console.error('Errore durante auto-cancellazione:', cancelErr);
+        }
+      }
+      
       setTimeout(() => {
         setIsCompletionInProgress(false);
       }, 3000);
@@ -2180,22 +2204,48 @@ export default function VagliaturaConMappa() {
               <Button variant="outline" onClick={() => setCurrentTab('selezione-destinazione')}>
                 Indietro
               </Button>
-              <Button 
-                variant="default" 
-                onClick={handleCompleteScreening}
-                disabled={isCompletionInProgress || isScreeningCompleted}
-              >
-                {isCompletionInProgress ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Completamento in corso...
-                  </>
-                ) : isScreeningCompleted ? (
-                  'Vagliatura Completata ✓'
-                ) : (
-                  'Completa Vagliatura'
+              <div className="flex gap-2">
+                {failedSelectionId && (
+                  <Button 
+                    variant="destructive" 
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/selections/${failedSelectionId}/cancel`, { method: 'POST' });
+                        if (res.ok) {
+                          toast({ title: "Vagliatura cancellata", description: "Puoi riprovare ora." });
+                          setFailedSelectionId(null);
+                          queryClient.invalidateQueries({ queryKey: ['/api/baskets'] });
+                          queryClient.invalidateQueries({ queryKey: ['/api/selections'] });
+                          queryClient.invalidateQueries({ queryKey: ['/api/cycles'] });
+                        } else {
+                          const err = await res.json();
+                          toast({ title: "Errore", description: err.error || "Cancellazione fallita", variant: "destructive" });
+                        }
+                      } catch (e: any) {
+                        toast({ title: "Errore", description: e.message, variant: "destructive" });
+                      }
+                    }}
+                  >
+                    Cancella Vagliatura Fallita
+                  </Button>
                 )}
-              </Button>
+                <Button 
+                  variant="default" 
+                  onClick={handleCompleteScreening}
+                  disabled={isCompletionInProgress || isScreeningCompleted}
+                >
+                  {isCompletionInProgress ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Completamento in corso...
+                    </>
+                  ) : isScreeningCompleted ? (
+                    'Vagliatura Completata ✓'
+                  ) : (
+                    'Completa Vagliatura'
+                  )}
+                </Button>
+              </div>
             </CardFooter>
           </Card>
         </TabsContent>

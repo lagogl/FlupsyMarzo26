@@ -21,7 +21,9 @@ import {
   cycles,
   baskets,
   basketLotComposition,
-  flupsys
+  flupsys,
+  lotLedger,
+  selectionBasketHistory
 } from '../../shared/schema';
 import { eq, and, gt, inArray, sql, desc } from 'drizzle-orm';
 import { OperationsCache } from '../operations-cache-service.js';
@@ -247,6 +249,18 @@ class SelectionRollbackService {
       console.log(`📋 [ROLLBACK] Operazioni da cancellare: ${opIds.join(', ')}`);
       console.log(`📋 [ROLLBACK] Cicli da riaprire: ${oldCycleIds.join(', ')}`);
       console.log(`📋 [ROLLBACK] Cicli da cancellare: ${newCycleIds.join(', ')}`);
+
+      // STEP 0a: Cancella lot_ledger per questa selezione
+      const deletedLedger = await db.delete(lotLedger).where(eq(lotLedger.selectionId, selectionId)).returning({ id: lotLedger.id });
+      if (deletedLedger.length > 0) {
+        console.log(`✅ [ROLLBACK] Cancellati ${deletedLedger.length} record lot_ledger`);
+      }
+
+      // STEP 0b: Cancella selection_basket_history per questa selezione
+      const deletedHistory = await db.delete(selectionBasketHistory).where(eq(selectionBasketHistory.selectionId, selectionId)).returning({ id: selectionBasketHistory.id });
+      if (deletedHistory.length > 0) {
+        console.log(`✅ [ROLLBACK] Cancellati ${deletedHistory.length} record selection_basket_history`);
+      }
 
       // STEP 1: Cancella le operazioni
       if (opIds.length > 0) {
