@@ -360,9 +360,7 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       const destWeight = sourceWeightGrams > 0
         ? Math.round((dest.animalCount / sourceAnimalCount) * sourceWeightGrams)
         : (animalsPerKg && animalsPerKg > 0 ? Math.round((dest.animalCount * 1000) / animalsPerKg) : 0);
-      const destAnimalsPerKg = destWeight > 0
-        ? Math.round((dest.animalCount * 1000) / destWeight)
-        : (animalsPerKg ?? null);
+      const destAnimalsPerKg = animalsPerKg ?? null;
 
       const pctOnSource = sourceAnimalCount > 0
         ? ((dest.animalCount / sourceAnimalCount) * 100).toFixed(1)
