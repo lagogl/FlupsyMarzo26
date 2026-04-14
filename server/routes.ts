@@ -541,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             JOIN baskets b ON b.id = o.basket_id
             WHERE b.state = 'active'
               AND b.flupsy_id IN (${sql.raw(idsLiteral)})
-              AND o.type IN ('misura', 'peso', 'prima-attivazione')
+              AND o.type IN ('misura', 'peso', 'prima-attivazione', 'trasferimento')
               AND o.animal_count > 0
             ORDER BY o.basket_id, o.date DESC, o.id DESC
           )
@@ -559,7 +559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             FROM operations o
             JOIN baskets b ON b.id = o.basket_id
             WHERE b.state = 'active'
-              AND o.type IN ('misura', 'peso', 'prima-attivazione')
+              AND o.type IN ('misura', 'peso', 'prima-attivazione', 'trasferimento')
               AND o.animal_count > 0
             ORDER BY o.basket_id, o.date DESC, o.id DESC
           )
