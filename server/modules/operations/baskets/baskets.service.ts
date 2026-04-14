@@ -964,10 +964,17 @@ export class BasketsService {
       const registeredAnimalsPerKg = lastMeasurementOp.animalsPerKg;
       const registeredSize = this.getSizeCodeFromAnimalsPerKg(allSizes, registeredAnimalsPerKg);
 
-      const opDate = new Date(lastMeasurementOp.date);
-      const daysSince = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
+      const lastAnyOp = basketOps.find(op =>
+        (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'peso') &&
+        op.animalsPerKg && op.animalsPerKg > 0
+      );
+      const lastOpDate = lastAnyOp ? new Date(lastAnyOp.date) : new Date(lastMeasurementOp.date);
+      const daysSince = Math.floor((today.getTime() - lastOpDate.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (daysSince < 3) {
+      const measurementOpDate = new Date(lastMeasurementOp.date);
+      const daysSinceMeasurement = Math.floor((today.getTime() - measurementOpDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysSinceMeasurement < 3) {
         continue;
       }
 
@@ -978,7 +985,7 @@ export class BasketsService {
         continue;
       }
 
-      const expectedWeightGrams = avgWeightGrams * Math.exp((sgr / 100) * daysSince);
+      const expectedWeightGrams = avgWeightGrams * Math.exp((sgr / 100) * daysSinceMeasurement);
       const expectedAnimalsPerKg = Math.round(1000 / expectedWeightGrams);
       const expectedSize = this.getSizeCodeFromAnimalsPerKg(allSizes, expectedAnimalsPerKg);
 
@@ -995,8 +1002,8 @@ export class BasketsService {
         expectedAnimalsPerKg,
         hasExpectedSizeChange,
         daysSinceLastMeasurement: daysSince,
-        lastMeasurementDate: opDate.toISOString().split('T')[0],
-        lastOperationType: lastMeasurementOp.type
+        lastMeasurementDate: lastOpDate.toISOString().split('T')[0],
+        lastOperationType: lastAnyOp?.type || lastMeasurementOp.type
       });
     }
 
