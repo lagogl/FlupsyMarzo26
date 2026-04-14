@@ -665,8 +665,9 @@ export class BasketsService {
         INNER JOIN baskets b ON o.basket_id = b.id
         WHERE b.current_cycle_id IS NOT NULL
           AND o.cycle_id = b.current_cycle_id
-          AND o.dead_count IS NOT NULL 
-          AND o.dead_count > 0
+          AND o.cancelled_at IS NULL
+          AND o.mortality_rate IS NOT NULL 
+          AND o.mortality_rate > 0
       ),
       first_activation AS (
         SELECT 
