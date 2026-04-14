@@ -394,7 +394,28 @@ export default function Baskets() {
         return dateCompare;
       });
 
+    // Usa dati server-side da latest-operations come fonte primaria (nessun limite paginazione)
+    const serverOp = latestOperationsMap[basket.id];
+
     if (basketOperations.length === 0) {
+      if (serverOp) {
+        const sSize = serverOp.measurementAnimalsPerKg && serverOp.measurementAnimalsPerKg > 0
+          ? getSizeCodeFromAnimalsPerKg(serverOp.measurementAnimalsPerKg) : null;
+        return {
+          ...basket,
+          calculatedSize: sSize,
+          calculatedAnimalCount: serverOp.animalCount || null,
+          activationDate: serverOp.activationDate || null,
+          lotId: serverOp.lotId || null,
+          lastOperationDate: serverOp.date,
+          lastOperationType: serverOp.type,
+          cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null,
+          sitoProduttivo,
+          pesoCesta: serverOp.totalWeight && serverOp.totalWeight > 0 ? serverOp.totalWeight / 1000 : null,
+          animalsPerKg: serverOp.measurementAnimalsPerKg ?? serverOp.animalsPerKg ?? null,
+          mortalityPercent: serverOp.lastMortalityRate ?? null
+        };
+      }
       return {
         ...basket,
         calculatedSize: null,
@@ -428,9 +449,6 @@ export default function Baskets() {
         mortalityPercent: null
       };
     }
-
-    // Usa dati server-side da latest-operations come fonte primaria (nessun limite paginazione)
-    const serverOp = latestOperationsMap[basket.id];
 
     // Fallback: operazione più recente dal set client-side, escludendo chiusure
     const latestOperation = basketOperations.find(op => 
