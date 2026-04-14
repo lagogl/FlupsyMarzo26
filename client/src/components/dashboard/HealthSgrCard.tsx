@@ -49,7 +49,7 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
     
     const relevantOps = operations.filter((op: any) => 
       op.cycleId && activeCycleIds.has(op.cycleId) && 
-      (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'peso')
+      op.type !== 'chiusura-ciclo' && op.type !== 'chiusura-ciclo-vagliatura'
     );
 
     const latestOpsByBasket = new Map<number, any>();

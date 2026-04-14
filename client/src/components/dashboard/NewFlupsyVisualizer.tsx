@@ -141,10 +141,12 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return expectedSizesMap.has(basketId);
   };
 
-  // Helper to check if basket needs measurement (>7 days since last)
   const needsMeasurement = (basketId: number): boolean => {
-    const info = expectedSizesData?.find(e => e.basketId === basketId);
-    return info ? info.daysSinceLastMeasurement > 7 : false;
+    if (!latestOperationsMap) return false;
+    const latestOp = latestOperationsMap[basketId];
+    if (!latestOp || !latestOp.date) return true;
+    const daysDiff = Math.floor((new Date().getTime() - new Date(latestOp.date).getTime()) / (1000 * 60 * 60 * 24));
+    return daysDiff > 7;
   };
 
   // Helper to check if basket has high mortality (>10%) - uses lastMortalityRate from latestOperationsMap

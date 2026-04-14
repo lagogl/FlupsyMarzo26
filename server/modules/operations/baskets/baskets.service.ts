@@ -965,8 +965,7 @@ export class BasketsService {
       const registeredSize = this.getSizeCodeFromAnimalsPerKg(allSizes, registeredAnimalsPerKg);
 
       const lastAnyOp = basketOps.find(op =>
-        (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'peso') &&
-        op.animalsPerKg && op.animalsPerKg > 0
+        op.type !== 'chiusura-ciclo' && op.type !== 'chiusura-ciclo-vagliatura'
       );
       const lastOpDate = lastAnyOp ? new Date(lastAnyOp.date) : new Date(lastMeasurementOp.date);
       const daysSince = Math.floor((today.getTime() - lastOpDate.getTime()) / (1000 * 60 * 60 * 24));
