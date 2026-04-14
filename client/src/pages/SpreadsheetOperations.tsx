@@ -786,7 +786,7 @@ export default function SpreadsheetOperations() {
           totalWeight: fullOp?.totalWeight || null,
           animalsPerKg: fullOp?.animalsPerKg || null,
           deadCount: fullOp?.deadCount || null,
-          mortalityRate: fullOp?.mortalityRate || null,
+          mortalityRate: fullOp?.mortalityRate != null ? fullOp.mortalityRate : null,
           notes: (() => {
             const hasMixedLot = !!(fullOp?.metadata);
             if (hasMixedLot) return extractOperatorNote(fullOp?.notes);
@@ -4400,7 +4400,7 @@ export default function SpreadsheetOperations() {
                       <div style={{width: '65px'}} className="px-1 py-1 border-r">
                         <input
                           type="number"
-                          value={row.mortalityRate ? row.mortalityRate.toFixed(2) : ''}
+                          value={row.mortalityRate != null ? row.mortalityRate.toFixed(2) : ''}
                           readOnly
                           className="w-full h-6 px-1 text-xs border-0 bg-gray-100 text-gray-600 rounded"
                           placeholder="Auto"
