@@ -2861,13 +2861,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Formatta la data dell'operazione per il confronto
         const pesoDate = req.body.date ? format(new Date(req.body.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
         
-        // Recupera l'ultima operazione del ciclo CON DATA <= data peso per evitare copia da operazioni future
+        // Recupera l'ultima operazione MISURA o PRIMA-ATTIVAZIONE del ciclo per ottenere animalCount e altri dati base
         const lastOperations = await db
           .select()
           .from(operations)
           .where(and(
             eq(operations.cycleId, req.body.cycleId),
-            sql`${operations.date} <= ${pesoDate}`
+            sql`${operations.date} <= ${pesoDate}`,
+            sql`${operations.type} IN ('misura', 'prima-attivazione')`
           ))
           .orderBy(sql`${operations.date} DESC, ${operations.id} DESC`)
           .limit(1);
@@ -2876,24 +2877,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clearTimeout(timeoutId);
           return res.status(400).json({
             success: false,
-            message: "Nessuna operazione precedente trovata per questo ciclo alla data specificata. L'operazione peso richiede almeno una prima-attivazione."
+            message: "Nessuna operazione di misura o prima-attivazione trovata per questo ciclo. L'operazione peso richiede almeno una prima-attivazione."
           });
         }
         
         const lastOp = lastOperations[0];
-        console.log(`📊 PESO: Copio dati da operazione #${lastOp.id} (${lastOp.type}) del ${lastOp.date}`);
+        console.log(`📊 PESO: Copio dati base da operazione #${lastOp.id} (${lastOp.type}) del ${lastOp.date}`);
         
-        // Copia tutti i campi dall'ultima operazione tranne totalWeight che viene dall'input
-        req.body.sizeId = lastOp.sizeId;
         req.body.sgrId = lastOp.sgrId;
         req.body.lotId = lastOp.lotId;
         req.body.animalCount = lastOp.animalCount;
-        req.body.animalsPerKg = lastOp.animalsPerKg;
-        req.body.averageWeight = lastOp.averageWeight;
         req.body.deadCount = 0;
-        req.body.mortalityRate = 0;
         
-        console.log(`📊 PESO: Dati copiati - sizeId=${req.body.sizeId}, animalCount=${req.body.animalCount}, totalWeight=${req.body.totalWeight}`);
+        const lastMortResult = await db.execute(sql`
+          SELECT mortality_rate FROM operations
+          WHERE basket_id = ${req.body.basketId}
+            AND cancelled_at IS NULL
+            AND type IN ('prima-attivazione', 'misura', 'peso')
+            AND mortality_rate IS NOT NULL AND mortality_rate > 0
+          ORDER BY date DESC, id DESC LIMIT 1
+        `);
+        const prevMort = lastMortResult.rows[0] as any;
+        req.body.mortalityRate = prevMort ? prevMort.mortality_rate : 0;
+        if (prevMort) {
+          console.log(`📋 PESO: Ereditata mortalityRate=${prevMort.mortality_rate}% dall'operazione precedente`);
+        }
+        
+        const totalWeightKg = (req.body.totalWeight || 0) / 1000;
+        if (totalWeightKg > 0 && req.body.animalCount > 0) {
+          req.body.animalsPerKg = Math.round(req.body.animalCount / totalWeightKg);
+          req.body.averageWeight = 1000000 / req.body.animalsPerKg;
+          const newSizeId = await determineSizeByAnimalsPerKg(req.body.animalsPerKg);
+          req.body.sizeId = newSizeId || lastOp.sizeId;
+          console.log(`📊 PESO: Ricalcolato - animalsPerKg=${req.body.animalsPerKg}, averageWeight=${req.body.averageWeight}, sizeId=${req.body.sizeId}, animalCount=${req.body.animalCount}, totalWeight=${req.body.totalWeight}`);
+        } else {
+          req.body.animalsPerKg = lastOp.animalsPerKg;
+          req.body.averageWeight = lastOp.averageWeight;
+          req.body.sizeId = lastOp.sizeId;
+          console.log(`📊 PESO: Peso non valido, copiati dati precedenti - animalsPerKg=${req.body.animalsPerKg}, sizeId=${req.body.sizeId}`);
+        }
       }
 
       // Prima verifica se si tratta di un'operazione prima-attivazione che non richiede un cycleId

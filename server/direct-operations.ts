@@ -246,19 +246,40 @@ export function implementDirectOperationRoute(app: Express) {
         }
         
         const lastMeasureOp = lastMeasureOperations[0];
-        console.log(`📊 PESO: Copio dati da operazione #${lastMeasureOp.id} (${lastMeasureOp.type}) del ${lastMeasureOp.date}`);
+        console.log(`📊 PESO: Copio dati base da operazione #${lastMeasureOp.id} (${lastMeasureOp.type}) del ${lastMeasureOp.date}`);
         
-        // Copia tutti i campi dall'ultima MISURA/PRIMA-ATTIVAZIONE tranne totalWeight che viene dall'input
-        operationData.sizeId = lastMeasureOp.sizeId;
         operationData.sgrId = lastMeasureOp.sgrId;
         operationData.lotId = lastMeasureOp.lotId;
         operationData.animalCount = lastMeasureOp.animalCount;
-        operationData.animalsPerKg = lastMeasureOp.animalsPerKg;
-        operationData.averageWeight = lastMeasureOp.averageWeight;
         operationData.deadCount = 0;
-        operationData.mortalityRate = 0;
         
-        console.log(`📊 PESO: Dati copiati da ${lastMeasureOp.type} - sizeId=${operationData.sizeId}, animalsPerKg=${operationData.animalsPerKg}, animalCount=${operationData.animalCount}, totalWeight=${operationData.totalWeight}`);
+        const lastMortResult = await db.execute(sql`
+          SELECT mortality_rate FROM operations
+          WHERE basket_id = ${operationData.basketId}
+            AND cancelled_at IS NULL
+            AND type IN ('prima-attivazione', 'misura', 'peso')
+            AND mortality_rate IS NOT NULL AND mortality_rate > 0
+          ORDER BY date DESC, id DESC LIMIT 1
+        `);
+        const prevMort = lastMortResult.rows[0] as any;
+        operationData.mortalityRate = prevMort ? prevMort.mortality_rate : 0;
+        if (prevMort) {
+          console.log(`📋 PESO: Ereditata mortalityRate=${prevMort.mortality_rate}% dall'operazione precedente`);
+        }
+        
+        const totalWeightKg = (operationData.totalWeight || 0) / 1000;
+        if (totalWeightKg > 0 && operationData.animalCount > 0) {
+          operationData.animalsPerKg = Math.round(operationData.animalCount / totalWeightKg);
+          operationData.averageWeight = 1000000 / operationData.animalsPerKg;
+          const newSizeId = await findSizeIdByAnimalsPerKg(operationData.animalsPerKg);
+          operationData.sizeId = newSizeId || lastMeasureOp.sizeId;
+          console.log(`📊 PESO: Ricalcolato - animalsPerKg=${operationData.animalsPerKg}, averageWeight=${operationData.averageWeight}, sizeId=${operationData.sizeId}, animalCount=${operationData.animalCount}, totalWeight=${operationData.totalWeight}`);
+        } else {
+          operationData.animalsPerKg = lastMeasureOp.animalsPerKg;
+          operationData.averageWeight = lastMeasureOp.averageWeight;
+          operationData.sizeId = lastMeasureOp.sizeId;
+          console.log(`📊 PESO: Peso non valido, copiati dati precedenti - animalsPerKg=${operationData.animalsPerKg}, sizeId=${operationData.sizeId}`);
+        }
       }
       
       if (!operationData.basketId) {
