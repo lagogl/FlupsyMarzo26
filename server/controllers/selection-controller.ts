@@ -1282,6 +1282,7 @@ export async function completeSelectionFixed(req: Request, res: Response) {
                         : 0,
           deadCount: destBasket.deadCount || 0,
           mortalityRate: destBasket.mortalityRate || 0,
+          sampleCount: destBasket.sampleCount || null,
           sizeId: actualSizeId,
           metadata: operationMetadata,
           notes: operationNotes,

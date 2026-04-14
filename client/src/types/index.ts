@@ -93,6 +93,7 @@ export interface DestinationBasket {
   destinationType: 'placed' | 'sold';
   animalCount: number | null;
   deadCount: number | null;
+  mortalityRate?: number | null;
   sampleWeight: number | null;
   sampleCount: number | null;
   totalWeight: number | null;
