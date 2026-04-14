@@ -376,9 +376,9 @@ export default function Baskets() {
       };
     }
 
-    // Trova tutte le operazioni per questo cestello, ordinate per data e ID (più recente prima)
+    // Trova tutte le operazioni per questo cestello nel ciclo CORRENTE, ordinate per data e ID (più recente prima)
     const basketOperations = operations
-      .filter(op => op.basketId === basket.id)
+      .filter(op => op.basketId === basket.id && (!basket.currentCycleId || op.cycleId === basket.currentCycleId))
       .sort((a, b) => {
         const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
         if (dateCompare === 0) {
