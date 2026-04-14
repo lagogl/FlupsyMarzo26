@@ -376,9 +376,9 @@ export default function Baskets() {
       };
     }
 
-    // Trova tutte le operazioni per questo cestello nel ciclo CORRENTE, ordinate per data e ID (più recente prima)
+    // Trova tutte le operazioni per questo cestello, ordinate per data e ID (più recente prima)
     const basketOperations = operations
-      .filter(op => op.basketId === basket.id && (!basket.currentCycleId || op.cycleId === basket.currentCycleId))
+      .filter(op => op.basketId === basket.id)
       .sort((a, b) => {
         const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
         if (dateCompare === 0) {
@@ -423,8 +423,10 @@ export default function Baskets() {
       };
     }
 
-    // Prendi l'operazione più recente per i dati principali
-    const latestOperation = basketOperations[0];
+    // Prendi l'operazione più recente escludendo le chiusure ciclo (che appartengono a cicli vecchi)
+    const latestOperation = basketOperations.find(op => 
+      op.type !== 'chiusura-ciclo-vagliatura' && op.type !== 'chiusura-ciclo'
+    ) || basketOperations[0];
     
     // Calcola la taglia usando SOLO operazioni misura/prima-attivazione (logica allineata al backend)
     let calculatedSize = null;
