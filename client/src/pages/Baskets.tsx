@@ -114,6 +114,12 @@ export default function Baskets() {
     staleTime: 60000 // Cache for 1 minute per performance
   });
 
+  // Query latest operations per basket (server-side, nessun limite paginazione)
+  const { data: latestOperationsMap = {} } = useQuery<Record<number, any>>({
+    queryKey: ['/api/baskets/latest-operations'],
+    staleTime: 60000
+  });
+
   // Query sizes for size calculation
   const { data: sizes = [] } = useQuery({
     queryKey: ['/api/sizes'],
@@ -423,49 +429,54 @@ export default function Baskets() {
       };
     }
 
-    // Prendi l'operazione più recente escludendo le chiusure ciclo (che appartengono a cicli vecchi)
+    // Usa dati server-side da latest-operations come fonte primaria (nessun limite paginazione)
+    const serverOp = latestOperationsMap[basket.id];
+
+    // Fallback: operazione più recente dal set client-side, escludendo chiusure
     const latestOperation = basketOperations.find(op => 
       op.type !== 'chiusura-ciclo-vagliatura' && op.type !== 'chiusura-ciclo'
     ) || basketOperations[0];
     
-    // Calcola la taglia usando SOLO operazioni misura/prima-attivazione (logica allineata al backend)
+    // Calcola la taglia: priorità server-side measurementAnimalsPerKg, poi client-side
     let calculatedSize = null;
     
-    // Cerca operazioni misura/prima-attivazione che hanno il campo animals_per_kg
-    const measurementOps = basketOperations.filter(op => 
-      (op.type === 'misura' || op.type === 'prima-attivazione') && 
-      op.animalsPerKg && op.animalsPerKg > 0
-    );
-    
-    if (measurementOps.length > 0) {
-      // Usa l'operazione misura/prima-attivazione più recente
-      const operation = measurementOps[0];
-      calculatedSize = getSizeCodeFromAnimalsPerKg(operation.animalsPerKg);
+    if (serverOp?.measurementAnimalsPerKg && serverOp.measurementAnimalsPerKg > 0) {
+      calculatedSize = getSizeCodeFromAnimalsPerKg(serverOp.measurementAnimalsPerKg);
+    } else {
+      const measurementOps = basketOperations.filter(op => 
+        (op.type === 'misura' || op.type === 'prima-attivazione') && 
+        op.animalsPerKg && op.animalsPerKg > 0
+      );
+      if (measurementOps.length > 0) {
+        calculatedSize = getSizeCodeFromAnimalsPerKg(measurementOps[0].animalsPerKg);
+      }
     }
 
-    // Data di attivazione: prima operazione
-    const firstOperation = basketOperations[basketOperations.length - 1];
-    const activationDate = firstOperation?.date || null;
+    // Data di attivazione: da server-side o fallback client-side
+    const activationDate = serverOp?.activationDate || basketOperations[basketOperations.length - 1]?.date || null;
 
-    // Peso cesta: dall'ultima operazione con totalWeight (in grammi nel database)
+    // Peso cesta: da server-side o fallback client-side (in grammi nel database)
+    const serverWeight = serverOp?.totalWeight && serverOp.totalWeight > 0 ? serverOp.totalWeight / 1000 : null;
     const operationWithWeight = basketOperations.find(op => op.totalWeight && op.totalWeight > 0);
-    const pesoCesta = operationWithWeight?.totalWeight ? operationWithWeight.totalWeight / 1000 : null;
+    const pesoCesta = serverWeight ?? (operationWithWeight?.totalWeight ? operationWithWeight.totalWeight / 1000 : null);
 
-    // pz/Kg: dall'ultima operazione misura/prima-attivazione
-    const animalsPerKg = measurementOps.length > 0 ? measurementOps[0].animalsPerKg : null;
+    // pz/Kg: da server-side measurementAnimalsPerKg o fallback
+    const animalsPerKg = serverOp?.measurementAnimalsPerKg ?? serverOp?.animalsPerKg ?? null;
 
-    // Mortalità: dall'ultima operazione con mortality
-    const operationWithMortality = basketOperations.find(op => op.mortality !== null && op.mortality !== undefined);
-    const mortalityPercent = operationWithMortality?.mortality || null;
+    // Mortalità: da server-side o fallback client-side
+    const mortalityPercent = serverOp?.lastMortalityRate ?? null;
+
+    // Animal count: server-side come fonte primaria
+    const calculatedAnimalCount = serverOp?.animalCount ?? latestOperation?.animalCount ?? null;
 
     return {
       ...basket,
       calculatedSize,
-      calculatedAnimalCount: latestOperation.animalCount || null,
+      calculatedAnimalCount,
       activationDate,
-      lotId: latestOperation.lotId || null,
-      lastOperationDate: latestOperation.date,
-      lastOperationType: latestOperation.type,
+      lotId: serverOp?.lotId ?? latestOperation?.lotId ?? null,
+      lastOperationDate: serverOp?.date ?? latestOperation?.date,
+      lastOperationType: serverOp?.type ?? latestOperation?.type,
       cycleCode: basket.currentCycleId ? `CICLO-${basket.currentCycleId}` : null,
       sitoProduttivo,
       pesoCesta,
