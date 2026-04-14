@@ -1,0 +1,33 @@
+Ecco l'analisi punto per punto confrontando i requisiti con il nostro codice:
+
+1. "totalWeight in grammi?"
+
+Endpoint	Cosa fa	Conforme?
+/api/direct-operations (routes.ts)	Prende totalWeight dal body e lo salva direttamente, con commento "In grammi come da specifica" (linea 1266)	✅ SI
+MobilePesoHandler.registraPeso	Prende totalWeight in grammi (commento linea 113), divide per 1000 per calcolare animalsPerKg (linea 147: totalWeight / 1000)	✅ SI
+Nessun problema. Entrambi si aspettano grammi.
+
+2. "Mandate animalsPerKg, averageWeight o sizeId?"
+
+Endpoint	Cosa fa	Conforme?
+/api/direct-operations	NON li ricalcola. Copia animalsPerKg, averageWeight e sizeId dall'ultima operazione del ciclo (linee 1262-1268) senza ricalcolare in base al nuovo peso	⚠️ PARZIALE
+MobilePesoHandler	LI RICALCOLA tutti. animalsPerKg (linea 148), averageWeight (linea 153), sizeId (linea 158 via determinaTaglia)	✅ SI
+Problema in direct-operations: copia i vecchi valori dall'ultima operazione senza ricalcolare. Se la cesta pesava 3kg alla misura e ora pesa 5kg, animalsPerKg e averageWeight resteranno quelli della vecchia misura, non quelli del nuovo peso. Il MobilePesoHandler invece li ricalcola correttamente.
+
+3. "Il campo animalCount viene inviato?"
+
+Endpoint	Cosa fa	Conforme?
+/api/direct-operations	Ignora qualsiasi animalCount dal body. Usa lastOperation.animalCount (linea 1265)	✅ SI
+MobilePesoHandler	Non accetta animalCount nei parametri. Lo recupera dall'ultima operazione del ciclo (linea 141)	✅ SI
+Nessun problema. Entrambi ignorano l'input e usano il valore dell'ultima operazione.
+
+Riepilogo finale:
+
+Requisito	direct-operations	MobilePesoHandler
+totalWeight in grammi	✅	✅
+Ricalcola animalsPerKg	❌ copia il vecchio	✅ ricalcola
+Ricalcola averageWeight	❌ copia il vecchio	✅ ricalcola
+Ricalcola sizeId	❌ copia il vecchio	✅ ricalcola
+animalCount ignorato	✅	✅
+mortalityRate ereditato	✅	✅
+L'unico punto critico è l'endpoint /api/direct-operations in routes.ts che non ricalcola animalsPerKg, averageWeight e sizeId in base al nuovo totalWeight. Vuoi che corregga anche quello?
