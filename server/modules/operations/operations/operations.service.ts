@@ -469,6 +469,25 @@ class OperationsService {
       console.log(`✅ Validazione OK: ${data.animalCount} animali <= ${availableAnimals} disponibili`);
     }
     
+    if (data.type === 'peso' && data.basketId && (!data.mortalityRate || data.mortalityRate === 0)) {
+      const lastOpResult = await db.execute(sql`
+        SELECT mortality_rate, sample_count, dead_count
+        FROM operations
+        WHERE basket_id = ${data.basketId}
+          AND cancelled_at IS NULL
+          AND type IN ('prima-attivazione', 'misura', 'peso')
+          AND mortality_rate IS NOT NULL
+          AND mortality_rate > 0
+        ORDER BY date DESC, id DESC
+        LIMIT 1
+      `);
+      const prevOp = lastOpResult.rows[0] as any;
+      if (prevOp) {
+        data.mortalityRate = prevOp.mortality_rate;
+        console.log(`📋 PESO: Ereditata mortalityRate=${prevOp.mortality_rate}% dall'operazione precedente`);
+      }
+    }
+
     // Arricchimento metadata e note per operazioni peso/misura su cestelli misti
     if ((data.type === 'peso' || data.type === 'misura') && data.basketId) {
       const isMixed = await isBasketMixedLot(data.basketId);
