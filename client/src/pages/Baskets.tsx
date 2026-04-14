@@ -1101,7 +1101,7 @@ export default function Baskets() {
                         </td>
                         <td className="px-2 py-2 text-sm text-gray-700">
                           {basket.mortalityPercent !== null && basket.mortalityPercent !== undefined ? (
-                            <span className="font-medium">{basket.mortalityPercent}%</span>
+                            <span className="font-medium">{Number(basket.mortalityPercent).toFixed(2)}%</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
