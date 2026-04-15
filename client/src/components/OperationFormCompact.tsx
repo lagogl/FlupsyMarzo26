@@ -2055,9 +2055,9 @@ export default function OperationFormCompact({
                         <FormControl>
                           <Input 
                             type="number" 
-                            step="0.1"
+                            step="0.01"
                             min="0"
-                            max="999999.9"
+                            max="999999.99"
                             placeholder={watchManualCountAdjustment ? "Peso calcolato automaticamente" : "Peso totale cestello"}
                             className={`h-8 text-sm ${watchManualCountAdjustment ? 'bg-purple-50' : ''}`}
                             readOnly={watchManualCountAdjustment}
@@ -2069,8 +2069,8 @@ export default function OperationFormCompact({
                                   field.onChange(null);
                                 } else {
                                   const numValue = parseFloat(value);
-                                  if (!isNaN(numValue) && numValue >= 0 && numValue <= 999999.9) {
-                                    field.onChange(Math.round(numValue * 10) / 10);
+                                  if (!isNaN(numValue) && numValue >= 0 && numValue <= 999999.99) {
+                                    field.onChange(numValue);
                                   }
                                 }
                               }
