@@ -1683,28 +1683,20 @@ export default function OperationForm({
                     </FormLabel>
                     <FormControl>
                       <Input 
-                        type="text" 
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="1000000"
                         placeholder={watchType === 'vendita' ? 'Es. 26000 per 26 kg' : 'Inserisci peso'}
                         className="h-8 text-sm"
-                        value={field.value !== null && field.value !== undefined ? field.value.toString() : ''}
+                        value={field.value !== null && field.value !== undefined ? field.value : ''}
                         onChange={(e) => {
                           const value = e.target.value;
-                          // Accetta solo numeri e un punto decimale
-                          if (!/^(\d*\.?\d*)$/.test(value) && value !== '') {
-                            return;
-                          }
-                          
-                          if (value === '' || value === '.') {
+                          if (value === '') {
                             field.onChange(null);
                           } else {
-                            let numValue = parseFloat(value);
-                            // Limita il valore massimo a 1.000.000
-                            if (numValue > 1000000) {
-                              numValue = 1000000;
-                            }
-                            // Arrotonda a una cifra decimale
-                            numValue = Math.round(numValue * 10) / 10;
-                            field.onChange(isNaN(numValue) ? null : numValue);
+                            const numValue = parseFloat(value);
+                            field.onChange(isNaN(numValue) ? null : Math.min(numValue, 1000000));
                           }
                         }}
                         onBlur={field.onBlur}
