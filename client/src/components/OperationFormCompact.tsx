@@ -98,7 +98,7 @@ const operationSchema = z.object({
           path: ['sampleWeight'],
           message: 'I grammi sample sono obbligatori in modalità automatica',
         });
-      } else if (data.sampleWeight < 1) {
+      } else if (data.sampleWeight <= 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['sampleWeight'],
@@ -1925,6 +1925,7 @@ export default function OperationFormCompact({
                         <FormControl>
                           <Input 
                             type="number" 
+                            step="any"
                             placeholder="Peso in grammi"
                             className="h-8 text-sm"
                             value={field.value === null || field.value === undefined ? '' : field.value}
@@ -2346,6 +2347,7 @@ export default function OperationFormCompact({
                           <FormControl>
                             <Input
                               type="number"
+                              step="any"
                               placeholder="Grammi"
                               className="h-7 text-xs"
                               value={field.value === null || field.value === undefined ? '' : field.value}
