@@ -873,52 +873,57 @@ export default function OperationFormCompact({
     }
   }, [watchType, watchBasketId, watchCycleId, watchLiveAnimals, deadCount, operations, form, watchManualCountAdjustment, watchTotalWeight]);
 
-  // Gestisce il tipo "peso" - recupera il conteggio animali dall'ultima operazione
+  // Gestisce il tipo "peso" - recupera animalCount e animalsPerKg dall'ultima misura/prima-attivazione
   useEffect(() => {
     const handlePesoOperation = async () => {
       if (watchType === 'peso' && watchBasketId && operations && operations.length > 0) {
-        console.log("Operazione PESO selezionata: ricerca conteggio animali dalla precedente operazione");
+        console.log("Operazione PESO selezionata: ricerca dati dall'ultima misura/prima-attivazione");
         
-        // Cerca l'ultima operazione per questo cestello/ciclo
-        let lastOperation = null;
-        
-        // Ottieni il cycleId corrente
         const cycleId = form.getValues('cycleId');
         
-        // Filtra le operazioni per questo cestello e ciclo
-        const basketOperations = operations
-          .filter((op: any) => op.basketId === watchBasketId && (!cycleId || op.cycleId === cycleId))
+        // Per il Peso, animalsPerKg deve venire dall'ultima MISURA o PRIMA-ATTIVAZIONE (non da qualsiasi operazione).
+        // Usare animalCount/totalWeight per ricalcolare animalsPerKg è sbagliato perché
+        // animalCount è il conteggio storico aggiustato per mortalità, non basato sulla densità reale.
+        const measureOps = operations
+          .filter((op: any) => 
+            op.basketId === watchBasketId && 
+            (!cycleId || op.cycleId === cycleId) &&
+            (op.type === 'misura' || op.type === 'prima-attivazione')
+          )
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
-        if (basketOperations.length > 0) {
-          lastOperation = basketOperations[0];
-          console.log("Trovata ultima operazione per cestello/ciclo:", lastOperation);
-        }
+        const lastMeasureOp = measureOps.length > 0 ? measureOps[0] : null;
+        console.log("Ultima misura/prima-attivazione trovata:", lastMeasureOp);
         
-        // Se abbiamo un'operazione precedente e il conteggio degli animali
-        if (lastOperation && lastOperation.animalCount) {
-          console.log(`Impostazione conteggio animali dall'ultima operazione: ${lastOperation.animalCount}`);
-          
-          // Imposta il conteggio animali uguale a quello dell'ultima operazione
-          form.setValue('animalCount', lastOperation.animalCount);
-          
-          // Assicurati che il form riconosca questo campo come "impostato" manualmente
+        if (lastMeasureOp) {
+          // Imposta animalCount dall'ultima misura (conteggio storico)
+          if (lastMeasureOp.animalCount) {
+            form.setValue('animalCount', lastMeasureOp.animalCount);
+            console.log(`🐚 PESO: animalCount=${lastMeasureOp.animalCount} da op #${lastMeasureOp.id}`);
+          }
+          // Imposta animalsPerKg dall'ultima misura (densità reale da campione)
+          // NON ricalcolare da animalCount/totalWeight: produrrebbe valori errati
+          if (lastMeasureOp.animalsPerKg) {
+            form.setValue('animalsPerKg', lastMeasureOp.animalsPerKg);
+            console.log(`🐚 PESO: animalsPerKg=${lastMeasureOp.animalsPerKg} (da ${lastMeasureOp.type} del ${lastMeasureOp.date})`);
+          }
           toast({
-            title: "Conteggio animali preimpostato",
-            description: `Utilizzato conteggio di ${lastOperation.animalCount.toLocaleString('it-IT')} animali dall'ultima operazione`,
+            title: "Dati preimpostati dalla Misura",
+            description: `${lastMeasureOp.animalCount?.toLocaleString('it-IT')} animali · ${lastMeasureOp.animalsPerKg?.toLocaleString('it-IT')} anim/kg dall'ultima ${lastMeasureOp.type}`,
             duration: 3000
           });
         } else if (prevOperationData && prevOperationData.animalCount) {
-          // Se non abbiamo trovato un'operazione ma abbiamo dati precedenti
-          console.log(`Fallback: impostazione conteggio animali da prevOperationData: ${prevOperationData.animalCount}`);
+          console.log(`Fallback: impostazione da prevOperationData`);
           form.setValue('animalCount', prevOperationData.animalCount);
+          if (prevOperationData.animalsPerKg) {
+            form.setValue('animalsPerKg', prevOperationData.animalsPerKg);
+          }
         } else {
-          console.warn("Impossibile trovare il conteggio animali dall'ultima operazione");
+          console.warn("Impossibile trovare l'ultima misura/prima-attivazione per il cestello");
         }
       }
     };
     
-    // Esegui la funzione quando cambia il tipo di operazione o il cestello
     handlePesoOperation();
   }, [watchType, watchBasketId, form, operations, prevOperationData]);
 
@@ -1766,15 +1771,9 @@ export default function OperationFormCompact({
                                 const numValue = parseInt(value, 10);
                                 if (!isNaN(numValue) && numValue <= 999999) {
                                   field.onChange(numValue);
-                                  
-                                  // Se è un'operazione di tipo peso e abbiamo un conteggio animali,
-                                  // calcoliamo automaticamente gli animali per kg
-                                  const animalCount = form.getValues('animalCount');
-                                  if (animalCount && numValue > 0) {
-                                    // Calcolo animali per kg = (animalCount * 1000) / pesoTotale
-                                    const calculatedAnimalsPerKg = Math.round((animalCount * 1000) / numValue);
-                                    form.setValue('animalsPerKg', calculatedAnimalsPerKg);
-                                  }
+                                  // animalsPerKg NON viene ricalcolato dal peso:
+                                  // la densità rimane quella dell'ultima misura/prima-attivazione.
+                                  // Il backend gestisce questa logica server-side.
                                 }
                               }
                             }}
