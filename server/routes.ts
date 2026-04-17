@@ -2903,14 +2903,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`📋 PESO: Ereditata mortalityRate=${prevMort.mortality_rate}% dall'operazione precedente`);
         }
         
-        // La taglia/densità è determinata SOLO dalla Misura, non dal Peso.
-        // animalsPerKg viene sempre copiato dall'ultima misura/prima-attivazione
-        // perché animalCount è il conteggio storico aggiustato per mortalità (non basato sulla densità)
-        // e usarlo per ricalcolare animalsPerKg produce valori errati.
-        req.body.animalsPerKg = lastOp.animalsPerKg;
-        req.body.averageWeight = lastOp.averageWeight;
-        req.body.sizeId = lastOp.sizeId;
-        console.log(`📊 PESO: Copiati animalsPerKg=${req.body.animalsPerKg}, averageWeight=${req.body.averageWeight}, sizeId=${req.body.sizeId} dall'operazione #${lastOp.id} (${lastOp.type}). totalWeight=${req.body.totalWeight}`);
+        const totalWeightKg = (req.body.totalWeight || 0) / 1000;
+        if (totalWeightKg > 0 && req.body.animalCount > 0) {
+          req.body.animalsPerKg = Math.round(req.body.animalCount / totalWeightKg);
+          req.body.averageWeight = 1000000 / req.body.animalsPerKg;
+          const newSizeId = await determineSizeByAnimalsPerKg(req.body.animalsPerKg);
+          req.body.sizeId = newSizeId || lastOp.sizeId;
+          console.log(`📊 PESO: Ricalcolato - animalsPerKg=${req.body.animalsPerKg}, averageWeight=${req.body.averageWeight}, sizeId=${req.body.sizeId}, animalCount=${req.body.animalCount}, totalWeight=${req.body.totalWeight}`);
+        } else {
+          req.body.animalsPerKg = lastOp.animalsPerKg;
+          req.body.averageWeight = lastOp.averageWeight;
+          req.body.sizeId = lastOp.sizeId;
+          console.log(`📊 PESO: Peso non valido, copiati dati precedenti - animalsPerKg=${req.body.animalsPerKg}, sizeId=${req.body.sizeId}`);
+        }
       }
 
       // Prima verifica se si tratta di un'operazione prima-attivazione che non richiede un cycleId

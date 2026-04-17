@@ -267,14 +267,19 @@ export function implementDirectOperationRoute(app: Express) {
           console.log(`📋 PESO: Ereditata mortalityRate=${prevMort.mortality_rate}% dall'operazione precedente`);
         }
         
-        // La taglia/densità è determinata SOLO dalla Misura, non dal Peso.
-        // animalsPerKg viene sempre copiato dall'ultima misura/prima-attivazione
-        // perché animalCount è il conteggio storico aggiustato per mortalità (non basato sulla densità)
-        // e usarlo per ricalcolare animalsPerKg produce valori errati.
-        operationData.animalsPerKg = lastMeasureOp.animalsPerKg;
-        operationData.averageWeight = lastMeasureOp.averageWeight;
-        operationData.sizeId = lastMeasureOp.sizeId;
-        console.log(`📊 PESO: Copiati animalsPerKg=${operationData.animalsPerKg}, averageWeight=${operationData.averageWeight}, sizeId=${operationData.sizeId} dall'operazione #${lastMeasureOp.id} (${lastMeasureOp.type}). totalWeight=${operationData.totalWeight}`);
+        const totalWeightKg = (operationData.totalWeight || 0) / 1000;
+        if (totalWeightKg > 0 && operationData.animalCount > 0) {
+          operationData.animalsPerKg = Math.round(operationData.animalCount / totalWeightKg);
+          operationData.averageWeight = 1000000 / operationData.animalsPerKg;
+          const newSizeId = await findSizeIdByAnimalsPerKg(operationData.animalsPerKg);
+          operationData.sizeId = newSizeId || lastMeasureOp.sizeId;
+          console.log(`📊 PESO: Ricalcolato - animalsPerKg=${operationData.animalsPerKg}, averageWeight=${operationData.averageWeight}, sizeId=${operationData.sizeId}, animalCount=${operationData.animalCount}, totalWeight=${operationData.totalWeight}`);
+        } else {
+          operationData.animalsPerKg = lastMeasureOp.animalsPerKg;
+          operationData.averageWeight = lastMeasureOp.averageWeight;
+          operationData.sizeId = lastMeasureOp.sizeId;
+          console.log(`📊 PESO: Peso non valido, copiati dati precedenti - animalsPerKg=${operationData.animalsPerKg}, sizeId=${operationData.sizeId}`);
+        }
       }
       
       if (!operationData.basketId) {
