@@ -45,36 +45,39 @@ export default function IntegratedSampleCalculator({
   // Riferimento per tenere traccia dei cambiamenti
   const isCalculating = useRef(false);
   
-  // Funzione per calcolare i risultati
+  // Funzione per calcolare i risultati - FORMULA v2 (no cascata)
   const calculateResults = () => {
     if (sampleWeight && animalsCount && sampleWeight > 0 && animalsCount > 0) {
       isCalculating.current = true;
       
-      // Calcolo del numero di animali per kg
+      // apk VIVI: vivi/sampleW × 1000 (per conteggio vivi tramite totW × apk / 1000)
       const animalsPerKg = Math.round((animalsCount / sampleWeight) * 1000);
       
-      // Calcolo del peso medio in mg
-      const averageWeight = animalsPerKg > 0 ? 1000000 / animalsPerKg : 0;
+      // Peso individuale medio REALE (mg) = sampleW / (vivi+morti) × 1000
+      // Include i morti perché occupano biomassa nel sample
+      const totalSampleAnimals = animalsCount + (deadCount || 0);
+      const averageWeight = totalSampleAnimals > 0 
+        ? parseFloat(((sampleWeight / totalSampleAnimals) * 1000).toFixed(2))
+        : (animalsPerKg > 0 ? 1000000 / animalsPerKg : 0);
       
-      // Calcolo della popolazione totale stimata
+      // Popolazione totale (vivi nel cestello) - dipende dal samplePercentage
       const totalPopulation = Math.round(animalsCount / (samplePercentage / 100));
       
-      // Calcolo della mortalità
+      // Mortalità calcolata sul sample (vivi+morti)
       let mortalityRate = null;
       let totalDeadCount = null;
       
-      if (deadCount !== null && deadCount >= 0 && totalPopulation > 0) {
-        // Se il deadCount è relativo al campione, calcoliamo il valore totale
+      if (deadCount !== null && deadCount >= 0 && totalSampleAnimals > 0) {
         totalDeadCount = samplePercentage < 100 
           ? Math.round(deadCount / (samplePercentage / 100)) 
           : deadCount;
-          
-        // Calcoliamo la percentuale di mortalità
-        mortalityRate = (totalDeadCount / (totalPopulation + totalDeadCount)) * 100;
-        mortalityRate = Math.round(mortalityRate * 10) / 10; // Arrotondiamo a una cifra decimale
+        
+        // Mortalità del campione = morti / totale_sample (NON la cumulativa di ciclo!)
+        mortalityRate = totalSampleAnimals > 0 
+          ? Math.round(((deadCount / totalSampleAnimals) * 100) * 10) / 10
+          : 0;
       }
       
-      // Aggiorniamo i valori calcolati
       const newValues = {
         animalsPerKg,
         averageWeight,
@@ -85,7 +88,6 @@ export default function IntegratedSampleCalculator({
       
       setCalculatedValues(newValues);
       
-      // Importante: inviamo i risultati al genitore solo se i valori sono cambiati
       const result = {
         animalsPerKg,
         averageWeight,

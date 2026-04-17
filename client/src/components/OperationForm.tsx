@@ -541,38 +541,19 @@ export default function OperationForm({
         form.setValue('animalsPerKg', calculatedAnimalsPerKg);
       }
       
-      // Calcola il numero di animali dalla mortalità SOLO per operazioni Misura
+      // FORMULA v2: per Misura, calcola animalCount DIRETTAMENTE da totW × apk / 1000
+      // (NO cascata mortalità - usa il sample fresco come fotografia istantanea)
       if (watchType === 'misura') {
-        const selectedBasket = baskets?.find(b => b.id === Number(watchBasketId));
-        const currentCycleId = selectedBasket?.currentCycleId || watchCycleId;
+        const liveCount = watchLiveAnimals || 0;
+        const sampleW = watchSampleWeight || 0;
+        const apk = sampleW > 0 && liveCount > 0 ? Math.round((liveCount / sampleW) * 1000) : 0;
+        const totW = (form.getValues('totalWeight') as number) || 0;
         
-        if (currentCycleId && basketOperations && basketOperations.length > 0) {
-          // Trova l'ultima operazione del ciclo corrente con animalCount valido
-          const cycleOperations = basketOperations
-            .filter((op: any) => op.cycleId === currentCycleId && op.animalCount !== null && op.animalCount > 0)
-            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          
-          const lastOperationWithCount = cycleOperations[0];
-          
-          if (lastOperationWithCount) {
-            const previousAnimalCount = lastOperationWithCount.animalCount;
-            
-            // Calcola mortalità dal campione
-            const liveCount = watchLiveAnimals || 0;
-            const deadCount = watchDeadCount || 0;
-            const totalSample = liveCount + deadCount;
-            
-            if (totalSample > 0 && deadCount > 0) {
-              // Formula: Nr animali precedente * (100 - mortalità%) / 100
-              const mortalityPercent = (deadCount / totalSample) * 100;
-              const newAnimalCount = Math.round(previousAnimalCount * (100 - mortalityPercent) / 100);
-              form.setValue('animalCount', newAnimalCount);
-              console.log(`Misura - Calcolo animali: ${previousAnimalCount} * (100 - ${mortalityPercent.toFixed(2)}) / 100 = ${newAnimalCount}`);
-            } else if (totalSample > 0) {
-              // Senza mortalità (deadCount = 0), mantieni il numero precedente
-              form.setValue('animalCount', previousAnimalCount);
-            }
-          }
+        if (apk > 0 && totW > 0) {
+          // Vivi nel cestello = totW × apk / 1000 (no cascata)
+          const newAnimalCount = Math.round((totW * apk) / 1000);
+          form.setValue('animalCount', newAnimalCount);
+          console.log(`Misura v2 - Vivi diretti: ${totW}g × ${apk} apk / 1000 = ${newAnimalCount}`);
         }
       }
     }
@@ -976,27 +957,26 @@ export default function OperationForm({
         formattedValues.totalWeight = lastOpWithWeight.totalWeight;
       }
       
-      // Se c'è mortalità > 0, calcola il nuovo numero di animali
-      if (formattedValues.deadCount && Number(formattedValues.deadCount) > 0 && lastOpWithCount?.animalCount) {
-        const liveCount = formattedValues.liveAnimals || 0;
-        const deadCount = Number(formattedValues.deadCount);
-        const totalSample = liveCount + deadCount;
-        const mortalityPercent = (deadCount / totalSample) * 100;
-        const newAnimalCount = Math.round(lastOpWithCount.animalCount * (100 - mortalityPercent) / 100);
-        
+      // FORMULA v2: vivi calcolati DIRETTAMENTE da totW × apk / 1000 (no cascata mortalità)
+      const liveCount = formattedValues.liveAnimals || 0;
+      const sampleW = formattedValues.sampleWeight || 0;
+      const apk = sampleW > 0 && liveCount > 0 ? Math.round((liveCount / sampleW) * 1000) : (formattedValues.animalsPerKg || 0);
+      const totW = formattedValues.totalWeight || 0;
+      
+      if (apk > 0 && totW > 0) {
+        const newAnimalCount = Math.round((totW * apk) / 1000);
         formattedValues.animalCount = newAnimalCount;
-        console.log(`Misura con mortalità: ${lastOpWithCount.animalCount} * (100 - ${mortalityPercent.toFixed(2)}) / 100 = ${newAnimalCount}`);
+        formattedValues.formulaVersion = 2;
+        console.log(`Misura v2 - Vivi diretti: ${totW}g × ${apk} apk / 1000 = ${newAnimalCount}`);
         
-        // Mostra conferma solo se il conteggio è cambiato significativamente
-        if (Math.abs(newAnimalCount - lastOpWithCount.animalCount) > 100) {
+        // Conferma se differenza significativa rispetto al precedente
+        if (lastOpWithCount?.animalCount && Math.abs(newAnimalCount - lastOpWithCount.animalCount) > Math.max(100, lastOpWithCount.animalCount * 0.1)) {
           setPendingValues(formattedValues);
           setShowConfirmDialog(true);
           return;
         }
       } else if (lastOpWithCount?.animalCount && !formattedValues.animalCount) {
-        // Senza mortalità: mantieni il numero precedente
         formattedValues.animalCount = lastOpWithCount.animalCount;
-        console.log("Misura senza mortalità: mantenuto conteggio animali precedente:", lastOpWithCount.animalCount);
       }
     }
     

@@ -17,6 +17,9 @@ interface DraggableCalculatorProps {
     deadCount: number;
     animalCount: number;
     animalsPerKg: number;
+    averageWeight?: number; // mg, peso individuale reale (incl. morti) - formula v2
+    apkForSize?: number; // apk per classificazione taglia (incl. morti) - formula v2
+    formulaVersion?: number; // 2 = nuova formula
     mortalityRate: number;
     position: number;
     screeningPosition: 'sopra' | 'sotto' | null;
@@ -93,21 +96,35 @@ export default function DraggableCalculator({
     enabled: isOpen
   });
   
-  // Calcoli automatici
+  // Calcoli automatici - FORMULA v2 (no cascata mortalità, sample diretto)
   const totalSample = sampleCount + deadCount;
   const mortalityRate = totalSample > 0 ? parseFloat(((deadCount / totalSample) * 100).toFixed(1)) : 0;
-  const mortalityFactor = 1 - (mortalityRate / 100);
   
-  // Calcola animali per kg dal campione (peso campione in grammi / numero animali vivi * 1000)
+  // apk VIVI: densità degli animali vivi nella biomassa (per conteggio vivi)
+  // Formula: vivi nel sample / peso sample × 1000
   const calculatedAnimalsPerKg = sampleWeight > 0 && sampleCount > 0 
     ? Math.round((sampleCount / sampleWeight) * 1000) 
     : animalsPerKg;
   
-  const theoreticalAnimals = totalWeight * calculatedAnimalsPerKg;
-  const animalCount = Math.round(theoreticalAnimals * mortalityFactor);
+  // apk TAGLIA: densità totale (vivi+morti) - riflette il vero peso individuale medio
+  // Usato per la classificazione di taglia commerciale
+  const apkForSize = sampleWeight > 0 && totalSample > 0
+    ? Math.round((totalSample / sampleWeight) * 1000)
+    : calculatedAnimalsPerKg;
   
-  // Calcola la taglia in base agli animali per kg
-  const calculatedSize = getSizeCodeFromAnimalsPerKg(calculatedAnimalsPerKg, sizes as any[]);
+  // Vivi nel cestello = sample × totW / sampleW (formula diretta, NO cascata)
+  // Equivalente a: totW × apk_vivi / 1000
+  const animalCount = sampleWeight > 0 && sampleCount > 0
+    ? Math.round((sampleCount * totalWeight) / sampleWeight)
+    : Math.round((totalWeight * calculatedAnimalsPerKg) / 1000);
+  
+  // Peso individuale medio reale (mg) - include i morti nel calcolo
+  const averageWeightMg = totalSample > 0 && sampleWeight > 0
+    ? parseFloat(((sampleWeight / totalSample) * 1000).toFixed(2))
+    : (calculatedAnimalsPerKg > 0 ? parseFloat((1000 / calculatedAnimalsPerKg).toFixed(2)) : 0);
+  
+  // Taglia commerciale calcolata da apk_taglia (incl. morti) → riflette peso individuale reale
+  const calculatedSize = getSizeCodeFromAnimalsPerKg(apkForSize, sizes as any[]);
   
   // Gestione drag
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -151,6 +168,9 @@ export default function DraggableCalculator({
       deadCount: Math.round(deadCount),
       animalCount: Math.round(animalCount),
       animalsPerKg: Math.round(calculatedAnimalsPerKg),
+      averageWeight: averageWeightMg,
+      apkForSize: Math.round(apkForSize),
+      formulaVersion: 2,
       mortalityRate,
       position: basketPosition,
       screeningPosition,
@@ -295,16 +315,35 @@ export default function DraggableCalculator({
               </div>
             </div>
             
-            {/* Risultati compatti */}
+            {/* Risultati compatti - FORMULA v2 */}
             <div className="bg-gray-50 p-2 rounded text-xs space-y-1">
               <div className="flex justify-between">
-                <span className="text-blue-600">Totale Animali:</span>
+                <span className="text-blue-600">Animali Vivi:</span>
                 <span className="font-medium">{animalCount.toLocaleString('it-IT')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-orange-600">Mortalità:</span>
+                <span className="text-purple-600">apk taglia:</span>
+                <span className="font-medium">{apkForSize.toLocaleString('it-IT')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-indigo-600">Peso ind. (mg):</span>
+                <span className="font-medium">{averageWeightMg.toLocaleString('it-IT')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-orange-600">Mortalità sample:</span>
                 <span className="font-medium">{mortalityRate}%</span>
               </div>
+              {/* Avvisi qualità sample */}
+              {sampleWeight > 0 && sampleWeight < 2 && (
+                <div className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.5 rounded mt-1">
+                  ⚠ Sample piccolo ({sampleWeight}g): errore amplificato
+                </div>
+              )}
+              {totalSample > 0 && totalSample < 100 && (
+                <div className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.5 rounded mt-1">
+                  ⚠ Sample ridotto ({totalSample}): varianza statistica elevata
+                </div>
+              )}
             </div>
             
             {/* Note operative opzionali */}

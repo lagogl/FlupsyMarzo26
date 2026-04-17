@@ -91,6 +91,7 @@ import Operators from "@/pages/Operators";
 import MenuSettings from "@/pages/MenuSettings";
 // Importazione Pending Closures (Chiusure Ciclo Pendenti)
 import PendingClosures from "@/pages/PendingClosures";
+import CesteDaRiallineare from "@/pages/CesteDaRiallineare";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
@@ -129,6 +130,7 @@ function Router() {
       <ProtectedRoute path="/cycles" component={CyclesPaginated}/>
       <ProtectedRoute path="/cycles/:id" component={CycleDetail}/>
       <ProtectedRoute path="/pending-closures" component={PendingClosures}/>
+      <ProtectedRoute path="/ceste-da-riallineare" component={CesteDaRiallineare}/>
       <ProtectedRoute path="/lots" component={Lots}/>
       <ProtectedRoute path="/statistics" component={Statistics}/>
       <ProtectedRoute path="/lots-analytics" component={LotsAnalytics}/>

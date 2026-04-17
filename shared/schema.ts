@@ -420,6 +420,7 @@ export const operations = pgTable("operations", {
   cancelledAt: timestamp("cancelled_at"), // Data/ora annullamento vendita (null = non annullata)
   cancellationReason: text("cancellation_reason"), // Motivo annullamento (es. "Cliente non ha ritirato")
   restoredToFlupsyId: integer("restored_to_flupsy_id"), // FLUPSY dove la cesta è stata ripristinata (può essere diverso dall'originale)
+  formulaVersion: integer("formula_version").default(1).notNull(), // 1 = formula vecchia (cascata mortalità), 2 = formula nuova (sample diretto, no cascata)
 }, (table) => ({
   basketIdIdx: index("operations_basket_id_idx").on(table.basketId),
   cycleIdIdx: index("operations_cycle_id_idx").on(table.cycleId),

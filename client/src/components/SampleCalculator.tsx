@@ -56,10 +56,11 @@ export default function SampleCalculator({
       // Poiché sampleWeight è in grammi, dobbiamo moltiplicare per 1000 per ottenere animali/kg
       const calculatedAnimalsPerKg = Math.round((animalsCount / sampleWeight) * 1000);
       
-      // Calcolo del peso medio in mg con 4 decimali di precisione
-      const calculatedAverageWeight = calculatedAnimalsPerKg > 0 
-        ? parseFloat((1000000 / calculatedAnimalsPerKg).toFixed(4)) 
-        : 0;
+      // FORMULA v2: peso medio REALE includendo i morti = sampleW / (vivi+morti) × 1000 mg
+      const totalSampleAnimals = animalsCount + (deadCount || 0);
+      const calculatedAverageWeight = totalSampleAnimals > 0
+        ? parseFloat(((sampleWeight / totalSampleAnimals) * 1000).toFixed(4))
+        : (calculatedAnimalsPerKg > 0 ? parseFloat((1000000 / calculatedAnimalsPerKg).toFixed(4)) : 0);
       
       // Calcolo della popolazione totale stimata
       const calculatedTotalPopulation = Math.round(animalsCount / (samplePercentage / 100));

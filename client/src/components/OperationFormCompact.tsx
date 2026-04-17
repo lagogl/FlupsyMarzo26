@@ -756,10 +756,9 @@ export default function OperationFormCompact({
       form.setValue('mortalityRate', mortRate > 0 ? mortRate : null);
       form.setValue('totalSample', totalSample > 0 ? totalSample : null);
 
-      // Calcola numero animali se abbiamo il peso totale
+      // FORMULA v2: vivi diretti, no cascata mortalità
       if (watchTotalWeight && watchTotalWeight > 0) {
-        const mortalityFactor = mortRate > 0 ? (1 - mortRate / 100) : 1;
-        const calculatedAnimalCount = Math.round((watchTotalWeight / 1000) * apk * mortalityFactor);
+        const calculatedAnimalCount = Math.round((watchTotalWeight / 1000) * apk);
         form.setValue('animalCount', calculatedAnimalCount > 0 ? calculatedAnimalCount : null);
 
         // Trova e imposta taglia
@@ -787,35 +786,16 @@ export default function OperationFormCompact({
     }
     
     if (watchTotalWeight && watchAnimalsPerKg && watchAnimalsPerKg > 0) {
-      // Animali per kg sono calcolati dai VIVI del campione
-      // Totali proiettati = animalsPerKg × (peso totale in kg)
-      const totalAnimalsProjected = Math.round(watchAnimalsPerKg * (watchTotalWeight / 1000));
+      // FORMULA v2: vivi diretti = peso totale × apk_vivi / 1000 (NO cascata mortalità)
+      // L'apk vivi è già la densità reale dei vivi nella biomassa, quindi questa formula è esatta
+      const calculatedAnimalCount = Math.round(watchAnimalsPerKg * (watchTotalWeight / 1000));
       
-      // Calcola % mortalità dal campione (vivi + morti)
-      let mortalityRate = 0;
-      if (watchLiveAnimals && deadCount > 0) {
-        const totalSample = watchLiveAnimals + deadCount;
-        mortalityRate = (deadCount / totalSample) * 100;
-      }
-      
-      // Applica % mortalità ai totali proiettati
-      const deadAnimalsEstimated = Math.round(totalAnimalsProjected * (mortalityRate / 100));
-      
-      // Numero di animali VIVI finali = totali proiettati - morti stimati
-      const calculatedAnimalCount = totalAnimalsProjected - deadAnimalsEstimated;
-      
-      console.log('🧮 CALCOLO ANIMALI:', {
+      console.log('🧮 CALCOLO ANIMALI v2:', {
         animalsPerKg: watchAnimalsPerKg,
         totalWeight: watchTotalWeight,
-        totalProjected: totalAnimalsProjected,
-        liveInSample: watchLiveAnimals,
-        deadInSample: deadCount,
-        mortalityRate: mortalityRate.toFixed(2) + '%',
-        deadEstimated: deadAnimalsEstimated,
         liveAnimals: calculatedAnimalCount
       });
       
-      // Imposta il valore calcolato solo se non è attiva la modifica manuale
       if (!watchManualCountAdjustment) {
         form.setValue('animalCount', calculatedAnimalCount);
       }
@@ -847,28 +827,21 @@ export default function OperationFormCompact({
     const lastOpWithCount = basketCycleOps[0];
     
     if (lastOpWithCount) {
-      const previousAnimalCount = lastOpWithCount.animalCount;
-      
-      // Calcola mortalità dal campione
+      // FORMULA v2: vivi DIRETTI da totW × apk / 1000 (NO cascata)
       const liveCount = watchLiveAnimals || 0;
-      const totalSample = liveCount + deadCount;
+      const sampleW = (form.getValues('sampleWeight') as number) || 0;
+      const apk = sampleW > 0 && liveCount > 0 ? Math.round((liveCount / sampleW) * 1000) : 0;
+      const totW = watchTotalWeight || lastOpWithCount.totalWeight || 0;
       
-      if (totalSample > 0 && deadCount > 0) {
-        // Formula: Nr animali precedente * (100 - mortalità%) / 100
-        const mortalityPercent = (deadCount / totalSample) * 100;
-        const newAnimalCount = Math.round(previousAnimalCount * (100 - mortalityPercent) / 100);
+      if (apk > 0 && totW > 0) {
+        const newAnimalCount = Math.round((totW * apk) / 1000);
         form.setValue('animalCount', newAnimalCount);
-        console.log(`🧮 MISURA - Calcolo animali: ${previousAnimalCount} * (100 - ${mortalityPercent.toFixed(2)}) / 100 = ${newAnimalCount}`);
-      } else if (totalSample > 0) {
-        // Senza mortalità (deadCount = 0), mantieni il numero precedente
-        form.setValue('animalCount', previousAnimalCount);
-        console.log(`🧮 MISURA - Mortalità 0, mantengo animali: ${previousAnimalCount}`);
+        console.log(`🧮 MISURA v2 - Vivi diretti: ${totW}g × ${apk} apk / 1000 = ${newAnimalCount}`);
       }
       
-      // Recupera anche il peso totale dall'ultima operazione se non inserito
+      // Recupera peso totale dall'ultima operazione se non inserito
       if (!watchTotalWeight && lastOpWithCount.totalWeight) {
         form.setValue('totalWeight', lastOpWithCount.totalWeight);
-        console.log(`🧮 MISURA - Recuperato peso totale: ${lastOpWithCount.totalWeight}g`);
       }
     }
   }, [watchType, watchBasketId, watchCycleId, watchLiveAnimals, deadCount, operations, form, watchManualCountAdjustment, watchTotalWeight]);

@@ -537,7 +537,8 @@ class OperationsService {
       .insert(operations)
       .values({
         ...data,
-        source: data.source || 'desktop_manager' // Imposta source predefinito se non specificato
+        source: data.source || 'desktop_manager', // Imposta source predefinito se non specificato
+        formulaVersion: data.formulaVersion || 2 // Default formula v2 (no cascata mortalità)
       })
       .returning();
     

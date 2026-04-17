@@ -936,6 +936,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/_dead_placeholder_", async (_req, res) => {
+    res.status(410).end();
+    return;
+    try {
+      const { db } = await import('./db');
+      const result = await db.execute(`
+        SELECT
+          b.id AS basket_id,
+          b.physical_number,
+          b.flupsy_id,
+          f.name AS flupsy_name,
+          c.id AS cycle_id,
+          b.cycle_code AS cycle_code,
+          c.start_date AS cycle_start,
+          last_op.id AS last_op_id,
+          last_op.date AS last_op_date,
+          last_op.type AS last_op_type,
+          last_op.animal_count AS last_animal_count,
+          last_op.animals_per_kg AS last_apk,
+          last_op.total_weight AS last_total_weight,
+          v2_count.cnt AS v2_op_count,
+          v1_count.cnt AS v1_op_count,
+          all_count.cnt AS total_op_count,
+          last_misura.date AS last_misura_date,
+          EXTRACT(DAY FROM NOW() - last_misura.date)::int AS days_since_misura
+        FROM baskets b
+        JOIN cycles c ON c.id = b.current_cycle_id
+        JOIN flupsys f ON f.id = b.flupsy_id
+        LEFT JOIN LATERAL (
+          SELECT * FROM operations o
+          WHERE o.cycle_id = c.id
+          ORDER BY o.date DESC, o.id DESC LIMIT 1
+        ) last_op ON true
+        LEFT JOIN LATERAL (
+          SELECT MAX(o.date) AS date FROM operations o
+          WHERE o.cycle_id = c.id AND o.type = 'misura'
+        ) last_misura ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS cnt FROM operations o
+          WHERE o.cycle_id = c.id AND o.formula_version = 2
+        ) v2_count ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS cnt FROM operations o
+          WHERE o.cycle_id = c.id AND COALESCE(o.formula_version, 1) = 1
+        ) v1_count ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS cnt FROM operations o WHERE o.cycle_id = c.id
+        ) all_count ON true
+        WHERE b.state = 'active' AND c.state = 'active'
+        ORDER BY (v2_count.cnt = 0) DESC, days_since_misura DESC NULLS LAST
+      `);
+      const rows = (result as any).rows || result;
+      const enriched = rows.map((r: any) => {
+        const isAligned = r.v2_op_count > 0;
+        let priority: 'alta' | 'media' | 'bassa' = 'bassa';
+        if (!isAligned) {
+          const days = r.days_since_misura;
+          if (days == null || days >= 30) priority = 'alta';
+          else if (days >= 14) priority = 'media';
+          else priority = 'bassa';
+        }
+        return {
+          basketId: r.basket_id,
+          physicalNumber: r.physical_number,
+          flupsyId: r.flupsy_id,
+          flupsyName: r.flupsy_name,
+          cycleId: r.cycle_id,
+          cycleCode: r.cycle_code,
+          cycleStart: r.cycle_start,
+          lastOpDate: r.last_op_date,
+          lastOpType: r.last_op_type,
+          lastAnimalCount: r.last_animal_count,
+          lastApk: r.last_apk,
+          lastTotalWeight: r.last_total_weight,
+          v2OpCount: r.v2_op_count || 0,
+          v1OpCount: r.v1_op_count || 0,
+          totalOpCount: r.total_op_count || 0,
+          lastMisuraDate: r.last_misura_date,
+          daysSinceMisura: r.days_since_misura,
+          isAligned,
+          priority,
+        };
+      });
+      res.json({
+        baskets: enriched,
+        summary: {
+          total: enriched.length,
+          aligned: enriched.filter((b: any) => b.isAligned).length,
+          toRealign: enriched.filter((b: any) => !b.isAligned).length,
+          highPriority: enriched.filter((b: any) => !b.isAligned && b.priority === 'alta').length,
+        }
+      });
+    } catch (error) {
+      console.error('Errore /api/baskets/realignment-status:', error);
+      return sendError(res, error, 'Errore caricamento stato riallineamento');
+    }
+  });
+
   app.get("/api/baskets", async (req, res) => {
     try {
       const startTime = Date.now();
@@ -1956,7 +2054,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   */
   // Fine delle route dei baskets migrate al modulo
-  
+
+  // Endpoint: ceste con cicli attivi che non hanno ancora avuto operazioni
+  // con la nuova formula (formula_version = 2). Servono per il dashboard
+  // "Ceste da riallineare" — operatore vede priorità di re-misurazione.
+  app.get("/api/realignment-status", async (_req, res) => {
+    try {
+      const { db } = await import('./db');
+      const result = await db.execute(`
+        SELECT
+          b.id AS basket_id,
+          b.physical_number,
+          b.flupsy_id,
+          f.name AS flupsy_name,
+          c.id AS cycle_id,
+          b.cycle_code AS cycle_code,
+          c.start_date AS cycle_start,
+          last_op.id AS last_op_id,
+          last_op.date AS last_op_date,
+          last_op.type AS last_op_type,
+          last_op.animal_count AS last_animal_count,
+          last_op.animals_per_kg AS last_apk,
+          last_op.total_weight AS last_total_weight,
+          v2_count.cnt AS v2_op_count,
+          v1_count.cnt AS v1_op_count,
+          all_count.cnt AS total_op_count,
+          last_misura.date AS last_misura_date,
+          EXTRACT(DAY FROM NOW() - last_misura.date)::int AS days_since_misura
+        FROM baskets b
+        JOIN cycles c ON c.id = b.current_cycle_id
+        JOIN flupsys f ON f.id = b.flupsy_id
+        LEFT JOIN LATERAL (
+          SELECT * FROM operations o
+          WHERE o.cycle_id = c.id
+          ORDER BY o.date DESC, o.id DESC LIMIT 1
+        ) last_op ON true
+        LEFT JOIN LATERAL (
+          SELECT MAX(o.date) AS date FROM operations o
+          WHERE o.cycle_id = c.id AND o.type = 'misura'
+        ) last_misura ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS cnt FROM operations o
+          WHERE o.cycle_id = c.id AND o.formula_version = 2
+        ) v2_count ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS cnt FROM operations o
+          WHERE o.cycle_id = c.id AND COALESCE(o.formula_version, 1) = 1
+        ) v1_count ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS cnt FROM operations o WHERE o.cycle_id = c.id
+        ) all_count ON true
+        WHERE b.state = 'active' AND c.state = 'active'
+        ORDER BY (v2_count.cnt = 0) DESC, days_since_misura DESC NULLS LAST
+      `);
+      const rows = (result as any).rows || result;
+      const enriched = rows.map((r: any) => {
+        const isAligned = r.v2_op_count > 0;
+        let priority: 'alta' | 'media' | 'bassa' = 'bassa';
+        if (!isAligned) {
+          const days = r.days_since_misura;
+          if (days == null || days >= 30) priority = 'alta';
+          else if (days >= 14) priority = 'media';
+          else priority = 'bassa';
+        }
+        return {
+          basketId: r.basket_id,
+          physicalNumber: r.physical_number,
+          flupsyId: r.flupsy_id,
+          flupsyName: r.flupsy_name,
+          cycleId: r.cycle_id,
+          cycleCode: r.cycle_code,
+          cycleStart: r.cycle_start,
+          lastOpDate: r.last_op_date,
+          lastOpType: r.last_op_type,
+          lastAnimalCount: r.last_animal_count,
+          lastApk: r.last_apk,
+          lastTotalWeight: r.last_total_weight,
+          v2OpCount: r.v2_op_count || 0,
+          v1OpCount: r.v1_op_count || 0,
+          totalOpCount: r.total_op_count || 0,
+          lastMisuraDate: r.last_misura_date,
+          daysSinceMisura: r.days_since_misura,
+          isAligned,
+          priority,
+        };
+      });
+      res.json({
+        baskets: enriched,
+        summary: {
+          total: enriched.length,
+          aligned: enriched.filter((b: any) => b.isAligned).length,
+          toRealign: enriched.filter((b: any) => !b.isAligned).length,
+          highPriority: enriched.filter((b: any) => !b.isAligned && b.priority === 'alta').length,
+        }
+      });
+    } catch (error) {
+      console.error('Errore /api/realignment-status:', error);
+      return sendError(res, error, 'Errore caricamento stato riallineamento');
+    }
+  });
+
   // Position history endpoints removed for performance optimization
 
   // === Operation routes ===
