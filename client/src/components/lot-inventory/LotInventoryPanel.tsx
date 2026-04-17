@@ -131,6 +131,29 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
     enabled: !!lotId,
   });
 
+  // Query per mortalità v2 (calcolata dalle operazioni con nuova formula)
+  const mortalityV2Query = useQuery({
+    queryKey: ["/api/lots", lotId, "mortality-v2"],
+    queryFn: async () => {
+      const response = await fetch(`/api/lots/${lotId}/mortality-v2`);
+      const data = await response.json();
+      return data as {
+        summary: {
+          totalCycles: number; cyclesV2: number; cyclesV1: number; cyclesNoData: number;
+          totalInitial: number; totalCurrent: number; totalSold: number;
+          totalMortality: number; totalMortalityPct: number; dataQualityScore: number;
+        };
+        cycles: Array<{
+          cycleId: number; basketId: number; physicalNumber: number; flupsyName: string;
+          cycleState: string; startDate: string; endDate: string | null;
+          initialCount: number; currentCount: number; soldCount: number;
+          mortalityCount: number; mortalityPct: number; dataQuality: 'v2'|'v1'|'none';
+        }>;
+      };
+    },
+    enabled: !!lotId,
+  });
+
   // Query per ottenere la cronologia delle mortalità
   const mortalityHistoryQuery = useQuery({
     queryKey: ["/api/lot-inventory", lotId, "mortality-history"],
@@ -239,6 +262,93 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
               </div>
             ) : (
               <div className="space-y-6 py-4">
+                {/* SEZIONE NEW: MORTALITÀ v2 (nuova formula) */}
+                {mortalityV2Query.data && mortalityV2Query.data.summary.totalCycles > 0 && (
+                  <div className="space-y-3 p-4 border-2 border-blue-200 dark:border-blue-900 rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        🧮 Mortalità da Misure (Nuova Formula)
+                      </h3>
+                      <Badge variant="outline" className={
+                        mortalityV2Query.data.summary.dataQualityScore >= 80 ? "bg-green-100 text-green-800 border-green-300" :
+                        mortalityV2Query.data.summary.dataQualityScore >= 30 ? "bg-amber-100 text-amber-800 border-amber-300" :
+                        "bg-red-100 text-red-800 border-red-300"
+                      }>
+                        Affidabilità: {mortalityV2Query.data.summary.dataQualityScore}%
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Iniziali (Σ cicli)</Label>
+                        <div className="text-lg font-bold">{formatNumber(mortalityV2Query.data.summary.totalInitial)}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Attuali in coltura</Label>
+                        <div className="text-lg font-bold text-green-600 dark:text-green-400">{formatNumber(mortalityV2Query.data.summary.totalCurrent)}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Venduti</Label>
+                        <div className="text-lg font-bold">{formatNumber(mortalityV2Query.data.summary.totalSold)}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Mortalità</Label>
+                        <div className="text-lg font-bold text-red-600 dark:text-red-400">
+                          {formatNumber(mortalityV2Query.data.summary.totalMortality)}
+                          <span className="text-sm ml-2">({mortalityV2Query.data.summary.totalMortalityPct}%)</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground border-t pt-2">
+                      Calcolata su {mortalityV2Query.data.summary.totalCycles} cicli del lotto:
+                      {' '}<span className="text-green-700">{mortalityV2Query.data.summary.cyclesV2} con formula nuova</span>,
+                      {' '}<span className="text-amber-700">{mortalityV2Query.data.summary.cyclesV1} solo formula vecchia</span>
+                      {mortalityV2Query.data.summary.cyclesNoData > 0 && (<>, <span className="text-red-700">{mortalityV2Query.data.summary.cyclesNoData} senza dati</span></>)}.
+                      {mortalityV2Query.data.summary.dataQualityScore < 80 && (
+                        <span className="block mt-1 italic">⚠ Per dati più affidabili, registra una nuova Misura sui cicli ancora "v1" (vedi dashboard "Ceste da Riallineare").</span>
+                      )}
+                    </div>
+                    {mortalityV2Query.data.cycles.length > 0 && (
+                      <details className="text-sm">
+                        <summary className="cursor-pointer font-medium hover:underline">Dettaglio per ciclo ({mortalityV2Query.data.cycles.length})</summary>
+                        <div className="mt-2 max-h-64 overflow-y-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Cesta</TableHead>
+                                <TableHead>FLUPSY</TableHead>
+                                <TableHead className="text-right">Iniziali</TableHead>
+                                <TableHead className="text-right">Attuali</TableHead>
+                                <TableHead className="text-right">Venduti</TableHead>
+                                <TableHead className="text-right">Mortalità %</TableHead>
+                                <TableHead>Dati</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {mortalityV2Query.data.cycles.map((c) => (
+                                <TableRow key={c.cycleId}>
+                                  <TableCell>#{c.physicalNumber} {c.cycleState === 'closed' && <Badge variant="secondary" className="ml-1 text-[10px]">chiuso</Badge>}</TableCell>
+                                  <TableCell className="text-xs">{c.flupsyName}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(c.initialCount)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(c.currentCount)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(c.soldCount)}</TableCell>
+                                  <TableCell className="text-right font-medium">{c.mortalityPct}%</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={
+                                      c.dataQuality === 'v2' ? 'bg-green-50 text-green-700 border-green-300' :
+                                      c.dataQuality === 'v1' ? 'bg-amber-50 text-amber-700 border-amber-300' :
+                                      'bg-gray-50 text-gray-600'
+                                    }>{c.dataQuality}</Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                )}
+
                 {/* SEZIONE A: STOCCAGGIO LOTTO */}
                 <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
                   <h3 className="text-lg font-semibold">📦 Stoccaggio Lotto</h3>

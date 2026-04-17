@@ -2154,6 +2154,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // Mortalità Lotto v2 — calcolo basato su operazioni con nuova formula
+  // GET /api/lots/:lotId/mortality-v2
+  // Per ogni ciclo del lotto: initial=prima operazione, current=ultima non-vendita
+  // Aggrega a livello lotto e segnala qualità dei dati (v1 vs v2)
+  // ============================================================================
+  app.get('/api/lots/:lotId/mortality-v2', async (req: Request, res: Response) => {
+    try {
+      const lotId = parseInt(req.params.lotId);
+      if (isNaN(lotId)) return res.status(400).json({ error: 'lotId non valido' });
+
+      const result = await db.execute(sql`
+        WITH lot_cycles AS (
+          SELECT c.id AS cycle_id, c.basket_id, c.state AS cycle_state,
+                 c.start_date, c.end_date, b.physical_number, f.name AS flupsy_name
+          FROM cycles c
+          JOIN baskets b ON b.id = c.basket_id
+          JOIN flupsys f ON f.id = b.flupsy_id
+          WHERE c.lot_id = ${lotId}
+        ),
+        cycle_first AS (
+          SELECT DISTINCT ON (o.cycle_id)
+            o.cycle_id, o.animal_count AS initial_count, o.formula_version AS initial_fv, o.date AS initial_date
+          FROM operations o
+          WHERE o.cycle_id IN (SELECT cycle_id FROM lot_cycles)
+            AND o.animal_count IS NOT NULL
+          ORDER BY o.cycle_id, o.date ASC, o.id ASC
+        ),
+        cycle_last AS (
+          SELECT DISTINCT ON (o.cycle_id)
+            o.cycle_id, o.animal_count AS current_count, o.formula_version AS current_fv, o.date AS current_date, o.type AS current_type
+          FROM operations o
+          WHERE o.cycle_id IN (SELECT cycle_id FROM lot_cycles)
+            AND o.type NOT IN ('vendita','cessazione')
+            AND o.animal_count IS NOT NULL
+          ORDER BY o.cycle_id, o.date DESC, o.id DESC
+        ),
+        cycle_sold AS (
+          SELECT o.cycle_id, COALESCE(SUM(o.animal_count),0)::bigint AS sold_count
+          FROM operations o
+          WHERE o.cycle_id IN (SELECT cycle_id FROM lot_cycles)
+            AND o.type IN ('vendita','cessazione')
+          GROUP BY o.cycle_id
+        )
+        SELECT lc.cycle_id, lc.basket_id, lc.physical_number, lc.flupsy_name, lc.cycle_state,
+               lc.start_date, lc.end_date,
+               cf.initial_count, cf.initial_fv, cf.initial_date,
+               cl.current_count, cl.current_fv, cl.current_date, cl.current_type,
+               COALESCE(cs.sold_count, 0) AS sold_count
+        FROM lot_cycles lc
+        LEFT JOIN cycle_first cf ON cf.cycle_id = lc.cycle_id
+        LEFT JOIN cycle_last cl ON cl.cycle_id = lc.cycle_id
+        LEFT JOIN cycle_sold cs ON cs.cycle_id = lc.cycle_id
+        ORDER BY lc.cycle_state DESC, lc.start_date DESC
+      `);
+
+      const rows = ((result as any).rows || result) as any[];
+      let totalInitial = 0, totalCurrent = 0, totalSold = 0;
+      let cyclesV2 = 0, cyclesV1 = 0, cyclesNoData = 0;
+
+      const cycles = rows.map((r) => {
+        const initial = r.initial_count || 0;
+        const current = (r.cycle_state === 'closed') ? 0 : (r.current_count || 0);
+        const sold = Number(r.sold_count) || 0;
+        const mortality = Math.max(0, initial - current - sold);
+        const mortalityPct = initial > 0 ? (mortality / initial) * 100 : 0;
+        const dataQuality = (r.current_fv === 2 || r.initial_fv === 2) ? 'v2'
+                          : (r.current_fv === 1 || r.initial_fv === 1) ? 'v1' : 'none';
+        if (dataQuality === 'v2') cyclesV2++;
+        else if (dataQuality === 'v1') cyclesV1++;
+        else cyclesNoData++;
+        totalInitial += initial;
+        totalCurrent += current;
+        totalSold += sold;
+        return {
+          cycleId: r.cycle_id,
+          basketId: r.basket_id,
+          physicalNumber: r.physical_number,
+          flupsyName: r.flupsy_name,
+          cycleState: r.cycle_state,
+          startDate: r.start_date,
+          endDate: r.end_date,
+          initialCount: initial,
+          currentCount: current,
+          soldCount: sold,
+          mortalityCount: mortality,
+          mortalityPct: Math.round(mortalityPct * 100) / 100,
+          dataQuality,
+        };
+      });
+
+      const totalMortality = Math.max(0, totalInitial - totalCurrent - totalSold);
+      const totalMortalityPct = totalInitial > 0 ? Math.round((totalMortality / totalInitial) * 10000) / 100 : 0;
+
+      res.json({
+        lotId,
+        summary: {
+          totalCycles: cycles.length,
+          cyclesV2, cyclesV1, cyclesNoData,
+          totalInitial, totalCurrent, totalSold,
+          totalMortality, totalMortalityPct,
+          dataQualityScore: cycles.length > 0 ? Math.round((cyclesV2 / cycles.length) * 100) : 0,
+        },
+        cycles,
+      });
+    } catch (error) {
+      console.error('Errore /api/lots/:lotId/mortality-v2:', error);
+      return sendError(res, error, 'Errore calcolo mortalità v2');
+    }
+  });
+
   // Position history endpoints removed for performance optimization
 
   // === Operation routes ===
