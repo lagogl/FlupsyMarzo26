@@ -169,7 +169,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <ClipboardList className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.taskManagement || "Gestione Attività", path: "/task-management" },
         { icon: <Users className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.operators || "Gestione Operatori", path: "/operators" },
         { icon: <History className="h-5 w-5 mr-2 text-emerald-600" />, label: "Storia Animali", path: "/storia-animali" },
-        { icon: <Leaf className="h-5 w-5 mr-2 text-teal-600" />, label: "Diario Ambientale", path: "/diario-ambientale" }
+        { icon: <Leaf className="h-5 w-5 mr-2 text-teal-600" />, label: "Diario Ambientale", path: "/diario-ambientale" },
+        { icon: <Ruler className="h-5 w-5 mr-2 text-blue-600" />, label: "Ceste da Riallineare", path: "/ceste-da-riallineare" }
       ]
     },
     {
@@ -193,7 +194,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
       items: [
         { icon: <Brain className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiDashboard, path: "/ai-dashboard" },
         { icon: <ClipboardList className="h-5 w-5 mr-2 text-purple-600" />, label: "Attività Consigliate", path: "/attivita-consigliate" },
-        { icon: <Ruler className="h-5 w-5 mr-2 text-blue-600" />, label: "Ceste da Riallineare", path: "/ceste-da-riallineare" },
         { icon: <FileSpreadsheet className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiReportGenerator, path: "/ai-report-generator" },
         { icon: <Sparkles className="h-5 w-5 mr-2 text-purple-600" />, label: "AI Enhanced (BETA)", path: "/ai-enhanced" },
         { icon: <BarChart3 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiGrowthVariability, path: "/growth-variability-analysis" },
