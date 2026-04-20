@@ -70,6 +70,8 @@ interface HatcheryArrival {
   year: number;
   month: number;
   quantity: number;
+  actualQuantity: number | null;
+  actualLockedAt: string | null;
   sizeCategory: string;
   notes: string | null;
 }
@@ -836,6 +838,68 @@ export default function ProiezioneCrescita() {
     }
   });
 
+  // Stato locale per i campi "reale" (input modificabile per ogni mese)
+  const [actualInputs, setActualInputs] = useState<Record<string, string>>({});
+  const [calculatingActual, setCalculatingActual] = useState<string | null>(null);
+
+  const saveActual = useMutation({
+    mutationFn: async (payload: { year: number; month: number; actualQuantity: number }) => {
+      return apiRequest("/api/proiezione-crescita/hatchery-arrivals/actual", "POST", payload);
+    },
+    onSuccess: () => {
+      for (const y of hatcheryYears) {
+        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", { year: y }] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
+      toast({ title: "Reale salvato", description: "Quantità reale aggiornata" });
+    }
+  });
+
+  const clearActual = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest(`/api/proiezione-crescita/hatchery-arrivals/actual/${id}`, "DELETE");
+    },
+    onSuccess: () => {
+      for (const y of hatcheryYears) {
+        queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita/hatchery-arrivals", { year: y }] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
+      toast({ title: "Reale rimosso", description: "Si torna a usare la previsione" });
+    }
+  });
+
+  const handleCalculateActual = async (year: number, month: number) => {
+    const key = `${year}-${month}`;
+    setCalculatingActual(key);
+    try {
+      const res = await fetch(
+        `/api/proiezione-crescita/hatchery-arrivals/calculate-actual?year=${year}&month=${month}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error("Errore calcolo");
+      const data = await res.json();
+      setActualInputs(prev => ({ ...prev, [key]: String(data.totalAnimals) }));
+      toast({
+        title: "Calcolato dai lotti",
+        description: `${data.lotCount} lotti, totale ${formatNumber(data.totalAnimals)} animali. Premi salvataggio per consolidare.`,
+      });
+    } catch (e) {
+      toast({ title: "Errore", description: "Impossibile calcolare il reale", variant: "destructive" });
+    } finally {
+      setCalculatingActual(null);
+    }
+  };
+
+  const handleSaveActual = (year: number, month: number) => {
+    const key = `${year}-${month}`;
+    const raw = actualInputs[key];
+    if (raw === undefined || raw === "") return;
+    const val = parseInt(raw);
+    if (isNaN(val) || val < 0) return;
+    saveActual.mutate({ year, month, actualQuantity: val });
+    setActualInputs(prev => ({ ...prev, [key]: "" }));
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -1050,63 +1114,166 @@ export default function ProiezioneCrescita() {
         </Card>
       )}
 
-      {showHatcheryForm && (
+      {showHatcheryForm && (() => {
+        const totalForecast = allHatcheryData.reduce((sum, h) => sum + h.quantity, 0);
+        const totalActual = allHatcheryData.reduce((sum, h) => sum + (h.actualQuantity ?? 0), 0);
+        const totalEffective = allHatcheryData.reduce((sum, h) => sum + (h.actualQuantity ?? h.quantity), 0);
+        const variance = totalActual > 0 ? totalEffective - totalForecast : 0;
+        const variancePct = totalForecast > 0 ? (variance / totalForecast) * 100 : 0;
+
+        return (
         <Card className="border-emerald-200">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg text-emerald-700">
-              Inserisci Arrivi Schiuditoio (TP-300)
-              <span className="ml-3 text-base font-normal text-gray-600">
-                Totale: <span className="font-semibold text-emerald-700">{formatNumber(allHatcheryData.reduce((sum, h) => sum + h.quantity, 0))}</span>
+              Arrivi Schiuditoio (TP-300)
+              <span className="ml-3 text-sm font-normal text-gray-600">
+                Previsione: <span className="font-semibold text-emerald-700">{formatNumber(totalForecast)}</span>
+                {totalActual > 0 && (
+                  <>
+                    {' · '}Reale: <span className="font-semibold text-blue-700">{formatNumber(totalActual)}</span>
+                    {' · '}Effettivo: <span className="font-semibold text-gray-800">{formatNumber(totalEffective)}</span>
+                    {' · '}Scostamento:{' '}
+                    <span className={variance >= 0 ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>
+                      {variance >= 0 ? '+' : ''}{formatNumber(variance)} ({variancePct.toFixed(1)}%)
+                    </span>
+                  </>
+                )}
               </span>
             </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              <span className="text-emerald-600 font-medium">Previsione</span> a inizio anno ·
+              <span className="text-blue-600 font-medium ml-1">Reale</span> dai lotti effettivamente arrivati ·
+              il calcolo proiezione usa il <strong>Reale</strong> quando disponibile, altrimenti la Previsione.
+            </p>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {hatcheryMonths.map(({ year, month, label }) => {
                 const existing = allHatcheryData.find(h => h.year === year && h.month === month);
                 const inputKey = `${year}-${month}`;
+                const isCalculating = calculatingActual === inputKey;
+                const actualVal = existing?.actualQuantity ?? null;
+                const forecastVal = existing?.quantity ?? 0;
+                const variance = actualVal !== null ? actualVal - forecastVal : null;
+                const variancePct = actualVal !== null && forecastVal > 0
+                  ? (variance! / forecastVal) * 100
+                  : null;
+
                 return (
-                  <div key={inputKey} className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-muted-foreground">{label}</label>
-                    {existing ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm font-semibold text-emerald-700 flex-1">{formatNumber(existing.quantity)}</span>
+                  <div key={inputKey} className="border rounded-lg p-2 bg-white">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-bold text-gray-700">{label}</span>
+                      {actualVal !== null && variance !== null && (
+                        <span className={`text-xs font-semibold ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {variance >= 0 ? '+' : ''}{variancePct?.toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+
+                    {/* PREVISIONE */}
+                    <div className="flex items-center gap-1 mb-1.5">
+                      <span className="text-[10px] uppercase font-semibold text-emerald-600 w-12">Prev.</span>
+                      {existing && existing.quantity > 0 ? (
+                        <>
+                          <span className="text-sm font-medium text-emerald-700 flex-1">{formatNumber(existing.quantity)}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-red-400 hover:text-red-600"
+                            title="Elimina previsione"
+                            onClick={() => deleteHatchery.mutate(existing.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1 flex-1">
+                          <Input
+                            type="number"
+                            placeholder="0"
+                            className="h-7 text-xs"
+                            value={hatcheryInputs[inputKey] || ""}
+                            onChange={e => setHatcheryInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-emerald-600"
+                            onClick={() => handleSaveHatchery(year, month)}
+                            disabled={!hatcheryInputs[inputKey] || parseInt(hatcheryInputs[inputKey]) <= 0}
+                            title="Salva previsione"
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* REALE */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] uppercase font-semibold text-blue-600 w-12">Reale</span>
+                      <Input
+                        type="number"
+                        placeholder={actualVal !== null ? formatNumber(actualVal) : "0"}
+                        className={`h-7 text-xs ${actualVal !== null ? 'bg-blue-50 border-blue-200' : ''}`}
+                        value={
+                          actualInputs[inputKey] !== undefined
+                            ? actualInputs[inputKey]
+                            : (actualVal !== null ? String(actualVal) : "")
+                        }
+                        onChange={e => setActualInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-purple-600"
+                        title="Calcola dai lotti del mese"
+                        onClick={() => handleCalculateActual(year, month)}
+                        disabled={isCalculating}
+                      >
+                        {isCalculating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-blue-600"
+                        title="Salva reale"
+                        onClick={() => handleSaveActual(year, month)}
+                        disabled={
+                          actualInputs[inputKey] === undefined ||
+                          actualInputs[inputKey] === "" ||
+                          actualInputs[inputKey] === String(actualVal ?? '')
+                        }
+                      >
+                        <Save className="h-3 w-3" />
+                      </Button>
+                      {actualVal !== null && existing && (
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 text-red-500"
-                          onClick={() => deleteHatchery.mutate(existing.id)}
+                          className="h-6 w-6 text-gray-400 hover:text-red-500"
+                          title="Rimuovi consolidamento (torna alla previsione)"
+                          onClick={() => {
+                            clearActual.mutate(existing.id);
+                            setActualInputs(prev => {
+                              const c = { ...prev };
+                              delete c[inputKey];
+                              return c;
+                            });
+                          }}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
-                          placeholder="0"
-                          className="h-8 text-sm"
-                          value={hatcheryInputs[inputKey] || ""}
-                          onChange={e => setHatcheryInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-emerald-600"
-                          onClick={() => handleSaveHatchery(year, month)}
-                          disabled={!hatcheryInputs[inputKey] || parseInt(hatcheryInputs[inputKey]) <= 0}
-                        >
-                          <Save className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
       {groupsAbove.length > 0 && (
         <Card className="border-green-200">

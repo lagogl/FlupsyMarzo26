@@ -147,7 +147,8 @@ export class GrowthProjectionService {
     for (const row of hatcheryRows) {
       const key = `${row.year}-${row.month}`;
       if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = 0;
-      hatcheryByYearMonth[key] += row.quantity;
+      // Usa il reale consolidato se disponibile, altrimenti la previsione
+      hatcheryByYearMonth[key] += row.actualQuantity ?? row.quantity;
     }
 
     const grouped: Record<string, Array<{basketId: number, animalsPerKg: number, animalCount: number}>> = {};

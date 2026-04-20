@@ -1626,7 +1626,9 @@ export const hatcheryArrivals = pgTable("hatchery_arrivals", {
   id: serial("id").primaryKey(),
   year: integer("year").notNull(),
   month: integer("month").notNull(),
-  quantity: integer("quantity").notNull(),
+  quantity: integer("quantity").notNull(), // Previsione iniziale
+  actualQuantity: integer("actual_quantity"), // Reale consolidato (da lotti o manuale); null = non ancora consolidato
+  actualLockedAt: timestamp("actual_locked_at"), // Quando il reale è stato consolidato
   sizeCategory: text("size_category").notNull().default('TP-300'),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

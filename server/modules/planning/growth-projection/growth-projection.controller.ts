@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import { growthProjectionService } from "./growth-projection.service";
 import { db } from "../../../db";
-import { hatcheryArrivals, projectionMortalityRates, productionTargets } from "../../../../shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { hatcheryArrivals, projectionMortalityRates, productionTargets, lots } from "../../../../shared/schema";
+import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -77,6 +77,107 @@ router.post("/hatchery-arrivals", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Errore salvataggio arrivo schiuditoio:", error);
     res.status(500).json({ error: "Errore nel salvataggio dati schiuditoio" });
+  }
+});
+
+// Calcola il reale di arrivi per un dato (year, month) sommando tutti i lotti
+// con arrival_date in quel mese. Tutti i lotti sono considerati "da schiuditoio".
+router.get("/hatchery-arrivals/calculate-actual", async (req: Request, res: Response) => {
+  try {
+    const year = parseInt(req.query.year as string);
+    const month = parseInt(req.query.month as string);
+    if (!year || !month || month < 1 || month > 12) {
+      return res.status(400).json({ error: "Anno e mese (1-12) sono obbligatori" });
+    }
+
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endMonth0 = month; // mese successivo (1-based si traduce in 0-based mese giusto)
+    const endYear = month === 12 ? year + 1 : year;
+    const endMonth1 = month === 12 ? 1 : month + 1;
+    const endDate = `${endYear}-${String(endMonth1).padStart(2, '0')}-01`;
+
+    const rows = await db.select({
+      id: lots.id,
+      arrivalDate: lots.arrivalDate,
+      supplier: lots.supplier,
+      animalCount: lots.animalCount,
+    })
+      .from(lots)
+      .where(and(
+        gte(lots.arrivalDate, startDate),
+        sql`${lots.arrivalDate} < ${endDate}`,
+      ));
+
+    const totalAnimals = rows.reduce((s, r) => s + (r.animalCount || 0), 0);
+    res.json({
+      year,
+      month,
+      totalAnimals,
+      lotCount: rows.length,
+      lots: rows,
+    });
+  } catch (error) {
+    console.error("Errore calcolo reale arrivi schiuditoio:", error);
+    res.status(500).json({ error: "Errore nel calcolo dei dati reali" });
+  }
+});
+
+// Salva il reale consolidato per (year, month, sizeCategory).
+// Crea il record se non esiste (con previsione = 0).
+router.post("/hatchery-arrivals/actual", async (req: Request, res: Response) => {
+  try {
+    const { year, month, actualQuantity, sizeCategory } = req.body;
+    if (!year || !month || actualQuantity === undefined || actualQuantity === null) {
+      return res.status(400).json({ error: "Anno, mese e quantità reale sono obbligatori" });
+    }
+    const sz = sizeCategory || 'TP-300';
+
+    const existing = await db.select().from(hatcheryArrivals)
+      .where(and(
+        eq(hatcheryArrivals.year, year),
+        eq(hatcheryArrivals.month, month),
+        eq(hatcheryArrivals.sizeCategory, sz)
+      ));
+
+    if (existing.length > 0) {
+      const updated = await db.update(hatcheryArrivals)
+        .set({
+          actualQuantity,
+          actualLockedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(hatcheryArrivals.id, existing[0].id))
+        .returning();
+      return res.json(updated[0]);
+    }
+
+    const inserted = await db.insert(hatcheryArrivals).values({
+      year,
+      month,
+      quantity: 0, // nessuna previsione registrata
+      actualQuantity,
+      actualLockedAt: new Date(),
+      sizeCategory: sz,
+    }).returning();
+    res.json(inserted[0]);
+  } catch (error) {
+    console.error("Errore salvataggio reale arrivi schiuditoio:", error);
+    res.status(500).json({ error: "Errore nel salvataggio del reale" });
+  }
+});
+
+// Rimuove il consolidamento del reale (torna a usare la previsione)
+router.delete("/hatchery-arrivals/actual/:id", async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    const updated = await db.update(hatcheryArrivals)
+      .set({ actualQuantity: null, actualLockedAt: null, updatedAt: new Date() })
+      .where(eq(hatcheryArrivals.id, id))
+      .returning();
+    res.json(updated[0] || { success: true });
+  } catch (error) {
+    console.error("Errore rimozione reale arrivi:", error);
+    res.status(500).json({ error: "Errore nella rimozione del reale" });
   }
 });
 
