@@ -375,16 +375,235 @@ function ExcelTable({ data, mc, toast }: {
       to: { row: 2 + excelRows.length, column: mc.length + 1 },
     };
 
+    // ===========================================================
+    // FOGLIO 2: Già a taglia target o superiore
+    // ===========================================================
+    if (groupsAbove.length > 0) {
+      const ws2 = wb.addWorksheet(`Già a ${data.targetSize}`, {
+        views: [{ state: 'frozen', ySplit: 2 }]
+      });
+
+      const t2 = ws2.addRow([`Già a taglia ${data.targetSize} o superiore`]);
+      t2.font = { bold: true, size: 14, color: { argb: "FF166534" } };
+      ws2.mergeCells(1, 1, 1, 4);
+      t2.alignment = { horizontal: "center", vertical: "middle" };
+      t2.height = 30;
+
+      const h2 = ws2.addRow(["Taglia Attuale", "Cestelli", "Quantità", "An/kg medio"]);
+      h2.height = 24;
+      h2.eachCell((cell) => {
+        cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF166534" } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = thinBorder;
+      });
+
+      groupsAbove.forEach((g, idx) => {
+        const r = ws2.addRow([g.currentSize, g.basketCount, g.currentQuantity, g.currentAvgAnimalsPerKg]);
+        const stripe = idx % 2 === 0 ? white : lightGray;
+        r.eachCell((cell, colNumber) => {
+          cell.border = thinBorder;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripe } };
+          if (colNumber === 1) {
+            cell.font = { bold: true, size: 10, color: { argb: "FF333333" } };
+            cell.alignment = { horizontal: "left", vertical: "middle" };
+          } else {
+            cell.numFmt = "#,##0";
+            cell.font = { size: 10, color: { argb: "FF333333" } };
+            cell.alignment = { horizontal: "right", vertical: "middle" };
+          }
+        });
+      });
+
+      // Totale
+      const totalQty = groupsAbove.reduce((s, g) => s + g.currentQuantity, 0);
+      const totalBaskets = groupsAbove.reduce((s, g) => s + g.basketCount, 0);
+      const totRow = ws2.addRow(["TOTALE", totalBaskets, totalQty, ""]);
+      totRow.eachCell((cell, colNumber) => {
+        cell.border = thinBorder;
+        cell.font = { bold: true, size: 11, color: { argb: "FF166534" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } };
+        if (colNumber === 1) cell.alignment = { horizontal: "left", vertical: "middle" };
+        else {
+          cell.numFmt = "#,##0";
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+        }
+      });
+
+      ws2.columns = [{ width: 18 }, { width: 12 }, { width: 18 }, { width: 18 }];
+    }
+
+    // ===========================================================
+    // FOGLIO 3: Progressione mensile verso target
+    // ===========================================================
+    if (groupsBelow.length > 0) {
+      const ws3 = wb.addWorksheet("Progressione Mensile", {
+        views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }]
+      });
+
+      const monthsHdr = groupsBelow[0]?.months || [];
+      const colCount = 4 + monthsHdr.length;
+
+      const t3 = ws3.addRow([`Progressione mensile verso ${data.targetSize}`]);
+      t3.font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
+      ws3.mergeCells(1, 1, 1, colCount);
+      t3.alignment = { horizontal: "center", vertical: "middle" };
+      t3.height = 30;
+
+      const h3 = ws3.addRow([
+        "Taglia Attuale",
+        "Cestelli",
+        "Quantità",
+        "Raggiunge",
+        ...monthsHdr.map(m => m.monthLabel),
+      ]);
+      h3.height = 24;
+      h3.eachCell((cell) => {
+        cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = thinBorder;
+      });
+
+      groupsBelow.forEach((g, idx) => {
+        const r = ws3.addRow([
+          g.currentSize,
+          g.basketCount,
+          g.currentQuantity,
+          g.monthReached || "Non nel periodo",
+          ...g.months.map((m: any) => m.projectedSize || ""),
+        ]);
+        const stripe = idx % 2 === 0 ? white : lightGray;
+        r.eachCell((cell, colNumber) => {
+          cell.border = thinBorder;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripe } };
+          if (colNumber === 1) {
+            cell.font = { bold: true, size: 10, color: { argb: "FF333333" } };
+            cell.alignment = { horizontal: "left", vertical: "middle" };
+          } else if (colNumber === 2 || colNumber === 3) {
+            cell.numFmt = "#,##0";
+            cell.font = { size: 10, color: { argb: "FF333333" } };
+            cell.alignment = { horizontal: "right", vertical: "middle" };
+          } else if (colNumber === 4) {
+            const reached = !!g.monthReached;
+            cell.font = { bold: true, size: 10, color: { argb: reached ? "FF166534" : "FFB91C1C" } };
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: reached ? "FFDCFCE7" : "FFFEE2E2" } };
+            cell.alignment = { horizontal: "center", vertical: "middle" };
+          } else {
+            const monthIdx = colNumber - 5;
+            const monthData = g.months[monthIdx];
+            const isTarget = monthData?.projectedSize === data.targetSize || monthData?.reachedTarget;
+            cell.font = { size: 10, color: { argb: isTarget ? "FF166534" : "FF555555" }, bold: isTarget };
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: isTarget ? "FFDCFCE7" : stripe } };
+            cell.alignment = { horizontal: "center", vertical: "middle" };
+          }
+        });
+      });
+
+      ws3.columns = [
+        { width: 18 },
+        { width: 12 },
+        { width: 16 },
+        { width: 18 },
+        ...monthsHdr.map(() => ({ width: 12 })),
+      ];
+    }
+
+    // ===========================================================
+    // FOGLIO 4: Arrivi Schiuditoio (Previsione vs Reale)
+    // ===========================================================
+    if (allHatcheryData.length > 0) {
+      const ws4 = wb.addWorksheet("Arrivi Schiuditoio", {
+        views: [{ state: 'frozen', ySplit: 2 }]
+      });
+
+      const t4 = ws4.addRow(["Arrivi Schiuditoio (TP-300) - Previsione vs Reale"]);
+      t4.font = { bold: true, size: 14, color: { argb: "FF047857" } };
+      ws4.mergeCells(1, 1, 1, 6);
+      t4.alignment = { horizontal: "center", vertical: "middle" };
+      t4.height = 30;
+
+      const h4 = ws4.addRow(["Anno", "Mese", "Previsione", "Reale", "Effettivo", "Scostamento %"]);
+      h4.height = 24;
+      h4.eachCell((cell) => {
+        cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF047857" } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = thinBorder;
+      });
+
+      const sortedHatchery = [...allHatcheryData].sort((a, b) => a.year - b.year || a.month - b.month);
+      sortedHatchery.forEach((h, idx) => {
+        const actual = h.actualQuantity ?? null;
+        const effective = actual ?? h.quantity;
+        const variancePct = actual !== null && h.quantity > 0
+          ? ((actual - h.quantity) / h.quantity) * 100
+          : null;
+        const r = ws4.addRow([
+          h.year,
+          MONTH_SHORT_IT[h.month - 1] || h.month,
+          h.quantity,
+          actual ?? "",
+          effective,
+          variancePct !== null ? variancePct / 100 : "",
+        ]);
+        const stripe = idx % 2 === 0 ? white : lightGray;
+        r.eachCell((cell, colNumber) => {
+          cell.border = thinBorder;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripe } };
+          if (colNumber <= 2) {
+            cell.font = { bold: colNumber === 2, size: 10, color: { argb: "FF333333" } };
+            cell.alignment = { horizontal: "center", vertical: "middle" };
+          } else if (colNumber === 6) {
+            cell.numFmt = "0.0%";
+            const positive = variancePct !== null && variancePct >= 0;
+            cell.font = {
+              bold: true,
+              size: 10,
+              color: { argb: variancePct === null ? "FF999999" : (positive ? "FF16A34A" : "FFDC2626") },
+            };
+            cell.alignment = { horizontal: "right", vertical: "middle" };
+          } else {
+            cell.numFmt = "#,##0";
+            cell.font = { size: 10, color: { argb: colNumber === 4 ? "FF1D4ED8" : "FF333333" }, bold: colNumber === 5 };
+            cell.alignment = { horizontal: "right", vertical: "middle" };
+          }
+        });
+      });
+
+      const totForecast = sortedHatchery.reduce((s, h) => s + h.quantity, 0);
+      const totActual = sortedHatchery.reduce((s, h) => s + (h.actualQuantity ?? 0), 0);
+      const totEffective = sortedHatchery.reduce((s, h) => s + (h.actualQuantity ?? h.quantity), 0);
+      const totVariancePct = totForecast > 0 ? (totEffective - totForecast) / totForecast : 0;
+      const totRow = ws4.addRow(["", "TOTALE", totForecast, totActual, totEffective, totVariancePct]);
+      totRow.eachCell((cell, colNumber) => {
+        cell.border = thinBorder;
+        cell.font = { bold: true, size: 11, color: { argb: "FF047857" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+        if (colNumber === 6) {
+          cell.numFmt = "0.0%";
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+        } else if (colNumber >= 3) {
+          cell.numFmt = "#,##0";
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+        } else {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        }
+      });
+
+      ws4.columns = [{ width: 8 }, { width: 10 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 16 }];
+    }
+
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Scostamenti_${data.targetSize}.xlsx`;
+    a.download = `ProiezioneCrescita_${data.targetSize}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Esportato", description: "File Excel scaricato" });
-  }, [mc, rows, data.targetSize]);
+    toast({ title: "Esportato", description: "File Excel scaricato (4 fogli)" });
+  }, [mc, rows, data.targetSize, groupsAbove, groupsBelow, allHatcheryData]);
 
   const handleCopyTable = useCallback(() => {
     const headers = ["Indicatore", ...mc.map(m => m.monthLabel)].join("\t");
