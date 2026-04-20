@@ -112,11 +112,12 @@ export default function DraggableCalculator({
     ? Math.round((totalSample / sampleWeight) * 1000)
     : calculatedAnimalsPerKg;
   
-  // Vivi nel cestello = sample × totW / sampleW (formula diretta, NO cascata)
-  // Equivalente a: totW × apk_vivi / 1000
+  // Vivi nel cestello = totalWeight (kg) × densità vivi (vivi/kg)
+  // Equivalente a: (sampleCount / sampleWeight g) × totalWeight (kg) × 1000
+  // NB: sampleWeight è in GRAMMI, totalWeight è in KG → serve il fattore 1000
   const animalCount = sampleWeight > 0 && sampleCount > 0
-    ? Math.round((sampleCount * totalWeight) / sampleWeight)
-    : Math.round((totalWeight * calculatedAnimalsPerKg) / 1000);
+    ? Math.round((sampleCount * totalWeight * 1000) / sampleWeight)
+    : Math.round(totalWeight * calculatedAnimalsPerKg);
   
   // Peso individuale medio reale (mg) - include i morti nel calcolo
   const averageWeightMg = totalSample > 0 && sampleWeight > 0
