@@ -30,6 +30,8 @@ interface BasketReport {
   previousOpDate: string | null;
   weightVariationKg: number | null;
   weightVariationPct: number | null;
+  daysBetweenOps: number | null;
+  weightVariationPerDayKg: number | null;
   animalsPerKg: number;
   avgWeightMg: number;
   deviationFromTarget: number;
@@ -54,7 +56,7 @@ interface ReportData {
 
 type SortKey = "flupsyName" | "physicalNumber" | "cycleCode" | "lotSupplier" | "opDate" | "currentSizeCode" |
   "animalCount" | "animalsPerKg" | "avgWeightMg" | "deviationFromTarget" | "totalWeightKg" |
-  "previousTotalWeightKg" | "weightVariationPct" | "formulaVersion";
+  "previousTotalWeightKg" | "weightVariationPct" | "weightVariationPerDayKg" | "formulaVersion";
 type SortDir = "asc" | "desc";
 
 const fmtN = (n: number | null | undefined, dec = 0) =>
@@ -90,12 +92,13 @@ interface ColumnFilters {
   bio: string;
   pen: string;
   varPct: string;
+  varPond: string;
   formula: string;
 }
 
 const emptyFilters: ColumnFilters = {
   flupsy: "", cesta: "", etichetta: "", lotto: "", data: "", taglia: "", animali: "",
-  pzkg: "", pmed: "", dist: "", bio: "", pen: "", varPct: "", formula: ""
+  pzkg: "", pmed: "", dist: "", bio: "", pen: "", varPct: "", varPond: "", formula: ""
 };
 
 // Helper per filtrare valori numerici con operatori (>10, <5, >=2, =3, oppure substring)
@@ -183,6 +186,7 @@ export default function ReportPesoCeste() {
       matchNumericFilter(b.totalWeightKg, colFilters.bio) &&
       matchNumericFilter(b.previousTotalWeightKg, colFilters.pen) &&
       matchNumericFilter(b.weightVariationPct, colFilters.varPct) &&
+      matchNumericFilter(b.weightVariationPerDayKg, colFilters.varPond) &&
       matchTextFilter(`v${b.formulaVersion}`, colFilters.formula)
     );
     return [...rows].sort((a, b) => {
@@ -215,6 +219,10 @@ export default function ReportPesoCeste() {
     const animalsSum = filtered.reduce((s, b) => s + (b.animalCount || 0), 0);
     const validVar = filtered.filter(b => b.weightVariationPct !== null);
     const avgVar = validVar.length > 0 ? validVar.reduce((s, b) => s + (b.weightVariationPct || 0), 0) / validVar.length : null;
+    const validVarPond = filtered.filter(b => b.weightVariationPerDayKg !== null);
+    const avgVarPond = validVarPond.length > 0
+      ? validVarPond.reduce((s, b) => s + (b.weightVariationPerDayKg || 0), 0) / validVarPond.length
+      : null;
     return {
       count: filtered.length,
       animalsSum,
@@ -222,6 +230,7 @@ export default function ReportPesoCeste() {
       penSum: Math.round(penSum * 10) / 10,
       bioDelta: Math.round((bioSum - penSum) * 10) / 10,
       avgVar: avgVar !== null ? Math.round(avgVar * 10) / 10 : null,
+      avgVarPond: avgVarPond !== null ? Math.round(avgVarPond * 1000) / 1000 : null,
     };
   }, [filtered]);
 
@@ -237,7 +246,7 @@ export default function ReportPesoCeste() {
     const ws = wb.addWorksheet("Report Peso Ceste");
 
     // Titolo
-    ws.mergeCells("A1:N1");
+    ws.mergeCells("A1:O1");
     const titleCell = ws.getCell("A1");
     titleCell.value = `Report Peso Ceste — Target TP-3000: ${fmtN(data.meta.targetMinApk)}–${fmtN(data.meta.targetMaxApk)} pz/kg`;
     titleCell.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
@@ -246,7 +255,7 @@ export default function ReportPesoCeste() {
     ws.getRow(1).height = 24;
 
     // Sottotitolo con data export
-    ws.mergeCells("A2:N2");
+    ws.mergeCells("A2:O2");
     const subCell = ws.getCell("A2");
     subCell.value = `Esportato il ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: it })} — ${filtered.length} ceste`;
     subCell.font = { name: "Calibri", size: 10, italic: true, color: { argb: "FF555555" } };
@@ -259,7 +268,7 @@ export default function ReportPesoCeste() {
     const headers = [
       "FLUPSY", "Cesta", "Etichetta", "Lotto", "Ultima op.", "Taglia", "Animali (n.)",
       "pz/kg", "Peso medio (mg)", "Distanza TP-3000 (pz/kg)", "Biomassa (kg)",
-      "Peso penultimo (kg)", "Variazione %", "Formula"
+      "Peso penultimo (kg)", "Variazione %", "Var. ponderale (kg/giorno)", "Formula"
     ];
     const headerRow = ws.addRow(headers);
     headerRow.eachCell(cell => {
@@ -276,7 +285,8 @@ export default function ReportPesoCeste() {
     headerRow.height = 32;
 
     // Dati — col 1=FLUPSY 2=Cesta 3=Etichetta 4=Lotto 5=Data 6=Taglia 7=Animali
-    // 8=pz/kg 9=PesoMedio 10=Distanza 11=Biomassa 12=PesoPen 13=Variaz 14=Form
+    // 8=pz/kg 9=PesoMedio 10=Distanza 11=Biomassa 12=PesoPen 13=Variaz%
+    // 14=VarPondKgGiorno 15=Form
     filtered.forEach((b, idx) => {
       const row = ws.addRow([
         b.flupsyName,
@@ -292,6 +302,7 @@ export default function ReportPesoCeste() {
         b.totalWeightKg,
         b.previousTotalWeightKg,
         b.weightVariationPct,
+        b.weightVariationPerDayKg,
         `v${b.formulaVersion}`,
       ]);
       const altFill = idx % 2 === 0 ? "FFFFFFFF" : "FFF3F4F6";
@@ -316,6 +327,9 @@ export default function ReportPesoCeste() {
           if (typeof cell.value === "number") {
             (cell as any).value = (cell.value as number) / 100;
           }
+        } else if (colNum === 14) {
+          cell.alignment = { horizontal: "right" };
+          cell.numFmt = "+0.000;-0.000;0.000";
         } else {
           cell.alignment = { horizontal: colNum === 1 || colNum === 3 || colNum === 4 ? "left" : "center" };
         }
@@ -340,13 +354,18 @@ export default function ReportPesoCeste() {
       } else {
         row.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
       }
-      // Colore variazione (col 13)
+      // Colore variazione (col 13) e variazione ponderale (col 14)
       if (b.weightVariationPct !== null) {
         const v = b.weightVariationPct;
-        if (v >= 20) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
-        else if (v >= 5) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
-        else if (v <= -20) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
-        else if (v <= -5) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEDD5" } };
+        let fillArgb: string | null = null;
+        if (v >= 20) fillArgb = "FFD1FAE5";
+        else if (v >= 5) fillArgb = "FFECFDF5";
+        else if (v <= -20) fillArgb = "FFFEE2E2";
+        else if (v <= -5) fillArgb = "FFFFEDD5";
+        if (fillArgb) {
+          row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } };
+          row.getCell(14).fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } };
+        }
       }
     });
 
@@ -354,7 +373,8 @@ export default function ReportPesoCeste() {
     const totalsRow = ws.addRow([
       "TOTALI", `${totals.count} ceste`, "", "", "", "",
       totals.animalsSum, "", "", "", totals.bioSum, totals.penSum,
-      totals.avgVar !== null ? totals.avgVar / 100 : null, ""
+      totals.avgVar !== null ? totals.avgVar / 100 : null,
+      totals.avgVarPond, ""
     ]);
     totalsRow.eachCell((cell, colNum) => {
       cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
@@ -364,13 +384,14 @@ export default function ReportPesoCeste() {
       if (colNum === 7) cell.numFmt = "#,##0";
       if (colNum === 11 || colNum === 12) cell.numFmt = "#,##0.0";
       if (colNum === 13) cell.numFmt = "+0.0%;-0.0%;0.0%";
+      if (colNum === 14) cell.numFmt = "+0.000;-0.000;0.000";
     });
 
     // Larghezze colonne
     ws.columns = [
       { width: 22 }, { width: 7 }, { width: 16 }, { width: 18 }, { width: 11 }, { width: 9 },
-      { width: 13 }, { width: 10 }, { width: 12 }, { width: 14 }, { width: 11 },
-      { width: 13 }, { width: 12 }, { width: 8 },
+      { width: 13 }, { width: 10 }, { width: 12 }, { width: 14 }, { width: 10 },
+      { width: 11 }, { width: 12 }, { width: 14 }, { width: 8 },
     ];
 
     // Freeze panes (riga header sempre visibile)
@@ -379,7 +400,7 @@ export default function ReportPesoCeste() {
     // AutoFilter sulla zona dati
     ws.autoFilter = {
       from: { row: 4, column: 1 },
-      to: { row: 4 + filtered.length, column: 14 },
+      to: { row: 4 + filtered.length, column: 15 },
     };
 
     // Download
@@ -490,19 +511,20 @@ export default function ReportPesoCeste() {
         <div className="rounded border border-gray-300 overflow-hidden">
           <table className="w-full text-[11px] table-fixed border-collapse" data-testid="table-report">
             <colgroup>
-              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "4%" }} />
-              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "4%" }} />
             </colgroup>
             <thead>
@@ -530,6 +552,9 @@ export default function ReportPesoCeste() {
                   <div>Peso pen.</div><div className="text-[10px] font-normal opacity-90">(kg)<SortIcon k="previousTotalWeightKg" /></div>
                 </th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("weightVariationPct")}>Variazione %<SortIcon k="weightVariationPct" /></th>
+                <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("weightVariationPerDayKg")}>
+                  <div>Var. pond.</div><div className="text-[10px] font-normal opacity-90">(kg/giorno)<SortIcon k="weightVariationPerDayKg" /></div>
+                </th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none whitespace-nowrap" onClick={() => handleSort("formulaVersion")}>Form.<SortIcon k="formulaVersion" /></th>
               </tr>
               {/* Riga filtri per colonna */}
@@ -547,12 +572,13 @@ export default function ReportPesoCeste() {
                 <th className="px-1 py-1"><Input value={colFilters.bio} onChange={(e) => setColFilters(f => ({ ...f, bio: e.target.value }))} placeholder=">10" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.pen} onChange={(e) => setColFilters(f => ({ ...f, pen: e.target.value }))} placeholder=">5" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.varPct} onChange={(e) => setColFilters(f => ({ ...f, varPct: e.target.value }))} placeholder=">10" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.varPond} onChange={(e) => setColFilters(f => ({ ...f, varPond: e.target.value }))} placeholder=">0.1" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.formula} onChange={(e) => setColFilters(f => ({ ...f, formula: e.target.value }))} placeholder="v2" className="h-6 text-[10px] px-1.5 py-0" /></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={14} className="text-center py-8 text-muted-foreground">Nessuna cesta trovata</td></tr>
+                <tr><td colSpan={15} className="text-center py-8 text-muted-foreground">Nessuna cesta trovata</td></tr>
               ) : filtered.map((b, i) => {
                 const tStyle = targetDeviationStyle(b.deviationFromTarget);
                 const vCls = variationStyle(b.weightVariationPct);
@@ -598,6 +624,16 @@ export default function ReportPesoCeste() {
                       ) : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-1 py-1 text-center">
+                      {b.weightVariationPerDayKg !== null ? (
+                        <span
+                          className={`inline-block px-1.5 py-0 rounded border text-[10px] tabular-nums ${vCls}`}
+                          title={`${b.daysBetweenOps} giorni tra le 2 operazioni`}
+                        >
+                          {b.weightVariationPerDayKg > 0 ? "+" : ""}{fmtN(b.weightVariationPerDayKg, 3)} <span className="opacity-70">({b.daysBetweenOps}g)</span>
+                        </span>
+                      ) : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-1 py-1 text-center">
                       <span className={`inline-block px-1 py-0 rounded text-[9px] font-semibold border ${b.formulaVersion === 2 ? "bg-green-50 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
                         v{b.formulaVersion}
                       </span>
@@ -623,6 +659,9 @@ export default function ReportPesoCeste() {
                   <td className="px-1 py-1.5 text-right tabular-nums">{fmtN(totals.penSum, 1)}</td>
                   <td className="px-1 py-1.5 text-center tabular-nums">
                     {totals.avgVar !== null ? `${totals.avgVar > 0 ? "+" : ""}${fmtN(totals.avgVar, 1)}% media` : "—"}
+                  </td>
+                  <td className="px-1 py-1.5 text-center tabular-nums">
+                    {totals.avgVarPond !== null ? `${totals.avgVarPond > 0 ? "+" : ""}${fmtN(totals.avgVarPond, 3)} media` : "—"}
                   </td>
                   <td className="px-1 py-1.5"></td>
                 </tr>

@@ -2354,6 +2354,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? Math.round((totalWeightKg - prevTotalWeightKg) * 100) / 100 : null;
         const weightVariationPct = prevTotalWeightKg !== null && prevTotalWeightKg > 0
           ? Math.round(((totalWeightKg - prevTotalWeightKg) / prevTotalWeightKg) * 10000) / 100 : null;
+        // Giorni tra ultima e penultima operazione + variazione ponderale (kg/giorno)
+        let daysBetweenOps: number | null = null;
+        let weightVariationPerDayKg: number | null = null;
+        if (r.prev_op_date && r.op_date) {
+          const ms = new Date(r.op_date).getTime() - new Date(r.prev_op_date).getTime();
+          daysBetweenOps = Math.max(1, Math.round(ms / 86400000));
+          if (weightVariationKg !== null) {
+            weightVariationPerDayKg = Math.round((weightVariationKg / daysBetweenOps) * 1000) / 1000;
+          }
+        }
         // Scostamento da soglia superiore TP-3000 (29.000 pz/kg)
         // Negativo = già in range TP-3000 o più grande; Positivo = ancora sotto
         const deviationFromTarget = animalsPerKg - TARGET_MAX_APK;
@@ -2380,6 +2390,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           previousOpDate: r.prev_op_date || null,
           weightVariationKg,
           weightVariationPct,
+          daysBetweenOps,
+          weightVariationPerDayKg,
           animalsPerKg,
           avgWeightMg,
           deviationFromTarget,       // pz/kg in eccesso rispetto a soglia TP-3000
