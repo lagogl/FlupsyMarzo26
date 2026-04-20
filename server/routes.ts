@@ -2289,7 +2289,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           last_op.total_weight,
           last_op.animals_per_kg,
           last_op.average_weight,
-          last_op.formula_version
+          last_op.formula_version,
+          prev_op.id AS prev_op_id,
+          prev_op.date AS prev_op_date,
+          prev_op.type AS prev_op_type,
+          prev_op.total_weight AS prev_total_weight,
+          prev_op.animal_count AS prev_animal_count,
+          prev_op.animals_per_kg AS prev_animals_per_kg
         FROM baskets b
         JOIN cycles c ON c.id = b.current_cycle_id
         JOIN flupsys f ON f.id = b.flupsy_id
@@ -2301,6 +2307,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             AND o.total_weight IS NOT NULL
           ORDER BY o.date DESC, o.id DESC LIMIT 1
         ) last_op ON true
+        LEFT JOIN LATERAL (
+          SELECT * FROM operations o
+          WHERE o.cycle_id = c.id
+            AND o.animal_count IS NOT NULL
+            AND o.total_weight IS NOT NULL
+            AND (o.date < last_op.date OR (o.date = last_op.date AND o.id < last_op.id))
+          ORDER BY o.date DESC, o.id DESC LIMIT 1
+        ) prev_op ON true
         WHERE b.state = 'active' AND c.state = 'active'
           AND last_op.id IS NOT NULL
         ORDER BY f.name, b.physical_number
@@ -2330,6 +2344,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const animalCount = parseInt(r.animal_count) || 0;
         const animalsPerKg = parseInt(r.animals_per_kg) || 0;
         const avgWeightMg = animalsPerKg > 0 ? Math.round((1000000 / animalsPerKg) * 100) / 100 : 0;
+        // Penultima operazione (peso precedente)
+        const prevTotalWeightG = r.prev_total_weight !== null && r.prev_total_weight !== undefined
+          ? parseFloat(r.prev_total_weight) : null;
+        const prevTotalWeightKg = prevTotalWeightG !== null
+          ? Math.round((prevTotalWeightG / 1000) * 100) / 100 : null;
+        const weightVariationKg = prevTotalWeightKg !== null
+          ? Math.round((totalWeightKg - prevTotalWeightKg) * 100) / 100 : null;
+        const weightVariationPct = prevTotalWeightKg !== null && prevTotalWeightKg > 0
+          ? Math.round(((totalWeightKg - prevTotalWeightKg) / prevTotalWeightKg) * 10000) / 100 : null;
         // Scostamento da soglia superiore TP-3000 (29.000 pz/kg)
         // Negativo = già in range TP-3000 o più grande; Positivo = ancora sotto
         const deviationFromTarget = animalsPerKg - TARGET_MAX_APK;
@@ -2351,6 +2374,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           opType: r.op_type,
           animalCount,
           totalWeightKg: Math.round(totalWeightKg * 100) / 100,
+          previousTotalWeightKg: prevTotalWeightKg,
+          previousOpDate: r.prev_op_date || null,
+          weightVariationKg,
+          weightVariationPct,
           animalsPerKg,
           avgWeightMg,
           deviationFromTarget,       // pz/kg in eccesso rispetto a soglia TP-3000

@@ -23,6 +23,10 @@ interface BasketReport {
   opType: string;
   animalCount: number;
   totalWeightKg: number;
+  previousTotalWeightKg: number | null;
+  previousOpDate: string | null;
+  weightVariationKg: number | null;
+  weightVariationPct: number | null;
   animalsPerKg: number;
   avgWeightMg: number;
   deviationFromTarget: number;
@@ -47,7 +51,7 @@ interface ReportData {
   };
 }
 
-type SortKey = "animalsPerKg" | "deviationFromTargetPct" | "totalWeightKg" | "deviationTotalWeightPct" | "avgWeightMg" | "animalCount";
+type SortKey = "animalsPerKg" | "deviationFromTargetPct" | "totalWeightKg" | "previousTotalWeightKg" | "weightVariationPct" | "deviationTotalWeightPct" | "avgWeightMg" | "animalCount";
 type SortDir = "asc" | "desc";
 
 const fmtN = (n: number | null | undefined, dec = 0) =>
@@ -99,8 +103,12 @@ export default function ReportPesoCeste() {
     if (selectedFlupsys.length > 0) rows = rows.filter(b => selectedFlupsys.includes(b.flupsyId));
     if (showOnlyAtTarget) rows = rows.filter(b => b.atOrAboveTarget);
     return [...rows].sort((a, b) => {
-      const av = a[sortKey] as number;
-      const bv = b[sortKey] as number;
+      const av = a[sortKey] as number | null;
+      const bv = b[sortKey] as number | null;
+      // I null vanno sempre in fondo
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
       return sortDir === "asc" ? av - bv : bv - av;
     });
   }, [data, selectedFlupsys, showOnlyAtTarget, sortKey, sortDir]);
@@ -218,12 +226,18 @@ export default function ReportPesoCeste() {
                 <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("totalWeightKg")}>
                   <span className="flex items-center justify-end">Biomassa (kg) <SortIcon k="totalWeightKg" /></span>
                 </th>
+                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("previousTotalWeightKg")}>
+                  <span className="flex items-center justify-end">Peso penultimo (kg) <SortIcon k="previousTotalWeightKg" /></span>
+                </th>
+                <th className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("weightVariationPct")}>
+                  <span className="flex items-center justify-center">Variazione % <SortIcon k="weightVariationPct" /></span>
+                </th>
                 <th className="text-center px-3 py-2 font-medium">Formula</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-10 text-muted-foreground">Nessuna cesta trovata</td></tr>
+                <tr><td colSpan={12} className="text-center py-10 text-muted-foreground">Nessuna cesta trovata</td></tr>
               ) : filtered.map((b, i) => {
                 const tStyle = targetDeviationStyle(b.deviationFromTarget);
                 return (
@@ -259,6 +273,37 @@ export default function ReportPesoCeste() {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{fmtN(b.totalWeightKg, 1)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+                      {b.previousTotalWeightKg !== null ? (
+                        <div className="flex flex-col items-end leading-tight">
+                          <span>{fmtN(b.previousTotalWeightKg, 1)}</span>
+                          {b.previousOpDate && (
+                            <span className="text-[10px] opacity-60">{format(new Date(b.previousOpDate), "dd/MM/yy", { locale: it })}</span>
+                          )}
+                        </div>
+                      ) : <span className="opacity-50">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {b.weightVariationPct !== null ? (
+                        (() => {
+                          const v = b.weightVariationPct;
+                          const k = b.weightVariationKg ?? 0;
+                          let cls = "bg-gray-50 border-gray-200 text-gray-700";
+                          if (v >= 20) cls = "bg-green-100 border-green-300 text-green-800 font-semibold";
+                          else if (v >= 5) cls = "bg-green-50 border-green-200 text-green-700";
+                          else if (v <= -20) cls = "bg-red-100 border-red-300 text-red-800 font-semibold";
+                          else if (v <= -5) cls = "bg-orange-50 border-orange-200 text-orange-700";
+                          const sign = v > 0 ? "+" : "";
+                          const ksign = k > 0 ? "+" : "";
+                          return (
+                            <span className={`inline-flex flex-col items-center px-2 py-0.5 rounded border text-xs gap-0.5 ${cls}`}>
+                              <span>{sign}{fmtN(v, 1)}%</span>
+                              <span className="text-[10px] opacity-70">({ksign}{fmtN(k, 1)} kg)</span>
+                            </span>
+                          );
+                        })()
+                      ) : <span className="text-muted-foreground opacity-50">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-center">
                       <Badge variant="outline" className={`text-[10px] ${b.formulaVersion === 2 ? "bg-green-50 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
                         v{b.formulaVersion}
@@ -278,6 +323,8 @@ export default function ReportPesoCeste() {
         <p><strong>pz/kg</strong>: animali per chilogrammo (meno = animali più grandi). Ordinando crescente si vedono le ceste con gli animali più grandi in cima.</p>
         <p><strong>Peso medio (mg)</strong>: peso medio di un singolo animale = 1.000.000 / pz/kg.</p>
         <p><strong>Distanza da TP-3000</strong>: quanti pz/kg devono ancora ridursi per raggiungere TP-3000 ({data ? fmtN(data.meta.targetMinApk) : "20.001"}–{data ? fmtN(data.meta.targetMaxApk) : "29.000"} pz/kg). Verde = già in range o più grandi.</p>
+        <p><strong>Peso penultimo (kg)</strong>: biomassa registrata nell'operazione immediatamente precedente all'ultima. Se la cesta ha una sola operazione, la cella è vuota.</p>
+        <p><strong>Variazione %</strong>: confronto tra biomassa attuale e penultima. Verde = peso aumentato (crescita); rosso/arancio = peso diminuito (possibile mortalità o vagliatura).</p>
         <p><strong>Formula</strong>: v2 = dato con nuova formula (affidabile), v1 = dato con vecchia formula (potenzialmente distorto).</p>
       </div>
     </div>
