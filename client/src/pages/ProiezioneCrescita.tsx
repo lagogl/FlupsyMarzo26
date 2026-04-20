@@ -45,6 +45,7 @@ interface MonthlyContext {
   budgetProduzione: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
+  arrivalTooLate?: boolean;
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
@@ -58,6 +59,8 @@ interface GrowthProjectionResult {
   generatedAt: string;
   year: number;
   mortalityPercent: number | null;
+  monthsHorizon?: number;
+  monthsToReachTarget?: number;
   totalCurrentQuantity: number;
   totalAlreadyAtTarget: number;
   totalNotYetAtTarget: number;
@@ -101,6 +104,8 @@ interface SpreadsheetRow {
   isBold?: boolean;
   isWarning?: (colIdx: number) => boolean;
   isSuccess?: (colIdx: number) => boolean;
+  isInfo?: (colIdx: number) => boolean;
+  infoTooltip?: string;
   isExpandable?: boolean;
   isSubRow?: boolean;
   subRowSize?: string;
@@ -267,11 +272,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     },
     {
       label: "Arrivi Schiuditoio (TP-300)",
-      tooltip: "Quantità di animali TP-300 (~30M an/kg) pianificati in arrivo dallo schiuditoio per questo mese. Questi valori sono inseriti manualmente e vengono usati nella simulazione di crescita per calcolare il loro contributo futuro alla giacenza a taglia target.",
+      tooltip: "Quantità di animali TP-300 (~30M an/kg) pianificati in arrivo dallo schiuditoio per questo mese. Questi valori sono inseriti manualmente e vengono usati nella simulazione di crescita per calcolare il loro contributo futuro alla giacenza a taglia target. ⏱ = arrivi inseriti in questo mese non avranno tempo di crescere fino alla taglia target entro la fine della finestra di proiezione: aumenta l'orizzonte (selettore in alto) per vederne l'impatto.",
       color: "#10b981",
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.arriviSchiuditoio),
+      isInfo: (colIdx: number) => {
+        const m = mc[colIdx];
+        return !!(m && m.arrivalTooLate && m.arriviSchiuditoio > 0);
+      },
+      infoTooltip: "Gli animali aggiunti in questo mese non raggiungono la taglia target entro la fine della proiezione",
     },
   ];
 
@@ -934,14 +944,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                     const isEmpty = numVal === 0 && !row.isNegative;
                     const warn = row.isWarning ? row.isWarning(colIdx) : false;
                     const success = row.isSuccess ? row.isSuccess(colIdx) : false;
+                    const info = row.isInfo ? row.isInfo(colIdx) : false;
                     const displayVal = typeof val === 'string'
                       ? val
                       : numVal === 0
                         ? (row.isNegative ? '-' : '-')
                         : formatNumber(numVal!);
 
-                    const cellBg = isSelected ? '' : warn ? 'bg-red-50' : success ? 'bg-green-50' : '';
-                    const textColor = isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : success ? 'text-green-700 font-bold' : isNeg ? 'text-red-600' : row.textClass;
+                    const cellBg = isSelected ? '' : warn ? 'bg-red-50' : success ? 'bg-green-50' : info ? 'bg-amber-50' : '';
+                    const textColor = isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : success ? 'text-green-700 font-bold' : info ? 'text-amber-700 font-semibold' : isNeg ? 'text-red-600' : row.textClass;
 
                     return (
                       <td
@@ -949,8 +960,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                         className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
                         onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
                       >
-                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor}`}>
-                          {displayVal}
+                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor} flex items-center justify-end gap-1`}>
+                          {info && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-amber-600 cursor-help text-[11px]" title={row.infoTooltip || ""}>⏱</span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs p-2 bg-amber-900 text-white border border-amber-700">
+                                {row.infoTooltip || "Arrivi tardivi: gli animali non maturano in tempo."}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <span>{displayVal}</span>
                         </div>
                       </td>
                     );
@@ -976,13 +997,15 @@ export default function ProiezioneCrescita() {
   const [activeMortality, setActiveMortality] = useState<number | undefined>(undefined);
   const [startMonth, setStartMonth] = useState<number>(new Date().getMonth() + 1);
   const [startYear, setStartYear] = useState<number>(new Date().getFullYear());
+  const [monthsHorizon, setMonthsHorizon] = useState<number>(12);
 
   const { data, isLoading, error } = useQuery<GrowthProjectionResult>({
-    queryKey: ["/api/proiezione-crescita", startMonth, startYear, activeMortality ?? null],
+    queryKey: ["/api/proiezione-crescita", startMonth, startYear, monthsHorizon, activeMortality ?? null],
     queryFn: async () => {
       const params = new URLSearchParams({
         startMonth: String(startMonth),
         year: String(startYear),
+        monthsHorizon: String(monthsHorizon),
       });
       if (activeMortality !== undefined) {
         params.append("mortalityPercent", String(activeMortality));
@@ -1266,6 +1289,18 @@ export default function ProiezioneCrescita() {
           >
             {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
               <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          <span className="text-gray-300 mx-1">|</span>
+          <span className="text-gray-500 shrink-0">Orizzonte:</span>
+          <select
+            value={monthsHorizon}
+            onChange={e => setMonthsHorizon(Number(e.target.value))}
+            className="border-0 bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
+            title="Numero di mesi proiettati. Aumenta per vedere l'impatto degli arrivi tardivi."
+          >
+            {[12, 15, 18, 24, 30, 36].map(h => (
+              <option key={h} value={h}>{h} mesi</option>
             ))}
           </select>
         </div>

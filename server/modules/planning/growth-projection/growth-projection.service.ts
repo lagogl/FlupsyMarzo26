@@ -46,6 +46,7 @@ interface MonthlyContext {
   budgetProduzione: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
+  arrivalTooLate: boolean;
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
   giacenzaNetTarget: number;
@@ -59,6 +60,8 @@ interface GrowthProjectionResult {
   generatedAt: string;
   year: number;
   mortalityPercent: number | null;
+  monthsHorizon: number;
+  monthsToReachTarget: number;
   totalCurrentQuantity: number;
   totalAlreadyAtTarget: number;
   totalNotYetAtTarget: number;
@@ -95,9 +98,10 @@ export class GrowthProjectionService {
     return lookup;
   }
 
-  async project(targetSize: string = 'TP-3000', year?: number, mortalityPercent?: number, startMonth?: number): Promise<GrowthProjectionResult> {
+  async project(targetSize: string = 'TP-3000', year?: number, mortalityPercent?: number, startMonth?: number, monthsHorizon?: number): Promise<GrowthProjectionResult> {
     const now = new Date();
     const startYear = year || now.getFullYear();
+    const horizon = Math.max(12, Math.min(36, monthsHorizon || 12));
     const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
 
     const threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === targetSize);
@@ -108,7 +112,7 @@ export class GrowthProjectionService {
     const currentMonth0 = startMonth != null ? startMonth - 1 : now.getMonth();
     const currentDay = now.getDate();
 
-    const monthSteps = this.buildMonthSteps(currentMonth0, startYear, 12);
+    const monthSteps = this.buildMonthSteps(currentMonth0, startYear, horizon);
 
     const yearsNeeded = [...new Set(monthSteps.map(s => s.year))];
 
@@ -330,6 +334,7 @@ export class GrowthProjectionService {
         budgetProduzione: budgetByYearMonth[ymKey] || 0,
         domandaEffettiva,
         arriviSchiuditoio: hatcheryThisMonth,
+        arrivalTooLate: false,
         giacenzaLordaInventario,
         giacenzaLordaConSchiuditoio,
         giacenzaNetTarget,
@@ -413,6 +418,18 @@ export class GrowthProjectionService {
           monthlyContext[arrivalMonthIndex].schiuditoioNecessario += Math.ceil(gap / growthSurvivalFactor);
         }
         // Se arrivalMonthIndex < 0, è troppo tardi: gli arrivi avrebbero dovuto avvenire in passato
+      }
+    }
+
+    // Marca i mesi di arrivo "troppo tardi": gli animali TP-300 inseriti in questi mesi
+    // non avranno tempo sufficiente per crescere fino alla taglia target entro la fine
+    // della finestra di proiezione.
+    for (let i = 0; i < monthlyContext.length; i++) {
+      if (monthsToReachTarget < 0) {
+        // Nessun mese raggiunge il target nemmeno partendo da i=0
+        monthlyContext[i].arrivalTooLate = true;
+      } else if (i + monthsToReachTarget >= monthlyContext.length) {
+        monthlyContext[i].arrivalTooLate = true;
       }
     }
 
@@ -519,6 +536,8 @@ export class GrowthProjectionService {
       generatedAt: now.toISOString(),
       year: startYear,
       mortalityPercent: mortalityPercent ?? null,
+      monthsHorizon: horizon,
+      monthsToReachTarget,
       totalCurrentQuantity: totalCurrentQty,
       totalAlreadyAtTarget: totalAlready,
       totalNotYetAtTarget: totalCurrentQty - totalAlready,

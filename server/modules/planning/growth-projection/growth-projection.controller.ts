@@ -24,8 +24,15 @@ router.get("/", async (req: Request, res: Response) => {
         startMonth = parsed;
       }
     }
+    let monthsHorizon: number | undefined = undefined;
+    if (req.query.monthsHorizon !== undefined) {
+      const parsed = parseInt(req.query.monthsHorizon as string);
+      if (!isNaN(parsed) && parsed >= 12 && parsed <= 36) {
+        monthsHorizon = parsed;
+      }
+    }
 
-    const result = await growthProjectionService.project(targetSize, year, mortalityPercent, startMonth);
+    const result = await growthProjectionService.project(targetSize, year, mortalityPercent, startMonth, monthsHorizon);
     res.json(result);
   } catch (error) {
     console.error("Errore proiezione crescita:", error);
