@@ -955,7 +955,24 @@ export default function ProiezioneCrescita() {
     setMortalityInput("");
   };
 
-  const hatcheryMonths = mc.map(m => ({ year: m.year, month: m.month, label: m.monthLabel }));
+  // Pannello arrivi: mostra TUTTI i mesi dell'anno corrente (Gen-Dic) + eventuali
+  // mesi del prossimo anno coperti dalla proiezione, in ordine cronologico.
+  const MONTH_SHORT_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const yearsInPanel = [...new Set([startYear, ...mc.map(m => m.year)])].sort();
+  const hatcheryMonths: Array<{ year: number; month: number; label: string }> = [];
+  for (const y of yearsInPanel) {
+    for (let m = 1; m <= 12; m++) {
+      // Per gli anni successivi a startYear, includi solo i mesi coperti dalla proiezione
+      if (y === startYear) {
+        hatcheryMonths.push({ year: y, month: m, label: `${MONTH_SHORT_IT[m-1]} ${String(y).slice(-2)}` });
+      } else {
+        const isInProjection = mc.some(c => c.year === y && c.month === m);
+        if (isInProjection) {
+          hatcheryMonths.push({ year: y, month: m, label: `${MONTH_SHORT_IT[m-1]} ${String(y).slice(-2)}` });
+        }
+      }
+    }
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -1213,15 +1230,19 @@ export default function ProiezioneCrescita() {
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] uppercase font-semibold text-blue-600 w-12">Reale</span>
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         placeholder={actualVal !== null ? formatNumber(actualVal) : "0"}
                         className={`h-7 text-xs ${actualVal !== null ? 'bg-blue-50 border-blue-200' : ''}`}
                         value={
                           actualInputs[inputKey] !== undefined
-                            ? actualInputs[inputKey]
-                            : (actualVal !== null ? String(actualVal) : "")
+                            ? (actualInputs[inputKey] === "" ? "" : formatNumber(parseInt(actualInputs[inputKey]) || 0))
+                            : (actualVal !== null ? formatNumber(actualVal) : "")
                         }
-                        onChange={e => setActualInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
+                        onChange={e => {
+                          const digits = e.target.value.replace(/\D/g, "");
+                          setActualInputs(prev => ({ ...prev, [inputKey]: digits }));
+                        }}
                       />
                       <Button
                         variant="ghost"
@@ -1242,7 +1263,7 @@ export default function ProiezioneCrescita() {
                         disabled={
                           actualInputs[inputKey] === undefined ||
                           actualInputs[inputKey] === "" ||
-                          actualInputs[inputKey] === String(actualVal ?? '')
+                          parseInt(actualInputs[inputKey]) === actualVal
                         }
                       >
                         <Save className="h-3 w-3" />

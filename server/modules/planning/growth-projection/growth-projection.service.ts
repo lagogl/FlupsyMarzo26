@@ -143,12 +143,17 @@ export class GrowthProjectionService {
       budgetByYearMonth[key] += row.targetAnimals;
     }
 
-    const hatcheryByYearMonth: Record<string, number> = {};
+    // Tracciamo SEPARATAMENTE reale e previsione per ogni mese:
+    // - per il mese corrente (i === 0) si userà SEMPRE il reale (actual ?? 0)
+    // - per i mesi futuri si userà SEMPRE la previsione
+    const hatcheryByYearMonth: Record<string, { actual: number | null; forecast: number }> = {};
     for (const row of hatcheryRows) {
       const key = `${row.year}-${row.month}`;
-      if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = 0;
-      // Usa il reale consolidato se disponibile, altrimenti la previsione
-      hatcheryByYearMonth[key] += row.actualQuantity ?? row.quantity;
+      if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = { actual: null, forecast: 0 };
+      hatcheryByYearMonth[key].forecast += row.quantity;
+      if (row.actualQuantity !== null && row.actualQuantity !== undefined) {
+        hatcheryByYearMonth[key].actual = (hatcheryByYearMonth[key].actual ?? 0) + row.actualQuantity;
+      }
     }
 
     const grouped: Record<string, Array<{basketId: number, animalsPerKg: number, animalCount: number}>> = {};
@@ -197,7 +202,15 @@ export class GrowthProjectionService {
       }
 
       const ymKey = `${y}-${step.month1Based}`;
-      const hatcheryThisMonth = hatcheryByYearMonth[ymKey] || 0;
+      const hatcheryEntry = hatcheryByYearMonth[ymKey];
+      // Mese corrente (primo step) = reale consolidato (anche 0 se non consolidato)
+      // Mesi futuri = previsione
+      let hatcheryThisMonth = 0;
+      if (hatcheryEntry) {
+        hatcheryThisMonth = i === 0
+          ? (hatcheryEntry.actual ?? 0)
+          : hatcheryEntry.forecast;
+      }
       if (hatcheryThisMonth > 0) {
         const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
         const hatcheryApk = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
