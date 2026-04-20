@@ -19,6 +19,7 @@ interface BasketReport {
   flupsyName: string;
   cycleId: number;
   cycleStart: string;
+  cycleCode: string | null;
   lotId: number | null;
   lotSupplier: string | null;
   opDate: string;
@@ -51,7 +52,7 @@ interface ReportData {
   };
 }
 
-type SortKey = "flupsyName" | "physicalNumber" | "lotSupplier" | "opDate" | "currentSizeCode" |
+type SortKey = "flupsyName" | "physicalNumber" | "cycleCode" | "lotSupplier" | "opDate" | "currentSizeCode" |
   "animalCount" | "animalsPerKg" | "avgWeightMg" | "deviationFromTarget" | "totalWeightKg" |
   "previousTotalWeightKg" | "weightVariationPct" | "formulaVersion";
 type SortDir = "asc" | "desc";
@@ -78,6 +79,7 @@ const variationStyle = (pct: number | null) => {
 interface ColumnFilters {
   flupsy: string;
   cesta: string;
+  etichetta: string;
   lotto: string;
   data: string;
   taglia: string;
@@ -92,7 +94,7 @@ interface ColumnFilters {
 }
 
 const emptyFilters: ColumnFilters = {
-  flupsy: "", cesta: "", lotto: "", data: "", taglia: "", animali: "",
+  flupsy: "", cesta: "", etichetta: "", lotto: "", data: "", taglia: "", animali: "",
   pzkg: "", pmed: "", dist: "", bio: "", pen: "", varPct: "", formula: ""
 };
 
@@ -170,6 +172,7 @@ export default function ReportPesoCeste() {
     rows = rows.filter(b =>
       matchTextFilter(b.flupsyName, colFilters.flupsy) &&
       matchTextFilter(String(b.physicalNumber), colFilters.cesta) &&
+      matchTextFilter(b.cycleCode || "", colFilters.etichetta) &&
       matchTextFilter(b.lotSupplier, colFilters.lotto) &&
       matchTextFilter(b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "", colFilters.data) &&
       matchTextFilter(b.currentSizeCode, colFilters.taglia) &&
@@ -234,7 +237,7 @@ export default function ReportPesoCeste() {
     const ws = wb.addWorksheet("Report Peso Ceste");
 
     // Titolo
-    ws.mergeCells("A1:M1");
+    ws.mergeCells("A1:N1");
     const titleCell = ws.getCell("A1");
     titleCell.value = `Report Peso Ceste — Target TP-3000: ${fmtN(data.meta.targetMinApk)}–${fmtN(data.meta.targetMaxApk)} pz/kg`;
     titleCell.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
@@ -243,7 +246,7 @@ export default function ReportPesoCeste() {
     ws.getRow(1).height = 24;
 
     // Sottotitolo con data export
-    ws.mergeCells("A2:M2");
+    ws.mergeCells("A2:N2");
     const subCell = ws.getCell("A2");
     subCell.value = `Esportato il ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: it })} — ${filtered.length} ceste`;
     subCell.font = { name: "Calibri", size: 10, italic: true, color: { argb: "FF555555" } };
@@ -254,7 +257,7 @@ export default function ReportPesoCeste() {
 
     // Header colonne
     const headers = [
-      "FLUPSY", "Cesta", "Lotto", "Ultima op.", "Taglia", "Animali (n.)",
+      "FLUPSY", "Cesta", "Etichetta", "Lotto", "Ultima op.", "Taglia", "Animali (n.)",
       "pz/kg", "Peso medio (mg)", "Distanza TP-3000 (pz/kg)", "Biomassa (kg)",
       "Peso penultimo (kg)", "Variazione %", "Formula"
     ];
@@ -272,12 +275,13 @@ export default function ReportPesoCeste() {
     });
     headerRow.height = 32;
 
-    // Dati — col 1=FLUPSY 2=Cesta 3=Lotto 4=Data 5=Taglia 6=Animali
-    // 7=pz/kg 8=PesoMedio 9=Distanza 10=Biomassa 11=PesoPen 12=Variaz 13=Form
+    // Dati — col 1=FLUPSY 2=Cesta 3=Etichetta 4=Lotto 5=Data 6=Taglia 7=Animali
+    // 8=pz/kg 9=PesoMedio 10=Distanza 11=Biomassa 12=PesoPen 13=Variaz 14=Form
     filtered.forEach((b, idx) => {
       const row = ws.addRow([
         b.flupsyName,
         `#${b.physicalNumber}`,
+        b.cycleCode || "",
         b.lotSupplier || "",
         b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "",
         b.currentSizeCode || "",
@@ -300,69 +304,71 @@ export default function ReportPesoCeste() {
           left: { style: "hair", color: { argb: "FFDDDDDD" } },
           right: { style: "hair", color: { argb: "FFDDDDDD" } },
         };
-        if (colNum === 6 || colNum === 7 || colNum === 9) {
+        if (colNum === 7 || colNum === 8 || colNum === 10) {
           cell.alignment = { horizontal: "right" };
           cell.numFmt = "#,##0";
-        } else if ([8, 10, 11].includes(colNum)) {
+        } else if ([9, 11, 12].includes(colNum)) {
           cell.alignment = { horizontal: "right" };
           cell.numFmt = "#,##0.0";
-        } else if (colNum === 12) {
+        } else if (colNum === 13) {
           cell.alignment = { horizontal: "center" };
           cell.numFmt = "+0.0%;-0.0%;0.0%";
           if (typeof cell.value === "number") {
             (cell as any).value = (cell.value as number) / 100;
           }
         } else {
-          cell.alignment = { horizontal: colNum === 1 || colNum === 3 ? "left" : "center" };
+          cell.alignment = { horizontal: colNum === 1 || colNum === 3 || colNum === 4 ? "left" : "center" };
         }
       });
-      // Colore taglia (col 5)
+      // Etichetta (col 3): mono + bold
+      row.getCell(3).font = { name: "Consolas", size: 10, bold: true, color: { argb: "FF1D4ED8" } };
+      // Colore taglia (col 6)
       if (b.currentSizeColor) {
-        row.getCell(5).fill = {
+        row.getCell(6).fill = {
           type: "pattern", pattern: "solid",
           fgColor: { argb: "FF" + b.currentSizeColor.replace("#", "") + "" }
         };
       }
-      // Colore distanza target (col 9)
+      // Colore distanza target (col 10)
       if (b.atOrAboveTarget) {
-        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
-        row.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF065F46" } };
+        row.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+        row.getCell(10).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF065F46" } };
       } else if (b.deviationFromTarget <= 10000) {
-        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
+        row.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
       } else if (b.deviationFromTarget <= 30000) {
-        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFED7AA" } };
+        row.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFED7AA" } };
       } else {
-        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+        row.getCell(10).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
       }
-      // Colore variazione (col 12)
+      // Colore variazione (col 13)
       if (b.weightVariationPct !== null) {
         const v = b.weightVariationPct;
-        if (v >= 20) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
-        else if (v >= 5) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
-        else if (v <= -20) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
-        else if (v <= -5) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEDD5" } };
+        if (v >= 20) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+        else if (v >= 5) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
+        else if (v <= -20) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+        else if (v <= -5) row.getCell(13).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEDD5" } };
       }
     });
 
     // Riga totali
     const totalsRow = ws.addRow([
-      "TOTALI", `${totals.count} ceste`, "", "", "",
+      "TOTALI", `${totals.count} ceste`, "", "", "", "",
       totals.animalsSum, "", "", "", totals.bioSum, totals.penSum,
       totals.avgVar !== null ? totals.avgVar / 100 : null, ""
     ]);
     totalsRow.eachCell((cell, colNum) => {
       cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF374151" } };
-      cell.alignment = { horizontal: colNum === 1 ? "left" : (colNum === 12 ? "center" : "right") };
+      cell.alignment = { horizontal: colNum === 1 ? "left" : (colNum === 13 ? "center" : "right") };
       cell.border = { top: { style: "medium", color: { argb: "FF000000" } } };
-      if (colNum === 6) cell.numFmt = "#,##0";
-      if (colNum === 10 || colNum === 11) cell.numFmt = "#,##0.0";
-      if (colNum === 12) cell.numFmt = "+0.0%;-0.0%;0.0%";
+      if (colNum === 7) cell.numFmt = "#,##0";
+      if (colNum === 11 || colNum === 12) cell.numFmt = "#,##0.0";
+      if (colNum === 13) cell.numFmt = "+0.0%;-0.0%;0.0%";
     });
 
     // Larghezze colonne
     ws.columns = [
-      { width: 22 }, { width: 7 }, { width: 18 }, { width: 11 }, { width: 9 },
+      { width: 22 }, { width: 7 }, { width: 16 }, { width: 18 }, { width: 11 }, { width: 9 },
       { width: 13 }, { width: 10 }, { width: 12 }, { width: 14 }, { width: 11 },
       { width: 13 }, { width: 12 }, { width: 8 },
     ];
@@ -373,7 +379,7 @@ export default function ReportPesoCeste() {
     // AutoFilter sulla zona dati
     ws.autoFilter = {
       from: { row: 4, column: 1 },
-      to: { row: 4 + filtered.length, column: 13 },
+      to: { row: 4 + filtered.length, column: 14 },
     };
 
     // Download
@@ -484,25 +490,27 @@ export default function ReportPesoCeste() {
         <div className="rounded border border-gray-300 overflow-hidden">
           <table className="w-full text-[11px] table-fixed border-collapse" data-testid="table-report">
             <colgroup>
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "9%" }} />
               <col style={{ width: "4%" }} />
               <col style={{ width: "9%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "8%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "11%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "13%" }} />
               <col style={{ width: "4%" }} />
             </colgroup>
             <thead>
               <tr className="bg-blue-700 text-white text-[12px] leading-tight">
                 <th className="px-2 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("flupsyName")}>FLUPSY<SortIcon k="flupsyName" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("physicalNumber")}>Cesta<SortIcon k="physicalNumber" /></th>
-                <th className="px-2 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("lotSupplier")}>Lotto<SortIcon k="lotSupplier" /></th>
+                <th className="px-1 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("cycleCode")}>Etichetta<SortIcon k="cycleCode" /></th>
+                <th className="px-1 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("lotSupplier")}>Lotto<SortIcon k="lotSupplier" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("opDate")}>Data<SortIcon k="opDate" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("currentSizeCode")}>Taglia<SortIcon k="currentSizeCode" /></th>
                 <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("animalCount")}>
@@ -528,6 +536,7 @@ export default function ReportPesoCeste() {
               <tr className="bg-blue-50 border-b border-blue-200">
                 <th className="px-1 py-1"><Input value={colFilters.flupsy} onChange={(e) => setColFilters(f => ({ ...f, flupsy: e.target.value }))} placeholder="filtra" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.cesta} onChange={(e) => setColFilters(f => ({ ...f, cesta: e.target.value }))} placeholder="#" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.etichetta} onChange={(e) => setColFilters(f => ({ ...f, etichetta: e.target.value }))} placeholder="codice" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.lotto} onChange={(e) => setColFilters(f => ({ ...f, lotto: e.target.value }))} placeholder="filtra" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.data} onChange={(e) => setColFilters(f => ({ ...f, data: e.target.value }))} placeholder="dd/mm" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.taglia} onChange={(e) => setColFilters(f => ({ ...f, taglia: e.target.value }))} placeholder="TP-" className="h-6 text-[10px] px-1.5 py-0" /></th>
@@ -543,7 +552,7 @@ export default function ReportPesoCeste() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">Nessuna cesta trovata</td></tr>
+                <tr><td colSpan={14} className="text-center py-8 text-muted-foreground">Nessuna cesta trovata</td></tr>
               ) : filtered.map((b, i) => {
                 const tStyle = targetDeviationStyle(b.deviationFromTarget);
                 const vCls = variationStyle(b.weightVariationPct);
@@ -551,7 +560,8 @@ export default function ReportPesoCeste() {
                   <tr key={b.basketId} className={`border-b border-gray-200 hover:bg-blue-50/50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`} data-testid={`row-basket-${b.basketId}`}>
                     <td className="px-1.5 py-1 truncate text-[10px] text-gray-600" title={b.flupsyName}>{b.flupsyName}</td>
                     <td className="px-1 py-1 text-center font-semibold">#{b.physicalNumber}</td>
-                    <td className="px-1.5 py-1 truncate text-[10px] text-gray-600" title={b.lotSupplier || ""}>{b.lotSupplier || "—"}</td>
+                    <td className="px-1 py-1 truncate text-[10px] font-mono font-semibold text-blue-700" title={b.cycleCode || ""}>{b.cycleCode || "—"}</td>
+                    <td className="px-1 py-1 truncate text-[10px] text-gray-600" title={b.lotSupplier || ""}>{b.lotSupplier || "—"}</td>
                     <td className="px-1 py-1 text-center text-[10px] text-gray-600 whitespace-nowrap">
                       {b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "—"}
                     </td>
@@ -601,6 +611,7 @@ export default function ReportPesoCeste() {
                 <tr className="bg-gray-700 text-white font-semibold">
                   <td className="px-1.5 py-1.5 text-left">TOTALI</td>
                   <td className="px-1 py-1.5 text-center">{totals.count}</td>
+                  <td className="px-1 py-1.5"></td>
                   <td className="px-1.5 py-1.5"></td>
                   <td className="px-1 py-1.5"></td>
                   <td className="px-1 py-1.5"></td>
