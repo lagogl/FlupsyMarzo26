@@ -489,19 +489,27 @@ export default function ReportPesoCeste() {
               <col style={{ width: "5%" }} />
             </colgroup>
             <thead>
-              <tr className="bg-blue-700 text-white">
-                <th className="px-1.5 py-1.5 text-left font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("flupsyName")}>FLUPSY<SortIcon k="flupsyName" /></th>
-                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("physicalNumber")}>Cesta<SortIcon k="physicalNumber" /></th>
-                <th className="px-1.5 py-1.5 text-left font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("lotSupplier")}>Lotto<SortIcon k="lotSupplier" /></th>
-                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("opDate")}>Data<SortIcon k="opDate" /></th>
-                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("currentSizeCode")}>Taglia<SortIcon k="currentSizeCode" /></th>
-                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("animalsPerKg")}>pz/kg<SortIcon k="animalsPerKg" /></th>
-                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("avgWeightMg")}>P.med (mg)<SortIcon k="avgWeightMg" /></th>
-                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("deviationFromTarget")}>Δ TP-3000<SortIcon k="deviationFromTarget" /></th>
-                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("totalWeightKg")}>Bio (kg)<SortIcon k="totalWeightKg" /></th>
-                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("previousTotalWeightKg")}>Pen. (kg)<SortIcon k="previousTotalWeightKg" /></th>
-                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("weightVariationPct")}>Variazione %<SortIcon k="weightVariationPct" /></th>
-                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none" onClick={() => handleSort("formulaVersion")}>F.<SortIcon k="formulaVersion" /></th>
+              <tr className="bg-blue-700 text-white text-[12px] leading-tight">
+                <th className="px-2 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("flupsyName")}>FLUPSY<SortIcon k="flupsyName" /></th>
+                <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("physicalNumber")}>Cesta<SortIcon k="physicalNumber" /></th>
+                <th className="px-2 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("lotSupplier")}>Lotto<SortIcon k="lotSupplier" /></th>
+                <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("opDate")}>Data<SortIcon k="opDate" /></th>
+                <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("currentSizeCode")}>Taglia<SortIcon k="currentSizeCode" /></th>
+                <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("animalsPerKg")}>pz/kg<SortIcon k="animalsPerKg" /></th>
+                <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("avgWeightMg")}>
+                  <div>Peso medio</div><div className="text-[10px] font-normal opacity-90">(mg)<SortIcon k="avgWeightMg" /></div>
+                </th>
+                <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("deviationFromTarget")}>
+                  <div>Distanza</div><div className="text-[10px] font-normal opacity-90">TP-3000<SortIcon k="deviationFromTarget" /></div>
+                </th>
+                <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("totalWeightKg")}>
+                  <div>Biomassa</div><div className="text-[10px] font-normal opacity-90">(kg)<SortIcon k="totalWeightKg" /></div>
+                </th>
+                <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("previousTotalWeightKg")}>
+                  <div>Peso pen.</div><div className="text-[10px] font-normal opacity-90">(kg)<SortIcon k="previousTotalWeightKg" /></div>
+                </th>
+                <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("weightVariationPct")}>Variazione %<SortIcon k="weightVariationPct" /></th>
+                <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none whitespace-nowrap" onClick={() => handleSort("formulaVersion")}>Form.<SortIcon k="formulaVersion" /></th>
               </tr>
               {/* Riga filtri per colonna */}
               <tr className="bg-blue-50 border-b border-blue-200">
