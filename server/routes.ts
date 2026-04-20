@@ -2381,6 +2381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cycleId: r.cycle_id,
           cycleStart: r.cycle_start,
           cycleCode: r.cycle_code,
+          screeningLabel: r.screening_label || null,
           lotId: r.lot_id,
           lotSupplier: r.lot_supplier,
           opDate: r.op_date,

@@ -20,6 +20,7 @@ interface BasketReport {
   cycleId: number;
   cycleStart: string;
   cycleCode: string | null;
+  screeningLabel: string | null;
   lotId: number | null;
   lotSupplier: string | null;
   opDate: string;
@@ -54,7 +55,7 @@ interface ReportData {
   };
 }
 
-type SortKey = "flupsyName" | "physicalNumber" | "cycleCode" | "lotSupplier" | "opDate" | "currentSizeCode" |
+type SortKey = "flupsyName" | "physicalNumber" | "screeningLabel" | "lotSupplier" | "opDate" | "currentSizeCode" |
   "animalCount" | "animalsPerKg" | "avgWeightMg" | "deviationFromTarget" | "totalWeightKg" |
   "previousTotalWeightKg" | "weightVariationPct" | "weightVariationPerDayKg" | "formulaVersion";
 type SortDir = "asc" | "desc";
@@ -175,7 +176,7 @@ export default function ReportPesoCeste() {
     rows = rows.filter(b =>
       matchTextFilter(b.flupsyName, colFilters.flupsy) &&
       matchTextFilter(String(b.physicalNumber), colFilters.cesta) &&
-      matchTextFilter(b.cycleCode || "", colFilters.etichetta) &&
+      matchTextFilter(b.screeningLabel || b.cycleCode || "", colFilters.etichetta) &&
       matchTextFilter(b.lotSupplier, colFilters.lotto) &&
       matchTextFilter(b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "", colFilters.data) &&
       matchTextFilter(b.currentSizeCode, colFilters.taglia) &&
@@ -291,7 +292,7 @@ export default function ReportPesoCeste() {
       const row = ws.addRow([
         b.flupsyName,
         `#${b.physicalNumber}`,
-        b.cycleCode || "",
+        b.screeningLabel || b.cycleCode || "",
         b.lotSupplier || "",
         b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "",
         b.currentSizeCode || "",
@@ -531,7 +532,7 @@ export default function ReportPesoCeste() {
               <tr className="bg-blue-700 text-white text-[12px] leading-tight">
                 <th className="px-2 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("flupsyName")}>FLUPSY<SortIcon k="flupsyName" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("physicalNumber")}>Cesta<SortIcon k="physicalNumber" /></th>
-                <th className="px-1 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("cycleCode")}>Etichetta<SortIcon k="cycleCode" /></th>
+                <th className="px-1 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("screeningLabel")}>Etichetta<SortIcon k="screeningLabel" /></th>
                 <th className="px-1 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("lotSupplier")}>Lotto<SortIcon k="lotSupplier" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("opDate")}>Data<SortIcon k="opDate" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("currentSizeCode")}>Taglia<SortIcon k="currentSizeCode" /></th>
@@ -586,7 +587,7 @@ export default function ReportPesoCeste() {
                   <tr key={b.basketId} className={`border-b border-gray-200 hover:bg-blue-50/50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`} data-testid={`row-basket-${b.basketId}`}>
                     <td className="px-1.5 py-1 truncate text-[10px] text-gray-600" title={b.flupsyName}>{b.flupsyName}</td>
                     <td className="px-1 py-1 text-center font-semibold">#{b.physicalNumber}</td>
-                    <td className="px-1 py-1 truncate text-[10px] font-mono font-semibold text-blue-700" title={b.cycleCode || ""}>{b.cycleCode || "—"}</td>
+                    <td className="px-1 py-1 truncate text-[11px] font-bold text-blue-700" title={b.screeningLabel || b.cycleCode || ""}>{b.screeningLabel || <span className="text-gray-400 font-normal">—</span>}</td>
                     <td className="px-1 py-1 truncate text-[10px] text-gray-600" title={b.lotSupplier || ""}>{b.lotSupplier || "—"}</td>
                     <td className="px-1 py-1 text-center text-[10px] text-gray-600 whitespace-nowrap">
                       {b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "—"}
