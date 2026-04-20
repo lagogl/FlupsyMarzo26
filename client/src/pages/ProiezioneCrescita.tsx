@@ -107,11 +107,16 @@ interface SpreadsheetRow {
   groupKey?: string;
 }
 
-function ExcelTable({ data, mc, toast }: {
+const MONTH_SHORT_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+function ExcelTable({ data, mc, toast, allHatcheryData }: {
   data: GrowthProjectionResult;
   mc: MonthlyContext[];
   toast: any;
+  allHatcheryData: any[];
 }) {
+  const groupsAbove = data.groups.filter(g => g.alreadyAtTarget);
+  const groupsBelow = data.groups.filter(g => !g.alreadyAtTarget);
   const tableRef = useRef<HTMLTableElement>(null);
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [anchorCell, setAnchorCell] = useState<{row: number, col: number} | null>(null);
@@ -1176,7 +1181,6 @@ export default function ProiezioneCrescita() {
 
   // Pannello arrivi: mostra TUTTI i mesi dell'anno corrente (Gen-Dic) + eventuali
   // mesi del prossimo anno coperti dalla proiezione, in ordine cronologico.
-  const MONTH_SHORT_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const yearsInPanel = [...new Set([startYear, ...mc.map(m => m.year)])].sort();
   const hatcheryMonths: Array<{ year: number; month: number; label: string }> = [];
   for (const y of yearsInPanel) {
@@ -1239,6 +1243,7 @@ export default function ProiezioneCrescita() {
         data={data}
         mc={mc}
         toast={toast}
+        allHatcheryData={allHatcheryData}
       />
 
       <div className="flex flex-wrap items-center gap-3">
