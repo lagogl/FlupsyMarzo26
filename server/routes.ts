@@ -2281,6 +2281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           c.id AS cycle_id,
           c.start_date AS cycle_start,
           b.cycle_code,
+          c.screening_label,
           c.lot_id,
           l.supplier AS lot_supplier,
           last_op.id AS op_id,
