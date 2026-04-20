@@ -963,10 +963,12 @@ export default function OperationForm({
       const apk = sampleW > 0 && liveCount > 0 ? Math.round((liveCount / sampleW) * 1000) : (formattedValues.animalsPerKg || 0);
       const totW = formattedValues.totalWeight || 0;
       
+      // Misura usa sempre la nuova formula, anche quando i conteggi vengono ereditati
+      formattedValues.formulaVersion = 2;
+      
       if (apk > 0 && totW > 0) {
         const newAnimalCount = Math.round((totW * apk) / 1000);
         formattedValues.animalCount = newAnimalCount;
-        formattedValues.formulaVersion = 2;
         console.log(`Misura v2 - Vivi diretti: ${totW}g × ${apk} apk / 1000 = ${newAnimalCount}`);
         
         // Conferma se differenza significativa rispetto al precedente

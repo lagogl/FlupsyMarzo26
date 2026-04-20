@@ -1286,7 +1286,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           sizeId: actualSizeId,
           metadata: operationMetadata,
           notes: operationNotes,
-          source: 'desktop_manager' // Operazione da gestionale desktop
+          source: 'desktop_manager', // Operazione da gestionale desktop
+          formulaVersion: 2 // Vagliatura usa la nuova formula (sample diretto, no cascata)
         });
 
         // 4. GESTISCI POSIZIONAMENTO O VENDITA
@@ -1328,7 +1329,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             lotId: primaryLotId, // ✅ LOTTO DOMINANTE
             metadata: operationMetadata,
             notes: saleNotes,
-            source: 'desktop_manager' // Operazione da gestionale desktop
+            source: 'desktop_manager', // Operazione da gestionale desktop
+            formulaVersion: 2 // Vagliatura usa la nuova formula (sample diretto, no cascata)
           }).returning();
           
           // Salva l'ID dell'operazione di vendita per creare la notifica DOPO il commit
