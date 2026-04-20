@@ -170,7 +170,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <Users className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.operators || "Gestione Operatori", path: "/operators" },
         { icon: <History className="h-5 w-5 mr-2 text-emerald-600" />, label: "Storia Animali", path: "/storia-animali" },
         { icon: <Leaf className="h-5 w-5 mr-2 text-teal-600" />, label: "Diario Ambientale", path: "/diario-ambientale" },
-        { icon: <Ruler className="h-5 w-5 mr-2 text-blue-600" />, label: "Ceste da Riallineare", path: "/ceste-da-riallineare" }
+        { icon: <Ruler className="h-5 w-5 mr-2 text-blue-600" />, label: "Ceste da Riallineare", path: "/ceste-da-riallineare" },
+        { icon: <Scale className="h-5 w-5 mr-2 text-blue-600" />, label: "Report Peso Ceste", path: "/report-peso-ceste" }
       ]
     },
     {

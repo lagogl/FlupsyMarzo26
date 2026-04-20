@@ -2265,6 +2265,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // Report Peso Ceste — scostamenti biomassa e peso medio vs target TP-3000
+  // GET /api/report/peso-ceste
+  // Ritorna tutte le ceste attive con ultima operazione, peso medio, deviazioni
+  // ============================================================================
+  app.get('/api/report/peso-ceste', async (req: Request, res: Response) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          b.id AS basket_id,
+          b.physical_number,
+          b.flupsy_id,
+          f.name AS flupsy_name,
+          c.id AS cycle_id,
+          c.start_date AS cycle_start,
+          c.lot_id,
+          l.supplier AS lot_supplier,
+          last_op.id AS op_id,
+          last_op.date AS op_date,
+          last_op.type AS op_type,
+          last_op.animal_count,
+          last_op.total_weight,
+          last_op.animals_per_kg,
+          last_op.average_weight,
+          last_op.formula_version
+        FROM baskets b
+        JOIN cycles c ON c.id = b.current_cycle_id
+        JOIN flupsys f ON f.id = b.flupsy_id
+        LEFT JOIN lots l ON l.id = c.lot_id
+        LEFT JOIN LATERAL (
+          SELECT * FROM operations o
+          WHERE o.cycle_id = c.id
+            AND o.animal_count IS NOT NULL
+            AND o.total_weight IS NOT NULL
+          ORDER BY o.date DESC, o.id DESC LIMIT 1
+        ) last_op ON true
+        WHERE b.state = 'active' AND c.state = 'active'
+          AND last_op.id IS NOT NULL
+        ORDER BY f.name, b.physical_number
+      `);
+
+      const rows = ((result as any).rows || result) as any[];
+      const TARGET_APK = 3000; // TP-3000
+      const TARGET_AVG_WEIGHT_MG = 1000000 / TARGET_APK; // 333.33 mg
+
+      const baskets = rows.map((r: any) => {
+        const totalWeightG = parseFloat(r.total_weight) || 0;
+        const totalWeightKg = totalWeightG / 1000;
+        const animalCount = parseInt(r.animal_count) || 0;
+        const animalsPerKg = parseInt(r.animals_per_kg) || 0;
+        const avgWeightMg = r.average_weight
+          ? parseFloat(r.average_weight)
+          : (animalsPerKg > 0 ? 1000000 / animalsPerKg : 0);
+        const deviationAvgWeightMg = avgWeightMg - TARGET_AVG_WEIGHT_MG;
+        const deviationAvgWeightPct = TARGET_AVG_WEIGHT_MG > 0
+          ? (deviationAvgWeightMg / TARGET_AVG_WEIGHT_MG) * 100 : 0;
+        return {
+          basketId: r.basket_id,
+          physicalNumber: r.physical_number,
+          flupsyId: r.flupsy_id,
+          flupsyName: r.flupsy_name,
+          cycleId: r.cycle_id,
+          cycleStart: r.cycle_start,
+          lotId: r.lot_id,
+          lotSupplier: r.lot_supplier,
+          opDate: r.op_date,
+          opType: r.op_type,
+          animalCount,
+          totalWeightKg: Math.round(totalWeightKg * 100) / 100,
+          animalsPerKg,
+          avgWeightMg: Math.round(avgWeightMg * 100) / 100,
+          deviationAvgWeightMg: Math.round(deviationAvgWeightMg * 100) / 100,
+          deviationAvgWeightPct: Math.round(deviationAvgWeightPct * 100) / 100,
+          formulaVersion: r.formula_version,
+          aboveTarget: avgWeightMg >= TARGET_AVG_WEIGHT_MG,
+        };
+      });
+
+      // Calcola media di gruppo per biomassa totale (per scostamento)
+      const validWeights = baskets.filter(b => b.totalWeightKg > 0);
+      const avgTotalWeightKg = validWeights.length > 0
+        ? validWeights.reduce((s, b) => s + b.totalWeightKg, 0) / validWeights.length : 0;
+      const enriched = baskets.map(b => ({
+        ...b,
+        deviationTotalWeightKg: Math.round((b.totalWeightKg - avgTotalWeightKg) * 100) / 100,
+        deviationTotalWeightPct: avgTotalWeightKg > 0
+          ? Math.round(((b.totalWeightKg - avgTotalWeightKg) / avgTotalWeightKg) * 10000) / 100 : 0,
+      }));
+
+      res.json({
+        baskets: enriched,
+        meta: {
+          totalBaskets: enriched.length,
+          targetApk: TARGET_APK,
+          targetAvgWeightMg: TARGET_AVG_WEIGHT_MG,
+          avgTotalWeightKg: Math.round(avgTotalWeightKg * 100) / 100,
+          aboveTarget: enriched.filter(b => b.aboveTarget).length,
+        }
+      });
+    } catch (error) {
+      console.error('Errore /api/report/peso-ceste:', error);
+      return sendError(res, error, 'Errore report peso ceste');
+    }
+  });
+
   // Position history endpoints removed for performance optimization
 
   // === Operation routes ===
