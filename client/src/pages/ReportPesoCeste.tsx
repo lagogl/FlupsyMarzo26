@@ -2,13 +2,15 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { ArrowUpDown, ArrowUp, ArrowDown, Target, Scale, TrendingUp, Fish, Filter } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Target, Scale, TrendingUp, Fish, Filter, FileSpreadsheet, X } from "lucide-react";
+import ExcelJS from "exceljs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 interface BasketReport {
   basketId: number;
@@ -31,8 +33,6 @@ interface BasketReport {
   avgWeightMg: number;
   deviationFromTarget: number;
   deviationFromTargetPct: number;
-  deviationTotalWeightKg: number;
-  deviationTotalWeightPct: number;
   currentSizeCode: string | null;
   currentSizeColor: string | null;
   formulaVersion: number;
@@ -51,13 +51,14 @@ interface ReportData {
   };
 }
 
-type SortKey = "animalsPerKg" | "deviationFromTargetPct" | "totalWeightKg" | "previousTotalWeightKg" | "weightVariationPct" | "deviationTotalWeightPct" | "avgWeightMg" | "animalCount";
+type SortKey = "flupsyName" | "physicalNumber" | "lotSupplier" | "opDate" | "currentSizeCode" |
+  "animalsPerKg" | "avgWeightMg" | "deviationFromTarget" | "totalWeightKg" |
+  "previousTotalWeightKg" | "weightVariationPct" | "formulaVersion";
 type SortDir = "asc" | "desc";
 
 const fmtN = (n: number | null | undefined, dec = 0) =>
   n === null || n === undefined ? "—" : n.toLocaleString("it-IT", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
-// Colore scostamento da TP-3000: negativo (pz/kg < soglia) = già in range/sopra = verde
 const targetDeviationStyle = (dev: number) => {
   if (dev <= 0) return { badge: "bg-green-100 border-green-300", text: "text-green-700 font-bold" };
   if (dev <= 10000) return { badge: "bg-yellow-50 border-yellow-300", text: "text-yellow-700 font-semibold" };
@@ -65,12 +66,69 @@ const targetDeviationStyle = (dev: number) => {
   return { badge: "bg-red-50 border-red-200", text: "text-red-700" };
 };
 
+const variationStyle = (pct: number | null) => {
+  if (pct === null) return "text-gray-400";
+  if (pct >= 20) return "bg-green-100 border-green-300 text-green-800 font-semibold";
+  if (pct >= 5) return "bg-green-50 border-green-200 text-green-700";
+  if (pct <= -20) return "bg-red-100 border-red-300 text-red-800 font-semibold";
+  if (pct <= -5) return "bg-orange-50 border-orange-200 text-orange-700";
+  return "bg-gray-50 border-gray-200 text-gray-700";
+};
+
+interface ColumnFilters {
+  flupsy: string;
+  cesta: string;
+  lotto: string;
+  data: string;
+  taglia: string;
+  pzkg: string;
+  pmed: string;
+  dist: string;
+  bio: string;
+  pen: string;
+  varPct: string;
+  formula: string;
+}
+
+const emptyFilters: ColumnFilters = {
+  flupsy: "", cesta: "", lotto: "", data: "", taglia: "",
+  pzkg: "", pmed: "", dist: "", bio: "", pen: "", varPct: "", formula: ""
+};
+
+// Helper per filtrare valori numerici con operatori (>10, <5, >=2, =3, oppure substring)
+const matchNumericFilter = (value: number | null, filter: string): boolean => {
+  if (!filter.trim()) return true;
+  if (value === null || value === undefined) return false;
+  const f = filter.trim();
+  const opMatch = f.match(/^(>=|<=|>|<|=)\s*(-?[\d.,]+)$/);
+  if (opMatch) {
+    const op = opMatch[1];
+    const num = parseFloat(opMatch[2].replace(/\./g, "").replace(",", "."));
+    if (isNaN(num)) return true;
+    switch (op) {
+      case ">=": return value >= num;
+      case "<=": return value <= num;
+      case ">": return value > num;
+      case "<": return value < num;
+      case "=": return value === num;
+    }
+  }
+  // Substring match sul valore formattato
+  return fmtN(value, 1).includes(f) || String(value).includes(f);
+};
+
+const matchTextFilter = (value: string | null | undefined, filter: string): boolean => {
+  if (!filter.trim()) return true;
+  if (!value) return false;
+  return value.toLowerCase().includes(filter.trim().toLowerCase());
+};
 
 export default function ReportPesoCeste() {
   const [selectedFlupsys, setSelectedFlupsys] = useState<number[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("animalsPerKg");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [showOnlyAtTarget, setShowOnlyAtTarget] = useState(false);
+  const [colFilters, setColFilters] = useState<ColumnFilters>(emptyFilters);
 
   const { data, isLoading, isError } = useQuery<ReportData>({
     queryKey: ["/api/report/peso-ceste"],
@@ -94,7 +152,12 @@ export default function ReportPesoCeste() {
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir(key === "animalsPerKg" ? "asc" : "desc"); }
+    else {
+      setSortKey(key);
+      const numericAsc = key === "animalsPerKg";
+      const stringDesc = false;
+      setSortDir(numericAsc ? "asc" : (typeof key === "string" && ["flupsyName", "lotSupplier", "currentSizeCode"].includes(key) ? "asc" : "desc"));
+    }
   };
 
   const filtered = useMemo(() => {
@@ -102,230 +165,452 @@ export default function ReportPesoCeste() {
     let rows = data.baskets;
     if (selectedFlupsys.length > 0) rows = rows.filter(b => selectedFlupsys.includes(b.flupsyId));
     if (showOnlyAtTarget) rows = rows.filter(b => b.atOrAboveTarget);
+    // Filtri per colonna
+    rows = rows.filter(b =>
+      matchTextFilter(b.flupsyName, colFilters.flupsy) &&
+      matchTextFilter(String(b.physicalNumber), colFilters.cesta) &&
+      matchTextFilter(b.lotSupplier, colFilters.lotto) &&
+      matchTextFilter(b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "", colFilters.data) &&
+      matchTextFilter(b.currentSizeCode, colFilters.taglia) &&
+      matchNumericFilter(b.animalsPerKg, colFilters.pzkg) &&
+      matchNumericFilter(b.avgWeightMg, colFilters.pmed) &&
+      matchNumericFilter(b.deviationFromTarget, colFilters.dist) &&
+      matchNumericFilter(b.totalWeightKg, colFilters.bio) &&
+      matchNumericFilter(b.previousTotalWeightKg, colFilters.pen) &&
+      matchNumericFilter(b.weightVariationPct, colFilters.varPct) &&
+      matchTextFilter(`v${b.formulaVersion}`, colFilters.formula)
+    );
     return [...rows].sort((a, b) => {
-      const av = a[sortKey] as number | null;
-      const bv = b[sortKey] as number | null;
-      // I null vanno sempre in fondo
+      const av = a[sortKey] as any;
+      const bv = b[sortKey] as any;
       if (av === null && bv === null) return 0;
-      if (av === null) return 1;
-      if (bv === null) return -1;
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      if (typeof av === "string") {
+        return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
       return sortDir === "asc" ? av - bv : bv - av;
     });
-  }, [data, selectedFlupsys, showOnlyAtTarget, sortKey, sortDir]);
+  }, [data, selectedFlupsys, showOnlyAtTarget, sortKey, sortDir, colFilters]);
 
   const SortIcon = ({ k }: { k: SortKey }) => {
-    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
-    return sortDir === "desc" ? <ArrowDown className="h-3 w-3 ml-1 text-blue-600" /> : <ArrowUp className="h-3 w-3 ml-1 text-blue-600" />;
+    if (sortKey !== k) return <ArrowUpDown className="h-2.5 w-2.5 ml-0.5 opacity-40 inline" />;
+    return sortDir === "desc"
+      ? <ArrowDown className="h-2.5 w-2.5 ml-0.5 text-blue-600 inline" />
+      : <ArrowUp className="h-2.5 w-2.5 ml-0.5 text-blue-600 inline" />;
   };
 
   const atTargetCount = filtered.filter(b => b.atOrAboveTarget).length;
   const closeCount = filtered.filter(b => !b.atOrAboveTarget && b.deviationFromTarget <= 10000).length;
 
+  // Totali per la riga di sintesi
+  const totals = useMemo(() => {
+    const bioSum = filtered.reduce((s, b) => s + (b.totalWeightKg || 0), 0);
+    const penSum = filtered.reduce((s, b) => s + (b.previousTotalWeightKg || 0), 0);
+    const validVar = filtered.filter(b => b.weightVariationPct !== null);
+    const avgVar = validVar.length > 0 ? validVar.reduce((s, b) => s + (b.weightVariationPct || 0), 0) / validVar.length : null;
+    return {
+      count: filtered.length,
+      bioSum: Math.round(bioSum * 10) / 10,
+      penSum: Math.round(penSum * 10) / 10,
+      bioDelta: Math.round((bioSum - penSum) * 10) / 10,
+      avgVar: avgVar !== null ? Math.round(avgVar * 10) / 10 : null,
+    };
+  }, [filtered]);
+
+  const clearFilters = () => setColFilters(emptyFilters);
+  const hasColFilters = Object.values(colFilters).some(v => v.trim() !== "");
+
+  // ============ EXPORT EXCEL ============
+  const exportExcel = async () => {
+    if (!data) return;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "FLUPSY Management System";
+    wb.created = new Date();
+    const ws = wb.addWorksheet("Report Peso Ceste");
+
+    // Titolo
+    ws.mergeCells("A1:L1");
+    const titleCell = ws.getCell("A1");
+    titleCell.value = `Report Peso Ceste — Target TP-3000: ${fmtN(data.meta.targetMinApk)}–${fmtN(data.meta.targetMaxApk)} pz/kg`;
+    titleCell.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
+    titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F766E" } };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    ws.getRow(1).height = 24;
+
+    // Sottotitolo con data export
+    ws.mergeCells("A2:L2");
+    const subCell = ws.getCell("A2");
+    subCell.value = `Esportato il ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: it })} — ${filtered.length} ceste`;
+    subCell.font = { name: "Calibri", size: 10, italic: true, color: { argb: "FF555555" } };
+    subCell.alignment = { horizontal: "center" };
+
+    // Riga vuota
+    ws.addRow([]);
+
+    // Header colonne
+    const headers = [
+      "FLUPSY", "Cesta", "Lotto", "Ultima op.", "Taglia",
+      "pz/kg", "Peso medio (mg)", "Distanza TP-3000 (pz/kg)", "Biomassa (kg)",
+      "Peso penultimo (kg)", "Variazione %", "Formula"
+    ];
+    const headerRow = ws.addRow(headers);
+    headerRow.eachCell(cell => {
+      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      cell.border = {
+        top: { style: "thin", color: { argb: "FF000000" } },
+        bottom: { style: "thin", color: { argb: "FF000000" } },
+        left: { style: "thin", color: { argb: "FFCCCCCC" } },
+        right: { style: "thin", color: { argb: "FFCCCCCC" } },
+      };
+    });
+    headerRow.height = 32;
+
+    // Dati
+    filtered.forEach((b, idx) => {
+      const row = ws.addRow([
+        b.flupsyName,
+        `#${b.physicalNumber}`,
+        b.lotSupplier || "",
+        b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "",
+        b.currentSizeCode || "",
+        b.animalsPerKg,
+        b.avgWeightMg,
+        b.deviationFromTarget,
+        b.totalWeightKg,
+        b.previousTotalWeightKg,
+        b.weightVariationPct,
+        `v${b.formulaVersion}`,
+      ]);
+      const altFill = idx % 2 === 0 ? "FFFFFFFF" : "FFF3F4F6";
+      row.eachCell((cell, colNum) => {
+        cell.font = { name: "Calibri", size: 10 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: altFill } };
+        cell.border = {
+          top: { style: "hair", color: { argb: "FFDDDDDD" } },
+          bottom: { style: "hair", color: { argb: "FFDDDDDD" } },
+          left: { style: "hair", color: { argb: "FFDDDDDD" } },
+          right: { style: "hair", color: { argb: "FFDDDDDD" } },
+        };
+        // Numeri allineati a destra con format
+        if ([6, 7, 8, 9, 10].includes(colNum)) {
+          cell.alignment = { horizontal: "right" };
+          cell.numFmt = "#,##0.0";
+        } else if (colNum === 11) {
+          cell.alignment = { horizontal: "center" };
+          cell.numFmt = "+0.0%;-0.0%;0.0%";
+          if (typeof cell.value === "number") {
+            (cell as any).value = (cell.value as number) / 100;
+          }
+        } else {
+          cell.alignment = { horizontal: colNum === 1 || colNum === 3 ? "left" : "center" };
+        }
+      });
+      // Colore taglia (col 5)
+      if (b.currentSizeColor) {
+        row.getCell(5).fill = {
+          type: "pattern", pattern: "solid",
+          fgColor: { argb: "FF" + b.currentSizeColor.replace("#", "") + "" }
+        };
+      }
+      // Colore distanza target (col 8)
+      if (b.atOrAboveTarget) {
+        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+        row.getCell(8).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF065F46" } };
+      } else if (b.deviationFromTarget <= 10000) {
+        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
+      } else if (b.deviationFromTarget <= 30000) {
+        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFED7AA" } };
+      } else {
+        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+      }
+      // Colore variazione (col 11)
+      if (b.weightVariationPct !== null) {
+        const v = b.weightVariationPct;
+        if (v >= 20) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+        else if (v >= 5) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
+        else if (v <= -20) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+        else if (v <= -5) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEDD5" } };
+      }
+    });
+
+    // Riga totali
+    const totalsRow = ws.addRow([
+      "TOTALI", `${totals.count} ceste`, "", "", "",
+      "", "", "", totals.bioSum, totals.penSum,
+      totals.avgVar !== null ? totals.avgVar / 100 : null, ""
+    ]);
+    totalsRow.eachCell((cell, colNum) => {
+      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF374151" } };
+      cell.alignment = { horizontal: colNum === 1 ? "left" : (colNum === 11 ? "center" : "right") };
+      cell.border = { top: { style: "medium", color: { argb: "FF000000" } } };
+      if (colNum === 9 || colNum === 10) cell.numFmt = "#,##0.0";
+      if (colNum === 11) cell.numFmt = "+0.0%;-0.0%;0.0%";
+    });
+
+    // Larghezze colonne
+    ws.columns = [
+      { width: 22 }, { width: 7 }, { width: 18 }, { width: 11 }, { width: 9 },
+      { width: 10 }, { width: 12 }, { width: 14 }, { width: 11 },
+      { width: 13 }, { width: 12 }, { width: 8 },
+    ];
+
+    // Freeze panes (riga header sempre visibile)
+    ws.views = [{ state: "frozen", ySplit: 4 }];
+
+    // AutoFilter sulla zona dati
+    ws.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: 4 + filtered.length, column: 12 },
+    };
+
+    // Download
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `report-peso-ceste-${format(new Date(), "yyyyMMdd-HHmm")}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="container mx-auto py-4 px-2 space-y-4">
+    <div className="container mx-auto py-3 px-2 space-y-3 max-w-full">
       {/* Intestazione */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Report Peso Ceste</h1>
-          <p className="text-muted-foreground text-sm">Selezione ceste da vagliare — priorità per taglia TP-3000</p>
+          <h1 className="text-xl font-bold">Report Peso Ceste</h1>
+          <p className="text-muted-foreground text-xs">Selezione ceste da vagliare — priorità per taglia TP-3000</p>
         </div>
-        {data && (
-          <Badge variant="outline" className="self-start sm:self-center flex items-center gap-1 text-sm px-3 py-1 border-green-300 bg-green-50 text-green-800">
-            <Target className="h-4 w-4" />
-            Target TP-3000: {fmtN(data.meta.targetMinApk)}–{fmtN(data.meta.targetMaxApk)} pz/kg
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {data && (
+            <Badge variant="outline" className="flex items-center gap-1 text-xs px-2.5 py-1 border-green-300 bg-green-50 text-green-800">
+              <Target className="h-3.5 w-3.5" />
+              Target TP-3000: {fmtN(data.meta.targetMinApk)}–{fmtN(data.meta.targetMaxApk)} pz/kg
+            </Badge>
+          )}
+          <Button
+            size="sm"
+            onClick={exportExcel}
+            disabled={!data || filtered.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white h-8"
+            data-testid="button-export-excel"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-1.5" />Esporta Excel
+          </Button>
+        </div>
       </div>
 
-      {/* Legenda rapida */}
-      <div className="flex flex-wrap gap-3 text-xs">
-        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-green-100 border-green-300 text-green-800 font-medium">🟢 In range / sopra TP-3000 (≤ {fmtN(data?.meta.targetMaxApk)} pz/kg)</span>
-        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-yellow-50 border-yellow-300 text-yellow-700">🟡 Vicini (entro 10.000 pz/kg dal target)</span>
-        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-orange-50 border-orange-300 text-orange-700">🟠 In crescita (10–30k pz/kg dal target)</span>
-        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-red-50 border-red-200 text-red-700">🔴 Ancora lontani (&gt; 30.000 pz/kg dal target)</span>
-      </div>
-
-      {/* Cards riepilogo */}
+      {/* Cards riepilogo + legenda compatta */}
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">{[1,2,3,4].map(i => <Skeleton key={i} className="h-16" />)}</div>
       ) : data && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card>
-            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-muted-foreground font-medium">Ceste analizzate</CardTitle></CardHeader>
-            <CardContent className="px-4 pb-3"><div className="text-2xl font-bold">{filtered.length}</div></CardContent>
-          </Card>
-          <Card className="border-green-200 bg-green-50/50">
-            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-green-700 font-medium flex items-center gap-1"><TrendingUp className="h-3 w-3"/>In range TP-3000 o più grandi</CardTitle></CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold text-green-700">{atTargetCount}</div>
-              <div className="text-xs text-muted-foreground">pronte per vagliatura</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <Card className="py-1">
+            <CardContent className="px-3 py-1.5">
+              <div className="text-[10px] text-muted-foreground font-medium uppercase">Ceste analizzate</div>
+              <div className="text-xl font-bold leading-tight">{filtered.length}</div>
             </CardContent>
           </Card>
-          <Card className="border-yellow-200 bg-yellow-50/50">
-            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-yellow-700 font-medium flex items-center gap-1"><Fish className="h-3 w-3"/>Vicine al target</CardTitle></CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold text-yellow-700">{closeCount}</div>
-              <div className="text-xs text-muted-foreground">entro 10.000 pz/kg</div>
+          <Card className="border-green-200 bg-green-50/50 py-1">
+            <CardContent className="px-3 py-1.5">
+              <div className="text-[10px] text-green-700 font-medium uppercase flex items-center gap-1"><TrendingUp className="h-2.5 w-2.5"/>In range / sopra TP-3000</div>
+              <div className="text-xl font-bold text-green-700 leading-tight">{atTargetCount}</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Scale className="h-3 w-3"/>Biomassa media/cesta</CardTitle></CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold">{fmtN(data.meta.avgTotalWeightKg, 1)} kg</div>
+          <Card className="border-yellow-200 bg-yellow-50/50 py-1">
+            <CardContent className="px-3 py-1.5">
+              <div className="text-[10px] text-yellow-700 font-medium uppercase flex items-center gap-1"><Fish className="h-2.5 w-2.5"/>Vicine al target</div>
+              <div className="text-xl font-bold text-yellow-700 leading-tight">{closeCount}</div>
+            </CardContent>
+          </Card>
+          <Card className="py-1">
+            <CardContent className="px-3 py-1.5">
+              <div className="text-[10px] text-muted-foreground font-medium uppercase flex items-center gap-1"><Scale className="h-2.5 w-2.5"/>Biomassa totale visibile</div>
+              <div className="text-xl font-bold leading-tight">{fmtN(totals.bioSum, 1)} kg</div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Filtri */}
+      {/* Filtri FLUPSY + clear */}
       <Card>
-        <CardContent className="pt-4 pb-3 px-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Filter className="h-4 w-4" />Filtra FLUPSY:
+        <CardContent className="py-2 px-3">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-1 font-medium text-muted-foreground">
+              <Filter className="h-3.5 w-3.5" />FLUPSY:
             </div>
             {flupsyOptions.map(f => (
-              <div key={f.id} className="flex items-center gap-1.5">
-                <Checkbox id={`f-${f.id}`} checked={selectedFlupsys.includes(f.id)} onCheckedChange={() => toggleFlupsy(f.id)} />
-                <Label htmlFor={`f-${f.id}`} className="text-sm cursor-pointer">{f.name}</Label>
+              <div key={f.id} className="flex items-center gap-1">
+                <Checkbox id={`f-${f.id}`} checked={selectedFlupsys.includes(f.id)} onCheckedChange={() => toggleFlupsy(f.id)} className="h-3.5 w-3.5" />
+                <Label htmlFor={`f-${f.id}`} className="text-xs cursor-pointer">{f.name}</Label>
               </div>
             ))}
-            {selectedFlupsys.length > 0 && <Button variant="ghost" size="sm" onClick={() => setSelectedFlupsys([])}>Tutti</Button>}
-            <div className="ml-auto flex items-center gap-1.5">
-              <Checkbox id="at-target" checked={showOnlyAtTarget} onCheckedChange={(v) => setShowOnlyAtTarget(!!v)} />
-              <Label htmlFor="at-target" className="text-sm cursor-pointer text-green-700 font-medium">Solo in range / sopra TP-3000</Label>
+            {selectedFlupsys.length > 0 && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setSelectedFlupsys([])}>Tutti</Button>}
+            <div className="flex items-center gap-1 ml-2">
+              <Checkbox id="at-target" checked={showOnlyAtTarget} onCheckedChange={(v) => setShowOnlyAtTarget(!!v)} className="h-3.5 w-3.5" />
+              <Label htmlFor="at-target" className="text-xs cursor-pointer text-green-700 font-medium">Solo ≥ TP-3000</Label>
             </div>
+            {hasColFilters && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs ml-auto text-blue-600" onClick={clearFilters}>
+                <X className="h-3 w-3 mr-1" />Pulisci filtri colonne
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Tabella */}
+      {/* Tabella stile Excel */}
       {isLoading ? (
-        <div className="space-y-2">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        <div className="space-y-1">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}</div>
       ) : isError ? (
         <div className="text-center text-destructive py-8">Errore nel caricamento dei dati</div>
       ) : (
-        <div className="rounded-lg border overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 border-b">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium">FLUPSY</th>
-                <th className="text-left px-3 py-2 font-medium">Cesta</th>
-                <th className="text-left px-3 py-2 font-medium">Lotto</th>
-                <th className="text-left px-3 py-2 font-medium">Ultima op.</th>
-                <th className="text-center px-3 py-2 font-medium">Taglia attuale</th>
-                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("animalsPerKg")}>
-                  <span className="flex items-center justify-end">pz/kg <SortIcon k="animalsPerKg" /></span>
-                </th>
-                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("avgWeightMg")}>
-                  <span className="flex items-center justify-end">Peso medio (mg) <SortIcon k="avgWeightMg" /></span>
-                </th>
-                <th className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("deviationFromTargetPct")}>
-                  <span className="flex items-center justify-center">Distanza da TP-3000 <SortIcon k="deviationFromTargetPct" /></span>
-                </th>
-                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("totalWeightKg")}>
-                  <span className="flex items-center justify-end">Biomassa (kg) <SortIcon k="totalWeightKg" /></span>
-                </th>
-                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("previousTotalWeightKg")}>
-                  <span className="flex items-center justify-end">Peso penultimo (kg) <SortIcon k="previousTotalWeightKg" /></span>
-                </th>
-                <th className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("weightVariationPct")}>
-                  <span className="flex items-center justify-center">Variazione % <SortIcon k="weightVariationPct" /></span>
-                </th>
-                <th className="text-center px-3 py-2 font-medium">Formula</th>
+        <div className="rounded border border-gray-300 overflow-hidden">
+          <table className="w-full text-[11px] table-fixed border-collapse" data-testid="table-report">
+            <colgroup>
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "5%" }} />
+            </colgroup>
+            <thead>
+              <tr className="bg-blue-700 text-white">
+                <th className="px-1.5 py-1.5 text-left font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("flupsyName")}>FLUPSY<SortIcon k="flupsyName" /></th>
+                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("physicalNumber")}>Cesta<SortIcon k="physicalNumber" /></th>
+                <th className="px-1.5 py-1.5 text-left font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("lotSupplier")}>Lotto<SortIcon k="lotSupplier" /></th>
+                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("opDate")}>Data<SortIcon k="opDate" /></th>
+                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("currentSizeCode")}>Taglia<SortIcon k="currentSizeCode" /></th>
+                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("animalsPerKg")}>pz/kg<SortIcon k="animalsPerKg" /></th>
+                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("avgWeightMg")}>P.med (mg)<SortIcon k="avgWeightMg" /></th>
+                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("deviationFromTarget")}>Δ TP-3000<SortIcon k="deviationFromTarget" /></th>
+                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("totalWeightKg")}>Bio (kg)<SortIcon k="totalWeightKg" /></th>
+                <th className="px-1 py-1.5 text-right font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("previousTotalWeightKg")}>Pen. (kg)<SortIcon k="previousTotalWeightKg" /></th>
+                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-600" onClick={() => handleSort("weightVariationPct")}>Variazione %<SortIcon k="weightVariationPct" /></th>
+                <th className="px-1 py-1.5 text-center font-semibold cursor-pointer hover:bg-blue-800 select-none" onClick={() => handleSort("formulaVersion")}>F.<SortIcon k="formulaVersion" /></th>
+              </tr>
+              {/* Riga filtri per colonna */}
+              <tr className="bg-blue-50 border-b border-blue-200">
+                <th className="px-1 py-1"><Input value={colFilters.flupsy} onChange={(e) => setColFilters(f => ({ ...f, flupsy: e.target.value }))} placeholder="filtra" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.cesta} onChange={(e) => setColFilters(f => ({ ...f, cesta: e.target.value }))} placeholder="#" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.lotto} onChange={(e) => setColFilters(f => ({ ...f, lotto: e.target.value }))} placeholder="filtra" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.data} onChange={(e) => setColFilters(f => ({ ...f, data: e.target.value }))} placeholder="dd/mm" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.taglia} onChange={(e) => setColFilters(f => ({ ...f, taglia: e.target.value }))} placeholder="TP-" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.pzkg} onChange={(e) => setColFilters(f => ({ ...f, pzkg: e.target.value }))} placeholder=">15000" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.pmed} onChange={(e) => setColFilters(f => ({ ...f, pmed: e.target.value }))} placeholder=">50" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.dist} onChange={(e) => setColFilters(f => ({ ...f, dist: e.target.value }))} placeholder="<10000" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.bio} onChange={(e) => setColFilters(f => ({ ...f, bio: e.target.value }))} placeholder=">10" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.pen} onChange={(e) => setColFilters(f => ({ ...f, pen: e.target.value }))} placeholder=">5" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.varPct} onChange={(e) => setColFilters(f => ({ ...f, varPct: e.target.value }))} placeholder=">10" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.formula} onChange={(e) => setColFilters(f => ({ ...f, formula: e.target.value }))} placeholder="v2" className="h-6 text-[10px] px-1.5 py-0" /></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={12} className="text-center py-10 text-muted-foreground">Nessuna cesta trovata</td></tr>
+                <tr><td colSpan={12} className="text-center py-8 text-muted-foreground">Nessuna cesta trovata</td></tr>
               ) : filtered.map((b, i) => {
                 const tStyle = targetDeviationStyle(b.deviationFromTarget);
+                const vCls = variationStyle(b.weightVariationPct);
                 return (
-                  <tr key={b.basketId} className={`border-b hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{b.flupsyName}</td>
-                    <td className="px-3 py-2 font-semibold">#{b.physicalNumber}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground max-w-[100px] truncate" title={b.lotSupplier || "—"}>
-                      {b.lotSupplier ? b.lotSupplier.slice(0, 15) + (b.lotSupplier.length > 15 ? "…" : "") : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                  <tr key={b.basketId} className={`border-b border-gray-200 hover:bg-blue-50/50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`} data-testid={`row-basket-${b.basketId}`}>
+                    <td className="px-1.5 py-1 truncate text-[10px] text-gray-600" title={b.flupsyName}>{b.flupsyName}</td>
+                    <td className="px-1 py-1 text-center font-semibold">#{b.physicalNumber}</td>
+                    <td className="px-1.5 py-1 truncate text-[10px] text-gray-600" title={b.lotSupplier || ""}>{b.lotSupplier || "—"}</td>
+                    <td className="px-1 py-1 text-center text-[10px] text-gray-600 whitespace-nowrap">
                       {b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "—"}
-                      <span className="ml-1 opacity-60">({b.opType})</span>
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-1 py-1 text-center">
                       {b.currentSizeCode ? (
-                        <Badge variant="outline" style={{ borderColor: b.currentSizeColor || undefined, backgroundColor: b.currentSizeColor ? b.currentSizeColor + '30' : undefined }} className="text-xs font-mono">
+                        <span
+                          className="inline-block px-1.5 py-0 rounded text-[10px] font-mono font-semibold border"
+                          style={{
+                            borderColor: b.currentSizeColor || undefined,
+                            backgroundColor: b.currentSizeColor ? b.currentSizeColor + '40' : undefined
+                          }}
+                        >
                           {b.currentSizeCode}
-                        </Badge>
+                        </span>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold">{fmtN(b.animalsPerKg)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmtN(b.avgWeightMg, 1)}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className={`inline-flex flex-col items-center px-2 py-0.5 rounded border text-xs gap-0.5 ${tStyle.badge}`}>
-                        {b.atOrAboveTarget ? (
-                          <span className={tStyle.text}>✓ In range / sopra</span>
-                        ) : (
-                          <>
-                            <span className={tStyle.text}>+{fmtN(b.deviationFromTarget)} pz/kg</span>
-                            <span className="text-muted-foreground opacity-70">da ridurre</span>
-                          </>
-                        )}
+                    <td className="px-1 py-1 text-right font-mono font-semibold tabular-nums">{fmtN(b.animalsPerKg)}</td>
+                    <td className="px-1 py-1 text-right font-mono tabular-nums">{fmtN(b.avgWeightMg, 1)}</td>
+                    <td className="px-1 py-1 text-center">
+                      <span className={`inline-block px-1.5 py-0 rounded border text-[10px] ${tStyle.badge} ${tStyle.text}`}>
+                        {b.atOrAboveTarget ? "✓ in range" : `+${fmtN(b.deviationFromTarget)}`}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right font-mono">{fmtN(b.totalWeightKg, 1)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
-                      {b.previousTotalWeightKg !== null ? (
-                        <div className="flex flex-col items-end leading-tight">
-                          <span>{fmtN(b.previousTotalWeightKg, 1)}</span>
-                          {b.previousOpDate && (
-                            <span className="text-[10px] opacity-60">{format(new Date(b.previousOpDate), "dd/MM/yy", { locale: it })}</span>
-                          )}
-                        </div>
-                      ) : <span className="opacity-50">—</span>}
+                    <td className="px-1 py-1 text-right font-mono tabular-nums">{fmtN(b.totalWeightKg, 1)}</td>
+                    <td className="px-1 py-1 text-right font-mono tabular-nums text-gray-600">
+                      {b.previousTotalWeightKg !== null ? fmtN(b.previousTotalWeightKg, 1) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-1 py-1 text-center">
                       {b.weightVariationPct !== null ? (
-                        (() => {
-                          const v = b.weightVariationPct;
-                          const k = b.weightVariationKg ?? 0;
-                          let cls = "bg-gray-50 border-gray-200 text-gray-700";
-                          if (v >= 20) cls = "bg-green-100 border-green-300 text-green-800 font-semibold";
-                          else if (v >= 5) cls = "bg-green-50 border-green-200 text-green-700";
-                          else if (v <= -20) cls = "bg-red-100 border-red-300 text-red-800 font-semibold";
-                          else if (v <= -5) cls = "bg-orange-50 border-orange-200 text-orange-700";
-                          const sign = v > 0 ? "+" : "";
-                          const ksign = k > 0 ? "+" : "";
-                          return (
-                            <span className={`inline-flex flex-col items-center px-2 py-0.5 rounded border text-xs gap-0.5 ${cls}`}>
-                              <span>{sign}{fmtN(v, 1)}%</span>
-                              <span className="text-[10px] opacity-70">({ksign}{fmtN(k, 1)} kg)</span>
-                            </span>
-                          );
-                        })()
-                      ) : <span className="text-muted-foreground opacity-50">—</span>}
+                        <span className={`inline-block px-1.5 py-0 rounded border text-[10px] tabular-nums ${vCls}`}>
+                          {b.weightVariationPct > 0 ? "+" : ""}{fmtN(b.weightVariationPct, 1)}% ({b.weightVariationKg && b.weightVariationKg > 0 ? "+" : ""}{fmtN(b.weightVariationKg, 1)}kg)
+                        </span>
+                      ) : <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-3 py-2 text-center">
-                      <Badge variant="outline" className={`text-[10px] ${b.formulaVersion === 2 ? "bg-green-50 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
+                    <td className="px-1 py-1 text-center">
+                      <span className={`inline-block px-1 py-0 rounded text-[9px] font-semibold border ${b.formulaVersion === 2 ? "bg-green-50 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
                         v{b.formulaVersion}
-                      </Badge>
+                      </span>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
+            {filtered.length > 0 && (
+              <tfoot>
+                <tr className="bg-gray-700 text-white font-semibold">
+                  <td className="px-1.5 py-1.5 text-left">TOTALI</td>
+                  <td className="px-1 py-1.5 text-center">{totals.count}</td>
+                  <td className="px-1.5 py-1.5"></td>
+                  <td className="px-1 py-1.5"></td>
+                  <td className="px-1 py-1.5"></td>
+                  <td className="px-1 py-1.5"></td>
+                  <td className="px-1 py-1.5"></td>
+                  <td className="px-1 py-1.5"></td>
+                  <td className="px-1 py-1.5 text-right tabular-nums">{fmtN(totals.bioSum, 1)}</td>
+                  <td className="px-1 py-1.5 text-right tabular-nums">{fmtN(totals.penSum, 1)}</td>
+                  <td className="px-1 py-1.5 text-center tabular-nums">
+                    {totals.avgVar !== null ? `${totals.avgVar > 0 ? "+" : ""}${fmtN(totals.avgVar, 1)}% media` : "—"}
+                  </td>
+                  <td className="px-1 py-1.5"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}
 
-      {/* Legenda colonne */}
-      <div className="text-xs text-muted-foreground pb-4 space-y-1 border-t pt-3">
-        <p><strong>Taglia attuale</strong>: classificazione TP della cesta in base all'ultimo valore pz/kg registrato.</p>
-        <p><strong>pz/kg</strong>: animali per chilogrammo (meno = animali più grandi). Ordinando crescente si vedono le ceste con gli animali più grandi in cima.</p>
-        <p><strong>Peso medio (mg)</strong>: peso medio di un singolo animale = 1.000.000 / pz/kg.</p>
-        <p><strong>Distanza da TP-3000</strong>: quanti pz/kg devono ancora ridursi per raggiungere TP-3000 ({data ? fmtN(data.meta.targetMinApk) : "20.001"}–{data ? fmtN(data.meta.targetMaxApk) : "29.000"} pz/kg). Verde = già in range o più grandi.</p>
-        <p><strong>Peso penultimo (kg)</strong>: biomassa registrata nell'operazione immediatamente precedente all'ultima. Se la cesta ha una sola operazione, la cella è vuota.</p>
-        <p><strong>Variazione %</strong>: confronto tra biomassa attuale e penultima. Verde = peso aumentato (crescita); rosso/arancio = peso diminuito (possibile mortalità o vagliatura).</p>
-        <p><strong>Formula</strong>: v2 = dato con nuova formula (affidabile), v1 = dato con vecchia formula (potenzialmente distorto).</p>
+      {/* Legenda compatta */}
+      <div className="text-[10px] text-muted-foreground pb-3 space-y-0.5 border-t pt-2">
+        <p>
+          <strong>Filtri colonna</strong>: per i numeri usa operatori <code className="bg-gray-100 px-1">&gt;100</code>, <code className="bg-gray-100 px-1">&lt;50</code>, <code className="bg-gray-100 px-1">&gt;=10</code>, <code className="bg-gray-100 px-1">=15</code> oppure scrivi un numero per substring match. Per il testo, ricerca substring case-insensitive.
+        </p>
+        <p>
+          <strong>Δ TP-3000</strong>: pz/kg ancora da ridurre per arrivare a TP-3000 (≤ {data ? fmtN(data.meta.targetMaxApk) : "29.000"} pz/kg). 🟢 In range / 🟡 ≤10k / 🟠 ≤30k / 🔴 &gt;30k.
+        </p>
+        <p>
+          <strong>Variazione %</strong>: confronto tra biomassa attuale (Bio) e penultima (Pen.). Verde = crescita; rosso/arancio = calo (mortalità o vagliatura).
+        </p>
+        <p>
+          <strong>Esporta Excel</strong>: scarica un foglio .xlsx con intestazioni colorate, righe alternate, colori sulle colonne stato e riga totali.
+        </p>
       </div>
     </div>
   );
