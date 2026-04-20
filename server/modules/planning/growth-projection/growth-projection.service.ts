@@ -203,11 +203,15 @@ export class GrowthProjectionService {
 
       const ymKey = `${y}-${step.month1Based}`;
       const hatcheryEntry = hatcheryByYearMonth[ymKey];
-      // Mese corrente (primo step) = reale consolidato (anche 0 se non consolidato)
-      // Mesi futuri = previsione
+      // Mesi passati e mese corrente (rispetto a oggi) = reale consolidato (anche 0 se non consolidato).
+      // Mesi futuri (dopo oggi) = previsione.
+      const todayYear = now.getFullYear();
+      const todayMonth1 = now.getMonth() + 1;
+      const isPastOrCurrentMonth =
+        y < todayYear || (y === todayYear && step.month1Based <= todayMonth1);
       let hatcheryThisMonth = 0;
       if (hatcheryEntry) {
-        hatcheryThisMonth = i === 0
+        hatcheryThisMonth = isPastOrCurrentMonth
           ? (hatcheryEntry.actual ?? 0)
           : hatcheryEntry.forecast;
       }
