@@ -25,12 +25,14 @@ interface BasketReport {
   totalWeightKg: number;
   animalsPerKg: number;
   avgWeightMg: number;
-  deviationAvgWeightMg: number;
-  deviationAvgWeightPct: number;
+  deviationFromTarget: number;
+  deviationFromTargetPct: number;
   deviationTotalWeightKg: number;
   deviationTotalWeightPct: number;
+  currentSizeCode: string | null;
+  currentSizeColor: string | null;
   formulaVersion: number;
-  aboveTarget: boolean;
+  atOrAboveTarget: boolean;
 }
 
 interface ReportData {
@@ -38,41 +40,39 @@ interface ReportData {
   meta: {
     totalBaskets: number;
     targetApk: number;
-    targetAvgWeightMg: number;
+    targetMinApk: number;
+    targetMaxApk: number;
     avgTotalWeightKg: number;
-    aboveTarget: number;
+    atOrAboveTarget: number;
   };
 }
 
-type SortKey = "avgWeightMg" | "deviationAvgWeightPct" | "totalWeightKg" | "deviationTotalWeightPct" | "animalsPerKg" | "animalCount";
+type SortKey = "animalsPerKg" | "deviationFromTargetPct" | "totalWeightKg" | "deviationTotalWeightPct" | "avgWeightMg" | "animalCount";
 type SortDir = "asc" | "desc";
 
-const fmtN = (n: number | null | undefined, dec = 0) => {
-  if (n === null || n === undefined) return "—";
-  return n.toLocaleString("it-IT", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const fmtN = (n: number | null | undefined, dec = 0) =>
+  n === null || n === undefined ? "—" : n.toLocaleString("it-IT", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+// Colore scostamento da TP-3000: negativo (pz/kg < soglia) = già in range/sopra = verde
+const targetDeviationStyle = (dev: number) => {
+  if (dev <= 0) return { badge: "bg-green-100 border-green-300", text: "text-green-700 font-bold" };
+  if (dev <= 10000) return { badge: "bg-yellow-50 border-yellow-300", text: "text-yellow-700 font-semibold" };
+  if (dev <= 30000) return { badge: "bg-orange-50 border-orange-300", text: "text-orange-700" };
+  return { badge: "bg-red-50 border-red-200", text: "text-red-700" };
 };
 
-const deviationColor = (pct: number, inverted = false) => {
-  const v = inverted ? -pct : pct;
-  if (v >= 20) return "text-green-700 font-semibold";
-  if (v >= 5) return "text-green-600";
-  if (v >= -10) return "text-amber-600";
-  return "text-red-600 font-semibold";
-};
-
-const deviationBg = (pct: number, inverted = false) => {
-  const v = inverted ? -pct : pct;
-  if (v >= 20) return "bg-green-100 border-green-300";
-  if (v >= 5) return "bg-green-50 border-green-200";
-  if (v >= -10) return "bg-amber-50 border-amber-200";
-  return "bg-red-50 border-red-200";
+const biomassDeviationStyle = (pct: number) => {
+  if (pct >= 50) return { badge: "bg-blue-100 border-blue-300", text: "text-blue-800 font-bold" };
+  if (pct >= 10) return { badge: "bg-blue-50 border-blue-200", text: "text-blue-700" };
+  if (pct >= -20) return { badge: "bg-gray-50 border-gray-200", text: "text-gray-600" };
+  return { badge: "bg-orange-50 border-orange-200", text: "text-orange-700" };
 };
 
 export default function ReportPesoCeste() {
   const [selectedFlupsys, setSelectedFlupsys] = useState<number[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>("deviationAvgWeightPct");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [showOnlyAboveTarget, setShowOnlyAboveTarget] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("animalsPerKg");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [showOnlyAtTarget, setShowOnlyAtTarget] = useState(false);
 
   const { data, isLoading, isError } = useQuery<ReportData>({
     queryKey: ["/api/report/peso-ceste"],
@@ -91,57 +91,61 @@ export default function ReportPesoCeste() {
   }, [data]);
 
   const toggleFlupsy = (id: number) => {
-    setSelectedFlupsys(prev =>
-      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
-    );
+    setSelectedFlupsys(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);
   };
 
   const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir(key === "animalsPerKg" ? "asc" : "desc"); }
   };
 
   const filtered = useMemo(() => {
     if (!data) return [];
     let rows = data.baskets;
     if (selectedFlupsys.length > 0) rows = rows.filter(b => selectedFlupsys.includes(b.flupsyId));
-    if (showOnlyAboveTarget) rows = rows.filter(b => b.aboveTarget);
+    if (showOnlyAtTarget) rows = rows.filter(b => b.atOrAboveTarget);
     return [...rows].sort((a, b) => {
       const av = a[sortKey] as number;
       const bv = b[sortKey] as number;
       return sortDir === "asc" ? av - bv : bv - av;
     });
-  }, [data, selectedFlupsys, showOnlyAboveTarget, sortKey, sortDir]);
+  }, [data, selectedFlupsys, showOnlyAtTarget, sortKey, sortDir]);
 
   const SortIcon = ({ k }: { k: SortKey }) => {
     if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
     return sortDir === "desc" ? <ArrowDown className="h-3 w-3 ml-1 text-blue-600" /> : <ArrowUp className="h-3 w-3 ml-1 text-blue-600" />;
   };
 
-  const aboveCount = filtered.filter(b => b.aboveTarget).length;
+  const atTargetCount = filtered.filter(b => b.atOrAboveTarget).length;
+  const closeCount = filtered.filter(b => !b.atOrAboveTarget && b.deviationFromTarget <= 10000).length;
 
   return (
     <div className="container mx-auto py-4 px-2 space-y-4">
+      {/* Intestazione */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">Report Peso Ceste</h1>
-          <p className="text-muted-foreground text-sm">Scostamenti da TP-3000 — selezione ceste per vagliatura</p>
+          <p className="text-muted-foreground text-sm">Selezione ceste da vagliare — priorità per taglia TP-3000</p>
         </div>
-        <Badge variant="outline" className="self-start sm:self-center flex items-center gap-1 text-sm px-3 py-1">
-          <Target className="h-4 w-4" />
-          Target TP-3000: 333 mg/animale · 3.000 pz/kg
-        </Badge>
+        {data && (
+          <Badge variant="outline" className="self-start sm:self-center flex items-center gap-1 text-sm px-3 py-1 border-green-300 bg-green-50 text-green-800">
+            <Target className="h-4 w-4" />
+            Target TP-3000: {fmtN(data.meta.targetMinApk)}–{fmtN(data.meta.targetMaxApk)} pz/kg
+          </Badge>
+        )}
+      </div>
+
+      {/* Legenda rapida */}
+      <div className="flex flex-wrap gap-3 text-xs">
+        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-green-100 border-green-300 text-green-800 font-medium">🟢 In range / sopra TP-3000 (≤ {fmtN(data?.meta.targetMaxApk)} pz/kg)</span>
+        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-yellow-50 border-yellow-300 text-yellow-700">🟡 Vicini (entro 10.000 pz/kg dal target)</span>
+        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-orange-50 border-orange-300 text-orange-700">🟠 In crescita (10–30k pz/kg dal target)</span>
+        <span className="flex items-center gap-1.5 px-2 py-1 rounded border bg-red-50 border-red-200 text-red-700">🔴 Ancora lontani (&gt; 30.000 pz/kg dal target)</span>
       </div>
 
       {/* Cards riepilogo */}
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
-        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}</div>
       ) : data && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card>
@@ -149,18 +153,24 @@ export default function ReportPesoCeste() {
             <CardContent className="px-4 pb-3"><div className="text-2xl font-bold">{filtered.length}</div></CardContent>
           </Card>
           <Card className="border-green-200 bg-green-50/50">
-            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-green-700 font-medium flex items-center gap-1"><TrendingUp className="h-3 w-3"/>Sopra target TP-3000</CardTitle></CardHeader>
-            <CardContent className="px-4 pb-3"><div className="text-2xl font-bold text-green-700">{aboveCount}</div></CardContent>
+            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-green-700 font-medium flex items-center gap-1"><TrendingUp className="h-3 w-3"/>In range TP-3000 o più grandi</CardTitle></CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold text-green-700">{atTargetCount}</div>
+              <div className="text-xs text-muted-foreground">pronte per vagliatura</div>
+            </CardContent>
+          </Card>
+          <Card className="border-yellow-200 bg-yellow-50/50">
+            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-yellow-700 font-medium flex items-center gap-1"><Fish className="h-3 w-3"/>Vicine al target</CardTitle></CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold text-yellow-700">{closeCount}</div>
+              <div className="text-xs text-muted-foreground">entro 10.000 pz/kg</div>
+            </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Scale className="h-3 w-3"/>Biomassa media/cesta</CardTitle></CardHeader>
             <CardContent className="px-4 pb-3">
               <div className="text-2xl font-bold">{fmtN(data.meta.avgTotalWeightKg, 1)} kg</div>
             </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-1 pt-3 px-4"><CardTitle className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Fish className="h-3 w-3"/>Totale FLUPSY attivi</CardTitle></CardHeader>
-            <CardContent className="px-4 pb-3"><div className="text-2xl font-bold">{flupsyOptions.length}</div></CardContent>
           </Card>
         </div>
       )}
@@ -170,29 +180,18 @@ export default function ReportPesoCeste() {
         <CardContent className="pt-4 pb-3 px-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Filter className="h-4 w-4" />
-              Filtra FLUPSY:
+              <Filter className="h-4 w-4" />Filtra FLUPSY:
             </div>
             {flupsyOptions.map(f => (
               <div key={f.id} className="flex items-center gap-1.5">
-                <Checkbox
-                  id={`flupsy-${f.id}`}
-                  checked={selectedFlupsys.includes(f.id)}
-                  onCheckedChange={() => toggleFlupsy(f.id)}
-                />
-                <Label htmlFor={`flupsy-${f.id}`} className="text-sm cursor-pointer">{f.name}</Label>
+                <Checkbox id={`f-${f.id}`} checked={selectedFlupsys.includes(f.id)} onCheckedChange={() => toggleFlupsy(f.id)} />
+                <Label htmlFor={`f-${f.id}`} className="text-sm cursor-pointer">{f.name}</Label>
               </div>
             ))}
-            {selectedFlupsys.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setSelectedFlupsys([])}>Tutti</Button>
-            )}
+            {selectedFlupsys.length > 0 && <Button variant="ghost" size="sm" onClick={() => setSelectedFlupsys([])}>Tutti</Button>}
             <div className="ml-auto flex items-center gap-1.5">
-              <Checkbox
-                id="above-target"
-                checked={showOnlyAboveTarget}
-                onCheckedChange={(v) => setShowOnlyAboveTarget(!!v)}
-              />
-              <Label htmlFor="above-target" className="text-sm cursor-pointer text-green-700 font-medium">Solo sopra TP-3000</Label>
+              <Checkbox id="at-target" checked={showOnlyAtTarget} onCheckedChange={(v) => setShowOnlyAtTarget(!!v)} />
+              <Label htmlFor="at-target" className="text-sm cursor-pointer text-green-700 font-medium">Solo in range / sopra TP-3000</Label>
             </div>
           </div>
         </CardContent>
@@ -200,9 +199,7 @@ export default function ReportPesoCeste() {
 
       {/* Tabella */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-        </div>
+        <div className="space-y-2">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
       ) : isError ? (
         <div className="text-center text-destructive py-8">Errore nel caricamento dei dati</div>
       ) : (
@@ -214,103 +211,95 @@ export default function ReportPesoCeste() {
                 <th className="text-left px-3 py-2 font-medium">Cesta</th>
                 <th className="text-left px-3 py-2 font-medium">Lotto</th>
                 <th className="text-left px-3 py-2 font-medium">Ultima op.</th>
-                <th
-                  className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap"
-                  onClick={() => handleSort("animalsPerKg")}
-                >
+                <th className="text-center px-3 py-2 font-medium">Taglia attuale</th>
+                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("animalsPerKg")}>
                   <span className="flex items-center justify-end">pz/kg <SortIcon k="animalsPerKg" /></span>
                 </th>
-                <th
-                  className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap"
-                  onClick={() => handleSort("avgWeightMg")}
-                >
+                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("avgWeightMg")}>
                   <span className="flex items-center justify-end">Peso medio (mg) <SortIcon k="avgWeightMg" /></span>
                 </th>
-                <th
-                  className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap"
-                  onClick={() => handleSort("deviationAvgWeightPct")}
-                >
-                  <span className="flex items-center justify-center">
-                    Scost. da TP-3000 <SortIcon k="deviationAvgWeightPct" />
-                  </span>
+                <th className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("deviationFromTargetPct")}>
+                  <span className="flex items-center justify-center">Distanza da TP-3000 <SortIcon k="deviationFromTargetPct" /></span>
                 </th>
-                <th
-                  className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap"
-                  onClick={() => handleSort("totalWeightKg")}
-                >
+                <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("totalWeightKg")}>
                   <span className="flex items-center justify-end">Biomassa (kg) <SortIcon k="totalWeightKg" /></span>
                 </th>
-                <th
-                  className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap"
-                  onClick={() => handleSort("deviationTotalWeightPct")}
-                >
-                  <span className="flex items-center justify-center">
-                    Scost. da media <SortIcon k="deviationTotalWeightPct" />
-                  </span>
+                <th className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("deviationTotalWeightPct")}>
+                  <span className="flex items-center justify-center">Scost. biomassa <SortIcon k="deviationTotalWeightPct" /></span>
                 </th>
                 <th className="text-center px-3 py-2 font-medium">Formula</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-10 text-muted-foreground">Nessuna cesta trovata</td></tr>
-              ) : filtered.map((b, i) => (
-                <tr key={b.basketId} className={`border-b hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{b.flupsyName}</td>
-                  <td className="px-3 py-2 font-semibold">#{b.physicalNumber}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground max-w-[120px] truncate" title={b.lotSupplier || "—"}>
-                    {b.lotSupplier ? b.lotSupplier.slice(0, 18) + (b.lotSupplier.length > 18 ? "…" : "") : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                    {b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "—"}
-                    <span className="ml-1 opacity-60">({b.opType})</span>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono">{fmtN(b.animalsPerKg)}</td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold">{fmtN(b.avgWeightMg, 1)}</td>
-                  <td className="px-3 py-2 text-center">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${deviationBg(b.deviationAvgWeightPct)}`}>
-                      <span className={deviationColor(b.deviationAvgWeightPct)}>
-                        {b.deviationAvgWeightPct >= 0 ? "+" : ""}{fmtN(b.deviationAvgWeightPct, 1)}%
+                <tr><td colSpan={11} className="text-center py-10 text-muted-foreground">Nessuna cesta trovata</td></tr>
+              ) : filtered.map((b, i) => {
+                const tStyle = targetDeviationStyle(b.deviationFromTarget);
+                const bStyle = biomassDeviationStyle(b.deviationTotalWeightPct);
+                return (
+                  <tr key={b.basketId} className={`border-b hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
+                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{b.flupsyName}</td>
+                    <td className="px-3 py-2 font-semibold">#{b.physicalNumber}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground max-w-[100px] truncate" title={b.lotSupplier || "—"}>
+                      {b.lotSupplier ? b.lotSupplier.slice(0, 15) + (b.lotSupplier.length > 15 ? "…" : "") : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                      {b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "—"}
+                      <span className="ml-1 opacity-60">({b.opType})</span>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {b.currentSizeCode ? (
+                        <Badge variant="outline" style={{ borderColor: b.currentSizeColor || undefined, backgroundColor: b.currentSizeColor ? b.currentSizeColor + '30' : undefined }} className="text-xs font-mono">
+                          {b.currentSizeCode}
+                        </Badge>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono font-semibold">{fmtN(b.animalsPerKg)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{fmtN(b.avgWeightMg, 1)}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`inline-flex flex-col items-center px-2 py-0.5 rounded border text-xs gap-0.5 ${tStyle.badge}`}>
+                        {b.atOrAboveTarget ? (
+                          <span className={tStyle.text}>✓ In range / sopra</span>
+                        ) : (
+                          <>
+                            <span className={tStyle.text}>+{fmtN(b.deviationFromTarget)} pz/kg</span>
+                            <span className="text-muted-foreground opacity-70">da ridurre</span>
+                          </>
+                        )}
                       </span>
-                      <span className="text-muted-foreground opacity-70">
-                        ({b.deviationAvgWeightMg >= 0 ? "+" : ""}{fmtN(b.deviationAvgWeightMg, 1)} mg)
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{fmtN(b.totalWeightKg, 1)}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${bStyle.badge}`}>
+                        <span className={bStyle.text}>
+                          {b.deviationTotalWeightPct >= 0 ? "+" : ""}{fmtN(b.deviationTotalWeightPct, 1)}%
+                        </span>
+                        <span className="text-muted-foreground opacity-60 text-[10px]">
+                          ({b.deviationTotalWeightKg >= 0 ? "+" : ""}{fmtN(b.deviationTotalWeightKg, 1)} kg)
+                        </span>
                       </span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono">{fmtN(b.totalWeightKg, 1)}</td>
-                  <td className="px-3 py-2 text-center">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${
-                      b.deviationTotalWeightPct >= 20 ? "bg-blue-50 border-blue-200" :
-                      b.deviationTotalWeightPct >= -10 ? "bg-gray-50 border-gray-200" :
-                      "bg-orange-50 border-orange-200"
-                    }`}>
-                      <span className={
-                        b.deviationTotalWeightPct >= 20 ? "text-blue-700 font-semibold" :
-                        b.deviationTotalWeightPct >= -10 ? "text-gray-600" : "text-orange-700"
-                      }>
-                        {b.deviationTotalWeightPct >= 0 ? "+" : ""}{fmtN(b.deviationTotalWeightPct, 1)}%
-                      </span>
-                      <span className="text-muted-foreground opacity-70">
-                        ({b.deviationTotalWeightKg >= 0 ? "+" : ""}{fmtN(b.deviationTotalWeightKg, 1)} kg)
-                      </span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <Badge variant="outline" className={`text-[10px] ${b.formulaVersion === 2 ? "bg-green-50 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
-                      v{b.formulaVersion}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <Badge variant="outline" className={`text-[10px] ${b.formulaVersion === 2 ? "bg-green-50 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
+                        v{b.formulaVersion}
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      <div className="text-xs text-muted-foreground pb-4 space-y-1">
-        <p><strong>Scost. da TP-3000</strong>: differenza % tra il peso medio attuale dell'animale e il target 333 mg (TP-3000 = 3.000 pz/kg). Valori positivi (verde) = animali già sopra il target.</p>
-        <p><strong>Scost. da media</strong>: differenza % della biomassa totale della cesta rispetto alla media del gruppo selezionato. Aiuta a identificare ceste eccezionalmente pesanti o leggere.</p>
-        <p><strong>Formula</strong>: v2 = dati affidabili (nuova formula), v1 = dati con vecchia formula (potrebbero essere distorti).</p>
+      {/* Legenda colonne */}
+      <div className="text-xs text-muted-foreground pb-4 space-y-1 border-t pt-3">
+        <p><strong>Taglia attuale</strong>: classificazione TP della cesta in base all'ultimo valore pz/kg registrato.</p>
+        <p><strong>pz/kg</strong>: animali per chilogrammo (meno = animali più grandi). Ordinando crescente si vedono le ceste con gli animali più grandi in cima.</p>
+        <p><strong>Peso medio (mg)</strong>: peso medio di un singolo animale = 1.000.000 / pz/kg.</p>
+        <p><strong>Distanza da TP-3000</strong>: quanti pz/kg devono ancora ridursi per raggiungere TP-3000 ({data ? fmtN(data.meta.targetMinApk) : "20.001"}–{data ? fmtN(data.meta.targetMaxApk) : "29.000"} pz/kg). Verde = già in range o più grandi.</p>
+        <p><strong>Scost. biomassa</strong>: quanto il peso totale della cesta si discosta dalla media del gruppo selezionato. Blu = cesta molto più pesante della media — più da vagliare.</p>
+        <p><strong>Formula</strong>: v2 = dato con nuova formula (affidabile), v1 = dato con vecchia formula (potenzialmente distorto).</p>
       </div>
     </div>
   );

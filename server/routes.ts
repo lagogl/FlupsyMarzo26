@@ -2306,21 +2306,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ORDER BY f.name, b.physical_number
       `);
 
+      // Carica tabella taglie per classificazione e target TP-3000
+      const sizesResult = await db.execute(sql`
+        SELECT id, code, min_animals_per_kg, max_animals_per_kg, color
+        FROM sizes ORDER BY min_animals_per_kg ASC
+      `);
+      const sizes = ((sizesResult as any).rows || sizesResult) as any[];
+      // TP-3000: 20.001–29.000 pz/kg (da tabella sizes)
+      const tp3000 = sizes.find((s: any) => s.code === 'TP-3000');
+      const TARGET_MIN_APK = tp3000 ? parseInt(tp3000.min_animals_per_kg) : 20001;
+      const TARGET_MAX_APK = tp3000 ? parseInt(tp3000.max_animals_per_kg) : 29000;
+
+      const classifySize = (apk: number) => {
+        if (!apk) return null;
+        return sizes.find((s: any) => apk >= parseInt(s.min_animals_per_kg) && apk <= parseInt(s.max_animals_per_kg)) || null;
+      };
+
       const rows = ((result as any).rows || result) as any[];
-      const TARGET_APK = 3000; // TP-3000
-      const TARGET_AVG_WEIGHT_MG = 1000000 / TARGET_APK; // 333.33 mg
 
       const baskets = rows.map((r: any) => {
         const totalWeightG = parseFloat(r.total_weight) || 0;
         const totalWeightKg = totalWeightG / 1000;
         const animalCount = parseInt(r.animal_count) || 0;
         const animalsPerKg = parseInt(r.animals_per_kg) || 0;
-        const avgWeightMg = r.average_weight
-          ? parseFloat(r.average_weight)
-          : (animalsPerKg > 0 ? 1000000 / animalsPerKg : 0);
-        const deviationAvgWeightMg = avgWeightMg - TARGET_AVG_WEIGHT_MG;
-        const deviationAvgWeightPct = TARGET_AVG_WEIGHT_MG > 0
-          ? (deviationAvgWeightMg / TARGET_AVG_WEIGHT_MG) * 100 : 0;
+        const avgWeightMg = animalsPerKg > 0 ? Math.round((1000000 / animalsPerKg) * 100) / 100 : 0;
+        // Scostamento da soglia superiore TP-3000 (29.000 pz/kg)
+        // Negativo = già in range TP-3000 o più grande; Positivo = ancora sotto
+        const deviationFromTarget = animalsPerKg - TARGET_MAX_APK;
+        const deviationFromTargetPct = TARGET_MAX_APK > 0
+          ? Math.round((deviationFromTarget / TARGET_MAX_APK) * 10000) / 100 : 0;
+        const currentSize = classifySize(animalsPerKg);
+        // "Sopra target" = animale è già nella classe TP-3000 o più grande (meno pz/kg)
+        const atOrAboveTarget = animalsPerKg > 0 && animalsPerKg <= TARGET_MAX_APK;
         return {
           basketId: r.basket_id,
           physicalNumber: r.physical_number,
@@ -2335,19 +2352,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           animalCount,
           totalWeightKg: Math.round(totalWeightKg * 100) / 100,
           animalsPerKg,
-          avgWeightMg: Math.round(avgWeightMg * 100) / 100,
-          deviationAvgWeightMg: Math.round(deviationAvgWeightMg * 100) / 100,
-          deviationAvgWeightPct: Math.round(deviationAvgWeightPct * 100) / 100,
+          avgWeightMg,
+          deviationFromTarget,       // pz/kg in eccesso rispetto a soglia TP-3000
+          deviationFromTargetPct,    // % rispetto alla soglia
+          currentSizeCode: currentSize?.code || null,
+          currentSizeColor: currentSize?.color || null,
           formulaVersion: r.formula_version,
-          aboveTarget: avgWeightMg >= TARGET_AVG_WEIGHT_MG,
+          atOrAboveTarget,
         };
       });
 
       // Calcola media di gruppo per biomassa totale (per scostamento)
-      const validWeights = baskets.filter(b => b.totalWeightKg > 0);
+      const validWeights = baskets.filter((b: any) => b.totalWeightKg > 0);
       const avgTotalWeightKg = validWeights.length > 0
-        ? validWeights.reduce((s, b) => s + b.totalWeightKg, 0) / validWeights.length : 0;
-      const enriched = baskets.map(b => ({
+        ? validWeights.reduce((s: number, b: any) => s + b.totalWeightKg, 0) / validWeights.length : 0;
+      const enriched = baskets.map((b: any) => ({
         ...b,
         deviationTotalWeightKg: Math.round((b.totalWeightKg - avgTotalWeightKg) * 100) / 100,
         deviationTotalWeightPct: avgTotalWeightKg > 0
@@ -2358,10 +2377,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         baskets: enriched,
         meta: {
           totalBaskets: enriched.length,
-          targetApk: TARGET_APK,
-          targetAvgWeightMg: TARGET_AVG_WEIGHT_MG,
+          targetApk: TARGET_MAX_APK,
+          targetMinApk: TARGET_MIN_APK,
+          targetMaxApk: TARGET_MAX_APK,
           avgTotalWeightKg: Math.round(avgTotalWeightKg * 100) / 100,
-          aboveTarget: enriched.filter(b => b.aboveTarget).length,
+          atOrAboveTarget: enriched.filter((b: any) => b.atOrAboveTarget).length,
         }
       });
     } catch (error) {
