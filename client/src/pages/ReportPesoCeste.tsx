@@ -61,12 +61,6 @@ const targetDeviationStyle = (dev: number) => {
   return { badge: "bg-red-50 border-red-200", text: "text-red-700" };
 };
 
-const biomassDeviationStyle = (pct: number) => {
-  if (pct >= 50) return { badge: "bg-blue-100 border-blue-300", text: "text-blue-800 font-bold" };
-  if (pct >= 10) return { badge: "bg-blue-50 border-blue-200", text: "text-blue-700" };
-  if (pct >= -20) return { badge: "bg-gray-50 border-gray-200", text: "text-gray-600" };
-  return { badge: "bg-orange-50 border-orange-200", text: "text-orange-700" };
-};
 
 export default function ReportPesoCeste() {
   const [selectedFlupsys, setSelectedFlupsys] = useState<number[]>([]);
@@ -224,18 +218,14 @@ export default function ReportPesoCeste() {
                 <th className="text-right px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("totalWeightKg")}>
                   <span className="flex items-center justify-end">Biomassa (kg) <SortIcon k="totalWeightKg" /></span>
                 </th>
-                <th className="text-center px-3 py-2 font-medium cursor-pointer hover:bg-muted select-none whitespace-nowrap" onClick={() => handleSort("deviationTotalWeightPct")}>
-                  <span className="flex items-center justify-center">Scost. biomassa <SortIcon k="deviationTotalWeightPct" /></span>
-                </th>
                 <th className="text-center px-3 py-2 font-medium">Formula</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-10 text-muted-foreground">Nessuna cesta trovata</td></tr>
+                <tr><td colSpan={10} className="text-center py-10 text-muted-foreground">Nessuna cesta trovata</td></tr>
               ) : filtered.map((b, i) => {
                 const tStyle = targetDeviationStyle(b.deviationFromTarget);
-                const bStyle = biomassDeviationStyle(b.deviationTotalWeightPct);
                 return (
                   <tr key={b.basketId} className={`border-b hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
                     <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{b.flupsyName}</td>
@@ -270,16 +260,6 @@ export default function ReportPesoCeste() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{fmtN(b.totalWeightKg, 1)}</td>
                     <td className="px-3 py-2 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs ${bStyle.badge}`}>
-                        <span className={bStyle.text}>
-                          {b.deviationTotalWeightPct >= 0 ? "+" : ""}{fmtN(b.deviationTotalWeightPct, 1)}%
-                        </span>
-                        <span className="text-muted-foreground opacity-60 text-[10px]">
-                          ({b.deviationTotalWeightKg >= 0 ? "+" : ""}{fmtN(b.deviationTotalWeightKg, 1)} kg)
-                        </span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">
                       <Badge variant="outline" className={`text-[10px] ${b.formulaVersion === 2 ? "bg-green-50 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
                         v{b.formulaVersion}
                       </Badge>
@@ -298,7 +278,6 @@ export default function ReportPesoCeste() {
         <p><strong>pz/kg</strong>: animali per chilogrammo (meno = animali più grandi). Ordinando crescente si vedono le ceste con gli animali più grandi in cima.</p>
         <p><strong>Peso medio (mg)</strong>: peso medio di un singolo animale = 1.000.000 / pz/kg.</p>
         <p><strong>Distanza da TP-3000</strong>: quanti pz/kg devono ancora ridursi per raggiungere TP-3000 ({data ? fmtN(data.meta.targetMinApk) : "20.001"}–{data ? fmtN(data.meta.targetMaxApk) : "29.000"} pz/kg). Verde = già in range o più grandi.</p>
-        <p><strong>Scost. biomassa</strong>: quanto il peso totale della cesta si discosta dalla media del gruppo selezionato. Blu = cesta molto più pesante della media — più da vagliare.</p>
         <p><strong>Formula</strong>: v2 = dato con nuova formula (affidabile), v1 = dato con vecchia formula (potenzialmente distorto).</p>
       </div>
     </div>
