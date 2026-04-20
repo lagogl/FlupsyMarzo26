@@ -52,7 +52,7 @@ interface ReportData {
 }
 
 type SortKey = "flupsyName" | "physicalNumber" | "lotSupplier" | "opDate" | "currentSizeCode" |
-  "animalsPerKg" | "avgWeightMg" | "deviationFromTarget" | "totalWeightKg" |
+  "animalCount" | "animalsPerKg" | "avgWeightMg" | "deviationFromTarget" | "totalWeightKg" |
   "previousTotalWeightKg" | "weightVariationPct" | "formulaVersion";
 type SortDir = "asc" | "desc";
 
@@ -81,6 +81,7 @@ interface ColumnFilters {
   lotto: string;
   data: string;
   taglia: string;
+  animali: string;
   pzkg: string;
   pmed: string;
   dist: string;
@@ -91,7 +92,7 @@ interface ColumnFilters {
 }
 
 const emptyFilters: ColumnFilters = {
-  flupsy: "", cesta: "", lotto: "", data: "", taglia: "",
+  flupsy: "", cesta: "", lotto: "", data: "", taglia: "", animali: "",
   pzkg: "", pmed: "", dist: "", bio: "", pen: "", varPct: "", formula: ""
 };
 
@@ -172,6 +173,7 @@ export default function ReportPesoCeste() {
       matchTextFilter(b.lotSupplier, colFilters.lotto) &&
       matchTextFilter(b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "", colFilters.data) &&
       matchTextFilter(b.currentSizeCode, colFilters.taglia) &&
+      matchNumericFilter(b.animalCount, colFilters.animali) &&
       matchNumericFilter(b.animalsPerKg, colFilters.pzkg) &&
       matchNumericFilter(b.avgWeightMg, colFilters.pmed) &&
       matchNumericFilter(b.deviationFromTarget, colFilters.dist) &&
@@ -207,10 +209,12 @@ export default function ReportPesoCeste() {
   const totals = useMemo(() => {
     const bioSum = filtered.reduce((s, b) => s + (b.totalWeightKg || 0), 0);
     const penSum = filtered.reduce((s, b) => s + (b.previousTotalWeightKg || 0), 0);
+    const animalsSum = filtered.reduce((s, b) => s + (b.animalCount || 0), 0);
     const validVar = filtered.filter(b => b.weightVariationPct !== null);
     const avgVar = validVar.length > 0 ? validVar.reduce((s, b) => s + (b.weightVariationPct || 0), 0) / validVar.length : null;
     return {
       count: filtered.length,
+      animalsSum,
       bioSum: Math.round(bioSum * 10) / 10,
       penSum: Math.round(penSum * 10) / 10,
       bioDelta: Math.round((bioSum - penSum) * 10) / 10,
@@ -230,7 +234,7 @@ export default function ReportPesoCeste() {
     const ws = wb.addWorksheet("Report Peso Ceste");
 
     // Titolo
-    ws.mergeCells("A1:L1");
+    ws.mergeCells("A1:M1");
     const titleCell = ws.getCell("A1");
     titleCell.value = `Report Peso Ceste — Target TP-3000: ${fmtN(data.meta.targetMinApk)}–${fmtN(data.meta.targetMaxApk)} pz/kg`;
     titleCell.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
@@ -239,7 +243,7 @@ export default function ReportPesoCeste() {
     ws.getRow(1).height = 24;
 
     // Sottotitolo con data export
-    ws.mergeCells("A2:L2");
+    ws.mergeCells("A2:M2");
     const subCell = ws.getCell("A2");
     subCell.value = `Esportato il ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: it })} — ${filtered.length} ceste`;
     subCell.font = { name: "Calibri", size: 10, italic: true, color: { argb: "FF555555" } };
@@ -250,7 +254,7 @@ export default function ReportPesoCeste() {
 
     // Header colonne
     const headers = [
-      "FLUPSY", "Cesta", "Lotto", "Ultima op.", "Taglia",
+      "FLUPSY", "Cesta", "Lotto", "Ultima op.", "Taglia", "Animali (n.)",
       "pz/kg", "Peso medio (mg)", "Distanza TP-3000 (pz/kg)", "Biomassa (kg)",
       "Peso penultimo (kg)", "Variazione %", "Formula"
     ];
@@ -268,7 +272,8 @@ export default function ReportPesoCeste() {
     });
     headerRow.height = 32;
 
-    // Dati
+    // Dati — col 1=FLUPSY 2=Cesta 3=Lotto 4=Data 5=Taglia 6=Animali
+    // 7=pz/kg 8=PesoMedio 9=Distanza 10=Biomassa 11=PesoPen 12=Variaz 13=Form
     filtered.forEach((b, idx) => {
       const row = ws.addRow([
         b.flupsyName,
@@ -276,6 +281,7 @@ export default function ReportPesoCeste() {
         b.lotSupplier || "",
         b.opDate ? format(new Date(b.opDate), "dd/MM/yy", { locale: it }) : "",
         b.currentSizeCode || "",
+        b.animalCount,
         b.animalsPerKg,
         b.avgWeightMg,
         b.deviationFromTarget,
@@ -294,11 +300,13 @@ export default function ReportPesoCeste() {
           left: { style: "hair", color: { argb: "FFDDDDDD" } },
           right: { style: "hair", color: { argb: "FFDDDDDD" } },
         };
-        // Numeri allineati a destra con format
-        if ([6, 7, 8, 9, 10].includes(colNum)) {
+        if (colNum === 6 || colNum === 7 || colNum === 9) {
+          cell.alignment = { horizontal: "right" };
+          cell.numFmt = "#,##0";
+        } else if ([8, 10, 11].includes(colNum)) {
           cell.alignment = { horizontal: "right" };
           cell.numFmt = "#,##0.0";
-        } else if (colNum === 11) {
+        } else if (colNum === 12) {
           cell.alignment = { horizontal: "center" };
           cell.numFmt = "+0.0%;-0.0%;0.0%";
           if (typeof cell.value === "number") {
@@ -315,46 +323,47 @@ export default function ReportPesoCeste() {
           fgColor: { argb: "FF" + b.currentSizeColor.replace("#", "") + "" }
         };
       }
-      // Colore distanza target (col 8)
+      // Colore distanza target (col 9)
       if (b.atOrAboveTarget) {
-        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
-        row.getCell(8).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF065F46" } };
+        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+        row.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF065F46" } };
       } else if (b.deviationFromTarget <= 10000) {
-        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
+        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
       } else if (b.deviationFromTarget <= 30000) {
-        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFED7AA" } };
+        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFED7AA" } };
       } else {
-        row.getCell(8).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+        row.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
       }
-      // Colore variazione (col 11)
+      // Colore variazione (col 12)
       if (b.weightVariationPct !== null) {
         const v = b.weightVariationPct;
-        if (v >= 20) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
-        else if (v >= 5) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
-        else if (v <= -20) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
-        else if (v <= -5) row.getCell(11).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEDD5" } };
+        if (v >= 20) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+        else if (v >= 5) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
+        else if (v <= -20) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+        else if (v <= -5) row.getCell(12).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEDD5" } };
       }
     });
 
     // Riga totali
     const totalsRow = ws.addRow([
       "TOTALI", `${totals.count} ceste`, "", "", "",
-      "", "", "", totals.bioSum, totals.penSum,
+      totals.animalsSum, "", "", "", totals.bioSum, totals.penSum,
       totals.avgVar !== null ? totals.avgVar / 100 : null, ""
     ]);
     totalsRow.eachCell((cell, colNum) => {
       cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF374151" } };
-      cell.alignment = { horizontal: colNum === 1 ? "left" : (colNum === 11 ? "center" : "right") };
+      cell.alignment = { horizontal: colNum === 1 ? "left" : (colNum === 12 ? "center" : "right") };
       cell.border = { top: { style: "medium", color: { argb: "FF000000" } } };
-      if (colNum === 9 || colNum === 10) cell.numFmt = "#,##0.0";
-      if (colNum === 11) cell.numFmt = "+0.0%;-0.0%;0.0%";
+      if (colNum === 6) cell.numFmt = "#,##0";
+      if (colNum === 10 || colNum === 11) cell.numFmt = "#,##0.0";
+      if (colNum === 12) cell.numFmt = "+0.0%;-0.0%;0.0%";
     });
 
     // Larghezze colonne
     ws.columns = [
       { width: 22 }, { width: 7 }, { width: 18 }, { width: 11 }, { width: 9 },
-      { width: 10 }, { width: 12 }, { width: 14 }, { width: 11 },
+      { width: 13 }, { width: 10 }, { width: 12 }, { width: 14 }, { width: 11 },
       { width: 13 }, { width: 12 }, { width: 8 },
     ];
 
@@ -364,7 +373,7 @@ export default function ReportPesoCeste() {
     // AutoFilter sulla zona dati
     ws.autoFilter = {
       from: { row: 4, column: 1 },
-      to: { row: 4 + filtered.length, column: 12 },
+      to: { row: 4 + filtered.length, column: 13 },
     };
 
     // Download
@@ -475,18 +484,19 @@ export default function ReportPesoCeste() {
         <div className="rounded border border-gray-300 overflow-hidden">
           <table className="w-full text-[11px] table-fixed border-collapse" data-testid="table-report">
             <colgroup>
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "5%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "4%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "10%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "11%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "5%" }} />
+              <col style={{ width: "4%" }} />
             </colgroup>
             <thead>
               <tr className="bg-blue-700 text-white text-[12px] leading-tight">
@@ -495,6 +505,9 @@ export default function ReportPesoCeste() {
                 <th className="px-2 py-2.5 text-left font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("lotSupplier")}>Lotto<SortIcon k="lotSupplier" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("opDate")}>Data<SortIcon k="opDate" /></th>
                 <th className="px-1 py-2.5 text-center font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("currentSizeCode")}>Taglia<SortIcon k="currentSizeCode" /></th>
+                <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("animalCount")}>
+                  <div>Animali</div><div className="text-[10px] font-normal opacity-90">(n.)<SortIcon k="animalCount" /></div>
+                </th>
                 <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500 whitespace-nowrap" onClick={() => handleSort("animalsPerKg")}>pz/kg<SortIcon k="animalsPerKg" /></th>
                 <th className="px-1 py-2.5 text-right font-bold cursor-pointer hover:bg-blue-800 select-none border-r border-blue-500" onClick={() => handleSort("avgWeightMg")}>
                   <div>Peso medio</div><div className="text-[10px] font-normal opacity-90">(mg)<SortIcon k="avgWeightMg" /></div>
@@ -518,6 +531,7 @@ export default function ReportPesoCeste() {
                 <th className="px-1 py-1"><Input value={colFilters.lotto} onChange={(e) => setColFilters(f => ({ ...f, lotto: e.target.value }))} placeholder="filtra" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.data} onChange={(e) => setColFilters(f => ({ ...f, data: e.target.value }))} placeholder="dd/mm" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.taglia} onChange={(e) => setColFilters(f => ({ ...f, taglia: e.target.value }))} placeholder="TP-" className="h-6 text-[10px] px-1.5 py-0" /></th>
+                <th className="px-1 py-1"><Input value={colFilters.animali} onChange={(e) => setColFilters(f => ({ ...f, animali: e.target.value }))} placeholder=">100000" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.pzkg} onChange={(e) => setColFilters(f => ({ ...f, pzkg: e.target.value }))} placeholder=">15000" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.pmed} onChange={(e) => setColFilters(f => ({ ...f, pmed: e.target.value }))} placeholder=">50" className="h-6 text-[10px] px-1.5 py-0" /></th>
                 <th className="px-1 py-1"><Input value={colFilters.dist} onChange={(e) => setColFilters(f => ({ ...f, dist: e.target.value }))} placeholder="<10000" className="h-6 text-[10px] px-1.5 py-0" /></th>
@@ -529,7 +543,7 @@ export default function ReportPesoCeste() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={12} className="text-center py-8 text-muted-foreground">Nessuna cesta trovata</td></tr>
+                <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">Nessuna cesta trovata</td></tr>
               ) : filtered.map((b, i) => {
                 const tStyle = targetDeviationStyle(b.deviationFromTarget);
                 const vCls = variationStyle(b.weightVariationPct);
@@ -554,6 +568,7 @@ export default function ReportPesoCeste() {
                         </span>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
+                    <td className="px-1 py-1 text-right font-mono tabular-nums" title={`${b.animalCount.toLocaleString("it-IT")} animali`}>{fmtN(b.animalCount)}</td>
                     <td className="px-1 py-1 text-right font-mono font-semibold tabular-nums">{fmtN(b.animalsPerKg)}</td>
                     <td className="px-1 py-1 text-right font-mono tabular-nums">{fmtN(b.avgWeightMg, 1)}</td>
                     <td className="px-1 py-1 text-center">
@@ -589,6 +604,7 @@ export default function ReportPesoCeste() {
                   <td className="px-1.5 py-1.5"></td>
                   <td className="px-1 py-1.5"></td>
                   <td className="px-1 py-1.5"></td>
+                  <td className="px-1 py-1.5 text-right tabular-nums">{fmtN(totals.animalsSum)}</td>
                   <td className="px-1 py-1.5"></td>
                   <td className="px-1 py-1.5"></td>
                   <td className="px-1 py-1.5"></td>
