@@ -68,19 +68,19 @@ router.get("/price-list", async (_req: Request, res: Response) => {
 
 router.put("/price-list", async (req: Request, res: Response) => {
   try {
-    const { sizeCode, pricePer1000, notes } = req.body;
-    if (!sizeCode || pricePer1000 === undefined || pricePer1000 === null) {
-      return res.status(400).json({ error: "sizeCode e pricePer1000 sono obbligatori" });
+    const { sizeCode, pricePerAnimal, notes } = req.body;
+    if (!sizeCode || pricePerAnimal === undefined || pricePerAnimal === null) {
+      return res.status(400).json({ error: "sizeCode e pricePerAnimal sono obbligatori" });
     }
     const existing = await db.select().from(salesPriceList).where(eq(salesPriceList.sizeCode, sizeCode));
     if (existing.length > 0) {
       const updated = await db.update(salesPriceList)
-        .set({ pricePer1000, notes, updatedAt: new Date() })
+        .set({ pricePerAnimal, notes, updatedAt: new Date() })
         .where(eq(salesPriceList.id, existing[0].id))
         .returning();
       return res.json(updated[0]);
     }
-    const inserted = await db.insert(salesPriceList).values({ sizeCode, pricePer1000, notes }).returning();
+    const inserted = await db.insert(salesPriceList).values({ sizeCode, pricePerAnimal, notes }).returning();
     res.json(inserted[0]);
   } catch (error) {
     console.error("Errore salvataggio listino:", error);

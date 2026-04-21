@@ -155,7 +155,7 @@ export class SalesPlanningMilpService {
   async getPriceList(): Promise<Record<string, number>> {
     const rows = await db.select().from(salesPriceList);
     const map: Record<string, number> = {};
-    for (const r of rows) map[r.sizeCode] = r.pricePer1000;
+    for (const r of rows) map[r.sizeCode] = r.pricePerAnimal;
     return map;
   }
 
@@ -294,8 +294,8 @@ export class SalesPlanningMilpService {
 
         const state = b.monthState[m];
         const price = priceMap[state.sizeCode] || 0;
-        // price = €/1000 animali → revenuePerAnimal = price / 1000
-        const revenuePerAnimal = price / 1000;
+        // price = €/animale → revenuePerAnimal = price
+        const revenuePerAnimal = price;
 
         // Coefficiente in obiettivo
         variables[xName] = { obj: revenueWeight * revenuePerAnimal };
@@ -374,8 +374,8 @@ export class SalesPlanningMilpService {
         if (m < arrivalIdx) continue;
         const state = b.monthState[m];
         const price = priceMap[state.sizeCode] || 0;
-        // price = €/1000 animali → revenuePerAnimal = price / 1000
-        const revenuePerAnimal = price / 1000;
+        // price = €/animale → revenuePerAnimal = price
+        const revenuePerAnimal = price;
         if (revenuePerAnimal === 0) continue;
         const xName = `x_${b.id}_${m}`;
         variables[xName][cName] = (variables[xName][cName] || 0) + revenuePerAnimal;
@@ -420,8 +420,8 @@ export class SalesPlanningMilpService {
         if (!state || state.kgPerAnimal === 0) continue;
         const weightKg = sold * state.kgPerAnimal;
         const price = priceMap[state.sizeCode] || 0;
-        // price = €/1000 animali
-        const revenue = (sold / 1000) * price;
+        // price = €/animale
+        const revenue = sold * price;
         sales.push({
           basketId: b.basketIdNumeric,
           isHatchery: b.isHatchery,

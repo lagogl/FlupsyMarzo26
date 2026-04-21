@@ -26,7 +26,7 @@ const MONTHS_IT = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
 type Mode = 'cassa' | 'ricavo' | 'bilanciato';
 type Engine = 'greedy' | 'lp';
 
-interface PriceListEntry { id: number; sizeCode: string; pricePer1000: number; notes: string | null; }
+interface PriceListEntry { id: number; sizeCode: string; pricePerAnimal: number; notes: string | null; }
 interface CashTarget { id: number; year: number; month: number; minRevenue: number; }
 
 interface PlanResult {
@@ -72,13 +72,13 @@ export default function PianificazioneVendite() {
   });
   const priceMap = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const p of priceList) m[p.sizeCode] = p.pricePer1000;
+    for (const p of priceList) m[p.sizeCode] = p.pricePerAnimal;
     return m;
   }, [priceList]);
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
 
   const savePriceMutation = useMutation({
-    mutationFn: async (vars: { sizeCode: string; pricePer1000: number }) =>
+    mutationFn: async (vars: { sizeCode: string; pricePerAnimal: number }) =>
       apiRequest({ url: '/api/pianificazione-vendite/price-list', method: 'PUT', body: vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/pianificazione-vendite/price-list'] });
@@ -126,7 +126,7 @@ export default function PianificazioneVendite() {
       toast({ title: 'Prezzo non valido', variant: 'destructive' });
       return;
     }
-    savePriceMutation.mutate({ sizeCode, pricePer1000: num });
+    savePriceMutation.mutate({ sizeCode, pricePerAnimal: num });
     setPriceEdits(prev => { const n = { ...prev }; delete n[sizeCode]; return n; });
   };
 
@@ -148,7 +148,7 @@ export default function PianificazioneVendite() {
       mese: m.monthLabel,
       ricavo: Math.round(m.totalRevenue),
       target: Math.round(m.cashTarget),
-      kg: Math.round(m.totalKg),
+      animali: m.sales.reduce((a, s) => a + s.animalCount, 0),
     }));
   }, [plan]);
 
@@ -271,12 +271,12 @@ export default function PianificazioneVendite() {
                   <div className="text-xl font-bold text-emerald-600" data-testid="kpi-revenue">{fmtEur(plan.totalRevenue)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Kg venduti</div>
-                  <div className="text-xl font-bold">{fmtKg(plan.totalKgSold)}</div>
+                  <div className="text-xs text-muted-foreground">Animali venduti</div>
+                  <div className="text-xl font-bold" data-testid="kpi-animals">{fmtNum(plan.totalAnimalsSold)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Animali venduti</div>
-                  <div className="text-xl font-bold">{fmtNum(plan.totalAnimalsSold)}</div>
+                  <div className="text-xs text-muted-foreground">Peso totale</div>
+                  <div className="text-xl font-bold text-muted-foreground">{fmtKg(plan.totalKgSold)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
                   <div className="text-xs text-muted-foreground">Mesi sotto budget</div>
@@ -303,11 +303,11 @@ export default function PianificazioneVendite() {
                         <XAxis dataKey="mese" />
                         <YAxis yAxisId="left" tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                         <YAxis yAxisId="right" orientation="right" />
-                        <RechartsTooltip formatter={(v: any, name: string) => name === 'kg' ? `${fmtNum(v)} kg` : fmtEur(v)} />
+                        <RechartsTooltip formatter={(v: any, name: string) => name === 'animali' ? `${fmtNum(v)} animali` : fmtEur(v)} />
                         <Legend />
                         <Bar yAxisId="left" dataKey="ricavo" fill="#10b981" name="Ricavo" />
                         <Line yAxisId="left" type="monotone" dataKey="target" stroke="#ef4444" name="Target cassa" strokeWidth={2} />
-                        <Line yAxisId="right" type="monotone" dataKey="kg" stroke="#3b82f6" name="Kg venduti" strokeDasharray="4 2" />
+                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name="Animali venduti" strokeDasharray="4 2" />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -322,7 +322,7 @@ export default function PianificazioneVendite() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Mese</TableHead>
-                        <TableHead className="text-right">Kg venduti</TableHead>
+                        <TableHead className="text-right">Animali venduti</TableHead>
                         <TableHead className="text-right">Ricavo</TableHead>
                         <TableHead className="text-right">Target</TableHead>
                         <TableHead className="text-right">Gap</TableHead>
@@ -336,7 +336,7 @@ export default function PianificazioneVendite() {
                         return (
                           <TableRow key={`${m.year}-${m.month}`}>
                             <TableCell className="font-medium">{m.monthName}</TableCell>
-                            <TableCell className="text-right">{fmtKg(m.totalKg)}</TableCell>
+                            <TableCell className="text-right font-mono">{fmtNum(m.sales.reduce((a, s) => a + s.animalCount, 0))}</TableCell>
                             <TableCell className="text-right font-semibold text-emerald-600">{fmtEur(m.totalRevenue)}</TableCell>
                             <TableCell className="text-right text-muted-foreground">{m.cashTarget > 0 ? fmtEur(m.cashTarget) : '—'}</TableCell>
                             <TableCell className="text-right">
@@ -356,14 +356,14 @@ export default function PianificazioneVendite() {
                                 {Object.entries(
                                   m.sales.reduce((acc, s) => {
                                     const k = `${s.sizeCode}|${s.reason}`;
-                                    if (!acc[k]) acc[k] = { sizeCode: s.sizeCode, reason: s.reason, kg: 0, rev: 0 };
-                                    acc[k].kg += s.weightKg;
+                                    if (!acc[k]) acc[k] = { sizeCode: s.sizeCode, reason: s.reason, animals: 0, rev: 0 };
+                                    acc[k].animals += s.animalCount;
                                     acc[k].rev += s.revenue;
                                     return acc;
-                                  }, {} as Record<string, { sizeCode: string; reason: string; kg: number; rev: number }>)
-                                ).map(([k, v]) => (
+                                  }, {} as Record<string, { sizeCode: string; reason: string; animals: number; rev: number }>)
+                                ).sort((a, b) => b[1].animals - a[1].animals).map(([k, v]) => (
                                   <Badge key={k} variant={v.reason === 'ordine' ? 'default' : v.reason === 'liquidazione' ? 'secondary' : 'outline'} className="text-xs">
-                                    {v.sizeCode} · {fmtKg(v.kg)} · {fmtEur(v.rev)}
+                                    {v.sizeCode} · {fmtNum(v.animals)} · {fmtEur(v.rev)}
                                     <span className="ml-1 opacity-70">({v.reason})</span>
                                   </Badge>
                                 ))}
@@ -390,8 +390,8 @@ export default function PianificazioneVendite() {
         <TabsContent value="listino">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-emerald-600" />Listino prezzi (€ ogni 1.000 animali)</CardTitle>
-              <CardDescription>Gli animali sono venduti a numero. Imposta il prezzo per 1.000 animali per ciascuna taglia commerciale. Lascia vuoto (o 0) per non vendere quella taglia.</CardDescription>
+              <CardTitle className="text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-emerald-600" />Listino prezzi (€ per animale)</CardTitle>
+              <CardDescription>Gli animali sono venduti a numero. Imposta il prezzo per singolo animale per ciascuna taglia commerciale. Lascia vuoto (o 0) per non vendere quella taglia.</CardDescription>
             </CardHeader>
             <CardContent>
               {priceLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (
@@ -407,7 +407,7 @@ export default function PianificazioneVendite() {
                         <Input
                           type="number"
                           step="0.0001"
-                          placeholder="€/1000 animali"
+                          placeholder="€/animale"
                           value={display}
                           onChange={e => setPriceEdits(prev => ({ ...prev, [sz]: e.target.value }))}
                           className="flex-1"
