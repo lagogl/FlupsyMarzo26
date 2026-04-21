@@ -2,8 +2,9 @@ import { Router, Request, Response } from "express";
 import { salesPlanningService, SalesPlanningMode } from "./sales-planning.service";
 import { salesPlanningMilpService } from "./sales-planning.milp";
 import { db } from "../../../db";
-import { salesPriceList, salesCashTargets } from "../../../../shared/schema";
-import { eq, and } from "drizzle-orm";
+import { salesPriceList, salesCashTargets, hatcheryArrivals, projectionMortalityRates } from "../../../../shared/schema";
+import { eq, and, gte } from "drizzle-orm";
+import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
 
 const router = Router();
 
@@ -136,6 +137,100 @@ router.put("/cash-targets", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Errore salvataggio budget cassa:", error);
     res.status(500).json({ error: "Errore nel salvataggio del budget" });
+  }
+});
+
+// === DATI DI INPUT ===
+router.get("/input-data", async (req: Request, res: Response) => {
+  try {
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const now = new Date();
+
+    const [basketInventory, sgrLookup, mortalityRows, priceRows, cashRows, hatcheryRows, orders] = await Promise.all([
+      productionForecastService.getBasketLevelInventory(),
+      productionForecastService.getSgrLookup(),
+      db.select().from(projectionMortalityRates),
+      db.select().from(salesPriceList),
+      db.select().from(salesCashTargets).where(eq(salesCashTargets.year, year)),
+      db.select().from(hatcheryArrivals).where(gte(hatcheryArrivals.year, year)),
+      productionForecastService.getOrdersByMonthAndSize(year),
+    ]);
+
+    // Arricchisci cestelli con la taglia corrente
+    const basketsWithSize = basketInventory.map(b => ({
+      basketId: b.basketId,
+      animalCount: b.animalCount,
+      animalsPerKg: Math.round(b.animalsPerKg),
+      sizeCode: productionForecastService.mapAnimalsPerKgToSaleSize(b.animalsPerKg),
+      weightGrams: Math.round(1000 / b.animalsPerKg * 1000),
+    }));
+
+    // Raggruppa cestelli per taglia
+    const bySize: Record<string, { count: number; animals: number }> = {};
+    for (const b of basketsWithSize) {
+      if (!bySize[b.sizeCode]) bySize[b.sizeCode] = { count: 0, animals: 0 };
+      bySize[b.sizeCode].count++;
+      bySize[b.sizeCode].animals += b.animalCount;
+    }
+
+    // SGR: crea tabella mese×taglia (sample: max 12 mesi × taglie SALE_SIZES)
+    const sgrTable: Array<{ month: string; [key: string]: string | number }> = [];
+    const MONTHS = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    const sgrSizes = Object.keys(sgrLookup).slice(0, 8); // prime 8 taglie per leggibilità
+    for (let m = 0; m < 12; m++) {
+      const row: Record<string, string | number> = { month: MONTHS[m] };
+      for (const sz of sgrSizes) {
+        const v = sgrLookup[sz]?.[m];
+        row[sz] = v !== undefined ? parseFloat((v * 100).toFixed(3)) : 0;
+      }
+      sgrTable.push(row as any);
+    }
+
+    // Mortalità raggrupata per taglia
+    const mortalityBySize: Record<string, Record<number, number>> = {};
+    for (const row of mortalityRows) {
+      if (!mortalityBySize[row.sizeName]) mortalityBySize[row.sizeName] = {};
+      mortalityBySize[row.sizeName][row.month] = row.monthlyPercentage;
+    }
+
+    // Ordini raggruppati
+    const orderSummary: Array<{ month: string; size: string; animals: number }> = [];
+    for (const [monthStr, sizeMap] of Object.entries(orders)) {
+      for (const [size, animals] of Object.entries(sizeMap as Record<string, number>)) {
+        if (animals > 0) {
+          const m = parseInt(monthStr) - 1;
+          orderSummary.push({ month: MONTHS[m] || monthStr, size, animals });
+        }
+      }
+    }
+    orderSummary.sort((a, b) => a.month.localeCompare(b.month) || a.size.localeCompare(b.size));
+
+    res.json({
+      generatedAt: now.toISOString(),
+      year,
+      inventory: {
+        baskets: basketsWithSize,
+        totalBaskets: basketsWithSize.length,
+        totalAnimals: basketsWithSize.reduce((s, b) => s + b.animalCount, 0),
+        bySize,
+      },
+      hatchery: hatcheryRows.map(h => ({
+        year: h.year,
+        month: h.month,
+        monthName: MONTHS[h.month - 1],
+        quantity: h.quantity,
+        actualQuantity: h.actualQuantity,
+        notes: h.notes,
+      })),
+      sgr: { sgrSizes, sgrTable },
+      mortality: mortalityBySize,
+      priceList: priceRows,
+      cashTargets: cashRows,
+      orders: orderSummary,
+    });
+  } catch (error) {
+    console.error("Errore dati di input pianificazione:", error);
+    res.status(500).json({ error: "Errore nel caricamento dei dati di input" });
   }
 });
 

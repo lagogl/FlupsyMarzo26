@@ -31,6 +31,23 @@ type Engine = 'greedy' | 'lp';
 interface PriceListEntry { id: number; sizeCode: string; pricePerAnimal: number; notes: string | null; }
 interface CashTarget { id: number; year: number; month: number; minRevenue: number; }
 
+interface InputData {
+  generatedAt: string;
+  year: number;
+  inventory: {
+    totalBaskets: number;
+    totalAnimals: number;
+    bySize: Record<string, { count: number; animals: number }>;
+    baskets: Array<{ basketId: number; animalCount: number; animalsPerKg: number; sizeCode: string; weightGrams: number }>;
+  };
+  hatchery: Array<{ year: number; month: number; monthName: string; quantity: number; actualQuantity: number | null; notes: string | null }>;
+  sgr: { sgrSizes: string[]; sgrTable: Array<Record<string, string | number>> };
+  mortality: Record<string, Record<string, number>>;
+  priceList: PriceListEntry[];
+  cashTargets: CashTarget[];
+  orders: Array<{ month: string; size: string; animals: number }>;
+}
+
 interface PlanResult {
   mode: Mode;
   year: number;
@@ -87,6 +104,16 @@ export default function PianificazioneVendite() {
       </TooltipProvider>
     </div>
   );
+
+  // === Dati di Input ===
+  const { data: inputData, isLoading: inputLoading, refetch: refetchInputData } = useQuery<InputData>({
+    queryKey: ['/api/pianificazione-vendite/input-data', year],
+    queryFn: async () => {
+      const r = await fetch(`/api/pianificazione-vendite/input-data?year=${year}`);
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
 
   // === Listino Prezzi ===
   const { data: priceList = [], isLoading: priceLoading } = useQuery<PriceListEntry[]>({
@@ -189,8 +216,9 @@ export default function PianificazioneVendite() {
       </div>
 
       <Tabs defaultValue="risultati" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
           <TabsTrigger value="risultati" data-testid="tab-risultati">Risultati Piano</TabsTrigger>
+          <TabsTrigger value="dati" data-testid="tab-dati">Dati di Input</TabsTrigger>
           <TabsTrigger value="listino" data-testid="tab-listino">Listino Prezzi</TabsTrigger>
           <TabsTrigger value="cassa" data-testid="tab-cassa">Budget Cassa</TabsTrigger>
         </TabsList>
@@ -480,6 +508,213 @@ export default function PianificazioneVendite() {
           {!plan && !isFetching && (
             <Card><CardContent className="pt-6 text-center text-muted-foreground">
               Imposta i parametri e premi <strong>Calcola Piano</strong> per generare la pianificazione.
+            </CardContent></Card>
+          )}
+        </TabsContent>
+
+        {/* === DATI DI INPUT === */}
+        <TabsContent value="dati" className="space-y-4">
+          {inputLoading ? (
+            <Card><CardContent className="pt-6 flex items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Caricamento dati in corso…
+            </CardContent></Card>
+          ) : inputData ? (
+            <>
+              {/* Riepilogo KPI */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card><CardContent className="pt-4">
+                  <p className="text-xs text-muted-foreground">Cestelli attivi</p>
+                  <p className="text-2xl font-bold">{fmtNum(inputData.inventory.totalBaskets)}</p>
+                </CardContent></Card>
+                <Card><CardContent className="pt-4">
+                  <p className="text-xs text-muted-foreground">Animali in inventario</p>
+                  <p className="text-2xl font-bold text-blue-600">{fmtNum(inputData.inventory.totalAnimals)}</p>
+                </CardContent></Card>
+                <Card><CardContent className="pt-4">
+                  <p className="text-xs text-muted-foreground">Taglie con prezzo</p>
+                  <p className="text-2xl font-bold">{inputData.priceList.filter(p => p.pricePerAnimal > 0).length}</p>
+                </CardContent></Card>
+                <Card><CardContent className="pt-4">
+                  <p className="text-xs text-muted-foreground">Ordini caricati ({inputData.year})</p>
+                  <p className="text-2xl font-bold">{inputData.orders.length}</p>
+                </CardContent></Card>
+              </div>
+
+              {/* Inventario per taglia */}
+              <Card>
+                <CardHeader><CardTitle className="text-base">🦪 Inventario corrente per taglia</CardTitle>
+                  <CardDescription>Cestelli attivi e animali disponibili al momento del calcolo</CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Taglia</TableHead>
+                        <TableHead className="text-right">Cestelli</TableHead>
+                        <TableHead className="text-right">Animali</TableHead>
+                        <TableHead className="text-right">% del totale</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(inputData.inventory.bySize)
+                        .sort((a, b) => b[1].animals - a[1].animals)
+                        .map(([size, data]) => (
+                          <TableRow key={size}>
+                            <TableCell className="font-mono font-semibold">{size}</TableCell>
+                            <TableCell className="text-right">{data.count}</TableCell>
+                            <TableCell className="text-right font-mono">{fmtNum(data.animals)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {((data.animals / inputData.inventory.totalAnimals) * 100).toFixed(1)}%
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Arrivi schiuditoio */}
+              {inputData.hatchery.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-base">🐣 Arrivi schiuditoio pianificati</CardTitle>
+                    <CardDescription>Animali in ingresso che saranno aggiunti alla simulazione al mese di arrivo</CardDescription>
+                  </CardHeader>
+                  <CardContent className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Anno</TableHead>
+                          <TableHead>Mese</TableHead>
+                          <TableHead className="text-right">Quantità prevista</TableHead>
+                          <TableHead className="text-right">Quantità effettiva</TableHead>
+                          <TableHead>Note</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {inputData.hatchery.map((h, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{h.year}</TableCell>
+                            <TableCell>{h.monthName}</TableCell>
+                            <TableCell className="text-right font-mono">{fmtNum(h.quantity)}</TableCell>
+                            <TableCell className="text-right font-mono">
+                              {h.actualQuantity !== null ? fmtNum(h.actualQuantity) : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{h.notes || '—'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Ordini cliente */}
+              {inputData.orders.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-base">📦 Ordini cliente {inputData.year}</CardTitle>
+                    <CardDescription>Ordini aperti per mese e taglia che il motore cercherà di soddisfare</CardDescription>
+                  </CardHeader>
+                  <CardContent className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mese</TableHead>
+                          <TableHead>Taglia</TableHead>
+                          <TableHead className="text-right">Animali richiesti</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {inputData.orders.map((o, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{o.month}</TableCell>
+                            <TableCell className="font-mono">{o.size}</TableCell>
+                            <TableCell className="text-right font-mono">{fmtNum(o.animals)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+              {inputData.orders.length === 0 && (
+                <Card><CardContent className="pt-4 text-sm text-muted-foreground">
+                  Nessun ordine aperto trovato per l'anno {inputData.year}.
+                </CardContent></Card>
+              )}
+
+              {/* SGR (crescita) */}
+              <Card>
+                <CardHeader><CardTitle className="text-base">📈 SGR mensile per taglia (% giornaliero)</CardTitle>
+                  <CardDescription>Specific Growth Rate usato per simulare la crescita giorno per giorno. Valori in % al giorno.</CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Mese</TableHead>
+                        {inputData.sgr.sgrSizes.map(sz => <TableHead key={sz} className="text-right text-xs">{sz}</TableHead>)}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {inputData.sgr.sgrTable.map((row, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-medium">{row.month as string}</TableCell>
+                          {inputData.sgr.sgrSizes.map(sz => (
+                            <TableCell key={sz} className="text-right font-mono text-xs">
+                              {typeof row[sz] === 'number' ? (row[sz] as number).toFixed(3) : '—'}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Mortalità */}
+              {Object.keys(inputData.mortality).length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-base">💀 Mortalità mensile per taglia (%)</CardTitle>
+                    <CardDescription>Percentuale di mortalità mensile applicata a ciascuna classe di taglia durante la simulazione</CardDescription>
+                  </CardHeader>
+                  <CardContent className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Taglia</TableHead>
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <TableHead key={i} className="text-right text-xs">
+                              {['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][i]}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {Object.entries(inputData.mortality).map(([sizeName, months]) => (
+                          <TableRow key={sizeName}>
+                            <TableCell className="font-mono font-semibold">{sizeName}</TableCell>
+                            {Array.from({ length: 12 }, (_, i) => (
+                              <TableCell key={i} className="text-right font-mono text-xs">
+                                {months[i + 1] !== undefined ? `${months[i + 1]}%` : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+
+              <p className="text-xs text-muted-foreground text-right">
+                Dati aggiornati: {new Date(inputData.generatedAt).toLocaleString('it-IT')}
+                {' · '}
+                <button onClick={() => refetchInputData()} className="underline hover:text-foreground">Aggiorna</button>
+              </p>
+            </>
+          ) : (
+            <Card><CardContent className="pt-6 text-center text-muted-foreground">
+              Errore nel caricamento dei dati di input.
             </CardContent></Card>
           )}
         </TabsContent>
