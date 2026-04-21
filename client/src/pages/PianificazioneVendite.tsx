@@ -74,20 +74,8 @@ const fmtEur = (n: number) => new Intl.NumberFormat('it-IT', { style: 'currency'
 const fmtKg = (n: number) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(n) + ' kg';
 const fmtNum = (n: number) => new Intl.NumberFormat('it-IT').format(Math.round(n));
 
-export default function PianificazioneVendite() {
-  const { toast } = useToast();
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
-
-  const [year, setYear] = useState(currentYear);
-  const [startMonth, setStartMonth] = useState(currentMonth);
-  const [monthsHorizon, setMonthsHorizon] = useState(12);
-  const [mode, setMode] = useState<Mode>('bilanciato');
-  const [engine, setEngine] = useState<Engine>('greedy');
-  const [guideOpen, setGuideOpen] = useState(false);
-
-  // Helper: label con tooltip informativo
-  const LabelWithHelp = ({ children, tip }: { children: React.ReactNode; tip: string }) => (
+function LabelWithHelp({ children, tip }: { children: React.ReactNode; tip: string }) {
+  return (
     <div className="flex items-center gap-1">
       <Label>{children}</Label>
       <TooltipProvider>
@@ -104,6 +92,19 @@ export default function PianificazioneVendite() {
       </TooltipProvider>
     </div>
   );
+}
+
+export default function PianificazioneVendite() {
+  const { toast } = useToast();
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  const [year, setYear] = useState(currentYear);
+  const [startMonth, setStartMonth] = useState(currentMonth);
+  const [monthsHorizon, setMonthsHorizon] = useState(12);
+  const [mode, setMode] = useState<Mode>('bilanciato');
+  const [engine, setEngine] = useState<Engine>('greedy');
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // === Dati di Input ===
   const { data: inputData, isLoading: inputLoading, refetch: refetchInputData } = useQuery<InputData>({
