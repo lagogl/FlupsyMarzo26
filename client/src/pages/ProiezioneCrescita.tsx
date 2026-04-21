@@ -204,7 +204,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     })) : []),
     {
       label: "Budget Produzione",
-      tooltip: "Budget di vendita pianificato per il mese, espresso in numero di animali. Rappresenta l'obiettivo commerciale mensile definito nel piano di produzione annuale.",
+      tooltip: "Obiettivo commerciale mensile pianificato (numero di animali). Usato come riferimento per valutare le performance di vendita, ma NON guida la simulazione: la domanda effettiva è determinata dagli ordini confermati, non dal budget.",
       color: "#f59e0b",
       bgClass: "",
       textClass: "text-gray-800",
@@ -212,7 +212,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     },
     {
       label: `Domanda effettiva`,
-      tooltip: `Il maggiore tra ordini clienti e budget produzione per il mese. Questo valore guida i calcoli di evasione, giacenza residua e fabbisogno schiuditoio. Se il budget è superiore agli ordini, il sistema pianifica per il budget.`,
+      tooltip: `Ordini clienti confermati per la taglia target (${data.targetSize}) nel mese. Questo valore guida i calcoli di evasione, arretrato e giacenza residua. Il budget produzione è un riferimento separato e non influenza la simulazione.`,
       color: "#7c3aed",
       bgClass: "",
       textClass: "text-gray-900",
@@ -775,7 +775,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         : `= Nessun budget pianificato per ${m.monthName}`;
     }
     if (label === "Domanda effettiva") {
-      return `= MAX(Ordini ${data.targetSize} ${fn(m.ordiniTarget)}, Budget ${fn(m.budgetProduzione)}) = ${fn(m.domandaEffettiva)} animali. Questo valore guida evasione e fabbisogno schiuditoio.`;
+      const budgetRef = m.budgetProduzione > 0 ? ` (Budget riferimento: ${fn(m.budgetProduzione)})` : '';
+      return `= Ordini ${data.targetSize} confermati: ${fn(m.domandaEffettiva)} animali${budgetRef}. Guida evasione, arretrato e giacenza residua.`;
     }
     if (label.startsWith("Arretrato mese precedente")) {
       const arretrato = m.ordiniArretrati || 0;

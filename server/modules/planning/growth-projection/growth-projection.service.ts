@@ -289,7 +289,7 @@ export class GrowthProjectionService {
         }
       }
       const budgetMese = budgetByYearMonth[ymKey] || 0;
-      const domandaEffettiva = Math.max(ordiniTarget, budgetMese);
+      const domandaEffettiva = ordiniTarget;
       const ordiniArretrati = carryOver;
 
       const totalToFulfill = domandaEffettiva + ordiniArretrati;
