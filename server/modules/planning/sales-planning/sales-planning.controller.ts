@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { salesPlanningService, SalesPlanningMode } from "./sales-planning.service";
+import { salesPlanningMilpService } from "./sales-planning.milp";
 import { db } from "../../../db";
 import { salesPriceList, salesCashTargets } from "../../../../shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -35,8 +36,19 @@ router.get("/", async (req: Request, res: Response) => {
       if (!isNaN(m) && m >= 0 && m <= 100) mortalityPercent = m;
     }
 
-    const result = await salesPlanningService.plan({ year, startMonth, monthsHorizon, mode, mortalityPercent });
-    res.json(result);
+    const validEngines = ['greedy', 'lp'] as const;
+    type Engine = typeof validEngines[number];
+    const rawEngine = (req.query.engine as string) || 'greedy';
+    const engine: Engine = (validEngines as readonly string[]).includes(rawEngine)
+      ? (rawEngine as Engine) : 'greedy';
+
+    if (engine === 'lp') {
+      const result = await salesPlanningMilpService.plan({ year, startMonth, monthsHorizon, mode, mortalityPercent });
+      res.json({ ...result, engine: 'lp', mode, year: year || new Date().getFullYear(), startMonth: startMonth || (new Date().getMonth() + 1), monthsHorizon: monthsHorizon || 12, generatedAt: new Date().toISOString() });
+    } else {
+      const result = await salesPlanningService.plan({ year, startMonth, monthsHorizon, mode, mortalityPercent });
+      res.json({ ...result, engine: 'greedy' });
+    }
   } catch (error) {
     console.error("Errore pianificazione vendite:", error);
     res.status(500).json({ error: "Errore nel calcolo della pianificazione vendite" });

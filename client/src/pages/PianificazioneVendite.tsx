@@ -24,6 +24,7 @@ const SALE_SIZES = [
 const MONTHS_IT = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
 type Mode = 'cassa' | 'ricavo' | 'bilanciato';
+type Engine = 'greedy' | 'lp';
 
 interface PriceListEntry { id: number; sizeCode: string; pricePerKg: number; notes: string | null; }
 interface CashTarget { id: number; year: number; month: number; minRevenue: number; }
@@ -63,6 +64,7 @@ export default function PianificazioneVendite() {
   const [startMonth, setStartMonth] = useState(currentMonth);
   const [monthsHorizon, setMonthsHorizon] = useState(12);
   const [mode, setMode] = useState<Mode>('bilanciato');
+  const [engine, setEngine] = useState<Engine>('greedy');
 
   // === Listino Prezzi ===
   const { data: priceList = [], isLoading: priceLoading } = useQuery<PriceListEntry[]>({
@@ -107,10 +109,10 @@ export default function PianificazioneVendite() {
   });
 
   // === Piano calcolato ===
-  const { data: plan, isLoading: planLoading, refetch: refetchPlan, isFetching } = useQuery<PlanResult>({
-    queryKey: ['/api/pianificazione-vendite', year, startMonth, monthsHorizon, mode],
+  const { data: plan, isLoading: planLoading, refetch: refetchPlan, isFetching } = useQuery<PlanResult & { engine?: Engine; solverStatus?: { feasible: boolean; bounded: boolean; objective?: number } }>({
+    queryKey: ['/api/pianificazione-vendite', year, startMonth, monthsHorizon, mode, engine],
     queryFn: async () => {
-      const r = await fetch(`/api/pianificazione-vendite?year=${year}&startMonth=${startMonth}&monthsHorizon=${monthsHorizon}&mode=${mode}`);
+      const r = await fetch(`/api/pianificazione-vendite?year=${year}&startMonth=${startMonth}&monthsHorizon=${monthsHorizon}&mode=${mode}&engine=${engine}`);
       return r.json();
     },
     enabled: false,
@@ -179,7 +181,7 @@ export default function PianificazioneVendite() {
               <CardDescription>Imposta i parametri e calcola il piano</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
                 <div>
                   <Label>Anno</Label>
                   <Input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || currentYear)} data-testid="input-year" />
@@ -213,6 +215,16 @@ export default function PianificazioneVendite() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label>Motore</Label>
+                  <Select value={engine} onValueChange={v => setEngine(v as Engine)}>
+                    <SelectTrigger data-testid="select-engine"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="greedy">⚡ Greedy (veloce)</SelectItem>
+                      <SelectItem value="lp">🧮 Ottimo LP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button onClick={() => refetchPlan()} disabled={isFetching} data-testid="button-calculate">
                   {isFetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Calculator className="h-4 w-4 mr-2" />}
                   Calcola Piano
@@ -224,11 +236,34 @@ export default function PianificazioneVendite() {
                 <div><strong>⚖️ Bilanciato:</strong> soddisfa ordini + budget cassa, lascia crescere il resto.</div>
                 <div><strong>📈 Ricavo massimo:</strong> trattieni il più possibile, liquidi a fine orizzonte.</div>
               </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                <strong>⚡ Greedy:</strong> euristica veloce (&lt;100ms), buona ma non garantita ottima.{' '}
+                <strong>🧮 Ottimo LP:</strong> programmazione lineare con solver, soluzione provatamente ottima (qualche secondo su orizzonti lunghi).
+              </div>
             </CardContent>
           </Card>
 
           {plan && (
             <>
+              {/* Engine info */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="text-xs">
+                  Motore: {plan.engine === 'lp' ? '🧮 LP Ottimo' : '⚡ Greedy'}
+                </Badge>
+                {plan.engine === 'lp' && plan.solverStatus && (
+                  <>
+                    <Badge variant={plan.solverStatus.feasible ? 'default' : 'destructive'} className="text-xs">
+                      {plan.solverStatus.feasible ? '✓ Soluzione fattibile' : '✗ Modello infattibile'}
+                    </Badge>
+                    {plan.solverStatus.objective !== undefined && (
+                      <Badge variant="secondary" className="text-xs">
+                        Obiettivo: {fmtEur(plan.solverStatus.objective)}
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </div>
+
               {/* KPI */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <Card><CardContent className="pt-4">
