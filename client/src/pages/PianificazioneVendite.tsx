@@ -74,6 +74,25 @@ const fmtEur = (n: number) => new Intl.NumberFormat('it-IT', { style: 'currency'
 const fmtKg = (n: number) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(n) + ' kg';
 const fmtNum = (n: number) => new Intl.NumberFormat('it-IT').format(Math.round(n));
 
+function ThWithTip({ children, tip, className }: { children: React.ReactNode; tip: string; className?: string }) {
+  return (
+    <TableHead className={className}>
+      <TooltipProvider>
+        <Tooltip delayDuration={150}>
+          <TooltipTrigger asChild>
+            <span className="cursor-help border-b border-dashed border-muted-foreground/50 inline-block">
+              {children}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs whitespace-pre-line leading-relaxed">
+            {tip}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </TableHead>
+  );
+}
+
 function LabelWithHelp({ children, tip }: { children: React.ReactNode; tip: string }) {
   return (
     <div className="flex items-center gap-1">
@@ -435,7 +454,7 @@ export default function PianificazioneVendite() {
                   <div className="text-xl font-bold text-emerald-600" data-testid="kpi-revenue">{fmtEur(plan.totalRevenue)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Animali venduti</div>
+                  <div className="text-xs text-muted-foreground">Animali da vendere</div>
                   <div className="text-xl font-bold" data-testid="kpi-animals">{fmtNum(plan.totalAnimalsSold)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
@@ -487,13 +506,13 @@ export default function PianificazioneVendite() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Mese</TableHead>
-                        <TableHead className="text-right">Animali venduti</TableHead>
-                        <TableHead className="text-right">Ricavo</TableHead>
-                        <TableHead className="text-right">Target</TableHead>
-                        <TableHead className="text-right">Gap</TableHead>
-                        <TableHead className="text-right">Ordini scoperti</TableHead>
-                        <TableHead>Vendite</TableHead>
+                        <ThWithTip tip="Il mese di riferimento del piano (anno + mese calcolato dall'algoritmo).">Mese</ThWithTip>
+                        <ThWithTip className="text-right" tip="Quanti animali in totale il motore ha deciso di vendere in questo mese, sommando tutte le taglie e tutti i cestelli. Sono animali pianificati — non ancora fisicamente venduti.">Animali da vendere</ThWithTip>
+                        <ThWithTip className="text-right" tip="Incasso previsto per questo mese: è la somma di (animali venduti × prezzo per animale) per ogni singola vendita pianificata. Verde = almeno qualcosa incassato.">Ricavo</ThWithTip>
+                        <ThWithTip className="text-right" tip="Budget cassa minimo che hai impostato per questo mese nella scheda 'Budget Cassa'. È il ricavo minimo che vuoi raggiungere. Se è 0, non c'è nessun vincolo di cassa per questo mese.">Target</ThWithTip>
+                        <ThWithTip className="text-right" tip="Differenza tra il Target e il Ricavo: quanti euro mancano ancora per raggiungere il budget cassa del mese. Rosso = il motore non è riuscito a coprire il budget pur vendendo tutto il disponibile.">Gap</ThWithTip>
+                        <ThWithTip className="text-right" tip="Animali ordinati dai clienti per questo mese che il motore NON è riuscito a consegnare: la taglia non era ancora pronta o l'inventario era insufficiente. Arancione con triangolo = attenzione, hai ordini inevasi.">Ordini scoperti</ThWithTip>
+                        <ThWithTip tip="Elenco di ogni singola vendita pianificata nel mese, nel formato: TAGLIA · N.ANIMALI · RICAVO € (motivo). Il motivo è 'cassa' se si vende per avvicinarsi al budget mensile, 'ordine' se si vende per soddisfare un ordine cliente.">Vendite</ThWithTip>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
