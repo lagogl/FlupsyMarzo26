@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays, RefreshCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useCallback, useRef, useMemo } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1016,7 +1016,7 @@ export default function ProiezioneCrescita() {
   const [startYear, setStartYear] = useState<number>(new Date().getFullYear());
   const [monthsHorizon, setMonthsHorizon] = useState<number>(12);
 
-  const { data, isLoading, error } = useQuery<GrowthProjectionResult>({
+  const { data, isLoading, error, refetch, isFetching } = useQuery<GrowthProjectionResult>({
     queryKey: ["/api/proiezione-crescita", startMonth, startYear, monthsHorizon, activeMortality ?? null],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -1239,14 +1239,20 @@ export default function ProiezioneCrescita() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <TrendingUp className="h-7 w-7 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold">Proiezione Crescita verso {data.targetSize}</h1>
-          <p className="text-sm text-muted-foreground">
-            Progressione 12 mesi con ordini (sottratti dalla giacenza), budget e arrivi schiuditoio
-          </p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <TrendingUp className="h-7 w-7 text-primary" />
+          <div>
+            <h1 className="text-2xl font-bold">Proiezione Crescita verso {data.targetSize}</h1>
+            <p className="text-sm text-muted-foreground">
+              Progressione 12 mesi con ordini (sottratti dalla giacenza), budget e arrivi schiuditoio
+            </p>
+          </div>
         </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2 shrink-0">
+          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          Aggiorna
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
