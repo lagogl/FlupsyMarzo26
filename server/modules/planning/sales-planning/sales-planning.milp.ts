@@ -178,7 +178,7 @@ export class SalesPlanningMilpService {
   }): Promise<MilpResult> {
     const now = new Date();
     const startYear = opts.year || now.getFullYear();
-    const horizon = Math.max(6, Math.min(36, opts.monthsHorizon || 12));
+    const horizon = Math.max(1, Math.min(60, opts.monthsHorizon || 12));
     const mode: SalesPlanningMode = opts.mode || 'bilanciato';
     const currentMonth0 = opts.startMonth != null ? opts.startMonth - 1 : now.getMonth();
     const currentDay = now.getDate();

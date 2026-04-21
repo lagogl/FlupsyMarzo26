@@ -153,7 +153,7 @@ export class SalesPlanningService {
   }): Promise<SalesPlanningResult> {
     const now = new Date();
     const startYear = opts.year || now.getFullYear();
-    const horizon = Math.max(6, Math.min(36, opts.monthsHorizon || 12));
+    const horizon = Math.max(1, Math.min(60, opts.monthsHorizon || 12));
     const mode: SalesPlanningMode = opts.mode || 'bilanciato';
     const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
 

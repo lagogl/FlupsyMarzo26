@@ -29,7 +29,7 @@ router.get("/", async (req: Request, res: Response) => {
     let monthsHorizon: number | undefined;
     if (req.query.monthsHorizon !== undefined) {
       const h = parseInt(req.query.monthsHorizon as string);
-      if (!isNaN(h) && h >= 6 && h <= 36) monthsHorizon = h;
+      if (!isNaN(h) && h >= 1 && h <= 60) monthsHorizon = h;
     }
     let mortalityPercent: number | undefined;
     if (req.query.mortalityPercent !== undefined) {

@@ -102,9 +102,14 @@ export default function PianificazioneVendite() {
   const [year, setYear] = useState(currentYear);
   const [startMonth, setStartMonth] = useState(currentMonth);
   const [monthsHorizon, setMonthsHorizon] = useState(12);
+  const [customHorizonStr, setCustomHorizonStr] = useState('');
+  const [isCustomHorizon, setIsCustomHorizon] = useState(false);
   const [mode, setMode] = useState<Mode>('bilanciato');
   const [engine, setEngine] = useState<Engine>('greedy');
   const [guideOpen, setGuideOpen] = useState(false);
+
+  const PRESET_HORIZONS = [6, 12, 18, 24, 36];
+  const horizonSelectValue = isCustomHorizon ? 'custom' : String(monthsHorizon);
 
   // === Dati di Input ===
   const { data: inputData, isLoading: inputLoading, refetch: refetchInputData } = useQuery<InputData>({
@@ -251,15 +256,47 @@ export default function PianificazioneVendite() {
                   </Select>
                 </div>
                 <div>
-                  <LabelWithHelp tip="Numero di mesi futuri da pianificare a partire dal mese di inizio. Orizzonti lunghi (24–36 mesi) catturano l'effetto della crescita ma rallentano il motore LP.">
+                  <LabelWithHelp tip="Numero di mesi futuri da pianificare a partire dal mese di inizio. Orizzonti lunghi (24–60 mesi) catturano l'effetto della crescita ma rallentano il motore LP.">
                     Orizzonte (mesi)
                   </LabelWithHelp>
-                  <Select value={String(monthsHorizon)} onValueChange={v => setMonthsHorizon(parseInt(v))}>
-                    <SelectTrigger data-testid="select-horizon"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {[6, 12, 18, 24, 36].map(h => <SelectItem key={h} value={String(h)}>{h} mesi</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2 items-center">
+                    <Select value={horizonSelectValue} onValueChange={v => {
+                      if (v === 'custom') {
+                        setIsCustomHorizon(true);
+                        setCustomHorizonStr(String(monthsHorizon));
+                      } else {
+                        setIsCustomHorizon(false);
+                        setCustomHorizonStr('');
+                        setMonthsHorizon(parseInt(v));
+                      }
+                    }}>
+                      <SelectTrigger data-testid="select-horizon" className={isCustomHorizon ? 'w-auto' : ''}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRESET_HORIZONS.map(h => <SelectItem key={h} value={String(h)}>{h} mesi</SelectItem>)}
+                        <SelectItem value="custom">Personalizzato…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {isCustomHorizon && (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={60}
+                          value={customHorizonStr}
+                          onChange={e => {
+                            setCustomHorizonStr(e.target.value);
+                            const n = parseInt(e.target.value);
+                            if (!isNaN(n) && n >= 1 && n <= 60) setMonthsHorizon(n);
+                          }}
+                          className="w-20 h-9 text-sm"
+                          placeholder="mesi"
+                        />
+                        <span className="text-sm text-muted-foreground">mesi</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <LabelWithHelp tip={`Strategia di vendita.\n\n💰 Cassa rapida: vendi il prima possibile per coprire il budget cassa mensile (priorità liquidità).\n\n⚖️ Bilanciato: soddisfa ordini cliente + budget cassa, lascia crescere il resto.\n\n📈 Ricavo massimo: trattieni gli animali fin che cresce il valore, liquidi a fine orizzonte.`}>
