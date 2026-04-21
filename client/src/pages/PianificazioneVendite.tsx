@@ -401,10 +401,6 @@ export default function PianificazioneVendite() {
                   <div className="text-xl font-bold" data-testid="kpi-animals">{fmtNum(plan.totalAnimalsSold)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Peso totale</div>
-                  <div className="text-xl font-bold text-muted-foreground">{fmtKg(plan.totalKgSold)}</div>
-                </CardContent></Card>
-                <Card><CardContent className="pt-4">
                   <div className="text-xs text-muted-foreground">Mesi sotto budget</div>
                   <div className={`text-xl font-bold ${plan.monthsBelowCashTarget > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                     {plan.monthsBelowCashTarget} / {plan.monthsHorizon}
