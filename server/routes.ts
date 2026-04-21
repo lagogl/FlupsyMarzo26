@@ -6933,13 +6933,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const basketOperations = operationsByBasket[cycleData.basketId] || [];
         if (basketOperations.length === 0) return null;
         
-        // Ordina le operazioni per data (più recente prima)
-        const sortedOps = basketOperations.sort((a, b) => 
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-        );
+        // Ordina le operazioni per data DESC e poi per ID DESC (tiebreaker per stessa data)
+        const sortedOps = basketOperations.sort((a, b) => {
+          const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+          if (dateDiff !== 0) return dateDiff;
+          return b.id - a.id;
+        });
         
-        // Prendi l'ultima operazione con misurazione di peso
-        const lastOperation = sortedOps.find(op => op.animalsPerKg !== null && op.animalsPerKg > 0);
+        // Prendi l'ultima operazione con misurazione di peso, preferendo il ciclo corrente
+        const currentCycleId = cycleData.cycleId;
+        const lastOperation = sortedOps.find(op => op.cycleId === currentCycleId && op.animalsPerKg !== null && op.animalsPerKg > 0)
+          || sortedOps.find(op => op.animalsPerKg !== null && op.animalsPerKg > 0);
         if (!lastOperation) return null;
         
         // Calcola il peso attuale in mg
