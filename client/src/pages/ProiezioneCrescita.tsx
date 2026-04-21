@@ -260,14 +260,24 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     },
     {
       label: `Schiuditoio necessario ${data.targetSize}`,
-      tooltip: `Numero di animali TP-300 che devono ARRIVARE dallo schiuditoio in questo mese per poter crescere e coprire i gap degli ordini futuri. Il calcolo simula la crescita da TP-300 alla taglia target usando SGR e mortalità, e posiziona il fabbisogno nel mese di arrivo (non nel mese di consegna). Se il valore è 0, non ci sono gap futuri che richiedono arrivi in questo mese.`,
+      tooltip: `Numero di animali TP-300 che devono ARRIVARE dallo schiuditoio in questo mese per poter crescere e coprire i gap degli ordini futuri. Il calcolo simula la crescita da TP-300 alla taglia target usando SGR e mortalità, e posiziona il fabbisogno nel mese di arrivo (non nel mese di consegna). Se il valore è 0, non ci sono gap futuri che richiedono arrivi in questo mese. Verde = gli arrivi pianificati superano il fabbisogno (surplus schiuditoio).`,
       color: "#be185d",
       bgClass: "",
       textClass: "text-gray-600",
       values: mc.map(m => m.schiuditoioNecessario || 0),
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
-        return m ? (m.schiuditoioNecessario || 0) > 0 : false;
+        if (!m) return false;
+        const necessario = m.schiuditoioNecessario || 0;
+        const arrivi = m.arriviSchiuditoio || 0;
+        return necessario > 0 && arrivi < necessario;
+      },
+      isSuccess: (colIdx: number) => {
+        const m = mc[colIdx];
+        if (!m) return false;
+        const necessario = m.schiuditoioNecessario || 0;
+        const arrivi = m.arriviSchiuditoio || 0;
+        return arrivi > necessario;
       },
     },
     {
@@ -793,8 +803,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     }
     if (label.startsWith("Schiuditoio necessario")) {
       const necessario = m.schiuditoioNecessario || 0;
+      const arrivi = m.arriviSchiuditoio || 0;
+      if (arrivi > necessario) {
+        const surplus = arrivi - necessario;
+        return necessario > 0
+          ? `= Surplus schiuditoio: ${fn(arrivi)} arrivi pianificati vs ${fn(necessario)} necessari → +${fn(surplus)} animali in eccesso`
+          : `= Surplus schiuditoio: ${fn(arrivi)} arrivi pianificati, nessun fabbisogno proiettato in ${m.monthName} → +${fn(arrivi)} animali in eccesso`;
+      }
       if (necessario > 0) {
-        return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)`;
+        return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)${arrivi > 0 ? ` — già pianificati ${fn(arrivi)}, mancano ancora ${fn(necessario - arrivi)}` : ''}`;
       }
       return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
     }
