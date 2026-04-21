@@ -173,15 +173,39 @@ router.get("/input-data", async (req: Request, res: Response) => {
       bySize[b.sizeCode].animals += b.animalCount;
     }
 
-    // SGR: crea tabella mese×taglia (sample: max 12 mesi × taglie SALE_SIZES)
+    // SGR: la chiave è "{mese_italiano}_{sizeId}" e il valore è già % giornaliero
+    // Mappa sizeId → nome TP (da tabella sizes)
+    const SIZE_ID_TO_TP: Record<number, string> = {
+      27:'TP-10000', 26:'TP-9000', 25:'TP-8000', 24:'TP-7000', 23:'TP-6000',
+      22:'TP-5500',  21:'TP-5000', 20:'TP-4500', 19:'TP-4000', 18:'TP-3500',
+      17:'TP-3000',  28:'TP-2800', 16:'TP-2500', 15:'TP-2000', 14:'TP-1900',
+      13:'TP-1800',  12:'TP-1500', 11:'TP-1260', 10:'TP-1140',  9:'TP-1000',
+       8:'TP-800',    7:'TP-700',   6:'TP-600',   1:'TP-500',   5:'TP-450',
+      29:'TP-350',    4:'TP-300',   3:'TP-250',   2:'TP-180',
+    };
+    const MONTHS_LOWER = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                          'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+    const MONTHS_SHORT  = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+    // Estrai tutti i sizeId presenti nel lookup, in ordine canonico (TP più grande → piccola)
+    const sizeIdsInData = new Set<number>();
+    for (const key of Object.keys(sgrLookup)) {
+      const parts = key.split('_');
+      const sizeId = parseInt(parts[parts.length - 1]);
+      if (!isNaN(sizeId)) sizeIdsInData.add(sizeId);
+    }
+    // Ordine canonico SALE_SIZES (indice più basso = più grande)
+    const canonicalOrder = [27,26,25,24,23,22,21,20,19,18,17,28,16,15,14,13,12,11,10,9,8,7,6,1,5,29,4,3,2];
+    const sgrSizeIds = canonicalOrder.filter(id => sizeIdsInData.has(id));
+    const sgrSizes = sgrSizeIds.map(id => SIZE_ID_TO_TP[id] || `ID-${id}`);
+
     const sgrTable: Array<{ month: string; [key: string]: string | number }> = [];
-    const MONTHS = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-    const sgrSizes = Object.keys(sgrLookup).slice(0, 8); // prime 8 taglie per leggibilità
     for (let m = 0; m < 12; m++) {
-      const row: Record<string, string | number> = { month: MONTHS[m] };
-      for (const sz of sgrSizes) {
-        const v = sgrLookup[sz]?.[m];
-        row[sz] = v !== undefined ? parseFloat((v * 100).toFixed(3)) : 0;
+      const row: Record<string, string | number> = { month: MONTHS_SHORT[m] };
+      for (let si = 0; si < sgrSizeIds.length; si++) {
+        const key = `${MONTHS_LOWER[m]}_${sgrSizeIds[si]}`;
+        const v = sgrLookup[key];
+        row[sgrSizes[si]] = v !== undefined && v !== null ? parseFloat(v.toFixed(3)) : 0;
       }
       sgrTable.push(row as any);
     }
@@ -201,7 +225,7 @@ router.get("/input-data", async (req: Request, res: Response) => {
         if (animals > 0) {
           const monthNum = parseInt(monthStr);
           const m = monthNum - 1;
-          orderSummary.push({ monthNum, month: MONTHS[m] || monthStr, size, animals });
+          orderSummary.push({ monthNum, month: MONTHS_SHORT[m] || monthStr, size, animals });
         }
       }
     }
@@ -229,7 +253,7 @@ router.get("/input-data", async (req: Request, res: Response) => {
       hatchery: hatcherySorted.map(h => ({
         year: h.year,
         month: h.month,
-        monthName: MONTHS[h.month - 1],
+        monthName: MONTHS_SHORT[h.month - 1],
         quantity: h.quantity,
         actualQuantity: h.actualQuantity,
         notes: h.notes,
