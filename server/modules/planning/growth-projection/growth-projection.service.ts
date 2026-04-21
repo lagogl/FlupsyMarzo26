@@ -41,6 +41,7 @@ interface MonthlyContext {
   ordiniTarget: number;
   ordiniTotali: number;
   ordiniBySize: Record<string, number>;
+  ordiniEvasiBySize: Record<string, number>;
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
@@ -292,6 +293,19 @@ export class GrowthProjectionService {
       const domandaEffettiva = ordiniTarget;
       const ordiniArretrati = carryOver;
 
+      // Pre-compute snapshot of available animals per size threshold (before TP-target removal)
+      // Used for per-size fulfillment indicator on non-target sizes
+      const ordiniEvasiBySize: Record<string, number> = {};
+      for (const [sz, qty] of Object.entries(ordiniBySize)) {
+        if (!qty || sz === targetSize) continue;
+        const sizeNum = parseInt(sz.replace('TP-', ''));
+        if (isNaN(sizeNum)) continue;
+        const available = globalBaskets
+          .filter(b => (1000000 / b.weightMg) <= sizeNum && b.animalCount > 0)
+          .reduce((s, b) => s + b.animalCount, 0);
+        ordiniEvasiBySize[sz] = Math.min(available, qty);
+      }
+
       const totalToFulfill = domandaEffettiva + ordiniArretrati;
       let ordiniEvasi = 0;
       if (totalToFulfill > 0) {
@@ -308,6 +322,8 @@ export class GrowthProjectionService {
           ordiniEvasi += take;
         }
       }
+      // For target size use the accurate simulation result (includes carryOver logic)
+      if (ordiniBySize[targetSize]) ordiniEvasiBySize[targetSize] = ordiniEvasi;
       carryOver = totalToFulfill - ordiniEvasi;
 
       let giacenzaNetTarget = 0;
@@ -329,6 +345,7 @@ export class GrowthProjectionService {
         ordiniTarget,
         ordiniTotali,
         ordiniBySize,
+        ordiniEvasiBySize,
         ordiniArretrati,
         ordiniEvasi,
         budgetProduzione: budgetByYearMonth[ymKey] || 0,

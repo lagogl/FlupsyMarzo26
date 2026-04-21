@@ -40,6 +40,7 @@ interface MonthlyContext {
   ordiniTarget: number;
   ordiniTotali: number;
   ordiniBySize: Record<string, number>;
+  ordiniEvasiBySize: Record<string, number>;
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
@@ -978,18 +979,38 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                         className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
                         onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
                       >
-                        <div className={`px-2 py-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor} flex items-center justify-end gap-1`}>
-                          {info && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-amber-600 cursor-help text-[11px]" title={row.infoTooltip || ""}>⏱</span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-xs text-xs p-2 bg-amber-900 text-white border border-amber-700">
-                                {row.infoTooltip || "Arrivi tardivi: gli animali non maturano in tempo."}
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                          <span>{displayVal}</span>
+                        <div className={`px-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor} flex flex-col items-end ${row.isSubRow && row.subRowSize && (mc[colIdx]?.ordiniBySize?.[row.subRowSize] || 0) > 0 ? 'py-1 gap-0.5' : 'py-2'}`}>
+                          <div className="flex items-center justify-end gap-1">
+                            {info && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-amber-600 cursor-help text-[11px]" title={row.infoTooltip || ""}>⏱</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs text-xs p-2 bg-amber-900 text-white border border-amber-700">
+                                  {row.infoTooltip || "Arrivi tardivi: gli animali non maturano in tempo."}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                            <span>{displayVal}</span>
+                          </div>
+                          {row.isSubRow && row.subRowSize && (() => {
+                            const m = mc[colIdx];
+                            const ordered = m?.ordiniBySize?.[row.subRowSize] || 0;
+                            if (ordered === 0) return null;
+                            const evasi = m?.ordiniEvasiBySize?.[row.subRowSize] || 0;
+                            const pct = Math.min(100, Math.round(evasi / ordered * 100));
+                            const barFill = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                            const textPct = pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
+                            const icon = pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗';
+                            return (
+                              <div className="w-full flex items-center gap-1">
+                                <div className="flex-1 h-[3px] bg-gray-200 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barFill }} />
+                                </div>
+                                <span className={`text-[10px] font-bold tabular-nums leading-none ${textPct}`} style={{ minWidth: 30, textAlign: 'right' }}>{icon} {pct}%</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
                     );
