@@ -264,7 +264,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       color: "#be185d",
       bgClass: "",
       textClass: "text-gray-600",
-      values: mc.map(m => m.schiuditoioNecessario || 0),
+      values: mc.map(m => {
+        const necessario = m.schiuditoioNecessario || 0;
+        const arrivi = m.arriviSchiuditoio || 0;
+        return arrivi > necessario ? arrivi - necessario : necessario;
+      }),
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
         if (!m) return false;
