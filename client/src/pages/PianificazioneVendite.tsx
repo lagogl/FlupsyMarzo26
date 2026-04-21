@@ -548,7 +548,7 @@ export default function PianificazioneVendite() {
                         <TableHead>Taglia</TableHead>
                         <TableHead className="text-right">Cestelli</TableHead>
                         <TableHead className="text-right">Animali</TableHead>
-                        <TableHead className="text-right">% del totale</TableHead>
+                        <TableHead>% del totale</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -558,16 +558,29 @@ export default function PianificazioneVendite() {
                           const ib = SALE_SIZES.indexOf(b[0]);
                           return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
                         })
-                        .map(([size, data]) => (
-                          <TableRow key={size}>
-                            <TableCell className="font-mono font-semibold">{size}</TableCell>
-                            <TableCell className="text-right">{data.count}</TableCell>
-                            <TableCell className="text-right font-mono">{fmtNum(data.animals)}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {((data.animals / inputData.inventory.totalAnimals) * 100).toFixed(1)}%
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        .map(([size, data]) => {
+                          const pct = (data.animals / inputData.inventory.totalAnimals) * 100;
+                          return (
+                            <TableRow key={size}>
+                              <TableCell className="font-mono font-semibold">{size}</TableCell>
+                              <TableCell className="text-right">{data.count}</TableCell>
+                              <TableCell className="text-right font-mono">{fmtNum(data.animals)}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2 min-w-[140px]">
+                                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-blue-500"
+                                      style={{ width: `${Math.min(pct, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">
+                                    {pct.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                     </TableBody>
                   </Table>
                 </CardContent>
