@@ -14,6 +14,7 @@ import { Banknote, TrendingUp, Scale, AlertTriangle, CheckCircle2, Loader2, Calc
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Bar, ComposedChart } from "recharts";
+import { usePlanningLang, MONTHS_EN } from "@/lib/planningI18n";
 
 const SALE_SIZES = [
   'TP-10000', 'TP-9000', 'TP-8000', 'TP-7000', 'TP-6000', 'TP-5500',
@@ -115,6 +116,8 @@ function LabelWithHelp({ children, tip }: { children: React.ReactNode; tip: stri
 
 export default function PianificazioneVendite() {
   const { toast } = useToast();
+  const { lang, setLang, t } = usePlanningLang();
+  const MONTHS = lang === "en" ? MONTHS_EN : MONTHS_IT;
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
@@ -247,26 +250,26 @@ export default function PianificazioneVendite() {
       };
       const white = "FFFFFFFF";
       const lightGray = "FFF7F7F7";
-      const modeLabel = plan.mode === 'cassa' ? 'Cassa rapida' : plan.mode === 'ricavo' ? 'Ricavo massimo' : 'Bilanciato';
-      const engineLabel = plan.engine === 'lp' ? 'Ottimo LP' : 'Greedy';
-      const startMonthName = MONTHS_IT[(plan.startMonth - 1) % 12];
+      const modeLabel = plan.mode === 'cassa' ? t("pv_mode_label_cassa") : plan.mode === 'ricavo' ? t("pv_mode_label_ricavo") : t("pv_mode_label_bilanciato");
+      const engineLabel = plan.engine === 'lp' ? t("pv_engine_label_lp") : t("pv_engine_label_greedy");
+      const startMonthName = MONTHS[(plan.startMonth - 1) % 12];
 
       // ── FOGLIO 1: Piano mensile ──────────────────────────────────────────
-      const ws1 = wb.addWorksheet("Piano Vendite", { views: [{ state: 'frozen', xSplit: 0, ySplit: 3 }] });
+      const ws1 = wb.addWorksheet(t("pv_excel_sheet1"), { views: [{ state: 'frozen', xSplit: 0, ySplit: 3 }] });
 
-      const t1 = ws1.addRow(["Pianificazione Vendite Ottimizzata"]);
+      const t1 = ws1.addRow([t("pv_title")]);
       t1.font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
       ws1.mergeCells(1, 1, 1, 7);
       t1.alignment = { horizontal: "center", vertical: "middle" };
       t1.height = 30;
 
-      const p1 = ws1.addRow([`Anno: ${plan.year}  |  Inizio: ${startMonthName}  |  Orizzonte: ${plan.monthsHorizon} mesi  |  Modalità: ${modeLabel}  |  Motore: ${engineLabel}`]);
+      const p1 = ws1.addRow([`${t("pv_excel_param_row_pre")} ${plan.year}  |  ${t("pv_excel_param_inizio")} ${startMonthName}  |  ${t("pv_excel_param_orizzonte")} ${plan.monthsHorizon} ${t("months_label")}  |  ${t("pv_excel_param_modalita")} ${modeLabel}  |  ${t("pv_excel_param_motore")} ${engineLabel}`]);
       p1.font = { italic: true, size: 10, color: { argb: "FF555555" } };
       ws1.mergeCells(2, 1, 2, 7);
       p1.alignment = { horizontal: "center" };
       p1.height = 18;
 
-      const h1 = ws1.addRow(["Mese", "Animali da vendere", "Ricavo (€)", "Target Cassa (€)", "Gap Cassa (€)", "Ordini Scoperti", "Animali Residui"]);
+      const h1 = ws1.addRow([t("pv_excel_col_mese"), t("pv_excel_col_animali"), t("pv_excel_col_ricavo"), t("pv_excel_col_target"), t("pv_excel_col_gap"), t("pv_excel_col_scoperti"), t("pv_excel_col_residui")]);
       h1.height = 22;
       h1.eachCell(cell => {
         cell.font = headerFont;
@@ -293,7 +296,7 @@ export default function PianificazioneVendite() {
         });
       });
 
-      const tot = ws1.addRow(["TOTALE", totAnimals, totRevenue, "", totGap, totShortfall, ""]);
+      const tot = ws1.addRow([t("pv_excel_totale"), totAnimals, totRevenue, "", totGap, totShortfall, ""]);
       tot.eachCell((cell, col) => {
         cell.border = thinBorder;
         cell.font = { bold: true, size: 11 };
@@ -307,11 +310,11 @@ export default function PianificazioneVendite() {
       const kpiRow = ws1.addRow(["KPI", "Valore"]);
       kpiRow.eachCell(cell => { cell.font = headerFont; cell.fill = headerFill; cell.border = thinBorder; });
       const kpis = [
-        ["Ricavo totale (€)", plan.totalRevenue],
-        ["Animali da vendere", plan.totalAnimalsSold],
-        ["Mesi sotto budget", plan.monthsBelowCashTarget],
-        ["Ordini scoperti totali", plan.totalShortfall],
-        ["Ordini totali anno", inputData ? inputData.orders.reduce((s, o) => s + o.animals, 0) : 0],
+        [t("pv_kpi_ricavo"), plan.totalRevenue],
+        [t("pv_kpi_animali"), plan.totalAnimalsSold],
+        [t("pv_kpi_mesi_sotto"), plan.monthsBelowCashTarget],
+        [t("pv_kpi_ordini_scoperti"), plan.totalShortfall],
+        [t("pv_kpi_ordini_totali"), inputData ? inputData.orders.reduce((s, o) => s + o.animals, 0) : 0],
       ];
       kpis.forEach(([label, val], i) => {
         const r = ws1.addRow([label, val]);
@@ -327,14 +330,14 @@ export default function PianificazioneVendite() {
       ws1.columns = [{ width: 22 }, { width: 20 }, { width: 16 }, { width: 18 }, { width: 15 }, { width: 18 }, { width: 18 }];
 
       // ── FOGLIO 2: Dettaglio vendite per taglia ───────────────────────────
-      const ws2 = wb.addWorksheet("Vendite per Taglia", { views: [{ state: 'frozen', xSplit: 0, ySplit: 2 }] });
-      const t2 = ws2.addRow(["Dettaglio Vendite per Taglia"]);
+      const ws2 = wb.addWorksheet(t("pv_excel_sheet2_pre"), { views: [{ state: 'frozen', xSplit: 0, ySplit: 2 }] });
+      const t2 = ws2.addRow([t("pv_excel_sheet2_pre")]);
       t2.font = { bold: true, size: 13, color: { argb: "FF1E3A5F" } };
       ws2.mergeCells(1, 1, 1, 5);
       t2.alignment = { horizontal: "center" };
       t2.height = 26;
 
-      const h2 = ws2.addRow(["Mese", "Taglia", "Animali", "Ricavo (€)", "Motivo"]);
+      const h2 = ws2.addRow([t("pv_excel_col_mese"), t("size_label"), t("pv_col_animali"), t("pv_excel_col_ricavo"), t("vco_col_stato")]);
       h2.height = 22;
       h2.eachCell(cell => { cell.font = headerFont; cell.fill = headerFill; cell.alignment = { horizontal: "center", vertical: "middle" }; cell.border = thinBorder; });
 
@@ -370,13 +373,13 @@ export default function PianificazioneVendite() {
       ws2.columns = [{ width: 22 }, { width: 12 }, { width: 18 }, { width: 16 }, { width: 14 }];
 
       // ── FOGLIO 3: Dati grafico ───────────────────────────────────────────
-      const ws3 = wb.addWorksheet("Dati Grafico");
-      const t3 = ws3.addRow(["Dati Andamento Mensile"]);
+      const ws3 = wb.addWorksheet(t("pv_excel_sheet3"));
+      const t3 = ws3.addRow([t("pv_excel_chart_title")]);
       t3.font = { bold: true, size: 13, color: { argb: "FF1E3A5F" } };
       ws3.mergeCells(1, 1, 1, 4);
       t3.alignment = { horizontal: "center" };
       t3.height = 26;
-      const h3 = ws3.addRow(["Mese", "Ricavo (€)", "Target Cassa (€)", "Animali da vendere"]);
+      const h3 = ws3.addRow([t("pv_excel_col_mese"), t("pv_excel_chart_ricavo"), t("pv_excel_chart_target"), t("pv_excel_chart_animali")]);
       h3.height = 22;
       h3.eachCell(cell => { cell.font = headerFont; cell.fill = headerFill; cell.alignment = { horizontal: "center", vertical: "middle" }; cell.border = thinBorder; });
       chartData.forEach((row, i) => {
@@ -403,9 +406,9 @@ export default function PianificazioneVendite() {
       a.download = `PianificazioneVendite_${plan.year}_${modeLabel.replace(/\s/g,'')}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Excel esportato", description: `3 fogli: Piano Vendite, Vendite per Taglia, Dati Grafico` });
+      toast({ title: t("pv_toast_excel"), description: t("pv_toast_excel_desc") });
     } catch (e) {
-      toast({ title: "Errore esportazione", variant: "destructive" });
+      toast({ title: t("pv_toast_error"), variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
@@ -417,51 +420,55 @@ export default function PianificazioneVendite() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
             <Calculator className="h-7 w-7 text-blue-600" />
-            Pianificazione Vendite Ottimizzata
+            {t("pv_title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Bilanciamento tra cassa, ricavo massimo e copertura ordini su orizzonte multi-mensile.
+            {t("pv_subtitle")}
           </p>
+        </div>
+        <div className="flex items-center rounded-md border overflow-hidden text-xs font-semibold">
+          <button onClick={() => setLang("it")} className={`px-2 py-1 transition-colors ${lang === "it" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>IT</button>
+          <button onClick={() => setLang("en")} className={`px-2 py-1 transition-colors ${lang === "en" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>EN</button>
         </div>
       </div>
 
       <Tabs defaultValue="risultati" className="w-full">
         <TabsList className="grid w-full grid-cols-4 max-w-2xl">
-          <TabsTrigger value="risultati" data-testid="tab-risultati">Risultati Piano</TabsTrigger>
-          <TabsTrigger value="dati" data-testid="tab-dati">Dati di Input</TabsTrigger>
-          <TabsTrigger value="listino" data-testid="tab-listino">Listino Prezzi</TabsTrigger>
-          <TabsTrigger value="cassa" data-testid="tab-cassa">Budget Cassa</TabsTrigger>
+          <TabsTrigger value="risultati" data-testid="tab-risultati">{t("pv_tab_risultati")}</TabsTrigger>
+          <TabsTrigger value="dati" data-testid="tab-dati">{t("pv_tab_dati")}</TabsTrigger>
+          <TabsTrigger value="listino" data-testid="tab-listino">{t("pv_tab_listino")}</TabsTrigger>
+          <TabsTrigger value="cassa" data-testid="tab-cassa">{t("pv_tab_cassa")}</TabsTrigger>
         </TabsList>
 
         {/* === RISULTATI === */}
         <TabsContent value="risultati" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Parametri di calcolo</CardTitle>
-              <CardDescription>Imposta i parametri e calcola il piano</CardDescription>
+              <CardTitle className="text-lg">{t("pv_params_title")}</CardTitle>
+              <CardDescription>{t("pv_params_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
                 <div>
-                  <LabelWithHelp tip="Anno solare di riferimento per il piano. Determina quali ordini cliente e quali budget di cassa vengono caricati. Range valido: 2020–2100.">
-                    Anno
+                  <LabelWithHelp tip={t("pv_tip_anno")}>
+                    {t("pv_label_anno")}
                   </LabelWithHelp>
                   <Input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || currentYear)} data-testid="input-year" />
                 </div>
                 <div>
-                  <LabelWithHelp tip="Mese da cui parte la simulazione. La crescita degli animali è simulata giorno per giorno a partire dal 1° del mese scelto, con SGR specifico per taglia e mortalità mensile per taglia.">
-                    Mese inizio
+                  <LabelWithHelp tip={t("pv_tip_mese")}>
+                    {t("pv_label_mese_inizio")}
                   </LabelWithHelp>
                   <Select value={String(startMonth)} onValueChange={v => setStartMonth(parseInt(v))}>
                     <SelectTrigger data-testid="select-start-month"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {MONTHS_IT.map((m, i) => <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>)}
+                      {MONTHS.map((m, i) => <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <LabelWithHelp tip="Numero di mesi futuri da pianificare a partire dal mese di inizio. Orizzonti lunghi (24–60 mesi) catturano l'effetto della crescita ma rallentano il motore LP.">
-                    Orizzonte (mesi)
+                  <LabelWithHelp tip={t("pv_tip_orizzonte")}>
+                    {t("pv_label_orizzonte")}
                   </LabelWithHelp>
                   <div className="flex gap-2 items-center">
                     <Select value={horizonSelectValue} onValueChange={v => {
@@ -478,8 +485,8 @@ export default function PianificazioneVendite() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {PRESET_HORIZONS.map(h => <SelectItem key={h} value={String(h)}>{h} mesi</SelectItem>)}
-                        <SelectItem value="custom">Personalizzato…</SelectItem>
+                        {PRESET_HORIZONS.map(h => <SelectItem key={h} value={String(h)}>{h} {t("months_label")}</SelectItem>)}
+                        <SelectItem value="custom">{t("custom")}</SelectItem>
                       </SelectContent>
                     </Select>
                     {isCustomHorizon && (
@@ -503,34 +510,34 @@ export default function PianificazioneVendite() {
                   </div>
                 </div>
                 <div>
-                  <LabelWithHelp tip={`Strategia di vendita.\n\n💰 Cassa rapida: vendi il prima possibile per coprire il budget cassa mensile (priorità liquidità).\n\n⚖️ Bilanciato: soddisfa ordini cliente + budget cassa, lascia crescere il resto.\n\n📈 Ricavo massimo: trattieni gli animali fin che cresce il valore, liquidi a fine orizzonte.`}>
-                    Modalità
+                  <LabelWithHelp tip={t("pv_tip_modalita")}>
+                    {t("pv_label_modalita")}
                   </LabelWithHelp>
                   <Select value={mode} onValueChange={v => setMode(v as Mode)}>
                     <SelectTrigger data-testid="select-mode"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cassa">💰 Cassa rapida</SelectItem>
-                      <SelectItem value="bilanciato">⚖️ Bilanciato</SelectItem>
-                      <SelectItem value="ricavo">📈 Ricavo massimo</SelectItem>
+                      <SelectItem value="cassa">{t("pv_mode_cassa")}</SelectItem>
+                      <SelectItem value="bilanciato">{t("pv_mode_bilanciato")}</SelectItem>
+                      <SelectItem value="ricavo">{t("pv_mode_ricavo")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <LabelWithHelp tip={`Algoritmo che decide cosa vendere.\n\n⚡ Greedy: euristica veloce (<100 ms). Sceglie mese per mese il cestello "migliore". Buona ma non garantita ottima.\n\n🧮 Ottimo LP: risolve un problema di programmazione lineare con tutte le variabili insieme (qualche secondo). Garantisce la soluzione matematicamente ottima rispetto all'obiettivo della modalità scelta.`}>
-                    Motore
+                  <LabelWithHelp tip={t("pv_tip_motore")}>
+                    {t("pv_label_motore")}
                   </LabelWithHelp>
                   <Select value={engine} onValueChange={v => setEngine(v as Engine)}>
                     <SelectTrigger data-testid="select-engine"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="greedy">⚡ Greedy (veloce)</SelectItem>
-                      <SelectItem value="lp">🧮 Ottimo LP</SelectItem>
+                      <SelectItem value="greedy">{t("pv_engine_greedy")}</SelectItem>
+                      <SelectItem value="lp">{t("pv_engine_lp")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex gap-2 items-end">
                   <Button onClick={() => refetchPlan()} disabled={isFetching} data-testid="button-calculate">
                     {isFetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Calculator className="h-4 w-4 mr-2" />}
-                    Calcola Piano
+                    {t("pv_btn_calcola")}
                   </Button>
                   {plan && (
                     <Button variant="outline" onClick={handleExportExcel} disabled={isExporting} title="Esporta in Excel" className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800">
@@ -545,71 +552,50 @@ export default function PianificazioneVendite() {
                 <CollapsibleTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2" data-testid="button-toggle-guide">
                     <Info className="h-4 w-4" />
-                    {guideOpen ? 'Nascondi guida ai parametri' : 'Mostra guida ai parametri'}
+                    {guideOpen ? t("pv_hide_guide") : t("pv_show_guide")}
                     {guideOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-3">
                   <div className="border rounded-lg bg-muted/30 p-4 space-y-4 text-sm">
                     <div>
-                      <h4 className="font-semibold mb-1 flex items-center gap-2">📅 Anno</h4>
-                      <p className="text-muted-foreground">
-                        Anno solare di riferimento del piano. Il sistema usa questo valore per filtrare gli <strong>ordini cliente</strong> da soddisfare e i <strong>budget cassa</strong> definiti nelle relative schede. Se l'orizzonte attraversa il 31 dicembre, anche gli ordini e i budget dell'anno successivo vengono inclusi automaticamente.
-                      </p>
+                      <h4 className="font-semibold mb-1">{t("pv_guide_anno_title")}</h4>
+                      <p className="text-muted-foreground">{t("pv_guide_anno_text")}</p>
                     </div>
-
                     <div>
-                      <h4 className="font-semibold mb-1 flex items-center gap-2">🗓️ Mese inizio</h4>
-                      <p className="text-muted-foreground">
-                        Mese da cui parte la simulazione. La crescita di ogni cestello è simulata <strong>giorno per giorno</strong> usando l'SGR specifico per ogni taglia e la mortalità mensile per taglia. Se imposti un mese passato (es. gennaio in aprile), il piano "rivede" lo storico nella simulazione: utile per back-test, ma non per pianificazioni future.
-                      </p>
+                      <h4 className="font-semibold mb-1">{t("pv_guide_mese_title")}</h4>
+                      <p className="text-muted-foreground">{t("pv_guide_mese_text")}</p>
                     </div>
-
                     <div>
-                      <h4 className="font-semibold mb-1 flex items-center gap-2">📏 Orizzonte (mesi)</h4>
-                      <p className="text-muted-foreground">
-                        Numero di mesi futuri pianificati a partire dal mese di inizio. <strong>Orizzonti brevi (6–12 mesi)</strong> sono adatti a piani operativi a corto termine. <strong>Orizzonti lunghi (24–36 mesi)</strong> permettono al motore di sfruttare la crescita futura (es. trattenere TP-3000 oggi per venderlo come TP-7000 fra 8 mesi), ma rallentano il motore LP (1–10 secondi su 36 mesi con molti cestelli).
-                      </p>
+                      <h4 className="font-semibold mb-1">{t("pv_guide_orizzonte_title")}</h4>
+                      <p className="text-muted-foreground">{t("pv_guide_orizzonte_text")}</p>
                     </div>
-
                     <div>
-                      <h4 className="font-semibold mb-1 flex items-center gap-2">⚙️ Modalità</h4>
+                      <h4 className="font-semibold mb-1">{t("pv_guide_modalita_title")}</h4>
                       <ul className="text-muted-foreground space-y-2 ml-2">
-                        <li>
-                          <strong className="text-foreground">💰 Cassa rapida</strong> — Massimizza la copertura del <em>budget cassa</em> mensile (definito nella scheda Budget Cassa). Il motore vende appena ha taglie con prezzo &gt; 0, anche se piccole, per generare liquidità immediata. Usa questa modalità quando hai bisogno di pagare fornitori, stipendi o rate a scadenza fissa.
-                        </li>
-                        <li>
-                          <strong className="text-foreground">⚖️ Bilanciato</strong> — Compromesso fra tre obiettivi: (1) soddisfare gli ordini cliente alla taglia richiesta nel mese richiesto, (2) coprire il budget cassa mensile, (3) lasciar crescere il resto per ricavi futuri. È la modalità di default consigliata per la pianificazione operativa normale.
-                        </li>
-                        <li>
-                          <strong className="text-foreground">📈 Ricavo massimo</strong> — Trattiene gli animali il più possibile per farli crescere verso le taglie più redditizie (TP-7000, TP-9000, TP-10000), poi liquida tutto verso fine orizzonte. Ignora il budget cassa. Usa questa modalità per stimare il <strong>valore teorico massimo</strong> dell'inventario corrente.
-                        </li>
+                        <li><strong className="text-foreground">{t("pv_guide_cassa_title")}</strong> — {t("pv_guide_cassa_text")}</li>
+                        <li><strong className="text-foreground">{t("pv_guide_bilanciato_title")}</strong> — {t("pv_guide_bilanciato_text")}</li>
+                        <li><strong className="text-foreground">{t("pv_guide_ricavo_title")}</strong> — {t("pv_guide_ricavo_text")}</li>
                       </ul>
                     </div>
-
                     <div>
-                      <h4 className="font-semibold mb-1 flex items-center gap-2">🧠 Motore</h4>
+                      <h4 className="font-semibold mb-1">{t("pv_guide_motore_title")}</h4>
                       <ul className="text-muted-foreground space-y-2 ml-2">
-                        <li>
-                          <strong className="text-foreground">⚡ Greedy</strong> — Euristica rapida (&lt;100 ms). Esamina i cestelli mese per mese e sceglie ad ogni passo l'opzione localmente migliore. <em>Pro</em>: istantaneo, sempre stabile. <em>Contro</em>: non vede il futuro, può lasciare ricavo "sul tavolo" su orizzonti lunghi.
-                        </li>
-                        <li>
-                          <strong className="text-foreground">🧮 Ottimo LP</strong> — Programmazione lineare risolta con un solver matematico. Considera <strong>tutte</strong> le decisioni dei mesi futuri simultaneamente e produce la soluzione provatamente ottima rispetto alla funzione obiettivo della modalità scelta. <em>Pro</em>: massimo ricavo possibile, copertura ordini ottimale. <em>Contro</em>: tempo di calcolo 1–10 s in base a numero di cestelli e orizzonte.
-                        </li>
+                        <li><strong className="text-foreground">{t("pv_guide_greedy_title")}</strong> — {t("pv_guide_greedy_text")}</li>
+                        <li><strong className="text-foreground">{t("pv_guide_lp_title")}</strong> — {t("pv_guide_lp_text")}</li>
                       </ul>
                       <div className="mt-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-xs">
-                        <strong>💡 Consiglio</strong>: usa <strong>Greedy</strong> per esplorare scenari rapidamente (cambia parametri e ricalcola), poi conferma il piano definitivo con <strong>Ottimo LP</strong>.
+                        <strong>{t("pv_guide_consiglio")}</strong>: {t("pv_guide_consiglio_text")}
                       </div>
                     </div>
-
                     <div className="pt-2 border-t">
-                      <h4 className="font-semibold mb-1 flex items-center gap-2">📋 Dati richiesti per ottenere risultati significativi</h4>
+                      <h4 className="font-semibold mb-1">{t("pv_guide_data_title")}</h4>
                       <ul className="text-muted-foreground space-y-1 list-disc ml-5">
-                        <li><strong>Listino prezzi</strong> (scheda <em>Listino Prezzi</em>): prezzo €/animale per ciascuna taglia commerciale. Le taglie senza prezzo non verranno mai vendute dal motore.</li>
-                        <li><strong>Budget cassa</strong> (scheda <em>Budget Cassa</em>): obiettivo di ricavo minimo mensile, usato dalle modalità Cassa rapida e Bilanciato.</li>
-                        <li><strong>Ordini cliente</strong> (modulo Ordini): vengono caricati automaticamente per anno+mese+taglia richiesta.</li>
-                        <li><strong>Inventario corrente</strong>: cestelli attivi con cicli aperti, recuperati dal database.</li>
-                        <li><strong>Arrivi schiuditoio futuri</strong>: pianificazioni di nuovi ingressi vengono integrate come "cestelli virtuali" disponibili dal mese di arrivo previsto.</li>
+                        <li>{t("pv_guide_data_listino")}</li>
+                        <li>{t("pv_guide_data_cassa")}</li>
+                        <li>{t("pv_guide_data_ordini")}</li>
+                        <li>{t("pv_guide_data_inventario")}</li>
+                        <li>{t("pv_guide_data_schiuditoio")}</li>
                       </ul>
                     </div>
                   </div>
@@ -623,16 +609,16 @@ export default function PianificazioneVendite() {
               {/* Engine info */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="text-xs">
-                  Motore: {plan.engine === 'lp' ? '🧮 LP Ottimo' : '⚡ Greedy'}
+                  {t("pv_engine_badge_pre")} {plan.engine === 'lp' ? '🧮 LP' : '⚡ Greedy'}
                 </Badge>
                 {plan.engine === 'lp' && plan.solverStatus && (
                   <>
                     <Badge variant={plan.solverStatus.feasible ? 'default' : 'destructive'} className="text-xs">
-                      {plan.solverStatus.feasible ? '✓ Soluzione fattibile' : '✗ Modello infattibile'}
+                      {plan.solverStatus.feasible ? t("pv_solver_feasible") : t("pv_solver_infeasible")}
                     </Badge>
                     {plan.solverStatus.objective !== undefined && (
                       <Badge variant="secondary" className="text-xs">
-                        Obiettivo: {fmtEur(plan.solverStatus.objective)}
+                        {t("pv_solver_objective")} {fmtEur(plan.solverStatus.objective)}
                       </Badge>
                     )}
                   </>
@@ -642,27 +628,27 @@ export default function PianificazioneVendite() {
               {/* KPI */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Ricavo totale</div>
+                  <div className="text-xs text-muted-foreground">{t("pv_kpi_ricavo")}</div>
                   <div className="text-xl font-bold text-emerald-600" data-testid="kpi-revenue">{fmtEur(plan.totalRevenue)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Animali da vendere</div>
+                  <div className="text-xs text-muted-foreground">{t("pv_kpi_animali")}</div>
                   <div className="text-xl font-bold" data-testid="kpi-animals">{fmtNum(plan.totalAnimalsSold)}</div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Mesi sotto budget</div>
+                  <div className="text-xs text-muted-foreground">{t("pv_kpi_mesi_sotto")}</div>
                   <div className={`text-xl font-bold ${plan.monthsBelowCashTarget > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                     {plan.monthsBelowCashTarget} / {plan.monthsHorizon}
                   </div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Ordini scoperti</div>
+                  <div className="text-xs text-muted-foreground">{t("pv_kpi_ordini_scoperti")}</div>
                   <div className={`text-xl font-bold ${plan.totalShortfall > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                     {fmtNum(plan.totalShortfall)}
                   </div>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">Ordini totali anno</div>
+                  <div className="text-xs text-muted-foreground">{t("pv_kpi_ordini_totali")}</div>
                   <div className="text-xl font-bold text-blue-600">
                     {inputData ? fmtNum(inputData.orders.reduce((s, o) => s + o.animals, 0)) : '—'}
                   </div>
@@ -671,7 +657,7 @@ export default function PianificazioneVendite() {
 
               {/* Grafico */}
               <Card>
-                <CardHeader><CardTitle className="text-lg">Andamento mensile cassa</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg">{t("pv_chart_title")}</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -680,11 +666,11 @@ export default function PianificazioneVendite() {
                         <XAxis dataKey="mese" />
                         <YAxis yAxisId="left" tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                         <YAxis yAxisId="right" orientation="right" />
-                        <RechartsTooltip formatter={(v: any, name: string) => name === 'Animali da vendere' ? fmtNum(v) : fmtEur(v)} />
+                        <RechartsTooltip formatter={(v: any, name: string) => name === t("pv_chart_animali") ? fmtNum(v) : fmtEur(v)} />
                         <Legend />
-                        <Bar yAxisId="left" dataKey="ricavo" fill="#10b981" name="Ricavo" />
-                        <Line yAxisId="left" type="monotone" dataKey="target" stroke="#ef4444" name="Target cassa" strokeWidth={2} />
-                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name="Animali da vendere" strokeDasharray="4 2" />
+                        <Bar yAxisId="left" dataKey="ricavo" fill="#10b981" name={t("pv_chart_ricavo")} />
+                        <Line yAxisId="left" type="monotone" dataKey="target" stroke="#ef4444" name={t("pv_chart_target")} strokeWidth={2} />
+                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name={t("pv_chart_animali")} strokeDasharray="4 2" />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -693,18 +679,18 @@ export default function PianificazioneVendite() {
 
               {/* Tabella mensile */}
               <Card>
-                <CardHeader><CardTitle className="text-lg">Dettaglio mensile</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg">{t("pv_table_title")}</CardTitle></CardHeader>
                 <CardContent className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <ThWithTip tip="Il mese di riferimento del piano (anno + mese calcolato dall'algoritmo).">Mese</ThWithTip>
-                        <ThWithTip className="text-right" tip="Quanti animali in totale il motore ha deciso di vendere in questo mese, sommando tutte le taglie e tutti i cestelli. Sono animali pianificati — non ancora fisicamente venduti.">Animali da vendere</ThWithTip>
-                        <ThWithTip className="text-right" tip="Incasso previsto per questo mese: è la somma di (animali venduti × prezzo per animale) per ogni singola vendita pianificata. Verde = almeno qualcosa incassato.">Ricavo</ThWithTip>
-                        <ThWithTip className="text-right" tip="Budget cassa minimo che hai impostato per questo mese nella scheda 'Budget Cassa'. È il ricavo minimo che vuoi raggiungere. Se è 0, non c'è nessun vincolo di cassa per questo mese.">Target</ThWithTip>
-                        <ThWithTip className="text-right" tip="Differenza tra il Target e il Ricavo: quanti euro mancano ancora per raggiungere il budget cassa del mese. Rosso = il motore non è riuscito a coprire il budget pur vendendo tutto il disponibile.">Gap</ThWithTip>
-                        <ThWithTip className="text-right" tip="Animali ordinati dai clienti per questo mese che il motore NON è riuscito a consegnare: la taglia non era ancora pronta o l'inventario era insufficiente. Arancione con triangolo = attenzione, hai ordini inevasi.">Ordini scoperti</ThWithTip>
-                        <ThWithTip tip="Elenco di ogni singola vendita pianificata nel mese, nel formato: TAGLIA · N.ANIMALI · RICAVO € (motivo). Il motivo è 'cassa' se si vende per avvicinarsi al budget mensile, 'ordine' se si vende per soddisfare un ordine cliente.">Vendite</ThWithTip>
+                        <ThWithTip tip={t("pv_col_mese_tip")}>{t("pv_col_mese")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_col_animali_tip")}>{t("pv_col_animali")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_col_ricavo_tip")}>{t("pv_col_ricavo")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_col_target_tip")}>{t("pv_col_target")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_col_gap_tip")}>{t("pv_col_gap")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_col_scoperti_tip")}>{t("pv_col_scoperti")}</ThWithTip>
+                        <ThWithTip tip={t("pv_col_vendite_tip")}>{t("pv_col_vendite")}</ThWithTip>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -758,7 +744,7 @@ export default function PianificazioneVendite() {
 
           {!plan && !isFetching && (
             <Card><CardContent className="pt-6 text-center text-muted-foreground">
-              Imposta i parametri e premi <strong>Calcola Piano</strong> per generare la pianificazione.
+              {t("pv_no_plan")} <strong>{t("pv_no_plan_btn")}</strong> {t("pv_no_plan_suffix")}
             </CardContent></Card>
           )}
         </TabsContent>
@@ -767,43 +753,43 @@ export default function PianificazioneVendite() {
         <TabsContent value="dati" className="space-y-4">
           {inputLoading ? (
             <Card><CardContent className="pt-6 flex items-center justify-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Caricamento dati in corso…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("pv_loading_data")}
             </CardContent></Card>
           ) : inputData ? (
             <>
               {/* Riepilogo KPI */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card><CardContent className="pt-4">
-                  <p className="text-xs text-muted-foreground">Cestelli attivi</p>
+                  <p className="text-xs text-muted-foreground">{t("pv_dati_kpi_cestelli")}</p>
                   <p className="text-2xl font-bold">{fmtNum(inputData.inventory.totalBaskets)}</p>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <p className="text-xs text-muted-foreground">Animali in inventario</p>
+                  <p className="text-xs text-muted-foreground">{t("pv_dati_kpi_animali")}</p>
                   <p className="text-2xl font-bold text-blue-600">{fmtNum(inputData.inventory.totalAnimals)}</p>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <p className="text-xs text-muted-foreground">Taglie con prezzo</p>
+                  <p className="text-xs text-muted-foreground">{t("pv_dati_kpi_taglie")}</p>
                   <p className="text-2xl font-bold">{inputData.priceList.filter(p => p.pricePerAnimal > 0).length}</p>
                 </CardContent></Card>
                 <Card><CardContent className="pt-4">
-                  <p className="text-xs text-muted-foreground">Ordini caricati ({inputData.year})</p>
+                  <p className="text-xs text-muted-foreground">{t("pv_dati_kpi_ordini")} ({inputData.year})</p>
                   <p className="text-2xl font-bold">{inputData.orders.length}</p>
                 </CardContent></Card>
               </div>
 
               {/* Inventario per taglia */}
               <Card>
-                <CardHeader><CardTitle className="text-base">🦪 Inventario corrente per taglia</CardTitle>
-                  <CardDescription>Cestelli attivi e animali disponibili al momento del calcolo</CardDescription>
+                <CardHeader><CardTitle className="text-base">{t("pv_inv_title")}</CardTitle>
+                  <CardDescription>{t("pv_inv_desc")}</CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Taglia</TableHead>
-                        <TableHead className="text-right">Cestelli</TableHead>
-                        <TableHead className="text-right">Animali</TableHead>
-                        <TableHead>% del totale</TableHead>
+                        <TableHead>{t("pv_inv_col_taglia")}</TableHead>
+                        <TableHead className="text-right">{t("pv_inv_col_cestelli")}</TableHead>
+                        <TableHead className="text-right">{t("pv_inv_col_animali")}</TableHead>
+                        <TableHead>{t("pv_inv_col_pct")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -844,19 +830,19 @@ export default function PianificazioneVendite() {
               {/* Arrivi schiuditoio */}
               {inputData.hatchery.length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle className="text-base">🐣 Arrivi schiuditoio pianificati</CardTitle>
-                    <CardDescription>Animali in ingresso che saranno aggiunti alla simulazione al mese di arrivo</CardDescription>
+                  <CardHeader><CardTitle className="text-base">{t("pv_hatchery_title")}</CardTitle>
+                    <CardDescription>{t("pv_hatchery_desc")}</CardDescription>
                   </CardHeader>
                   <CardContent className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Anno</TableHead>
-                          <TableHead>Mese</TableHead>
-                          <TableHead className="text-right">Quantità prevista</TableHead>
-                          <TableHead className="text-right">Quantità effettiva</TableHead>
-                          <TableHead className="text-right">Subtotale effettivo</TableHead>
-                          <TableHead>Note</TableHead>
+                          <TableHead>{t("pv_hatchery_col_anno")}</TableHead>
+                          <TableHead>{t("pv_hatchery_col_mese")}</TableHead>
+                          <TableHead className="text-right">{t("pv_hatchery_col_qty_prev")}</TableHead>
+                          <TableHead className="text-right">{t("pv_hatchery_col_qty_eff")}</TableHead>
+                          <TableHead className="text-right">{t("pv_hatchery_col_subtot")}</TableHead>
+                          <TableHead>{t("pv_hatchery_col_note")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -890,16 +876,16 @@ export default function PianificazioneVendite() {
               {/* Ordini cliente */}
               {inputData.orders.length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle className="text-base">📦 Ordini cliente {inputData.year}</CardTitle>
-                    <CardDescription>Ordini aperti per mese e taglia che il motore cercherà di soddisfare</CardDescription>
+                  <CardHeader><CardTitle className="text-base">{t("pv_orders_title")} {inputData.year}</CardTitle>
+                    <CardDescription>{t("pv_orders_desc")}</CardDescription>
                   </CardHeader>
                   <CardContent className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Mese</TableHead>
-                          <TableHead>Taglia</TableHead>
-                          <TableHead className="text-right">Animali richiesti</TableHead>
+                          <TableHead>{t("pv_orders_col_mese")}</TableHead>
+                          <TableHead>{t("pv_orders_col_taglia")}</TableHead>
+                          <TableHead className="text-right">{t("pv_orders_col_animali")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -931,14 +917,14 @@ export default function PianificazioneVendite() {
 
               {/* SGR (crescita) */}
               <Card>
-                <CardHeader><CardTitle className="text-base">📈 SGR mensile per taglia (% giornaliero)</CardTitle>
-                  <CardDescription>Specific Growth Rate usato per simulare la crescita giorno per giorno. Valori in % al giorno.</CardDescription>
+                <CardHeader><CardTitle className="text-base">{t("pv_sgr_title")}</CardTitle>
+                  <CardDescription>{t("pv_sgr_desc")}</CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Mese</TableHead>
+                        <TableHead>{t("pv_sgr_col_mese")}</TableHead>
                         {inputData.sgr.sgrSizes.map(sz => <TableHead key={sz} className="text-right text-xs">{sz}</TableHead>)}
                       </TableRow>
                     </TableHeader>
@@ -961,17 +947,17 @@ export default function PianificazioneVendite() {
               {/* Mortalità */}
               {Object.keys(inputData.mortality).length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle className="text-base">💀 Mortalità mensile per taglia (%)</CardTitle>
-                    <CardDescription>Percentuale di mortalità mensile applicata a ciascuna classe di taglia durante la simulazione</CardDescription>
+                  <CardHeader><CardTitle className="text-base">{t("pv_mortality_title")}</CardTitle>
+                    <CardDescription>{t("pv_mortality_desc")}</CardDescription>
                   </CardHeader>
                   <CardContent className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Taglia</TableHead>
+                          <TableHead>{t("pv_mortality_col_taglia")}</TableHead>
                           {Array.from({ length: 12 }, (_, i) => (
                             <TableHead key={i} className="text-right text-xs">
-                              {['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][i]}
+                              {MONTHS.map(m => m.slice(0, 3))[i]}
                             </TableHead>
                           ))}
                         </TableRow>
@@ -994,14 +980,14 @@ export default function PianificazioneVendite() {
               )}
 
               <p className="text-xs text-muted-foreground text-right">
-                Dati aggiornati: {new Date(inputData.generatedAt).toLocaleString('it-IT')}
+                {t("pv_updated_at")} {new Date(inputData.generatedAt).toLocaleString('it-IT')}
                 {' · '}
-                <button onClick={() => refetchInputData()} className="underline hover:text-foreground">Aggiorna</button>
+                <button onClick={() => refetchInputData()} className="underline hover:text-foreground">{t("update")}</button>
               </p>
             </>
           ) : (
             <Card><CardContent className="pt-6 text-center text-muted-foreground">
-              Errore nel caricamento dei dati di input.
+              {t("pv_error_data")}
             </CardContent></Card>
           )}
         </TabsContent>
@@ -1010,8 +996,8 @@ export default function PianificazioneVendite() {
         <TabsContent value="listino">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-emerald-600" />Listino prezzi (€ per animale)</CardTitle>
-              <CardDescription>Gli animali sono venduti a numero. Imposta il prezzo per singolo animale per ciascuna taglia commerciale. Lascia vuoto (o 0) per non vendere quella taglia.</CardDescription>
+              <CardTitle className="text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-emerald-600" />{t("pv_listino_title")}</CardTitle>
+              <CardDescription>{t("pv_listino_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               {priceLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (
@@ -1034,7 +1020,7 @@ export default function PianificazioneVendite() {
                           data-testid={`input-price-${sz}`}
                         />
                         <Button size="sm" variant={dirty ? 'default' : 'ghost'} onClick={() => handleSavePrice(sz)} disabled={!dirty}>
-                          Salva
+                          {t("save")}
                         </Button>
                       </div>
                     );
@@ -1049,16 +1035,16 @@ export default function PianificazioneVendite() {
         <TabsContent value="cassa">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2"><Scale className="h-5 w-5 text-blue-600" />Budget cassa minimo (€/mese)</CardTitle>
-              <CardDescription>Imposta il ricavo minimo richiesto ogni mese per l'anno {year}. Lascia 0 per non vincolare.</CardDescription>
+              <CardTitle className="text-lg flex items-center gap-2"><Scale className="h-5 w-5 text-blue-600" />{t("pv_cassa_title")}</CardTitle>
+              <CardDescription>{t("pv_cassa_desc_pre")} {year}. {t("pv_cassa_desc_suf")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="mb-3 flex items-center gap-2">
-                <Label>Anno</Label>
+                <Label>{t("pv_label_anno")}</Label>
                 <Input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || currentYear)} className="w-32" />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {MONTHS_IT.map((label, i) => {
+                {MONTHS.map((label, i) => {
                   const month = i + 1;
                   const current = cashMap[month];
                   const editing = cashEdits[month];
@@ -1082,7 +1068,7 @@ export default function PianificazioneVendite() {
                         data-testid={`input-cash-${month}`}
                       />
                       <Button size="sm" variant={dirty ? 'default' : 'ghost'} onClick={() => handleSaveCash(month)} disabled={!dirty}>
-                        Salva
+                        {t("save")}
                       </Button>
                     </div>
                   );

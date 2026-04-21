@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useState, useCallback, useRef, useMemo } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { usePlanningLang, translateMonthLabel } from "@/lib/planningI18n";
 
 interface SizeMonthProjection {
   month: number;
@@ -101,6 +102,7 @@ interface SpreadsheetRow {
   bgClass: string;
   textClass: string;
   values: (number | string)[];
+  rowKey?: string;
   isNegative?: boolean;
   isBold?: boolean;
   isWarning?: (colIdx: number) => boolean;
@@ -121,6 +123,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   toast: any;
   allHatcheryData: any[];
 }) {
+  const { t } = usePlanningLang();
   const groupsAbove = data.groups.filter(g => g.alreadyAtTarget);
   const groupsBelow = data.groups.filter(g => !g.alreadyAtTarget);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -158,32 +161,36 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
 
   const rows: SpreadsheetRow[] = [
     {
-      label: "Giacenza lorda (inventario)",
-      tooltip: "Numero totale di animali presenti nell'inventario reale (cestelli attivi) che hanno raggiunto o superato la taglia target selezionata. Considera solo la crescita simulata dell'inventario esistente, senza includere arrivi futuri dallo schiuditoio.",
+      rowKey: "giac_inv",
+      label: t("pc_row_giacenza_lorda_inv"),
+      tooltip: t("pc_row_giacenza_lorda_inv_tip"),
       color: "#3b82f6",
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.giacenzaLordaInventario),
     },
     {
-      label: "Giacenza lorda (con schiuditoio)",
-      tooltip: "Numero totale di animali a taglia target includendo sia l'inventario reale sia il contributo degli arrivi pianificati dallo schiuditoio. Gli animali TP-300 inseriti come arrivi vengono simulati in crescita mese per mese usando SGR e mortalità, e conteggiati quando raggiungono la taglia target.",
+      rowKey: "giac_schiu",
+      label: t("pc_row_giacenza_lorda_schiu"),
+      tooltip: t("pc_row_giacenza_lorda_schiu_tip"),
       color: "#06b6d4",
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.giacenzaLordaConSchiuditoio),
     },
     {
-      label: "Perdite per mortalità",
-      tooltip: "Numero di animali persi nel mese a causa della mortalità. Calcolato come differenza tra il totale animali a inizio mese e il totale dopo la simulazione giorno per giorno. La mortalità NON viene applicata alla giacenza già pronta (animali già a taglia target). I tassi sono configurabili nella pagina Gestione Mortalità.",
+      rowKey: "perdite",
+      label: t("pc_row_perdite_mortalita"),
+      tooltip: t("pc_row_perdite_mortalita_tip"),
       color: "#dc2626",
       bgClass: "",
       textClass: "text-gray-600",
       values: mc.map(m => m.perditeMortalita || 0),
     },
     {
-      label: `Ordini clienti (Totale)`,
-      tooltip: `Somma di tutti gli ordini clienti per tutte le taglie nel mese. Clicca la freccia per espandere e vedere il dettaglio per singola taglia. Taglie presenti negli ordini: ${allOrderSizes.join(', ') || 'nessuna'}.`,
+      rowKey: "ordini",
+      label: t("pc_row_ordini_totale"),
+      tooltip: `${t("pc_row_ordini_totale_tip")} ${allOrderSizes.join(', ') || t("pc_none")}.`,
       color: "#ea580c",
       bgClass: "",
       textClass: "text-gray-800",
@@ -194,7 +201,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     },
     ...(ordersExpanded ? allOrderSizes.map(sz => ({
       label: `  ↳ ${sz}`,
-      tooltip: `Ordini clienti specifici per taglia ${sz}. Quantità richiesta per questo mese.`,
+      tooltip: `${t("pc_row_ordini_size_tip")} ${sz}.`,
       color: "#fb923c",
       bgClass: "bg-orange-50/50",
       textClass: "text-gray-600",
@@ -204,16 +211,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       groupKey: "ordini",
     })) : []),
     {
-      label: "Budget Produzione",
-      tooltip: "Obiettivo commerciale mensile pianificato (numero di animali). Usato come riferimento per valutare le performance di vendita, ma NON guida la simulazione: la domanda effettiva è determinata dagli ordini confermati, non dal budget.",
+      rowKey: "budget",
+      label: t("pc_row_budget"),
+      tooltip: t("pc_row_budget_tip"),
       color: "#f59e0b",
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.budgetProduzione),
     },
     {
-      label: `Domanda effettiva`,
-      tooltip: `Ordini clienti confermati per la taglia target (${data.targetSize}) nel mese. Questo valore guida i calcoli di evasione, arretrato e giacenza residua. Il budget produzione è un riferimento separato e non influenza la simulazione.`,
+      rowKey: "domanda",
+      label: t("pc_row_domanda_effettiva"),
+      tooltip: `${t("pc_row_domanda_effettiva_tip")} (${data.targetSize}).`,
       color: "#7c3aed",
       bgClass: "",
       textClass: "text-gray-900",
@@ -221,8 +230,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       isBold: true,
     },
     {
-      label: `Arretrato mese precedente`,
-      tooltip: `Ordini non evasi nei mesi precedenti per mancanza di prodotto, trascinati a questo mese per tentare di evaderli. Se presente, questi animali si sommano alla domanda del mese corrente nel tentativo di evasione.`,
+      rowKey: "arretrato",
+      label: t("pc_row_arretrato"),
+      tooltip: t("pc_row_arretrato_tip"),
       color: "#b91c1c",
       bgClass: "",
       textClass: "text-gray-600",
@@ -233,8 +243,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       },
     },
     {
-      label: `Ordini evadibili ${data.targetSize}`,
-      tooltip: `Quantità della domanda effettiva (+ arretrato) che può essere evasa con l'inventario disponibile (incluso schiuditoio). Verde = domanda completamente coperta. Rosso = copertura parziale, c'è un gap.`,
+      rowKey: "evadibili",
+      label: `${t("pc_row_evadibili")} ${data.targetSize}`,
+      tooltip: t("pc_row_evadibili_tip"),
       color: "#a855f7",
       bgClass: "",
       textClass: "text-gray-800",
@@ -251,8 +262,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       },
     },
     {
-      label: `Giacenza residua ${data.targetSize}`,
-      tooltip: `Animali rimasti dopo aver evaso gli ordini del mese. Calcolato come: Giacenza lorda (con schiuditoio) meno Ordini evadibili. Un valore positivo indica surplus disponibile. Un valore negativo indica carenza di stock.`,
+      rowKey: "giac_res",
+      label: `${t("pc_row_giacenza_residua")} ${data.targetSize}`,
+      tooltip: t("pc_row_giacenza_residua_tip"),
       color: "#16a34a",
       bgClass: "",
       textClass: "text-gray-900",
@@ -260,8 +272,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       isBold: true,
     },
     {
-      label: `Schiuditoio necessario ${data.targetSize}`,
-      tooltip: `Numero di animali TP-300 che devono ARRIVARE dallo schiuditoio in questo mese per poter crescere e coprire i gap degli ordini futuri. Il calcolo simula la crescita da TP-300 alla taglia target usando SGR e mortalità, e posiziona il fabbisogno nel mese di arrivo (non nel mese di consegna). Se il valore è 0, non ci sono gap futuri che richiedono arrivi in questo mese. Verde = gli arrivi pianificati superano il fabbisogno (surplus schiuditoio).`,
+      rowKey: "schiu_nec",
+      label: `${t("pc_row_schiu_necessario")} ${data.targetSize}`,
+      tooltip: t("pc_row_schiu_necessario_tip"),
       color: "#be185d",
       bgClass: "",
       textClass: "text-gray-600",
@@ -282,8 +295,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       },
     },
     {
-      label: "Arrivi Schiuditoio (TP-300)",
-      tooltip: "Quantità di animali TP-300 (~30M an/kg) pianificati in arrivo dallo schiuditoio per questo mese. Questi valori sono inseriti manualmente e vengono usati nella simulazione di crescita per calcolare il loro contributo futuro alla giacenza a taglia target. ⏱ = arrivi inseriti in questo mese non avranno tempo di crescere fino alla taglia target entro la fine della finestra di proiezione: aumenta l'orizzonte (selettore in alto) per vederne l'impatto.",
+      rowKey: "arrivi_schiu",
+      label: t("pc_row_arrivi_schiu"),
+      tooltip: t("pc_row_arrivi_schiu_tip"),
       color: "#10b981",
       bgClass: "",
       textClass: "text-gray-800",
@@ -292,7 +306,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         const m = mc[colIdx];
         return !!(m && m.arrivalTooLate && m.arriviSchiuditoio > 0);
       },
-      infoTooltip: "Gli animali aggiunti in questo mese non raggiungono la taglia target entro la fine della proiezione",
+      infoTooltip: t("pc_row_arrivi_schiu_late"),
     },
   ];
 
@@ -303,17 +317,17 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     const wb = new ExcelJS.Workbook();
     wb.creator = "FLUPSY Management";
     wb.created = new Date();
-    const ws = wb.addWorksheet("Scostamenti", {
+    const ws = wb.addWorksheet(t("pc_excel_s1_name"), {
       views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }]
     });
 
-    const titleRow = ws.addRow([`Scostamenti - Target ${data.targetSize}`]);
+    const titleRow = ws.addRow([`${t("pc_excel_s1_title_pre")} ${data.targetSize}`]);
     titleRow.font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
     ws.mergeCells(1, 1, 1, mc.length + 1);
     titleRow.alignment = { horizontal: "center", vertical: "middle" };
     titleRow.height = 30;
 
-    const headerLabels = ["INDICATORE", ...mc.map(m => m.monthLabel)];
+    const headerLabels = [t("pc_excel_indicator"), ...mc.map(m => m.monthLabel)];
     const headerRow = ws.addRow(headerLabels);
     headerRow.height = 24;
     headerRow.eachCell((cell, colNumber) => {
@@ -432,17 +446,17 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     // FOGLIO 2: Già a taglia target o superiore
     // ===========================================================
     if (groupsAbove.length > 0) {
-      const ws2 = wb.addWorksheet(`Già a ${data.targetSize}`, {
+      const ws2 = wb.addWorksheet(`${t("pc_excel_s2_name_pre")} ${data.targetSize}`, {
         views: [{ state: 'frozen', ySplit: 2 }]
       });
 
-      const t2 = ws2.addRow([`Già a taglia ${data.targetSize} o superiore`]);
+      const t2 = ws2.addRow([`${t("pc_excel_s2_title_pre")} ${data.targetSize} ${t("pc_excel_s2_title_suf")}`]);
       t2.font = { bold: true, size: 14, color: { argb: "FF166534" } };
       ws2.mergeCells(1, 1, 1, 4);
       t2.alignment = { horizontal: "center", vertical: "middle" };
       t2.height = 30;
 
-      const h2 = ws2.addRow(["Taglia Attuale", "Cestelli", "Quantità", "An/kg medio"]);
+      const h2 = ws2.addRow([t("pc_excel_col_taglia_attuale"), t("pc_excel_col_cestelli"), t("pc_excel_col_quantita"), t("pc_excel_col_ankg")]);
       h2.height = 24;
       h2.eachCell((cell) => {
         cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
@@ -471,7 +485,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       // Totale
       const totalQty = groupsAbove.reduce((s, g) => s + g.currentQuantity, 0);
       const totalBaskets = groupsAbove.reduce((s, g) => s + g.basketCount, 0);
-      const totRow = ws2.addRow(["TOTALE", totalBaskets, totalQty, ""]);
+      const totRow = ws2.addRow([t("pc_excel_totale"), totalBaskets, totalQty, ""]);
       totRow.eachCell((cell, colNumber) => {
         cell.border = thinBorder;
         cell.font = { bold: true, size: 11, color: { argb: "FF166534" } };
@@ -490,24 +504,24 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     // FOGLIO 3: Progressione mensile verso target
     // ===========================================================
     if (groupsBelow.length > 0) {
-      const ws3 = wb.addWorksheet("Progressione Mensile", {
+      const ws3 = wb.addWorksheet(t("pc_excel_s3_name"), {
         views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }]
       });
 
       const monthsHdr = groupsBelow[0]?.months || [];
       const colCount = 4 + monthsHdr.length;
 
-      const t3 = ws3.addRow([`Progressione mensile verso ${data.targetSize}`]);
+      const t3 = ws3.addRow([`${t("pc_excel_s3_title_pre")} ${data.targetSize}`]);
       t3.font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
       ws3.mergeCells(1, 1, 1, colCount);
       t3.alignment = { horizontal: "center", vertical: "middle" };
       t3.height = 30;
 
       const h3 = ws3.addRow([
-        "Taglia Attuale",
-        "Cestelli",
-        "Quantità",
-        "Raggiunge",
+        t("pc_excel_col_taglia_attuale"),
+        t("pc_excel_col_cestelli"),
+        t("pc_excel_col_quantita"),
+        t("pc_excel_col_raggiunge"),
         ...monthsHdr.map(m => m.monthLabel),
       ]);
       h3.height = 24;
@@ -523,7 +537,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           g.currentSize,
           g.basketCount,
           g.currentQuantity,
-          g.monthReached || "Non nel periodo",
+          g.monthReached || t("pc_excel_not_in_period"),
           ...g.months.map((m: any) => m.projectedSize || ""),
         ]);
         const stripe = idx % 2 === 0 ? white : lightGray;
@@ -566,17 +580,17 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     // FOGLIO 4: Arrivi Schiuditoio (Previsione vs Reale)
     // ===========================================================
     if (allHatcheryData.length > 0) {
-      const ws4 = wb.addWorksheet("Arrivi Schiuditoio", {
+      const ws4 = wb.addWorksheet(t("pc_excel_s4_name"), {
         views: [{ state: 'frozen', ySplit: 2 }]
       });
 
-      const t4 = ws4.addRow(["Arrivi Schiuditoio (TP-300) - Previsione vs Reale"]);
+      const t4 = ws4.addRow([t("pc_excel_s4_title")]);
       t4.font = { bold: true, size: 14, color: { argb: "FF047857" } };
       ws4.mergeCells(1, 1, 1, 6);
       t4.alignment = { horizontal: "center", vertical: "middle" };
       t4.height = 30;
 
-      const h4 = ws4.addRow(["Anno", "Mese", "Previsione", "Reale", "Effettivo", "Scostamento %"]);
+      const h4 = ws4.addRow([t("pc_excel_s4_col_anno"), t("pc_excel_s4_col_mese"), t("pc_excel_s4_col_prev"), t("pc_excel_s4_col_reale"), t("pc_excel_s4_col_eff"), t("pc_excel_s4_col_scost")]);
       h4.height = 24;
       h4.eachCell((cell) => {
         cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
@@ -628,7 +642,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       const totActual = sortedHatchery.reduce((s, h) => s + (h.actualQuantity ?? 0), 0);
       const totEffective = sortedHatchery.reduce((s, h) => s + (h.actualQuantity ?? h.quantity), 0);
       const totVariancePct = totForecast > 0 ? (totEffective - totForecast) / totForecast : 0;
-      const totRow = ws4.addRow(["", "TOTALE", totForecast, totActual, totEffective, totVariancePct]);
+      const totRow = ws4.addRow(["", t("pc_excel_totale"), totForecast, totActual, totEffective, totVariancePct]);
       totRow.eachCell((cell, colNumber) => {
         cell.border = thinBorder;
         cell.font = { bold: true, size: 11, color: { argb: "FF047857" } };
@@ -652,20 +666,20 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ProiezioneCrescita_${data.targetSize}.xlsx`;
+    a.download = `${t("pc_excel_filename_pre")}_${data.targetSize}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Esportato", description: "File Excel scaricato (4 fogli)" });
+    toast({ title: t("pc_excel"), description: t("pc_excel_filename_pre") + " .xlsx" });
   }, [mc, rows, data.targetSize, groupsAbove, groupsBelow, allHatcheryData]);
 
   const handleCopyTable = useCallback(() => {
-    const headers = ["Indicatore", ...mc.map(m => m.monthLabel)].join("\t");
+    const headers = [t("pc_col_indicatore"), ...mc.map(m => m.monthLabel)].join("\t");
     const dataRows = rows.map(row =>
       [row.label, ...row.values.map(v => typeof v === 'number' ? v : String(v))].join("\t")
     );
     const text = [headers, ...dataRows].join("\n");
     navigator.clipboard.writeText(text).then(() => {
-      toast({ title: "Copiato", description: "Tabella copiata negli appunti" });
+      toast({ title: t("pc_toast_copied_title"), description: t("pc_toast_copied_desc") });
     });
   }, [mc, rows]);
 
@@ -764,90 +778,90 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     if (row.isSubRow && row.subRowSize) {
       const qty = m.ordiniBySize?.[row.subRowSize] || 0;
       return qty > 0
-        ? `= Ordini clienti ${row.subRowSize} per ${m.monthName}: ${fn(qty)} animali`
-        : `= Nessun ordine ${row.subRowSize} per ${m.monthName}`;
+        ? `= ${t("pc_cf_sub_has_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}: ${fn(qty)} ${t("pc_cf_animali")}`
+        : `= ${t("pc_cf_sub_no_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}`;
     }
 
-    const label = row.label;
-    if (label.startsWith("Giacenza lorda (inventario)")) {
-      return `= Simulazione crescita SGR giorno per giorno (solo inventario reale) → animali con ≤${fn(data.targetMaxAnimalsPerKg)} an/kg = ${fn(m.giacenzaLordaInventario)}`;
+    const rk = row.rowKey;
+    if (rk === "giac_inv") {
+      return `${t("pc_cf_giac_inv_a")}${fn(data.targetMaxAnimalsPerKg)} ${t("pc_cf_giac_inv_b")} ${fn(m.giacenzaLordaInventario)}`;
     }
-    if (label.startsWith("Giacenza lorda (con schiuditoio)")) {
+    if (rk === "giac_schiu") {
       const diff = m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario;
       if (diff > 0) {
-        return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Contributo schiuditoio cresciuto (${fn(diff)}) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
+        return `${t("pc_cf_giac_schiu_diff_pre")}${fn(m.giacenzaLordaInventario)}${t("pc_cf_giac_schiu_diff_mid")}${fn(diff)}${t("pc_cf_giac_schiu_diff_suf")} ${fn(m.giacenzaLordaConSchiuditoio)}`;
       }
-      return `= Giacenza inventario (${fn(m.giacenzaLordaInventario)}) + Schiuditoio (non ancora a taglia) = ${fn(m.giacenzaLordaConSchiuditoio)}`;
+      return `${t("pc_cf_giac_schiu_nodiff_pre")}${fn(m.giacenzaLordaInventario)}${t("pc_cf_giac_schiu_nodiff_mid")} ${fn(m.giacenzaLordaConSchiuditoio)}`;
     }
-    if (label.startsWith("Perdite per mortalità")) {
+    if (rk === "perdite") {
       const perdite = m.perditeMortalita || 0;
       if (perdite > 0) {
-        return `= Animali persi nel mese per mortalità: ${fn(perdite)} (tassi applicati per taglia, esclusa giacenza già pronta)`;
+        return `${t("pc_cf_perdite_a")} ${fn(perdite)} ${t("pc_cf_perdite_a_suf")}`;
       }
-      return `= Nessuna perdita per mortalità in ${m.monthName}`;
+      return `${t("pc_cf_perdite_b")} ${m.monthName}`;
     }
-    if (label.startsWith("Ordini clienti")) {
+    if (rk === "ordini") {
       const tot = m.ordiniTotali || 0;
       if (tot > 0) {
         const breakdown = allOrderSizes
           .filter(sz => (m.ordiniBySize?.[sz] || 0) > 0)
           .map(sz => `${sz}: ${fn(m.ordiniBySize[sz])}`)
           .join(', ');
-        return `= Totale ordini tutte le taglie per ${m.monthName}: ${fn(tot)} animali (${breakdown})`;
+        return `${t("pc_cf_ordini_a_pre")} ${m.monthName}: ${fn(tot)} ${t("pc_cf_ordini_a_suf")} (${breakdown})`;
       }
-      return `= Nessun ordine clienti per ${m.monthName}`;
+      return `${t("pc_cf_ordini_b")} ${m.monthName}`;
     }
-    if (label === "Budget Produzione") {
+    if (rk === "budget") {
       return m.budgetProduzione > 0
-        ? `= Budget vendite pianificato per ${m.monthName}: ${fn(m.budgetProduzione)} animali`
-        : `= Nessun budget pianificato per ${m.monthName}`;
+        ? `${t("pc_cf_budget_a_pre")} ${m.monthName}: ${fn(m.budgetProduzione)} ${t("pc_cf_budget_a_suf")}`
+        : `${t("pc_cf_budget_b")} ${m.monthName}`;
     }
-    if (label === "Domanda effettiva") {
-      const budgetRef = m.budgetProduzione > 0 ? ` (Budget riferimento: ${fn(m.budgetProduzione)})` : '';
-      return `= Ordini ${data.targetSize} confermati: ${fn(m.domandaEffettiva)} animali${budgetRef}. Guida evasione, arretrato e giacenza residua.`;
+    if (rk === "domanda") {
+      const budgetRef = m.budgetProduzione > 0 ? ` ${t("pc_cf_domanda_bref")} ${fn(m.budgetProduzione)})` : '';
+      return `${t("pc_cf_domanda_pre")} ${data.targetSize} ${t("pc_cf_domanda_mid")} ${fn(m.domandaEffettiva)} ${t("pc_cf_animali")}${budgetRef}${t("pc_cf_domanda_suf")}`;
     }
-    if (label.startsWith("Arretrato mese precedente")) {
+    if (rk === "arretrato") {
       const arretrato = m.ordiniArretrati || 0;
       if (arretrato > 0) {
-        return `= Domanda non evasa trascinata dai mesi precedenti: ${fn(arretrato)} animali. Sommata alla domanda del mese (${fn(m.domandaEffettiva)}) = ${fn(m.domandaEffettiva + arretrato)} totale da evadere`;
+        return `${t("pc_cf_arretrato_a_pre")} ${fn(arretrato)} ${t("pc_cf_arretrato_a_mid")}${fn(m.domandaEffettiva)}) = ${fn(m.domandaEffettiva + arretrato)} ${t("pc_cf_animali")}`;
       }
-      return `= Nessun arretrato da mesi precedenti`;
+      return t("pc_cf_arretrato_b");
     }
-    if (label.startsWith("Ordini evadibili")) {
+    if (rk === "evadibili") {
       const totalDemand = m.domandaEffettiva + (m.ordiniArretrati || 0);
       if (m.ordiniEvasi > 0 && m.ordiniEvasi >= totalDemand) {
-        return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti (${fn(m.domandaEffettiva)} domanda + ${fn(m.ordiniArretrati || 0)} arretrato) → Copertura completa ✓`;
+        return `= ${fn(m.ordiniEvasi)} / ${fn(totalDemand)} ${t("pc_cf_evadibili_a_suf")}`;
       }
       if (m.ordiniEvasi > 0) {
         const nonEvasi = totalDemand - m.ordiniEvasi;
-        return `= ${fn(m.ordiniEvasi)} evadibili su ${fn(totalDemand)} richiesti → Mancano ${fn(nonEvasi)} animali (trascinati al mese successivo)`;
+        return `= ${fn(m.ordiniEvasi)} / ${fn(totalDemand)} ${t("pc_cf_evadibili_b_suf")} ${fn(nonEvasi)} ${t("pc_cf_evadibili_b_end")}`;
       }
       if (totalDemand > 0) {
-        return `= 0 evadibili su ${fn(totalDemand)} richiesti → ${fn(totalDemand)} animali trascinati al mese successivo`;
+        return `= 0 / ${fn(totalDemand)} → ${fn(totalDemand)} ${t("pc_cf_evadibili_c_suf")}`;
       }
-      return `= Nessuna domanda per ${m.monthName}`;
+      return `${t("pc_cf_evadibili_d")} ${m.monthName}`;
     }
-    if (label.startsWith("Giacenza residua")) {
-      return `= Giacenza lorda con schiuditoio (${fn(m.giacenzaLordaConSchiuditoio)}) - Ordini evadibili (${fn(m.ordiniEvasi)}) = ${fn(m.giacenzaNetTarget)}`;
+    if (rk === "giac_res") {
+      return `${t("pc_cf_giac_res_pre")}${fn(m.giacenzaLordaConSchiuditoio)}${t("pc_cf_giac_res_mid")}${fn(m.ordiniEvasi)}${t("pc_cf_giac_res_suf")} ${fn(m.giacenzaNetTarget)}`;
     }
-    if (label.startsWith("Schiuditoio necessario")) {
+    if (rk === "schiu_nec") {
       const necessario = m.schiuditoioNecessario || 0;
       const arrivi = m.arriviSchiuditoio || 0;
       if (arrivi > necessario) {
         const surplus = arrivi - necessario;
         return necessario > 0
-          ? `= Surplus schiuditoio: ${fn(arrivi)} arrivi pianificati vs ${fn(necessario)} necessari → +${fn(surplus)} animali in eccesso`
-          : `= Surplus schiuditoio: ${fn(arrivi)} arrivi pianificati, nessun fabbisogno proiettato in ${m.monthName} → +${fn(arrivi)} animali in eccesso`;
+          ? `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_a_mid")} ${fn(necessario)} ${t("pc_cf_schiu_surplus_a_suf")}${fn(surplus)} ${t("pc_cf_schiu_surplus_a_end")}`
+          : `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_mid")} ${m.monthName} → +${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_end")}`;
       }
       if (necessario > 0) {
-        return `= TP-300 che devono arrivare in ${m.monthName} per crescere fino a ${data.targetSize} e coprire gap futuri = ${fn(necessario)} animali (gap ÷ fattore sopravvivenza SGR + mortalità)${arrivi > 0 ? ` — già pianificati ${fn(arrivi)}, mancano ancora ${fn(necessario - arrivi)}` : ''}`;
+        return `${t("pc_cf_schiu_nec_pre")} ${m.monthName} ${t("pc_cf_schiu_nec_mid")} ${data.targetSize} ${t("pc_cf_schiu_nec_suf")} ${fn(necessario)} ${t("pc_cf_schiu_nec_end")}${arrivi > 0 ? ` ${t("pc_cf_schiu_nec_planned")} ${fn(arrivi)}, ${t("pc_cf_schiu_nec_missing")} ${fn(necessario - arrivi)}` : ''}`;
       }
-      return `= Nessun arrivo TP-300 necessario in ${m.monthName}`;
+      return `${t("pc_cf_schiu_nec_none")} ${m.monthName}`;
     }
-    if (label.startsWith("Arrivi Schiuditoio")) {
+    if (rk === "arrivi_schiu") {
       return m.arriviSchiuditoio > 0
-        ? `= Arrivo schiuditoio pianificato: ${fn(m.arriviSchiuditoio)} animali (taglia TP-300, ~30M an/kg)`
-        : `= Nessun arrivo schiuditoio pianificato per ${m.monthName}`;
+        ? `${t("pc_cf_arrivi_a_pre")} ${fn(m.arriviSchiuditoio)} ${t("pc_cf_arrivi_a_suf")}`
+        : `${t("pc_cf_arrivi_b")} ${m.monthName}`;
     }
     return "";
   };
@@ -861,11 +875,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Grid3X3 className="h-4 w-4 text-green-700" />
-            <CardTitle className="text-sm font-semibold text-green-800">Tabella Riepilogativa Mensile</CardTitle>
+            <CardTitle className="text-sm font-semibold text-green-800">{t("pc_table_title")}</CardTitle>
           </div>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleCopyTable}>
-              <Copy className="h-3 w-3" /> Copia
+              <Copy className="h-3 w-3" /> {t("pc_copy")}
             </Button>
             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-green-700" onClick={handleExportExcel}>
               <Download className="h-3 w-3" /> Excel
@@ -890,27 +904,27 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
               <span className="text-blue-200">│</span>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 flex-1">
                 <span className="inline-flex items-center gap-1">
-                  <span className="text-gray-500 font-medium">Somma:</span>
+                  <span className="text-gray-500 font-medium">{t("pc_sum")}</span>
                   <span className="font-mono font-bold text-blue-800">{formatNumber(multiCellStats.somma)}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <span className="text-gray-500 font-medium">Media:</span>
+                  <span className="text-gray-500 font-medium">{t("pc_avg")}</span>
                   <span className="font-mono font-bold text-blue-800">{formatNumber(Math.round(multiCellStats.media))}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <span className="text-gray-500 font-medium">Conteggio:</span>
+                  <span className="text-gray-500 font-medium">{t("pc_count")}</span>
                   <span className="font-mono font-bold text-blue-800">{multiCellStats.conteggio}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <span className="text-gray-500 font-medium">Min:</span>
+                  <span className="text-gray-500 font-medium">{t("pc_min")}</span>
                   <span className="font-mono font-bold text-blue-800">{formatNumber(multiCellStats.minimo)}</span>
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <span className="text-gray-500 font-medium">Max:</span>
+                  <span className="text-gray-500 font-medium">{t("pc_max")}</span>
                   <span className="font-mono font-bold text-blue-800">{formatNumber(multiCellStats.massimo)}</span>
                 </span>
                 <span className="inline-flex items-center gap-1 text-gray-400">
-                  ({multiCellStats.celle} celle)
+                  ({multiCellStats.celle} {t("pc_cells")})
                 </span>
               </div>
             </div>
@@ -918,7 +932,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         )}
       </CardHeader>
       <div className="px-3 pb-1">
-        <p className="text-[10px] text-gray-400 italic">Ctrl+click per selezionare più celle · Shift+click per selezionare un intervallo</p>
+        <p className="text-[10px] text-gray-400 italic">{t("pc_ctrl_hint")}</p>
       </div>
       <CardContent className="p-0">
         <div className="overflow-x-auto border-t border-gray-300">
@@ -1017,7 +1031,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                                   <span className="text-amber-600 cursor-help text-[11px]" title={row.infoTooltip || ""}>⏱</span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-xs text-xs p-2 bg-amber-900 text-white border border-amber-700">
-                                  {row.infoTooltip || "Arrivi tardivi: gli animali non maturano in tempo."}
+                                  {row.infoTooltip || t("pc_late_arrivals_tip")}
                                 </TooltipContent>
                               </Tooltip>
                             )}
@@ -1076,6 +1090,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
 
 export default function ProiezioneCrescita() {
   const { toast } = useToast();
+  const { lang, setLang, t } = usePlanningLang();
+  const monthNames = lang === 'it'
+    ? ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"]
+    : ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const [showHatcheryForm, setShowHatcheryForm] = useState(false);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
   const [hatcheryInputs, setHatcheryInputs] = useState<Record<string, string>>({});
@@ -1210,15 +1228,15 @@ export default function ProiezioneCrescita() {
         `/api/proiezione-crescita/hatchery-arrivals/calculate-actual?year=${year}&month=${month}`,
         { credentials: "include" }
       );
-      if (!res.ok) throw new Error("Errore calcolo");
+      if (!res.ok) throw new Error(t("pc_err_calc"));
       const data = await res.json();
       setActualInputs(prev => ({ ...prev, [key]: String(data.totalAnimals) }));
       toast({
-        title: "Calcolato dai lotti",
-        description: `${data.lotCount} lotti, totale ${formatNumber(data.totalAnimals)} animali. Premi salvataggio per consolidare.`,
+        title: t("pc_toast_calc_title"),
+        description: `${data.lotCount} ${t("pc_toast_calc_desc").replace("{n}", formatNumber(data.totalAnimals))}`,
       });
     } catch (e) {
-      toast({ title: "Errore", description: "Impossibile calcolare il reale", variant: "destructive" });
+      toast({ title: t("pc_toast_calc_err_title"), description: t("pc_toast_calc_err_desc"), variant: "destructive" });
     } finally {
       setCalculatingActual(null);
     }
@@ -1313,16 +1331,22 @@ export default function ProiezioneCrescita() {
         <div className="flex items-center gap-3">
           <TrendingUp className="h-7 w-7 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Proiezione Crescita verso {data.targetSize}</h1>
+            <h1 className="text-2xl font-bold">{t("pc_header_title_pre")} {data.targetSize}</h1>
             <p className="text-sm text-muted-foreground">
-              Progressione {monthsHorizon} mesi con ordini (sottratti dalla giacenza), budget e arrivi schiuditoio
+              {t("pc_header_subtitle_pre")} {monthsHorizon} {t("pc_header_subtitle_suf")}
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2 shrink-0">
-          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-          Aggiorna
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex rounded-md overflow-hidden border text-xs font-medium">
+            <button onClick={() => setLang("it")} className={`px-2 py-1 ${lang === "it" ? "bg-primary text-primary-foreground" : "bg-white text-muted-foreground hover:bg-muted"}`}>IT</button>
+            <button onClick={() => setLang("en")} className={`px-2 py-1 ${lang === "en" ? "bg-primary text-primary-foreground" : "bg-white text-muted-foreground hover:bg-muted"}`}>EN</button>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+            {t("pc_btn_aggiorna")}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1330,7 +1354,7 @@ export default function ProiezioneCrescita() {
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
               <Target className="h-4 w-4" />
-              Giacenza Totale
+              {t("pc_kpi_giacenza_tot")}
             </div>
             <div className="text-2xl font-bold">{formatNumber(data.totalCurrentQuantity)}</div>
           </CardContent>
@@ -1339,7 +1363,7 @@ export default function ProiezioneCrescita() {
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-green-700 mb-1">
               <CheckCircle2 className="h-4 w-4" />
-              Già a {data.targetSize}+
+              {t("pc_kpi_gia_target")} {data.targetSize}+
             </div>
             <div className="text-2xl font-bold text-green-700">{formatNumber(data.totalAlreadyAtTarget)}</div>
           </CardContent>
@@ -1348,7 +1372,7 @@ export default function ProiezioneCrescita() {
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-amber-700 mb-1">
               <Clock className="h-4 w-4" />
-              In crescita
+              {t("pc_kpi_in_crescita")}
             </div>
             <div className="text-2xl font-bold text-amber-700">{formatNumber(data.totalNotYetAtTarget)}</div>
           </CardContent>
@@ -1365,13 +1389,13 @@ export default function ProiezioneCrescita() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1.5 border rounded-md px-2 py-1 bg-white text-xs text-gray-700">
           <CalendarDays className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-          <span className="text-gray-500 shrink-0">Avvio:</span>
+          <span className="text-gray-500 shrink-0">{t("pc_controls_avvio")}</span>
           <select
             value={startMonth}
             onChange={e => setStartMonth(Number(e.target.value))}
             className="border-0 bg-transparent text-xs font-medium focus:outline-none cursor-pointer pr-1"
           >
-            {["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"].map((name, i) => (
+            {monthNames.map((name, i) => (
               <option key={i+1} value={i+1}>{name}</option>
             ))}
           </select>
@@ -1385,15 +1409,14 @@ export default function ProiezioneCrescita() {
             ))}
           </select>
           <span className="text-gray-300 mx-1">|</span>
-          <span className="text-gray-500 shrink-0">Orizzonte:</span>
+          <span className="text-gray-500 shrink-0">{t("pc_controls_orizzonte")}</span>
           <select
             value={monthsHorizon}
             onChange={e => setMonthsHorizon(Number(e.target.value))}
             className="border-0 bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
-            title="Numero di mesi proiettati. Aumenta per vedere l'impatto degli arrivi tardivi."
           >
             {[12, 15, 18, 24, 30, 36].map(h => (
-              <option key={h} value={h}>{h} mesi</option>
+              <option key={h} value={h}>{h} {t("pc_controls_mesi")}</option>
             ))}
           </select>
         </div>
@@ -1404,7 +1427,7 @@ export default function ProiezioneCrescita() {
           onClick={() => setShowBudgetForm(!showBudgetForm)}
         >
           <DollarSign className="h-3.5 w-3.5" />
-          Budget Produzione
+          {t("pc_btn_budget")}
         </Button>
         <Button
           variant={showHatcheryForm ? "default" : "outline"}
@@ -1413,7 +1436,7 @@ export default function ProiezioneCrescita() {
           onClick={() => setShowHatcheryForm(!showHatcheryForm)}
         >
           <Plus className="h-3.5 w-3.5" />
-          Arrivi Schiuditoio
+          {t("pc_btn_schiu")}
         </Button>
       </div>
 
@@ -1549,7 +1572,7 @@ export default function ProiezioneCrescita() {
                             variant="ghost"
                             size="icon"
                             className="h-5 w-5 text-red-400 hover:text-red-600"
-                            title="Elimina previsione"
+                            title={t("pc_btn_delete_forecast")}
                             onClick={() => deleteHatchery.mutate(existing.id)}
                           >
                             <Trash2 className="h-3 w-3" />
@@ -1570,7 +1593,7 @@ export default function ProiezioneCrescita() {
                             className="h-6 w-6 text-emerald-600"
                             onClick={() => handleSaveHatchery(year, month)}
                             disabled={!hatcheryInputs[inputKey] || parseInt(hatcheryInputs[inputKey]) <= 0}
-                            title="Salva previsione"
+                            title={t("pc_btn_save_forecast")}
                           >
                             <Save className="h-3 w-3" />
                           </Button>
@@ -1580,7 +1603,7 @@ export default function ProiezioneCrescita() {
 
                     {/* REALE */}
                     <div className="flex items-center gap-1">
-                      <span className="text-[10px] uppercase font-semibold text-blue-600 w-12">Reale</span>
+                      <span className="text-[10px] uppercase font-semibold text-blue-600 w-12">{t("pc_label_reale")}</span>
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -1600,7 +1623,7 @@ export default function ProiezioneCrescita() {
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6 text-purple-600"
-                        title="Calcola dai lotti del mese"
+                        title={t("pc_btn_calc_lots")}
                         onClick={() => handleCalculateActual(year, month)}
                         disabled={isCalculating}
                       >
@@ -1610,7 +1633,7 @@ export default function ProiezioneCrescita() {
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6 text-blue-600"
-                        title="Salva reale"
+                        title={t("pc_btn_save_real")}
                         onClick={() => handleSaveActual(year, month)}
                         disabled={
                           actualInputs[inputKey] === undefined ||
@@ -1625,7 +1648,7 @@ export default function ProiezioneCrescita() {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 text-gray-400 hover:text-red-500"
-                          title="Rimuovi consolidamento (torna alla previsione)"
+                          title={t("pc_btn_remove_lock")}
                           onClick={() => {
                             clearActual.mutate(existing.id);
                             setActualInputs(prev => {
@@ -1652,9 +1675,9 @@ export default function ProiezioneCrescita() {
         <Card className="border-green-200">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg text-green-700">
-              Già a taglia {data.targetSize} o superiore
+              {t("pc_section_gia_pre")} {data.targetSize} {t("pc_section_gia_suf")}
               <span className="ml-3 text-base font-normal text-gray-600">
-                Totale: <span className="font-semibold text-green-700">{formatNumber(groupsAbove.reduce((sum, g) => sum + g.currentQuantity, 0))}</span>
+                {t("pc_section_totale")} <span className="font-semibold text-green-700">{formatNumber(groupsAbove.reduce((sum, g) => sum + g.currentQuantity, 0))}</span>
               </span>
             </CardTitle>
           </CardHeader>
@@ -1663,10 +1686,10 @@ export default function ProiezioneCrescita() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-green-50">
-                    <th className="text-left p-2 font-semibold">Taglia Attuale</th>
-                    <th className="text-right p-2 font-semibold">Cestelli</th>
-                    <th className="text-right p-2 font-semibold">Quantità</th>
-                    <th className="text-right p-2 font-semibold">An/kg medio</th>
+                    <th className="text-left p-2 font-semibold">{t("pc_excel_col_taglia_attuale")}</th>
+                    <th className="text-right p-2 font-semibold">{t("pc_excel_col_cestelli")}</th>
+                    <th className="text-right p-2 font-semibold">{t("pc_excel_col_quantita")}</th>
+                    <th className="text-right p-2 font-semibold">{t("pc_excel_col_ankg")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1689,10 +1712,10 @@ export default function ProiezioneCrescita() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">
-              Progressione mensile verso {data.targetSize}
+              {t("pc_section_prog_pre")} {data.targetSize}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Per ogni taglia attuale, la taglia proiettata mese per mese
+              {t("pc_section_prog_desc")}
             </p>
           </CardHeader>
           <CardContent>
@@ -1701,10 +1724,10 @@ export default function ProiezioneCrescita() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-semibold sticky left-0 bg-muted/50 z-10 min-w-[100px]">Taglia Attuale</th>
-                      <th className="text-right p-2 font-semibold min-w-[80px]">Cestelli</th>
-                      <th className="text-right p-2 font-semibold min-w-[100px]">Quantità</th>
-                      <th className="text-center p-2 font-semibold min-w-[110px]">Raggiunge</th>
+                      <th className="text-left p-2 font-semibold sticky left-0 bg-muted/50 z-10 min-w-[100px]">{t("pc_excel_col_taglia_attuale")}</th>
+                      <th className="text-right p-2 font-semibold min-w-[80px]">{t("pc_excel_col_cestelli")}</th>
+                      <th className="text-right p-2 font-semibold min-w-[100px]">{t("pc_excel_col_quantita")}</th>
+                      <th className="text-center p-2 font-semibold min-w-[110px]">{t("pc_col_raggiunge")}</th>
                       {groupsBelow[0]?.months.map((m, i) => (
                         <th key={i} className="text-center p-2 font-semibold min-w-[90px]">{m.monthLabel}</th>
                       ))}
@@ -1724,7 +1747,7 @@ export default function ProiezioneCrescita() {
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                              Non nel periodo
+                              {t("pc_not_in_period")}
                             </span>
                           )}
                         </td>
@@ -1742,10 +1765,10 @@ export default function ProiezioneCrescita() {
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p className="font-semibold">{m.monthName}</p>
-                                  <p>Taglia: {m.projectedSize}</p>
-                                  <p>An/kg: {formatNumber(m.avgAnimalsPerKg)}</p>
-                                  <p>Quantità: {formatNumber(m.quantity)}</p>
-                                  {reached && <p className="text-green-600 font-semibold">Target {data.targetSize} raggiunto!</p>}
+                                  <p>{t("pc_tooltip_taglia")} {m.projectedSize}</p>
+                                  <p>{t("pc_tooltip_ankg")} {formatNumber(m.avgAnimalsPerKg)}</p>
+                                  <p>{t("pc_tooltip_quantita")} {formatNumber(m.quantity)}</p>
+                                  {reached && <p className="text-green-600 font-semibold">Target {data.targetSize} {t("pc_tooltip_target_ok")}</p>}
                                 </TooltipContent>
                               </Tooltip>
                             </td>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { usePlanningLang } from "@/lib/planningI18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +104,7 @@ function getCoverageText(pct: number): string {
 export default function VerificaCoperturaOrdini() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const { lang, setLang, t } = usePlanningLang();
 
   const { data, isLoading, error } = useQuery<CoverageResult>({
     queryKey: ["/api/verifica-copertura", year],
@@ -152,25 +154,25 @@ export default function VerificaCoperturaOrdini() {
     const ExcelModule = (ExcelJS as any).default || ExcelJS;
     const wb = new ExcelModule.Workbook();
 
-    const wsOverview = wb.addWorksheet("Riepilogo Mensile");
+    const wsOverview = wb.addWorksheet(t("vco_excel_sheet1"));
     wsOverview.columns = [
-      { header: "Mese", key: "mese", width: 14 },
-      { header: "Giacenza Disponibile", key: "giacenza", width: 22 },
-      { header: "Ordini", key: "ordini", width: 16 },
-      { header: "Soddisfatti", key: "soddisfatti", width: 16 },
-      { header: "Gap", key: "gap", width: 14 },
-      { header: "Copertura %", key: "copertura", width: 14 },
-      { header: "Giacenza Residua", key: "residua", width: 20 },
+      { header: t("vco_excel_col_mese"), key: "mese", width: 14 },
+      { header: t("vco_excel_col_giacenza"), key: "giacenza", width: 22 },
+      { header: t("vco_excel_col_ordini"), key: "ordini", width: 16 },
+      { header: t("vco_excel_col_soddisfatti"), key: "soddisfatti", width: 16 },
+      { header: t("vco_excel_col_gap"), key: "gap", width: 14 },
+      { header: t("vco_excel_col_copertura"), key: "copertura", width: 14 },
+      { header: t("vco_excel_col_residua"), key: "residua", width: 20 },
     ];
-    data.timeline.forEach(t => {
+    data.timeline.forEach(snap => {
       wsOverview.addRow({
-        mese: t.monthName,
-        giacenza: t.totaleGiacenzaPre,
-        ordini: t.totaleOrdini,
-        soddisfatti: t.totaleSoddisfatti,
-        gap: t.totaleGap,
-        copertura: t.coperturaPctGlobale,
-        residua: t.totaleGiacenzaPost,
+        mese: snap.monthName,
+        giacenza: snap.totaleGiacenzaPre,
+        ordini: snap.totaleOrdini,
+        soddisfatti: snap.totaleSoddisfatti,
+        gap: snap.totaleGap,
+        copertura: snap.coperturaPctGlobale,
+        residua: snap.totaleGiacenzaPost,
       });
     });
     styleSheet(wsOverview);
@@ -181,7 +183,7 @@ export default function VerificaCoperturaOrdini() {
       return numA - numB;
     });
 
-    const wsDetail = wb.addWorksheet("Dettaglio Taglie");
+    const wsDetail = wb.addWorksheet(t("vco_excel_sheet2"));
 
     const sectionFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
     const sectionFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 12 };
@@ -192,7 +194,7 @@ export default function VerificaCoperturaOrdini() {
       titleRow.fill = sectionFill;
       wsDetail.mergeCells(titleRow.number, 1, titleRow.number, sizesWithData.length + 1);
 
-      const headerRow = wsDetail.addRow(["Mese", ...sizesWithData]);
+      const headerRow = wsDetail.addRow([t("vco_excel_col_mese"), ...sizesWithData]);
       headerRow.font = headerFont;
       headerRow.fill = headerFill;
       headerRow.eachCell(cell => {
@@ -200,12 +202,12 @@ export default function VerificaCoperturaOrdini() {
         cell.alignment = { horizontal: "center" };
       });
 
-      data.timeline.forEach(t => {
+      data.timeline.forEach(snap => {
         const vals = sizesWithData.map(size => {
-          const cell = t.perTaglia[size];
+          const cell = snap.perTaglia[size];
           return cell ? (cell[metric] || 0) : 0;
         });
-        const row = wsDetail.addRow([t.monthName, ...vals]);
+        const row = wsDetail.addRow([snap.monthName, ...vals]);
         row.eachCell((cell, colNumber) => {
           cell.border = borderStyle;
           if (colNumber > 1) {
@@ -223,24 +225,24 @@ export default function VerificaCoperturaOrdini() {
       wsDetail.getColumn(i + 2).width = 14;
     });
 
-    addSection("GIACENZA DISPONIBILE", "giacenzaPre");
-    addSection("ORDINI", "ordini");
-    addSection("SODDISFATTI", "soddisfatti");
-    addSection("GAP", "gap");
+    addSection(t("vco_excel_sec_giacenza"), "giacenzaPre");
+    addSection(t("vco_excel_sec_ordini"), "ordini");
+    addSection(t("vco_excel_sec_soddisfatti"), "soddisfatti");
+    addSection(t("vco_excel_sec_gap"), "gap");
 
     if (data.ordiniDettaglio.length > 0) {
-      const wsOrdini = wb.addWorksheet("Ordini Dettaglio");
+      const wsOrdini = wb.addWorksheet(t("vco_excel_sheet3"));
       wsOrdini.columns = [
-        { header: "ID Ordine", key: "id", width: 10 },
-        { header: "Cliente", key: "cliente", width: 25 },
-        { header: "Taglia", key: "taglia", width: 12 },
-        { header: "Taglia Vendita", key: "saleSize", width: 14 },
-        { header: "Quantità Totale", key: "qty", width: 18 },
-        { header: "Quantità/Mese", key: "qtyMese", width: 16 },
-        { header: "Mesi", key: "mesi", width: 8 },
-        { header: "Data Inizio", key: "inizio", width: 14 },
-        { header: "Data Fine", key: "fine", width: 14 },
-        { header: "Stato", key: "stato", width: 14 },
+        { header: t("vco_excel_col_id"), key: "id", width: 10 },
+        { header: t("vco_excel_col_cliente"), key: "cliente", width: 25 },
+        { header: t("vco_excel_col_taglia"), key: "taglia", width: 12 },
+        { header: t("vco_excel_col_salesize"), key: "saleSize", width: 14 },
+        { header: t("vco_excel_col_qtytot"), key: "qty", width: 18 },
+        { header: t("vco_excel_col_qtymese"), key: "qtyMese", width: 16 },
+        { header: t("vco_excel_col_mesi"), key: "mesi", width: 8 },
+        { header: t("vco_excel_col_inizio"), key: "inizio", width: 14 },
+        { header: t("vco_excel_col_fine"), key: "fine", width: 14 },
+        { header: t("vco_excel_col_stato"), key: "stato", width: 14 },
       ];
       data.ordiniDettaglio.forEach(o => {
         wsOrdini.addRow({
@@ -274,7 +276,7 @@ export default function VerificaCoperturaOrdini() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-600" />
-          <p className="text-muted-foreground">Simulazione in corso...</p>
+          <p className="text-muted-foreground">{t("vco_loading")}</p>
         </div>
       </div>
     );
@@ -285,20 +287,20 @@ export default function VerificaCoperturaOrdini() {
       <div className="p-6">
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
-            <p className="text-red-700">Errore nel caricamento dei dati di copertura.</p>
+            <p className="text-red-700">{t("vco_error")}</p>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const chartData = data.timeline.map(t => ({
-    name: t.monthShort,
-    giacenza: t.totaleGiacenzaPre,
-    ordini: t.totaleOrdini,
-    soddisfatti: t.totaleSoddisfatti,
-    gap: t.totaleGap,
-    copertura: t.coperturaPctGlobale,
+  const chartData = data.timeline.map(snap => ({
+    name: snap.monthShort,
+    giacenza: snap.totaleGiacenzaPre,
+    ordini: snap.totaleOrdini,
+    soddisfatti: snap.totaleSoddisfatti,
+    gap: snap.totaleGap,
+    copertura: snap.coperturaPctGlobale,
   }));
 
   const sizesWithOrders = Object.entries(data.riepilogoPerTaglia)
@@ -322,13 +324,17 @@ export default function VerificaCoperturaOrdini() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ShieldCheck className="h-7 w-7 text-blue-600" />
-            Verifica Copertura Ordini
+            {t("vco_title")}
           </h1>
           <p className="text-muted-foreground mt-1">
-            Simulazione dinamica: giacenze crescono, ordini si soddisfano, gap emergono
+            {t("vco_subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center rounded-md border overflow-hidden text-xs font-semibold">
+            <button onClick={() => setLang("it")} className={`px-2 py-1 transition-colors ${lang === "it" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>IT</button>
+            <button onClick={() => setLang("en")} className={`px-2 py-1 transition-colors ${lang === "en" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>EN</button>
+          </div>
           <Select value={year.toString()} onValueChange={(v) => setYear(parseInt(v))}>
             <SelectTrigger className="w-[100px]">
               <SelectValue />
@@ -341,7 +347,7 @@ export default function VerificaCoperturaOrdini() {
           </Select>
           <Button onClick={exportExcel} className="gap-2 bg-black hover:bg-gray-800 text-white">
             <Download className="h-4 w-4" />
-            Excel
+            {t("excel")}
           </Button>
         </div>
       </div>
@@ -351,7 +357,7 @@ export default function VerificaCoperturaOrdini() {
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2 text-yellow-800">
               <AlertTriangle className="h-5 w-5" />
-              <span className="font-medium">Database esterno non disponibile. La simulazione usa solo la giacenza attuale senza ordini.</span>
+              <span className="font-medium">{t("vco_db_na")}</span>
             </div>
           </CardContent>
         </Card>
@@ -360,50 +366,50 @@ export default function VerificaCoperturaOrdini() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="border-blue-200">
           <CardContent className="pt-4 pb-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">Giacenza Attuale</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">{t("vco_kpi_giacenza")}</div>
             <div className="text-2xl font-bold text-blue-700 mt-1">{formatNumber(data.kpi.totaleGiacenzaIniziale)}</div>
-            <div className="text-xs text-muted-foreground">animali totali</div>
+            <div className="text-xs text-muted-foreground">{t("vco_kpi_giacenza_sub")}</div>
           </CardContent>
         </Card>
 
         <Card className="border-purple-200">
           <CardContent className="pt-4 pb-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">Ordini Anno</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">{t("vco_kpi_ordini")}</div>
             <div className="text-2xl font-bold text-purple-700 mt-1">{formatNumber(data.kpi.totaleOrdiniAnno)}</div>
-            <div className="text-xs text-muted-foreground">da soddisfare</div>
+            <div className="text-xs text-muted-foreground">{t("vco_kpi_ordini_sub")}</div>
           </CardContent>
         </Card>
 
         <Card className={`border-2 ${data.kpi.coperturaPctGlobale >= 100 ? "border-emerald-300" : data.kpi.coperturaPctGlobale >= 75 ? "border-yellow-300" : "border-red-300"}`}>
           <CardContent className="pt-4 pb-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">Copertura</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">{t("vco_kpi_copertura")}</div>
             <div className={`text-2xl font-bold mt-1 ${data.kpi.coperturaPctGlobale >= 100 ? "text-emerald-700" : data.kpi.coperturaPctGlobale >= 75 ? "text-yellow-700" : "text-red-700"}`}>
               {data.kpi.coperturaPctGlobale}%
             </div>
-            <div className="text-xs text-muted-foreground">{formatNumber(data.kpi.totaleSoddisfacibili)} soddisfacibili</div>
+            <div className="text-xs text-muted-foreground">{formatNumber(data.kpi.totaleSoddisfacibili)} {t("vco_kpi_soddisfatti_sub")}</div>
           </CardContent>
         </Card>
 
         <Card className={data.kpi.totaleGap > 0 ? "border-red-200" : "border-emerald-200"}>
           <CardContent className="pt-4 pb-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">Gap Totale</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">{t("vco_kpi_gap")}</div>
             <div className={`text-2xl font-bold mt-1 ${data.kpi.totaleGap > 0 ? "text-red-700" : "text-emerald-700"}`}>
               {data.kpi.totaleGap > 0 ? formatNumber(data.kpi.totaleGap) : "0"}
             </div>
-            <div className="text-xs text-muted-foreground">{data.kpi.totaleGap > 0 ? "animali mancanti" : "nessun gap"}</div>
+            <div className="text-xs text-muted-foreground">{data.kpi.totaleGap > 0 ? t("vco_kpi_gap_pos") : t("vco_kpi_gap_neg")}</div>
           </CardContent>
         </Card>
 
         <Card className="border-gray-200">
           <CardContent className="pt-4 pb-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">Mesi</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">{t("vco_kpi_mesi")}</div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-lg font-bold text-emerald-600">{data.kpi.mesiOk}</span>
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               <span className="text-lg font-bold text-red-600 ml-1">{data.kpi.mesiCritici}</span>
               <XCircle className="h-4 w-4 text-red-500" />
             </div>
-            <div className="text-xs text-muted-foreground">ok / critici</div>
+            <div className="text-xs text-muted-foreground">{t("vco_kpi_mesi_sub")}</div>
           </CardContent>
         </Card>
       </div>
@@ -412,15 +418,15 @@ export default function VerificaCoperturaOrdini() {
         <TabsList className="grid w-full grid-cols-3 max-w-md">
           <TabsTrigger value="overview" className="gap-1.5">
             <BarChart3 className="h-4 w-4" />
-            Panoramica
+            {t("vco_tab_overview")}
           </TabsTrigger>
           <TabsTrigger value="detail" className="gap-1.5">
             <Eye className="h-4 w-4" />
-            Dettaglio
+            {t("vco_tab_detail")}
           </TabsTrigger>
           <TabsTrigger value="orders" className="gap-1.5">
             <Package className="h-4 w-4" />
-            Ordini
+            {t("vco_tab_orders")}
           </TabsTrigger>
         </TabsList>
 
@@ -429,7 +435,7 @@ export default function VerificaCoperturaOrdini() {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-blue-600" />
-                Evoluzione Mensile
+                {t("vco_chart_title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -440,13 +446,13 @@ export default function VerificaCoperturaOrdini() {
                   <YAxis tickFormatter={(v: number) => formatNumber(v)} tick={{ fontSize: 11 }} />
                   <RechartsTooltip
                     formatter={(value: number, name: string) => [formatNumber(value), name]}
-                    labelFormatter={(label: string) => `Mese: ${label}`}
+                    labelFormatter={(label: string) => `${t("vco_month_prefix")}${label}`}
                   />
                   <Legend />
-                  <Bar dataKey="giacenza" name="Giacenza Disponibile" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="ordini" name="Ordini Totali" fill="#a855f7" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="soddisfatti" name="Ordini Soddisfatti" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="gap" name="Gap" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="giacenza" name={t("vco_chart_giacenza")} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="ordini" name={t("vco_chart_ordini")} fill="#a855f7" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="soddisfatti" name={t("vco_chart_soddisfatti")} fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="gap" name={t("vco_chart_gap")} fill="#ef4444" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -454,38 +460,38 @@ export default function VerificaCoperturaOrdini() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Timeline Mensile</CardTitle>
+              <CardTitle className="text-lg">{t("vco_timeline_title")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="sticky left-0 bg-background z-10 min-w-[100px]">Mese</TableHead>
-                      <TableHead className="text-right">Giacenza</TableHead>
-                      <TableHead className="text-right">Ordini</TableHead>
-                      <TableHead className="text-right">Soddisfatti</TableHead>
-                      <TableHead className="text-right">Gap</TableHead>
-                      <TableHead className="text-center">Copertura</TableHead>
-                      <TableHead className="text-right">Residuo</TableHead>
+                      <TableHead className="sticky left-0 bg-background z-10 min-w-[100px]">{t("vco_col_mese")}</TableHead>
+                      <TableHead className="text-right">{t("vco_col_giacenza")}</TableHead>
+                      <TableHead className="text-right">{t("vco_col_ordini")}</TableHead>
+                      <TableHead className="text-right">{t("vco_col_soddisfatti")}</TableHead>
+                      <TableHead className="text-right">{t("vco_col_gap")}</TableHead>
+                      <TableHead className="text-center">{t("vco_col_copertura")}</TableHead>
+                      <TableHead className="text-right">{t("vco_col_residuo")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.timeline.map(t => (
-                      <TableRow key={t.month} className={t.totaleGap > 0 ? "bg-red-50/50" : ""}>
-                        <TableCell className="sticky left-0 bg-background z-10 font-medium">{t.monthName}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{formatNumber(t.totaleGiacenzaPre)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{formatNumber(t.totaleOrdini)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-emerald-700">{formatNumber(t.totaleSoddisfatti)}</TableCell>
+                    {data.timeline.map(snap => (
+                      <TableRow key={snap.month} className={snap.totaleGap > 0 ? "bg-red-50/50" : ""}>
+                        <TableCell className="sticky left-0 bg-background z-10 font-medium">{snap.monthName}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{formatNumber(snap.totaleGiacenzaPre)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{formatNumber(snap.totaleOrdini)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-emerald-700">{formatNumber(snap.totaleSoddisfatti)}</TableCell>
                         <TableCell className="text-right font-mono text-sm">
-                          {t.totaleGap > 0 ? <span className="text-red-600 font-bold">{formatNumber(t.totaleGap)}</span> : <span className="text-gray-400">-</span>}
+                          {snap.totaleGap > 0 ? <span className="text-red-600 font-bold">{formatNumber(snap.totaleGap)}</span> : <span className="text-gray-400">-</span>}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Badge className={`${getCoverageColor(t.coperturaPctGlobale)} text-white border-0 min-w-[50px]`}>
-                            {t.coperturaPctGlobale}%
+                          <Badge className={`${getCoverageColor(snap.coperturaPctGlobale)} text-white border-0 min-w-[50px]`}>
+                            {snap.coperturaPctGlobale}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatNumber(t.totaleGiacenzaPost)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatNumber(snap.totaleGiacenzaPost)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -499,7 +505,7 @@ export default function VerificaCoperturaOrdini() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <ShieldAlert className="h-5 w-5 text-orange-600" />
-                  Riepilogo per Taglia (solo con ordini)
+                  {t("vco_riepilogo_taglia")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -518,20 +524,20 @@ export default function VerificaCoperturaOrdini() {
                       </div>
                       <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Giacenza iniziale:</span>
+                          <span className="text-muted-foreground">{t("vco_giacenza_iniziale")}</span>
                           <span className="font-mono">{formatNumber(info.giacenzaIniziale)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Ordini totali:</span>
+                          <span className="text-muted-foreground">{t("vco_ordini_totali_label")}</span>
                           <span className="font-mono">{formatNumber(info.totaleOrdini)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Soddisfacibili:</span>
+                          <span className="text-muted-foreground">{t("vco_soddisfacibili")}</span>
                           <span className="font-mono text-emerald-700">{formatNumber(info.totaleSoddisfatti)}</span>
                         </div>
                         {info.totaleGap > 0 && (
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Gap:</span>
+                            <span className="text-muted-foreground">{t("vco_gap_label")}</span>
                             <span className="font-mono text-red-600 font-bold">{formatNumber(info.totaleGap)}</span>
                           </div>
                         )}
@@ -555,20 +561,20 @@ export default function VerificaCoperturaOrdini() {
         <TabsContent value="detail" className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Matrice Taglia x Mese</CardTitle>
-              <p className="text-sm text-muted-foreground">Giacenza disponibile / Ordini / Gap per ogni combinazione. Celle colorate in base alla copertura.</p>
+              <CardTitle className="text-lg">{t("vco_matrice_title")}</CardTitle>
+              <p className="text-sm text-muted-foreground">{t("vco_matrice_sub")}</p>
             </CardHeader>
             <CardContent>
               <div className="overflow-auto max-h-[70vh] border rounded-md relative">
                 <table className="w-full caption-bottom text-sm">
                   <thead className="[&_tr]:border-b">
                     <tr className="border-b">
-                      <th className="sticky top-0 left-0 z-30 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-left align-middle font-bold text-sm text-muted-foreground min-w-[100px] shadow-[2px_2px_4px_rgba(0,0,0,0.08)]">Taglia</th>
-                      <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-right align-middle font-bold text-sm text-muted-foreground min-w-[90px]">Giac. Iniz.</th>
-                      {data.timeline.map(t => (
-                        <th key={t.month} className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-center align-middle font-bold text-sm text-muted-foreground min-w-[130px]">{t.monthShort}</th>
+                      <th className="sticky top-0 left-0 z-30 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-left align-middle font-bold text-sm text-muted-foreground min-w-[100px] shadow-[2px_2px_4px_rgba(0,0,0,0.08)]">{t("vco_col_taglia")}</th>
+                      <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-right align-middle font-bold text-sm text-muted-foreground min-w-[90px]">{t("vco_col_giac_iniz")}</th>
+                      {data.timeline.map(snap => (
+                        <th key={snap.month} className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-center align-middle font-bold text-sm text-muted-foreground min-w-[130px]">{snap.monthShort}</th>
                       ))}
-                      <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-center align-middle font-bold text-sm text-muted-foreground min-w-[80px]">Tot %</th>
+                      <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 h-10 px-2 text-center align-middle font-bold text-sm text-muted-foreground min-w-[80px]">{t("vco_col_tot_pct")}</th>
                     </tr>
                   </thead>
                   <tbody className="[&_tr:last-child]:border-0">
@@ -584,13 +590,13 @@ export default function VerificaCoperturaOrdini() {
                           <td className="p-2 align-middle text-right font-mono text-sm text-blue-700">
                             {riepilogo.giacenzaIniziale > 0 ? formatNumber(riepilogo.giacenzaIniziale) : <span className="text-gray-300">-</span>}
                           </td>
-                          {data.timeline.map(t => {
-                            const cell = t.perTaglia[size];
+                          {data.timeline.map(snap => {
+                            const cell = snap.perTaglia[size];
                             if (!cell || (cell.giacenzaPre === 0 && cell.ordini === 0)) {
-                              return <td key={t.month} className="p-2 align-middle text-center text-gray-300 text-sm">-</td>;
+                              return <td key={snap.month} className="p-2 align-middle text-center text-gray-300 text-sm">-</td>;
                             }
                             return (
-                              <td key={t.month} className={`text-center text-sm p-1.5 align-middle ${cell.ordini > 0 ? getCoverageBg(cell.coperturaPct) : ""}`}>
+                              <td key={snap.month} className={`text-center text-sm p-1.5 align-middle ${cell.ordini > 0 ? getCoverageBg(cell.coperturaPct) : ""}`}>
                                 <div className="space-y-0.5">
                                   <div className="font-mono text-blue-700 font-medium">{formatNumber(cell.giacenzaPre)}</div>
                                   {cell.ordini > 0 && (
@@ -622,16 +628,16 @@ export default function VerificaCoperturaOrdini() {
                 </table>
               </div>
               <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-blue-600" /> Giacenza</span>
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-purple-600" /> Ordini</span>
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-500" /> Gap</span>
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-500" /> Coperto</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-blue-600" /> {t("vco_legend_giacenza")}</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-purple-600" /> {t("vco_legend_ordini")}</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-500" /> {t("vco_legend_gap")}</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-500" /> {t("vco_legend_coperto")}</span>
               </div>
 
               {selectedSize && (
                 <div className="mt-3">
                   <Button variant="outline" size="sm" onClick={() => setSelectedSize(null)}>
-                    Mostra tutte le taglie
+                    {t("vco_mostra_tutte")}
                   </Button>
                 </div>
               )}
@@ -644,14 +650,14 @@ export default function VerificaCoperturaOrdini() {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Package className="h-5 w-5 text-purple-600" />
-                Ordini Attivi ({data.ordiniDettaglio.length})
+                {t("vco_ordini_attivi")} ({data.ordiniDettaglio.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
               {data.ordiniDettaglio.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                  <p>Nessun ordine trovato per il {year}.</p>
+                  <p>{t("vco_nessun_ordine_pre")} {year}.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -659,12 +665,12 @@ export default function VerificaCoperturaOrdini() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>ID</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Taglia</TableHead>
-                        <TableHead className="text-right">Quantità</TableHead>
-                        <TableHead className="text-right">Qty/Mese</TableHead>
-                        <TableHead>Periodo</TableHead>
-                        <TableHead>Stato</TableHead>
+                        <TableHead>{t("vco_col_cliente")}</TableHead>
+                        <TableHead>{t("vco_col_taglia")}</TableHead>
+                        <TableHead className="text-right">{t("vco_col_quantita")}</TableHead>
+                        <TableHead className="text-right">{t("vco_col_qty_mese")}</TableHead>
+                        <TableHead>{t("vco_col_periodo")}</TableHead>
+                        <TableHead>{t("vco_col_stato")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -681,7 +687,7 @@ export default function VerificaCoperturaOrdini() {
                           <TableCell className="text-right font-mono text-sm text-muted-foreground">{formatNumber(o.quantitaPerMese)}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {!o.dataInizioConsegna && !o.dataFineConsegna 
-                              ? <span className="text-amber-500 font-medium">Nessuna data</span>
+                              ? <span className="text-amber-500 font-medium">{t("no_date")}</span>
                               : `${o.dataInizioConsegna || "?"} → ${o.dataFineConsegna || "?"}`}
                           </TableCell>
                           <TableCell>
