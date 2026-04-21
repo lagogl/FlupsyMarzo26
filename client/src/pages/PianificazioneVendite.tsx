@@ -837,18 +837,23 @@ export default function PianificazioneVendite() {
                   const month = i + 1;
                   const current = cashMap[month];
                   const editing = cashEdits[month];
-                  const display = editing !== undefined ? editing : (current !== undefined ? String(current) : '');
+                  const display = editing !== undefined
+                    ? editing
+                    : (current !== undefined && current !== 0 ? fmtNum(current) : '');
                   const dirty = editing !== undefined && editing !== (current !== undefined ? String(current) : '');
                   return (
                     <div key={month} className="flex items-center gap-2 p-2 border rounded">
                       <span className="text-sm w-20">{label}</span>
                       <Input
-                        type="number"
-                        step="100"
+                        type="text"
+                        inputMode="numeric"
                         placeholder="€"
                         value={display}
-                        onChange={e => setCashEdits(prev => ({ ...prev, [month]: e.target.value }))}
-                        className="flex-1"
+                        onChange={e => {
+                          const raw = e.target.value.replace(/[^\d]/g, '');
+                          setCashEdits(prev => ({ ...prev, [month]: raw }));
+                        }}
+                        className="flex-1 tabular-nums"
                         data-testid={`input-cash-${month}`}
                       />
                       <Button size="sm" variant={dirty ? 'default' : 'ghost'} onClick={() => handleSaveCash(month)} disabled={!dirty}>
