@@ -340,19 +340,17 @@ export default function PianificazioneVendite() {
 
       let rowIdx2 = 0;
       for (const m of plan.monthlyPlan) {
-        const grouped: Record<string, { animals: number; rev: number; reason: string }> = {};
+        const grouped: Record<string, { sizeCode: string; animals: number; rev: number; reason: string }> = {};
         for (const s of m.sales) {
           const k = `${s.sizeCode}|${s.reason}`;
-          if (!grouped[k]) grouped[k] = { animals: 0, rev: 0, reason: s.reason };
+          if (!grouped[k]) grouped[k] = { sizeCode: s.sizeCode, animals: 0, rev: 0, reason: s.reason };
           grouped[k].animals += s.animalCount;
           grouped[k].rev += s.revenue;
         }
-        const entries = Object.entries(grouped).sort((a, b) => b[1].animals - a[1].animals);
-        for (const [, v] of entries) {
+        const entries = Object.values(grouped).sort((a, b) => b.animals - a.animals);
+        for (const v of entries) {
           const bg = rowIdx2 % 2 === 0 ? white : lightGray;
-          const r = ws2.addRow([m.monthName, entries.indexOf([m.monthName, v] as any) === 0 ? '' : '', v.animals, v.rev, v.reason]);
-          r.getCell(1).value = m.monthName;
-          r.getCell(2).value = Object.keys(grouped).find(k => grouped[k] === v)?.split('|')[0] ?? '';
+          const r = ws2.addRow([m.monthName, v.sizeCode, v.animals, v.rev, v.reason]);
           r.eachCell((cell, col) => {
             cell.border = thinBorder;
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
