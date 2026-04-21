@@ -288,7 +288,7 @@ export function TargetSizePredictions() {
                   return (
                     <tr key={p.id} className={idx % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
                       <td className="px-3 py-2">
-                        <Link to={`/operazioni/cestello/${p.basketId}`}>
+                        <Link to={`/baskets/${p.basketId}`}>
                           <span className="font-medium text-blue-600 hover:underline">#{p.basket.physicalNumber}</span>
                         </Link>
                         {p.basket.row && p.basket.position && (
