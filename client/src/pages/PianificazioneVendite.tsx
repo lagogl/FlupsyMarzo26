@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Banknote, TrendingUp, Scale, AlertTriangle, CheckCircle2, Loader2, Calculator, HelpCircle, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Banknote, TrendingUp, Scale, AlertTriangle, CheckCircle2, Loader2, Calculator, HelpCircle, ChevronDown, ChevronUp, Info, Download } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Bar, ComposedChart } from "recharts";
@@ -226,6 +226,193 @@ export default function PianificazioneVendite() {
     }));
   }, [plan]);
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (!plan) return;
+    setIsExporting(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = "FLUPSY Management";
+      wb.created = new Date();
+
+      const headerFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1E3A5F" } };
+      const headerFont = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+      const thinBorder = {
+        top: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+        bottom: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+        left: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+        right: { style: "thin" as const, color: { argb: "FFD0D0D0" } },
+      };
+      const white = "FFFFFFFF";
+      const lightGray = "FFF7F7F7";
+      const modeLabel = plan.mode === 'cassa' ? 'Cassa rapida' : plan.mode === 'ricavo' ? 'Ricavo massimo' : 'Bilanciato';
+      const engineLabel = plan.engine === 'lp' ? 'Ottimo LP' : 'Greedy';
+      const startMonthName = MONTHS_IT[(plan.startMonth - 1) % 12];
+
+      // ── FOGLIO 1: Piano mensile ──────────────────────────────────────────
+      const ws1 = wb.addWorksheet("Piano Vendite", { views: [{ state: 'frozen', xSplit: 0, ySplit: 3 }] });
+
+      const t1 = ws1.addRow(["Pianificazione Vendite Ottimizzata"]);
+      t1.font = { bold: true, size: 14, color: { argb: "FF1E3A5F" } };
+      ws1.mergeCells(1, 1, 1, 7);
+      t1.alignment = { horizontal: "center", vertical: "middle" };
+      t1.height = 30;
+
+      const p1 = ws1.addRow([`Anno: ${plan.year}  |  Inizio: ${startMonthName}  |  Orizzonte: ${plan.monthsHorizon} mesi  |  Modalità: ${modeLabel}  |  Motore: ${engineLabel}`]);
+      p1.font = { italic: true, size: 10, color: { argb: "FF555555" } };
+      ws1.mergeCells(2, 1, 2, 7);
+      p1.alignment = { horizontal: "center" };
+      p1.height = 18;
+
+      const h1 = ws1.addRow(["Mese", "Animali da vendere", "Ricavo (€)", "Target Cassa (€)", "Gap Cassa (€)", "Ordini Scoperti", "Animali Residui"]);
+      h1.height = 22;
+      h1.eachCell(cell => {
+        cell.font = headerFont;
+        cell.fill = headerFill;
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = thinBorder;
+      });
+
+      let totAnimals = 0, totRevenue = 0, totGap = 0, totShortfall = 0;
+      plan.monthlyPlan.forEach((m, i) => {
+        const animals = m.sales.reduce((a, s) => a + s.animalCount, 0);
+        const shortfall = Object.values(m.orderShortfallBySize).reduce((a, b) => a + b, 0);
+        const bg = i % 2 === 0 ? white : lightGray;
+        const row = ws1.addRow([m.monthName, animals, m.totalRevenue, m.cashTarget || 0, m.cashGap || 0, shortfall, m.remainingAnimals]);
+        totAnimals += animals; totRevenue += m.totalRevenue; totGap += m.cashGap || 0; totShortfall += shortfall;
+        row.eachCell((cell, col) => {
+          cell.border = thinBorder;
+          cell.alignment = { horizontal: col === 1 ? "left" : "right", vertical: "middle" };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
+          if (col > 1) cell.numFmt = col === 2 || col === 6 || col === 7 ? "#,##0" : "#,##0.00";
+          if (col === 3 && m.totalRevenue > 0) cell.font = { color: { argb: "FF059669" }, bold: true };
+          if (col === 5 && m.cashGap > 0) { cell.font = { color: { argb: "FFDC2626" }, bold: true }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } }; }
+          if (col === 6 && shortfall > 0) { cell.font = { color: { argb: "FFD97706" }, bold: true }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } }; }
+        });
+      });
+
+      const tot = ws1.addRow(["TOTALE", totAnimals, totRevenue, "", totGap, totShortfall, ""]);
+      tot.eachCell((cell, col) => {
+        cell.border = thinBorder;
+        cell.font = { bold: true, size: 11 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8F4FD" } };
+        cell.alignment = { horizontal: col === 1 ? "left" : "right", vertical: "middle" };
+        if (col > 1 && col !== 4 && col !== 7) cell.numFmt = col === 2 || col === 6 ? "#,##0" : "#,##0.00";
+      });
+      tot.height = 22;
+
+      ws1.addRow([]);
+      const kpiRow = ws1.addRow(["KPI", "Valore"]);
+      kpiRow.eachCell(cell => { cell.font = headerFont; cell.fill = headerFill; cell.border = thinBorder; });
+      const kpis = [
+        ["Ricavo totale (€)", plan.totalRevenue],
+        ["Animali da vendere", plan.totalAnimalsSold],
+        ["Mesi sotto budget", plan.monthsBelowCashTarget],
+        ["Ordini scoperti totali", plan.totalShortfall],
+        ["Ordini totali anno", inputData ? inputData.orders.reduce((s, o) => s + o.animals, 0) : 0],
+      ];
+      kpis.forEach(([label, val], i) => {
+        const r = ws1.addRow([label, val]);
+        const bg2 = i % 2 === 0 ? white : lightGray;
+        r.eachCell((cell, col) => {
+          cell.border = thinBorder;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg2 } };
+          cell.alignment = { horizontal: col === 1 ? "left" : "right" };
+          if (col === 2) cell.numFmt = typeof val === 'number' && val > 100 ? "#,##0" : "#,##0.00";
+        });
+      });
+
+      ws1.columns = [{ width: 22 }, { width: 20 }, { width: 16 }, { width: 18 }, { width: 15 }, { width: 18 }, { width: 18 }];
+
+      // ── FOGLIO 2: Dettaglio vendite per taglia ───────────────────────────
+      const ws2 = wb.addWorksheet("Vendite per Taglia", { views: [{ state: 'frozen', xSplit: 0, ySplit: 2 }] });
+      const t2 = ws2.addRow(["Dettaglio Vendite per Taglia"]);
+      t2.font = { bold: true, size: 13, color: { argb: "FF1E3A5F" } };
+      ws2.mergeCells(1, 1, 1, 5);
+      t2.alignment = { horizontal: "center" };
+      t2.height = 26;
+
+      const h2 = ws2.addRow(["Mese", "Taglia", "Animali", "Ricavo (€)", "Motivo"]);
+      h2.height = 22;
+      h2.eachCell(cell => { cell.font = headerFont; cell.fill = headerFill; cell.alignment = { horizontal: "center", vertical: "middle" }; cell.border = thinBorder; });
+
+      let rowIdx2 = 0;
+      for (const m of plan.monthlyPlan) {
+        const grouped: Record<string, { animals: number; rev: number; reason: string }> = {};
+        for (const s of m.sales) {
+          const k = `${s.sizeCode}|${s.reason}`;
+          if (!grouped[k]) grouped[k] = { animals: 0, rev: 0, reason: s.reason };
+          grouped[k].animals += s.animalCount;
+          grouped[k].rev += s.revenue;
+        }
+        const entries = Object.entries(grouped).sort((a, b) => b[1].animals - a[1].animals);
+        for (const [, v] of entries) {
+          const bg = rowIdx2 % 2 === 0 ? white : lightGray;
+          const r = ws2.addRow([m.monthName, entries.indexOf([m.monthName, v] as any) === 0 ? '' : '', v.animals, v.rev, v.reason]);
+          r.getCell(1).value = m.monthName;
+          r.getCell(2).value = Object.keys(grouped).find(k => grouped[k] === v)?.split('|')[0] ?? '';
+          r.eachCell((cell, col) => {
+            cell.border = thinBorder;
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
+            cell.alignment = { horizontal: col === 1 || col === 2 || col === 5 ? "left" : "right", vertical: "middle" };
+            if (col === 3) cell.numFmt = "#,##0";
+            if (col === 4) { cell.numFmt = "#,##0.00"; cell.font = { color: { argb: "FF059669" } }; }
+            if (col === 5) {
+              const reason = cell.value as string;
+              if (reason === 'ordine') { cell.font = { color: { argb: "FF1D4ED8" } }; }
+              else if (reason === 'cassa') { cell.font = { color: { argb: "FF7C3AED" } }; }
+              else { cell.font = { color: { argb: "FF6B7280" } }; }
+            }
+          });
+          rowIdx2++;
+        }
+      }
+      ws2.columns = [{ width: 22 }, { width: 12 }, { width: 18 }, { width: 16 }, { width: 14 }];
+
+      // ── FOGLIO 3: Dati grafico ───────────────────────────────────────────
+      const ws3 = wb.addWorksheet("Dati Grafico");
+      const t3 = ws3.addRow(["Dati Andamento Mensile"]);
+      t3.font = { bold: true, size: 13, color: { argb: "FF1E3A5F" } };
+      ws3.mergeCells(1, 1, 1, 4);
+      t3.alignment = { horizontal: "center" };
+      t3.height = 26;
+      const h3 = ws3.addRow(["Mese", "Ricavo (€)", "Target Cassa (€)", "Animali da vendere"]);
+      h3.height = 22;
+      h3.eachCell(cell => { cell.font = headerFont; cell.fill = headerFill; cell.alignment = { horizontal: "center", vertical: "middle" }; cell.border = thinBorder; });
+      chartData.forEach((row, i) => {
+        const bg = i % 2 === 0 ? white : lightGray;
+        const r = ws3.addRow([row.mese, row.ricavo, row.target, row.animali]);
+        r.eachCell((cell, col) => {
+          cell.border = thinBorder;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
+          cell.alignment = { horizontal: col === 1 ? "left" : "right" };
+          if (col > 1) cell.numFmt = col === 4 ? "#,##0" : "#,##0.00";
+          if (col === 2) cell.font = { color: { argb: "FF059669" } };
+          if (col === 3) cell.font = { color: { argb: "FFDC2626" } };
+          if (col === 4) cell.font = { color: { argb: "FF3B82F6" } };
+        });
+      });
+      ws3.columns = [{ width: 14 }, { width: 16 }, { width: 18 }, { width: 20 }];
+
+      // ── Scarica ──────────────────────────────────────────────────────────
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PianificazioneVendite_${plan.year}_${modeLabel.replace(/\s/g,'')}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Excel esportato", description: `3 fogli: Piano Vendite, Vendite per Taglia, Dati Grafico` });
+    } catch (e) {
+      toast({ title: "Errore esportazione", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-[1600px]">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -342,10 +529,17 @@ export default function PianificazioneVendite() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={() => refetchPlan()} disabled={isFetching} data-testid="button-calculate">
-                  {isFetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Calculator className="h-4 w-4 mr-2" />}
-                  Calcola Piano
-                </Button>
+                <div className="flex gap-2 items-end">
+                  <Button onClick={() => refetchPlan()} disabled={isFetching} data-testid="button-calculate">
+                    {isFetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Calculator className="h-4 w-4 mr-2" />}
+                    Calcola Piano
+                  </Button>
+                  {plan && (
+                    <Button variant="outline" onClick={handleExportExcel} disabled={isExporting} title="Esporta in Excel">
+                      {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Guida espandibile ai parametri */}
