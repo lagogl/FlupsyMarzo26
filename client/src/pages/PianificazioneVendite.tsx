@@ -587,21 +587,32 @@ export default function PianificazioneVendite() {
                           <TableHead>Mese</TableHead>
                           <TableHead className="text-right">Quantità prevista</TableHead>
                           <TableHead className="text-right">Quantità effettiva</TableHead>
+                          <TableHead className="text-right">Subtotale effettivo</TableHead>
                           <TableHead>Note</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {inputData.hatchery.map((h, i) => (
-                          <TableRow key={i}>
-                            <TableCell>{h.year}</TableCell>
-                            <TableCell>{h.monthName}</TableCell>
-                            <TableCell className="text-right font-mono">{fmtNum(h.quantity)}</TableCell>
-                            <TableCell className="text-right font-mono">
-                              {h.actualQuantity !== null ? fmtNum(h.actualQuantity) : <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground text-sm">{h.notes || '—'}</TableCell>
-                          </TableRow>
-                        ))}
+                        {(() => {
+                          let runningTotal = 0;
+                          return inputData.hatchery.map((h, i) => {
+                            if (h.actualQuantity !== null) runningTotal += h.actualQuantity;
+                            const hasActual = h.actualQuantity !== null;
+                            return (
+                              <TableRow key={i}>
+                                <TableCell>{h.year}</TableCell>
+                                <TableCell>{h.monthName}</TableCell>
+                                <TableCell className="text-right font-mono">{fmtNum(h.quantity)}</TableCell>
+                                <TableCell className="text-right font-mono">
+                                  {hasActual ? fmtNum(h.actualQuantity!) : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                                <TableCell className="text-right font-mono font-semibold text-blue-600">
+                                  {hasActual ? fmtNum(runningTotal) : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground text-sm">{h.notes || '—'}</TableCell>
+                              </TableRow>
+                            );
+                          });
+                        })()}
                       </TableBody>
                     </Table>
                   </CardContent>
