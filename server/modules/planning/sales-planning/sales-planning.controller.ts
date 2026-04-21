@@ -193,17 +193,29 @@ router.get("/input-data", async (req: Request, res: Response) => {
       mortalityBySize[row.sizeName][row.month] = row.monthlyPercentage;
     }
 
-    // Ordini raggruppati
-    const orderSummary: Array<{ month: string; size: string; animals: number }> = [];
+    // Ordini raggruppati — ordinati per mese numerico, poi per taglia
+    const SALE_SIZES_ORDER = ProductionForecastService.SALE_SIZES;
+    const orderSummary: Array<{ monthNum: number; month: string; size: string; animals: number }> = [];
     for (const [monthStr, sizeMap] of Object.entries(orders)) {
       for (const [size, animals] of Object.entries(sizeMap as Record<string, number>)) {
         if (animals > 0) {
-          const m = parseInt(monthStr) - 1;
-          orderSummary.push({ month: MONTHS[m] || monthStr, size, animals });
+          const monthNum = parseInt(monthStr);
+          const m = monthNum - 1;
+          orderSummary.push({ monthNum, month: MONTHS[m] || monthStr, size, animals });
         }
       }
     }
-    orderSummary.sort((a, b) => a.month.localeCompare(b.month) || a.size.localeCompare(b.size));
+    orderSummary.sort((a, b) => {
+      if (a.monthNum !== b.monthNum) return a.monthNum - b.monthNum;
+      const ia = SALE_SIZES_ORDER.indexOf(a.size);
+      const ib = SALE_SIZES_ORDER.indexOf(b.size);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+
+    // Schiuditoio ordinato per anno poi mese
+    const hatcherySorted = [...hatcheryRows].sort((a, b) =>
+      a.year !== b.year ? a.year - b.year : a.month - b.month
+    );
 
     res.json({
       generatedAt: now.toISOString(),
@@ -214,7 +226,7 @@ router.get("/input-data", async (req: Request, res: Response) => {
         totalAnimals: basketsWithSize.reduce((s, b) => s + b.animalCount, 0),
         bySize,
       },
-      hatchery: hatcheryRows.map(h => ({
+      hatchery: hatcherySorted.map(h => ({
         year: h.year,
         month: h.month,
         monthName: MONTHS[h.month - 1],

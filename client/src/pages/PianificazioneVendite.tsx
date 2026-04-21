@@ -45,7 +45,7 @@ interface InputData {
   mortality: Record<string, Record<string, number>>;
   priceList: PriceListEntry[];
   cashTargets: CashTarget[];
-  orders: Array<{ month: string; size: string; animals: number }>;
+  orders: Array<{ monthNum: number; month: string; size: string; animals: number }>;
 }
 
 interface PlanResult {
@@ -553,7 +553,11 @@ export default function PianificazioneVendite() {
                     </TableHeader>
                     <TableBody>
                       {Object.entries(inputData.inventory.bySize)
-                        .sort((a, b) => b[1].animals - a[1].animals)
+                        .sort((a, b) => {
+                          const ia = SALE_SIZES.indexOf(a[0]);
+                          const ib = SALE_SIZES.indexOf(b[0]);
+                          return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+                        })
                         .map(([size, data]) => (
                           <TableRow key={size}>
                             <TableCell className="font-mono font-semibold">{size}</TableCell>
