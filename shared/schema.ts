@@ -1646,7 +1646,7 @@ export type InsertHatcheryArrival = z.infer<typeof insertHatcheryArrivalSchema>;
 export const salesPriceList = pgTable("sales_price_list", {
   id: serial("id").primaryKey(),
   sizeCode: text("size_code").notNull().unique(),
-  pricePerKg: real("price_per_kg").notNull(),
+  pricePer1000: real("price_per_1000").notNull(),
   notes: text("notes"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

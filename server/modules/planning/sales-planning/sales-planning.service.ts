@@ -93,7 +93,7 @@ export class SalesPlanningService {
   async getPriceList(): Promise<Record<string, number>> {
     const rows = await db.select().from(salesPriceList);
     const map: Record<string, number> = {};
-    for (const r of rows) map[r.sizeCode] = r.pricePerKg;
+    for (const r of rows) map[r.sizeCode] = r.pricePer1000;
     return map;
   }
 
@@ -130,7 +130,8 @@ export class SalesPlanningService {
     const weightKg = take / apk;
     const sizeCode = this.sizeOf(b);
     const price = priceMap[sizeCode] || 0;
-    const revenue = weightKg * price;
+    // price = €/1000 animali → revenue = (animali/1000) × price
+    const revenue = (take / 1000) * price;
     b.animalCount -= take;
     return {
       basketId: b.basketId,

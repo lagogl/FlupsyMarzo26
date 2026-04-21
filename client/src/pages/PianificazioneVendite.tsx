@@ -26,7 +26,7 @@ const MONTHS_IT = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
 type Mode = 'cassa' | 'ricavo' | 'bilanciato';
 type Engine = 'greedy' | 'lp';
 
-interface PriceListEntry { id: number; sizeCode: string; pricePerKg: number; notes: string | null; }
+interface PriceListEntry { id: number; sizeCode: string; pricePer1000: number; notes: string | null; }
 interface CashTarget { id: number; year: number; month: number; minRevenue: number; }
 
 interface PlanResult {
@@ -72,13 +72,13 @@ export default function PianificazioneVendite() {
   });
   const priceMap = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const p of priceList) m[p.sizeCode] = p.pricePerKg;
+    for (const p of priceList) m[p.sizeCode] = p.pricePer1000;
     return m;
   }, [priceList]);
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
 
   const savePriceMutation = useMutation({
-    mutationFn: async (vars: { sizeCode: string; pricePerKg: number }) =>
+    mutationFn: async (vars: { sizeCode: string; pricePer1000: number }) =>
       apiRequest({ url: '/api/pianificazione-vendite/price-list', method: 'PUT', body: vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/pianificazione-vendite/price-list'] });
@@ -126,7 +126,7 @@ export default function PianificazioneVendite() {
       toast({ title: 'Prezzo non valido', variant: 'destructive' });
       return;
     }
-    savePriceMutation.mutate({ sizeCode, pricePerKg: num });
+    savePriceMutation.mutate({ sizeCode, pricePer1000: num });
     setPriceEdits(prev => { const n = { ...prev }; delete n[sizeCode]; return n; });
   };
 
@@ -390,8 +390,8 @@ export default function PianificazioneVendite() {
         <TabsContent value="listino">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-emerald-600" />Listino prezzi (€/kg)</CardTitle>
-              <CardDescription>Imposta il prezzo unitario per ciascuna taglia commerciale. Lascia vuoto per non vendere quella taglia.</CardDescription>
+              <CardTitle className="text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-emerald-600" />Listino prezzi (€ ogni 1.000 animali)</CardTitle>
+              <CardDescription>Gli animali sono venduti a numero. Imposta il prezzo per 1.000 animali per ciascuna taglia commerciale. Lascia vuoto (o 0) per non vendere quella taglia.</CardDescription>
             </CardHeader>
             <CardContent>
               {priceLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (
@@ -406,8 +406,8 @@ export default function PianificazioneVendite() {
                         <span className="font-mono text-sm w-24">{sz}</span>
                         <Input
                           type="number"
-                          step="0.01"
-                          placeholder="€/kg"
+                          step="0.0001"
+                          placeholder="€/1000 animali"
                           value={display}
                           onChange={e => setPriceEdits(prev => ({ ...prev, [sz]: e.target.value }))}
                           className="flex-1"
