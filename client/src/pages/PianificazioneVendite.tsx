@@ -450,6 +450,12 @@ export default function PianificazioneVendite() {
                     {fmtNum(plan.totalShortfall)}
                   </div>
                 </CardContent></Card>
+                <Card><CardContent className="pt-4">
+                  <div className="text-xs text-muted-foreground">Ordini totali anno</div>
+                  <div className="text-xl font-bold text-blue-600">
+                    {inputData ? fmtNum(inputData.orders.reduce((s, o) => s + o.animals, 0)) : '—'}
+                  </div>
+                </CardContent></Card>
               </div>
 
               {/* Grafico */}
@@ -694,6 +700,14 @@ export default function PianificazioneVendite() {
                           </TableRow>
                         ))}
                       </TableBody>
+                      <tfoot>
+                        <TableRow className="border-t-2 font-semibold bg-muted/40">
+                          <TableCell colSpan={2}>Totale ordini anno</TableCell>
+                          <TableCell className="text-right font-mono">
+                            {fmtNum(inputData.orders.reduce((s, o) => s + o.animals, 0))}
+                          </TableCell>
+                        </TableRow>
+                      </tfoot>
                     </Table>
                   </CardContent>
                 </Card>
