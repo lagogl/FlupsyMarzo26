@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Banknote, TrendingUp, Scale, AlertTriangle, CheckCircle2, Loader2, Calculator } from "lucide-react";
+import { Banknote, TrendingUp, Scale, AlertTriangle, CheckCircle2, Loader2, Calculator, HelpCircle, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Bar, ComposedChart } from "recharts";
 
 const SALE_SIZES = [
@@ -65,6 +67,26 @@ export default function PianificazioneVendite() {
   const [monthsHorizon, setMonthsHorizon] = useState(12);
   const [mode, setMode] = useState<Mode>('bilanciato');
   const [engine, setEngine] = useState<Engine>('greedy');
+  const [guideOpen, setGuideOpen] = useState(false);
+
+  // Helper: label con tooltip informativo
+  const LabelWithHelp = ({ children, tip }: { children: React.ReactNode; tip: string }) => (
+    <div className="flex items-center gap-1">
+      <Label>{children}</Label>
+      <TooltipProvider>
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button type="button" className="inline-flex">
+              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs whitespace-pre-line">
+            {tip}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
 
   // === Listino Prezzi ===
   const { data: priceList = [], isLoading: priceLoading } = useQuery<PriceListEntry[]>({
@@ -183,11 +205,15 @@ export default function PianificazioneVendite() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
                 <div>
-                  <Label>Anno</Label>
+                  <LabelWithHelp tip="Anno solare di riferimento per il piano. Determina quali ordini cliente e quali budget di cassa vengono caricati. Range valido: 2020–2100.">
+                    Anno
+                  </LabelWithHelp>
                   <Input type="number" value={year} onChange={e => setYear(parseInt(e.target.value) || currentYear)} data-testid="input-year" />
                 </div>
                 <div>
-                  <Label>Mese inizio</Label>
+                  <LabelWithHelp tip="Mese da cui parte la simulazione. La crescita degli animali è simulata giorno per giorno a partire dal 1° del mese scelto, con SGR specifico per taglia e mortalità mensile per taglia.">
+                    Mese inizio
+                  </LabelWithHelp>
                   <Select value={String(startMonth)} onValueChange={v => setStartMonth(parseInt(v))}>
                     <SelectTrigger data-testid="select-start-month"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -196,7 +222,9 @@ export default function PianificazioneVendite() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Orizzonte (mesi)</Label>
+                  <LabelWithHelp tip="Numero di mesi futuri da pianificare a partire dal mese di inizio. Orizzonti lunghi (24–36 mesi) catturano l'effetto della crescita ma rallentano il motore LP.">
+                    Orizzonte (mesi)
+                  </LabelWithHelp>
                   <Select value={String(monthsHorizon)} onValueChange={v => setMonthsHorizon(parseInt(v))}>
                     <SelectTrigger data-testid="select-horizon"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -205,7 +233,9 @@ export default function PianificazioneVendite() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Modalità</Label>
+                  <LabelWithHelp tip={`Strategia di vendita.\n\n💰 Cassa rapida: vendi il prima possibile per coprire il budget cassa mensile (priorità liquidità).\n\n⚖️ Bilanciato: soddisfa ordini cliente + budget cassa, lascia crescere il resto.\n\n📈 Ricavo massimo: trattieni gli animali fin che cresce il valore, liquidi a fine orizzonte.`}>
+                    Modalità
+                  </LabelWithHelp>
                   <Select value={mode} onValueChange={v => setMode(v as Mode)}>
                     <SelectTrigger data-testid="select-mode"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -216,7 +246,9 @@ export default function PianificazioneVendite() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Motore</Label>
+                  <LabelWithHelp tip={`Algoritmo che decide cosa vendere.\n\n⚡ Greedy: euristica veloce (<100 ms). Sceglie mese per mese il cestello "migliore". Buona ma non garantita ottima.\n\n🧮 Ottimo LP: risolve un problema di programmazione lineare con tutte le variabili insieme (qualche secondo). Garantisce la soluzione matematicamente ottima rispetto all'obiettivo della modalità scelta.`}>
+                    Motore
+                  </LabelWithHelp>
                   <Select value={engine} onValueChange={v => setEngine(v as Engine)}>
                     <SelectTrigger data-testid="select-engine"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -231,15 +263,81 @@ export default function PianificazioneVendite() {
                 </Button>
               </div>
 
-              <div className="mt-3 text-xs text-muted-foreground grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div><strong>💰 Cassa rapida:</strong> vendi appena possibile per coprire il budget mensile.</div>
-                <div><strong>⚖️ Bilanciato:</strong> soddisfa ordini + budget cassa, lascia crescere il resto.</div>
-                <div><strong>📈 Ricavo massimo:</strong> trattieni il più possibile, liquidi a fine orizzonte.</div>
-              </div>
-              <div className="mt-2 text-xs text-muted-foreground">
-                <strong>⚡ Greedy:</strong> euristica veloce (&lt;100ms), buona ma non garantita ottima.{' '}
-                <strong>🧮 Ottimo LP:</strong> programmazione lineare con solver, soluzione provatamente ottima (qualche secondo su orizzonti lunghi).
-              </div>
+              {/* Guida espandibile ai parametri */}
+              <Collapsible open={guideOpen} onOpenChange={setGuideOpen} className="mt-4">
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-toggle-guide">
+                    <Info className="h-4 w-4" />
+                    {guideOpen ? 'Nascondi guida ai parametri' : 'Mostra guida ai parametri'}
+                    {guideOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  <div className="border rounded-lg bg-muted/30 p-4 space-y-4 text-sm">
+                    <div>
+                      <h4 className="font-semibold mb-1 flex items-center gap-2">📅 Anno</h4>
+                      <p className="text-muted-foreground">
+                        Anno solare di riferimento del piano. Il sistema usa questo valore per filtrare gli <strong>ordini cliente</strong> da soddisfare e i <strong>budget cassa</strong> definiti nelle relative schede. Se l'orizzonte attraversa il 31 dicembre, anche gli ordini e i budget dell'anno successivo vengono inclusi automaticamente.
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold mb-1 flex items-center gap-2">🗓️ Mese inizio</h4>
+                      <p className="text-muted-foreground">
+                        Mese da cui parte la simulazione. La crescita di ogni cestello è simulata <strong>giorno per giorno</strong> usando l'SGR specifico per ogni taglia e la mortalità mensile per taglia. Se imposti un mese passato (es. gennaio in aprile), il piano "rivede" lo storico nella simulazione: utile per back-test, ma non per pianificazioni future.
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold mb-1 flex items-center gap-2">📏 Orizzonte (mesi)</h4>
+                      <p className="text-muted-foreground">
+                        Numero di mesi futuri pianificati a partire dal mese di inizio. <strong>Orizzonti brevi (6–12 mesi)</strong> sono adatti a piani operativi a corto termine. <strong>Orizzonti lunghi (24–36 mesi)</strong> permettono al motore di sfruttare la crescita futura (es. trattenere TP-3000 oggi per venderlo come TP-7000 fra 8 mesi), ma rallentano il motore LP (1–10 secondi su 36 mesi con molti cestelli).
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold mb-1 flex items-center gap-2">⚙️ Modalità</h4>
+                      <ul className="text-muted-foreground space-y-2 ml-2">
+                        <li>
+                          <strong className="text-foreground">💰 Cassa rapida</strong> — Massimizza la copertura del <em>budget cassa</em> mensile (definito nella scheda Budget Cassa). Il motore vende appena ha taglie con prezzo &gt; 0, anche se piccole, per generare liquidità immediata. Usa questa modalità quando hai bisogno di pagare fornitori, stipendi o rate a scadenza fissa.
+                        </li>
+                        <li>
+                          <strong className="text-foreground">⚖️ Bilanciato</strong> — Compromesso fra tre obiettivi: (1) soddisfare gli ordini cliente alla taglia richiesta nel mese richiesto, (2) coprire il budget cassa mensile, (3) lasciar crescere il resto per ricavi futuri. È la modalità di default consigliata per la pianificazione operativa normale.
+                        </li>
+                        <li>
+                          <strong className="text-foreground">📈 Ricavo massimo</strong> — Trattiene gli animali il più possibile per farli crescere verso le taglie più redditizie (TP-7000, TP-9000, TP-10000), poi liquida tutto verso fine orizzonte. Ignora il budget cassa. Usa questa modalità per stimare il <strong>valore teorico massimo</strong> dell'inventario corrente.
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold mb-1 flex items-center gap-2">🧠 Motore</h4>
+                      <ul className="text-muted-foreground space-y-2 ml-2">
+                        <li>
+                          <strong className="text-foreground">⚡ Greedy</strong> — Euristica rapida (&lt;100 ms). Esamina i cestelli mese per mese e sceglie ad ogni passo l'opzione localmente migliore. <em>Pro</em>: istantaneo, sempre stabile. <em>Contro</em>: non vede il futuro, può lasciare ricavo "sul tavolo" su orizzonti lunghi.
+                        </li>
+                        <li>
+                          <strong className="text-foreground">🧮 Ottimo LP</strong> — Programmazione lineare risolta con un solver matematico. Considera <strong>tutte</strong> le decisioni dei mesi futuri simultaneamente e produce la soluzione provatamente ottima rispetto alla funzione obiettivo della modalità scelta. <em>Pro</em>: massimo ricavo possibile, copertura ordini ottimale. <em>Contro</em>: tempo di calcolo 1–10 s in base a numero di cestelli e orizzonte.
+                        </li>
+                      </ul>
+                      <div className="mt-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-xs">
+                        <strong>💡 Consiglio</strong>: usa <strong>Greedy</strong> per esplorare scenari rapidamente (cambia parametri e ricalcola), poi conferma il piano definitivo con <strong>Ottimo LP</strong>.
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t">
+                      <h4 className="font-semibold mb-1 flex items-center gap-2">📋 Dati richiesti per ottenere risultati significativi</h4>
+                      <ul className="text-muted-foreground space-y-1 list-disc ml-5">
+                        <li><strong>Listino prezzi</strong> (scheda <em>Listino Prezzi</em>): prezzo €/animale per ciascuna taglia commerciale. Le taglie senza prezzo non verranno mai vendute dal motore.</li>
+                        <li><strong>Budget cassa</strong> (scheda <em>Budget Cassa</em>): obiettivo di ricavo minimo mensile, usato dalle modalità Cassa rapida e Bilanciato.</li>
+                        <li><strong>Ordini cliente</strong> (modulo Ordini): vengono caricati automaticamente per anno+mese+taglia richiesta.</li>
+                        <li><strong>Inventario corrente</strong>: cestelli attivi con cicli aperti, recuperati dal database.</li>
+                        <li><strong>Arrivi schiuditoio futuri</strong>: pianificazioni di nuovi ingressi vengono integrate come "cestelli virtuali" disponibili dal mese di arrivo previsto.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </CardContent>
           </Card>
 
