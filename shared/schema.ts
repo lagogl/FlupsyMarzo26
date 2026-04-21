@@ -1641,6 +1641,36 @@ export const insertHatcheryArrivalSchema = createInsertSchema(hatcheryArrivals)
 export type HatcheryArrival = typeof hatcheryArrivals.$inferSelect;
 export type InsertHatcheryArrival = z.infer<typeof insertHatcheryArrivalSchema>;
 
+// ===== PIANIFICAZIONE VENDITE =====
+
+export const salesPriceList = pgTable("sales_price_list", {
+  id: serial("id").primaryKey(),
+  sizeCode: text("size_code").notNull().unique(),
+  pricePerKg: real("price_per_kg").notNull(),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSalesPriceListSchema = createInsertSchema(salesPriceList)
+  .omit({ id: true, updatedAt: true });
+
+export type SalesPriceListEntry = typeof salesPriceList.$inferSelect;
+export type InsertSalesPriceListEntry = z.infer<typeof insertSalesPriceListSchema>;
+
+export const salesCashTargets = pgTable("sales_cash_targets", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  minRevenue: real("min_revenue").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSalesCashTargetSchema = createInsertSchema(salesCashTargets)
+  .omit({ id: true, updatedAt: true });
+
+export type SalesCashTarget = typeof salesCashTargets.$inferSelect;
+export type InsertSalesCashTarget = z.infer<typeof insertSalesCashTargetSchema>;
+
 // ===== DIARIO AMBIENTALE =====
 export const environmentalLog = pgTable("environmental_log", {
   id: serial("id").primaryKey(),

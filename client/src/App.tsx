@@ -82,6 +82,7 @@ import AttivitaConsigliate from "@/pages/AttivitaConsigliate";
 import VerificaCoperturaOrdini from "@/pages/VerificaCoperturaOrdini";
 // Importazione Proiezione Crescita
 import ProiezioneCrescita from "@/pages/ProiezioneCrescita";
+import PianificazioneVendite from "@/pages/PianificazioneVendite";
 import MappaGISLaguna from "@/pages/MappaGISLaguna";
 // Importazione Gestione Mortalità
 import GestioneMortalita from "@/pages/GestioneMortalita";
@@ -164,6 +165,7 @@ function Router() {
       <ProtectedRoute path="/attivita-consigliate" component={AttivitaConsigliate}/>
       <ProtectedRoute path="/verifica-copertura" component={VerificaCoperturaOrdini}/>
       <ProtectedRoute path="/proiezione-crescita" component={ProiezioneCrescita}/>
+      <ProtectedRoute path="/pianificazione-vendite" component={PianificazioneVendite}/>
       <ProtectedRoute path="/gestione-mortalita" component={GestioneMortalita}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>

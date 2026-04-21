@@ -216,6 +216,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       color: 'text-blue-600',
       items: [
         { icon: <TrendingUp className="h-5 w-5 mr-2 text-blue-600" />, label: "Scostamenti", path: "/proiezione-crescita" },
+        { icon: <TrendingUp className="h-5 w-5 mr-2 text-emerald-600" />, label: "Pianificazione Vendite", path: "/pianificazione-vendite" },
         { icon: <Skull className="h-5 w-5 mr-2 text-red-500" />, label: "Gestione Mortalità", path: "/gestione-mortalita" },
       ]
     },

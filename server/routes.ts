@@ -308,6 +308,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/proiezione-crescita', growthProjectionModule.growthProjectionRoutes);
   console.log('✅ Modulo PROIEZIONE CRESCITA registrato su /api/proiezione-crescita/*');
 
+  // Registra il modulo PIANIFICAZIONE VENDITE
+  const salesPlanningModule = await import('./modules/planning/sales-planning');
+  app.use('/api/pianificazione-vendite', salesPlanningModule.default);
+  console.log('✅ Modulo PIANIFICAZIONE VENDITE registrato su /api/pianificazione-vendite/*');
+
   // Registra il modulo SCREENING
   registerScreeningRoutes(app);
 
