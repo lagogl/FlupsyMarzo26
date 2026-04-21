@@ -165,7 +165,7 @@ function Router() {
       <ProtectedRoute path="/attivita-consigliate" component={AttivitaConsigliate}/>
       <ProtectedRoute path="/verifica-copertura" component={VerificaCoperturaOrdini}/>
       <ProtectedRoute path="/proiezione-crescita" component={ProiezioneCrescita}/>
-      <ProtectedRoute path="/pianificazione-vendite" component={PianificazioneVendite}/>
+      <ProtectedRoute path="/pianificazione-vendite" component={PianificazioneVendite} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/gestione-mortalita" component={GestioneMortalita}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>

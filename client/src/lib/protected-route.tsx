@@ -7,12 +7,14 @@ interface ProtectedRouteProps {
   path: string;
   component: React.ComponentType;
   requiredRole?: 'admin' | 'user' | 'visitor';
+  requiredUsername?: string;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   path,
   component: Component,
-  requiredRole
+  requiredRole,
+  requiredUsername,
 }) => {
   const { user, isLoading } = useAuth();
 
@@ -38,7 +40,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Se è richiesto un ruolo specifico e l'utente non ha quel ruolo, reindirizza
   if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
-    // Gli admin hanno accesso a tutte le pagine
     return (
       <Route path={path}>
         <Redirect to="/" />
@@ -46,7 +47,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // Se l'utente è autenticato e ha il ruolo richiesto (o non è richiesto un ruolo specifico)
+  // Se è richiesto uno username specifico e l'utente non corrisponde, reindirizza
+  if (requiredUsername && user.username?.toLowerCase() !== requiredUsername.toLowerCase()) {
+    return (
+      <Route path={path}>
+        <Redirect to="/" />
+      </Route>
+    );
+  }
+
   return (
     <Route path={path}>
       <Component />
