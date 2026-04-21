@@ -6950,8 +6950,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const currentWeight = lastOperation.animalsPerKg ? 1000000 / lastOperation.animalsPerKg : 0;
         if (currentWeight <= 0) return null;
         
-        // Calcola il peso della taglia target in mg
-        const targetWeight = targetSize.minAnimalsPerKg ? 1000000 / targetSize.minAnimalsPerKg : 0;
+        // Calcola il peso d'ingresso della taglia target in mg
+        // Una cesta "arriva" alla taglia quando entra nel range (animale più leggero = max an/kg)
+        // TP-3000 = 20.001-29.000 an/kg → ingresso a 1.000.000/29.000 ≈ 34,5 mg
+        const targetWeight = targetSize.maxAnimalsPerKg ? 1000000 / targetSize.maxAnimalsPerKg : 0;
         if (targetWeight <= 0) return null;
         
         // Se il peso è già uguale o superiore alla taglia target
@@ -6996,7 +6998,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const size of validSizes) {
           if (size.id === targetSize.id) continue;
           
-          const sizeWeight = size.minAnimalsPerKg ? 1000000 / size.minAnimalsPerKg : 0;
+          // Anche per le taglie superiori, soglia d'ingresso = animale più leggero (max an/kg)
+          const sizeWeight = size.maxAnimalsPerKg ? 1000000 / size.maxAnimalsPerKg : 0;
           if (sizeWeight <= 0 || sizeWeight < targetWeight) continue;
           
           if (currentWeight >= sizeWeight) {
