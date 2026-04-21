@@ -533,7 +533,7 @@ export default function PianificazioneVendite() {
                     Calcola Piano
                   </Button>
                   {plan && (
-                    <Button variant="outline" onClick={handleExportExcel} disabled={isExporting} title="Esporta in Excel">
+                    <Button variant="outline" onClick={handleExportExcel} disabled={isExporting} title="Esporta in Excel" className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800">
                       {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                     </Button>
                   )}
