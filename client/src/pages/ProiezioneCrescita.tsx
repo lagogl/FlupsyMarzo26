@@ -1267,7 +1267,7 @@ export default function ProiezioneCrescita() {
           <div>
             <h1 className="text-2xl font-bold">Proiezione Crescita verso {data.targetSize}</h1>
             <p className="text-sm text-muted-foreground">
-              Progressione 12 mesi con ordini (sottratti dalla giacenza), budget e arrivi schiuditoio
+              Progressione {monthsHorizon} mesi con ordini (sottratti dalla giacenza), budget e arrivi schiuditoio
             </p>
           </div>
         </div>
