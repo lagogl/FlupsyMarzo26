@@ -362,6 +362,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       const excelRow = ws.addRow(rowData);
       const stripeBg = rowIdx % 2 === 0 ? white : lightGray;
       const isSubRowExcel = !!row.isSubRow;
+      const isTotaleOrdini = !!(row.isExpandable && row.groupKey === "ordini");
 
       excelRow.eachCell((cell, colNumber) => {
         cell.border = thinBorder;
@@ -389,6 +390,32 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           } else {
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripeBg } };
             cell.font = { size: 10, color: { argb: "FF333333" }, bold: !!row.isBold };
+          }
+
+          // Coverage coloring for ordini rows (sub-rows per taglia + riga Totale)
+          let coveragePct: number | null = null;
+          if (isSubRowExcel && row.subRowSize) {
+            const month = mc[colIdx];
+            const ordered = month?.ordiniBySize?.[row.subRowSize] || 0;
+            if (ordered > 0) {
+              const evasi = month?.ordiniEvasiBySize?.[row.subRowSize] || 0;
+              coveragePct = Math.min(100, Math.round(evasi / ordered * 100));
+            }
+          } else if (isTotaleOrdini) {
+            const month = mc[colIdx];
+            const ordered = month?.ordiniTotali || 0;
+            if (ordered > 0) {
+              const evasi = Object.values(month?.ordiniEvasiBySize || {}).reduce((a, b) => a + b, 0);
+              coveragePct = Math.min(100, Math.round(evasi / ordered * 100));
+            }
+          }
+          if (coveragePct !== null) {
+            const fillArgb = coveragePct >= 100 ? "FFD1FAE5" : coveragePct >= 50 ? "FFFEF3C7" : "FFFEE2E2";
+            const fontArgb = coveragePct >= 100 ? "FF065F46" : coveragePct >= 50 ? "FF92400E" : "FF991B1B";
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } };
+            cell.font = { size: isSubRowExcel ? 9 : 10, color: { argb: fontArgb }, bold: true };
+            const icon = coveragePct >= 100 ? "✓" : coveragePct >= 50 ? "~" : "✗";
+            cell.note = `${icon} Copertura: ${coveragePct}%`;
           }
         }
       });
