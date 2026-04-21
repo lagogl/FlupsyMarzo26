@@ -488,11 +488,11 @@ export default function PianificazioneVendite() {
                         <XAxis dataKey="mese" />
                         <YAxis yAxisId="left" tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                         <YAxis yAxisId="right" orientation="right" />
-                        <RechartsTooltip formatter={(v: any, name: string) => name === 'animali' ? `${fmtNum(v)} animali` : fmtEur(v)} />
+                        <RechartsTooltip formatter={(v: any, name: string) => name === 'Animali da vendere' ? fmtNum(v) : fmtEur(v)} />
                         <Legend />
                         <Bar yAxisId="left" dataKey="ricavo" fill="#10b981" name="Ricavo" />
                         <Line yAxisId="left" type="monotone" dataKey="target" stroke="#ef4444" name="Target cassa" strokeWidth={2} />
-                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name="Animali venduti" strokeDasharray="4 2" />
+                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name="Animali da vendere" strokeDasharray="4 2" />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
