@@ -6738,10 +6738,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Ottieni gli SGR mensili per il calcolo della crescita
         const sgrs = await storage.getSgrs();
-        const currentMonth = new Date().toLocaleString('default', { month: 'long' }).toLowerCase();
+        // Usa it-IT per ottenere il nome del mese in italiano (es. "aprile") che corrisponde ai valori in DB
+        const currentMonth = new Date().toLocaleString('it-IT', { month: 'long' }).toLowerCase();
         
         // Trova l'SGR per il mese corrente o usa la media di tutti gli SGR disponibili
-        let sgrDaily = 0.067; // Valore di default: ~2% al mese, circa 0.067% al giorno
+        let sgrDaily = 0.037; // Valore di default: 3.7% (valore medio primaverile)
         const currentSgr = sgrs.find(sgr => sgr.month.toLowerCase() === currentMonth);
         if (currentSgr) {
           // Usa il valore SGR del database che è già in percentuale giornaliera
@@ -6865,15 +6866,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Ottieni gli SGR mensili per il calcolo della crescita
       const sgrs = await storage.getSgrs();
-      const currentMonth = new Date().toLocaleString('default', { month: 'long' }).toLowerCase();
+      // Usa it-IT per ottenere il nome del mese in italiano (es. "aprile") che corrisponde ai valori in DB
+      const currentMonth = new Date().toLocaleString('it-IT', { month: 'long' }).toLowerCase();
       
       // Trova l'SGR per il mese corrente o usa la media di tutti gli SGR disponibili
-      let sgrDaily = 0.067;
+      let sgrDaily = 0.037; // Valore di default: 3.7% (valore medio primaverile)
       const currentSgr = sgrs.find(sgr => sgr.month.toLowerCase() === currentMonth);
       if (currentSgr) {
         sgrDaily = currentSgr.percentage / 100;
+        console.log(`[size-predictions] SGR mese "${currentMonth}": ${currentSgr.percentage}% → sgrDaily=${sgrDaily}`);
       } else if (sgrs.length > 0) {
         sgrDaily = sgrs.reduce((acc, sgr) => acc + sgr.percentage, 0) / sgrs.length / 100;
+        console.log(`[size-predictions] SGR mese "${currentMonth}" non trovato, uso media: ${(sgrDaily*100).toFixed(2)}%`);
       }
       
       // OTTIMIZZAZIONE: Query unica per cicli attivi con baskets (JOIN)
