@@ -2,6 +2,7 @@ import { productionForecastService, ProductionForecastService } from "../../../a
 import { db } from "../../../db";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, inArray } from "drizzle-orm";
+import { loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -117,10 +118,11 @@ export class GrowthProjectionService {
 
     const yearsNeeded = [...new Set(monthSteps.map(s => s.year))];
 
-    const [sgrLookup, basketInventory, dbMortalityRates, ...ordersByYearArr] = await Promise.all([
+    const [sgrLookup, basketInventory, dbMortalityRates, simCtx, ...ordersByYearArr] = await Promise.all([
       productionForecastService.getSgrLookup(),
       productionForecastService.getBasketLevelInventory(),
       this.getMortalityRatesFromDb(),
+      loadGrowthSimulationContext(),
       ...yearsNeeded.map(y => productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders })))
     ]);
 
@@ -235,30 +237,22 @@ export class GrowthProjectionService {
       const totalBeforeMortality = globalBaskets.reduce((s, b) => s + b.animalCount, 0);
 
       if (simulDays > 0) {
-        const dailyMortalityFraction = 1 / daysInMonth;
+        // Usa il servizio di simulazione condiviso (stesso codice di /api/size-predictions
+        // e /api/size-predictions/stock-at-date) → garantisce coerenza fra moduli.
+        // Il cursore avanza giorno per giorno; il mese (m0/y) resta costante per tutta la simulazione del mese.
+        const overrideMortality = useCustomMortality ? customMonthlyRate : undefined;
         for (let day = 0; day < simulDays; day++) {
+          // Data di riferimento dentro al mese (giorno reale per i = 0, primi giorni per i > 0).
+          // Il valore esatto del giorno non influisce: stepOneDay legge solo m0 e daysInMonth.
+          const cursorDate = new Date(y, m0, (i === 0 ? currentDay : 0) + day + 1);
           globalBaskets = globalBaskets.map(b => {
-            const apk = 1000000 / b.weightMg;
-            const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
-            const newWeight = b.weightMg * (1 + sgr / 100);
-
-            // Mortalità applicata SEMPRE, anche per gli animali già a taglia commerciale:
-            // gli animali grandi continuano a perdere capi nel tempo (mortalità reale ≠ 0).
-            // (Precedentemente il flag `alreadyAtTarget` esentava dalla mortalità, gonfiando la giacenza.)
-            let dailyMortality: number;
-            if (useCustomMortality) {
-              dailyMortality = customMonthlyRate * dailyMortalityFraction;
-            } else {
-              const sizeName = productionForecastService.mapAnimalsPerKgToSaleSize(apk);
-              const month1Based = m0 + 1;
-              const dbRate = dbMortalityRates[sizeName]?.[month1Based];
-              const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-              const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
-              dailyMortality = monthlyRate * dailyMortalityFraction;
-            }
-
-            const surviving = Math.round(b.animalCount * (1 - dailyMortality));
-            return { ...b, weightMg: newWeight, animalCount: surviving };
+            const next = stepOneDay(
+              simCtx,
+              { weightMg: b.weightMg, count: b.animalCount },
+              cursorDate,
+              overrideMortality
+            );
+            return { ...b, weightMg: next.weightMg, animalCount: Math.round(next.count) };
           });
         }
       }

@@ -48,6 +48,7 @@ import { sendError, sendSuccess } from "./utils/error-handler";
 import * as SequenceController from "./controllers/sequence-controller";
 import { getOperationsUnified } from "./controllers/operations-unified-controller";
 import { invalidateAllCaches } from "./services/operations-lifecycle.service";
+import { loadGrowthSimulationContext, simulateForward } from "./services/growth-simulation.service";
 
 // 🎯 MODULI ORGANIZZATI
 import { flupsyRoutes } from "./modules/core/flupsys";
@@ -6877,174 +6878,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json([]);
       }
       
-      // Usa it-IT per ottenere il nome del mese in italiano (es. "aprile") che corrisponde ai valori in DB
-      const MONTH_NAMES_IT = [
-        'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
-        'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'
-      ];
-      const currentMonth = MONTH_NAMES_IT[new Date().getMonth()];
+      // Carica il contesto di simulazione condiviso (SGR + mortalità + lookup taglie).
+      // STESSO codice usato da /stock-at-date e da Proiezione Crescita.
+      const simCtx = await loadGrowthSimulationContext();
 
-      // Carica SGR mensili (fallback), SGR per taglia (calcolo preciso) e tassi di mortalità per taglia/mese
-      const [sgrs, sgrPerTagliaAll, mortalityRows] = await Promise.all([
-        storage.getSgrs(),
-        storage.getSgrPerTaglia(),
-        db.select().from(schema.projectionMortalityRates),
-      ]);
+      console.log(`[size-predictions] Contesto caricato: ${Object.keys(simCtx.sgrByMonthAndSize).length} combinazioni mese×taglia`);
 
-      // Tabella ordinata per soglia an/kg (max al min) per mappare peso → codice taglia (es. "TP-3000")
-      const SALE_SIZE_THRESHOLDS: Array<{size: string; maxAnimalsPerKg: number}> = [
-        { size: 'TP-10000', maxAnimalsPerKg: 1200 },
-        { size: 'TP-9000', maxAnimalsPerKg: 1800 },
-        { size: 'TP-8000', maxAnimalsPerKg: 2300 },
-        { size: 'TP-7000', maxAnimalsPerKg: 3000 },
-        { size: 'TP-6000', maxAnimalsPerKg: 3900 },
-        { size: 'TP-5500', maxAnimalsPerKg: 6000 },
-        { size: 'TP-5000', maxAnimalsPerKg: 9000 },
-        { size: 'TP-4500', maxAnimalsPerKg: 13000 },
-        { size: 'TP-4000', maxAnimalsPerKg: 15000 },
-        { size: 'TP-3500', maxAnimalsPerKg: 20000 },
-        { size: 'TP-3000', maxAnimalsPerKg: 29000 },
-        { size: 'TP-2800', maxAnimalsPerKg: 40000 },
-        { size: 'TP-2500', maxAnimalsPerKg: 70000 },
-        { size: 'TP-2000', maxAnimalsPerKg: 97000 },
-        { size: 'TP-1900', maxAnimalsPerKg: 120000 },
-        { size: 'TP-1800', maxAnimalsPerKg: 190000 },
-        { size: 'TP-1500', maxAnimalsPerKg: 300000 },
-        { size: 'TP-1260', maxAnimalsPerKg: 350000 },
-        { size: 'TP-1140', maxAnimalsPerKg: 600000 },
-        { size: 'TP-1000', maxAnimalsPerKg: 880000 },
-        { size: 'TP-800', maxAnimalsPerKg: 1000000 },
-        { size: 'TP-700', maxAnimalsPerKg: 1900000 },
-        { size: 'TP-600', maxAnimalsPerKg: 2000000 },
-        { size: 'TP-500', maxAnimalsPerKg: 8000000 },
-        { size: 'TP-450', maxAnimalsPerKg: 15000000 },
-        { size: 'TP-350', maxAnimalsPerKg: 20000000 },
-        { size: 'TP-300', maxAnimalsPerKg: 30000000 },
-        { size: 'TP-250', maxAnimalsPerKg: 70000000 },
-        { size: 'TP-180', maxAnimalsPerKg: Number.POSITIVE_INFINITY },
-      ];
-      const mapAnimalsPerKgToSizeCode = (apk: number): string => {
-        for (const t of SALE_SIZE_THRESHOLDS) {
-          if (apk <= t.maxAnimalsPerKg) return t.size;
-        }
-        return 'TP-180';
-      };
-
-      // Lookup mortalità: chiave "month1Based|TP-XXXX" → frazione mensile (es. 0.01 = 1%/mese)
-      const mortalityByMonthAndSize: Record<string, number> = {};
-      for (const m of mortalityRows as any[]) {
-        if (m.sizeName && m.month && m.monthlyPercentage != null) {
-          mortalityByMonthAndSize[`${m.month}|${m.sizeName}`] = m.monthlyPercentage / 100;
-        }
-      }
-      const FALLBACK_MONTHLY_MORTALITY = 0.03; // 3%/mese se non specificato
-      const getDailyMortality = (apk: number, month1Based: number, daysInMonth: number): number => {
-        const sizeCode = mapAnimalsPerKgToSizeCode(apk);
-        const monthlyRate = mortalityByMonthAndSize[`${month1Based}|${sizeCode}`] ?? FALLBACK_MONTHLY_MORTALITY;
-        return monthlyRate / daysInMonth;
-      };
-
-      // Costruisce SGR fallback per ciascun mese (used quando non esiste sgr_per_taglia per quella combinazione)
-      const sgrFallbackByMonth: Record<string, number> = {};
-      for (const s of sgrs) {
-        if (s.month && s.percentage != null) {
-          sgrFallbackByMonth[s.month.toLowerCase()] = s.percentage / 100;
-        }
-      }
-      // Fallback globale (media su tutti i mesi) se manca il mese corrente
-      const globalFallback = sgrs.length > 0
-        ? sgrs.reduce((acc, sgr) => acc + sgr.percentage, 0) / sgrs.length / 100
-        : 0.037;
-
-      // Costruisce SGR per (mese, sizeId) — chiave "mese|sizeId"
-      const sgrByMonthAndSize: Record<string, number> = {};
-      for (const s of sgrPerTagliaAll as any[]) {
-        if (s.month && s.sizeId != null && s.calculatedSgr != null) {
-          sgrByMonthAndSize[`${s.month.toLowerCase()}|${s.sizeId}`] = s.calculatedSgr / 100;
-        }
-      }
-
-      console.log(`[size-predictions] Mese corrente "${currentMonth}": SGR per-taglia caricati per ${Object.keys(sgrByMonthAndSize).length} combinazioni mese×taglia`);
-
-      // Helper: SGR giornaliero per una sizeId in un dato mese (con doppio fallback)
-      const getSgrForSizeInMonth = (sizeId: number | null | undefined, monthLower: string): number => {
-        if (sizeId != null) {
-          const v = sgrByMonthAndSize[`${monthLower}|${sizeId}`];
-          if (v !== undefined) return v;
-        }
-        if (sgrFallbackByMonth[monthLower] !== undefined) return sgrFallbackByMonth[monthLower];
-        return globalFallback;
-      };
-
-      // Helper: dato un peso in mg, trova la sizeId corrispondente
-      // animalsPerKg = 1_000_000 / weightMg; cerca la taglia dove min <= an/kg <= max
-      const findSizeIdForWeight = (weightMg: number): number | null => {
-        const anPerKg = 1_000_000 / weightMg;
-        // Cerca la taglia esatta per intervallo
-        const exact = allSizes.find(s =>
-          s.minAnimalsPerKg != null && s.maxAnimalsPerKg != null &&
-          anPerKg >= s.minAnimalsPerKg && anPerKg <= s.maxAnimalsPerKg
-        );
-        if (exact) return exact.id;
-        // Fallback: taglia con minAnimalsPerKg più vicino
-        let best: typeof allSizes[0] | null = null;
-        let bestDist = Infinity;
-        for (const s of allSizes) {
-          if (s.minAnimalsPerKg == null) continue;
-          const dist = Math.abs(s.minAnimalsPerKg - anPerKg);
-          if (dist < bestDist) { bestDist = dist; best = s; }
-        }
-        return best?.id ?? null;
-      };
-
-      // Simulazione giorno-per-giorno con SGR variabile per taglia E per mese,
-      // E mortalità per taglia/mese letta da `projection_mortality_rates` (allineata a Proiezione Crescita).
-      // Avanza il calendario reale: ogni giorno determina il mese corrente e applica:
-      //  - SGR specifico della combinazione (taglia attuale × mese)
-      //  - mortalità giornaliera = (tasso mensile della taglia/mese) / giorni del mese corrente
       const today = new Date();
       const simulate = (
         currentWeightMg: number,
         startCount: number,
-        targetWeightMg: number | null,  // null = simula esattamente maxDays giorni senza interrompere
+        targetWeightMg: number | null,
         maxDays: number
       ): { daysToReach: number | null; finalWeightMg: number; finalCount: number } => {
-        let weight = currentWeightMg;
-        let count = startCount;
-        let daysToReach: number | null = null;
-        const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        for (let day = 1; day <= maxDays; day++) {
-          cursor.setDate(cursor.getDate() + 1);
-          const m0 = cursor.getMonth();
-          const m1 = m0 + 1;
-          const monthLower = MONTH_NAMES_IT[m0];
-          const daysInMonth = new Date(cursor.getFullYear(), m1, 0).getDate();
-
-          // Crescita
-          const sizeId = findSizeIdForWeight(weight);
-          const sgr = getSgrForSizeInMonth(sizeId, monthLower);
-          weight *= (1 + sgr);
-
-          // Mortalità (basata sull'apk dopo crescita di oggi)
-          // Guardia: weight non dovrebbe mai essere ≤ 0 (SGR è sempre ≥ 0), ma evitiamo divisione/Infinity
-          const apk = weight > 0 ? 1_000_000 / weight : Number.MAX_SAFE_INTEGER;
-          const dailyMortality = getDailyMortality(apk, m1, daysInMonth);
-          count = count * (1 - dailyMortality);
-
-          if (targetWeightMg !== null && daysToReach === null && weight >= targetWeightMg) {
-            daysToReach = day;
-            break; // ci fermiamo al raggiungimento della soglia
-          }
-        }
-        return { daysToReach, finalWeightMg: weight, finalCount: Math.round(count) };
+        const r = simulateForward(simCtx, currentWeightMg, startCount, maxDays, {
+          today,
+          targetWeightMg,
+        });
+        return { daysToReach: r.daysToReach, finalWeightMg: r.finalWeightMg, finalCount: Math.round(r.finalCount) };
       };
-
-      // Wrapper retro-compatibile: ritorna solo i giorni
-      const simulateDaysToTarget = (
-        currentWeightMg: number,
-        targetWeightMg: number,
-        maxDays: number
-      ): number | null => simulate(currentWeightMg, 0, targetWeightMg, maxDays).daysToReach;
       
       // OTTIMIZZAZIONE: Query unica per cicli attivi con baskets (JOIN)
       const cyclesWithBaskets = await db
@@ -7258,73 +7110,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const targetMaxApk = targetSize.maxAnimalsPerKg;
 
-      const MONTH_NAMES_IT = [
-        'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
-        'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'
-      ];
-
-      const [allSizes, sgrs, sgrPerTagliaAll, mortalityRows] = await Promise.all([
-        storage.getSizes(),
-        storage.getSgrs(),
-        storage.getSgrPerTaglia(),
-        db.select().from(schema.projectionMortalityRates),
-      ]);
-
-      // Stessa tabella soglie di /api/size-predictions
-      const SALE_SIZE_THRESHOLDS: Array<{size: string; maxAnimalsPerKg: number}> = [
-        { size: 'TP-10000', maxAnimalsPerKg: 1200 }, { size: 'TP-9000', maxAnimalsPerKg: 1800 },
-        { size: 'TP-8000', maxAnimalsPerKg: 2300 }, { size: 'TP-7000', maxAnimalsPerKg: 3000 },
-        { size: 'TP-6000', maxAnimalsPerKg: 3900 }, { size: 'TP-5500', maxAnimalsPerKg: 6000 },
-        { size: 'TP-5000', maxAnimalsPerKg: 9000 }, { size: 'TP-4500', maxAnimalsPerKg: 13000 },
-        { size: 'TP-4000', maxAnimalsPerKg: 15000 }, { size: 'TP-3500', maxAnimalsPerKg: 20000 },
-        { size: 'TP-3000', maxAnimalsPerKg: 29000 }, { size: 'TP-2800', maxAnimalsPerKg: 40000 },
-        { size: 'TP-2500', maxAnimalsPerKg: 70000 }, { size: 'TP-2000', maxAnimalsPerKg: 97000 },
-        { size: 'TP-1900', maxAnimalsPerKg: 120000 }, { size: 'TP-1800', maxAnimalsPerKg: 190000 },
-        { size: 'TP-1500', maxAnimalsPerKg: 300000 }, { size: 'TP-1260', maxAnimalsPerKg: 350000 },
-        { size: 'TP-1140', maxAnimalsPerKg: 600000 }, { size: 'TP-1000', maxAnimalsPerKg: 880000 },
-        { size: 'TP-800', maxAnimalsPerKg: 1000000 }, { size: 'TP-700', maxAnimalsPerKg: 1900000 },
-        { size: 'TP-600', maxAnimalsPerKg: 2000000 }, { size: 'TP-500', maxAnimalsPerKg: 8000000 },
-        { size: 'TP-450', maxAnimalsPerKg: 15000000 }, { size: 'TP-350', maxAnimalsPerKg: 20000000 },
-        { size: 'TP-300', maxAnimalsPerKg: 30000000 }, { size: 'TP-250', maxAnimalsPerKg: 70000000 },
-        { size: 'TP-180', maxAnimalsPerKg: Number.POSITIVE_INFINITY },
-      ];
-      const mapApkToSize = (apk: number) => {
-        for (const t of SALE_SIZE_THRESHOLDS) if (apk <= t.maxAnimalsPerKg) return t.size;
-        return 'TP-180';
-      };
-
-      const mortalityByMonthAndSize: Record<string, number> = {};
-      for (const m of mortalityRows as any[]) {
-        if (m.sizeName && m.month && m.monthlyPercentage != null) {
-          mortalityByMonthAndSize[`${m.month}|${m.sizeName}`] = m.monthlyPercentage / 100;
-        }
-      }
-      const FALLBACK_MONTHLY = 0.03;
-      const sgrFallbackByMonth: Record<string, number> = {};
-      for (const s of sgrs) {
-        if (s.month && s.percentage != null) sgrFallbackByMonth[s.month.toLowerCase()] = s.percentage / 100;
-      }
-      const globalFallback = sgrs.length > 0
-        ? sgrs.reduce((a, s) => a + s.percentage, 0) / sgrs.length / 100
-        : 0.037;
-      const sgrByMonthAndSize: Record<string, number> = {};
-      for (const s of sgrPerTagliaAll as any[]) {
-        if (s.month && s.sizeId != null && s.calculatedSgr != null) {
-          sgrByMonthAndSize[`${s.month.toLowerCase()}|${s.sizeId}`] = s.calculatedSgr / 100;
-        }
-      }
-      const findSizeIdForWeight = (w: number): number | null => {
-        const apk = 1_000_000 / w;
-        const ex = allSizes.find(s => s.minAnimalsPerKg != null && s.maxAnimalsPerKg != null && apk >= s.minAnimalsPerKg && apk <= s.maxAnimalsPerKg);
-        if (ex) return ex.id;
-        let best: any = null, bd = Infinity;
-        for (const s of allSizes) {
-          if (s.minAnimalsPerKg == null) continue;
-          const d = Math.abs(s.minAnimalsPerKg - apk);
-          if (d < bd) { bd = d; best = s; }
-        }
-        return best?.id ?? null;
-      };
+      // Carica il contesto di simulazione condiviso (stesso codice di /api/size-predictions e Proiezione Crescita).
+      const simCtx = await loadGrowthSimulationContext();
 
       // Recupera ceste attive + ultima operazione con peso
       const cyclesWithBaskets = await db
@@ -7353,25 +7140,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const today = new Date();
-      // Simulazione condivisa
-      const simulateForward = (currentWeightMg: number, startCount: number, days: number) => {
-        let weight = currentWeightMg, count = startCount;
-        const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        for (let d = 1; d <= days; d++) {
-          cursor.setDate(cursor.getDate() + 1);
-          const m0 = cursor.getMonth();
-          const m1 = m0 + 1;
-          const monthLower = MONTH_NAMES_IT[m0];
-          const daysInMonth = new Date(cursor.getFullYear(), m1, 0).getDate();
-          const sizeId = findSizeIdForWeight(weight);
-          const sgr = (sizeId != null && sgrByMonthAndSize[`${monthLower}|${sizeId}`]) ?? sgrFallbackByMonth[monthLower] ?? globalFallback;
-          weight *= (1 + sgr);
-          const apk = weight > 0 ? 1_000_000 / weight : Number.MAX_SAFE_INTEGER;
-          const monthly = mortalityByMonthAndSize[`${m1}|${mapApkToSize(apk)}`] ?? FALLBACK_MONTHLY;
-          count = count * (1 - monthly / daysInMonth);
-        }
-        return { weightMg: weight, count: Math.round(count) };
-      };
 
       let totalCurrentAnimals = 0;
       let totalBaskets = 0;
@@ -7393,10 +7161,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalCurrentAnimals += startCount;
         totalBaskets += 1;
 
-        const sim = simulateForward(currentWeightMg, startCount, withinDays);
-        const finalApk = sim.weightMg > 0 ? 1_000_000 / sim.weightMg : Number.MAX_SAFE_INTEGER;
+        const sim = simulateForward(simCtx, currentWeightMg, startCount, withinDays, { today });
+        const finalApk = sim.finalWeightMg > 0 ? 1_000_000 / sim.finalWeightMg : Number.MAX_SAFE_INTEGER;
         if (finalApk <= targetMaxApk) {
-          totalAnimalsAtTarget += sim.count;
+          totalAnimalsAtTarget += Math.round(sim.finalCount);
           basketsAtTarget += 1;
         }
       }
