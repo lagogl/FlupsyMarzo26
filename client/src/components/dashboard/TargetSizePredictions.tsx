@@ -577,9 +577,9 @@ export function TargetSizePredictions() {
                   <tr className="bg-emerald-50 border-t-2 border-emerald-200 font-semibold text-emerald-900">
                     <td className="px-3 py-2" colSpan={2}>
                       <div className="flex flex-col">
-                        <span>STOCK {targetSize}+ @ {new Date(stockAtDate.date).toLocaleDateString('it-IT')}</span>
+                        <span>Stock fisico simulato {targetSize}+ @ {new Date(stockAtDate.date).toLocaleDateString('it-IT')} (lordo, senza ordini)</span>
                         <span className="text-[10px] font-normal text-emerald-700">
-                          Tutte le ceste attive simulate fino a quella data (apk ≤ {stockAtDate.targetMaxAnimalsPerKg.toLocaleString('it-IT')}). Confronto diretto con Proiezione Crescita.
+                          Tutte le ceste attive simulate fino a quella data (apk ≤ {stockAtDate.targetMaxAnimalsPerKg.toLocaleString('it-IT')}). Valore LORDO: non sottrae gli ordini già evasi, quindi non è confrontabile 1:1 con la Proiezione Crescita (che mostra il netto post-ordini).
                         </span>
                       </div>
                     </td>
