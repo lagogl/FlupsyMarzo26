@@ -164,6 +164,8 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
       return data.records as MortalityRecord[];
     },
     enabled: !!lotId,
+    staleTime: 0,
+    retry: 2,
   });
 
   // Mutation per registrare un nuovo calcolo di mortalità
@@ -558,8 +560,11 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
                 <Skeleton className="h-10 w-full" />
               </div>
             ) : mortalityHistoryQuery.isError ? (
-              <div className="py-4 text-center text-destructive">
-                Errore nel caricamento dei dati di mortalità
+              <div className="py-6 text-center space-y-3">
+                <p className="text-destructive text-sm">Errore nel caricamento dei dati di mortalità</p>
+                <Button variant="outline" size="sm" onClick={() => mortalityHistoryQuery.refetch()}>
+                  Riprova
+                </Button>
               </div>
             ) : !mortalityHistoryQuery.data || mortalityHistoryQuery.data.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">
