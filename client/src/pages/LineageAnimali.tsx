@@ -875,6 +875,7 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
   const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['mortalityPct', 'soldPct', 'activePct']));
   const [chartType, setChartType] = useState<'bar' | 'radar'>('bar');
   const [normalize, setNormalize] = useState(false);
+  const [filterLot, setFilterLot] = useState('');
 
   const lotGroups = useMemo(() => {
     const map = new Map<number, { lotInfo: any; groups: any[] }>();
@@ -928,6 +929,16 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
     return sortDir === 'desc' ? vb - va : va - vb;
   }), [lotStats, sortCol, sortDir]);
 
+  const filteredSorted = useMemo(() => {
+    if (!filterLot.trim()) return sorted;
+    const q = filterLot.trim().toLowerCase();
+    return sorted.filter(s =>
+      String(s.lotInfo.id).includes(q) ||
+      (s.lotInfo.supplier ?? '').toLowerCase().includes(q) ||
+      (s.lotInfo.supplierLotNumber ?? '').toLowerCase().includes(q)
+    );
+  }, [sorted, filterLot]);
+
   const totals = useMemo(() => lotStats.reduce((acc, s) => {
     acc.initialAnimals += s.initialAnimals; acc.totalDeaths += s.totalDeaths;
     acc.totalSold += s.totalSold; acc.totalActive += s.totalActive;
@@ -951,7 +962,7 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
     try {
       const XLSX = (await import('xlsx')).default ?? (await import('xlsx'));
       const wb = XLSX.utils.book_new();
-      const s1 = XLSX.utils.json_to_sheet(sorted.map(s => ({
+      const s1 = XLSX.utils.json_to_sheet(filteredSorted.map(s => ({
         'ID Lotto': s.lotInfo.id, 'Fornitore': s.lotInfo.supplier ?? '—',
         'N. Lotto Fornitore': s.lotInfo.supplierLotNumber ?? '—',
         'Taglia Ingresso': s.lotInfo.size?.code ?? '—',
@@ -973,7 +984,7 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
       XLSX.utils.book_append_sheet(wb, s1, 'Riepilogo Lotti');
 
       const cycleRows: any[] = [];
-      for (const s of sorted) {
+      for (const s of filteredSorted) {
         for (const g of s.groups) {
           for (const c of (g.cycles ?? [])) {
             const ops = [...(c.operations || [])].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -1271,10 +1282,30 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-gray-700 flex items-center gap-2">
+          <CardTitle className="text-sm text-gray-700 flex items-center gap-2 flex-wrap">
             <BookOpen className="w-4 h-4" />
             Dettaglio per lotto
-            <span className="text-xs font-normal text-gray-400 ml-1">▶ per espandere gruppi e cicli</span>
+            <span className="text-xs font-normal text-gray-400">▶ per espandere gruppi e cicli</span>
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input
+                value={filterLot}
+                onChange={e => setFilterLot(e.target.value)}
+                placeholder="Filtra per ID, fornitore o n. lotto…"
+                className="pl-7 pr-7 h-7 text-xs"
+              />
+              {filterLot && (
+                <button onClick={() => setFilterLot('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {filterLot && (
+              <span className="text-xs text-amber-600 font-normal">
+                {filteredSorted.length}/{sorted.length} lotti
+              </span>
+            )}
             <Button size="sm" variant="outline" className="ml-auto text-xs" onClick={handleExcel} disabled={exporting}>
               <Download className="w-3.5 h-3.5 mr-1" />{exporting ? 'Esportando...' : 'Excel'}
             </Button>
@@ -1305,7 +1336,7 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((s, i) => {
+                {filteredSorted.map((s, i) => {
                   const lotId = s.lotInfo.id;
                   const exp = expandedLots.has(lotId);
                   const mc = s.mortalityPct > 30 ? 'text-red-600 font-bold' : s.mortalityPct > 10 ? 'text-orange-500 font-semibold' : 'text-gray-700';
