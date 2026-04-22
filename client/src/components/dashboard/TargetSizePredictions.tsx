@@ -107,6 +107,22 @@ export function TargetSizePredictions() {
     queryFn: getQueryFn<TargetSizePrediction[]>({ on401: "throw" }),
   });
 
+  // Stock cumulativo @data: simula TUTTE le ceste attive a (oggi + days) e somma
+  // gli animali con apk ≤ targetSize.maxAnimalsPerKg → confronto diretto con Proiezione Crescita.
+  const { data: stockAtDate } = useQuery<{
+    targetSize: string;
+    targetMaxAnimalsPerKg: number;
+    days: number;
+    date: string;
+    totalCurrentAnimals: number;
+    totalBaskets: number;
+    totalAnimalsAtTarget: number;
+    basketsAtTarget: number;
+  }>({
+    queryKey: [`/api/size-predictions/stock-at-date?size=${targetSize}&days=${effectiveDays}`, targetSize, effectiveDays],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
   // For animal mode: walk through sorted predictions until target is met
   const parsedAnimalTarget = parseInt(animalTarget.replace(/\D/g, ""), 10) || 0;
 
@@ -557,6 +573,29 @@ export function TargetSizePredictions() {
                   <td className="px-3 py-2 bg-blue-50/50"></td>
                   <td className="px-3 py-2"></td>
                 </tr>
+                {stockAtDate && (
+                  <tr className="bg-emerald-50 border-t-2 border-emerald-200 font-semibold text-emerald-900">
+                    <td className="px-3 py-2" colSpan={2}>
+                      <div className="flex flex-col">
+                        <span>STOCK {targetSize}+ @ {new Date(stockAtDate.date).toLocaleDateString('it-IT')}</span>
+                        <span className="text-[10px] font-normal text-emerald-700">
+                          Tutte le ceste attive simulate fino a quella data (apk ≤ {stockAtDate.targetMaxAnimalsPerKg.toLocaleString('it-IT')}). Confronto diretto con Proiezione Crescita.
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right" colSpan={filterMode === "animals" ? 2 : 1}>
+                      <span className="text-xs text-emerald-700">su {stockAtDate.totalCurrentAnimals.toLocaleString('it-IT')} attuali</span>
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs text-emerald-700">{stockAtDate.basketsAtTarget} ceste a target</td>
+                    {/* Riempitivo: copre Peso Medio, Attuale, Target, Incr%, Data Arrivo (5 colonne) */}
+                    <td className="px-3 py-2" colSpan={5}></td>
+                    <td className="px-3 py-2 text-right bg-emerald-100 text-emerald-900 text-base">
+                      {stockAtDate.totalAnimalsAtTarget.toLocaleString('it-IT')}
+                    </td>
+                    <td className="px-3 py-2 bg-emerald-100"></td>
+                    <td className="px-3 py-2"></td>
+                  </tr>
+                )}
               </tfoot>
             </table>
           </div>

@@ -7241,6 +7241,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================
+  // 📊 STOCK CUMULATIVO ALLA DATA
+  // Per "Ceste in arrivo": simula TUTTE le ceste attive fino a (oggi + days) e somma
+  // gli animali con apk ≤ targetSize.maxAnimalsPerKg (es. TP-3000 → ≤ 29.000 an/kg).
+  // Coincide concettualmente con la giacenza lorda della Proiezione Crescita alla stessa data.
+  // ========================================
+  app.get("/api/size-predictions/stock-at-date", async (req, res) => {
+    try {
+      const targetSizeCode = req.query.size ? String(req.query.size) : "TP-3000";
+      const withinDays = req.query.days ? parseInt(req.query.days as string) : 14;
+
+      const targetSize = await storage.getSizeByCode(targetSizeCode);
+      if (!targetSize || !targetSize.maxAnimalsPerKg) {
+        return res.status(404).json({ message: `Taglia ${targetSizeCode} non trovata` });
+      }
+      const targetMaxApk = targetSize.maxAnimalsPerKg;
+
+      const MONTH_NAMES_IT = [
+        'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+        'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'
+      ];
+
+      const [allSizes, sgrs, sgrPerTagliaAll, mortalityRows] = await Promise.all([
+        storage.getSizes(),
+        storage.getSgrs(),
+        storage.getSgrPerTaglia(),
+        db.select().from(schema.projectionMortalityRates),
+      ]);
+
+      // Stessa tabella soglie di /api/size-predictions
+      const SALE_SIZE_THRESHOLDS: Array<{size: string; maxAnimalsPerKg: number}> = [
+        { size: 'TP-10000', maxAnimalsPerKg: 1200 }, { size: 'TP-9000', maxAnimalsPerKg: 1800 },
+        { size: 'TP-8000', maxAnimalsPerKg: 2300 }, { size: 'TP-7000', maxAnimalsPerKg: 3000 },
+        { size: 'TP-6000', maxAnimalsPerKg: 3900 }, { size: 'TP-5500', maxAnimalsPerKg: 6000 },
+        { size: 'TP-5000', maxAnimalsPerKg: 9000 }, { size: 'TP-4500', maxAnimalsPerKg: 13000 },
+        { size: 'TP-4000', maxAnimalsPerKg: 15000 }, { size: 'TP-3500', maxAnimalsPerKg: 20000 },
+        { size: 'TP-3000', maxAnimalsPerKg: 29000 }, { size: 'TP-2800', maxAnimalsPerKg: 40000 },
+        { size: 'TP-2500', maxAnimalsPerKg: 70000 }, { size: 'TP-2000', maxAnimalsPerKg: 97000 },
+        { size: 'TP-1900', maxAnimalsPerKg: 120000 }, { size: 'TP-1800', maxAnimalsPerKg: 190000 },
+        { size: 'TP-1500', maxAnimalsPerKg: 300000 }, { size: 'TP-1260', maxAnimalsPerKg: 350000 },
+        { size: 'TP-1140', maxAnimalsPerKg: 600000 }, { size: 'TP-1000', maxAnimalsPerKg: 880000 },
+        { size: 'TP-800', maxAnimalsPerKg: 1000000 }, { size: 'TP-700', maxAnimalsPerKg: 1900000 },
+        { size: 'TP-600', maxAnimalsPerKg: 2000000 }, { size: 'TP-500', maxAnimalsPerKg: 8000000 },
+        { size: 'TP-450', maxAnimalsPerKg: 15000000 }, { size: 'TP-350', maxAnimalsPerKg: 20000000 },
+        { size: 'TP-300', maxAnimalsPerKg: 30000000 }, { size: 'TP-250', maxAnimalsPerKg: 70000000 },
+        { size: 'TP-180', maxAnimalsPerKg: Number.POSITIVE_INFINITY },
+      ];
+      const mapApkToSize = (apk: number) => {
+        for (const t of SALE_SIZE_THRESHOLDS) if (apk <= t.maxAnimalsPerKg) return t.size;
+        return 'TP-180';
+      };
+
+      const mortalityByMonthAndSize: Record<string, number> = {};
+      for (const m of mortalityRows as any[]) {
+        if (m.sizeName && m.month && m.monthlyPercentage != null) {
+          mortalityByMonthAndSize[`${m.month}|${m.sizeName}`] = m.monthlyPercentage / 100;
+        }
+      }
+      const FALLBACK_MONTHLY = 0.03;
+      const sgrFallbackByMonth: Record<string, number> = {};
+      for (const s of sgrs) {
+        if (s.month && s.percentage != null) sgrFallbackByMonth[s.month.toLowerCase()] = s.percentage / 100;
+      }
+      const globalFallback = sgrs.length > 0
+        ? sgrs.reduce((a, s) => a + s.percentage, 0) / sgrs.length / 100
+        : 0.037;
+      const sgrByMonthAndSize: Record<string, number> = {};
+      for (const s of sgrPerTagliaAll as any[]) {
+        if (s.month && s.sizeId != null && s.calculatedSgr != null) {
+          sgrByMonthAndSize[`${s.month.toLowerCase()}|${s.sizeId}`] = s.calculatedSgr / 100;
+        }
+      }
+      const findSizeIdForWeight = (w: number): number | null => {
+        const apk = 1_000_000 / w;
+        const ex = allSizes.find(s => s.minAnimalsPerKg != null && s.maxAnimalsPerKg != null && apk >= s.minAnimalsPerKg && apk <= s.maxAnimalsPerKg);
+        if (ex) return ex.id;
+        let best: any = null, bd = Infinity;
+        for (const s of allSizes) {
+          if (s.minAnimalsPerKg == null) continue;
+          const d = Math.abs(s.minAnimalsPerKg - apk);
+          if (d < bd) { bd = d; best = s; }
+        }
+        return best?.id ?? null;
+      };
+
+      // Recupera ceste attive + ultima operazione con peso
+      const cyclesWithBaskets = await db
+        .select({
+          cycleId: cycles.id,
+          basketId: cycles.basketId,
+        })
+        .from(cycles)
+        .innerJoin(baskets, eq(cycles.basketId, baskets.id))
+        .where(eq(cycles.state, 'active'));
+
+      if (cyclesWithBaskets.length === 0) {
+        return res.json({
+          targetSize: targetSizeCode, targetMaxAnimalsPerKg: targetMaxApk,
+          days: withinDays, date: new Date().toISOString(),
+          totalCurrentAnimals: 0, totalBaskets: 0,
+          totalAnimalsAtTarget: 0, basketsAtTarget: 0
+        });
+      }
+
+      const basketIds = cyclesWithBaskets.map(c => c.basketId);
+      const allOperations = await db.select().from(operations).where(inArray(operations.basketId, basketIds));
+      const opsByBasket: Record<number, typeof allOperations> = {};
+      for (const op of allOperations) {
+        (opsByBasket[op.basketId] ??= []).push(op);
+      }
+
+      const today = new Date();
+      // Simulazione condivisa
+      const simulateForward = (currentWeightMg: number, startCount: number, days: number) => {
+        let weight = currentWeightMg, count = startCount;
+        const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        for (let d = 1; d <= days; d++) {
+          cursor.setDate(cursor.getDate() + 1);
+          const m0 = cursor.getMonth();
+          const m1 = m0 + 1;
+          const monthLower = MONTH_NAMES_IT[m0];
+          const daysInMonth = new Date(cursor.getFullYear(), m1, 0).getDate();
+          const sizeId = findSizeIdForWeight(weight);
+          const sgr = (sizeId != null && sgrByMonthAndSize[`${monthLower}|${sizeId}`]) ?? sgrFallbackByMonth[monthLower] ?? globalFallback;
+          weight *= (1 + sgr);
+          const apk = weight > 0 ? 1_000_000 / weight : Number.MAX_SAFE_INTEGER;
+          const monthly = mortalityByMonthAndSize[`${m1}|${mapApkToSize(apk)}`] ?? FALLBACK_MONTHLY;
+          count = count * (1 - monthly / daysInMonth);
+        }
+        return { weightMg: weight, count: Math.round(count) };
+      };
+
+      let totalCurrentAnimals = 0;
+      let totalBaskets = 0;
+      let totalAnimalsAtTarget = 0;
+      let basketsAtTarget = 0;
+
+      for (const c of cyclesWithBaskets) {
+        const ops = opsByBasket[c.basketId] || [];
+        if (ops.length === 0) continue;
+        const sorted = ops.sort((a, b) => {
+          const dd = new Date(b.date).getTime() - new Date(a.date).getTime();
+          return dd !== 0 ? dd : b.id - a.id;
+        });
+        const last = sorted.find(op => op.cycleId === c.cycleId && op.animalsPerKg != null && op.animalsPerKg > 0)
+          || sorted.find(op => op.animalsPerKg != null && op.animalsPerKg > 0);
+        if (!last || !last.animalsPerKg) continue;
+        const currentWeightMg = 1_000_000 / last.animalsPerKg;
+        const startCount = last.animalCount ?? 0;
+        totalCurrentAnimals += startCount;
+        totalBaskets += 1;
+
+        const sim = simulateForward(currentWeightMg, startCount, withinDays);
+        const finalApk = sim.weightMg > 0 ? 1_000_000 / sim.weightMg : Number.MAX_SAFE_INTEGER;
+        if (finalApk <= targetMaxApk) {
+          totalAnimalsAtTarget += sim.count;
+          basketsAtTarget += 1;
+        }
+      }
+
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + withinDays);
+
+      res.json({
+        targetSize: targetSizeCode,
+        targetMaxAnimalsPerKg: targetMaxApk,
+        days: withinDays,
+        date: targetDate.toISOString(),
+        totalCurrentAnimals,
+        totalBaskets,
+        totalAnimalsAtTarget,
+        basketsAtTarget,
+      });
+    } catch (error) {
+      console.error("Errore stock-at-date:", error);
+      res.status(500).json({ message: "Errore nel calcolo dello stock cumulativo" });
+    }
+  });
+
   // Create HTTP server
   const httpServer = createServer(app);
   
