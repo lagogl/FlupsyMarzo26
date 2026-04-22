@@ -325,7 +325,7 @@ export class ProductionForecastService {
     if (animalsPerKg > 70000000) sizeId = 2;
     else if (animalsPerKg > 30000000) sizeId = 3;
     else if (animalsPerKg > 20000000) sizeId = 4;
-    else if (animalsPerKg > 15000000) sizeId = 29;
+    else if (animalsPerKg > 15000000) sizeId = 4;
     else if (animalsPerKg > 8000000) sizeId = 5;
     else if (animalsPerKg > 2000000) sizeId = 1;
     else if (animalsPerKg > 1900000) sizeId = 6;

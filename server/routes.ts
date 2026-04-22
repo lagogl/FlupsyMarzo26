@@ -6878,7 +6878,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Usa it-IT per ottenere il nome del mese in italiano (es. "aprile") che corrisponde ai valori in DB
-      const currentMonth = new Date().toLocaleString('it-IT', { month: 'long' }).toLowerCase();
+      const MONTH_NAMES_IT = [
+        'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+        'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'
+      ];
+      const currentMonth = MONTH_NAMES_IT[new Date().getMonth()];
 
       // Carica SGR mensili (per fallback) e SGR per taglia (per calcolo preciso per-cesta)
       const [sgrs, sgrPerTagliaAll] = await Promise.all([
@@ -6886,33 +6890,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getSgrPerTaglia(),
       ]);
 
-      // SGR generico del mese corrente (usato come fallback se non trovato per taglia)
-      let sgrDailyFallback = 0.037;
-      const currentSgr = sgrs.find(sgr => sgr.month.toLowerCase() === currentMonth);
-      if (currentSgr) {
-        sgrDailyFallback = currentSgr.percentage / 100;
-      } else if (sgrs.length > 0) {
-        sgrDailyFallback = sgrs.reduce((acc, sgr) => acc + sgr.percentage, 0) / sgrs.length / 100;
+      // Costruisce SGR fallback per ciascun mese (used quando non esiste sgr_per_taglia per quella combinazione)
+      const sgrFallbackByMonth: Record<string, number> = {};
+      for (const s of sgrs) {
+        if (s.month && s.percentage != null) {
+          sgrFallbackByMonth[s.month.toLowerCase()] = s.percentage / 100;
+        }
+      }
+      // Fallback globale (media su tutti i mesi) se manca il mese corrente
+      const globalFallback = sgrs.length > 0
+        ? sgrs.reduce((acc, sgr) => acc + sgr.percentage, 0) / sgrs.length / 100
+        : 0.037;
+
+      // Costruisce SGR per (mese, sizeId) — chiave "mese|sizeId"
+      const sgrByMonthAndSize: Record<string, number> = {};
+      for (const s of sgrPerTagliaAll as any[]) {
+        if (s.month && s.sizeId != null && s.calculatedSgr != null) {
+          sgrByMonthAndSize[`${s.month.toLowerCase()}|${s.sizeId}`] = s.calculatedSgr / 100;
+        }
       }
 
-      // Mappa (sizeId → sgrDaily) per il mese corrente basata su sgr_per_taglia
-      const sgrBySize: Record<number, number> = {};
-      sgrPerTagliaAll
-        .filter((s: any) => s.month?.toLowerCase() === currentMonth)
-        .forEach((s: any) => {
-          if (s.sizeId != null && s.calculatedSgr != null) {
-            sgrBySize[s.sizeId] = s.calculatedSgr / 100;
-          }
-        });
+      console.log(`[size-predictions] Mese corrente "${currentMonth}": SGR per-taglia caricati per ${Object.keys(sgrByMonthAndSize).length} combinazioni mese×taglia`);
 
-      console.log(`[size-predictions] Mese "${currentMonth}": fallback SGR=${(sgrDailyFallback*100).toFixed(3)}%, taglie specifiche trovate: ${Object.keys(sgrBySize).length}`);
-
-      // Helper: restituisce l'SGR giornaliero per una data sizeId (usa sgr_per_taglia se disponibile)
-      const getSgrForSize = (sizeId: number | null | undefined): number => {
-        if (sizeId != null && sgrBySize[sizeId] !== undefined) {
-          return sgrBySize[sizeId];
+      // Helper: SGR giornaliero per una sizeId in un dato mese (con doppio fallback)
+      const getSgrForSizeInMonth = (sizeId: number | null | undefined, monthLower: string): number => {
+        if (sizeId != null) {
+          const v = sgrByMonthAndSize[`${monthLower}|${sizeId}`];
+          if (v !== undefined) return v;
         }
-        return sgrDailyFallback;
+        if (sgrFallbackByMonth[monthLower] !== undefined) return sgrFallbackByMonth[monthLower];
+        return globalFallback;
       };
 
       // Helper: dato un peso in mg, trova la sizeId corrispondente
@@ -6936,18 +6943,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return best?.id ?? null;
       };
 
-      // Simulazione giorno-per-giorno con SGR variabile per taglia
-      // Molto più accurata della formula log(target/current)/SGR_fisso
-      // perché aggiorna l'SGR ogni volta che l'animale cambia fascia di taglia
+      // Simulazione giorno-per-giorno con SGR variabile per taglia E per mese.
+      // Avanza il calendario reale: ogni giorno determina il mese corrente e applica
+      // l'SGR specifico della combinazione (taglia attuale × mese) — fondamentale per
+      // proiezioni multi-mese, dove l'SGR primaverile/estivo cresce significativamente.
+      const today = new Date();
       const simulateDaysToTarget = (
         currentWeightMg: number,
         targetWeightMg: number,
         maxDays: number
       ): number | null => {
         let weight = currentWeightMg;
+        const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         for (let day = 1; day <= maxDays; day++) {
+          cursor.setDate(cursor.getDate() + 1);
+          const monthLower = MONTH_NAMES_IT[cursor.getMonth()];
           const sizeId = findSizeIdForWeight(weight);
-          const sgr = getSgrForSize(sizeId);
+          const sgr = getSgrForSizeInMonth(sizeId, monthLower);
           weight *= (1 + sgr);   // sgr è già coefficiente decimale (es. 0.03515 = 3.515%)
           if (weight >= targetWeightMg) return day;
         }
