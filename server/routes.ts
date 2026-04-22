@@ -6914,6 +6914,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return sgrDailyFallback;
       };
+
+      // Helper: dato un peso in mg, trova la sizeId corrispondente
+      // animalsPerKg = 1_000_000 / weightMg; cerca la taglia dove min <= an/kg <= max
+      const findSizeIdForWeight = (weightMg: number): number | null => {
+        const anPerKg = 1_000_000 / weightMg;
+        // Cerca la taglia esatta per intervallo
+        const exact = allSizes.find(s =>
+          s.minAnimalsPerKg != null && s.maxAnimalsPerKg != null &&
+          anPerKg >= s.minAnimalsPerKg && anPerKg <= s.maxAnimalsPerKg
+        );
+        if (exact) return exact.id;
+        // Fallback: taglia con minAnimalsPerKg più vicino
+        let best: typeof allSizes[0] | null = null;
+        let bestDist = Infinity;
+        for (const s of allSizes) {
+          if (s.minAnimalsPerKg == null) continue;
+          const dist = Math.abs(s.minAnimalsPerKg - anPerKg);
+          if (dist < bestDist) { bestDist = dist; best = s; }
+        }
+        return best?.id ?? null;
+      };
+
+      // Simulazione giorno-per-giorno con SGR variabile per taglia
+      // Molto più accurata della formula log(target/current)/SGR_fisso
+      // perché aggiorna l'SGR ogni volta che l'animale cambia fascia di taglia
+      const simulateDaysToTarget = (
+        currentWeightMg: number,
+        targetWeightMg: number,
+        maxDays: number
+      ): number | null => {
+        let weight = currentWeightMg;
+        for (let day = 1; day <= maxDays; day++) {
+          const sizeId = findSizeIdForWeight(weight);
+          const sgr = getSgrForSize(sizeId);
+          weight *= (1 + sgr);   // sgr è già coefficiente decimale (es. 0.03515 = 3.515%)
+          if (weight >= targetWeightMg) return day;
+        }
+        return null; // non raggiunto entro maxDays
+      };
       
       // OTTIMIZZAZIONE: Query unica per cicli attivi con baskets (JOIN)
       const cyclesWithBaskets = await db
@@ -7011,13 +7050,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
         
-        // Calcola il tempo necessario per raggiungere la taglia target
-        // Usa SGR specifico per taglia corrente della cesta (da sgr_per_taglia)
-        const basketSgr = getSgrForSize(lastOperation.sizeId);
-        const daysToReachSize = Math.ceil(Math.log(targetWeight / currentWeight) / basketSgr);
+        // Simulazione giorno-per-giorno: SGR aggiornato ad ogni cambio di taglia
+        const daysToReachSize = simulateDaysToTarget(currentWeight, targetWeight, withinDays);
         
         // Se il numero di giorni è entro il periodo specificato
-        if (daysToReachSize <= withinDays) {
+        if (daysToReachSize !== null && daysToReachSize <= withinDays) {
           const predictedDate = new Date();
           predictedDate.setDate(predictedDate.getDate() + daysToReachSize);
           
@@ -7060,9 +7097,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
           }
           
-          const daysToReachThisSize = Math.ceil(Math.log(sizeWeight / currentWeight) / basketSgr);
+          const daysToReachThisSize = simulateDaysToTarget(currentWeight, sizeWeight, withinDays);
           
-          if (daysToReachThisSize <= withinDays) {
+          if (daysToReachThisSize !== null && daysToReachThisSize <= withinDays) {
             const predictedDate = new Date();
             predictedDate.setDate(predictedDate.getDate() + daysToReachThisSize);
             
