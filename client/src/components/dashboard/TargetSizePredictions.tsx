@@ -50,9 +50,6 @@ function getProjectedCount(p: TargetSizePrediction): number {
   return p.animalCount || p.lastOperation?.animalCount || 0;
 }
 
-// Mortalità giornaliera fallback (deprecata: ora il backend fornisce projectedAnimalCount)
-const DAILY_MORTALITY = 0.002; // mantenuta per compat. con eventuali tooltip; non usata nei calcoli
-
 interface Flupsy {
   id: number;
   name: string;
