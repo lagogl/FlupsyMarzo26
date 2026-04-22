@@ -872,6 +872,7 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
   const [exporting, setExporting] = useState(false);
   const [chartOpen, setChartOpen] = useState(false);
   const [chartLotIds, setChartLotIds] = useState<Set<number>>(new Set());
+  const [chartMode, setChartMode] = useState<'top8' | 'all' | 'custom'>('top8');
   const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['mortalityPct', 'soldPct', 'activePct']));
   const [chartType, setChartType] = useState<'bar' | 'radar'>('bar');
   const [normalize, setNormalize] = useState(false);
@@ -1031,7 +1032,9 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
     return (s as any)[key] ?? 0;
   }
 
-  const activeLots = chartLotIds.size > 0 ? sorted.filter(s => chartLotIds.has(s.lotInfo.id)) : sorted.slice(0, 8);
+  const activeLots = chartMode === 'top8' ? sorted.slice(0, 8)
+    : chartMode === 'all' ? sorted
+    : sorted.filter(s => chartLotIds.has(s.lotInfo.id));
   const selectedMetrics = LOT_METRICS.filter(m => chartMetrics.has(m.key));
 
   const barChartData = activeLots.map(s => {
@@ -1137,12 +1140,12 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
               </div>
               {/* Select all lots */}
               <div className="flex items-center gap-1.5 ml-auto">
-                <button onClick={() => setChartLotIds(new Set())}
-                  className="px-2 py-1 rounded text-xs text-indigo-600 border border-indigo-200 hover:bg-indigo-50">
+                <button onClick={() => { setChartMode('top8'); setChartLotIds(new Set()); }}
+                  className={`px-2 py-1 rounded text-xs border transition-colors ${chartMode === 'top8' ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}>
                   Top 8 lotti
                 </button>
-                <button onClick={() => setChartLotIds(new Set(sorted.map(s => s.lotInfo.id)))}
-                  className="px-2 py-1 rounded text-xs text-indigo-600 border border-indigo-200 hover:bg-indigo-50">
+                <button onClick={() => { setChartMode('all'); setChartLotIds(new Set()); }}
+                  className={`px-2 py-1 rounded text-xs border transition-colors ${chartMode === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}>
                   Tutti
                 </button>
                 <button onClick={() => setChartMetrics(new Set(LOT_METRICS.map(m => m.key)))}
@@ -1162,17 +1165,22 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
                 <div className="max-h-48 overflow-y-auto p-2 space-y-1">
                   {sorted.map((s, idx) => {
                     const id = s.lotInfo.id;
-                    const checked = chartLotIds.size === 0 ? idx < 8 : chartLotIds.has(id);
+                    const checked = chartMode === 'top8' ? idx < 8
+                      : chartMode === 'all' ? true
+                      : chartLotIds.has(id);
                     const color = CHART_COLORS[sorted.indexOf(s) % CHART_COLORS.length];
                     return (
                       <label key={id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
                         <input type="checkbox" checked={checked}
                           onChange={() => {
-                            if (chartLotIds.size === 0) {
-                              const defaultSet = new Set(sorted.slice(0, 8).map(ss => ss.lotInfo.id));
-                              if (checked) defaultSet.delete(id); else defaultSet.add(id);
-                              setChartLotIds(defaultSet);
-                            } else toggleChartLot(id);
+                            const currentIds = chartMode === 'top8'
+                              ? new Set(sorted.slice(0, 8).map(ss => ss.lotInfo.id))
+                              : chartMode === 'all'
+                              ? new Set(sorted.map(ss => ss.lotInfo.id))
+                              : new Set(chartLotIds);
+                            if (checked) currentIds.delete(id); else currentIds.add(id);
+                            setChartMode('custom');
+                            setChartLotIds(currentIds);
                           }}
                           className="rounded" />
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
