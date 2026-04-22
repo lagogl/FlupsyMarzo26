@@ -6736,22 +6736,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Recupera tutti i cicli attivi
         const activeCycles = await storage.getActiveCycles();
         
-        // Ottieni gli SGR mensili per il calcolo della crescita
-        const sgrs = await storage.getSgrs();
-        // Usa it-IT per ottenere il nome del mese in italiano (es. "aprile") che corrisponde ai valori in DB
-        const currentMonth = new Date().toLocaleString('it-IT', { month: 'long' }).toLowerCase();
-        
-        // Trova l'SGR per il mese corrente o usa la media di tutti gli SGR disponibili
-        let sgrDaily = 0.037; // Valore di default: 3.7% (valore medio primaverile)
-        const currentSgr = sgrs.find(sgr => sgr.month.toLowerCase() === currentMonth);
-        if (currentSgr) {
-          // Usa il valore SGR del database che è già in percentuale giornaliera
-          // Esempio: 3.7% è 0.037 come coefficiente di crescita giornaliero
-          sgrDaily = currentSgr.percentage / 100;
-        } else if (sgrs.length > 0) {
-          // Calcola la media degli SGR disponibili (convertendo da percentuale a coefficiente)
-          sgrDaily = sgrs.reduce((acc, sgr) => acc + sgr.percentage, 0) / sgrs.length / 100;
+        // Ottieni gli SGR mensili e per taglia per il calcolo della crescita
+        const currentMonthLegacy = new Date().toLocaleString('it-IT', { month: 'long' }).toLowerCase();
+        const [sgrsLegacy, sgrPerTagliaLegacy] = await Promise.all([
+          storage.getSgrs(),
+          storage.getSgrPerTaglia(),
+        ]);
+
+        let sgrDailyLegacyFallback = 0.037;
+        const currentSgrLegacy = sgrsLegacy.find((sgr: any) => sgr.month.toLowerCase() === currentMonthLegacy);
+        if (currentSgrLegacy) {
+          sgrDailyLegacyFallback = currentSgrLegacy.percentage / 100;
+        } else if (sgrsLegacy.length > 0) {
+          sgrDailyLegacyFallback = sgrsLegacy.reduce((acc: number, sgr: any) => acc + sgr.percentage, 0) / sgrsLegacy.length / 100;
         }
+
+        const sgrBySizeLegacy: Record<number, number> = {};
+        sgrPerTagliaLegacy
+          .filter((s: any) => s.month?.toLowerCase() === currentMonthLegacy)
+          .forEach((s: any) => {
+            if (s.sizeId != null && s.calculatedSgr != null) {
+              sgrBySizeLegacy[s.sizeId] = s.calculatedSgr / 100;
+            }
+          });
+
+        const getSgrLegacy = (sizeId: number | null | undefined): number =>
+          (sizeId != null && sgrBySizeLegacy[sizeId] !== undefined)
+            ? sgrBySizeLegacy[sizeId]
+            : sgrDailyLegacyFallback;
         
         // Per ogni ciclo attivo, controlla se il cestello raggiunge TP-3000 entro il periodo specificato
         const dynamicPredictions = await Promise.all(
@@ -6795,8 +6807,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             
             // Altrimenti calcola il tempo necessario per raggiungere TP-3000
-            // Usando la formula: daysTaken = ln(finalWeight/initialWeight) / SGR
-            const daysToReachSize = Math.ceil(Math.log(tp3000Weight / currentWeight) / sgrDaily);
+            // Usando la formula: daysTaken = ln(finalWeight/initialWeight) / SGR (specifico per taglia)
+            const basketSgrLegacy = getSgrLegacy(lastOperation.sizeId);
+            const daysToReachSize = Math.ceil(Math.log(tp3000Weight / currentWeight) / basketSgrLegacy);
             
             // Se il numero di giorni è entro il periodo specificato, includi nella previsione
             if (daysToReachSize <= withinDays) {
@@ -6864,21 +6877,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json([]);
       }
       
-      // Ottieni gli SGR mensili per il calcolo della crescita
-      const sgrs = await storage.getSgrs();
       // Usa it-IT per ottenere il nome del mese in italiano (es. "aprile") che corrisponde ai valori in DB
       const currentMonth = new Date().toLocaleString('it-IT', { month: 'long' }).toLowerCase();
-      
-      // Trova l'SGR per il mese corrente o usa la media di tutti gli SGR disponibili
-      let sgrDaily = 0.037; // Valore di default: 3.7% (valore medio primaverile)
+
+      // Carica SGR mensili (per fallback) e SGR per taglia (per calcolo preciso per-cesta)
+      const [sgrs, sgrPerTagliaAll] = await Promise.all([
+        storage.getSgrs(),
+        storage.getSgrPerTaglia(),
+      ]);
+
+      // SGR generico del mese corrente (usato come fallback se non trovato per taglia)
+      let sgrDailyFallback = 0.037;
       const currentSgr = sgrs.find(sgr => sgr.month.toLowerCase() === currentMonth);
       if (currentSgr) {
-        sgrDaily = currentSgr.percentage / 100;
-        console.log(`[size-predictions] SGR mese "${currentMonth}": ${currentSgr.percentage}% → sgrDaily=${sgrDaily}`);
+        sgrDailyFallback = currentSgr.percentage / 100;
       } else if (sgrs.length > 0) {
-        sgrDaily = sgrs.reduce((acc, sgr) => acc + sgr.percentage, 0) / sgrs.length / 100;
-        console.log(`[size-predictions] SGR mese "${currentMonth}" non trovato, uso media: ${(sgrDaily*100).toFixed(2)}%`);
+        sgrDailyFallback = sgrs.reduce((acc, sgr) => acc + sgr.percentage, 0) / sgrs.length / 100;
       }
+
+      // Mappa (sizeId → sgrDaily) per il mese corrente basata su sgr_per_taglia
+      const sgrBySize: Record<number, number> = {};
+      sgrPerTagliaAll
+        .filter((s: any) => s.month?.toLowerCase() === currentMonth)
+        .forEach((s: any) => {
+          if (s.sizeId != null && s.calculatedSgr != null) {
+            sgrBySize[s.sizeId] = s.calculatedSgr / 100;
+          }
+        });
+
+      console.log(`[size-predictions] Mese "${currentMonth}": fallback SGR=${(sgrDailyFallback*100).toFixed(3)}%, taglie specifiche trovate: ${Object.keys(sgrBySize).length}`);
+
+      // Helper: restituisce l'SGR giornaliero per una data sizeId (usa sgr_per_taglia se disponibile)
+      const getSgrForSize = (sizeId: number | null | undefined): number => {
+        if (sizeId != null && sgrBySize[sizeId] !== undefined) {
+          return sgrBySize[sizeId];
+        }
+        return sgrDailyFallback;
+      };
       
       // OTTIMIZZAZIONE: Query unica per cicli attivi con baskets (JOIN)
       const cyclesWithBaskets = await db
@@ -6963,7 +6998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Se il peso è già uguale o superiore alla taglia target
         if (currentWeight >= targetWeight) {
           return {
-            id: -Date.now() - basket.id,
+            id: cycleData.cycleId * 10000 + targetSize.id,
             basketId: basket.id,
             targetSizeId: targetSize.id,
             status: "pending",
@@ -6977,7 +7012,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Calcola il tempo necessario per raggiungere la taglia target
-        const daysToReachSize = Math.ceil(Math.log(targetWeight / currentWeight) / sgrDaily);
+        // Usa SGR specifico per taglia corrente della cesta (da sgr_per_taglia)
+        const basketSgr = getSgrForSize(lastOperation.sizeId);
+        const daysToReachSize = Math.ceil(Math.log(targetWeight / currentWeight) / basketSgr);
         
         // Se il numero di giorni è entro il periodo specificato
         if (daysToReachSize <= withinDays) {
@@ -6985,7 +7022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           predictedDate.setDate(predictedDate.getDate() + daysToReachSize);
           
           return {
-            id: -Date.now() - basket.id,
+            id: cycleData.cycleId * 10000 + targetSize.id,
             basketId: basket.id,
             targetSizeId: targetSize.id,
             status: "pending",
@@ -7008,7 +7045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (currentWeight >= sizeWeight) {
             return {
-              id: -Date.now() - basket.id - size.id,
+              id: cycleData.cycleId * 10000 + size.id,
               basketId: basket.id,
               targetSizeId: size.id,
               status: "pending",
@@ -7023,14 +7060,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
           }
           
-          const daysToReachThisSize = Math.ceil(Math.log(sizeWeight / currentWeight) / sgrDaily);
+          const daysToReachThisSize = Math.ceil(Math.log(sizeWeight / currentWeight) / basketSgr);
           
           if (daysToReachThisSize <= withinDays) {
             const predictedDate = new Date();
             predictedDate.setDate(predictedDate.getDate() + daysToReachThisSize);
             
             return {
-              id: -Date.now() - basket.id - size.id,
+              id: cycleData.cycleId * 10000 + size.id,
               basketId: basket.id,
               targetSizeId: size.id,
               status: "pending",
