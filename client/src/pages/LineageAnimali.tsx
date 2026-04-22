@@ -940,12 +940,20 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
     );
   }, [sorted, filterLot]);
 
-  const totals = useMemo(() => filteredSorted.reduce((acc, s) => {
-    acc.initialAnimals += s.initialAnimals; acc.totalDeaths += s.totalDeaths;
-    acc.totalSold += s.totalSold; acc.totalActive += s.totalActive;
-    acc.activeCycleCount += s.activeCycleCount; acc.totalCycles += s.totalCycles;
-    return acc;
-  }, { initialAnimals: 0, totalDeaths: 0, totalSold: 0, totalActive: 0, activeCycleCount: 0, totalCycles: 0 }), [filteredSorted]);
+  const totals = useMemo(() => {
+    // Quando il grafico è aperto, i totali seguono la selezione del grafico
+    const base = chartOpen
+      ? (chartMode === 'top8' ? sorted.slice(0, 8)
+        : chartMode === 'all' ? sorted
+        : sorted.filter(s => chartLotIds.has(s.lotInfo.id)))
+      : filteredSorted;
+    return base.reduce((acc, s) => {
+      acc.initialAnimals += s.initialAnimals; acc.totalDeaths += s.totalDeaths;
+      acc.totalSold += s.totalSold; acc.totalActive += s.totalActive;
+      acc.activeCycleCount += s.activeCycleCount; acc.totalCycles += s.totalCycles;
+      return acc;
+    }, { initialAnimals: 0, totalDeaths: 0, totalSold: 0, totalActive: 0, activeCycleCount: 0, totalCycles: 0 });
+  }, [filteredSorted, chartOpen, chartMode, sorted, chartLotIds]);
 
   function toggleLot(id: number) {
     setExpandedLots(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -1035,6 +1043,10 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
   const activeLots = chartMode === 'top8' ? sorted.slice(0, 8)
     : chartMode === 'all' ? sorted
     : sorted.filter(s => chartLotIds.has(s.lotInfo.id));
+
+  // Riepilogo Globale segue la selezione del grafico quando il pannello è aperto
+  const riassuntoLots = chartOpen ? activeLots : filteredSorted;
+
   const selectedMetrics = LOT_METRICS.filter(m => chartMetrics.has(m.key));
 
   const barChartData = activeLots.map(s => {
@@ -1073,15 +1085,20 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
           <CardTitle className="flex items-center gap-2 text-amber-800">
             <TrendingUp className="w-5 h-5" />
             Analisi Lotti — Riepilogo Globale
+            {chartOpen && (
+              <span className="text-[10px] font-normal px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full">
+                {chartMode === 'top8' ? 'Top 8' : chartMode === 'all' ? 'Tutti' : `${activeLots.length} selezionati`}
+              </span>
+            )}
             <span className="ml-auto text-sm font-normal text-amber-600">
-              {filterLot ? `${filteredSorted.length}/${lotStats.length}` : lotStats.length} lotti · {totals.totalCycles} cicli totali
+              {riassuntoLots.length < lotStats.length ? `${riassuntoLots.length}/${lotStats.length}` : lotStats.length} lotti · {totals.totalCycles} cicli totali
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
-              { label: 'Lotti', val: filteredSorted.length, sub: `${filteredSorted.filter(l => l.isOpen).length} aperti · ${filteredSorted.filter(l => !l.isOpen).length} chiusi`, color: 'amber' },
+              { label: 'Lotti', val: riassuntoLots.length, sub: `${riassuntoLots.filter(l => l.isOpen).length} aperti · ${riassuntoLots.filter(l => !l.isOpen).length} chiusi`, color: 'amber' },
               { label: 'Animali in ingresso', val: formatNum(totals.initialAnimals), sub: null, color: 'blue' },
               { label: 'Mortalità totale', val: formatNum(totals.totalDeaths), sub: `${totMortPct.toFixed(1)}%`, color: totMortPct > 30 ? 'red' : totMortPct > 10 ? 'orange' : 'green' },
               { label: 'Venduti', val: formatNum(totals.totalSold), sub: `${totals.initialAnimals > 0 ? (totals.totalSold / totals.initialAnimals * 100).toFixed(1) : 0}%`, color: 'green' },
