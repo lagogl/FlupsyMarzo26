@@ -191,20 +191,20 @@ export function TargetSizePredictions() {
     const titleRow = ws.addRow([`Ceste in arrivo a ${targetSize} - ${descriptionText} - ${format(new Date(), 'dd/MM/yyyy HH:mm')}`]);
     titleRow.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
     titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
-    ws.mergeCells(1, 1, 1, 11);
+    ws.mergeCells(1, 1, 1, 13);
     titleRow.alignment = { horizontal: 'center' };
 
-    const headers = ['Cesta', 'FLUPSY', 'Posizione', 'Animali', 'An/kg', 'Peso Medio (mg)', 'Attuale (mg)', 'Target (mg)', 'Incremento %', 'Data Arrivo', 'Giorni'];
+    const headers = ['Cesta', 'FLUPSY', 'Posizione', 'Animali ora', 'An/kg ora', 'Peso Medio (mg)', 'Attuale (mg)', 'Target (mg)', 'Incremento %', 'Data Arrivo', 'Giorni', 'Animali alla data', 'An/kg alla data'];
     const headerRow = ws.addRow(headers);
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
     headerRow.alignment = { horizontal: 'center' };
-    ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 11 } };
+    ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 13 } };
 
     ws.columns = [
       { width: 10 }, { width: 15 }, { width: 12 }, { width: 14 },
       { width: 12 }, { width: 16 }, { width: 14 }, { width: 14 },
-      { width: 14 }, { width: 14 }, { width: 12 }
+      { width: 14 }, { width: 14 }, { width: 10 }, { width: 16 }, { width: 14 }
     ];
 
     visiblePredictions.forEach((p, idx) => {
@@ -215,6 +215,8 @@ export function TargetSizePredictions() {
       const targetWt = p.targetWeight || 0;
       const increment = currentWt > 0 ? Math.round((targetWt / currentWt - 1) * 100) : 0;
       const position = p.basket.row && p.basket.position ? `${p.basket.row}-${p.basket.position}` : '';
+      const projectedCount = Math.round(animalCount * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
+      const projectedAnkg = p.daysRemaining > 0 && targetWt > 0 ? Math.round(1_000_000 / targetWt) : animalsPerKg;
 
       const row = ws.addRow([
         p.basket.physicalNumber,
@@ -227,7 +229,9 @@ export function TargetSizePredictions() {
         Math.round(targetWt),
         increment,
         formatDateIT(p.predictedDate),
-        p.daysRemaining
+        p.daysRemaining,
+        projectedCount,
+        projectedAnkg
       ]);
 
       if (idx % 2 === 1) {
@@ -239,12 +243,19 @@ export function TargetSizePredictions() {
       row.getCell(7).numFmt = '#,##0';
       row.getCell(8).numFmt = '#,##0';
       row.getCell(9).numFmt = '0"%"';
+      row.getCell(12).numFmt = '#,##0';
+      row.getCell(13).numFmt = '#,##0';
     });
 
-    const totalsRow = ws.addRow(['TOTALE', '', '', totalAnimals, '', '', '', '', '', `${totalBaskets} ceste`, '']);
+    const totalProjected = visiblePredictions.reduce((s, p) => {
+      const ac = p.animalCount || p.lastOperation?.animalCount || 0;
+      return s + Math.round(ac * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
+    }, 0);
+    const totalsRow = ws.addRow(['TOTALE', '', '', totalAnimals, '', '', '', '', '', `${totalBaskets} ceste`, '', totalProjected, '']);
     totalsRow.font = { bold: true };
     totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
     totalsRow.getCell(4).numFmt = '#,##0';
+    totalsRow.getCell(12).numFmt = '#,##0';
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -428,14 +439,16 @@ export function TargetSizePredictions() {
                 <tr className="bg-slate-100 text-left">
                   <th className="px-3 py-2 font-semibold">Cesta</th>
                   <th className="px-3 py-2 font-semibold">FLUPSY</th>
-                  <th className="px-3 py-2 font-semibold text-right">Animali</th>
+                  <th className="px-3 py-2 font-semibold text-right">Animali ora</th>
                   {filterMode === "animals" && <th className="px-3 py-2 font-semibold text-right">Progressivo</th>}
-                  <th className="px-3 py-2 font-semibold text-right">An/kg</th>
+                  <th className="px-3 py-2 font-semibold text-right">An/kg ora</th>
                   <th className="px-3 py-2 font-semibold text-right">Peso Medio</th>
                   <th className="px-3 py-2 font-semibold text-right">Attuale</th>
                   <th className="px-3 py-2 font-semibold text-right">Target</th>
                   <th className="px-3 py-2 font-semibold text-right">Incr. %</th>
                   <th className="px-3 py-2 font-semibold">Data Arrivo</th>
+                  <th className="px-3 py-2 font-semibold text-right bg-blue-50">Animali alla data</th>
+                  <th className="px-3 py-2 font-semibold text-right bg-blue-50">An/kg alla data</th>
                   <th className="px-3 py-2 font-semibold text-center">Stato</th>
                 </tr>
               </thead>
@@ -453,6 +466,10 @@ export function TargetSizePredictions() {
                   const progressPct = filterMode === "animals" && parsedAnimalTarget > 0
                     ? Math.min(100, Math.round((cumulative / parsedAnimalTarget) * 100))
                     : 0;
+                  // Proiezioni alla data di arrivo
+                  const projectedCount = Math.round(animalCount * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
+                  const projectedAnkg = p.daysRemaining > 0 && targetWt > 0 ? Math.round(1_000_000 / targetWt) : animalsPerKg;
+                  const projectedDiff = projectedCount - animalCount;
 
                   return (
                     <tr
@@ -495,6 +512,17 @@ export function TargetSizePredictions() {
                         </span>
                       </td>
                       <td className="px-3 py-2">{formatDateIT(p.predictedDate)}</td>
+                      <td className="px-3 py-2 text-right bg-blue-50/50">
+                        <span className="font-medium">{projectedCount.toLocaleString('it-IT')}</span>
+                        {p.daysRemaining > 0 && (
+                          <div className="text-xs text-red-500">
+                            {projectedDiff.toLocaleString('it-IT')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right bg-blue-50/50">
+                        <span className="font-medium">{projectedAnkg.toLocaleString('it-IT')}</span>
+                      </td>
                       <td className="px-3 py-2 text-center">
                         <Badge className={`text-xs ${getBadgeStyle(p.daysRemaining)}`}>
                           {getDaysMessage(p.daysRemaining)}
@@ -519,7 +547,15 @@ export function TargetSizePredictions() {
                   )}
                   <td className="px-3 py-2 text-right">-</td>
                   <td className="px-3 py-2 text-right">{avgWeight.toLocaleString('it-IT')} mg</td>
-                  <td className="px-3 py-2" colSpan={filterMode === "animals" ? 5 : 5}></td>
+                  <td className="px-3 py-2" colSpan={3}></td>
+                  <td className="px-3 py-2 text-right bg-blue-50/50 font-semibold">
+                    {(visiblePredictions?.reduce((s, p) => {
+                      const ac = p.animalCount || p.lastOperation?.animalCount || 0;
+                      return s + Math.round(ac * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
+                    }, 0) || 0).toLocaleString('it-IT')}
+                  </td>
+                  <td className="px-3 py-2 bg-blue-50/50"></td>
+                  <td className="px-3 py-2"></td>
                 </tr>
               </tfoot>
             </table>
