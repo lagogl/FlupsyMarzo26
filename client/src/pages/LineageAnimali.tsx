@@ -939,12 +939,12 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
     );
   }, [sorted, filterLot]);
 
-  const totals = useMemo(() => lotStats.reduce((acc, s) => {
+  const totals = useMemo(() => filteredSorted.reduce((acc, s) => {
     acc.initialAnimals += s.initialAnimals; acc.totalDeaths += s.totalDeaths;
     acc.totalSold += s.totalSold; acc.totalActive += s.totalActive;
     acc.activeCycleCount += s.activeCycleCount; acc.totalCycles += s.totalCycles;
     return acc;
-  }, { initialAnimals: 0, totalDeaths: 0, totalSold: 0, totalActive: 0, activeCycleCount: 0, totalCycles: 0 }), [lotStats]);
+  }, { initialAnimals: 0, totalDeaths: 0, totalSold: 0, totalActive: 0, activeCycleCount: 0, totalCycles: 0 }), [filteredSorted]);
 
   function toggleLot(id: number) {
     setExpandedLots(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -1070,13 +1070,15 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
           <CardTitle className="flex items-center gap-2 text-amber-800">
             <TrendingUp className="w-5 h-5" />
             Analisi Lotti — Riepilogo Globale
-            <span className="ml-auto text-sm font-normal text-amber-600">{lotStats.length} lotti · {totals.totalCycles} cicli totali</span>
+            <span className="ml-auto text-sm font-normal text-amber-600">
+              {filterLot ? `${filteredSorted.length}/${lotStats.length}` : lotStats.length} lotti · {totals.totalCycles} cicli totali
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
-              { label: 'Lotti', val: lotStats.length, sub: `${lotStats.filter(l => l.isOpen).length} aperti · ${lotStats.filter(l => !l.isOpen).length} chiusi`, color: 'amber' },
+              { label: 'Lotti', val: filteredSorted.length, sub: `${filteredSorted.filter(l => l.isOpen).length} aperti · ${filteredSorted.filter(l => !l.isOpen).length} chiusi`, color: 'amber' },
               { label: 'Animali in ingresso', val: formatNum(totals.initialAnimals), sub: null, color: 'blue' },
               { label: 'Mortalità totale', val: formatNum(totals.totalDeaths), sub: `${totMortPct.toFixed(1)}%`, color: totMortPct > 30 ? 'red' : totMortPct > 10 ? 'orange' : 'green' },
               { label: 'Venduti', val: formatNum(totals.totalSold), sub: `${totals.initialAnimals > 0 ? (totals.totalSold / totals.initialAnimals * 100).toFixed(1) : 0}%`, color: 'green' },
