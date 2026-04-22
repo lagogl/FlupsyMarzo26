@@ -31,6 +31,7 @@ interface TargetSizePrediction {
     animalsPerKg: number | null;
     averageWeight: number | null;
     animalCount?: number | null;
+    mortalityRate?: number | null;
   } | null;
   daysRemaining: number;
   currentWeight?: number;
@@ -39,6 +40,9 @@ interface TargetSizePrediction {
   requestedSize?: Size;
   animalCount?: number;
 }
+
+// Mortalità giornaliera applicata alla stima futura (0.2% / giorno)
+const DAILY_MORTALITY = 0.002;
 
 interface Flupsy {
   id: number;
