@@ -242,10 +242,9 @@ export class GrowthProjectionService {
             const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
             const newWeight = b.weightMg * (1 + sgr / 100);
 
-            if (b.alreadyAtTarget) {
-              return { ...b, weightMg: newWeight };
-            }
-
+            // Mortalità applicata SEMPRE, anche per gli animali già a taglia commerciale:
+            // gli animali grandi continuano a perdere capi nel tempo (mortalità reale ≠ 0).
+            // (Precedentemente il flag `alreadyAtTarget` esentava dalla mortalità, gonfiando la giacenza.)
             let dailyMortality: number;
             if (useCustomMortality) {
               dailyMortality = customMonthlyRate * dailyMortalityFraction;

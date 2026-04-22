@@ -6884,11 +6884,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
       const currentMonth = MONTH_NAMES_IT[new Date().getMonth()];
 
-      // Carica SGR mensili (per fallback) e SGR per taglia (per calcolo preciso per-cesta)
-      const [sgrs, sgrPerTagliaAll] = await Promise.all([
+      // Carica SGR mensili (fallback), SGR per taglia (calcolo preciso) e tassi di mortalità per taglia/mese
+      const [sgrs, sgrPerTagliaAll, mortalityRows] = await Promise.all([
         storage.getSgrs(),
         storage.getSgrPerTaglia(),
+        db.select().from(schema.projectionMortalityRates),
       ]);
+
+      // Tabella ordinata per soglia an/kg (max al min) per mappare peso → codice taglia (es. "TP-3000")
+      const SALE_SIZE_THRESHOLDS: Array<{size: string; maxAnimalsPerKg: number}> = [
+        { size: 'TP-10000', maxAnimalsPerKg: 1200 },
+        { size: 'TP-9000', maxAnimalsPerKg: 1800 },
+        { size: 'TP-8000', maxAnimalsPerKg: 2300 },
+        { size: 'TP-7000', maxAnimalsPerKg: 3000 },
+        { size: 'TP-6000', maxAnimalsPerKg: 3900 },
+        { size: 'TP-5500', maxAnimalsPerKg: 6000 },
+        { size: 'TP-5000', maxAnimalsPerKg: 9000 },
+        { size: 'TP-4500', maxAnimalsPerKg: 13000 },
+        { size: 'TP-4000', maxAnimalsPerKg: 15000 },
+        { size: 'TP-3500', maxAnimalsPerKg: 20000 },
+        { size: 'TP-3000', maxAnimalsPerKg: 29000 },
+        { size: 'TP-2800', maxAnimalsPerKg: 40000 },
+        { size: 'TP-2500', maxAnimalsPerKg: 70000 },
+        { size: 'TP-2000', maxAnimalsPerKg: 97000 },
+        { size: 'TP-1900', maxAnimalsPerKg: 120000 },
+        { size: 'TP-1800', maxAnimalsPerKg: 190000 },
+        { size: 'TP-1500', maxAnimalsPerKg: 300000 },
+        { size: 'TP-1260', maxAnimalsPerKg: 350000 },
+        { size: 'TP-1140', maxAnimalsPerKg: 600000 },
+        { size: 'TP-1000', maxAnimalsPerKg: 880000 },
+        { size: 'TP-800', maxAnimalsPerKg: 1000000 },
+        { size: 'TP-700', maxAnimalsPerKg: 1900000 },
+        { size: 'TP-600', maxAnimalsPerKg: 2000000 },
+        { size: 'TP-500', maxAnimalsPerKg: 8000000 },
+        { size: 'TP-450', maxAnimalsPerKg: 15000000 },
+        { size: 'TP-350', maxAnimalsPerKg: 20000000 },
+        { size: 'TP-300', maxAnimalsPerKg: 30000000 },
+        { size: 'TP-250', maxAnimalsPerKg: 70000000 },
+        { size: 'TP-180', maxAnimalsPerKg: Number.POSITIVE_INFINITY },
+      ];
+      const mapAnimalsPerKgToSizeCode = (apk: number): string => {
+        for (const t of SALE_SIZE_THRESHOLDS) {
+          if (apk <= t.maxAnimalsPerKg) return t.size;
+        }
+        return 'TP-180';
+      };
+
+      // Lookup mortalità: chiave "month1Based|TP-XXXX" → frazione mensile (es. 0.01 = 1%/mese)
+      const mortalityByMonthAndSize: Record<string, number> = {};
+      for (const m of mortalityRows as any[]) {
+        if (m.sizeName && m.month && m.monthlyPercentage != null) {
+          mortalityByMonthAndSize[`${m.month}|${m.sizeName}`] = m.monthlyPercentage / 100;
+        }
+      }
+      const FALLBACK_MONTHLY_MORTALITY = 0.03; // 3%/mese se non specificato
+      const getDailyMortality = (apk: number, month1Based: number, daysInMonth: number): number => {
+        const sizeCode = mapAnimalsPerKgToSizeCode(apk);
+        const monthlyRate = mortalityByMonthAndSize[`${month1Based}|${sizeCode}`] ?? FALLBACK_MONTHLY_MORTALITY;
+        return monthlyRate / daysInMonth;
+      };
 
       // Costruisce SGR fallback per ciascun mese (used quando non esiste sgr_per_taglia per quella combinazione)
       const sgrFallbackByMonth: Record<string, number> = {};
@@ -6943,28 +6997,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return best?.id ?? null;
       };
 
-      // Simulazione giorno-per-giorno con SGR variabile per taglia E per mese.
-      // Avanza il calendario reale: ogni giorno determina il mese corrente e applica
-      // l'SGR specifico della combinazione (taglia attuale × mese) — fondamentale per
-      // proiezioni multi-mese, dove l'SGR primaverile/estivo cresce significativamente.
+      // Simulazione giorno-per-giorno con SGR variabile per taglia E per mese,
+      // E mortalità per taglia/mese letta da `projection_mortality_rates` (allineata a Proiezione Crescita).
+      // Avanza il calendario reale: ogni giorno determina il mese corrente e applica:
+      //  - SGR specifico della combinazione (taglia attuale × mese)
+      //  - mortalità giornaliera = (tasso mensile della taglia/mese) / giorni del mese corrente
       const today = new Date();
+      const simulate = (
+        currentWeightMg: number,
+        startCount: number,
+        targetWeightMg: number | null,  // null = simula esattamente maxDays giorni senza interrompere
+        maxDays: number
+      ): { daysToReach: number | null; finalWeightMg: number; finalCount: number } => {
+        let weight = currentWeightMg;
+        let count = startCount;
+        let daysToReach: number | null = null;
+        const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        for (let day = 1; day <= maxDays; day++) {
+          cursor.setDate(cursor.getDate() + 1);
+          const m0 = cursor.getMonth();
+          const m1 = m0 + 1;
+          const monthLower = MONTH_NAMES_IT[m0];
+          const daysInMonth = new Date(cursor.getFullYear(), m1, 0).getDate();
+
+          // Crescita
+          const sizeId = findSizeIdForWeight(weight);
+          const sgr = getSgrForSizeInMonth(sizeId, monthLower);
+          weight *= (1 + sgr);
+
+          // Mortalità (basata sull'apk dopo crescita di oggi)
+          // Guardia: weight non dovrebbe mai essere ≤ 0 (SGR è sempre ≥ 0), ma evitiamo divisione/Infinity
+          const apk = weight > 0 ? 1_000_000 / weight : Number.MAX_SAFE_INTEGER;
+          const dailyMortality = getDailyMortality(apk, m1, daysInMonth);
+          count = count * (1 - dailyMortality);
+
+          if (targetWeightMg !== null && daysToReach === null && weight >= targetWeightMg) {
+            daysToReach = day;
+            break; // ci fermiamo al raggiungimento della soglia
+          }
+        }
+        return { daysToReach, finalWeightMg: weight, finalCount: Math.round(count) };
+      };
+
+      // Wrapper retro-compatibile: ritorna solo i giorni
       const simulateDaysToTarget = (
         currentWeightMg: number,
         targetWeightMg: number,
         maxDays: number
-      ): number | null => {
-        let weight = currentWeightMg;
-        const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        for (let day = 1; day <= maxDays; day++) {
-          cursor.setDate(cursor.getDate() + 1);
-          const monthLower = MONTH_NAMES_IT[cursor.getMonth()];
-          const sizeId = findSizeIdForWeight(weight);
-          const sgr = getSgrForSizeInMonth(sizeId, monthLower);
-          weight *= (1 + sgr);   // sgr è già coefficiente decimale (es. 0.03515 = 3.515%)
-          if (weight >= targetWeightMg) return day;
-        }
-        return null; // non raggiunto entro maxDays
-      };
+      ): number | null => simulate(currentWeightMg, 0, targetWeightMg, maxDays).daysToReach;
       
       // OTTIMIZZAZIONE: Query unica per cicli attivi con baskets (JOIN)
       const cyclesWithBaskets = await db
@@ -7046,6 +7126,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const targetWeight = targetSize.maxAnimalsPerKg ? 1000000 / targetSize.maxAnimalsPerKg : 0;
         if (targetWeight <= 0) return null;
         
+        const startCount = lastOperation.animalCount ?? 0;
+
         // Se il peso è già uguale o superiore alla taglia target
         if (currentWeight >= targetWeight) {
           return {
@@ -7058,18 +7140,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastOperation,
             daysRemaining: 0,
             currentWeight,
-            targetWeight
+            targetWeight,
+            projectedAnimalCount: startCount,
+            projectedAnimalsPerKg: lastOperation.animalsPerKg ?? null
           };
         }
-        
-        // Simulazione giorno-per-giorno: SGR aggiornato ad ogni cambio di taglia
-        const daysToReachSize = simulateDaysToTarget(currentWeight, targetWeight, withinDays);
-        
+
+        // Simulazione giorno-per-giorno: SGR + mortalità per taglia/mese
+        const sim = simulate(currentWeight, startCount, targetWeight, withinDays);
+
         // Se il numero di giorni è entro il periodo specificato
-        if (daysToReachSize !== null && daysToReachSize <= withinDays) {
+        if (sim.daysToReach !== null && sim.daysToReach <= withinDays) {
           const predictedDate = new Date();
-          predictedDate.setDate(predictedDate.getDate() + daysToReachSize);
-          
+          predictedDate.setDate(predictedDate.getDate() + sim.daysToReach);
+
           return {
             id: cycleData.cycleId * 10000 + targetSize.id,
             basketId: basket.id,
@@ -7078,9 +7162,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             predictedDate: predictedDate.toISOString(),
             basket,
             lastOperation,
-            daysRemaining: daysToReachSize,
+            daysRemaining: sim.daysToReach,
             currentWeight,
-            targetWeight
+            targetWeight,
+            projectedAnimalCount: sim.finalCount,
+            projectedAnimalsPerKg: sim.finalWeightMg > 0 ? Math.round(1_000_000 / sim.finalWeightMg) : null
           };
         }
         
@@ -7105,16 +7191,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               currentWeight,
               targetWeight: sizeWeight,
               actualSize: size,
-              requestedSize: targetSize
+              requestedSize: targetSize,
+              projectedAnimalCount: startCount,
+              projectedAnimalsPerKg: lastOperation.animalsPerKg ?? null
             };
           }
-          
-          const daysToReachThisSize = simulateDaysToTarget(currentWeight, sizeWeight, withinDays);
-          
-          if (daysToReachThisSize !== null && daysToReachThisSize <= withinDays) {
+
+          const simUp = simulate(currentWeight, startCount, sizeWeight, withinDays);
+
+          if (simUp.daysToReach !== null && simUp.daysToReach <= withinDays) {
             const predictedDate = new Date();
-            predictedDate.setDate(predictedDate.getDate() + daysToReachThisSize);
-            
+            predictedDate.setDate(predictedDate.getDate() + simUp.daysToReach);
+
             return {
               id: cycleData.cycleId * 10000 + size.id,
               basketId: basket.id,
@@ -7123,11 +7211,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               predictedDate: predictedDate.toISOString(),
               basket,
               lastOperation,
-              daysRemaining: daysToReachThisSize,
+              daysRemaining: simUp.daysToReach,
               currentWeight,
               targetWeight: sizeWeight,
               actualSize: size,
-              requestedSize: targetSize
+              requestedSize: targetSize,
+              projectedAnimalCount: simUp.finalCount,
+              projectedAnimalsPerKg: simUp.finalWeightMg > 0 ? Math.round(1_000_000 / simUp.finalWeightMg) : null
             };
           }
         }

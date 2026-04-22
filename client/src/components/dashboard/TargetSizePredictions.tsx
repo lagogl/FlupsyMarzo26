@@ -39,10 +39,19 @@ interface TargetSizePrediction {
   actualSize?: Size;
   requestedSize?: Size;
   animalCount?: number;
+  // Calcolati dal backend con SGR per taglia/mese + mortalità da projection_mortality_rates
+  projectedAnimalCount?: number;
+  projectedAnimalsPerKg?: number | null;
 }
 
-// Mortalità giornaliera applicata alla stima futura (0.2% / giorno)
-const DAILY_MORTALITY = 0.002;
+// Helper: ricava la proiezione del backend con fallback su current count (per cesta a target oggi)
+function getProjectedCount(p: TargetSizePrediction): number {
+  if (typeof p.projectedAnimalCount === 'number') return p.projectedAnimalCount;
+  return p.animalCount || p.lastOperation?.animalCount || 0;
+}
+
+// Mortalità giornaliera fallback (deprecata: ora il backend fornisce projectedAnimalCount)
+const DAILY_MORTALITY = 0.002; // mantenuta per compat. con eventuali tooltip; non usata nei calcoli
 
 interface Flupsy {
   id: number;
@@ -215,8 +224,8 @@ export function TargetSizePredictions() {
       const targetWt = p.targetWeight || 0;
       const increment = currentWt > 0 ? Math.round((targetWt / currentWt - 1) * 100) : 0;
       const position = p.basket.row && p.basket.position ? `${p.basket.row}-${p.basket.position}` : '';
-      const projectedCount = Math.round(animalCount * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
-      const projectedAnkg = p.daysRemaining > 0 && targetWt > 0 ? Math.round(1_000_000 / targetWt) : animalsPerKg;
+      const projectedCount = getProjectedCount(p);
+      const projectedAnkg = p.projectedAnimalsPerKg ?? (p.daysRemaining > 0 && targetWt > 0 ? Math.round(1_000_000 / targetWt) : animalsPerKg);
 
       const row = ws.addRow([
         p.basket.physicalNumber,
@@ -247,10 +256,7 @@ export function TargetSizePredictions() {
       row.getCell(13).numFmt = '#,##0';
     });
 
-    const totalProjected = visiblePredictions.reduce((s, p) => {
-      const ac = p.animalCount || p.lastOperation?.animalCount || 0;
-      return s + Math.round(ac * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
-    }, 0);
+    const totalProjected = visiblePredictions.reduce((s, p) => s + getProjectedCount(p), 0);
     const totalsRow = ws.addRow(['TOTALE', '', '', totalAnimals, '', '', '', '', '', `${totalBaskets} ceste`, '', totalProjected, '']);
     totalsRow.font = { bold: true };
     totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
@@ -466,9 +472,9 @@ export function TargetSizePredictions() {
                   const progressPct = filterMode === "animals" && parsedAnimalTarget > 0
                     ? Math.min(100, Math.round((cumulative / parsedAnimalTarget) * 100))
                     : 0;
-                  // Proiezioni alla data di arrivo
-                  const projectedCount = Math.round(animalCount * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
-                  const projectedAnkg = p.daysRemaining > 0 && targetWt > 0 ? Math.round(1_000_000 / targetWt) : animalsPerKg;
+                  // Proiezioni alla data di arrivo (calcolate dal backend con SGR + mortalità per taglia/mese)
+                  const projectedCount = getProjectedCount(p);
+                  const projectedAnkg = p.projectedAnimalsPerKg ?? (p.daysRemaining > 0 && targetWt > 0 ? Math.round(1_000_000 / targetWt) : animalsPerKg);
                   const projectedDiff = projectedCount - animalCount;
 
                   return (
@@ -549,10 +555,7 @@ export function TargetSizePredictions() {
                   <td className="px-3 py-2 text-right">{avgWeight.toLocaleString('it-IT')} mg</td>
                   <td className="px-3 py-2" colSpan={3}></td>
                   <td className="px-3 py-2 text-right bg-blue-50/50 font-semibold">
-                    {(visiblePredictions?.reduce((s, p) => {
-                      const ac = p.animalCount || p.lastOperation?.animalCount || 0;
-                      return s + Math.round(ac * Math.pow(1 - DAILY_MORTALITY, p.daysRemaining));
-                    }, 0) || 0).toLocaleString('it-IT')}
+                    {(visiblePredictions?.reduce((s, p) => s + getProjectedCount(p), 0) || 0).toLocaleString('it-IT')}
                   </td>
                   <td className="px-3 py-2 bg-blue-50/50"></td>
                   <td className="px-3 py-2"></td>
