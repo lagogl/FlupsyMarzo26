@@ -48,6 +48,7 @@ interface MonthlyPlan {
   ordersFulfilledBySize: Record<string, number>;
   orderShortfallBySize: Record<string, number>;
   remainingAnimals: number;
+  totalSellableAtStart: number;
 }
 
 export interface SalesPlanningResult {
@@ -283,6 +284,11 @@ export class SalesPlanningService {
       }
 
       const sales: SaleAllocation[] = [];
+
+      // Calcola animali vendibili all'inizio del mese (prima di qualsiasi vendita)
+      const totalSellableAtStart = baskets
+        .filter(b => b.animalCount > 0 && (priceMap[this.sizeOf(b)] || 0) > 0)
+        .reduce((s, b) => s + b.animalCount, 0);
 
       // 1) Soddisfare ordini (vincolo)
       for (const [sizeCode, qtyNeeded] of Object.entries(ordersBySize)) {
