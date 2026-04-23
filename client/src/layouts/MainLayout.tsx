@@ -169,6 +169,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <ClipboardList className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.taskManagement || "Gestione Attività", path: "/task-management" },
         { icon: <Users className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.operators || "Gestione Operatori", path: "/operators" },
         { icon: <History className="h-5 w-5 mr-2 text-emerald-600" />, label: "Storia Animali", path: "/storia-animali" },
+        { icon: <Package className="h-5 w-5 mr-2 text-emerald-600" />, label: translations.menuItems.reportLotto, path: "/report-lotto" },
+        { icon: <AlertCircle className="h-5 w-5 mr-2 text-amber-600" />, label: "Vagliature sospette", path: "/vagliature-sospette" },
         { icon: <Leaf className="h-5 w-5 mr-2 text-teal-600" />, label: "Diario Ambientale", path: "/diario-ambientale" },
         { icon: <Ruler className="h-5 w-5 mr-2 text-blue-600" />, label: "Ceste da Riallineare", path: "/ceste-da-riallineare" },
         { icon: <Scale className="h-5 w-5 mr-2 text-blue-600" />, label: "Report Peso Ceste", path: "/report-peso-ceste" }
@@ -201,8 +203,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <BarChart className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.statistics, path: "/statistics" },
         { icon: <BarChart2 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.lotsAnalytics, path: "/lots-analytics" },
         { icon: <Split className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.mixedLotsAnalytics, path: "/mixed-lots-analytics" },
-        { icon: <Package className="h-5 w-5 mr-2 text-emerald-600" />, label: translations.menuItems.reportLotto, path: "/report-lotto" },
-        { icon: <AlertCircle className="h-5 w-5 mr-2 text-amber-600" />, label: "Vagliature sospette", path: "/vagliature-sospette" },
         { icon: <Filter className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.lotLedgerStatistics, path: "/lot-ledger-statistics" },
         { icon: <TrendingUp className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.sgrIndices, path: "/sgr" },
         { icon: <PieChart className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.salesReports, path: "/sales-reports" },
