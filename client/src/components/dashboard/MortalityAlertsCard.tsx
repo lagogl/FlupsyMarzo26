@@ -156,10 +156,19 @@ export default function MortalityAlertsCard() {
               <div className="text-lg font-bold text-blue-600">{summary.infoCount}</div>
               <div className="text-[10px] text-muted-foreground">Info</div>
             </div>
-            <div className="p-1.5 rounded bg-gray-50">
-              <div className="text-lg font-bold">{summary.recentMortalityPercentage}%</div>
-              <div className="text-[10px] text-muted-foreground">Recente</div>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-1.5 rounded bg-gray-50 cursor-help">
+                    <div className="text-lg font-bold">{summary.recentMortalityPercentage}%</div>
+                    <div className="text-[10px] text-muted-foreground">Ceste recenti</div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>% di ceste con mortalità registrata negli ultimi 3 giorni</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           <div className="flex flex-wrap gap-1">

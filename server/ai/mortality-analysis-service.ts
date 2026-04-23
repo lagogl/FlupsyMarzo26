@@ -71,6 +71,7 @@ export class MortalityAnalysisService {
           f.name as flupsy_name,
           o.dead_count,
           o.mortality_rate,
+          o.animal_count,
           o.date,
           (CURRENT_DATE - DATE(o.date)) as days_ago
         FROM operations o
@@ -94,14 +95,20 @@ export class MortalityAnalysisService {
           MAX(date) as last_mortality_date,
           MIN(CASE WHEN days_ago <= 7 THEN days_ago END) as min_days_ago,
           SUM(CASE WHEN days_ago <= 7 THEN dead_count ELSE 0 END) as week_deaths,
-          SUM(CASE WHEN days_ago <= 3 THEN dead_count ELSE 0 END) as recent_deaths
+          SUM(CASE WHEN days_ago <= 3 THEN dead_count ELSE 0 END) as recent_deaths,
+          COUNT(CASE WHEN days_ago <= 3 THEN 1 END) as recent_events
         FROM recent_mortality
         GROUP BY basket_id, physical_number, flupsy_id, flupsy_name
       ),
       weekly_comparison AS (
         SELECT 
           COALESCE(SUM(CASE WHEN days_ago <= 7 THEN dead_count ELSE 0 END), 0) as current_week,
-          COALESCE(SUM(CASE WHEN days_ago > 7 AND days_ago <= 14 THEN dead_count ELSE 0 END), 0) as previous_week
+          COALESCE(SUM(CASE WHEN days_ago > 7 AND days_ago <= 14 THEN dead_count ELSE 0 END), 0) as previous_week,
+          -- Tassi ponderati per dimensione cestello (non distorti dai cestelli grandi)
+          SUM(CASE WHEN days_ago <= 7 THEN COALESCE(mortality_rate, 0) * COALESCE(animal_count, 0) ELSE 0 END)
+            / NULLIF(SUM(CASE WHEN days_ago <= 7 AND COALESCE(animal_count, 0) > 0 THEN animal_count ELSE 0 END), 0) as current_week_rate,
+          SUM(CASE WHEN days_ago > 7 AND days_ago <= 14 THEN COALESCE(mortality_rate, 0) * COALESCE(animal_count, 0) ELSE 0 END)
+            / NULLIF(SUM(CASE WHEN days_ago > 7 AND days_ago <= 14 AND COALESCE(animal_count, 0) > 0 THEN animal_count ELSE 0 END), 0) as previous_week_rate
         FROM recent_mortality
       ),
       flupsy_concentration AS (
@@ -131,7 +138,9 @@ export class MortalityAnalysisService {
         recent_deaths::text as recent_deaths,
         NULL as current_week,
         NULL as previous_week,
-        NULL as affected_baskets
+        NULL as affected_baskets,
+        NULL as current_week_rate,
+        NULL as previous_week_rate
       FROM basket_stats
       
       UNION ALL
@@ -141,7 +150,9 @@ export class MortalityAnalysisService {
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         current_week::text,
         previous_week::text,
-        NULL
+        NULL,
+        current_week_rate::text,
+        previous_week_rate::text
       FROM weekly_comparison
       
       UNION ALL
@@ -156,13 +167,16 @@ export class MortalityAnalysisService {
         total_deaths::text,
         avg_rate::text,
         NULL, NULL, NULL, NULL, NULL, NULL,
-        affected_baskets::text
+        affected_baskets::text,
+        NULL, NULL
       FROM flupsy_concentration
     `);
 
     const basketStats: BasketMortalityDetail[] = [];
     let currentWeekDeaths = 0;
     let previousWeekDeaths = 0;
+    let currentWeekRate = 0;
+    let previousWeekRate = 0;
     const flupsyProblems: { flupsyId: string; flupsyName: string; affectedBaskets: number; deaths: number }[] = [];
 
     for (const row of mortalityData.rows as any[]) {
@@ -189,6 +203,8 @@ export class MortalityAnalysisService {
       } else if (row.query_type === 'weekly') {
         currentWeekDeaths = parseInt(row.current_week) || 0;
         previousWeekDeaths = parseInt(row.previous_week) || 0;
+        currentWeekRate = parseFloat(row.current_week_rate) || 0;
+        previousWeekRate = parseFloat(row.previous_week_rate) || 0;
       } else if (row.query_type === 'flupsy_concentration') {
         flupsyProblems.push({
           flupsyId: row.flupsy_id,
@@ -199,11 +215,12 @@ export class MortalityAnalysisService {
       }
     }
 
-    basketStats.sort((a, b) => b.totalDeaths - a.totalDeaths);
+    basketStats.sort((a, b) => b.avgMortalityRate - a.avgMortalityRate);
     const topAffectedBaskets = basketStats.slice(0, 10);
 
-    const hasMortalitySpike = previousWeekDeaths > 0 && 
-      (currentWeekDeaths / previousWeekDeaths) > 1.5;
+    // Usa tassi ponderati (non conteggi assoluti) per evitare distorsioni dei cestelli grandi
+    const hasMortalitySpike = previousWeekRate > 0 && 
+      (currentWeekRate / previousWeekRate) > 1.5;
     
     const hasPersistentMortality = basketStats.filter(b => 
       b.mortalityEvents >= 3 && b.daysSinceLastMortality <= 7
@@ -211,12 +228,12 @@ export class MortalityAnalysisService {
 
     const hasLocalizedProblem = flupsyProblems.length > 0;
 
-    const isImproving = previousWeekDeaths > 0 && 
-      (currentWeekDeaths / previousWeekDeaths) < 0.5;
+    const isImproving = previousWeekRate > 0 && 
+      (currentWeekRate / previousWeekRate) < 0.5;
 
     if (hasMortalitySpike) {
-      const spikePercent = previousWeekDeaths > 0 
-        ? Math.round(((currentWeekDeaths - previousWeekDeaths) / previousWeekDeaths) * 100) 
+      const spikePercent = previousWeekRate > 0 
+        ? Math.round(((currentWeekRate - previousWeekRate) / previousWeekRate) * 100) 
         : 100;
       
       alerts.push({
@@ -224,7 +241,7 @@ export class MortalityAnalysisService {
         severity: spikePercent > 100 ? 'critical' : 'warning',
         pattern: 'spike',
         title: 'Picco di mortalità rilevato',
-        description: `La mortalità è aumentata del ${spikePercent}% rispetto alla settimana precedente`,
+        description: `Il tasso medio di mortalità è aumentato del ${spikePercent}% rispetto alla settimana precedente (${currentWeekRate.toFixed(1)}% vs ${previousWeekRate.toFixed(1)}%)`,
         affectedBaskets: topAffectedBaskets.slice(0, 5).map(b => b.basketId),
         affectedFlupsys: [...new Set(topAffectedBaskets.map(b => b.flupsyName))],
         recommendation: 'Verificare condizioni ambientali (temperatura, ossigeno, flusso d\'acqua) e ispezionare le ceste con maggiore mortalità',
@@ -306,11 +323,10 @@ export class MortalityAnalysisService {
     if (criticalCount > 0) overallStatus = 'critical';
     else if (warningCount > 0) overallStatus = 'warning';
 
-    const totalMortality = basketStats.reduce((sum, b) => sum + b.totalDeaths, 0);
-    const recentMortality = basketStats.reduce((sum, b) => {
-      if (b.daysSinceLastMortality <= 3) return sum + b.totalDeaths;
-      return sum;
-    }, 0);
+    // "Recente" = % di ceste che hanno avuto eventi di mortalità negli ultimi 3 giorni
+    // (non usa i morti assoluti per evitare distorsioni dei cestelli grandi)
+    const baskesWithRecentActivity = basketStats.filter(b => b.daysSinceLastMortality <= 3).length;
+    const totalMortality = basketStats.length; // riuso variabile per il denominatore
 
     console.log(`🔬 Analisi completata: ${alerts.length} alert generati, status: ${overallStatus}`);
 
@@ -324,7 +340,7 @@ export class MortalityAnalysisService {
         warningCount,
         infoCount,
         overallStatus,
-        recentMortalityPercentage: totalMortality > 0 ? Math.round((recentMortality / totalMortality) * 100) : 0
+        recentMortalityPercentage: totalMortality > 0 ? Math.round((baskesWithRecentActivity / totalMortality) * 100) : 0
       },
       patterns: {
         hasMortalitySpike,
