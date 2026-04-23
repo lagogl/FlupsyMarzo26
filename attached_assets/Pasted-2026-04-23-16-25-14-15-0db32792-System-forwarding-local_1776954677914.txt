@@ -1,0 +1,160 @@
+2026-04-23 16:25:14.15
+0db32792
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 16:25:14.17
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:14.24
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:14.99
+0db32792
+User
+ERROR: node not found
+2026-04-23 16:25:14.99
+0db32792
+System
+command finished with error [bash start.sh]: exit status 1
+2026-04-23 16:25:15.08
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:15.10
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:15.47
+0db32792
+User
+ERROR: node not found
+2026-04-23 16:25:15.47
+0db32792
+System
+command finished with error [bash start.sh]: exit status 1
+2026-04-23 16:25:15.59
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:15.60
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:15.95
+0db32792
+User
+ERROR: node not found
+2026-04-23 16:25:15.96
+0db32792
+System
+command finished with error [bash start.sh]: exit status 1
+2026-04-23 16:25:15.97
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:15.98
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:16.58
+0db32792
+User
+ERROR: node not found
+2026-04-23 16:25:16.58
+0db32792
+System
+command finished with error [bash start.sh]: exit status 1
+2026-04-23 16:25:16.63
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:23.16
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:23.17
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:23.38
+0db32792
+System
+command finished with error [bash start.sh]: exit status 1
+2026-04-23 16:25:23.38
+0db32792
+User
+ERROR: node not found
+2026-04-23 16:25:27.18
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:27.19
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:27.43
+0db32792
+System
+command finished with error [bash start.sh]: exit status 1
+2026-04-23 16:25:27.43
+0db32792
+User
+ERROR: node not found
+2026-04-23 16:25:31.28
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:31.29
+0db32792
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 16:25:31.52
+0db32792
+System
+command finished with error [bash start.sh]: exit status 1
+2026-04-23 16:25:31.52
+0db32792
+User
+ERROR: node not found
+2026-04-23 16:25:38.43
+0db32792
+System
+crash loop detected
+2026-04-23 16:28:12.54
+a0e5d20a
+User
+WebSocket client disconnected
+2026-04-23 16:28:16.49
+a0e5d20a
+User
+WebSocket client connected
+2026-04-23 16:29:38.32
+a0e5d20a
+User
+[2026-04-23T14:29:38.325Z] WARN: GET /api/cycles/pending-closures/count 304 in 1229ms [SLOW_API]
+2026-04-23 16:29:46.50
+a0e5d20a
+User
+Cache notifiche: dati scaduti per chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true"
+2026-04-23 16:29:46.50
+a0e5d20a
+User
+Richiesta notifiche con opzioni: {"unreadOnly":true,"type":null,"page":1,"pageSize":20}
+2026-04-23 16:29:46.50
+a0e5d20a
+User
+WebSocket client connected
+2026-04-23 16:29:46.78
+a0e5d20a
+User
+Cache notifiche: dati salvati con chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true", scadenza in 600 secondi
+2026-04-23 16:29:46.78
+a0e5d20a
+User
+Notifiche recuperate in 284ms (ottimizzato)
+2026-04-23 16:29:49.05
+a0e5d20a
+User
+WebSocket client disconnected
