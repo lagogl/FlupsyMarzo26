@@ -921,11 +921,29 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
   }), [lotGroups]);
 
   const sorted = useMemo(() => [...lotStats].sort((a, b) => {
+    // String sorting columns
+    if (sortCol === 'supplier') {
+      const sa = (a.lotInfo.supplier ?? '').toLowerCase();
+      const sb = (b.lotInfo.supplier ?? '').toLowerCase();
+      const cmp = sa.localeCompare(sb);
+      return sortDir === 'desc' ? -cmp : cmp;
+    }
     let va = 0, vb = 0;
     if (sortCol === 'mortality') { va = a.mortalityPct; vb = b.mortalityPct; }
     else if (sortCol === 'initial') { va = a.initialAnimals; vb = b.initialAnimals; }
     else if (sortCol === 'active') { va = a.totalActive; vb = b.totalActive; }
     else if (sortCol === 'sgr') { va = a.avgSGR ?? -1; vb = b.avgSGR ?? -1; }
+    else if (sortCol === 'state') { va = a.isOpen ? 1 : 0; vb = b.isOpen ? 1 : 0; }
+    else if (sortCol === 'deaths') { va = a.totalDeaths; vb = b.totalDeaths; }
+    else if (sortCol === 'misure') { va = a.rootCycleLosses; vb = b.rootCycleLosses; }
+    else if (sortCol === 'vagliatura') { va = a.vagliaturaDeaths; vb = b.vagliaturaDeaths; }
+    else if (sortCol === 'organiche') { va = a.childOrganicLosses; vb = b.childOrganicLosses; }
+    else if (sortCol === 'sold') { va = a.totalSold; vb = b.totalSold; }
+    else if (sortCol === 'cycles') { va = a.totalCycles; vb = b.totalCycles; }
+    else if (sortCol === 'period') {
+      va = a.firstDate ? new Date(a.firstDate).getTime() : 0;
+      vb = b.firstDate ? new Date(b.firstDate).getTime() : 0;
+    }
     else if (sortCol === 'survival') {
       va = a.initialAnimals > 0 ? ((a.totalActive + a.totalSold) / a.initialAnimals) * 100 : -1;
       vb = b.initialAnimals > 0 ? ((b.totalActive + b.totalSold) / b.initialAnimals) * 100 : -1;
@@ -1035,6 +1053,11 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
 
   const SortTh = ({ col, label }: { col: string; label: string }) => (
     <th onClick={() => toggleSort(col)} className="py-2 px-2 text-right text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none whitespace-nowrap">
+      {label}{sortCol === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+  const SortThLeft = ({ col, label, title }: { col: string; label: string; title?: string }) => (
+    <th onClick={() => toggleSort(col)} title={title} className="py-2 px-2 text-left text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none whitespace-nowrap">
       {label}{sortCol === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
     </th>
   );
@@ -1357,21 +1380,21 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
                   <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700" onClick={() => toggleSort('arrival')}>
                     Lotto{sortCol === 'arrival' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
                   </th>
-                  <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Fornitore</th>
-                  <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Stato</th>
+                  <SortThLeft col="supplier" label="Fornitore" />
+                  <SortThLeft col="state" label="Stato" />
                   <SortTh col="initial" label="Ingresso" />
                   <SortTh col="mortality" label="Mort.%" />
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Morti</th>
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Misure</th>
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Vagliatura</th>
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Organiche</th>
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Venduti</th>
+                  <SortTh col="deaths" label="Morti" />
+                  <SortTh col="misure" label="Misure" />
+                  <SortTh col="vagliatura" label="Vagliatura" />
+                  <SortTh col="organiche" label="Organiche" />
+                  <SortTh col="sold" label="Venduti" />
                   <SortTh col="active" label="Attivi" />
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none whitespace-nowrap" title="(Attivi + Venduti) / Ingresso" onClick={() => toggleSort('survival')}>Sopravv.%{sortCol === 'survival' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</th>
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none whitespace-nowrap" title="Ingresso − Morti − Venduti − Attivi" onClick={() => toggleSort('residuo')}>Residuo{sortCol === 'residuo' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</th>
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Ceste/Cicli</th>
+                  <SortTh col="cycles" label="Ceste/Cicli" />
                   <SortTh col="sgr" label="SGR %/g" />
-                  <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Periodo</th>
+                  <SortThLeft col="period" label="Periodo" />
                 </tr>
               </thead>
               <tbody>
