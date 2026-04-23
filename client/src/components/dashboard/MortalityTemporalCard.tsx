@@ -31,8 +31,10 @@ interface MortalityTemporalData {
     };
   };
   weeklyComparison: {
-    currentWeek: number;
-    previousWeek: number;
+    currentWeek: number;      // tasso ponderato sett. corrente (%)
+    previousWeek: number;     // tasso ponderato sett. precedente (%)
+    currentWeekDeaths: number;
+    previousWeekDeaths: number;
     trend: 'up' | 'down' | 'stable';
     trendPercent: number;
   };
@@ -179,16 +181,28 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
 
         <div className="flex items-center justify-between pt-2 border-t">
           <div className="text-xs text-muted-foreground">
-            Morti totali (sett. corrente vs prec.)
+            Tasso mortalità (sett. corrente vs prec.)
           </div>
-          <div className={`flex items-center gap-1 text-sm font-medium ${trendColor}`}>
-            <TrendIcon className="h-4 w-4" />
-            {weeklyComparison.trend === 'up' && '+'}
-            {weeklyComparison.trendPercent}%
-            <span className="text-xs text-muted-foreground ml-1">
-              ({weeklyComparison.currentWeek.toLocaleString('it-IT')} vs {weeklyComparison.previousWeek.toLocaleString('it-IT')})
-            </span>
-          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className={`flex items-center gap-1 text-sm font-medium cursor-help ${trendColor}`}>
+                  <TrendIcon className="h-4 w-4" />
+                  {weeklyComparison.trend === 'up' && '+'}
+                  {weeklyComparison.trendPercent}%
+                  <span className="text-xs text-muted-foreground ml-1">
+                    ({weeklyComparison.currentWeek.toFixed(1)}% vs {weeklyComparison.previousWeek.toFixed(1)}%)
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-medium">Variazione del tasso medio ponderato</p>
+                <p>Corrente: {weeklyComparison.currentWeek.toFixed(2)}% · {weeklyComparison.currentWeekDeaths?.toLocaleString('it-IT') ?? '—'} morti totali</p>
+                <p>Precedente: {weeklyComparison.previousWeek.toFixed(2)}% · {weeklyComparison.previousWeekDeaths?.toLocaleString('it-IT') ?? '—'} morti totali</p>
+                <p className="text-xs text-muted-foreground mt-1">Il tasso è ponderato per la dimensione del cestello, così i grandi cestelli non distorcono il confronto</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {hasRecentMortality && (

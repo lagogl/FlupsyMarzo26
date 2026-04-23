@@ -746,10 +746,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           END
       `);
       
-      // Anche per trend: confronto settimana corrente vs settimana precedente
+      // Trend: confronto tasso di mortalità ponderato settimana corrente vs precedente
+      // Usa lo stesso approccio dei periodi: SUM(mortality_rate * animal_count) / SUM(animal_count)
+      // così i cestelli grandi non distorcono il confronto con conteggi assoluti enormi
       const trendResult = await db.execute(sql`
         WITH current_week AS (
-          SELECT COALESCE(SUM(o.dead_count), 0) as deaths
+          SELECT 
+            SUM(COALESCE(o.mortality_rate, 0) * COALESCE(o.animal_count, 0)) /
+              NULLIF(SUM(COALESCE(o.animal_count, 0)), 0) as weighted_rate,
+            SUM(o.dead_count) as total_dead
           FROM operations o
           JOIN baskets b ON b.id = o.basket_id
           WHERE b.state = 'active'
@@ -758,7 +763,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
         ),
         previous_week AS (
-          SELECT COALESCE(SUM(o.dead_count), 0) as deaths
+          SELECT 
+            SUM(COALESCE(o.mortality_rate, 0) * COALESCE(o.animal_count, 0)) /
+              NULLIF(SUM(COALESCE(o.animal_count, 0)), 0) as weighted_rate,
+            SUM(o.dead_count) as total_dead
           FROM operations o
           JOIN baskets b ON b.id = o.basket_id
           WHERE b.state = 'active'
@@ -768,8 +776,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
         )
         SELECT 
-          (SELECT deaths FROM current_week) as current_week_deaths,
-          (SELECT deaths FROM previous_week) as previous_week_deaths
+          ROUND((SELECT COALESCE(weighted_rate, 0) FROM current_week)::numeric, 2) as current_week_rate,
+          ROUND((SELECT COALESCE(weighted_rate, 0) FROM previous_week)::numeric, 2) as previous_week_rate,
+          (SELECT COALESCE(total_dead, 0) FROM current_week) as current_week_deaths,
+          (SELECT COALESCE(total_dead, 0) FROM previous_week) as previous_week_deaths
       `);
       
       const periods: Record<string, any> = {
@@ -831,16 +841,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const estimatedTotalDead = Math.max(0, totalInitial - totalCurrent);
       
       const trendRow = trendResult.rows[0] as any;
-      const currentWeek = parseInt(trendRow?.current_week_deaths) || 0;
-      const previousWeek = parseInt(trendRow?.previous_week_deaths) || 0;
-      
+      // Tasso ponderato settimana corrente e precedente (in %)
+      const currentWeekRate = parseFloat(trendRow?.current_week_rate) || 0;
+      const previousWeekRate = parseFloat(trendRow?.previous_week_rate) || 0;
+      // Morti assoluti (solo informativi, non usati per il trend %)
+      const currentWeekDeaths = parseInt(trendRow?.current_week_deaths) || 0;
+      const previousWeekDeaths = parseInt(trendRow?.previous_week_deaths) || 0;
+
       let trend: 'up' | 'down' | 'stable' = 'stable';
       let trendPercent = 0;
-      if (previousWeek > 0) {
-        trendPercent = ((currentWeek - previousWeek) / previousWeek) * 100;
+      if (previousWeekRate > 0) {
+        trendPercent = ((currentWeekRate - previousWeekRate) / previousWeekRate) * 100;
         if (trendPercent > 10) trend = 'up';
         else if (trendPercent < -10) trend = 'down';
-      } else if (currentWeek > 0) {
+      } else if (currentWeekRate > 0) {
         trend = 'up';
         trendPercent = 100;
       }
@@ -849,10 +863,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         periods,
         weeklyComparison: {
-          currentWeek,
-          previousWeek,
+          currentWeek: currentWeekRate,
+          previousWeek: previousWeekRate,
+          currentWeekDeaths,
+          previousWeekDeaths,
           trend,
-          trendPercent: Math.round(trendPercent)
+          trendPercent: Math.round(trendPercent * 10) / 10
         },
         totalMortality: periods.recent.totalDead + periods.medium.totalDead + periods.old.totalDead,
         recentMortalityRatio: periods.recent.totalDead / (periods.recent.totalDead + periods.medium.totalDead + periods.old.totalDead || 1),
