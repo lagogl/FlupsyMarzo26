@@ -8,7 +8,7 @@ packages = ["curl", "hdf5", "libjpeg", "netcdf", "zlib"]
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["node", "dist/index.js"]
+run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
 
 [[ports]]
