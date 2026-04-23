@@ -707,6 +707,7 @@ export default function PianificazioneVendite() {
                             <TableCell className="font-medium">{row.mese}</TableCell>
                             <TableCell className="text-right font-mono text-purple-600">
                               {row.sellableBySize && Object.keys(row.sellableBySize).length > 0 ? (
+                                <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <span className="cursor-help underline decoration-dotted decoration-purple-400">{fmtNum(row.vendibili)}</span>
@@ -737,6 +738,7 @@ export default function PianificazioneVendite() {
                                     </div>
                                   </TooltipContent>
                                 </Tooltip>
+                                </TooltipProvider>
                               ) : fmtNum(row.vendibili)}
                             </TableCell>
                             <TableCell className="text-right font-mono text-blue-600">{fmtNum(row.animaliOrdini)}</TableCell>
