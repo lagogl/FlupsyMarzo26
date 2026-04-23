@@ -926,6 +926,14 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
     else if (sortCol === 'initial') { va = a.initialAnimals; vb = b.initialAnimals; }
     else if (sortCol === 'active') { va = a.totalActive; vb = b.totalActive; }
     else if (sortCol === 'sgr') { va = a.avgSGR ?? -1; vb = b.avgSGR ?? -1; }
+    else if (sortCol === 'survival') {
+      va = a.initialAnimals > 0 ? ((a.totalActive + a.totalSold) / a.initialAnimals) * 100 : -1;
+      vb = b.initialAnimals > 0 ? ((b.totalActive + b.totalSold) / b.initialAnimals) * 100 : -1;
+    }
+    else if (sortCol === 'residuo') {
+      va = a.initialAnimals - a.totalDeaths - a.totalSold - a.totalActive;
+      vb = b.initialAnimals - b.totalDeaths - b.totalSold - b.totalActive;
+    }
     else { va = a.lotInfo.arrivalDate ? new Date(a.lotInfo.arrivalDate).getTime() : 0; vb = b.lotInfo.arrivalDate ? new Date(b.lotInfo.arrivalDate).getTime() : 0; }
     return sortDir === 'desc' ? vb - va : va - vb;
   }), [lotStats, sortCol, sortDir]);
@@ -1359,8 +1367,8 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Organiche</th>
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Venduti</th>
                   <SortTh col="active" label="Attivi" />
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600" title="(Attivi + Venduti) / Ingresso">Sopravv.%</th>
-                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600" title="Ingresso − Morti − Venduti − Attivi">Residuo</th>
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none whitespace-nowrap" title="(Attivi + Venduti) / Ingresso" onClick={() => toggleSort('survival')}>Sopravv.%{sortCol === 'survival' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</th>
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600 cursor-pointer hover:text-amber-700 select-none whitespace-nowrap" title="Ingresso − Morti − Venduti − Attivi" onClick={() => toggleSort('residuo')}>Residuo{sortCol === 'residuo' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}</th>
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Ceste/Cicli</th>
                   <SortTh col="sgr" label="SGR %/g" />
                   <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Periodo</th>
