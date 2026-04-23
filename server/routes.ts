@@ -725,12 +725,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           COUNT(DISTINCT basket_id) as baskets_affected,
           SUM(dead_count) as total_dead,
           SUM(sample_count) as total_sampled,
-          -- Mortalità cumulativa ponderata: SUM(morti)/SUM(campioni)*100
-          -- Fallback su AVG(mortality_rate) se sample_count non disponibile
-          CASE 
-            WHEN SUM(COALESCE(sample_count, 0)) > 0 
-            THEN (SUM(dead_count)::float / SUM(sample_count)::float) * 100
-            ELSE AVG(mortality_rate)
+          -- Mortalità ponderata per population (animal_count del cestello all'operazione)
+          -- Usa mortality_rate già calcolato correttamente in fase di inserimento.
+          -- Non usare SUM(dead)/SUM(sample) perché dead_count può essere assoluto (es 50.000)
+          -- mentre sample_count è solo un campione → dà percentuali impossibili >100%.
+          CASE
+            WHEN SUM(COALESCE(animal_count, 0)) > 0
+            THEN SUM(COALESCE(mortality_rate, 0) * COALESCE(animal_count, 0)) / NULLIF(SUM(COALESCE(animal_count, 0)), 0)
+            ELSE AVG(COALESCE(mortality_rate, 0))
           END as weighted_mortality_rate,
           MIN(date) as oldest_date,
           MAX(date) as newest_date

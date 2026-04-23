@@ -179,14 +179,14 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
 
         <div className="flex items-center justify-between pt-2 border-t">
           <div className="text-xs text-muted-foreground">
-            Trend settimanale
+            Morti totali (sett. corrente vs prec.)
           </div>
           <div className={`flex items-center gap-1 text-sm font-medium ${trendColor}`}>
             <TrendIcon className="h-4 w-4" />
             {weeklyComparison.trend === 'up' && '+'}
             {weeklyComparison.trendPercent}%
             <span className="text-xs text-muted-foreground ml-1">
-              ({weeklyComparison.currentWeek} vs {weeklyComparison.previousWeek})
+              ({weeklyComparison.currentWeek.toLocaleString('it-IT')} vs {weeklyComparison.previousWeek.toLocaleString('it-IT')})
             </span>
           </div>
         </div>
