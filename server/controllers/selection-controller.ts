@@ -24,6 +24,10 @@ import {
   lots
 } from "../../shared/schema";
 import { format } from "date-fns";
+import { sendSuspiciousScreeningEmail } from "../services/screening-suspicious-email";
+
+const SUSPICIOUS_THRESHOLD_PCT = 3;
+
 import { 
   balancedRounding, 
   generateIdempotencyKey, 
@@ -976,11 +980,36 @@ export async function completeSelectionFixed(req: Request, res: Response) {
     const totalAnimalsOrigin = sourceBaskets.reduce((sum, sb) => sum + (sb.animalCount || 0), 0);
     const totalAnimalsDestination = destinationBaskets.reduce((sum, db) => sum + (db.animalCount || 0), 0);
     const mortality = totalAnimalsOrigin - totalAnimalsDestination;
-    
+    const discrepancyPct = totalAnimalsOrigin > 0 && mortality > 0
+      ? (mortality / totalAnimalsOrigin) * 100
+      : 0;
+
     console.log(`📊 CALCOLO MORTALITÀ:`);
     console.log(`   Animali origine: ${totalAnimalsOrigin}`);
     console.log(`   Animali destinazione: ${totalAnimalsDestination}`);
-    console.log(`   Mortalità calcolata: ${mortality} (${mortality > 0 ? 'perdita' : 'guadagno'})`);
+    console.log(`   Mortalità calcolata: ${mortality} (${mortality > 0 ? 'perdita' : 'guadagno'}) — discrepanza ${discrepancyPct.toFixed(2)}%`);
+
+    // ====== GUARD-RAIL: vagliatura sospetta ======
+    const confirmedSuspicious = req.body?.confirmedSuspicious === true;
+    const suspiciousNote: string | null = typeof req.body?.suspiciousNote === 'string'
+      ? req.body.suspiciousNote.trim().slice(0, 1000) || null
+      : null;
+    const isSuspicious = discrepancyPct >= SUSPICIOUS_THRESHOLD_PCT;
+
+    if (isSuspicious && !confirmedSuspicious) {
+      console.warn(`⛔ Vagliatura #${selection[0].selectionNumber} BLOCCATA: discrepanza ${discrepancyPct.toFixed(2)}% ≥ ${SUSPICIOUS_THRESHOLD_PCT}% — richiesta conferma operatore`);
+      return res.status(422).json({
+        success: false,
+        requiresConfirmation: true,
+        code: 'SUSPICIOUS_SCREENING',
+        threshold: SUSPICIOUS_THRESHOLD_PCT,
+        totalAnimalsOrigin,
+        totalAnimalsDestination,
+        mortality,
+        discrepancyPct,
+        message: `La destinazione è inferiore all'origine di ${mortality.toLocaleString('it-IT')} animali (${discrepancyPct.toFixed(2)}%). Soglia di sospetto: ${SUSPICIOUS_THRESHOLD_PCT}%. Conferma esplicita richiesta.`,
+      });
+    }
 
     // VALIDAZIONE AGGIUNTIVA: Verifica cestelli con doppio ruolo (origine E destinazione)
     const sourceBasketsIds = new Set(sourceBaskets.map(sb => sb.basketId));
@@ -1634,15 +1663,74 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       }
 
       // ====== FASE 5: FINALIZZAZIONE SELEZIONE ======
+      const finalNotes = isSuspicious
+        ? `[VAGLIATURA SOSPETTA confermata dall'operatore — discrepanza ${discrepancyPct.toFixed(2)}% (${mortality.toLocaleString('it-IT')} animali). Soglia: ${SUSPICIOUS_THRESHOLD_PCT}%]${suspiciousNote ? ` Nota: ${suspiciousNote}` : ''}${selection[0].notes ? ` | ${selection[0].notes}` : ''}`
+        : selection[0].notes;
+
       await tx.update(selections)
-        .set({ 
+        .set({
           status: 'completed',
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          notes: finalNotes,
         })
         .where(eq(selections.id, Number(id)));
 
       console.log(`✅ VAGLIATURA COMPLETATA CORRETTAMENTE!`);
     });
+
+    // ====== EMAIL ALERT VAGLIATURA SOSPETTA ======
+    if (isSuspicious) {
+      try {
+        const sourceDetails = await db.execute(sql`
+          SELECT ssb.basket_id, b.physical_number, f.name AS flupsy_name, ssb.lot_id, ssb.animal_count
+          FROM selection_source_baskets ssb
+          LEFT JOIN baskets b ON b.id = ssb.basket_id
+          LEFT JOIN flupsys f ON f.id = b.flupsy_id
+          WHERE ssb.selection_id = ${Number(id)}
+        `);
+        const destDetails = await db.execute(sql`
+          SELECT sdb.basket_id, b.physical_number, f.name AS flupsy_name, s.code AS size_code, sdb.animal_count
+          FROM selection_destination_baskets sdb
+          LEFT JOIN baskets b ON b.id = sdb.basket_id
+          LEFT JOIN flupsys f ON f.id = b.flupsy_id
+          LEFT JOIN sizes s ON s.id = sdb.size_id
+          WHERE sdb.selection_id = ${Number(id)}
+        `);
+        const lotIds = Array.from(new Set(
+          (sourceDetails.rows as any[]).map(r => r.lot_id).filter((x: any) => x != null)
+        ));
+
+        await sendSuspiciousScreeningEmail({
+          selectionId: Number(id),
+          selectionNumber: selection[0].selectionNumber,
+          date: selection[0].date,
+          totalAnimalsOrigin,
+          totalAnimalsDestination,
+          mortality,
+          discrepancyPct,
+          threshold: SUSPICIOUS_THRESHOLD_PCT,
+          suspiciousNote,
+          sourceBaskets: (sourceDetails.rows as any[]).map(r => ({
+            basketId: r.basket_id,
+            physicalNumber: r.physical_number,
+            flupsyName: r.flupsy_name,
+            lotId: r.lot_id,
+            animalCount: r.animal_count ?? 0,
+          })),
+          destinationBaskets: (destDetails.rows as any[]).map(r => ({
+            basketId: r.basket_id,
+            physicalNumber: r.physical_number,
+            flupsyName: r.flupsy_name,
+            sizeCode: r.size_code,
+            animalCount: r.animal_count ?? 0,
+          })),
+          lotIds: lotIds as number[],
+        });
+        console.log(`📧 Email alert vagliatura sospetta #${selection[0].selectionNumber} inviata`);
+      } catch (emailErr) {
+        console.error(`⚠️ Errore invio email vagliatura sospetta #${selection[0].selectionNumber} (vagliatura comunque salvata):`, emailErr);
+      }
+    }
 
     // Crea notifiche per le operazioni di vendita DOPO il commit della transazione
     if (saleOperationIds.length > 0 && req.app?.locals?.createSaleNotification) {
