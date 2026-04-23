@@ -225,7 +225,9 @@ export default function PianificazioneVendite() {
       mese: m.monthLabel,
       ricavo: Math.round(m.totalRevenue),
       target: Math.round(m.cashTarget),
-      animali: m.sales.reduce((a, s) => a + s.animalCount, 0),
+      animali: m.sales.reduce((a: number, s: any) => a + s.animalCount, 0),
+      animaliOrdini: m.sales.filter((s: any) => s.reason === 'ordine').reduce((a: number, s: any) => a + s.animalCount, 0),
+      animaliCassa: m.sales.filter((s: any) => s.reason === 'cassa' || s.reason === 'liquidazione').reduce((a: number, s: any) => a + s.animalCount, 0),
       vendibili: m.totalSellableAtStart ?? 0,
     }));
   }, [plan]);
@@ -667,12 +669,13 @@ export default function PianificazioneVendite() {
                         <XAxis dataKey="mese" />
                         <YAxis yAxisId="left" tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                         <YAxis yAxisId="right" orientation="right" width={72} tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}k` : String(v)} />
-                        <RechartsTooltip formatter={(v: any, name: string) => (name === t("pv_chart_animali") || name === t("pv_chart_vendibili")) ? fmtNum(v) : fmtEur(v)} />
+                        <RechartsTooltip formatter={(v: any, name: string) => (name === t("pv_chart_animali") || name === t("pv_chart_animali_cassa") || name === t("pv_chart_vendibili")) ? fmtNum(v) : fmtEur(v)} />
                         <Legend />
                         <Bar yAxisId="left" dataKey="ricavo" fill="#10b981" name={t("pv_chart_ricavo")} />
                         <Line yAxisId="left" type="monotone" dataKey="target" stroke="#ef4444" name={t("pv_chart_target")} strokeWidth={2} />
                         <Line yAxisId="right" type="monotone" dataKey="vendibili" stroke="#8b5cf6" name={t("pv_chart_vendibili")} strokeDasharray="6 3" strokeWidth={2} dot={false} />
-                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name={t("pv_chart_animali")} strokeDasharray="4 2" strokeWidth={2} />
+                        <Line yAxisId="right" type="monotone" dataKey="animaliOrdini" stroke="#3b82f6" name={t("pv_chart_animali")} strokeDasharray="4 2" strokeWidth={2} />
+                        <Line yAxisId="right" type="monotone" dataKey="animaliCassa" stroke="#f97316" name={t("pv_chart_animali_cassa")} strokeDasharray="2 2" strokeWidth={1.5} dot={false} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -688,7 +691,8 @@ export default function PianificazioneVendite() {
                       <TableRow>
                         <ThWithTip tip="">{t("pv_chart_data_mese")}</ThWithTip>
                         <ThWithTip className="text-right" tip={t("pv_chart_data_vendibili_tip")}>{t("pv_chart_data_vendibili")}</ThWithTip>
-                        <ThWithTip className="text-right" tip={t("pv_chart_data_allocati_tip")}>{t("pv_chart_data_allocati")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_chart_data_ordini_tip")}>{t("pv_chart_data_ordini")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_chart_data_cassa_tip")}>{t("pv_chart_data_cassa")}</ThWithTip>
                         <ThWithTip className="text-right" tip={t("pv_chart_data_copertura_tip")}>{t("pv_chart_data_copertura")}</ThWithTip>
                         <ThWithTip className="text-right" tip="">{t("pv_chart_data_ricavo")}</ThWithTip>
                         <ThWithTip className="text-right" tip="">{t("pv_chart_data_target")}</ThWithTip>
@@ -696,14 +700,15 @@ export default function PianificazioneVendite() {
                     </TableHeader>
                     <TableBody>
                       {chartData.map((row, i) => {
-                        const copertura = row.vendibili > 0 ? (row.animali / row.vendibili) * 100 : 0;
+                        const copertura = row.vendibili > 0 ? (row.animaliOrdini / row.vendibili) * 100 : 0;
                         return (
                           <TableRow key={i}>
                             <TableCell className="font-medium">{row.mese}</TableCell>
                             <TableCell className="text-right font-mono text-purple-600">{fmtNum(row.vendibili)}</TableCell>
-                            <TableCell className="text-right font-mono text-blue-600">{fmtNum(row.animali)}</TableCell>
+                            <TableCell className="text-right font-mono text-blue-600">{fmtNum(row.animaliOrdini)}</TableCell>
+                            <TableCell className="text-right font-mono text-orange-500">{row.animaliCassa > 0 ? fmtNum(row.animaliCassa) : <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell className="text-right font-mono">
-                              <span className={copertura > 80 ? "text-amber-600 font-semibold" : copertura > 50 ? "text-emerald-600" : "text-muted-foreground"}>
+                              <span className={copertura > 80 ? "text-amber-600 font-semibold" : copertura > 20 ? "text-emerald-600" : "text-muted-foreground"}>
                                 {row.vendibili > 0 ? `${copertura.toFixed(1)}%` : '—'}
                               </span>
                             </TableCell>
