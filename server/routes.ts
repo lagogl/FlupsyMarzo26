@@ -701,6 +701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             o.dead_count,
             o.sample_count,
             o.mortality_rate,
+            o.animal_count,
             o.date,
             b.flupsy_id,
             f.name as flupsy_name,
