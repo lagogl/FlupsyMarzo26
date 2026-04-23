@@ -251,7 +251,7 @@ export async function getLotsForReport(req: Request, res: Response) {
           WHERE blc.lot_id = l.id AND c.state = 'active'
         ) AS active_baskets,
 
-        /* Animali attivi oggi (pro-quota su cesti attivi) */
+        /* Animali attivi oggi (pro-quota su cesti attivi con blc) */
         COALESCE((
           SELECT SUM(
             CASE
@@ -268,6 +268,24 @@ export async function getLotsForReport(req: Request, res: Response) {
           ) last_op ON TRUE
           WHERE blc.lot_id = l.id AND c.state = 'active'
         ), 0) AS active_now,
+
+        /* Fuori tracciamento: cesti chiusi con blc per questo lotto */
+        COALESCE((
+          SELECT SUM(
+            CASE
+              WHEN blc.animal_count IS NOT NULL THEN blc.animal_count
+              ELSE ROUND(COALESCE(last_op.animal_count, 0) * blc.percentage / 100.0)
+            END
+          )
+          FROM basket_lot_composition blc
+          JOIN cycles c ON c.id = blc.cycle_id
+          LEFT JOIN LATERAL (
+            SELECT animal_count FROM operations
+            WHERE basket_id = c.basket_id AND cycle_id = c.id
+            ORDER BY date DESC, id DESC LIMIT 1
+          ) last_op ON TRUE
+          WHERE blc.lot_id = l.id AND c.state = 'closed'
+        ), 0) AS lost_tracking,
 
         /* Morti documentati (da lot_ledger) */
         COALESCE((
@@ -290,12 +308,14 @@ export async function getLotsForReport(req: Request, res: Response) {
     const lots = (rows.rows as any[]).map(r => {
       const initial = Number(r.animal_count) || 0;
       const activeNow = Number(r.active_now) || 0;
+      const lostTracking = Number(r.lost_tracking) || 0;
       const deaths = Number(r.deaths) || 0;
       const sales = Number(r.sales) || 0;
-      const survivalPct = initial > 0 ? ((activeNow + sales) / initial) * 100 : null;
+      const survivalPct = initial > 0 ? ((activeNow + sales + lostTracking) / initial) * 100 : null;
       return {
         ...r,
         active_now: activeNow,
+        lost_tracking: lostTracking,
         deaths,
         sales,
         survival_pct: survivalPct !== null ? Math.round(survivalPct * 10) / 10 : null,
