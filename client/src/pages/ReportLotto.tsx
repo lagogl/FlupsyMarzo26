@@ -49,7 +49,7 @@ function LotPicker() {
   }, [lots, filter]);
 
   return (
-    <div className="p-4 max-w-5xl mx-auto">
+    <div className="p-4">
       <div className="flex items-center gap-3 mb-4">
         <Package className="w-6 h-6 text-emerald-600" />
         <div>
@@ -94,34 +94,34 @@ function LotPicker() {
 
             return (
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+                <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      <th className="py-1.5 px-2 text-left font-semibold text-gray-500 whitespace-nowrap">ID</th>
-                      <th className="py-1.5 px-2 text-left font-semibold text-gray-500 whitespace-nowrap">Arrivo</th>
-                      <th className="py-1.5 px-2 text-left font-semibold text-gray-500 whitespace-nowrap">Fornitore</th>
-                      <th className="py-1.5 px-2 text-left font-semibold text-gray-500 whitespace-nowrap">N° Lotto</th>
-                      <th className="py-1.5 px-2 text-right font-semibold text-gray-500 whitespace-nowrap">Iniziali</th>
-                      <th className="py-1.5 px-2 text-right font-semibold text-emerald-700 whitespace-nowrap">
-                        <span className="flex items-center justify-end gap-1"><Boxes className="w-3 h-3" />Attivi</span>
+                      <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">ID</th>
+                      <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Arrivo</th>
+                      <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">Fornitore</th>
+                      <th className="py-2 px-3 text-left text-xs font-semibold text-gray-600">N° Lotto</th>
+                      <th className="py-2 px-3 text-right text-xs font-semibold text-gray-600">Iniziali</th>
+                      <th className="py-2 px-3 text-right text-xs font-semibold text-emerald-700">
+                        <span className="flex items-center justify-end gap-1"><Boxes className="w-3 h-3" />Attivi oggi</span>
                       </th>
                       {hasLost && (
-                        <th className="py-1.5 px-2 text-right font-semibold text-amber-600 whitespace-nowrap">
+                        <th className="py-2 px-3 text-right text-xs font-semibold text-amber-600">
                           <span className="flex items-center justify-end gap-1"><EyeOff className="w-3 h-3" />Fuori tracc.</span>
-                          <div className="font-normal text-gray-400 flex items-center justify-end gap-0.5 mt-0.5"><Calendar className="w-2.5 h-2.5" />Tracciato fino al</div>
+                          <div className="font-normal text-gray-400 flex items-center justify-end gap-0.5 mt-0.5 text-[10px]"><Calendar className="w-2.5 h-2.5" />Tracciato fino al</div>
                         </th>
                       )}
-                      <th className="py-1.5 px-2 text-right font-semibold text-red-600 whitespace-nowrap">
+                      <th className="py-2 px-3 text-right text-xs font-semibold text-red-600">
                         <span className="flex items-center justify-end gap-1"><Skull className="w-3 h-3" />Morti</span>
                       </th>
-                      <th className="py-1.5 px-2 text-right font-semibold text-green-600 whitespace-nowrap">
+                      <th className="py-2 px-3 text-right text-xs font-semibold text-green-600">
                         <span className="flex items-center justify-end gap-1"><ShoppingCart className="w-3 h-3" />Venduti</span>
                       </th>
-                      <th className="py-1.5 px-2 text-right font-semibold text-blue-600 whitespace-nowrap">
+                      <th className="py-2 px-3 text-right text-xs font-semibold text-blue-600">
                         <span className="flex items-center justify-end gap-1"><Heart className="w-3 h-3" />Sopravv.</span>
                       </th>
-                      <th className="py-1.5 px-2 text-center font-semibold text-gray-500 whitespace-nowrap">Stato</th>
-                      <th className="w-4"></th>
+                      <th className="py-2 px-3 text-center text-xs font-semibold text-gray-600">Stato</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -130,63 +130,63 @@ function LotPicker() {
                         className="border-b hover:bg-emerald-50/50 cursor-pointer"
                         onClick={() => navigate(`/report-lotto/${l.id}`)}
                       >
-                        <td className="py-1.5 px-2 font-mono text-gray-400">#{l.id}</td>
-                        <td className="py-1.5 px-2 whitespace-nowrap">{fmtDate(l.arrival_date)}</td>
-                        <td className="py-1.5 px-2 font-medium max-w-[120px] truncate">{l.supplier}</td>
-                        <td className="py-1.5 px-2 text-gray-400">{l.supplier_lot_number ?? '—'}</td>
-                        <td className="py-1.5 px-2 text-right text-gray-600">{fmt(l.animal_count)}</td>
-                        <td className="py-1.5 px-2 text-right">
+                        <td className="py-2 px-3 font-mono text-xs text-gray-500">#{l.id}</td>
+                        <td className="py-2 px-3 text-xs">{fmtDate(l.arrival_date)}</td>
+                        <td className="py-2 px-3 font-medium">{l.supplier}</td>
+                        <td className="py-2 px-3 text-xs text-gray-500">{l.supplier_lot_number ?? '—'}</td>
+                        <td className="py-2 px-3 text-right text-gray-600">{fmt(l.animal_count)}</td>
+                        <td className="py-2 px-3 text-right">
                           {l.active_now > 0 ? <span className="text-emerald-700 font-medium">{fmt(l.active_now)}</span> : <span className="text-gray-300">—</span>}
                         </td>
                         {hasLost && (
-                          <td className="py-1.5 px-2 text-right">
+                          <td className="py-2 px-3 text-right">
                             {l.lost_tracking > 0
                               ? <div>
                                   <span className="text-amber-700 font-medium">{fmt(l.lost_tracking)}</span>
                                   {l.last_tracked_date && (
-                                    <div className="text-gray-400 font-normal leading-tight">{fmtDate(l.last_tracked_date)}</div>
+                                    <div className="text-[10px] text-gray-400 leading-tight">{fmtDate(l.last_tracked_date)}</div>
                                   )}
                                 </div>
                               : <span className="text-gray-300">—</span>}
                           </td>
                         )}
-                        <td className="py-1.5 px-2 text-right">
+                        <td className="py-2 px-3 text-right">
                           {l.deaths > 0 ? <span className="text-red-600">{fmt(l.deaths)}</span> : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="py-1.5 px-2 text-right">
+                        <td className="py-2 px-3 text-right">
                           {l.sales > 0 ? <span className="text-green-600">{fmt(l.sales)}</span> : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className={`py-1.5 px-2 text-right ${survColor(l.survival_pct)}`}>
+                        <td className={`py-2 px-3 text-right ${survColor(l.survival_pct)}`}>
                           {l.survival_pct !== null ? `${l.survival_pct.toFixed(1)}%` : '—'}
                         </td>
-                        <td className="py-1.5 px-2 text-center">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${l.state === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${l.state === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                             {l.state === 'active' ? 'Attivo' : 'Esaurito'}
                           </span>
                         </td>
-                        <td className="py-1.5 px-1 text-right text-emerald-600">
-                          <ChevronRight className="w-3.5 h-3.5 inline" />
+                        <td className="py-2 px-3 text-right text-emerald-600">
+                          <ChevronRight className="w-4 h-4 inline" />
                         </td>
                       </tr>
                     ))}
                     {filtered.length === 0 && (
-                      <tr><td colSpan={colCount} className="py-8 text-center text-gray-400">Nessun lotto trovato</td></tr>
+                      <tr><td colSpan={colCount} className="py-8 text-center text-gray-400 text-sm">Nessun lotto trovato</td></tr>
                     )}
                   </tbody>
                   {filtered.length > 1 && (
                     <tfoot className="bg-gray-100 border-t-2 border-gray-300">
                       <tr>
-                        <td colSpan={4} className="py-1.5 px-2 font-semibold text-gray-700">
+                        <td colSpan={4} className="py-2 px-3 text-xs font-semibold text-gray-700">
                           Totale ({filtered.length} lotti)
                         </td>
-                        <td className="py-1.5 px-2 text-right font-bold text-gray-700">{fmt(totInitial)}</td>
-                        <td className="py-1.5 px-2 text-right font-bold text-emerald-700">{totActive > 0 ? fmt(totActive) : '—'}</td>
+                        <td className="py-2 px-3 text-right text-xs font-bold text-gray-700">{fmt(totInitial)}</td>
+                        <td className="py-2 px-3 text-right text-xs font-bold text-emerald-700">{totActive > 0 ? fmt(totActive) : '—'}</td>
                         {hasLost && (
-                          <td className="py-1.5 px-2 text-right font-bold text-amber-700">{totLost > 0 ? fmt(totLost) : '—'}</td>
+                          <td className="py-2 px-3 text-right text-xs font-bold text-amber-700">{totLost > 0 ? fmt(totLost) : '—'}</td>
                         )}
-                        <td className="py-1.5 px-2 text-right font-bold text-red-600">{totDeaths > 0 ? fmt(totDeaths) : '—'}</td>
-                        <td className="py-1.5 px-2 text-right font-bold text-green-700">{totSales > 0 ? fmt(totSales) : '—'}</td>
-                        <td className={`py-1.5 px-2 text-right font-bold ${survColor(totSurvPct ?? null)}`}>
+                        <td className="py-2 px-3 text-right text-xs font-bold text-red-600">{totDeaths > 0 ? fmt(totDeaths) : '—'}</td>
+                        <td className="py-2 px-3 text-right text-xs font-bold text-green-700">{totSales > 0 ? fmt(totSales) : '—'}</td>
+                        <td className={`py-2 px-3 text-right text-xs font-bold ${survColor(totSurvPct ?? null)}`}>
                           {totSurvPct !== null ? `${totSurvPct.toFixed(1)}%` : '—'}
                         </td>
                         <td colSpan={2}></td>
