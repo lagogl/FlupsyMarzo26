@@ -229,6 +229,7 @@ export default function PianificazioneVendite() {
       animaliOrdini: m.sales.filter((s: any) => s.reason === 'ordine').reduce((a: number, s: any) => a + s.animalCount, 0),
       animaliCassa: m.sales.filter((s: any) => s.reason === 'cassa' || s.reason === 'liquidazione').reduce((a: number, s: any) => a + s.animalCount, 0),
       vendibili: m.totalSellableAtStart ?? 0,
+      sellableBySize: (m as any).sellableBySize as Record<string, number> | undefined,
     }));
   }, [plan]);
 
@@ -704,7 +705,40 @@ export default function PianificazioneVendite() {
                         return (
                           <TableRow key={i}>
                             <TableCell className="font-medium">{row.mese}</TableCell>
-                            <TableCell className="text-right font-mono text-purple-600">{fmtNum(row.vendibili)}</TableCell>
+                            <TableCell className="text-right font-mono text-purple-600">
+                              {row.sellableBySize && Object.keys(row.sellableBySize).length > 0 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-help underline decoration-dotted decoration-purple-400">{fmtNum(row.vendibili)}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-xs p-0">
+                                    <div className="p-3">
+                                      <div className="font-semibold text-xs mb-2 text-muted-foreground uppercase tracking-wide">Composizione per taglia</div>
+                                      <table className="text-xs w-full">
+                                        <thead>
+                                          <tr className="border-b">
+                                            <th className="text-left py-0.5 pr-3 font-medium">Taglia</th>
+                                            <th className="text-right py-0.5 font-medium">Animali</th>
+                                            <th className="text-right py-0.5 pl-3 font-medium">%</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {Object.entries(row.sellableBySize)
+                                            .sort(([, a], [, b]) => b - a)
+                                            .map(([sz, cnt]) => (
+                                              <tr key={sz} className="border-b border-border/40">
+                                                <td className="py-0.5 pr-3 font-mono font-medium text-purple-600">{sz}</td>
+                                                <td className="py-0.5 text-right font-mono">{fmtNum(cnt)}</td>
+                                                <td className="py-0.5 pl-3 text-right text-muted-foreground">{row.vendibili > 0 ? `${((cnt / row.vendibili) * 100).toFixed(1)}%` : '—'}</td>
+                                              </tr>
+                                            ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : fmtNum(row.vendibili)}
+                            </TableCell>
                             <TableCell className="text-right font-mono text-blue-600">{fmtNum(row.animaliOrdini)}</TableCell>
                             <TableCell className="text-right font-mono text-orange-500">{row.animaliCassa > 0 ? fmtNum(row.animaliCassa) : <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell className="text-right font-mono">
