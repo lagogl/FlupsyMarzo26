@@ -27,6 +27,7 @@ interface Lot {
   active_baskets: string | number;
   active_now: number;
   lost_tracking: number;
+  last_tracked_date: string | null;
   deaths: number;
   sales: number;
   survival_pct: number | null;
@@ -77,7 +78,7 @@ function LotPicker() {
           {isLoading && <div className="p-6 text-center text-gray-400">Caricamento...</div>}
           {!isLoading && (() => {
             const hasLost = filtered.some(l => l.lost_tracking > 0);
-            const colCount = hasLost ? 12 : 11;
+            const colCount = hasLost ? 13 : 11;
 
             // Totali
             const totInitial    = filtered.reduce((s, l) => s + (l.animal_count ?? 0), 0);
@@ -107,6 +108,11 @@ function LotPicker() {
                       {hasLost && (
                         <th className="py-2 px-3 text-right text-xs font-semibold text-amber-600">
                           <span className="flex items-center justify-end gap-1"><EyeOff className="w-3 h-3" />Fuori tracc.</span>
+                        </th>
+                      )}
+                      {hasLost && (
+                        <th className="py-2 px-3 text-left text-xs font-semibold text-gray-500">
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Tracciato fino al</span>
                         </th>
                       )}
                       <th className="py-2 px-3 text-right text-xs font-semibold text-red-600">
@@ -139,6 +145,13 @@ function LotPicker() {
                         {hasLost && (
                           <td className="py-2 px-3 text-right">
                             {l.lost_tracking > 0 ? <span className="text-amber-700 font-medium">{fmt(l.lost_tracking)}</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                        )}
+                        {hasLost && (
+                          <td className="py-2 px-3 text-left text-xs">
+                            {l.last_tracked_date
+                              ? <span className="text-gray-500">{fmtDate(l.last_tracked_date)}</span>
+                              : <span className="text-gray-300">—</span>}
                           </td>
                         )}
                         <td className="py-2 px-3 text-right">
@@ -175,6 +188,7 @@ function LotPicker() {
                         {hasLost && (
                           <td className="py-2 px-3 text-right text-xs font-bold text-amber-700">{totLost > 0 ? fmt(totLost) : '—'}</td>
                         )}
+                        {hasLost && <td></td>}
                         <td className="py-2 px-3 text-right text-xs font-bold text-red-600">{totDeaths > 0 ? fmt(totDeaths) : '—'}</td>
                         <td className="py-2 px-3 text-right text-xs font-bold text-green-700">{totSales > 0 ? fmt(totSales) : '—'}</td>
                         <td className={`py-2 px-3 text-right text-xs font-bold ${survColor(totSurvPct ?? null)}`}>
@@ -209,6 +223,7 @@ interface ReportData {
     residual: number; residualPct: number;
     survivalPct: number;
     wasScreened: boolean;
+    lastTrackedDate: string | null;
   };
   distribution: any[];
   lostTracking: any[];
@@ -321,6 +336,15 @@ function LotReportDetail({ lotId }: { lotId: number }) {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {hasLostTracking && bilancio.lastTrackedDate && (
+            <div className="mb-3 flex items-center gap-2 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                Lotto integralmente tracciato fino al <strong>{fmtDate(bilancio.lastTrackedDate)}</strong>.
+                {' '}I valori del bilancio riflettono la situazione a quella data per gli animali usciti dal tracciamento.
+              </span>
+            </div>
+          )}
           {/* Barra impilata 100% */}
           <div className="mb-3">
             <div className="flex h-6 rounded overflow-hidden border border-gray-200">
@@ -378,7 +402,7 @@ function LotReportDetail({ lotId }: { lotId: number }) {
               <Stat
                 label="Fuori tracciamento"
                 value={fmt(bilancio.lostTracking)}
-                sub={`${fmtPct(bilancio.lostTrackingPct)} · ${bilancio.lostTrackingBasketsCount} ${bilancio.lostTrackingBasketsCount === 1 ? 'cesta' : 'ceste'}`}
+                sub={`${fmtPct(bilancio.lostTrackingPct)} · ${bilancio.lostTrackingBasketsCount} ${bilancio.lostTrackingBasketsCount === 1 ? 'cesta' : 'ceste'}${bilancio.lastTrackedDate ? ` · dalla data ${fmtDate(bilancio.lastTrackedDate)}` : ''}`}
                 color="text-amber-700"
                 icon={Eye}
               />

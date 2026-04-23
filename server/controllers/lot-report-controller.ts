@@ -130,6 +130,16 @@ export async function getLotReport(req: Request, res: Response) {
     const activeInMixed = activeNow - activeInPure;
     const lostTrackingTotal = lostTracking.reduce((s, d) => s + d.lotAnimals, 0);
 
+    // Data fino a cui il lotto era integralmente tracciato
+    // = data dell'ultima operazione sul primo ciclo che ha "perso" il tracciamento
+    const lastTrackedDate: string | null = lostTracking.length > 0
+      ? lostTracking
+          .map(d => d.lastOpDate as string | null)
+          .filter((d): d is string => !!d)
+          .sort()
+          .at(0) ?? null
+      : null;
+
     // 4. Bilancio
     const initial = Number(lot.animal_count ?? 0)
       || Math.abs(agg['in']?.total ?? 0)
@@ -168,6 +178,7 @@ export async function getLotReport(req: Request, res: Response) {
       residualPct: initial > 0 ? (residual / initial) * 100 : 0,
       survivalPct: initial > 0 ? ((sales + activeNow + lostTrackingTotal) / initial) * 100 : 0,
       wasScreened,
+      lastTrackedDate,
     };
 
     // 5. Timeline — ledger arricchito con info cesta/ciclo
@@ -287,6 +298,18 @@ export async function getLotsForReport(req: Request, res: Response) {
           WHERE blc.lot_id = l.id AND c.state = 'closed'
         ), 0) AS lost_tracking,
 
+        /* Data primo evento fuori tracciamento (= fine tracciamento integrale) */
+        (
+          SELECT MIN(last_op2.last_date)
+          FROM basket_lot_composition blc2
+          JOIN cycles c2 ON c2.id = blc2.cycle_id
+          JOIN LATERAL (
+            SELECT MAX(date) AS last_date FROM operations
+            WHERE basket_id = c2.basket_id AND cycle_id = c2.id
+          ) last_op2 ON TRUE
+          WHERE blc2.lot_id = l.id AND c2.state = 'closed'
+        ) AS last_tracked_date,
+
         /* Morti documentati (da lot_ledger) */
         COALESCE((
           SELECT SUM(quantity::numeric)
@@ -319,6 +342,7 @@ export async function getLotsForReport(req: Request, res: Response) {
         deaths,
         sales,
         survival_pct: survivalPct !== null ? Math.round(survivalPct * 10) / 10 : null,
+        last_tracked_date: r.last_tracked_date ?? null,
       };
     });
 
