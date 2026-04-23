@@ -235,15 +235,74 @@ export async function getLotReport(req: Request, res: Response) {
 export async function getLotsForReport(req: Request, res: Response) {
   try {
     const rows = await db.execute(sql`
-      SELECT l.id, l.arrival_date, l.supplier, l.supplier_lot_number,
-             l.animal_count, l.state,
-             (SELECT COUNT(DISTINCT blc.basket_id) FROM basket_lot_composition blc
-              JOIN cycles c ON c.id = blc.cycle_id
-              WHERE blc.lot_id = l.id AND c.state = 'active') AS active_baskets
+      SELECT
+        l.id,
+        l.arrival_date,
+        l.supplier,
+        l.supplier_lot_number,
+        l.animal_count,
+        l.state,
+
+        /* Ceste attive */
+        (
+          SELECT COUNT(DISTINCT blc.basket_id)
+          FROM basket_lot_composition blc
+          JOIN cycles c ON c.id = blc.cycle_id
+          WHERE blc.lot_id = l.id AND c.state = 'active'
+        ) AS active_baskets,
+
+        /* Animali attivi oggi (pro-quota su cesti attivi) */
+        COALESCE((
+          SELECT SUM(
+            CASE
+              WHEN blc.animal_count IS NOT NULL THEN blc.animal_count
+              ELSE ROUND(COALESCE(last_op.animal_count, 0) * blc.percentage / 100.0)
+            END
+          )
+          FROM basket_lot_composition blc
+          JOIN cycles c ON c.id = blc.cycle_id
+          LEFT JOIN LATERAL (
+            SELECT animal_count FROM operations
+            WHERE basket_id = c.basket_id AND cycle_id = c.id
+            ORDER BY date DESC, id DESC LIMIT 1
+          ) last_op ON TRUE
+          WHERE blc.lot_id = l.id AND c.state = 'active'
+        ), 0) AS active_now,
+
+        /* Morti documentati (da lot_ledger) */
+        COALESCE((
+          SELECT SUM(quantity::numeric)
+          FROM lot_ledger
+          WHERE lot_id = l.id AND type = 'mortality'
+        ), 0) AS deaths,
+
+        /* Venduti (da lot_ledger) */
+        COALESCE((
+          SELECT SUM(quantity::numeric)
+          FROM lot_ledger
+          WHERE lot_id = l.id AND type = 'sale'
+        ), 0) AS sales
+
       FROM lots l
       ORDER BY l.arrival_date DESC, l.id DESC
     `);
-    return res.json({ lots: rows.rows });
+
+    const lots = (rows.rows as any[]).map(r => {
+      const initial = Number(r.animal_count) || 0;
+      const activeNow = Number(r.active_now) || 0;
+      const deaths = Number(r.deaths) || 0;
+      const sales = Number(r.sales) || 0;
+      const survivalPct = initial > 0 ? ((activeNow + sales) / initial) * 100 : null;
+      return {
+        ...r,
+        active_now: activeNow,
+        deaths,
+        sales,
+        survival_pct: survivalPct !== null ? Math.round(survivalPct * 10) / 10 : null,
+      };
+    });
+
+    return res.json({ lots });
   } catch (err: any) {
     console.error('Lots list for report error:', err);
     return res.status(500).json({ error: err.message });
