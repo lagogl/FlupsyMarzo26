@@ -49,12 +49,16 @@ interface MortalityTemporalData {
 }
 
 interface MortalityTemporalCardProps {
-  flupsyId?: number;
+  selectedFlupsyIds?: number[];
 }
 
-export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCardProps) {
+export default function MortalityTemporalCard({ selectedFlupsyIds }: MortalityTemporalCardProps) {
+  const flupsyIdsParam = selectedFlupsyIds && selectedFlupsyIds.length > 0
+    ? selectedFlupsyIds.join(',')
+    : undefined;
+  const queryParams = flupsyIdsParam ? { flupsyIds: flupsyIdsParam } : {};
   const { data, isLoading, error } = useQuery<MortalityTemporalData>({
-    queryKey: ['/api/stats/mortality-temporal', { flupsyId }],
+    queryKey: ['/api/stats/mortality-temporal', queryParams],
   });
 
   if (isLoading) {

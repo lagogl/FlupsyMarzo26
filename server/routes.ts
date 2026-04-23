@@ -689,7 +689,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint per analisi temporale mortalità (recente vs storica)
   app.get("/api/stats/mortality-temporal", async (req: Request, res: Response) => {
     try {
-      const flupsyId = req.query.flupsyId ? parseInt(req.query.flupsyId as string) : undefined;
+      // Supporta sia flupsyId singolo (retrocompatibilità) che flupsyIds multipli (comma-separated)
+      const flupsyIdsParam = req.query.flupsyIds as string | undefined;
+      const flupsyIds: number[] = flupsyIdsParam
+        ? flupsyIdsParam.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0)
+        : req.query.flupsyId
+          ? [parseInt(req.query.flupsyId as string)].filter(n => n > 0)
+          : [];
+      const flupsyFilter = flupsyIds.length > 0
+        ? sql.raw(`AND b.flupsy_id IN (${flupsyIds.join(',')})`)
+        : sql``;
       
       // Query principale con calcolo mortalità cumulativa ponderata
       // Usa sample_count se disponibile, altrimenti fallback su mortality_rate
@@ -715,7 +724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             AND b.current_cycle_id IS NOT NULL
             AND o.dead_count IS NOT NULL 
             AND o.dead_count > 0
-            ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+            ${flupsyFilter}
         )
         SELECT 
           CASE 
@@ -760,7 +769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           WHERE b.state = 'active'
             AND o.dead_count IS NOT NULL AND o.dead_count > 0
             AND o.date >= CURRENT_DATE - INTERVAL '7 days'
-            ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+            ${flupsyFilter}
         ),
         previous_week AS (
           SELECT 
@@ -773,7 +782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             AND o.dead_count IS NOT NULL AND o.dead_count > 0
             AND o.date >= CURRENT_DATE - INTERVAL '14 days'
             AND o.date < CURRENT_DATE - INTERVAL '7 days'
-            ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+            ${flupsyFilter}
         )
         SELECT 
           ROUND((SELECT COALESCE(weighted_rate, 0) FROM current_week)::numeric, 2) as current_week_rate,
@@ -808,7 +817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           SELECT b.id, b.flupsy_id
           FROM baskets b
           WHERE b.state = 'active' AND b.current_cycle_id IS NOT NULL
-          ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+          ${flupsyFilter}
         ),
         first_ops AS (
           SELECT DISTINCT ON (o.basket_id)

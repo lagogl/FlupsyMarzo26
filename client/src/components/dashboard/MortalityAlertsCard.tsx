@@ -55,11 +55,19 @@ interface MortalityAnalysisData {
   };
 }
 
-export default function MortalityAlertsCard() {
+interface MortalityAlertsCardProps {
+  selectedFlupsyIds?: number[];
+}
+
+export default function MortalityAlertsCard({ selectedFlupsyIds }: MortalityAlertsCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const flupsyIdsParam = selectedFlupsyIds && selectedFlupsyIds.length > 0
+    ? selectedFlupsyIds.join(',')
+    : undefined;
+  const queryParams = flupsyIdsParam ? { flupsyIds: flupsyIdsParam } : {};
   
   const { data, isLoading, error } = useQuery<MortalityAnalysisData>({
-    queryKey: ['/api/ai/mortality-analysis'],
+    queryKey: ['/api/ai/mortality-analysis', queryParams],
     staleTime: 300000,
     refetchInterval: 300000,
   });

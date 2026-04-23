@@ -55,7 +55,10 @@ export interface MortalityAnalysisResult {
 
 export class MortalityAnalysisService {
 
-  static async analyzePatterns(flupsyId?: number): Promise<MortalityAnalysisResult> {
+  static async analyzePatterns(flupsyIds?: number[]): Promise<MortalityAnalysisResult> {
+    const flupsyFilter = flupsyIds && flupsyIds.length > 0
+      ? sql.raw(`AND b.flupsy_id IN (${flupsyIds.join(',')})`)
+      : sql``;
     const today = new Date();
     const todayString = today.toISOString().split('T')[0];
     const alerts: MortalityAlert[] = [];
@@ -81,7 +84,7 @@ export class MortalityAnalysisService {
           AND b.current_cycle_id IS NOT NULL
           AND o.dead_count IS NOT NULL 
           AND o.dead_count > 0
-          ${flupsyId ? sql`AND b.flupsy_id = ${flupsyId}` : sql``}
+          ${flupsyFilter}
       ),
       basket_stats AS (
         SELECT 

@@ -859,11 +859,16 @@ export function registerAIRoutes(app: Express) {
   // Modulo: Analisi Pattern Mortalità con Alert Anomalie
   app.get("/api/ai/mortality-analysis", async (req: Request, res: Response) => {
     try {
-      const { flupsyId } = req.query;
+      const flupsyIdsParam = req.query.flupsyIds as string | undefined;
+      const flupsyIds: number[] = flupsyIdsParam
+        ? flupsyIdsParam.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0)
+        : req.query.flupsyId
+          ? [parseInt(req.query.flupsyId as string)].filter(n => n > 0)
+          : [];
       const { MortalityAnalysisService } = await import('../ai/mortality-analysis-service');
       
       const analysis = await MortalityAnalysisService.analyzePatterns(
-        flupsyId ? parseInt(flupsyId as string) : undefined
+        flupsyIds.length > 0 ? flupsyIds : undefined
       );
       
       res.json({ success: true, ...analysis });

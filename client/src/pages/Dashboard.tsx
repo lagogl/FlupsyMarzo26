@@ -502,8 +502,8 @@ export default function Dashboard() {
 
       {/* Dashboard Summary - Seconda riga: Analisi Mortalità */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <MortalityTemporalCard />
-        <MortalityAlertsCard />
+        <MortalityTemporalCard selectedFlupsyIds={selectedFlupsyIds} />
+        <MortalityAlertsCard selectedFlupsyIds={selectedFlupsyIds} />
       </div>
 
       {/* FLUPSY Visualizer */}
