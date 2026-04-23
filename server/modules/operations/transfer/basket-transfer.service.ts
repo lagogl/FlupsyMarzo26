@@ -1,9 +1,16 @@
 import { db } from '../../../db';
-import { operations, cycles, baskets, lotLedger, lots } from '../../../../shared/schema';
+import { operations, cycles, baskets, lotLedger, lots, basketLotComposition } from '../../../../shared/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import { invalidateAllCaches } from '../../../services/operations-lifecycle.service.js';
 import { broadcastMessage } from '../../../websocket';
 import { LotAutoStatsService } from '../../../services/lot-auto-stats-service.js';
+import { balancedRounding } from '../../../utils/balanced-rounding';
+
+interface LotShare {
+  lotId: number;
+  animalCount: number; // animali di questo lotto nella sorgente al momento del trasferimento
+  fraction: number;    // quota 0..1 sul totale sorgente
+}
 
 export interface TransferDestination {
   basketId: number;
@@ -179,6 +186,57 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
 
     const lotId = sourceCycle.lotId;
 
+    // ── 3b. Composizione lotti della cesta sorgente ─────────────────────────
+    //  - Se esistono righe in basket_lot_composition → cesta MISTA: usa tutte
+    //  - Altrimenti → cesta PURA: usa il solo lotId del ciclo
+    const sourceCompRows = await tx
+      .select({
+        lotId: basketLotComposition.lotId,
+        animalCount: basketLotComposition.animalCount,
+        percentage: basketLotComposition.percentage,
+      })
+      .from(basketLotComposition)
+      .where(
+        and(
+          eq(basketLotComposition.basketId, sourceBasketId),
+          eq(basketLotComposition.cycleId, oldSourceCycleId),
+        ),
+      );
+
+    let sourceShares: LotShare[];
+    if (sourceCompRows.length > 0) {
+      const totalComp = sourceCompRows.reduce((s, r) => s + (r.animalCount ?? 0), 0);
+      sourceShares = sourceCompRows
+        .filter(r => (r.animalCount ?? 0) > 0)
+        .map(r => ({
+          lotId: r.lotId,
+          animalCount: r.animalCount!,
+          fraction: totalComp > 0 ? (r.animalCount! / totalComp) : 0,
+        }));
+    } else if (lotId) {
+      sourceShares = [{ lotId, animalCount: sourceAnimalCount, fraction: 1 }];
+    } else {
+      sourceShares = [];
+    }
+
+    const isMixed = sourceShares.length > 1;
+
+    // Distribuisce una quantità tra i lotti della sorgente preservando il totale esatto
+    const splitByShares = (quantity: number): Map<number, number> => {
+      if (quantity <= 0 || sourceShares.length === 0) return new Map();
+      if (sourceShares.length === 1) {
+        return new Map([[sourceShares[0].lotId, quantity]]);
+      }
+      const pctMap = new Map<number, number>();
+      for (const s of sourceShares) pctMap.set(s.lotId, s.fraction);
+      const result = balancedRounding(quantity, pctMap);
+      const out = new Map<number, number>();
+      for (const a of result.allocations) {
+        if (a.roundedQuantity > 0) out.set(a.lotId, a.roundedQuantity);
+      }
+      return out;
+    };
+
     // ── 4. Raccogli dettagli ceste destinazione ─────────────────────────────
     const destBasketDetails = await Promise.all(
       destinations.map(async (d) => {
@@ -246,28 +304,33 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
         .where(eq(baskets.id, sourceBasketId));
     }
 
-    // ── 7. Transfer_out nel lot_ledger ──────────────────────────────────────
-    await tx.insert(lotLedger).values({
-      date,
-      lotId: lotId!,
-      type: 'transfer_out',
-      quantity: totalTransferred.toString(),
-      sourceCycleId: oldSourceCycleId,
-      destCycleId: null,
-      selectionId: null,
-      operationId: sourceOp.id,
-      basketId: sourceBasketId,
-      allocationMethod: 'measured',
-      allocationBasis: {
-        source: 'basket_transfer',
-        mode,
-        totalTransferred,
-        sourceRetention: mode === 'partial' ? sourceRetention : 0,
-        destinations: destBasketDetails.map(d => ({ basketId: d.basketId, animalCount: d.animalCount }))
-      },
-      idempotencyKey: `transfer_out_${sourceOp.id}_${lotId}_${sourceBasketId}`,
-      notes: `Trasferimento ${mode} dalla cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})`,
-    } as any);
+    // ── 7. Transfer_out nel lot_ledger (uno per ogni lotto presente) ────────
+    const outSplit = splitByShares(totalTransferred);
+    for (const [outLotId, outQty] of outSplit.entries()) {
+      await tx.insert(lotLedger).values({
+        date,
+        lotId: outLotId,
+        type: 'transfer_out',
+        quantity: outQty.toString(),
+        sourceCycleId: oldSourceCycleId,
+        destCycleId: null,
+        selectionId: null,
+        operationId: sourceOp.id,
+        basketId: sourceBasketId,
+        allocationMethod: isMixed ? 'proportional' : 'measured',
+        allocationBasis: {
+          source: 'basket_transfer',
+          mode,
+          totalTransferred,
+          sourceRetention: mode === 'partial' ? sourceRetention : 0,
+          mixed: isMixed,
+          lotShare: sourceShares.find(s => s.lotId === outLotId)?.fraction ?? 1,
+          destinations: destBasketDetails.map(d => ({ basketId: d.basketId, animalCount: d.animalCount }))
+        },
+        idempotencyKey: `transfer_out_${sourceOp.id}_${outLotId}_${sourceBasketId}`,
+        notes: `Trasferimento ${mode} dalla cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})${isMixed ? ` — quota lotto ${outLotId}` : ''}`,
+      } as any);
+    }
 
     // ── 8. Modalità parziale: nuovo ciclo sulla cesta sorgente ──────────────
     let sourceNewOpId: number | null = null;
@@ -320,28 +383,48 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       await LotAutoStatsService.onOperationCreated(sourceNewOp);
       sourceNewOpId = sourceNewOp.id;
 
-      // Transfer_in per la quota sorgente (auto-assegnazione)
-      await tx.insert(lotLedger).values({
-        date,
-        lotId: lotId!,
-        type: 'transfer_in',
-        quantity: sourceRetention.toString(),
-        sourceCycleId: oldSourceCycleId,
-        destCycleId: newSourceCycle.id,
-        selectionId: null,
-        operationId: sourceNewOp.id,
-        basketId: sourceBasketId,
-        allocationMethod: 'measured',
-        allocationBasis: {
-          source: 'basket_transfer_self',
-          sourceBasketId,
-          sourcePhysicalNumber: sourcePhysical.physicalNumber,
-          sourceFlupsyName,
-          oldCycleId: oldSourceCycleId,
-        },
-        idempotencyKey: `transfer_in_${sourceOp.id}_${lotId}_${sourceBasketId}_self`,
-        notes: `Quota trattenuta dalla suddivisione del ${dateFormatted}: cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})`,
-      } as any);
+      // Transfer_in per la quota sorgente (auto-assegnazione) — uno per ogni lotto
+      const selfSplit = splitByShares(sourceRetention);
+      for (const [selfLotId, selfQty] of selfSplit.entries()) {
+        const selfPct = sourceRetention > 0 ? (selfQty / sourceRetention) * 100 : 0;
+
+        // Composizione multi-lotto sul nuovo ciclo della sorgente
+        if (isMixed) {
+          await tx.insert(basketLotComposition).values({
+            basketId: sourceBasketId,
+            cycleId: newSourceCycle.id,
+            lotId: selfLotId,
+            animalCount: selfQty,
+            percentage: selfPct,
+            sourceSelectionId: null,
+            notes: `Trasferimento parziale #${sourceOp.id} — ${selfPct.toFixed(2)}% del cestello (quota trattenuta)`,
+          } as any);
+        }
+
+        await tx.insert(lotLedger).values({
+          date,
+          lotId: selfLotId,
+          type: 'transfer_in',
+          quantity: selfQty.toString(),
+          sourceCycleId: oldSourceCycleId,
+          destCycleId: newSourceCycle.id,
+          selectionId: null,
+          operationId: sourceNewOp.id,
+          basketId: sourceBasketId,
+          allocationMethod: isMixed ? 'proportional' : 'measured',
+          allocationBasis: {
+            source: 'basket_transfer_self',
+            sourceBasketId,
+            sourcePhysicalNumber: sourcePhysical.physicalNumber,
+            sourceFlupsyName,
+            oldCycleId: oldSourceCycleId,
+            mixed: isMixed,
+            lotShare: sourceShares.find(s => s.lotId === selfLotId)?.fraction ?? 1,
+          },
+          idempotencyKey: `transfer_in_${sourceOp.id}_${selfLotId}_${sourceBasketId}_self`,
+          notes: `Quota trattenuta dalla suddivisione del ${dateFormatted}: cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})${isMixed ? ` — lotto ${selfLotId}` : ''}`,
+        } as any);
+      }
     }
 
     // ── 9. Per ogni cesta destinazione: nuovo ciclo + prima-attivazione ──────
@@ -409,26 +492,46 @@ export async function executeTransfer(req: TransferRequest): Promise<TransferRes
       await LotAutoStatsService.onOperationCreated(destOp);
       destinationOperationIds.push(destOp.id);
 
-      await tx.insert(lotLedger).values({
-        date,
-        lotId: lotId!,
-        type: 'transfer_in',
-        quantity: dest.animalCount.toString(),
-        sourceCycleId: oldSourceCycleId,
-        destCycleId: newCycle.id,
-        selectionId: null,
-        operationId: destOp.id,
-        basketId: dest.basketId,
-        allocationMethod: 'measured',
-        allocationBasis: {
-          source: 'basket_transfer',
-          sourceBasketId,
-          sourcePhysicalNumber: sourcePhysical.physicalNumber,
-          sourceFlupsyName,
-        },
-        idempotencyKey: `transfer_in_${sourceOp.id}_${lotId}_${dest.basketId}`,
-        notes: `Trasferimento da cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})`,
-      } as any);
+      // Transfer_in + composizione multi-lotto sulla destinazione
+      const destSplit = splitByShares(dest.animalCount);
+      for (const [destLotId, destLotQty] of destSplit.entries()) {
+        const destPct = dest.animalCount > 0 ? (destLotQty / dest.animalCount) * 100 : 0;
+
+        if (isMixed) {
+          await tx.insert(basketLotComposition).values({
+            basketId: dest.basketId,
+            cycleId: newCycle.id,
+            lotId: destLotId,
+            animalCount: destLotQty,
+            percentage: destPct,
+            sourceSelectionId: null,
+            notes: `Trasferimento #${sourceOp.id} da cesta #${sourcePhysical.physicalNumber} — ${destPct.toFixed(2)}% del cestello`,
+          } as any);
+        }
+
+        await tx.insert(lotLedger).values({
+          date,
+          lotId: destLotId,
+          type: 'transfer_in',
+          quantity: destLotQty.toString(),
+          sourceCycleId: oldSourceCycleId,
+          destCycleId: newCycle.id,
+          selectionId: null,
+          operationId: destOp.id,
+          basketId: dest.basketId,
+          allocationMethod: isMixed ? 'proportional' : 'measured',
+          allocationBasis: {
+            source: 'basket_transfer',
+            sourceBasketId,
+            sourcePhysicalNumber: sourcePhysical.physicalNumber,
+            sourceFlupsyName,
+            mixed: isMixed,
+            lotShare: sourceShares.find(s => s.lotId === destLotId)?.fraction ?? 1,
+          },
+          idempotencyKey: `transfer_in_${sourceOp.id}_${destLotId}_${dest.basketId}`,
+          notes: `Trasferimento da cesta #${sourcePhysical.physicalNumber} (${sourceFlupsyName})${isMixed ? ` — lotto ${destLotId}` : ''}`,
+        } as any);
+      }
     }
 
     // ── 10. Invalida cache e notifica WebSocket ─────────────────────────────
