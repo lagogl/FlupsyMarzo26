@@ -97,3 +97,10 @@ Preferred communication style: Simple, everyday language.
 ### Third-party Integrations
 - OpenAI GPT-4o (for AI capabilities)
 - Fatture in Cloud (for client and DDT management)
+### Report Lotto (Aprile 2026)
+- Pagina dedicata `/report-lotto` (e `/report-lotto/:lotId`) con 3 sezioni:
+  1. **Bilancio**: iniziali, morti, venduti, attivi (oggi pro-quota), residuo non spiegato, % sopravvivenza, barra impilata 100%.
+  2. **Distribuzione attuale**: tabella ceste attive con quota lotto (% e animali), taglia, ultima operazione, indicatore puro/misto.
+  3. **Cronologia**: timeline verticale degli eventi `lot_ledger` (in/activation/transfer_in/transfer_out/sale/mortality) con riferimento a cesta, FLUPSY, vagliatura e ciclo origine/destinazione.
+- Backend: `server/controllers/lot-report-controller.ts` espone `GET /api/lot-report/list` e `GET /api/lot-report/:lotId` aggregando `lot_ledger`, `basket_lot_composition` e `screening_operations`.
+- Voce di menu in **Analisi** (icona Package).

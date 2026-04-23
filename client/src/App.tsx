@@ -73,6 +73,7 @@ import GrowthVariabilityAnalysis from "@/pages/GrowthVariabilityAnalysis";
 import LCIModule from "@/pages/LCIModule";
 // Importazione Storia Animali (Genealogia)
 import LineageAnimali from "@/pages/LineageAnimali";
+import ReportLotto from "@/pages/ReportLotto";
 import SgrLineage from "@/pages/SgrLineage";
 // Importazione Task Management (Gestione Attività)
 import TaskManagement from "@/pages/TaskManagement";
@@ -138,6 +139,8 @@ function Router() {
       <ProtectedRoute path="/statistics" component={Statistics}/>
       <ProtectedRoute path="/lots-analytics" component={LotsAnalytics}/>
       <ProtectedRoute path="/mixed-lots-analytics" component={MixedLotsAnalytics}/>
+      <ProtectedRoute path="/report-lotto/:lotId" component={ReportLotto}/>
+      <ProtectedRoute path="/report-lotto" component={ReportLotto}/>
       <ProtectedRoute path="/lot-ledger-statistics" component={LotLedgerStatistics}/>
       <ProtectedRoute path="/inventory" component={Inventory}/>
       <ProtectedRoute path="/sizes" component={Sizes}/>

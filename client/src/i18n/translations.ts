@@ -111,6 +111,7 @@ export const translations: Record<'it' | 'en', MenuTranslations> = {
       statistics: "Statistiche",
       lotsAnalytics: "Analisi Lotti",
       mixedLotsAnalytics: "Analytics Lotti Misti",
+      reportLotto: "Report Lotto",
       lotLedgerStatistics: "Statistiche Lot Ledger",
       sgrIndices: "Indici SGR",
       salesReports: "Report di Vendita",

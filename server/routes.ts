@@ -57,6 +57,7 @@ import { registerScreeningRoutes } from "./modules/screening/screening.routes";
 import { registerAnalyticsRoutes } from "./modules/analytics/analytics.routes";
 import { registerIntegrationsRoutes } from "./modules/integrations/integrations.routes";
 import { getLineageData, exportLineageExcel, getAllLineageGroups } from "./controllers/lineage-controller";
+import { getLotReport, getLotsForReport } from "./controllers/lot-report-controller";
 import { validateBasketRow, validateBasketPosition } from "./utils/validation";
 import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-controller";
 import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
@@ -328,6 +329,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/lineage', getLineageData);
   app.get('/api/lineage/export', exportLineageExcel);
   console.log('✅ Modulo LINEAGE ANIMALI registrato su /api/lineage');
+
+  // Report lotto dedicato (bilancio + distribuzione + timeline)
+  app.get('/api/lot-report/list', getLotsForReport);
+  app.get('/api/lot-report/:lotId', getLotReport);
+  console.log('✅ Modulo REPORT LOTTO registrato su /api/lot-report');
 
   // Method-override workaround implemented - PATCH/PUT converted to POST + header in frontend
 

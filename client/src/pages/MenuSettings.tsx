@@ -52,6 +52,7 @@ const allMenuItems = [
   { path: "/statistics", label: "Statistiche", category: "Analisi", icon: <BarChart className="h-4 w-4" /> },
   { path: "/lots-analytics", label: "Analisi Lotti", category: "Analisi", icon: <BarChart2 className="h-4 w-4" /> },
   { path: "/mixed-lots-analytics", label: "Analisi Lotti Misti", category: "Analisi", icon: <Split className="h-4 w-4" /> },
+  { path: "/report-lotto", label: "Report Lotto", category: "Analisi", icon: <Package className="h-4 w-4" /> },
   { path: "/lot-ledger-statistics", label: "Statistiche Registro Lotti", category: "Analisi", icon: <Filter className="h-4 w-4" /> },
   { path: "/sgr", label: "Indici SGR", category: "Analisi", icon: <TrendingUp className="h-4 w-4" /> },
   { path: "/sales-reports", label: "Report Vendite", category: "Analisi", icon: <PieChart className="h-4 w-4" /> },
