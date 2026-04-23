@@ -150,7 +150,7 @@ const TYPE_META: Record<string, { label: string; color: string; icon: any }> = {
 };
 
 function LotReportDetail({ lotId }: { lotId: number }) {
-  const { data, isLoading, error } = useQuery<ReportData>({ queryKey: ['/api/lot-report', lotId] });
+  const { data, isLoading, error } = useQuery<ReportData>({ queryKey: [`/api/lot-report/${lotId}`] });
 
   if (isLoading) return <div className="p-8 text-center text-gray-400">Caricamento report lotto...</div>;
   if (error || !data) return (
