@@ -76,7 +76,7 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
     return null;
   }
 
-  const { periods, weeklyComparison, totalMortality, recentMortalityRatio, populationStats } = data;
+  const { periods, weeklyComparison, populationStats } = data;
   
   const TrendIcon = weeklyComparison.trend === 'up' ? TrendingUp : 
                     weeklyComparison.trend === 'down' ? TrendingDown : Minus;
@@ -85,7 +85,6 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
                      weeklyComparison.trend === 'down' ? 'text-green-500' : 'text-gray-500';
 
   const isRecentCritical = periods.recent.totalDead > 0 && periods.recent.avgMortalityRate > 10;
-  const hasRecentMortality = periods.recent.totalDead > 0;
 
   return (
     <Card className={`${isRecentCritical ? 'border-red-300 bg-red-50/50' : ''}`}>
@@ -205,11 +204,6 @@ export default function MortalityTemporalCard({ flupsyId }: MortalityTemporalCar
           </TooltipProvider>
         </div>
 
-        {hasRecentMortality && (
-          <div className="text-xs text-center py-1 bg-red-50 text-red-700 rounded border border-red-200">
-            {Math.round(recentMortalityRatio * 100)}% della mortalità è recente (ultimi 3 giorni)
-          </div>
-        )}
 
         {populationStats && populationStats.estimatedTotalDead > 0 && (
           <TooltipProvider>
