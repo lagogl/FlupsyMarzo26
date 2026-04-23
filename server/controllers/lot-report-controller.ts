@@ -36,55 +36,89 @@ export async function getLotReport(req: Request, res: Response) {
       agg[r.type] = { total: Number(r.total), n: r.n };
     }
 
-    // 3. Distribuzione ATTUALE (solo cesti attivi che contengono ancora animali del lotto)
+    // 3. Distribuzione ATTUALE
+    //    Include sia i cicli con basket_lot_composition (multi-lotto / vagliature)
+    //    sia i cicli mono-lotto (cycles.lot_id) per i quali la composition non è stata creata.
     const distRows = await db.execute(sql`
+      WITH active_lot_cycles AS (
+        -- Cicli con composition esplicita per questo lotto
+        SELECT DISTINCT blc.basket_id, blc.cycle_id,
+               blc.animal_count AS comp_animals,
+               blc.percentage   AS comp_pct,
+               TRUE             AS has_composition
+        FROM basket_lot_composition blc
+        JOIN cycles c ON c.id = blc.cycle_id
+        WHERE blc.lot_id = ${lotId} AND c.state = 'active'
+        UNION
+        -- Cicli mono-lotto attivi senza composition
+        SELECT c.basket_id, c.id AS cycle_id,
+               NULL::integer AS comp_animals,
+               NULL::numeric AS comp_pct,
+               FALSE         AS has_composition
+        FROM cycles c
+        WHERE c.lot_id = ${lotId}
+          AND c.state = 'active'
+          AND NOT EXISTS (
+            SELECT 1 FROM basket_lot_composition blc2
+            WHERE blc2.basket_id = c.basket_id
+              AND blc2.cycle_id  = c.id
+          )
+      )
       SELECT
-        b.id AS basket_id,
+        alc.basket_id,
         b.physical_number,
-        f.id AS flupsy_id,
+        f.id   AS flupsy_id,
         f.name AS flupsy_name,
-        c.id AS cycle_id,
+        alc.cycle_id,
         c.start_date,
         c.state AS cycle_state,
-        blc.animal_count AS lot_animals,
-        blc.percentage AS lot_pct,
+        alc.has_composition,
+        alc.comp_animals AS comp_animals,
+        alc.comp_pct     AS comp_pct,
         (SELECT s.code FROM operations o JOIN sizes s ON s.id = o.size_id
-         WHERE o.cycle_id = c.id AND o.cancelled_at IS NULL
+         WHERE o.cycle_id = alc.cycle_id AND o.cancelled_at IS NULL
          ORDER BY o.date DESC, o.id DESC LIMIT 1) AS last_size_code,
         (SELECT o.animal_count FROM operations o
-         WHERE o.cycle_id = c.id AND o.cancelled_at IS NULL
+         WHERE o.cycle_id = alc.cycle_id AND o.cancelled_at IS NULL
          AND o.type IN ('prima-attivazione','misura','peso','trasferimento','vagliatura')
          ORDER BY o.date DESC, o.id DESC LIMIT 1) AS last_total_animals,
         (SELECT o.date FROM operations o
-         WHERE o.cycle_id = c.id AND o.cancelled_at IS NULL
+         WHERE o.cycle_id = alc.cycle_id AND o.cancelled_at IS NULL
          ORDER BY o.date DESC, o.id DESC LIMIT 1) AS last_op_date,
         (SELECT COUNT(DISTINCT lot_id) FROM basket_lot_composition
-         WHERE basket_id = b.id AND cycle_id = c.id) AS lots_in_basket
-      FROM basket_lot_composition blc
-      JOIN baskets b ON b.id = blc.basket_id
-      JOIN cycles  c ON c.id = blc.cycle_id
+         WHERE basket_id = alc.basket_id AND cycle_id = alc.cycle_id) AS lots_in_basket
+      FROM active_lot_cycles alc
+      JOIN baskets b ON b.id = alc.basket_id
+      JOIN cycles  c ON c.id = alc.cycle_id
       JOIN flupsys f ON f.id = b.flupsy_id
-      WHERE blc.lot_id = ${lotId}
-        AND c.state = 'active'
       ORDER BY b.physical_number ASC
     `);
 
-    const distribution = (distRows.rows as any[]).map(r => ({
-      basketId: r.basket_id,
-      physicalNumber: r.physical_number,
-      flupsyId: r.flupsy_id,
-      flupsyName: r.flupsy_name,
-      cycleId: r.cycle_id,
-      cycleStartDate: r.start_date,
-      cycleState: r.cycle_state,
-      lotAnimals: Number(r.lot_animals ?? 0),
-      lotPercentage: Number(r.lot_pct ?? 0) * 100,
-      lastSizeCode: r.last_size_code,
-      lastTotalAnimals: Number(r.last_total_animals ?? 0),
-      lastOpDate: r.last_op_date,
-      lotsInBasket: Number(r.lots_in_basket ?? 1),
-      isMixed: Number(r.lots_in_basket ?? 1) > 1,
-    }));
+    const distribution = (distRows.rows as any[]).map(r => {
+      const hasComp = r.has_composition === true;
+      const lastTotal = Number(r.last_total_animals ?? 0);
+      // Per cicli mono-lotto senza composition: 100% del totale corrente
+      const lotAnimals = hasComp ? Number(r.comp_animals ?? 0) : lastTotal;
+      const lotPct = hasComp ? Number(r.comp_pct ?? 0) * 100 : 100;
+      const lotsInBasket = Number(r.lots_in_basket ?? 0) || 1;
+      return {
+        basketId: r.basket_id,
+        physicalNumber: r.physical_number,
+        flupsyId: r.flupsy_id,
+        flupsyName: r.flupsy_name,
+        cycleId: r.cycle_id,
+        cycleStartDate: r.start_date,
+        cycleState: r.cycle_state,
+        lotAnimals,
+        lotPercentage: lotPct,
+        lastSizeCode: r.last_size_code,
+        lastTotalAnimals: lastTotal,
+        lastOpDate: r.last_op_date,
+        lotsInBasket,
+        isMixed: lotsInBasket > 1,
+        hasComposition: hasComp,
+      };
+    });
 
     // Animali attivi pro-quota (oggi) — somma da composition su cicli attivi
     const activeNow = distribution.reduce((s, d) => s + d.lotAnimals, 0);
@@ -95,11 +129,16 @@ export async function getLotReport(req: Request, res: Response) {
     const initial = Number(lot.animal_count ?? 0)
       || Math.abs(agg['in']?.total ?? 0)
       || Math.abs(agg['activation']?.total ?? 0);
-    const deaths = Number(agg['mortality']?.total ?? 0);
-    const sales = Number(agg['sale']?.total ?? 0);
-    const transferOut = Number(agg['transfer_out']?.total ?? 0);
-    const transferIn = Number(agg['transfer_in']?.total ?? 0);
-    // Residuo = ciò che il ledger non spiega (errori di pesatura/campionamento)
+    const ledgerDeaths = Math.abs(Number(agg['mortality']?.total ?? 0));
+    const sales = Math.abs(Number(agg['sale']?.total ?? 0));
+    const transferOut = Math.abs(Number(agg['transfer_out']?.total ?? 0));
+    const transferIn = Math.abs(Number(agg['transfer_in']?.total ?? 0));
+    // Mortalità "calcolata" (totale): iniziali − attivi − venduti
+    // Riflette la differenza reale registrata nelle operazioni (misure, vagliature),
+    // non solo i dead_count dei campioni registrati nel libro mastro.
+    const calculatedMortality = Math.max(0, initial - activeNow - sales);
+    // Usiamo la mortalità calcolata come valore principale; teniamo il ledger come dettaglio
+    const deaths = calculatedMortality;
     const accounted = deaths + sales + activeNow;
     const residual = initial - accounted;
 
@@ -107,6 +146,8 @@ export async function getLotReport(req: Request, res: Response) {
       initial,
       deaths,
       deathsPct: initial > 0 ? (deaths / initial) * 100 : 0,
+      ledgerDeaths,
+      ledgerDeathsPct: initial > 0 ? (ledgerDeaths / initial) * 100 : 0,
       sales,
       salesPct: initial > 0 ? (sales / initial) * 100 : 0,
       activeNow,

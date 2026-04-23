@@ -129,6 +129,7 @@ interface ReportData {
   bilancio: {
     initial: number;
     deaths: number; deathsPct: number;
+    ledgerDeaths: number; ledgerDeathsPct: number;
     sales: number; salesPct: number;
     activeNow: number; activeNowPct: number;
     activeInPure: number; activeInMixed: number;
@@ -244,7 +245,13 @@ function LotReportDetail({ lotId }: { lotId: number }) {
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <Stat label="Iniziali" value={fmt(bilancio.initial)} sub="100%" color="text-gray-700" icon={Package} />
-            <Stat label="Morti" value={fmt(bilancio.deaths)} sub={fmtPct(bilancio.deathsPct)} color="text-red-600" icon={Skull} />
+            <Stat
+              label="Morti (totale)"
+              value={fmt(bilancio.deaths)}
+              sub={`${fmtPct(bilancio.deathsPct)}${bilancio.ledgerDeaths > 0 ? ` · ${fmt(bilancio.ledgerDeaths)} da campioni` : ''}`}
+              color="text-red-600"
+              icon={Skull}
+            />
             <Stat label="Venduti" value={fmt(bilancio.sales)} sub={fmtPct(bilancio.salesPct)} color="text-green-600" icon={ShoppingCart} />
             <Stat label="Attivi (oggi)" value={fmt(bilancio.activeNow)} sub={fmtPct(bilancio.activeNowPct)} color="text-emerald-700" icon={Boxes} />
             <Stat label="Sopravvivenza" value={fmtPct(bilancio.survivalPct)} sub="(venduti+attivi)/iniziali" color="text-blue-700" icon={TrendingUp} />
