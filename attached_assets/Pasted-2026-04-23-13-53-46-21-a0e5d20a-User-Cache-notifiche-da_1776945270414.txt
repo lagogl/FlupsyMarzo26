@@ -1,0 +1,105 @@
+2026-04-23 13:53:46.21
+a0e5d20a
+User
+Cache notifiche: dati scaduti per chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true"
+2026-04-23 13:53:46.21
+a0e5d20a
+User
+Richiesta notifiche con opzioni: {"unreadOnly":true,"type":null,"page":1,"pageSize":20}
+2026-04-23 13:53:46.33
+a0e5d20a
+User
+Cache notifiche: dati salvati con chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true", scadenza in 600 secondi
+2026-04-23 13:53:46.33
+a0e5d20a
+User
+Notifiche recuperate in 121ms (ottimizzato)
+2026-04-23 13:53:49.13
+abde1bae
+System
+starting up user application
+2026-04-23 13:53:49.13
+abde1bae
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 13:53:49.13
+abde1bae
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 13:53:49.15
+abde1bae
+System
+run command failed
+2026-04-23 13:53:49.15
+abde1bae
+System
+failed to start command [node dist/index.js]: exec: "node": executable file not found in $PATH
+2026-04-23 13:53:52.88
+a0e5d20a
+User
+Cache notifiche: dati recuperati dalla cache per chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true"
+2026-04-23 13:53:55.13
+abde1bae
+System
+starting up user application
+2026-04-23 13:53:55.13
+abde1bae
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 13:53:55.13
+abde1bae
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 13:53:55.15
+abde1bae
+System
+run command failed
+2026-04-23 13:53:55.15
+abde1bae
+System
+failed to start command [node dist/index.js]: exec: "node": executable file not found in $PATH
+
+2026-04-23 13:54:03.17
+abde1bae
+System
+starting up user application
+2026-04-23 13:54:03.17
+abde1bae
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 13:54:03.17
+abde1bae
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 13:54:03.18
+abde1bae
+System
+run command failed
+2026-04-23 13:54:03.18
+abde1bae
+System
+failed to start command [node dist/index.js]: exec: "node": executable file not found in $PATH
+2026-04-23 13:54:11.14
+abde1bae
+System
+starting up user application
+2026-04-23 13:54:11.14
+abde1bae
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 13:54:11.14
+abde1bae
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 13:54:11.16
+abde1bae
+System
+failed to start command [node dist/index.js]: exec: "node": executable file not found in $PATH
+2026-04-23 13:54:11.16
+abde1bae
+System
+run command failed
+2026-04-23 13:54:16.54
+a0e5d20a
+User
+Cache notifiche: dati recuperati dalla cache per chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true"
