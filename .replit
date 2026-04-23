@@ -8,8 +8,8 @@ packages = ["curl", "hdf5", "libjpeg", "netcdf", "zlib"]
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["sh", "-c", "NODE_ENV=production node dist/index.js"]
-build = ["sh", "-c", "npm run build"]
+run = ["node", "dist/index.js"]
+build = ["npm", "run", "build"]
 
 [[ports]]
 localPort = 5000

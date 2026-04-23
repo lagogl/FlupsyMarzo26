@@ -1,0 +1,160 @@
+2026-04-23 13:45:42.92
+91eaef41
+System
+command finished with error [sh -c NODE_ENV=production node dist/index.js]: exit status 127
+2026-04-23 13:45:42.92
+91eaef41
+User
+sh: line 1: node: command not found
+2026-04-23 13:45:43.69
+91eaef41
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 13:45:43.69
+91eaef41
+System
+command finished with error [sh -c NODE_ENV=production node dist/index.js]: exit status 127
+2026-04-23 13:45:43.69
+91eaef41
+User
+sh: line 1: node: command not found
+2026-04-23 13:45:45.04
+91eaef41
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 13:45:45.05
+91eaef41
+User
+sh: line 1: node: command not found
+2026-04-23 13:45:49.26
+a0e5d20a
+User
+Cache notifiche: dati recuperati dalla cache per chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true"
+2026-04-23 13:45:51.27
+91eaef41
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 13:45:51.28
+91eaef41
+User
+sh: line 1: node: command not found
+2026-04-23 13:45:51.28
+91eaef41
+System
+command finished with error [sh -c NODE_ENV=production node dist/index.js]: exit status 127
+2026-04-23 13:46:01.21
+91eaef41
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 13:46:01.22
+91eaef41
+User
+sh: line 1: node: command not found
+2026-04-23 13:46:01.22
+91eaef41
+System
+command finished with error [sh -c NODE_ENV=production node dist/index.js]: exit status 127
+2026-04-23 13:46:09.30
+91eaef41
+User
+ERROR: ld.so: object '/nix/store/sj11ljhx4n79h9g0167f8lg8hp7n545m-replit_rtld_loader-1/rtld_loader.so' cannot be loaded as audit interface: cannot open shared object file; ignored.
+2026-04-23 13:46:09.31
+91eaef41
+User
+sh: line 1: node: command not found
+2026-04-23 13:46:09.31
+91eaef41
+System
+command finished with error [sh -c NODE_ENV=production node dist/index.js]: exit status 127
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+pageSize: 1000,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+b.id, b.physical_number, b.flupsy_id, b.cycle_code,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+CTE: Recupero tutti i cestelli senza paginazione
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+Cache cestelli: dati scaduti per chiave "baskets_cycleId_flupsyId_includeAll_includeEmpty_page_pageSize_sortBy_sortOrder_state_undefined_undefined_true_false_1_1000_id_asc_undefined"
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+cycleId: undefined,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+Richiesta cestelli ottimizzata con CTE per opzioni: {
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+includeAll: true
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+🔍 CTE QUERY DEBUG:
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+🚀 CTE: Esecuzione query consolidata con 0 parametri
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+flupsyId: undefined,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+sortOrder: 'asc',
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+}
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+page: 1,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+state: undefined,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+includeEmpty: false,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+🔄 CESTELLI: Cache MISS - query CTE consolidata necessaria
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+b.state, b.current_cycle_id, b.nfc_data, b.nfc_last_programmed_at, b.row, b.position, b.group_id,
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+sortBy: 'id',
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+SELECT
+2026-04-23 13:46:10.74
+a0e5d20a
+User
+b.rfid_uhf_epc, b.rfid_uhf_user_data, b.rfid_uhf_programmed_at,
+2026-04-23 13:46:11.75
+91eaef41
+System
+crash loop detected
+2026-04-23 13:46:19.47
+a0e5d20a
+User
+Cache notifiche: dati recuperati dalla cache per chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true"
+2026-04-23 13:46:19.47
+a0e5d20a
+User
+Cache notifiche: dati recuperati dalla cache per chiave "notifications_page_1_pageSize_20_type_null_unreadOnly_true"
