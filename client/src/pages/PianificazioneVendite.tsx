@@ -114,6 +114,55 @@ function LabelWithHelp({ children, tip }: { children: React.ReactNode; tip: stri
   );
 }
 
+function SizeBreakdownCell({ value, bySize, colorClass, label }: {
+  value: number;
+  bySize: Record<string, number> | undefined;
+  colorClass: string;
+  label: string;
+}) {
+  const hasSizes = bySize && Object.keys(bySize).length > 0;
+  const cell = (
+    <span className={hasSizes ? "cursor-help underline decoration-dotted underline-offset-2" : undefined}>
+      {fmtNum(value)}
+    </span>
+  );
+  if (!hasSizes) return <TableCell className={`text-right font-mono ${colorClass}`}>{cell}</TableCell>;
+  return (
+    <TableCell className={`text-right font-mono ${colorClass}`}>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{cell}</TooltipTrigger>
+          <TooltipContent side="left" className="max-w-xs p-0">
+            <div className="p-3">
+              <div className="font-semibold text-xs mb-2 text-muted-foreground uppercase tracking-wide">{label}</div>
+              <table className="text-xs w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-0.5 pr-3 font-medium">Taglia</th>
+                    <th className="text-right py-0.5 font-medium">Animali</th>
+                    <th className="text-right py-0.5 pl-3 font-medium">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(bySize)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([sz, cnt]) => (
+                      <tr key={sz} className="border-b border-border/40">
+                        <td className={`py-0.5 pr-3 font-mono font-medium ${colorClass}`}>{sz}</td>
+                        <td className="py-0.5 text-right font-mono">{fmtNum(cnt)}</td>
+                        <td className="py-0.5 pl-3 text-right text-muted-foreground">{value > 0 ? `${((cnt / value) * 100).toFixed(1)}%` : '—'}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </TableCell>
+  );
+}
+
 export default function PianificazioneVendite() {
   const { toast } = useToast();
   const { lang, setLang, t } = usePlanningLang();
@@ -229,6 +278,8 @@ export default function PianificazioneVendite() {
       animaliOrdini: m.sales.filter((s: any) => s.reason === 'ordine').reduce((a: number, s: any) => a + s.animalCount, 0),
       animaliCassa: m.sales.filter((s: any) => s.reason === 'cassa' || s.reason === 'liquidazione').reduce((a: number, s: any) => a + s.animalCount, 0),
       ordiniTotali: Object.values(m.ordersBySize).reduce((a: number, v: number) => a + v, 0),
+      ordiniBySize: Object.fromEntries(Object.entries(m.ordersBySize).filter(([, v]) => (v as number) > 0)) as Record<string, number>,
+      ordiniConsegnatiBySize: m.sales.filter((s: any) => s.reason === 'ordine').reduce((acc: Record<string, number>, s: any) => { acc[s.sizeCode] = (acc[s.sizeCode] || 0) + s.animalCount; return acc; }, {} as Record<string, number>),
       vendibili: m.totalSellableAtStart ?? 0,
       sellableBySize: (m as any).sellableBySize as Record<string, number> | undefined,
     }));
@@ -708,44 +759,9 @@ export default function PianificazioneVendite() {
                         return (
                           <TableRow key={i}>
                             <TableCell className="font-medium">{row.mese}</TableCell>
-                            <TableCell className="text-right font-mono text-purple-600">
-                              {row.sellableBySize && Object.keys(row.sellableBySize).length > 0 ? (
-                                <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="cursor-help underline decoration-dotted decoration-purple-400">{fmtNum(row.vendibili)}</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="left" className="max-w-xs p-0">
-                                    <div className="p-3">
-                                      <div className="font-semibold text-xs mb-2 text-muted-foreground uppercase tracking-wide">Composizione per taglia</div>
-                                      <table className="text-xs w-full">
-                                        <thead>
-                                          <tr className="border-b">
-                                            <th className="text-left py-0.5 pr-3 font-medium">Taglia</th>
-                                            <th className="text-right py-0.5 font-medium">Animali</th>
-                                            <th className="text-right py-0.5 pl-3 font-medium">%</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {Object.entries(row.sellableBySize)
-                                            .sort(([, a], [, b]) => b - a)
-                                            .map(([sz, cnt]) => (
-                                              <tr key={sz} className="border-b border-border/40">
-                                                <td className="py-0.5 pr-3 font-mono font-medium text-purple-600">{sz}</td>
-                                                <td className="py-0.5 text-right font-mono">{fmtNum(cnt)}</td>
-                                                <td className="py-0.5 pl-3 text-right text-muted-foreground">{row.vendibili > 0 ? `${((cnt / row.vendibili) * 100).toFixed(1)}%` : '—'}</td>
-                                              </tr>
-                                            ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                                </TooltipProvider>
-                              ) : fmtNum(row.vendibili)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-indigo-500">{fmtNum(row.ordiniTotali)}</TableCell>
-                            <TableCell className="text-right font-mono text-blue-600">{fmtNum(row.animaliOrdini)}</TableCell>
+                            <SizeBreakdownCell value={row.vendibili} bySize={row.sellableBySize} colorClass="text-purple-600" label="Composizione per taglia" />
+                            <SizeBreakdownCell value={row.ordiniTotali} bySize={row.ordiniBySize} colorClass="text-indigo-500" label="Ordini per taglia" />
+                            <SizeBreakdownCell value={row.animaliOrdini} bySize={row.ordiniConsegnatiBySize} colorClass="text-blue-600" label="Consegnati per taglia" />
                             <TableCell className="text-right font-mono text-orange-500">{row.animaliCassa > 0 ? fmtNum(row.animaliCassa) : <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell className="text-right font-mono">
                               <span className={copertura > 80 ? "text-amber-600 font-semibold" : copertura > 20 ? "text-emerald-600" : "text-muted-foreground"}>
