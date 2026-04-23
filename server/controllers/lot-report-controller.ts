@@ -39,16 +39,18 @@ export async function getLotReport(req: Request, res: Response) {
     // 3. Distribuzione ATTUALE
     //    Include sia i cicli con basket_lot_composition (multi-lotto / vagliature)
     //    sia i cicli mono-lotto (cycles.lot_id) per i quali la composition non è stata creata.
+    //    Includiamo ANCHE i cicli chiusi nella composition per calcolare gli animali
+    //    "persi nel tracciamento" (vagliature successive senza propagazione del lotto).
     const distRows = await db.execute(sql`
       WITH active_lot_cycles AS (
-        -- Cicli con composition esplicita per questo lotto
+        -- Cicli con composition esplicita per questo lotto (attivi o chiusi)
         SELECT DISTINCT blc.basket_id, blc.cycle_id,
                blc.animal_count AS comp_animals,
                blc.percentage   AS comp_pct,
                TRUE             AS has_composition
         FROM basket_lot_composition blc
         JOIN cycles c ON c.id = blc.cycle_id
-        WHERE blc.lot_id = ${lotId} AND c.state = 'active'
+        WHERE blc.lot_id = ${lotId}
         UNION
         -- Cicli mono-lotto attivi senza composition
         SELECT c.basket_id, c.id AS cycle_id,
@@ -94,10 +96,9 @@ export async function getLotReport(req: Request, res: Response) {
       ORDER BY b.physical_number ASC
     `);
 
-    const distribution = (distRows.rows as any[]).map(r => {
+    const allRows = (distRows.rows as any[]).map(r => {
       const hasComp = r.has_composition === true;
       const lastTotal = Number(r.last_total_animals ?? 0);
-      // Per cicli mono-lotto senza composition: 100% del totale corrente
       const lotAnimals = hasComp ? Number(r.comp_animals ?? 0) : lastTotal;
       const lotPct = hasComp ? Number(r.comp_pct ?? 0) * 100 : 100;
       const lotsInBasket = Number(r.lots_in_basket ?? 0) || 1;
@@ -108,7 +109,7 @@ export async function getLotReport(req: Request, res: Response) {
         flupsyName: r.flupsy_name,
         cycleId: r.cycle_id,
         cycleStartDate: r.start_date,
-        cycleState: r.cycle_state,
+        cycleState: r.cycle_state as 'active' | 'closed',
         lotAnimals,
         lotPercentage: lotPct,
         lastSizeCode: r.last_size_code,
@@ -120,10 +121,14 @@ export async function getLotReport(req: Request, res: Response) {
       };
     });
 
-    // Animali attivi pro-quota (oggi) — somma da composition su cicli attivi
+    // Distribuzione = solo cesti ATTIVI; cesti chiusi = "tracciamento perso"
+    const distribution = allRows.filter(d => d.cycleState === 'active');
+    const lostTracking = allRows.filter(d => d.cycleState === 'closed');
+
     const activeNow = distribution.reduce((s, d) => s + d.lotAnimals, 0);
     const activeInPure = distribution.filter(d => !d.isMixed).reduce((s, d) => s + d.lotAnimals, 0);
     const activeInMixed = activeNow - activeInPure;
+    const lostTrackingTotal = lostTracking.reduce((s, d) => s + d.lotAnimals, 0);
 
     // 4. Bilancio
     const initial = Number(lot.animal_count ?? 0)
@@ -133,14 +138,14 @@ export async function getLotReport(req: Request, res: Response) {
     const sales = Math.abs(Number(agg['sale']?.total ?? 0));
     const transferOut = Math.abs(Number(agg['transfer_out']?.total ?? 0));
     const transferIn = Math.abs(Number(agg['transfer_in']?.total ?? 0));
-    // Mortalità "calcolata" (totale): iniziali − attivi − venduti
-    // Riflette la differenza reale registrata nelle operazioni (misure, vagliature),
-    // non solo i dead_count dei campioni registrati nel libro mastro.
-    const calculatedMortality = Math.max(0, initial - activeNow - sales);
-    // Usiamo la mortalità calcolata come valore principale; teniamo il ledger come dettaglio
-    const deaths = calculatedMortality;
-    const accounted = deaths + sales + activeNow;
+
+    // Mortalità calcolata = iniziali − attivi − venduti − persi nel tracciamento
+    // (animali finiti in cesti ora chiusi via vagliatura senza prosecuzione composition).
+    // Per lotti mono-ciclo riflette la differenza reale tra prima-attivazione e ultima misura.
+    const deaths = Math.max(0, initial - activeNow - sales - lostTrackingTotal);
+    const accounted = deaths + sales + activeNow + lostTrackingTotal;
     const residual = initial - accounted;
+    const wasScreened = transferOut > 0 || lostTracking.length > 0;
 
     const bilancio = {
       initial,
@@ -154,11 +159,15 @@ export async function getLotReport(req: Request, res: Response) {
       activeNowPct: initial > 0 ? (activeNow / initial) * 100 : 0,
       activeInPure,
       activeInMixed,
+      lostTracking: lostTrackingTotal,
+      lostTrackingPct: initial > 0 ? (lostTrackingTotal / initial) * 100 : 0,
+      lostTrackingBasketsCount: lostTracking.length,
       transferOut,
       transferIn,
       residual,
       residualPct: initial > 0 ? (residual / initial) * 100 : 0,
-      survivalPct: initial > 0 ? ((sales + activeNow) / initial) * 100 : 0,
+      survivalPct: initial > 0 ? ((sales + activeNow + lostTrackingTotal) / initial) * 100 : 0,
+      wasScreened,
     };
 
     // 5. Timeline — ledger arricchito con info cesta/ciclo
@@ -210,6 +219,7 @@ export async function getLotReport(req: Request, res: Response) {
       },
       bilancio,
       distribution,
+      lostTracking,
       timeline,
       ledgerCounts: agg,
     });

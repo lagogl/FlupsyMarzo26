@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
-  Package, Search, ArrowLeft, AlertCircle, TrendingDown, TrendingUp,
+  Package, Search, ArrowLeft, AlertCircle, TrendingUp,
   Activity, Boxes, Skull, ShoppingCart, GitMerge, GitBranch,
-  Calendar, MapPin, Hash, Layers, ChevronRight, Info,
+  Calendar, MapPin, Hash, Layers, ChevronRight, Info, HelpCircle, Eye,
 } from 'lucide-react';
 
 const fmt = (n: number) => Number.isFinite(n) ? new Intl.NumberFormat('it-IT').format(Math.round(n)) : '—';
@@ -133,11 +133,14 @@ interface ReportData {
     sales: number; salesPct: number;
     activeNow: number; activeNowPct: number;
     activeInPure: number; activeInMixed: number;
+    lostTracking: number; lostTrackingPct: number; lostTrackingBasketsCount: number;
     transferOut: number; transferIn: number;
     residual: number; residualPct: number;
     survivalPct: number;
+    wasScreened: boolean;
   };
   distribution: any[];
+  lostTracking: any[];
   timeline: any[];
 }
 
@@ -161,8 +164,31 @@ function LotReportDetail({ lotId }: { lotId: number }) {
     </div>
   );
 
-  const { lot, bilancio, distribution, timeline } = data;
+  const { lot, bilancio, distribution, lostTracking, timeline } = data;
   const balanced = Math.abs(bilancio.residualPct) < 1;
+  const hasLostTracking = (lostTracking?.length ?? 0) > 0;
+
+  // Stato umanamente leggibile del lotto
+  let statusBadge: { label: string; cls: string; desc: string };
+  if (lot.state !== 'active') {
+    statusBadge = { label: 'Esaurito', cls: 'bg-gray-200 text-gray-600', desc: 'Lotto non più attivo' };
+  } else if (bilancio.activeNow === 0 && hasLostTracking) {
+    statusBadge = {
+      label: 'Vagliato e distribuito',
+      cls: 'bg-amber-100 text-amber-800',
+      desc: `Gli animali sono stati distribuiti tramite vagliatura in ${bilancio.lostTrackingBasketsCount} ${bilancio.lostTrackingBasketsCount === 1 ? 'cesta' : 'ceste'}, ora ulteriormente trasformate (tracciamento del lotto perso).`,
+    };
+  } else if (bilancio.activeNow > 0 && hasLostTracking) {
+    statusBadge = {
+      label: 'Parzialmente vagliato',
+      cls: 'bg-blue-100 text-blue-800',
+      desc: 'Una parte degli animali è ancora rintracciabile in cesti attivi, un\'altra è confluita in vagliature successive non più tracciate.',
+    };
+  } else if (bilancio.activeNow > 0) {
+    statusBadge = { label: 'Attivo in produzione', cls: 'bg-emerald-100 text-emerald-800', desc: 'Animali del lotto presenti in cesti attivi.' };
+  } else {
+    statusBadge = { label: 'Senza ceste attive', cls: 'bg-gray-100 text-gray-600', desc: 'Nessun cesto attivo contiene animali tracciabili di questo lotto.' };
+  }
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
@@ -174,18 +200,32 @@ function LotReportDetail({ lotId }: { lotId: number }) {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
+            <h1 className="text-2xl font-bold flex items-center gap-2 flex-wrap">
               <Package className="w-6 h-6 text-emerald-600" />
               Lotto #{lot.id} — {lot.supplier}
+              <span className={`text-xs px-2 py-0.5 rounded font-semibold ${statusBadge.cls}`}>
+                {statusBadge.label}
+              </span>
             </h1>
             <p className="text-sm text-gray-500">
               {lot.supplierLotNumber && <>N° fornitore <strong>{lot.supplierLotNumber}</strong> · </>}
-              Arrivato il <strong>{fmtDate(lot.arrivalDate)}</strong> · Stato:{' '}
-              <span className={lot.state === 'active' ? 'text-green-600 font-medium' : 'text-gray-500'}>
-                {lot.state === 'active' ? 'Attivo' : 'Esaurito'}
-              </span>
+              Arrivato il <strong>{fmtDate(lot.arrivalDate)}</strong>
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Riassunto in linguaggio semplice */}
+      <div className="rounded border border-blue-200 bg-blue-50 p-3 flex gap-2 text-sm">
+        <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="text-blue-900">
+          <strong>Cosa è successo a questo lotto:</strong> {statusBadge.desc}
+          {hasLostTracking && (
+            <div className="mt-1 text-xs text-blue-800">
+              Per seguire gli animali oltre la vagliatura, controlla manualmente i cesti elencati sotto in
+              "Animali fuori dal tracciamento" e le loro vagliature successive.
+            </div>
+          )}
         </div>
       </div>
 
@@ -213,10 +253,10 @@ function LotReportDetail({ lotId }: { lotId: number }) {
           {/* Barra impilata 100% */}
           <div className="mb-3">
             <div className="flex h-6 rounded overflow-hidden border border-gray-200">
-              {bilancio.deathsPct > 0.1 && (
-                <div className="bg-red-400 flex items-center justify-center text-[10px] text-white font-medium"
-                  style={{ width: `${bilancio.deathsPct}%` }} title={`Morti: ${fmt(bilancio.deaths)}`}>
-                  {bilancio.deathsPct > 5 ? `${bilancio.deathsPct.toFixed(0)}%` : ''}
+              {bilancio.activeNowPct > 0.1 && (
+                <div className="bg-emerald-600 flex items-center justify-center text-[10px] text-white font-medium"
+                  style={{ width: `${bilancio.activeNowPct}%` }} title={`Attivi: ${fmt(bilancio.activeNow)}`}>
+                  {bilancio.activeNowPct > 5 ? `${bilancio.activeNowPct.toFixed(0)}%` : ''}
                 </div>
               )}
               {bilancio.salesPct > 0.1 && (
@@ -225,10 +265,16 @@ function LotReportDetail({ lotId }: { lotId: number }) {
                   {bilancio.salesPct > 5 ? `${bilancio.salesPct.toFixed(0)}%` : ''}
                 </div>
               )}
-              {bilancio.activeNowPct > 0.1 && (
-                <div className="bg-emerald-600 flex items-center justify-center text-[10px] text-white font-medium"
-                  style={{ width: `${bilancio.activeNowPct}%` }} title={`Attivi: ${fmt(bilancio.activeNow)}`}>
-                  {bilancio.activeNowPct > 5 ? `${bilancio.activeNowPct.toFixed(0)}%` : ''}
+              {bilancio.lostTrackingPct > 0.1 && (
+                <div className="bg-amber-400 flex items-center justify-center text-[10px] text-white font-medium"
+                  style={{ width: `${bilancio.lostTrackingPct}%` }} title={`Fuori tracciamento: ${fmt(bilancio.lostTracking)}`}>
+                  {bilancio.lostTrackingPct > 5 ? `${bilancio.lostTrackingPct.toFixed(0)}%` : ''}
+                </div>
+              )}
+              {bilancio.deathsPct > 0.1 && (
+                <div className="bg-red-400 flex items-center justify-center text-[10px] text-white font-medium"
+                  style={{ width: `${bilancio.deathsPct}%` }} title={`Morti: ${fmt(bilancio.deaths)}`}>
+                  {bilancio.deathsPct > 5 ? `${bilancio.deathsPct.toFixed(0)}%` : ''}
                 </div>
               )}
               {Math.abs(bilancio.residualPct) > 0.1 && (
@@ -238,47 +284,123 @@ function LotReportDetail({ lotId }: { lotId: number }) {
                 </div>
               )}
             </div>
-            <div className="flex justify-between text-[10px] text-gray-500 mt-1 px-1">
-              <span>0</span><span>100% degli animali iniziali</span>
+            <div className="flex justify-between gap-2 mt-1 text-[10px] flex-wrap">
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 bg-emerald-600 rounded-sm" /> Attivi tracciabili</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 bg-green-500 rounded-sm" /> Venduti</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 bg-amber-400 rounded-sm" /> Fuori tracciamento</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 bg-red-400 rounded-sm" /> Morti</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 bg-gray-300 rounded-sm" /> Residuo non spiegato</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div className={`grid grid-cols-2 ${hasLostTracking ? 'md:grid-cols-6' : 'md:grid-cols-5'} gap-2`}>
             <Stat label="Iniziali" value={fmt(bilancio.initial)} sub="100%" color="text-gray-700" icon={Package} />
             <Stat
-              label="Morti (totale)"
+              label="Attivi oggi"
+              value={fmt(bilancio.activeNow)}
+              sub={`${fmtPct(bilancio.activeNowPct)} · ${distribution.length} ${distribution.length === 1 ? 'cesta' : 'ceste'}`}
+              color="text-emerald-700"
+              icon={Boxes}
+            />
+            <Stat label="Venduti" value={fmt(bilancio.sales)} sub={fmtPct(bilancio.salesPct)} color="text-green-600" icon={ShoppingCart} />
+            {hasLostTracking && (
+              <Stat
+                label="Fuori tracciamento"
+                value={fmt(bilancio.lostTracking)}
+                sub={`${fmtPct(bilancio.lostTrackingPct)} · ${bilancio.lostTrackingBasketsCount} ${bilancio.lostTrackingBasketsCount === 1 ? 'cesta' : 'ceste'}`}
+                color="text-amber-700"
+                icon={Eye}
+              />
+            )}
+            <Stat
+              label="Morti documentati"
               value={fmt(bilancio.deaths)}
-              sub={`${fmtPct(bilancio.deathsPct)}${bilancio.ledgerDeaths > 0 ? ` · ${fmt(bilancio.ledgerDeaths)} da campioni` : ''}`}
+              sub={bilancio.ledgerDeaths > 0 && bilancio.ledgerDeaths !== bilancio.deaths ? `${fmtPct(bilancio.deathsPct)} · ${fmt(bilancio.ledgerDeaths)} da campioni` : fmtPct(bilancio.deathsPct)}
               color="text-red-600"
               icon={Skull}
             />
-            <Stat label="Venduti" value={fmt(bilancio.sales)} sub={fmtPct(bilancio.salesPct)} color="text-green-600" icon={ShoppingCart} />
-            <Stat label="Attivi (oggi)" value={fmt(bilancio.activeNow)} sub={fmtPct(bilancio.activeNowPct)} color="text-emerald-700" icon={Boxes} />
-            <Stat label="Sopravvivenza" value={fmtPct(bilancio.survivalPct)} sub="(venduti+attivi)/iniziali" color="text-blue-700" icon={TrendingUp} />
+            <Stat
+              label="Sopravvivenza"
+              value={fmtPct(bilancio.survivalPct)}
+              sub="(attivi+venduti+fuori-tracc.)/iniziali"
+              color="text-blue-700"
+              icon={TrendingUp}
+            />
           </div>
 
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-            <div className="p-2 rounded bg-emerald-50 border border-emerald-100">
-              <div className="text-gray-600">Attivi in cesti <strong>puri</strong></div>
-              <div className="text-lg font-semibold text-emerald-800">{fmt(bilancio.activeInPure)}</div>
-            </div>
-            <div className="p-2 rounded bg-purple-50 border border-purple-100">
-              <div className="text-gray-600 flex items-center gap-1">
-                Attivi in cesti <strong>misti</strong> (pro-quota)
-                <Info className="w-3 h-3 text-gray-400" />
-              </div>
-              <div className="text-lg font-semibold text-purple-800">{fmt(bilancio.activeInMixed)}</div>
-            </div>
-            <div className="p-2 rounded bg-gray-50 border border-gray-200">
-              <div className="text-gray-600">Residuo (iniziali − morti − venduti − attivi)</div>
-              <div className={`text-lg font-semibold ${balanced ? 'text-gray-400' : bilancio.residual >= 0 ? 'text-amber-700' : 'text-blue-700'}`}>
+          {!balanced && (
+            <div className="mt-3 p-2 rounded bg-gray-50 border border-gray-200 text-xs">
+              <div className="text-gray-600">Residuo non spiegato (iniziali − attivi − venduti − fuori tracciamento − morti)</div>
+              <div className={`text-base font-semibold ${bilancio.residual >= 0 ? 'text-amber-700' : 'text-blue-700'}`}>
                 {bilancio.residual >= 0 ? '+' : ''}{fmt(bilancio.residual)}{' '}
                 <span className="text-xs font-normal">({bilancio.residualPct >= 0 ? '+' : ''}{fmtPct(bilancio.residualPct)})</span>
+                {bilancio.residual < 0 && <span className="text-xs font-normal text-gray-500 ml-2">(animali in più rispetto agli iniziali — tipico delle vagliature pro-quota a causa degli arrotondamenti)</span>}
               </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* === ANIMALI FUORI TRACCIAMENTO === */}
+      {hasLostTracking && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Eye className="w-4 h-4 text-amber-600" />
+              Animali fuori dal tracciamento
+              <span className="text-xs font-normal text-gray-400">
+                ({lostTracking.length} {lostTracking.length === 1 ? 'cesta destinazione' : 'ceste destinazione'})
+              </span>
+              <span className="ml-auto text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                <HelpCircle className="w-3 h-3" />
+                cosa significa?
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-gray-600 mb-2">
+              Questi cesti hanno ricevuto animali del lotto tramite vagliatura, ma il loro ciclo è stato chiuso da una vagliatura
+              successiva che <strong>non ha propagato l'identità del lotto</strong>. Gli animali sono presumibilmente ancora in
+              produzione nei cesti destinatari di quelle vagliature, ma non più direttamente associati a questo lotto nel sistema.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="py-2 px-3 text-left font-semibold text-gray-600">Cesta</th>
+                    <th className="py-2 px-3 text-left font-semibold text-gray-600">FLUPSY</th>
+                    <th className="py-2 px-3 text-right font-semibold text-gray-600">Quota lotto</th>
+                    <th className="py-2 px-3 text-right font-semibold text-gray-600">Animali pro-quota</th>
+                    <th className="py-2 px-3 text-left font-semibold text-gray-600">Ciclo chiuso il</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lostTracking.map((d: any) => (
+                    <tr key={`lt-${d.basketId}-${d.cycleId}`} className="border-b">
+                      <td className="py-2 px-3 font-medium">
+                        <Hash className="w-3 h-3 inline text-gray-400 mr-0.5" />
+                        {d.physicalNumber}
+                        <span className="text-[10px] text-gray-400 ml-1">·C#{d.cycleId}</span>
+                      </td>
+                      <td className="py-2 px-3 text-gray-600">{d.flupsyName}</td>
+                      <td className="py-2 px-3 text-right">{d.lotPercentage.toFixed(1)}%</td>
+                      <td className="py-2 px-3 text-right font-semibold text-amber-700">{fmt(d.lotAnimals)}</td>
+                      <td className="py-2 px-3 text-gray-500">{fmtDate(d.lastOpDate)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t font-semibold">
+                  <tr>
+                    <td colSpan={3} className="py-2 px-3 text-right text-gray-600">Totale fuori tracciamento:</td>
+                    <td className="py-2 px-3 text-right text-amber-800">{fmt(bilancio.lostTracking)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* === DISTRIBUZIONE ATTUALE === */}
       <Card>
