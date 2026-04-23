@@ -11,7 +11,7 @@ const router = Router();
 // === PIANO VENDITE ===
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const validModes: SalesPlanningMode[] = ['cassa', 'ricavo', 'bilanciato'];
+    const validModes: SalesPlanningMode[] = ['cassa', 'ricavo', 'bilanciato', 'ordini'];
     const rawMode = (req.query.mode as string) || 'bilanciato';
     const mode: SalesPlanningMode = validModes.includes(rawMode as SalesPlanningMode)
       ? (rawMode as SalesPlanningMode) : 'bilanciato';

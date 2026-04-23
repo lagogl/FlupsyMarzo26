@@ -26,7 +26,7 @@ const SALE_SIZES = [
 
 const MONTHS_IT = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
-type Mode = 'cassa' | 'ricavo' | 'bilanciato';
+type Mode = 'cassa' | 'ricavo' | 'bilanciato' | 'ordini';
 type Engine = 'greedy' | 'lp';
 
 interface PriceListEntry { id: number; sizeCode: string; pricePerAnimal: number; notes: string | null; }
@@ -312,7 +312,7 @@ export default function PianificazioneVendite() {
       };
       const white = "FFFFFFFF";
       const lightGray = "FFF7F7F7";
-      const modeLabel = plan.mode === 'cassa' ? t("pv_mode_label_cassa") : plan.mode === 'ricavo' ? t("pv_mode_label_ricavo") : t("pv_mode_label_bilanciato");
+      const modeLabel = plan.mode === 'cassa' ? t("pv_mode_label_cassa") : plan.mode === 'ricavo' ? t("pv_mode_label_ricavo") : plan.mode === 'ordini' ? t("pv_mode_label_ordini") : t("pv_mode_label_bilanciato");
       const engineLabel = plan.engine === 'lp' ? t("pv_engine_label_lp") : t("pv_engine_label_greedy");
       const startMonthName = MONTHS[(plan.startMonth - 1) % 12];
 
@@ -581,6 +581,7 @@ export default function PianificazioneVendite() {
                       <SelectItem value="cassa">{t("pv_mode_cassa")}</SelectItem>
                       <SelectItem value="bilanciato">{t("pv_mode_bilanciato")}</SelectItem>
                       <SelectItem value="ricavo">{t("pv_mode_ricavo")}</SelectItem>
+                      <SelectItem value="ordini">{t("pv_mode_ordini")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

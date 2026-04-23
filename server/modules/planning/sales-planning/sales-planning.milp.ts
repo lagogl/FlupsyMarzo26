@@ -22,7 +22,7 @@ import { inArray } from "drizzle-orm";
 const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 const MONTH_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
 
-export type SalesPlanningMode = 'cassa' | 'ricavo' | 'bilanciato';
+export type SalesPlanningMode = 'cassa' | 'ricavo' | 'bilanciato' | 'ordini';
 
 interface MilpBasket {
   id: string;          // identificatore univoco "B<basketId>" o "H<year>-<month>" per arrivi
@@ -273,7 +273,7 @@ export class SalesPlanningMilpService {
     // Coefficienti penalità — intelligente in base alla modalità
     // Penalità ordini: sempre alta (sono vincolo), ma "pesata" dal prezzo della taglia
     //   per evitare distorsioni. Usiamo costante alta indipendente.
-    const LAMBDA_ORDERS = 1000; // €/animale di shortfall
+    let LAMBDA_ORDERS = 1000; // €/animale di shortfall
     let LAMBDA_CASH: number;
     let revenueWeight: number;
     if (mode === 'cassa') {
@@ -282,6 +282,12 @@ export class SalesPlanningMilpService {
     } else if (mode === 'ricavo') {
       LAMBDA_CASH = 0;        // ignora vincolo cassa
       revenueWeight = 1;
+    } else if (mode === 'ordini') {
+      // Massima soddisfazione ordini: penalità shortfall enorme, ignora cassa,
+      // ricavo come tiebreaker debole per evitare vendite inutili
+      LAMBDA_ORDERS = 100000;
+      LAMBDA_CASH = 0;
+      revenueWeight = 0.01;
     } else { // bilanciato
       LAMBDA_CASH = 2;
       revenueWeight = 1;

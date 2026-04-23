@@ -14,7 +14,7 @@ const MONTH_NAMES = [
 ];
 const MONTH_SHORT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
 
-export type SalesPlanningMode = 'cassa' | 'ricavo' | 'bilanciato';
+export type SalesPlanningMode = 'cassa' | 'ricavo' | 'bilanciato' | 'ordini';
 
 interface SimBasket {
   basketId: number;
