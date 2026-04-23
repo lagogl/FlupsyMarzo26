@@ -8379,6 +8379,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Route per completare definitivamente una selezione (usa il controller fisso)
   app.post("/api/selections/:id/complete", completeSelectionFixed);
+
+  // Report storico vagliature sospette (discrepanza origine→destinazione ≥ 3%)
+  app.get("/api/reports/suspicious-screenings", async (_req, res) => {
+    try {
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const result = await db.execute(sql`
+        SELECT
+          s.id,
+          s.selection_number,
+          s.date,
+          s.purpose,
+          s.status,
+          s.notes,
+          COALESCE(SUM(DISTINCT ssb_agg.total), 0)::bigint AS total_origin,
+          COALESCE(SUM(DISTINCT sdb_agg.total), 0)::bigint AS total_destination,
+          (COALESCE(SUM(DISTINCT ssb_agg.total), 0) - COALESCE(SUM(DISTINCT sdb_agg.total), 0))::bigint AS mortality,
+          CASE
+            WHEN COALESCE(SUM(DISTINCT ssb_agg.total), 0) > 0
+              THEN ROUND((COALESCE(SUM(DISTINCT ssb_agg.total), 0) - COALESCE(SUM(DISTINCT sdb_agg.total), 0))::numeric
+                  / NULLIF(COALESCE(SUM(DISTINCT ssb_agg.total), 0), 0) * 100, 2)
+            ELSE 0
+          END AS discrepancy_pct
+        FROM selections s
+        LEFT JOIN LATERAL (
+          SELECT s.id AS sid, COALESCE(SUM(animal_count), 0) AS total
+          FROM selection_source_baskets WHERE selection_id = s.id
+        ) ssb_agg ON true
+        LEFT JOIN LATERAL (
+          SELECT s.id AS sid, COALESCE(SUM(animal_count), 0) AS total
+          FROM selection_destination_baskets WHERE selection_id = s.id
+        ) sdb_agg ON true
+        WHERE s.status = 'completed'
+        GROUP BY s.id, s.selection_number, s.date, s.purpose, s.status, s.notes,
+                 ssb_agg.total, sdb_agg.total
+        HAVING COALESCE(ssb_agg.total, 0) > 0
+           AND (COALESCE(ssb_agg.total, 0) - COALESCE(sdb_agg.total, 0))::numeric
+                / NULLIF(COALESCE(ssb_agg.total, 0), 0) >= 0.03
+        ORDER BY s.date DESC, s.selection_number DESC
+      `);
+      res.json({ success: true, threshold: 3, screenings: result.rows });
+    } catch (e: any) {
+      console.error("❌ historical-suspicious error:", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
   
   // Route per migrazione dati basket-lotto (chiamata una tantum)
   app.post("/api/selections/migrate-basket-lot-data", migrateBasketLotData);

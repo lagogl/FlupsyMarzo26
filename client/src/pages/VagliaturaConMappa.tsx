@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -34,6 +34,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
 import { AlertTriangle, Fish, ShoppingCart, MoveRight, Calendar, Hash } from 'lucide-react';
 
 // Types
@@ -163,6 +164,29 @@ export default function VagliaturaConMappa() {
   }>>([]);
   const [currentCompletionStep, setCurrentCompletionStep] = useState(0);
   const [failedSelectionId, setFailedSelectionId] = useState<number | null>(null);
+
+  // Dialog di conferma per vagliature sospette (>=3% di scarto)
+  const [suspiciousPrompt, setSuspiciousPrompt] = useState<{
+    threshold: number;
+    totalAnimalsOrigin: number;
+    totalAnimalsDestination: number;
+    mortality: number;
+    discrepancyPct: number;
+    resolve: (note: string | null) => void;
+  } | null>(null);
+  const [suspiciousNoteInput, setSuspiciousNoteInput] = useState('');
+  // Ref al resolver per garantire pulizia se il componente viene smontato col dialog aperto
+  const suspiciousResolverRef = useRef<((note: string | null) => void) | null>(null);
+  useEffect(() => {
+    return () => {
+      // Se il componente viene smontato mentre il dialog è ancora aperto,
+      // risolviamo con null così la promise non resta appesa e il flusso entra nel catch (auto-cancel).
+      if (suspiciousResolverRef.current) {
+        suspiciousResolverRef.current(null);
+        suspiciousResolverRef.current = null;
+      }
+    };
+  }, []);
   
   // Query per i dati
   const { data: flupsys = [], isLoading: isLoadingFlupsys } = useQuery<Flupsy[]>({
@@ -1003,17 +1027,45 @@ export default function VagliaturaConMappa() {
       // Passo 5: Completare la selezione
       updateStep('complete', 'in-progress', 4);
       
-      const completeResponse = await fetch(`/api/selections/${selectionId}/complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ selectionId })
-      });
-      
+      const callComplete = (extraBody: Record<string, any> = {}) =>
+        fetch(`/api/selections/${selectionId}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selectionId, ...extraBody })
+        });
+
+      let completeResponse = await callComplete();
+
+      // Guard-rail vagliatura sospetta: il backend risponde 422 con requiresConfirmation
+      if (completeResponse.status === 422) {
+        const payload = await completeResponse.json();
+        if (payload?.code === 'SUSPICIOUS_SCREENING') {
+          const note = await new Promise<string | null>((resolve) => {
+            setSuspiciousNoteInput('');
+            suspiciousResolverRef.current = resolve;
+            setSuspiciousPrompt({
+              threshold: payload.threshold,
+              totalAnimalsOrigin: payload.totalAnimalsOrigin,
+              totalAnimalsDestination: payload.totalAnimalsDestination,
+              mortality: payload.mortality,
+              discrepancyPct: payload.discrepancyPct,
+              resolve,
+            });
+          });
+          suspiciousResolverRef.current = null;
+          if (note === null) {
+            throw new Error("Vagliatura annullata dall'operatore (conferma rifiutata).");
+          }
+          completeResponse = await callComplete({
+            confirmedSuspicious: true,
+            suspiciousNote: note,
+          });
+        }
+      }
+
       if (!completeResponse.ok) {
-        const error = await completeResponse.json();
-        throw new Error(error.message || 'Errore durante il completamento della selezione');
+        const error = await completeResponse.json().catch(() => ({}));
+        throw new Error(error.message || error.error || 'Errore durante il completamento della selezione');
       }
       
       updateStep('complete', 'completed', 4);
@@ -3037,6 +3089,104 @@ export default function VagliaturaConMappa() {
         totalSteps={completionSteps.length}
         onClose={() => setIsCompletionInProgress(false)}
       />
+
+      {/* Dialog di conferma per vagliature sospette */}
+      <Dialog
+        open={!!suspiciousPrompt}
+        onOpenChange={(open) => {
+          if (!open && suspiciousPrompt) {
+            suspiciousPrompt.resolve(null);
+            suspiciousResolverRef.current = null;
+            setSuspiciousPrompt(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700">
+              <AlertTriangle className="h-5 w-5" />
+              Vagliatura sospetta — conferma richiesta
+            </DialogTitle>
+            <DialogDescription>
+              La quantità di animali in destinazione è significativamente inferiore
+              a quella di origine. Verifica i numeri prima di procedere.
+            </DialogDescription>
+          </DialogHeader>
+
+          {suspiciousPrompt && (
+            <div className="space-y-3">
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+                <div className="grid grid-cols-2 gap-1">
+                  <div className="text-muted-foreground">Animali origine:</div>
+                  <div className="text-right font-medium tabular-nums">
+                    {suspiciousPrompt.totalAnimalsOrigin.toLocaleString('it-IT')}
+                  </div>
+                  <div className="text-muted-foreground">Animali destinazione:</div>
+                  <div className="text-right font-medium tabular-nums">
+                    {suspiciousPrompt.totalAnimalsDestination.toLocaleString('it-IT')}
+                  </div>
+                  <div className="text-muted-foreground">Differenza:</div>
+                  <div className="text-right font-semibold tabular-nums text-red-700">
+                    −{suspiciousPrompt.mortality.toLocaleString('it-IT')} ({suspiciousPrompt.discrepancyPct.toFixed(2)}%)
+                  </div>
+                  <div className="text-muted-foreground">Soglia di sospetto:</div>
+                  <div className="text-right font-medium tabular-nums">
+                    {suspiciousPrompt.threshold}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="suspicious-note">
+                  Nota di giustificazione <span className="text-muted-foreground">(facoltativa)</span>
+                </Label>
+                <Textarea
+                  id="suspicious-note"
+                  value={suspiciousNoteInput}
+                  onChange={(e) => setSuspiciousNoteInput(e.target.value)}
+                  placeholder="Es. mortalità verificata, scarto di animali sotto-taglia, errore di pesatura corretto..."
+                  rows={3}
+                  maxLength={1000}
+                />
+              </div>
+
+              <Alert variant="default" className="border-amber-300 bg-amber-50/60">
+                <AlertDescription className="text-xs">
+                  Confermando, la vagliatura verrà salvata e una mail di notifica
+                  sarà inviata al responsabile.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (suspiciousPrompt) {
+                  suspiciousPrompt.resolve(null);
+                  suspiciousResolverRef.current = null;
+                  setSuspiciousPrompt(null);
+                }
+              }}
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (suspiciousPrompt) {
+                  suspiciousPrompt.resolve(suspiciousNoteInput.trim());
+                  suspiciousResolverRef.current = null;
+                  setSuspiciousPrompt(null);
+                }
+              }}
+            >
+              Conferma comunque
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

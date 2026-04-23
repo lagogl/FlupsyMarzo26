@@ -1,0 +1,117 @@
+026-04-23 15:20:24.37
+666adb99
+System
+failed to start command [npm run start]: exec: "npm": executable file not found in $PATH
+2026-04-23 15:20:24.37
+666adb99
+System
+run command failed
+2026-04-23 15:20:34.37
+666adb99
+System
+starting up user application
+2026-04-23 15:20:34.37
+666adb99
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 15:20:34.37
+666adb99
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 15:20:34.39
+666adb99
+System
+run command failed
+2026-04-23 15:20:34.39
+666adb99
+System
+failed to start command [npm run start]: exec: "npm": executable file not found in $PATH
+2026-04-23 15:20:44.39
+666adb99
+System
+starting up user application
+2026-04-23 15:20:44.39
+666adb99
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 15:20:44.40
+666adb99
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 15:20:44.41
+666adb99
+System
+failed to start command [npm run start]: exec: "npm": executable file not found in $PATH
+2026-04-23 15:20:44.41
+666adb99
+System
+run command failed
+2026-04-23 15:20:55.33
+666adb99
+System
+starting up user application
+2026-04-23 15:20:55.33
+666adb99
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 15:20:55.33
+666adb99
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 15:20:55.36
+666adb99
+System
+run command failed
+2026-04-23 15:20:55.36
+666adb99
+System
+failed to start command [npm run start]: exec: "npm": executable file not found in $PATH
+2026-04-23 15:21:09.33
+666adb99
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 15:21:09.33
+666adb99
+System
+starting up user application
+2026-04-23 15:21:09.33
+666adb99
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 15:21:09.36
+666adb99
+System
+run command failed
+2026-04-23 15:21:09.36
+666adb99
+System
+failed to start command [npm run start]: exec: "npm": executable file not found in $PATH
+
+2026-04-23 15:21:23.34
+666adb99
+System
+starting up user application
+2026-04-23 15:21:23.34
+666adb99
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-23 15:21:23.34
+666adb99
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-23 15:21:23.38
+666adb99
+System
+failed to start command [npm run start]: exec: "npm": executable file not found in $PATH
+2026-04-23 15:21:23.38
+666adb99
+System
+run command failed
+2026-04-23 15:22:15.43
+a0e5d20a
+User
+WebSocket client disconnected
+2026-04-23 15:22:19.50
+a0e5d20a
+User
+WebSocket client connected
