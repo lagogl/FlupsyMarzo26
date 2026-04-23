@@ -983,6 +983,8 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
         'Morti Organiche Post-Vag.': s.childOrganicLosses,
         'Venduti': s.totalSold, 'Venduti %': +s.soldPct.toFixed(2),
         'In Produzione': s.totalActive, 'In Produzione %': +s.activePct.toFixed(2),
+        'Sopravvivenza %': s.initialAnimals > 0 ? +(((s.totalActive + s.totalSold) / s.initialAnimals) * 100).toFixed(2) : 0,
+        'Residuo (Bilancio)': s.initialAnimals - s.totalDeaths - s.totalSold - s.totalActive,
         'Ceste Attive': s.activeCycleCount, 'Cicli Totali': s.totalCycles,
         'Gruppi Genealogici': s.groups.length,
         'SGR Medio %/g': s.avgSGR != null ? +s.avgSGR.toFixed(4) : '',
@@ -1357,6 +1359,8 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Organiche</th>
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Venduti</th>
                   <SortTh col="active" label="Attivi" />
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600" title="(Attivi + Venduti) / Ingresso">Sopravv.%</th>
+                  <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600" title="Ingresso − Morti − Venduti − Attivi">Residuo</th>
                   <th className="py-2 px-2 text-right text-xs font-semibold text-gray-600">Ceste/Cicli</th>
                   <SortTh col="sgr" label="SGR %/g" />
                   <th className="py-2 px-2 text-left text-xs font-semibold text-gray-600">Periodo</th>
@@ -1397,6 +1401,18 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
                         <td className="py-2 px-2 text-right text-amber-500">{formatNum(s.childOrganicLosses)}</td>
                         <td className="py-2 px-2 text-right text-green-600">{formatNum(s.totalSold)}</td>
                         <td className="py-2 px-2 text-right font-semibold text-emerald-700">{formatNum(s.totalActive)}</td>
+                        {(() => {
+                          const survivedPct = s.initialAnimals > 0 ? ((s.totalActive + s.totalSold) / s.initialAnimals) * 100 : 0;
+                          const residuo = s.initialAnimals - s.totalDeaths - s.totalSold - s.totalActive;
+                          const sc = survivedPct >= 80 ? 'text-green-700 font-semibold' : survivedPct >= 50 ? 'text-amber-600' : 'text-red-600 font-semibold';
+                          const rc = Math.abs(residuo) < 1 ? 'text-gray-400' : residuo > 0 ? 'text-blue-600' : 'text-purple-600';
+                          return (
+                            <>
+                              <td className={`py-2 px-2 text-right ${sc}`}>{s.initialAnimals > 0 ? survivedPct.toFixed(1) + '%' : '—'}</td>
+                              <td className={`py-2 px-2 text-right ${rc}`} title={residuo > 0 ? 'Animali non ancora contabilizzati (potenzialmente persi non registrati)' : residuo < 0 ? 'Sovrastima (più output che input)' : 'Bilanciato'}>{formatNum(residuo)}</td>
+                            </>
+                          );
+                        })()}
                         <td className="py-2 px-2 text-right text-gray-500">{s.activeCycleCount}/{s.totalCycles}</td>
                         <td className="py-2 px-2 text-right">
                           {s.avgSGR != null ? <span className="text-indigo-700 font-medium">{s.avgSGR.toFixed(3)}</span> : <span className="text-gray-300">—</span>}
@@ -1407,7 +1423,7 @@ function LotAnalysis({ allGroups, allLots }: { allGroups: any[]; allLots: any[] 
                       </tr>
                       {exp && (
                         <tr key={`lot-${lotId}-bk`} className="bg-amber-50/30 border-b">
-                          <td colSpan={15} className="px-10 py-1">
+                          <td colSpan={17} className="px-10 py-1">
                             <span className="text-[11px] text-gray-500">
                               <span className="font-semibold text-gray-700">Breakdown mortalità: </span>
                               {formatNum(s.rootCycleLosses)} da misure ({s.initialAnimals > 0 ? (s.rootCycleLosses / s.initialAnimals * 100).toFixed(1) : 0}%)
