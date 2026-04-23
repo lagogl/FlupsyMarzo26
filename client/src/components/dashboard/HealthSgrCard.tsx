@@ -4,6 +4,7 @@ import { AlertTriangle, AlertCircle, CheckCircle, Activity, Clock, TrendingUp, T
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface HealthSgrCardProps {
   operations: any[];
@@ -41,7 +42,8 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         mortalityTrend: 'stable' as const,
         noRecentOps: 0,
         avgDaysSinceMeasure: null,
-        maxDaysSinceMeasure: null
+        maxDaysSinceMeasure: null,
+        sgrCount: 0
       };
     }
 
@@ -147,17 +149,21 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         prevMortalityCount++;
       }
 
-      // Calcolo SGR attuale tra le ultime 2 operazioni
-      if (basketOps.length >= 2) {
-        const op1 = basketOps[0];
-        const op2 = basketOps[1];
+      // SGR calcolato da animalsPerKg: la crescita individuale si misura come
+      // calo di animali/kg (meno animali per kg = ogni animale pesa di più).
+      // Formula: SGR = (ln(apk_vecchio) - ln(apk_nuovo)) / giorni × 100
+      // Filtra le op con animalsPerKg > 0 e almeno 3 giorni di distanza per evitare rumore
+      const opsWithApk = basketOps.filter((op: any) => op.animalsPerKg && op.animalsPerKg > 0);
+
+      if (opsWithApk.length >= 2) {
+        const op1 = opsWithApk[0]; // più recente
+        const op2 = opsWithApk[1]; // precedente
+        const date1 = new Date(op1.date);
+        const date2 = new Date(op2.date);
+        const days = Math.floor((date1.getTime() - date2.getTime()) / (1000 * 60 * 60 * 24));
         
-        if (op1.totalWeight && op2.totalWeight && op1.totalWeight > 0 && op2.totalWeight > 0) {
-          const date1 = new Date(op1.date);
-          const date2 = new Date(op2.date);
-          const days = Math.max(1, Math.floor((date1.getTime() - date2.getTime()) / (1000 * 60 * 60 * 24)));
-          const sgr = ((Math.log(op1.totalWeight) - Math.log(op2.totalWeight)) / days) * 100;
-          
+        if (days >= 3) { // almeno 3 giorni per evitare rumore
+          const sgr = ((Math.log(op2.animalsPerKg) - Math.log(op1.animalsPerKg)) / days) * 100;
           if (sgr > -50 && sgr < 50) {
             totalSgr += sgr;
             sgrCount++;
@@ -165,17 +171,16 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
         }
       }
 
-      // Calcolo SGR precedente tra 3a e 4a operazione per trend
-      if (basketOps.length >= 4) {
-        const op3 = basketOps[2];
-        const op4 = basketOps[3];
+      // SGR precedente: coppia op2–op3 con animalsPerKg per confronto trend
+      if (opsWithApk.length >= 3) {
+        const op2 = opsWithApk[1];
+        const op3 = opsWithApk[2];
+        const date2 = new Date(op2.date);
+        const date3 = new Date(op3.date);
+        const days = Math.floor((date2.getTime() - date3.getTime()) / (1000 * 60 * 60 * 24));
         
-        if (op3.totalWeight && op4.totalWeight && op3.totalWeight > 0 && op4.totalWeight > 0) {
-          const date3 = new Date(op3.date);
-          const date4 = new Date(op4.date);
-          const days = Math.max(1, Math.floor((date3.getTime() - date4.getTime()) / (1000 * 60 * 60 * 24)));
-          const prevSgr = ((Math.log(op3.totalWeight) - Math.log(op4.totalWeight)) / days) * 100;
-          
+        if (days >= 3) {
+          const prevSgr = ((Math.log(op3.animalsPerKg) - Math.log(op2.animalsPerKg)) / days) * 100;
           if (prevSgr > -50 && prevSgr < 50) {
             totalPrevSgr += prevSgr;
             prevSgrCount++;
@@ -251,7 +256,8 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
       mortalityTrend,
       noRecentOps,
       avgDaysSinceMeasure,
-      maxDaysSinceMeasure
+      maxDaysSinceMeasure,
+      sgrCount
     };
   }, [operations, activeCycles, activeBaskets]);
 
@@ -322,21 +328,37 @@ export default function HealthSgrCard({ operations, activeCycles, activeBaskets 
 
         <div className="flex-1 flex flex-col justify-between">
           <div className="space-y-1 text-xs">
-            <div className="flex justify-between items-center bg-white rounded px-2 py-1">
-              <span className="text-gray-600">SGR Medio</span>
-              <div className="flex items-center gap-1">
-                <span className={`font-semibold ${
-                  stats.avgSgr !== null && stats.avgSgr > 0 
-                    ? 'text-blue-600' 
-                    : 'text-gray-600'
-                }`}>
-                  {stats.avgSgr !== null ? `${stats.avgSgr.toFixed(2)}%` : 'N/D'}
-                </span>
-                {stats.sgrTrend === 'up' && <TrendingUp className="h-3 w-3 text-green-500" />}
-                {stats.sgrTrend === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
-                {stats.sgrTrend === 'stable' && stats.avgSgr !== null && <Minus className="h-3 w-3 text-gray-400" />}
-              </div>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex justify-between items-center bg-white rounded px-2 py-1 cursor-help">
+                    <span className="text-gray-600">SGR Medio</span>
+                    <div className="flex items-center gap-1">
+                      <span className={`font-semibold ${
+                        stats.avgSgr !== null && stats.avgSgr > 0 
+                          ? 'text-blue-600' 
+                          : 'text-gray-600'
+                      }`}>
+                        {stats.avgSgr !== null ? `${stats.avgSgr.toFixed(2)}%/g` : 'N/D'}
+                      </span>
+                      {stats.sgrTrend === 'up' && <TrendingUp className="h-3 w-3 text-green-500" />}
+                      {stats.sgrTrend === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
+                      {stats.sgrTrend === 'stable' && stats.avgSgr !== null && <Minus className="h-3 w-3 text-gray-400" />}
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-medium">Specific Growth Rate medio ({stats.sgrCount} ceste)</p>
+                  <p className="text-sm">Crescita individuale % al giorno calcolata da animali/kg</p>
+                  <p className="text-sm">Valori tipici spat: 3–15%/giorno</p>
+                  {stats.avgSgr !== null && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Trend: {stats.sgrTrend === 'up' ? '↑ in accelerazione' : stats.sgrTrend === 'down' ? '↓ in rallentamento' : '→ stabile'}
+                    </p>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
             <div className="flex justify-between items-center bg-white rounded px-2 py-1">
               <span className="text-gray-600">Mortalità Media</span>
