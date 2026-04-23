@@ -380,6 +380,7 @@ export class SalesPlanningService {
         ordersFulfilledBySize: fulfilledBySize,
         orderShortfallBySize: shortfallBySize,
         remainingAnimals,
+        totalSellableAtStart,
       });
     }
 

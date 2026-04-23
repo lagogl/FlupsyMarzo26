@@ -226,6 +226,7 @@ export default function PianificazioneVendite() {
       ricavo: Math.round(m.totalRevenue),
       target: Math.round(m.cashTarget),
       animali: m.sales.reduce((a, s) => a + s.animalCount, 0),
+      vendibili: m.totalSellableAtStart ?? 0,
     }));
   }, [plan]);
 
@@ -665,12 +666,13 @@ export default function PianificazioneVendite() {
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="mese" />
                         <YAxis yAxisId="left" tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                        <YAxis yAxisId="right" orientation="right" />
-                        <RechartsTooltip formatter={(v: any, name: string) => name === t("pv_chart_animali") ? fmtNum(v) : fmtEur(v)} />
+                        <YAxis yAxisId="right" orientation="right" width={72} tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}k` : String(v)} />
+                        <RechartsTooltip formatter={(v: any, name: string) => (name === t("pv_chart_animali") || name === t("pv_chart_vendibili")) ? fmtNum(v) : fmtEur(v)} />
                         <Legend />
                         <Bar yAxisId="left" dataKey="ricavo" fill="#10b981" name={t("pv_chart_ricavo")} />
                         <Line yAxisId="left" type="monotone" dataKey="target" stroke="#ef4444" name={t("pv_chart_target")} strokeWidth={2} />
-                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name={t("pv_chart_animali")} strokeDasharray="4 2" />
+                        <Line yAxisId="right" type="monotone" dataKey="vendibili" stroke="#8b5cf6" name={t("pv_chart_vendibili")} strokeDasharray="6 3" strokeWidth={2} dot={false} />
+                        <Line yAxisId="right" type="monotone" dataKey="animali" stroke="#3b82f6" name={t("pv_chart_animali")} strokeDasharray="4 2" strokeWidth={2} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
