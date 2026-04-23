@@ -270,19 +270,25 @@ export default function PianificazioneVendite() {
 
   const chartData = useMemo(() => {
     if (!plan) return [];
-    return plan.monthlyPlan.map(m => ({
-      mese: m.monthLabel,
-      ricavo: Math.round(m.totalRevenue),
-      target: Math.round(m.cashTarget),
-      animali: m.sales.reduce((a: number, s: any) => a + s.animalCount, 0),
-      animaliOrdini: m.sales.filter((s: any) => s.reason === 'ordine').reduce((a: number, s: any) => a + s.animalCount, 0),
-      animaliCassa: m.sales.filter((s: any) => s.reason === 'cassa' || s.reason === 'liquidazione').reduce((a: number, s: any) => a + s.animalCount, 0),
-      ordiniTotali: Object.values(m.ordersBySize).reduce((a: number, v: number) => a + v, 0),
-      ordiniBySize: Object.fromEntries(Object.entries(m.ordersBySize).filter(([, v]) => (v as number) > 0)) as Record<string, number>,
-      ordiniConsegnatiBySize: m.sales.filter((s: any) => s.reason === 'ordine').reduce((acc: Record<string, number>, s: any) => { acc[s.sizeCode] = (acc[s.sizeCode] || 0) + s.animalCount; return acc; }, {} as Record<string, number>),
-      vendibili: m.totalSellableAtStart ?? 0,
-      sellableBySize: (m as any).sellableBySize as Record<string, number> | undefined,
-    }));
+    return plan.monthlyPlan.map(m => {
+      const totalSold = m.sales.reduce((a: number, s: any) => a + s.animalCount, 0);
+      const fulfilled = m.ordersFulfilledBySize || {};
+      const animaliOrdini = Object.values(fulfilled).reduce((a: number, v: any) => a + (v as number), 0);
+      const animaliCassa = Math.max(0, totalSold - animaliOrdini);
+      return {
+        mese: m.monthLabel,
+        ricavo: Math.round(m.totalRevenue),
+        target: Math.round(m.cashTarget),
+        animali: totalSold,
+        animaliOrdini,
+        animaliCassa,
+        ordiniTotali: Object.values(m.ordersBySize).reduce((a: number, v: number) => a + v, 0),
+        ordiniBySize: Object.fromEntries(Object.entries(m.ordersBySize).filter(([, v]) => (v as number) > 0)) as Record<string, number>,
+        ordiniConsegnatiBySize: Object.fromEntries(Object.entries(fulfilled).filter(([, v]) => (v as number) > 0)) as Record<string, number>,
+        vendibili: (m as any).totalSellableAtStart ?? 0,
+        sellableBySize: (m as any).sellableBySize as Record<string, number> | undefined,
+      };
+    });
   }, [plan]);
 
   const [isExporting, setIsExporting] = useState(false);
