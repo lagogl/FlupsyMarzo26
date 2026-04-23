@@ -679,6 +679,44 @@ export default function PianificazioneVendite() {
                 </CardContent>
               </Card>
 
+              {/* Tabella dati grafico */}
+              <Card>
+                <CardHeader><CardTitle className="text-lg">{t("pv_chart_data_title")}</CardTitle></CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <ThWithTip tip="">{t("pv_chart_data_mese")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_chart_data_vendibili_tip")}>{t("pv_chart_data_vendibili")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_chart_data_allocati_tip")}>{t("pv_chart_data_allocati")}</ThWithTip>
+                        <ThWithTip className="text-right" tip={t("pv_chart_data_copertura_tip")}>{t("pv_chart_data_copertura")}</ThWithTip>
+                        <ThWithTip className="text-right" tip="">{t("pv_chart_data_ricavo")}</ThWithTip>
+                        <ThWithTip className="text-right" tip="">{t("pv_chart_data_target")}</ThWithTip>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {chartData.map((row, i) => {
+                        const copertura = row.vendibili > 0 ? (row.animali / row.vendibili) * 100 : 0;
+                        return (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{row.mese}</TableCell>
+                            <TableCell className="text-right font-mono text-purple-600">{fmtNum(row.vendibili)}</TableCell>
+                            <TableCell className="text-right font-mono text-blue-600">{fmtNum(row.animali)}</TableCell>
+                            <TableCell className="text-right font-mono">
+                              <span className={copertura > 80 ? "text-amber-600 font-semibold" : copertura > 50 ? "text-emerald-600" : "text-muted-foreground"}>
+                                {row.vendibili > 0 ? `${copertura.toFixed(1)}%` : '—'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-emerald-600">{fmtEur(row.ricavo)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{row.target > 0 ? fmtEur(row.target) : '—'}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
               {/* Tabella mensile */}
               <Card>
                 <CardHeader><CardTitle className="text-lg">{t("pv_table_title")}</CardTitle></CardHeader>
