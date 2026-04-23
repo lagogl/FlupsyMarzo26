@@ -245,7 +245,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <Zap className="h-5 w-5 mr-2 text-gray-600" />, label: translations.menuItems.adminUtilities, path: "/amministrazione-utilita" }
       ]
     }
-  ].filter(cat => cat.id !== 'system' || user?.role === 'admin');
+  ].filter(cat => cat.id !== 'system' || user?.role === 'admin')
+   .filter(cat => cat.id !== 'analysis' || user?.username?.toLowerCase() === 'gianluigi');
 
   return (
     <div className="min-h-screen flex flex-col">
