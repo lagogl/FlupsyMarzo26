@@ -51,6 +51,8 @@ interface MilpResult {
     ordersFulfilledBySize: Record<string, number>;
     orderShortfallBySize: Record<string, number>;
     remainingAnimals: number;
+    totalSellableAtStart: number;
+    sellableBySize: Record<string, number>;
   }>;
   solverStatus: { feasible: boolean; bounded: boolean; iterations?: number; objective?: number };
 }
@@ -411,16 +413,31 @@ export class SalesPlanningMilpService {
       }
 
       const sales: MilpResult['monthlyPlan'][0]['sales'] = [];
+      const sellableBySize: Record<string, number> = {};
+      let totalSellableAtStart = 0;
 
       for (const b of baskets) {
-        const xName = `x_${b.id}_${m}`;
-        const sold = solution[xName] || 0;
-        if (sold < 0.5) continue; // ignora rumore numerico
+        const arrivalIdx = b.isHatchery ? this.findArrivalIndex(b, monthSteps) : 0;
+        if (m < arrivalIdx) continue;
         const state = b.monthState[m];
         if (!state || state.kgPerAnimal === 0) continue;
-        const weightKg = sold * state.kgPerAnimal;
+
+        // Animali vivi disponibili in questo mese (post-mortalità, pre-vendita)
+        const xName = `x_${b.id}_${m}`;
+        const aliveName = `a_${b.id}_${m}`;
+        const sold = solution[xName] || 0;
+        const aliveEnd = solution[aliveName] || 0;
+        const availableThisMonth = sold + aliveEnd;
+
         const price = priceMap[state.sizeCode] || 0;
-        // price = €/animale
+        if (availableThisMonth > 0.5 && price > 0) {
+          const qty = Math.round(availableThisMonth);
+          sellableBySize[state.sizeCode] = (sellableBySize[state.sizeCode] || 0) + qty;
+          totalSellableAtStart += qty;
+        }
+
+        if (sold < 0.5) continue; // ignora rumore numerico
+        const weightKg = sold * state.kgPerAnimal;
         const revenue = sold * price;
         sales.push({
           basketId: b.basketIdNumeric,
@@ -467,6 +484,8 @@ export class SalesPlanningMilpService {
         ordersFulfilledBySize: fulfilledBySize,
         orderShortfallBySize: shortfallBySize,
         remainingAnimals: Math.round(remainingAnimals),
+        totalSellableAtStart,
+        sellableBySize,
       });
     }
 
