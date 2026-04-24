@@ -136,10 +136,16 @@ export class SalesPlanningMilpService {
           monthlyMortality = dbRate !== undefined ? dbRate : (fallback[cat] || 0.03);
         }
 
+        // Scala la mortalità proporzionalmente ai giorni effettivamente simulati nel mese.
+        // Per il primo mese del piano (corrente) simulDays < daysInMonth → mortalità ridotta,
+        // perché il conteggio dei cestelli rappresenta già lo stato di oggi
+        // (i giorni già trascorsi sono incorporati nei numeri reali).
+        const effectiveMortality = monthlyMortality * (simulDays / daysInMonth);
+
         monthState.push({
           kgPerAnimal: 1 / apkEnd,
           sizeCode,
-          mortalityRate: monthlyMortality,
+          mortalityRate: effectiveMortality,
         });
       }
 
