@@ -702,8 +702,9 @@ export default function AdvancedSales() {
         </TabsContent>
 
         <TabsContent value="new" className="space-y-4">
+          {/* Barra modalità — sempre visibile in cima */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 py-3">
               <CardTitle>Crea Nuova Vendita Avanzata</CardTitle>
               <div className="flex items-center gap-3">
                 <Label htmlFor="multi-mode-toggle" className="text-sm font-normal flex items-center gap-2 cursor-pointer">
@@ -718,22 +719,26 @@ export default function AdvancedSales() {
                 />
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {multiCustomerMode ? (
-                <MultiCustomerSaleForm
-                  selectedOperations={(availableOperations?.operations || []).filter(
-                    (op: SaleOperation) => selectedOperations.includes(op.operationId)
-                  )}
-                  defaultDate={saleDate}
-                  defaultCompanyId={selectedCompanyId}
-                  onSuccess={() => {
-                    setSelectedOperations([]);
-                    setMultiCustomerMode(false);
-                    setActiveTab("sales");
-                  }}
-                  onCancel={() => setMultiCustomerMode(false)}
-                />
-              ) : (
+          </Card>
+
+          {/* Multi-cliente: form reso FUORI dalla card per permettere lo sticky */}
+          {multiCustomerMode ? (
+            <MultiCustomerSaleForm
+              selectedOperations={(availableOperations?.operations || []).filter(
+                (op: SaleOperation) => selectedOperations.includes(op.operationId)
+              )}
+              defaultDate={saleDate}
+              defaultCompanyId={selectedCompanyId}
+              onSuccess={() => {
+                setSelectedOperations([]);
+                setMultiCustomerMode(false);
+                setActiveTab("sales");
+              }}
+              onCancel={() => setMultiCustomerMode(false)}
+            />
+          ) : (
+          <Card>
+            <CardContent className="space-y-4 pt-4">
               <>
               <div className="space-y-2">
                 <Label>Operazioni Selezionate</Label>
@@ -869,9 +874,9 @@ export default function AdvancedSales() {
                 {createSaleMutation.isPending ? "Creazione..." : "Crea Vendita"}
               </Button>
               </>
-              )}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="config" className="space-y-4">
