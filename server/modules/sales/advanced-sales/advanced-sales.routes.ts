@@ -16,6 +16,7 @@ router.get('/customers', AdvancedSalesController.getCustomers);
 router.get('/', AdvancedSalesController.getAdvancedSales);
 router.get('/:id', AdvancedSalesController.getAdvancedSale);
 router.post('/', AdvancedSalesController.createAdvancedSale);
+router.post('/multi', AdvancedSalesController.createMultiCustomerSale);
 router.patch('/:id/status', AdvancedSalesController.updateSaleStatus);
 router.delete('/:id', AdvancedSalesController.deleteSale);
 

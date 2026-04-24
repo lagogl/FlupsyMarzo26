@@ -302,6 +302,379 @@ export async function createAdvancedSale(req: Request, res: Response) {
 }
 
 /**
+ * Crea N vendite avanzate (una per cliente) dalle stesse operazioni di vendita selezionate.
+ * Permette di suddividere le operazioni sorgente tra più clienti contemporaneamente.
+ *
+ * Vincoli applicati:
+ *  - Le operazioni sorgente non devono essere già processate (saleOperationsRef vuota)
+ *  - Per ciascuna operazione: somma animali allocati attraverso TUTTE le vendite ≤ animali disponibili
+ *  - Ogni sale entry deve avere un cliente (selezionato o manuale) e almeno 1 sacco
+ *  - Tutto in una sola transazione: o si creano tutte le vendite o nessuna
+ *
+ * Le operazioni con residuo non allocato (nessuna allocation in nessuna sale) NON ricevono
+ * saleOperationsRef e restano "Disponibili" nell'elenco operazioni.
+ */
+export async function createMultiCustomerSale(req: Request, res: Response) {
+  try {
+    const {
+      operationIds,
+      companyId,
+      saleDate,
+      sales
+    }: {
+      operationIds: number[];
+      companyId: number | null;
+      saleDate: string;
+      sales: Array<{
+        customerData?: any;
+        manualCustomer?: { name: string; details?: string } | null;
+        notes?: string;
+        bags: Array<{
+          sizeCode?: string;
+          animalCount: number;
+          originalWeight: number;
+          weightLoss?: number;
+          wastePercentage?: number;
+          originalAnimalsPerKg: number;
+          notes?: string;
+          allocations: Array<{
+            sourceOperationId: number;
+            sourceBasketId: number;
+            allocatedAnimals: number;
+            allocatedWeight: number;
+            sourceAnimalsPerKg: number;
+            sourceSizeCode: string;
+          }>;
+        }>;
+      }>;
+    } = req.body;
+
+    // ---- Validazioni base sui parametri di input ----
+    if (!operationIds || !Array.isArray(operationIds) || operationIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "È necessario selezionare almeno un'operazione di vendita"
+      });
+    }
+    if (!sales || !Array.isArray(sales) || sales.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "È necessario specificare almeno una vendita cliente"
+      });
+    }
+    if (!saleDate) {
+      return res.status(400).json({
+        success: false,
+        error: "Data vendita obbligatoria"
+      });
+    }
+
+    // Ogni sale deve avere customer, almeno 1 sacco, e validazione invariante per-sacco
+    for (let i = 0; i < sales.length; i++) {
+      const s = sales[i];
+      const hasCustomer = !!(s.customerData?.id || s.manualCustomer?.name);
+      if (!hasCustomer) {
+        return res.status(400).json({
+          success: false,
+          error: `La vendita #${i + 1} non ha un cliente specificato`
+        });
+      }
+      if (!s.bags || !Array.isArray(s.bags) || s.bags.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: `La vendita #${i + 1} non ha sacchi configurati`
+        });
+      }
+      for (let j = 0; j < s.bags.length; j++) {
+        const b = s.bags[j];
+        if (!b.allocations || b.allocations.length === 0) {
+          return res.status(400).json({
+            success: false,
+            error: `Sacco #${j + 1} della vendita #${i + 1} non ha allocazioni`
+          });
+        }
+        if (!Number.isFinite(b.animalCount) || b.animalCount <= 0) {
+          return res.status(400).json({
+            success: false,
+            error: `Sacco #${j + 1} della vendita #${i + 1}: animalCount deve essere > 0`
+          });
+        }
+        if (!Number.isFinite(b.originalWeight) || b.originalWeight <= 0) {
+          return res.status(400).json({
+            success: false,
+            error: `Sacco #${j + 1} della vendita #${i + 1}: peso deve essere > 0`
+          });
+        }
+        // Invariante: animalCount del sacco == somma allocazioni
+        let allocSum = 0;
+        for (const a of b.allocations) {
+          if (!Number.isFinite(a.allocatedAnimals) || a.allocatedAnimals <= 0) {
+            return res.status(400).json({
+              success: false,
+              error: `Sacco #${j + 1} della vendita #${i + 1}: allocatedAnimals deve essere > 0`
+            });
+          }
+          if (!a.sourceOperationId || !a.sourceBasketId) {
+            return res.status(400).json({
+              success: false,
+              error: `Sacco #${j + 1} della vendita #${i + 1}: allocazione senza operationId/basketId`
+            });
+          }
+          allocSum += a.allocatedAnimals;
+        }
+        if (allocSum !== b.animalCount) {
+          return res.status(400).json({
+            success: false,
+            error: `Sacco #${j + 1} della vendita #${i + 1}: animalCount (${b.animalCount}) non coincide con somma allocazioni (${allocSum})`
+          });
+        }
+      }
+    }
+
+    // ---- Aggrega allocazioni richieste per operationId (usato dentro la tx) ----
+    const allocatedByOperation = new Map<number, number>();
+    for (const sale of sales) {
+      for (const bag of sale.bags) {
+        for (const alloc of bag.allocations) {
+          if (!operationIds.includes(alloc.sourceOperationId)) {
+            return res.status(400).json({
+              success: false,
+              error: `Allocazione su operazione ${alloc.sourceOperationId} non inclusa nelle operazioni selezionate`
+            });
+          }
+          const prev = allocatedByOperation.get(alloc.sourceOperationId) || 0;
+          allocatedByOperation.set(alloc.sourceOperationId, prev + alloc.allocatedAnimals);
+        }
+      }
+    }
+
+    // ---- Transazione: lock operazioni, ri-validazione, creazione N vendite ----
+    let createdSales: any[] = [];
+    let operationsData: Array<{
+      operationId: number; basketId: number; animalCount: number;
+      totalWeight: number; animalsPerKg: number; sizeCode: string | null;
+      basketPhysicalNumber: number | null;
+    }> = [];
+    try {
+      createdSales = await db.transaction(async (tx) => {
+        // Lock righe operations selezionate per evitare race con altri inserimenti
+        await tx.execute(sql`
+          SELECT id FROM ${operations}
+          WHERE id IN (${sql.join(operationIds.map(id => sql`${id}`), sql`, `)})
+          FOR UPDATE
+        `);
+
+        // Ricarica dettagli operazioni dentro la transazione
+        operationsData = await tx.select({
+          operationId: operations.id,
+          basketId: operations.basketId,
+          animalCount: operations.animalCount,
+          totalWeight: operations.totalWeight,
+          animalsPerKg: operations.animalsPerKg,
+          sizeCode: sizes.code,
+          basketPhysicalNumber: baskets.physicalNumber
+        })
+        .from(operations)
+        .leftJoin(baskets, eq(operations.basketId, baskets.id))
+        .leftJoin(sizes, eq(operations.sizeId, sizes.id))
+        .where(inArray(operations.id, operationIds));
+
+        const operationMap = new Map<number, typeof operationsData[number]>();
+        operationsData.forEach(op => operationMap.set(op.operationId, op));
+
+        for (const opId of operationIds) {
+          if (!operationMap.has(opId)) {
+            throw new Error(`Operazione ${opId} non trovata`);
+          }
+        }
+
+        // Verifica concorrenziale: nessun'altra vendita ha già processato queste operazioni
+        const existingRefs = await tx.select()
+          .from(saleOperationsRef)
+          .where(inArray(saleOperationsRef.operationId, operationIds));
+        if (existingRefs.length > 0) {
+          throw new Error("Alcune operazioni selezionate sono già state processate da un'altra vendita");
+        }
+
+        // Re-check capacity con i valori freschi dal DB
+        for (const [opId, allocated] of allocatedByOperation.entries()) {
+          const op = operationMap.get(opId)!;
+          const available = op.animalCount || 0;
+          if (allocated > available) {
+            throw new Error(
+              `Sovra-allocazione sul cestello #${op.basketPhysicalNumber}: richiesti ${allocated.toLocaleString('it-IT')} animali ma disponibili solo ${available.toLocaleString('it-IT')}`
+            );
+          }
+        }
+
+        // ---- Numerazione VAV: calcolo dentro la tx con lock dell'ultima riga ----
+        const lockedLast = await tx.execute(sql`
+          SELECT sale_number FROM ${advancedSales}
+          ORDER BY id DESC LIMIT 1 FOR UPDATE
+        `);
+        let baseNumber = 1;
+        const rows: any = (lockedLast as any).rows ?? lockedLast;
+        if (Array.isArray(rows) && rows.length > 0 && rows[0].sale_number) {
+          const match = String(rows[0].sale_number).match(/VAV-(\d+)/);
+          if (match) baseNumber = parseInt(match[1]) + 1;
+        }
+
+        const results: any[] = [];
+
+        for (let i = 0; i < sales.length; i++) {
+        const saleEntry = sales[i];
+        const saleNumber = `VAV-${(baseNumber + i).toString().padStart(6, '0')}`;
+        const customerData = saleEntry.customerData || saleEntry.manualCustomer || null;
+
+        // Crea vendita master
+        const [newSale] = await tx.insert(advancedSales).values({
+          saleNumber,
+          companyId: companyId || null,
+          customerId: customerData?.id || null,
+          customerName: customerData?.name || null,
+          customerDetails: customerData ? JSON.stringify(customerData) : null,
+          saleDate,
+          status: 'draft',
+          notes: saleEntry.notes || null
+        }).returning();
+
+        // Determina quali operationIds sono effettivamente usate da questa vendita
+        const usedOperationIds = new Set<number>();
+        for (const bag of saleEntry.bags) {
+          for (const alloc of bag.allocations) {
+            usedOperationIds.add(alloc.sourceOperationId);
+          }
+        }
+
+        // Crea saleOperationsRef SOLO per le operazioni usate da questa vendita
+        for (const opId of usedOperationIds) {
+          const op = operationMap.get(opId);
+          if (!op) continue;
+          await tx.insert(saleOperationsRef).values({
+            advancedSaleId: newSale.id,
+            operationId: op.operationId,
+            basketId: op.basketId,
+            originalAnimals: op.animalCount,
+            originalWeight: op.totalWeight,
+            originalAnimalsPerKg: op.animalsPerKg,
+            includedInSale: true
+          });
+        }
+
+        // Crea sacchi e allocazioni
+        let totalAnimalsForSale = 0;
+        let totalWeightKgForSale = 0;
+        for (let j = 0; j < saleEntry.bags.length; j++) {
+          const bag = saleEntry.bags[j];
+          const weightLossGrams = Math.min(bag.weightLoss || 0, 1500);
+          const finalWeightGrams = bag.originalWeight - weightLossGrams;
+          const finalWeightKg = finalWeightGrams / 1000;
+          const originalWeightKg = bag.originalWeight / 1000;
+          const weightLossKg = weightLossGrams / 1000;
+          const newAnimalsPerKg = finalWeightKg > 0
+            ? bag.animalCount / finalWeightKg
+            : bag.originalAnimalsPerKg;
+          const calculatedSizeCode = await calculateSizeCode(Math.round(newAnimalsPerKg));
+          const finalSizeCode = calculatedSizeCode || bag.sizeCode || '';
+
+          const [newBag] = await tx.insert(saleBags).values({
+            advancedSaleId: newSale.id,
+            bagNumber: j + 1,
+            sizeCode: finalSizeCode,
+            totalWeight: finalWeightKg,
+            originalWeight: originalWeightKg,
+            weightLoss: weightLossKg,
+            animalCount: bag.animalCount,
+            animalsPerKg: newAnimalsPerKg,
+            originalAnimalsPerKg: bag.originalAnimalsPerKg,
+            wastePercentage: bag.wastePercentage || 0,
+            notes: bag.notes || null
+          }).returning();
+
+          for (const alloc of bag.allocations) {
+            await tx.insert(bagAllocations).values({
+              saleBagId: newBag.id,
+              sourceOperationId: alloc.sourceOperationId,
+              sourceBasketId: alloc.sourceBasketId,
+              allocatedAnimals: alloc.allocatedAnimals,
+              allocatedWeight: alloc.allocatedWeight,
+              sourceAnimalsPerKg: alloc.sourceAnimalsPerKg,
+              sourceSizeCode: alloc.sourceSizeCode
+            });
+          }
+
+          totalAnimalsForSale += bag.animalCount;
+          totalWeightKgForSale += finalWeightKg;
+        }
+
+        // Aggiorna totali della vendita
+        await tx.update(advancedSales)
+          .set({
+            totalBags: saleEntry.bags.length,
+            totalAnimals: totalAnimalsForSale,
+            totalWeight: totalWeightKgForSale,
+            updatedAt: new Date()
+          })
+          .where(eq(advancedSales.id, newSale.id));
+
+        results.push({
+          ...newSale,
+          totalBags: saleEntry.bags.length,
+          totalAnimals: totalAnimalsForSale,
+          totalWeight: totalWeightKgForSale
+        });
+      }
+
+      return results;
+      });
+    } catch (txErr: any) {
+      // Errori di business sollevati dentro la transazione → 400
+      const msg = txErr?.message || "Errore nella creazione vendite";
+      const isBusinessError = /processate|Sovra-allocazione|non trovata/.test(msg);
+      return res.status(isBusinessError ? 400 : 500).json({
+        success: false,
+        error: msg
+      });
+    }
+
+    // Notifiche per ciascuna vendita creata
+    if ((req as any).app?.locals?.createAdvancedSaleNotification) {
+      for (const sale of createdSales) {
+        try {
+          (req as any).app.locals.createAdvancedSaleNotification(sale.id)
+            .catch((err: any) => console.error('Errore creazione notifica vendita avanzata:', err));
+        } catch (err) {
+          console.error('Errore notifica vendita multi-cliente:', err);
+        }
+      }
+    }
+
+    // Riepilogo: animali totali allocati e residuo
+    const totalAvailable = operationsData.reduce((sum, op) => sum + (op.animalCount || 0), 0);
+    const totalAllocated = Array.from(allocatedByOperation.values()).reduce((s, n) => s + n, 0);
+
+    res.status(201).json({
+      success: true,
+      message: `Create ${createdSales.length} vendite avanzate`,
+      sales: createdSales,
+      summary: {
+        salesCreated: createdSales.length,
+        totalAvailable,
+        totalAllocated,
+        residual: totalAvailable - totalAllocated
+      }
+    });
+  } catch (error: any) {
+    console.error("Errore nella creazione vendite multi-cliente:", error);
+    console.error("Stack trace:", error.stack);
+    res.status(500).json({
+      success: false,
+      error: `Errore nella creazione delle vendite multi-cliente: ${error.message}`
+    });
+  }
+}
+
+/**
  * Helper: Calcola sizeCode in base agli animali/kg
  */
 async function calculateSizeCode(animalsPerKg: number): Promise<string> {

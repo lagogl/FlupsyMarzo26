@@ -14,11 +14,13 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2, Trash2, Users } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 import AdvancedSalesConfigTab from "./AdvancedSalesConfigTab";
 import CancelSaleOperationDialog from "@/components/CancelSaleOperationDialog";
+import MultiCustomerSaleForm from "@/components/MultiCustomerSaleForm";
 
 interface SaleOperation {
   operationId: number;
@@ -79,6 +81,7 @@ interface BasketSupply {
 export default function AdvancedSales() {
   const [activeTab, setActiveTab] = useState("operations");
   const [selectedOperations, setSelectedOperations] = useState<number[]>([]);
+  const [multiCustomerMode, setMultiCustomerMode] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [manualCustomer, setManualCustomer] = useState({ name: "", details: "" });
   const [useManualCustomer, setUseManualCustomer] = useState(false);
@@ -696,10 +699,38 @@ export default function AdvancedSales() {
 
         <TabsContent value="new" className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle>Crea Nuova Vendita Avanzata</CardTitle>
+              <div className="flex items-center gap-3">
+                <Label htmlFor="multi-mode-toggle" className="text-sm font-normal flex items-center gap-2 cursor-pointer">
+                  <Users className="h-4 w-4" />
+                  Modalità multi-cliente
+                </Label>
+                <Switch
+                  id="multi-mode-toggle"
+                  checked={multiCustomerMode}
+                  onCheckedChange={setMultiCustomerMode}
+                  data-testid="switch-multi-customer-mode"
+                />
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {multiCustomerMode ? (
+                <MultiCustomerSaleForm
+                  selectedOperations={(availableOperations?.operations || []).filter(
+                    (op: SaleOperation) => selectedOperations.includes(op.operationId)
+                  )}
+                  defaultDate={saleDate}
+                  defaultCompanyId={selectedCompanyId}
+                  onSuccess={() => {
+                    setSelectedOperations([]);
+                    setMultiCustomerMode(false);
+                    setActiveTab("sales");
+                  }}
+                  onCancel={() => setMultiCustomerMode(false)}
+                />
+              ) : (
+              <>
               <div className="space-y-2">
                 <Label>Operazioni Selezionate</Label>
                 <div className="text-sm text-muted-foreground">
@@ -833,6 +864,8 @@ export default function AdvancedSales() {
               >
                 {createSaleMutation.isPending ? "Creazione..." : "Crea Vendita"}
               </Button>
+              </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -104,3 +104,11 @@ Preferred communication style: Simple, everyday language.
   3. **Cronologia**: timeline verticale degli eventi `lot_ledger` (in/activation/transfer_in/transfer_out/sale/mortality) con riferimento a cesta, FLUPSY, vagliatura e ciclo origine/destinazione.
 - Backend: `server/controllers/lot-report-controller.ts` espone `GET /api/lot-report/list` e `GET /api/lot-report/:lotId` aggregando `lot_ledger`, `basket_lot_composition` e `screening_operations`.
 - Voce di menu in **Analisi** (icona Package).
+
+### Vendite Avanzate Multi-Cliente (Aprile 2026)
+- Estensione di "Gestione Vendite Avanzate" per generare più vendite (una per cliente, con DDT/fattura separati) dalle stesse operazioni sorgente in una singola sottomissione.
+- È ammesso un residuo non allocato: le operazioni non utilizzate da nessun cliente restano "Disponibili".
+- Il flusso "singolo cliente" esistente resta invariato; nel tab "Nuova Vendita" uno switch "Modalità multi-cliente" permette di passare da un flusso all'altro.
+- Backend: `POST /api/advanced-sales/multi` (`createMultiCustomerSale` in `server/controllers/advanced-sales-controller.ts`). In una singola transazione: `SELECT ... FOR UPDATE` sulle operations selezionate, ricalcolo capacity, generazione progressiva di N numeri `VAV-NNNNNN`, creazione di N `advanced_sales` con i propri `sale_bags`, `bag_allocations` e `sale_operations_ref` (soltanto per le operazioni effettivamente usate da ciascuna vendita).
+- Validazioni server-side: invariante per-sacco `animalCount == sum(allocations.allocatedAnimals)`, somma allocazioni per operationId ≤ animali disponibili, customer obbligatorio per ogni vendita, allocazioni positive.
+- Frontend: nuovo componente `client/src/components/MultiCustomerSaleForm.tsx` con elenco "card cliente" (+ aggiungi cliente), per ogni cliente combobox o inserimento manuale + lista sacchi inline (cestello sorgente, animali, peso netto in kg), riepilogo live disponibili/allocati/residuo per cestello e globale.
