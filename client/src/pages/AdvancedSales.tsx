@@ -165,7 +165,10 @@ export default function AdvancedSales() {
       toast({ variant: "success", title: "Successo", description: "Vendita avanzata creata con successo" });
       setCurrentSaleId(response.sale.id);
       setActiveTab("config");
+      // Svuota le operazioni selezionate e aggiorna la lista disponibili
+      setSelectedOperations([]);
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/operations'] });
       
       // Cattura disponibilità cestelli
       const supply: Record<number, BasketSupply> = {};
@@ -234,9 +237,10 @@ export default function AdvancedSales() {
     mutationFn: (saleId: number) =>
       apiRequest(`/api/advanced-sales/${saleId}`, 'DELETE'),
     onSuccess: () => {
-      toast({ variant: "success", title: "Bozza eliminata", description: "La vendita è stata eliminata. La vagliatura e i cestelli rimangono invariati." });
+      toast({ variant: "success", title: "Bozza eliminata", description: "La vendita è stata eliminata. Le operazioni associate sono di nuovo disponibili." });
       setSaleToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/operations'] });
     },
     onError: (error: any) => {
       toast({
