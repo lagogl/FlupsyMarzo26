@@ -300,9 +300,10 @@ export default function MultiCustomerSaleForm({
 
   return (
     <div className="space-y-4">
-      {/* Riepilogo operazioni selezionate */}
-      <Card>
-        <CardHeader>
+      {/* Riepilogo operazioni selezionate — sticky */}
+      <div className="sticky top-0 z-20 bg-background pt-1 pb-2 -mx-1 px-1">
+      <Card className="shadow-md">
+        <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
             Vendita Multi-Cliente
@@ -363,6 +364,7 @@ export default function MultiCustomerSaleForm({
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Dati comuni */}
       <Card>
