@@ -271,6 +271,23 @@ export default function MultiCustomerSaleForm({
     }));
   };
 
+  const SLOT_COLORS = [
+    "bg-blue-50 border-blue-200",
+    "bg-green-50 border-green-200",
+    "bg-amber-50 border-amber-200",
+    "bg-purple-50 border-purple-200",
+    "bg-rose-50 border-rose-200",
+    "bg-cyan-50 border-cyan-200",
+  ];
+  const SLOT_HEADER_COLORS = [
+    "bg-blue-100/60",
+    "bg-green-100/60",
+    "bg-amber-100/60",
+    "bg-purple-100/60",
+    "bg-rose-100/60",
+    "bg-cyan-100/60",
+  ];
+
   if (selectedOperations.length === 0) {
     return (
       <Card>
@@ -387,8 +404,8 @@ export default function MultiCustomerSaleForm({
       {/* Slot clienti */}
       <div className="space-y-4">
         {slots.map((slot, idx) => (
-          <Card key={slot.id} data-testid={`customer-slot-${idx}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <Card key={slot.id} data-testid={`customer-slot-${idx}`} className={SLOT_COLORS[idx % SLOT_COLORS.length]}>
+            <CardHeader className={`flex flex-row items-center justify-between space-y-0 rounded-t-lg ${SLOT_HEADER_COLORS[idx % SLOT_HEADER_COLORS.length]}`}>
               <CardTitle className="text-base">Cliente #{idx + 1}</CardTitle>
               <Button
                 variant="ghost"
