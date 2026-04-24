@@ -560,7 +560,9 @@ export default function MultiCustomerSaleForm({
                             />
                           </div>
                           <div className="col-span-3">
-                            <Label className="text-xs">Peso netto (kg)</Label>
+                            <Label className="text-xs">
+                              Peso netto (kg) <span className="text-destructive">*</span>
+                            </Label>
                             <Input
                               type="number"
                               min={0}
@@ -568,6 +570,7 @@ export default function MultiCustomerSaleForm({
                               value={bag.netWeightKg || ''}
                               onChange={(e) => updateBag(slot.id, bag.id, { netWeightKg: parseFloat(e.target.value) || 0 })}
                               data-testid={`input-bag-weight-${idx}-${bIdx}`}
+                              className={(!bag.netWeightKg || bag.netWeightKg <= 0) ? 'border-destructive' : ''}
                             />
                           </div>
                           <div className="col-span-2 flex items-end justify-end">
