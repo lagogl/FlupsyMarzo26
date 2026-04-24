@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -200,6 +200,110 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
     recordMortalityMutation.mutate();
   };
 
+  // Direzione semantica della transazione (in = entrata animali, out = uscita)
+  // I segni nel ledger sono inconsistenti: usiamo SEMPRE Math.abs(quantity) e
+  // applichiamo il segno in base al tipo per una visualizzazione affidabile.
+  const getTransactionDirection = (type: string): "in" | "out" | "neutral" => {
+    const t = (type || "").toLowerCase();
+    if (["activation", "in", "arrivo-lotto", "transfer_in", "transferin"].includes(t)) return "in";
+    if (["mortality", "mortalita", "sale", "vendita", "transfer_out", "transferout"].includes(t)) return "out";
+    return "neutral";
+  };
+
+  // Categoria specifica della transazione (per separare received/mortality/sold/transfer)
+  const getTransactionCategory = (
+    type: string
+  ): "received" | "mortality" | "sold" | "transferIn" | "transferOut" | "other" => {
+    const t = (type || "").toLowerCase();
+    if (["activation", "in", "arrivo-lotto"].includes(t)) return "received";
+    if (["mortality", "mortalita"].includes(t)) return "mortality";
+    if (["sale", "vendita"].includes(t)) return "sold";
+    if (["transfer_in", "transferin"].includes(t)) return "transferIn";
+    if (["transfer_out", "transferout"].includes(t)) return "transferOut";
+    return "other"; // adjustment/aggiustamento/transfer/trasferimento → esclusi dai totali
+  };
+
+  // Bilancio affidabile calcolato client-side dalle transazioni del ledger.
+  // Ignora i segni memorizzati e usa il TIPO per stabilire entrata/uscita.
+  const reliableBalance = useMemo(() => {
+    const txs = transactionsQuery.data || [];
+    let received = 0;     // attivazioni + arrivi (entrate dallo stoccaggio in allevamento)
+    let mortality = 0;    // mortalità totale
+    let sold = 0;         // vendite totali
+    let transferIn = 0;   // ingressi in cestelli (vagliature)
+    let transferOut = 0;  // uscite da cestelli (vagliature)
+
+    for (const tx of txs) {
+      const qty = Math.abs(Number(tx.animalCount) || 0);
+      switch (getTransactionCategory(tx.transactionType)) {
+        case "received": received += qty; break;
+        case "mortality": mortality += qty; break;
+        case "sold": sold += qty; break;
+        case "transferIn": transferIn += qty; break;
+        case "transferOut": transferOut += qty; break;
+      }
+    }
+
+    // I trasferimenti interni allo stesso lotto si compensano (in = out).
+    // Vivi attualmente = ricevuti - mortalità - venduti
+    const currentlyAlive = Math.max(0, received - mortality - sold);
+    const mortalityPct = received > 0 ? (mortality / received) * 100 : 0;
+
+    return {
+      received,
+      mortality,
+      sold,
+      transferIn,
+      transferOut,
+      currentlyAlive,
+      mortalityPct,
+      txCount: txs.length,
+    };
+  }, [transactionsQuery.data]);
+
+  // Distribuzione attuale per cestello: usa i cicli V2 ATTIVI (con currentCount > 0).
+  // Se non disponibile, fallback su aggregazione dalle transazioni con basketId.
+  const basketDistribution = useMemo(() => {
+    const v2Cycles = mortalityV2Query.data?.cycles || [];
+    const activeCycles = v2Cycles.filter(
+      (c) => c.cycleState === "active" && c.currentCount > 0
+    );
+    if (activeCycles.length > 0) {
+      return activeCycles
+        .map((c) => ({
+          basketId: c.basketId,
+          physicalNumber: c.physicalNumber,
+          flupsyName: c.flupsyName,
+          count: c.currentCount,
+        }))
+        .sort((a, b) => b.count - a.count);
+    }
+
+    // Fallback: aggrega le transazioni per basketId calcolando net inflow
+    const map = new Map<
+      number,
+      { basketId: number; physicalNumber: number | null; flupsyName: string | null; count: number }
+    >();
+    for (const tx of transactionsQuery.data || []) {
+      if (!tx.basketId) continue;
+      const dir = getTransactionDirection(tx.transactionType);
+      if (dir === "neutral") continue;
+      const qty = Math.abs(Number(tx.animalCount) || 0);
+      const delta = dir === "in" ? qty : -qty;
+      const cur = map.get(tx.basketId) || {
+        basketId: tx.basketId,
+        physicalNumber: tx.basketPhysicalNumber,
+        flupsyName: tx.flupsyName,
+        count: 0,
+      };
+      cur.count += delta;
+      map.set(tx.basketId, cur);
+    }
+    return Array.from(map.values())
+      .filter((b) => b.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [mortalityV2Query.data, transactionsQuery.data]);
+
   // Traduzione dei tipi di transazione
   const translateTransactionType = (type: string) => {
     const translations: Record<string, string> = {
@@ -264,6 +368,92 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
               </div>
             ) : (
               <div className="space-y-6 py-4">
+                {/* SEZIONE PRIMARIA: BILANCIO AFFIDABILE (calcolato dal ledger) */}
+                <div className="space-y-4 p-4 border-2 border-primary/40 rounded-lg bg-primary/5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      ✅ Bilancio Affidabile
+                    </h3>
+                    <Badge variant="outline" className="bg-primary/10">
+                      Calcolato da {reliableBalance.txCount} transazioni
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Animali ricevuti</Label>
+                      <div className="text-xl font-bold">
+                        {formatNumber(reliableBalance.received)}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Mortalità totale</Label>
+                      <div className="text-xl font-bold text-red-600 dark:text-red-400">
+                        −{formatNumber(reliableBalance.mortality)}
+                        <span className="text-xs ml-1 font-normal">
+                          ({reliableBalance.mortalityPct.toFixed(2)}%)
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Animali venduti</Label>
+                      <div className="text-xl font-bold text-red-600 dark:text-red-400">
+                        −{formatNumber(reliableBalance.sold)}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Vivi attualmente</Label>
+                      <div className="text-xl font-bold text-green-600 dark:text-green-400">
+                        {formatNumber(reliableBalance.currentlyAlive)}
+                      </div>
+                    </div>
+                  </div>
+                  {(reliableBalance.transferIn > 0 || reliableBalance.transferOut > 0) && (
+                    <div className="text-xs text-muted-foreground border-t pt-2">
+                      Movimenti interni (vagliature): entrate {formatNumber(reliableBalance.transferIn)},
+                      uscite {formatNumber(reliableBalance.transferOut)}
+                      {Math.abs(reliableBalance.transferIn - reliableBalance.transferOut) > 1 && (
+                        <span className="text-amber-600 dark:text-amber-400 ml-1">
+                          ⚠ sbilancio: {formatNumber(Math.abs(reliableBalance.transferIn - reliableBalance.transferOut))}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Distribuzione attuale per cestello */}
+                  {basketDistribution.length > 0 && (
+                    <div className="border-t pt-3 space-y-2">
+                      <Label className="text-sm font-medium">
+                        Distribuzione attuale ({basketDistribution.length} {basketDistribution.length === 1 ? "cestello" : "cestelli"})
+                      </Label>
+                      <div className="space-y-1.5">
+                        {basketDistribution.map((b) => {
+                          const pct = reliableBalance.currentlyAlive > 0
+                            ? (b.count / reliableBalance.currentlyAlive) * 100
+                            : 0;
+                          return (
+                            <div key={b.basketId} className="flex items-center justify-between gap-2 text-sm">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Badge variant="secondary" className="shrink-0">
+                                  #{b.physicalNumber ?? "?"}
+                                </Badge>
+                                <span className="text-muted-foreground truncate">
+                                  {b.flupsyName ?? "FLUPSY ?"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-semibold">{formatNumber(b.count)}</span>
+                                <span className="text-xs text-muted-foreground w-12 text-right">
+                                  {pct.toFixed(1)}%
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* SEZIONE NEW: MORTALITÀ v2 (nuova formula) */}
                 {mortalityV2Query.data && mortalityV2Query.data.summary.totalCycles > 0 && (
                   <div className="space-y-3 p-4 border-2 border-blue-200 dark:border-blue-900 rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
@@ -495,14 +685,24 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactionsQuery.data && transactionsQuery.data.map((transaction) => (
+                  {transactionsQuery.data && transactionsQuery.data.map((transaction) => {
+                    const dir = getTransactionDirection(transaction.transactionType);
+                    const absQty = Math.abs(Number(transaction.animalCount) || 0);
+                    const signSymbol = dir === "in" ? "+" : dir === "out" ? "−" : "";
+                    const qtyColor =
+                      dir === "in"
+                        ? "text-green-600 dark:text-green-400"
+                        : dir === "out"
+                        ? "text-red-600 dark:text-red-400"
+                        : "";
+                    return (
                     <TableRow key={transaction.id}>
                       <TableCell>
                         {transaction.date ? format(new Date(transaction.date), "dd/MM/yyyy") : "-"}
                       </TableCell>
                       <TableCell>
                         <Badge variant={
-                          transaction.transactionType === "arrivo-lotto" || transaction.transactionType === "in"
+                          transaction.transactionType === "arrivo-lotto" || transaction.transactionType === "in" || transaction.transactionType === "activation" || transaction.transactionType === "transfer_in"
                             ? "default" 
                             : transaction.transactionType === "vendita" || transaction.transactionType === "sale"
                               ? "destructive" 
@@ -513,9 +713,9 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
                           {translateTransactionType(transaction.transactionType)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {transaction.animalCount > 0 ? "+" : ""}
-                        {formatNumber(transaction.animalCount)}
+                      <TableCell className={`text-right font-medium ${qtyColor}`}>
+                        {signSymbol}
+                        {formatNumber(absQty)}
                       </TableCell>
                       <TableCell>
                         {transaction.basketId && transaction.basketPhysicalNumber ? (
@@ -545,7 +745,8 @@ export default function LotInventoryPanel({ lotId, lotName }: LotInventoryPanelP
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
