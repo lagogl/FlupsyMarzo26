@@ -119,10 +119,6 @@ export default function FlupsyHeatmap() {
     queryKey: ["/api/sizes"],
     staleTime: 3600000,
   });
-  const { data: totalDeathsMap } = useQuery<{ success: boolean; data: Record<number, number>; byBasket: Record<number, number> }>({
-    queryKey: ["/api/baskets/total-deaths-by-flupsy"],
-    staleTime: 120000,
-  });
   const { data: dailyTrend } = useQuery<{ success: boolean; data: { yesterdayAnimals: number; yesterdayAvgMort: number | null; yesterdaySellable: number } }>({
     queryKey: ["/api/baskets/daily-trend"],
     staleTime: 300000,
@@ -147,6 +143,7 @@ export default function FlupsyHeatmap() {
         let totalSellableAnimals = 0;
         let activeCount = 0;
         let totalInitialAnimals = 0;
+        let totalDeadCount = 0;
 
         // Soglia vendibilità: <= 29000 animali/kg (taglia grande, TP-3000 o superiore)
         const VENDIBILE_THRESHOLD = 29000;
@@ -156,26 +153,29 @@ export default function FlupsyHeatmap() {
             activeCount++;
             const op = latestOpsMap?.[b.id];
             if (op) {
-              const count = op.animalCount || 0;
-              totalAnimals += count;
+              const current = op.animalCount || 0;
+              const initial = op.initialAnimalCount || 0;
+              totalAnimals += current;
+
               const apk = op.measurementAnimalsPerKg || op.animalsPerKg;
               if (apk != null && apk <= VENDIBILE_THRESHOLD) {
-                totalSellableAnimals += count;
+                totalSellableAnimals += current;
               }
-              // Animali iniziali del ciclo attuale (da prima-attivazione) per calcolo % mortalità
-              if (op.initialAnimalCount) {
-                totalInitialAnimals += op.initialAnimalCount;
+
+              // Mortalità = differenza tra animali iniziali del ciclo e attuali
+              if (initial > 0) {
+                totalInitialAnimals += initial;
+                if (initial > current) {
+                  totalDeadCount += initial - current;
+                }
               }
             }
           }
         });
 
-        // Morti cumulativi del ciclo attuale (dal backend, solo ciclo corrente)
-        const totalDeadCount = totalDeathsMap?.data?.[flupsy.id] ?? null;
-
-        // % mortalità coerente: morti_ciclo / animali_iniziali_ciclo * 100
+        // % mortalità coerente: morti / animali_iniziali_ciclo * 100
         const avgMort =
-          totalDeadCount != null && totalInitialAnimals > 0
+          totalInitialAnimals > 0
             ? (totalDeadCount / totalInitialAnimals) * 100
             : null;
 
@@ -185,7 +185,7 @@ export default function FlupsyHeatmap() {
           sxBaskets,
           totalAnimals,
           totalSellableAnimals,
-          totalDeadCount,
+          totalDeadCount: totalInitialAnimals > 0 ? totalDeadCount : null,
           totalInitialAnimals: totalInitialAnimals > 0 ? totalInitialAnimals : null,
           activeCount,
           totalBaskets: baskets.length,
@@ -200,7 +200,7 @@ export default function FlupsyHeatmap() {
         }
         return b.totalAnimals - a.totalAnimals;
       });
-  }, [allFlupsys, allBaskets, latestOpsMap, totalDeathsMap]);
+  }, [allFlupsys, allBaskets, latestOpsMap]);
 
   // Aggregati globali di oggi (somma di tutti i FLUPSY)
   const todayTotals = useMemo(() => {
@@ -400,10 +400,11 @@ function FlupsyCard({
                 </TooltipTrigger>
                 <TooltipContent className="text-xs space-y-0.5">
                   <div className="font-semibold text-gray-200 mb-1">Mortalità cumulativa ciclo attuale</div>
-                  <div>Morti registrati: <span className="font-bold">{totalDeadCount?.toLocaleString("it-IT") ?? "—"}</span></div>
                   <div>Animali al carico: <span className="font-bold">{totalInitialAnimals?.toLocaleString("it-IT") ?? "—"}</span></div>
+                  <div>Animali attuali: <span className="font-bold">{totalAnimals.toLocaleString("it-IT")}</span></div>
+                  <div>Morti (differenza): <span className="font-bold">{totalDeadCount?.toLocaleString("it-IT") ?? "—"}</span></div>
                   <div className="border-t border-gray-600 pt-1 mt-1">
-                    = morti / carico × 100 = <span className="font-bold">{avgMort.toFixed(2)}%</span>
+                    = (carico − attuali) / carico × 100 = <span className="font-bold">{avgMort.toFixed(2)}%</span>
                   </div>
                 </TooltipContent>
               </Tooltip>

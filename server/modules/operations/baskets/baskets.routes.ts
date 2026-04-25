@@ -74,18 +74,6 @@ router.get('/daily-trend', async (req: Request, res: Response) => {
           AND o.type NOT IN ('vendita', 'cessazione', 'pulizia')
         ORDER BY o.basket_id, o.date DESC, o.id DESC
       ),
-      yesterday_deaths AS (
-        -- Morti cumulative per cesta nel ciclo attuale con data < oggi
-        SELECT o.basket_id, COALESCE(SUM(o.dead_count), 0)::bigint AS total_dead
-        FROM operations o
-        JOIN baskets b ON b.id = o.basket_id
-        WHERE b.current_cycle_id IS NOT NULL
-          AND o.cycle_id = b.current_cycle_id
-          AND o.date < CURRENT_DATE
-          AND o.dead_count > 0
-          AND o.type NOT IN ('vendita', 'cessazione', 'pulizia', 'vagliatura')
-        GROUP BY o.basket_id
-      ),
       initial_counts AS (
         -- Animali al momento della prima attivazione del ciclo corrente
         SELECT DISTINCT ON (o.basket_id)
@@ -100,12 +88,11 @@ router.get('/daily-trend', async (req: Request, res: Response) => {
       )
       SELECT
         COALESCE(SUM(ys.animal_count), 0)::bigint                                              AS yesterday_animals,
-        COALESCE(SUM(yd.total_dead), 0)::bigint                                               AS yesterday_dead,
-        COALESCE(SUM(ic.initial_count), 0)::bigint                                            AS yesterday_initial,
-        COALESCE(SUM(CASE WHEN ys.apk <= 29000 THEN ys.animal_count ELSE 0 END), 0)::bigint  AS yesterday_sellable
+        COALESCE(SUM(ic.initial_count), 0)::bigint                                             AS yesterday_initial,
+        COALESCE(SUM(GREATEST(ic.initial_count - ys.animal_count, 0)), 0)::bigint              AS yesterday_dead,
+        COALESCE(SUM(CASE WHEN ys.apk <= 29000 THEN ys.animal_count ELSE 0 END), 0)::bigint   AS yesterday_sellable
       FROM yesterday_snapshot ys
-      LEFT JOIN yesterday_deaths yd ON yd.basket_id = ys.basket_id
-      LEFT JOIN initial_counts ic ON ic.basket_id = ys.basket_id
+      INNER JOIN initial_counts ic ON ic.basket_id = ys.basket_id
     `);
     const row = result.rows[0] as any;
     const yDead    = Number(row?.yesterday_dead    ?? 0);
