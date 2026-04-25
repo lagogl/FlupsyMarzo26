@@ -372,7 +372,7 @@ function BasketTile({ basket, op, sizes, maxAnimals, onNavigate }: BasketTilePro
         {/* Numero animali — elemento dominante */}
         {hasSize ? (
           <div
-            className="text-[24px] font-black leading-none tracking-tight"
+            className="text-[15px] font-black leading-none tracking-tight"
             style={{
               color: fillPct > 40 ? "#fff" : "#1e293b",
               textShadow: fillPct > 40 ? "0 1px 3px rgba(0,0,0,0.5)" : "none",
