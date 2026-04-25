@@ -199,6 +199,9 @@ function Router() {
       
       {/* Modulo selezione rimosso - ora si usa solo Vagliatura con Mappa */}
       
+      {/* Vista Mappa FLUPSY (solo gianluigi) */}
+      <ProtectedRoute path="/flupsy-heatmap" component={FlupsyHeatmap} requiredUsername="gianluigi"/>
+
       {/* Vagliatura con Mappa routes */}
       <ProtectedRoute path="/vagliatura" component={VagliaturaConMappa}/>
       <ProtectedRoute path="/vagliatura-con-mappa" component={VagliaturaConMappa}/>
@@ -242,6 +245,7 @@ function WebSocketListener() {
 import { WebSocketQueryIntegration } from './lib/websocketQueryIntegration';
 import { OperationListener } from '@/components/OperationListener';
 import MorningSummaryOverlay from '@/components/MorningSummaryOverlay';
+import FlupsyHeatmap from '@/pages/FlupsyHeatmap';
 
 function App() {
   return (
