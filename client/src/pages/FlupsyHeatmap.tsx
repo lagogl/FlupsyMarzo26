@@ -72,6 +72,10 @@ export default function FlupsyHeatmap() {
     queryKey: ["/api/sizes"],
     staleTime: 3600000,
   });
+  const { data: totalDeathsMap } = useQuery<{ success: boolean; data: Record<number, number> }>({
+    queryKey: ["/api/baskets/total-deaths-by-flupsy"],
+    staleTime: 120000,
+  });
 
   const isLoading = lFlupsys || lBaskets || lOps;
 
@@ -89,7 +93,6 @@ export default function FlupsyHeatmap() {
           .sort((a: any, b: any) => a.position - b.position);
 
         let totalAnimals = 0;
-        let totalDeadCount = 0;
         let activeCount = 0;
         let mortSum = 0;
         let mortN = 0;
@@ -100,7 +103,6 @@ export default function FlupsyHeatmap() {
             const op = latestOpsMap?.[b.id];
             if (op) {
               totalAnimals += op.animalCount || 0;
-              totalDeadCount += op.deadCount || 0;
               if (op.lastMortalityRate != null) {
                 mortSum += op.lastMortalityRate;
                 mortN++;
@@ -108,6 +110,8 @@ export default function FlupsyHeatmap() {
             }
           }
         });
+
+        const totalDeadCount = totalDeathsMap?.data?.[flupsy.id] ?? null;
 
         return {
           flupsy,
@@ -121,7 +125,7 @@ export default function FlupsyHeatmap() {
         };
       })
       .filter((d) => d.totalBaskets > 0);
-  }, [allFlupsys, allBaskets, latestOpsMap]);
+  }, [allFlupsys, allBaskets, latestOpsMap, totalDeathsMap]);
 
   if (isLoading) {
     return (
@@ -191,7 +195,7 @@ interface FlupsyCardProps {
   dxBaskets: any[];
   sxBaskets: any[];
   totalAnimals: number;
-  totalDeadCount: number;
+  totalDeadCount: number | null;
   activeCount: number;
   totalBaskets: number;
   avgMort: number | null;

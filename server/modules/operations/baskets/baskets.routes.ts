@@ -2,8 +2,10 @@
  * Route per il modulo cestelli
  */
 
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { basketsController } from './baskets.controller';
+import { db } from '../../../db';
+import { sql } from 'drizzle-orm';
 
 const router = Router();
 
@@ -22,6 +24,31 @@ router.get('/available', (req, res) => basketsController.getAvailable(req, res))
 router.get('/latest-operations', (req, res) => basketsController.getLatestOperations(req, res));
 router.get('/next-rfid-uhf-code', (req, res) => basketsController.getNextRfidUhfCode(req, res));
 router.get('/expected-sizes', (req, res) => basketsController.getExpectedSizes(req, res));
+
+// Morti cumulativi per FLUPSY: somma di tutti i dead_count da tutte le operazioni
+router.get('/total-deaths-by-flupsy', async (req: Request, res: Response) => {
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        b.flupsy_id,
+        COALESCE(SUM(o.dead_count), 0)::bigint AS total_dead
+      FROM baskets b
+      JOIN operations o ON o.basket_id = b.id
+      WHERE o.dead_count IS NOT NULL
+        AND o.dead_count > 0
+        AND o.type NOT IN ('vendita', 'cessazione', 'pulizia', 'vagliatura')
+      GROUP BY b.flupsy_id
+    `);
+    const map: Record<number, number> = {};
+    for (const row of result.rows as any[]) {
+      map[row.flupsy_id] = Number(row.total_dead);
+    }
+    res.json({ success: true, data: map });
+  } catch (err: any) {
+    console.error('Errore total-deaths-by-flupsy:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Route CRUD principali
 router.get('/', (req, res) => basketsController.getBaskets(req, res));
