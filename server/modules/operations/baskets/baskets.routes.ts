@@ -31,19 +31,25 @@ router.get('/total-deaths-by-flupsy', async (req: Request, res: Response) => {
     const result = await db.execute(sql`
       SELECT
         b.flupsy_id,
-        COALESCE(SUM(o.dead_count), 0)::bigint AS total_dead
+        b.id                                    AS basket_id,
+        COALESCE(SUM(o.dead_count), 0)::bigint  AS total_dead
       FROM baskets b
       JOIN operations o ON o.basket_id = b.id
-      WHERE o.dead_count IS NOT NULL
+      WHERE b.current_cycle_id IS NOT NULL
+        AND o.cycle_id = b.current_cycle_id
+        AND o.dead_count IS NOT NULL
         AND o.dead_count > 0
         AND o.type NOT IN ('vendita', 'cessazione', 'pulizia', 'vagliatura')
-      GROUP BY b.flupsy_id
+      GROUP BY b.flupsy_id, b.id
     `);
-    const map: Record<number, number> = {};
+    const byFlupsy: Record<number, number> = {};
+    const byBasket: Record<number, number> = {};
     for (const row of result.rows as any[]) {
-      map[row.flupsy_id] = Number(row.total_dead);
+      const dead = Number(row.total_dead);
+      byFlupsy[row.flupsy_id] = (byFlupsy[row.flupsy_id] ?? 0) + dead;
+      byBasket[row.basket_id] = dead;
     }
-    res.json({ success: true, data: map });
+    res.json({ success: true, data: byFlupsy, byBasket });
   } catch (err: any) {
     console.error('Errore total-deaths-by-flupsy:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -55,24 +61,51 @@ router.get('/daily-trend', async (req: Request, res: Response) => {
   try {
     const result = await db.execute(sql`
       WITH yesterday_snapshot AS (
+        -- Ultima operazione per ogni cesta (ciclo attuale) con data < oggi
         SELECT DISTINCT ON (o.basket_id)
           o.basket_id,
           o.animal_count,
-          o.mortality_rate,
           COALESCE(o.measurement_animals_per_kg, o.animals_per_kg) AS apk
         FROM operations o
         JOIN baskets b ON b.id = o.basket_id
-        WHERE b.state = 'active'
-          AND b.current_cycle_id IS NOT NULL
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.cycle_id = b.current_cycle_id
           AND o.date < CURRENT_DATE
           AND o.type NOT IN ('vendita', 'cessazione', 'pulizia')
         ORDER BY o.basket_id, o.date DESC, o.id DESC
+      ),
+      yesterday_deaths AS (
+        -- Morti cumulative per cesta nel ciclo attuale con data < oggi
+        SELECT o.basket_id, COALESCE(SUM(o.dead_count), 0)::bigint AS total_dead
+        FROM operations o
+        JOIN baskets b ON b.id = o.basket_id
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.cycle_id = b.current_cycle_id
+          AND o.date < CURRENT_DATE
+          AND o.dead_count > 0
+          AND o.type NOT IN ('vendita', 'cessazione', 'pulizia', 'vagliatura')
+        GROUP BY o.basket_id
+      ),
+      initial_counts AS (
+        -- Animali al momento della prima attivazione del ciclo corrente
+        SELECT DISTINCT ON (o.basket_id)
+          o.basket_id, o.animal_count AS initial_count
+        FROM operations o
+        JOIN baskets b ON b.id = o.basket_id
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.cycle_id = b.current_cycle_id
+          AND o.type = 'prima-attivazione'
+          AND o.animal_count > 0
+        ORDER BY o.basket_id, o.date ASC, o.id ASC
       )
       SELECT
-        COALESCE(SUM(animal_count), 0)::bigint                                             AS yesterday_animals,
-        AVG(mortality_rate)                                                                 AS yesterday_avg_mort,
-        COALESCE(SUM(CASE WHEN apk <= 29000 THEN animal_count ELSE 0 END), 0)::bigint     AS yesterday_sellable
-      FROM yesterday_snapshot
+        COALESCE(SUM(ys.animal_count), 0)::bigint                                              AS yesterday_animals,
+        COALESCE(SUM(yd.total_dead), 0)::bigint                                               AS yesterday_dead,
+        COALESCE(SUM(ic.initial_count), 0)::bigint                                            AS yesterday_initial,
+        COALESCE(SUM(CASE WHEN ys.apk <= 29000 THEN ys.animal_count ELSE 0 END), 0)::bigint  AS yesterday_sellable
+      FROM yesterday_snapshot ys
+      LEFT JOIN yesterday_deaths yd ON yd.basket_id = ys.basket_id
+      LEFT JOIN initial_counts ic ON ic.basket_id = ys.basket_id
     `);
     const row = result.rows[0] as any;
     res.json({

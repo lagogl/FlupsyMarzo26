@@ -119,7 +119,7 @@ export default function FlupsyHeatmap() {
     queryKey: ["/api/sizes"],
     staleTime: 3600000,
   });
-  const { data: totalDeathsMap } = useQuery<{ success: boolean; data: Record<number, number> }>({
+  const { data: totalDeathsMap } = useQuery<{ success: boolean; data: Record<number, number>; byBasket: Record<number, number> }>({
     queryKey: ["/api/baskets/total-deaths-by-flupsy"],
     staleTime: 120000,
   });
@@ -146,8 +146,7 @@ export default function FlupsyHeatmap() {
         let totalAnimals = 0;
         let totalSellableAnimals = 0;
         let activeCount = 0;
-        let mortSum = 0;
-        let mortN = 0;
+        let totalInitialAnimals = 0;
 
         // Soglia vendibilità: <= 29000 animali/kg (taglia grande, TP-3000 o superiore)
         const VENDIBILE_THRESHOLD = 29000;
@@ -163,15 +162,22 @@ export default function FlupsyHeatmap() {
               if (apk != null && apk <= VENDIBILE_THRESHOLD) {
                 totalSellableAnimals += count;
               }
-              if (op.lastMortalityRate != null) {
-                mortSum += op.lastMortalityRate;
-                mortN++;
+              // Animali iniziali del ciclo attuale (da prima-attivazione) per calcolo % mortalità
+              if (op.initialAnimalCount) {
+                totalInitialAnimals += op.initialAnimalCount;
               }
             }
           }
         });
 
+        // Morti cumulativi del ciclo attuale (dal backend, solo ciclo corrente)
         const totalDeadCount = totalDeathsMap?.data?.[flupsy.id] ?? null;
+
+        // % mortalità coerente: morti_ciclo / animali_iniziali_ciclo * 100
+        const avgMort =
+          totalDeadCount != null && totalInitialAnimals > 0
+            ? (totalDeadCount / totalInitialAnimals) * 100
+            : null;
 
         return {
           flupsy,
@@ -180,9 +186,10 @@ export default function FlupsyHeatmap() {
           totalAnimals,
           totalSellableAnimals,
           totalDeadCount,
+          totalInitialAnimals: totalInitialAnimals > 0 ? totalInitialAnimals : null,
           activeCount,
           totalBaskets: baskets.length,
-          avgMort: mortN > 0 ? mortSum / mortN : null,
+          avgMort,
         };
       })
       .filter((d) => d.totalBaskets > 0)
@@ -200,14 +207,16 @@ export default function FlupsyHeatmap() {
     if (!flupsyData.length) return null;
     let totalAnimals = 0;
     let totalSellable = 0;
-    let mortSum = 0;
-    let mortN = 0;
+    let totalDead = 0;
+    let totalInitial = 0;
     for (const d of flupsyData) {
       totalAnimals += d.totalAnimals;
       totalSellable += d.totalSellableAnimals;
-      if (d.avgMort != null) { mortSum += d.avgMort; mortN++; }
+      if (d.totalDeadCount != null) totalDead += d.totalDeadCount;
+      if (d.totalInitialAnimals != null) totalInitial += d.totalInitialAnimals;
     }
-    return { totalAnimals, totalSellable, avgMort: mortN > 0 ? mortSum / mortN : null };
+    const avgMort = totalInitial > 0 ? (totalDead / totalInitial) * 100 : null;
+    return { totalAnimals, totalSellable, avgMort };
   }, [flupsyData]);
 
   if (isLoading) {
@@ -307,6 +316,7 @@ interface FlupsyCardProps {
   totalAnimals: number;
   totalSellableAnimals: number;
   totalDeadCount: number | null;
+  totalInitialAnimals: number | null;
   activeCount: number;
   totalBaskets: number;
   avgMort: number | null;
