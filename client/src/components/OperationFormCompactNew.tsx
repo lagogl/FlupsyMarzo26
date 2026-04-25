@@ -432,34 +432,27 @@ export default function OperationFormCompact({
                         <FormItem>
                           <FormLabel className="text-sm font-medium">Grammi sample</FormLabel>
                           <FormControl>
-                            <Input 
+                            <input
                               type="text"
                               inputMode="decimal"
-                              className="h-10"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                               placeholder="es. 1.500"
                               value={sampleWeightText}
                               onChange={(e) => {
-                                // Converti virgola in punto; blocca caratteri non numerici
-                                const v = e.target.value.replace(',', '.');
-                                if (!/^[0-9]*\.?[0-9]*$/.test(v)) return;
-                                setSampleWeightText(v);
-                                // Aggiorna il form solo quando il numero è completo
-                                if (v === '' || v === '.') {
-                                  field.onChange(null);
-                                } else {
-                                  const num = parseFloat(v);
-                                  if (!isNaN(num)) field.onChange(num);
-                                }
+                                // Converti virgola→punto, rimuovi caratteri non numerici (mantieni un solo punto)
+                                let raw = e.target.value.replace(',', '.');
+                                // Rimuovi tutto tranne cifre e punto
+                                raw = raw.replace(/[^0-9.]/g, '');
+                                // Se ci sono più punti, mantieni solo il primo
+                                const parts = raw.split('.');
+                                if (parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
+                                // Aggiorna SEMPRE il testo mostrato — il punto/virgola non sparisce
+                                setSampleWeightText(raw);
+                                // Aggiorna il valore numerico nel form (anche se parziale come "1.")
+                                const num = parseFloat(raw);
+                                field.onChange(isNaN(num) ? null : num);
                               }}
-                              onBlur={() => {
-                                // Al blur: normalizza la visualizzazione
-                                const num = parseFloat(sampleWeightText.replace(',', '.'));
-                                if (!isNaN(num)) {
-                                  setSampleWeightText(String(num));
-                                  field.onChange(num);
-                                }
-                                field.onBlur();
-                              }}
+                              onBlur={field.onBlur}
                             />
                           </FormControl>
                           <FormMessage />

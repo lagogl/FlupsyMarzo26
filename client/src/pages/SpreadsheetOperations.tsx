@@ -4639,20 +4639,16 @@ export default function SpreadsheetOperations() {
                         inputMode="decimal"
                         value={sampleWeightInput}
                         onChange={(e) => {
-                          // Accetta solo cifre, un singolo punto o virgola
-                          let v = e.target.value.replace(',', '.');
-                          // Filtra caratteri non validi mantenendo al massimo un punto
-                          if (!/^[0-9]*\.?[0-9]*$/.test(v)) return;
-                          setSampleWeightInput(v);
-                          // Aggiorna il valore numerico nel form solo se la stringa è valida
-                          if (v === '' || v === '.') {
-                            setEditingForm({...editingForm, sampleWeight: 0});
-                          } else {
-                            const num = parseFloat(v);
-                            if (!isNaN(num)) {
-                              setEditingForm({...editingForm, sampleWeight: num});
-                            }
-                          }
+                          // Converti virgola→punto, rimuovi caratteri non numerici
+                          let raw = e.target.value.replace(',', '.');
+                          raw = raw.replace(/[^0-9.]/g, '');
+                          // Se ci sono più punti, mantieni solo il primo
+                          const parts = raw.split('.');
+                          if (parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
+                          // Aggiorna SEMPRE il testo — il punto non sparisce mai
+                          setSampleWeightInput(raw);
+                          const num = parseFloat(raw);
+                          setEditingForm({...editingForm, sampleWeight: isNaN(num) ? 0 : num});
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
