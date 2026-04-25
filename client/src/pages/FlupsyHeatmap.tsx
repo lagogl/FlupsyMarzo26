@@ -332,6 +332,7 @@ function FlupsyCard({
   totalAnimals,
   totalSellableAnimals,
   totalDeadCount,
+  totalInitialAnimals,
   activeCount,
   totalBaskets,
   avgMort,

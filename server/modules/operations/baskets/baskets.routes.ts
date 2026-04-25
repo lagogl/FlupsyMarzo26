@@ -65,7 +65,7 @@ router.get('/daily-trend', async (req: Request, res: Response) => {
         SELECT DISTINCT ON (o.basket_id)
           o.basket_id,
           o.animal_count,
-          COALESCE(o.measurement_animals_per_kg, o.animals_per_kg) AS apk
+          o.animals_per_kg AS apk
         FROM operations o
         JOIN baskets b ON b.id = o.basket_id
         WHERE b.current_cycle_id IS NOT NULL
