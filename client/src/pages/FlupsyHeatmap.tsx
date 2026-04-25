@@ -260,7 +260,7 @@ function FlupsyCard({
             <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">
               Fila {label}
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
               {baskets.map((basket: any) => (
                 <BasketTile
                   key={basket.id}
@@ -294,8 +294,8 @@ function BasketTile({ basket, op, sizes, onNavigate }: BasketTileProps) {
   const { bg, text } = sizeCode && sizeCode !== "N/D"
     ? getSizeHexColor(sizeCode)
     : isActive
-    ? { bg: "#dbeafe", text: "#1d4ed8" }   // blue-100 / blue-700 → active, no size
-    : { bg: "#f1f5f9", text: "#94a3b8" };  // slate-100 / slate-400 → empty
+    ? { bg: "#dbeafe", text: "#1d4ed8" }
+    : { bg: "#f1f5f9", text: "#94a3b8" };
 
   const animalCount = op?.animalCount ?? null;
   const mort = op?.lastMortalityRate ?? null;
@@ -306,39 +306,47 @@ function BasketTile({ basket, op, sizes, onNavigate }: BasketTileProps) {
       onClick={() => isActive && basket.currentCycleId && onNavigate(`/cycles/${basket.currentCycleId}`)}
       style={{ backgroundColor: bg, color: text }}
       className={`
-        relative flex flex-col items-center justify-center
-        rounded-xl w-[68px] h-[72px] select-none
+        relative flex flex-col items-center justify-center gap-1
+        rounded-xl w-[100px] h-[92px] select-none
         transition-all duration-150
-        ${isActive ? "cursor-pointer hover:scale-105 hover:shadow-md" : "cursor-default opacity-50"}
+        ${isActive ? "cursor-pointer hover:scale-105 hover:shadow-lg" : "cursor-default opacity-40"}
       `}
     >
       {/* High mortality dot */}
       {highMort && (
         <div
-          className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border border-white shadow"
+          className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white shadow"
           title="Alta mortalità"
         />
       )}
 
-      {/* Basket number */}
-      <div className="text-[10px] font-medium opacity-75 leading-none">
-        #{basket.physicalNumber}
+      {/* Top: basket number + size badge */}
+      <div className="flex items-center justify-between w-full px-1.5">
+        <span className="text-[10px] font-bold opacity-75">C#{basket.physicalNumber}</span>
+        {sizeCode && sizeCode !== "N/D" && (
+          <span className="text-[9px] font-bold opacity-80 bg-black/20 rounded px-1 py-0.5 leading-none">
+            {sizeCode}
+          </span>
+        )}
       </div>
 
+      {/* Center: animal count — dominant element */}
       {sizeCode && sizeCode !== "N/D" ? (
-        <>
-          <div className="text-[12px] font-black leading-tight mt-1">{sizeCode}</div>
-          <div className="text-[10px] opacity-90 leading-none mt-0.5 font-medium">
-            {fmtAnimals(animalCount)}
-          </div>
-        </>
+        <div className="text-[26px] font-black leading-none tracking-tight">
+          {fmtAnimals(animalCount)}
+        </div>
       ) : isActive ? (
-        <div className="text-[10px] opacity-75 text-center mt-1 leading-snug px-1">
-          Attiva<br />N/D
+        <div className="text-[12px] opacity-70 text-center leading-snug">
+          Attiva<br /><span className="text-[10px]">N/D</span>
         </div>
       ) : (
-        <div className="text-[10px] opacity-60 text-center mt-1 leading-snug">
-          Vuota
+        <div className="text-[11px] opacity-40 text-center">Vuota</div>
+      )}
+
+      {/* Bottom: weight if available */}
+      {op?.totalWeight != null && (
+        <div className="text-[9px] opacity-70 leading-none">
+          {(op.totalWeight / 1000).toFixed(1)} kg
         </div>
       )}
     </div>
