@@ -276,6 +276,11 @@ export default function SpreadsheetOperations() {
     lotId?: number;
   } | null>(null);
   const [editingPosition, setEditingPosition] = useState<{top: number, left: number} | null>(null);
+  
+  // Stato locale testuale per il campo "Peso campione" del modal misura/peso
+  // Necessario per consentire decimali (1.500, 0.875) senza che React resetti l'input
+  // mentre l'utente sta ancora digitando (es. "1." → parseFloat → 1 → React mostra "1" → utente non può finire)
+  const [sampleWeightInput, setSampleWeightInput] = useState<string>('');
 
   // Refs per i campi del form per la navigazione automatica
   const sampleWeightRef = useRef<HTMLInputElement>(null);
@@ -600,6 +605,16 @@ export default function SpreadsheetOperations() {
       console.error('❌ SPREADSHEET: Errore nel caricamento operazioni:', operationsError);
     }
   }, [operationsError]);
+
+  // Sincronizza il testo "Peso campione" quando si apre/chiude/cambia cestello nel modal
+  // Resetta solo quando cambia il cestello editato (non ad ogni keystroke)
+  useEffect(() => {
+    if (editingForm?.basketId) {
+      setSampleWeightInput(editingForm.sampleWeight ? String(editingForm.sampleWeight) : '');
+    } else {
+      setSampleWeightInput('');
+    }
+  }, [editingForm?.basketId]);
   
   // Inizializza le righe quando cambiano FLUPSY, tipo operazione o data
   useEffect(() => {
@@ -4622,24 +4637,35 @@ export default function SpreadsheetOperations() {
                         ref={sampleWeightRef}
                         type="text"
                         inputMode="decimal"
-                        value={editingForm.sampleWeight ?? ''}
+                        value={sampleWeightInput}
                         onChange={(e) => {
-                          const raw = e.target.value.replace(',', '.').replace(/[^0-9.]/g, '');
-                          const value = raw === '' ? 0 : parseFloat(raw);
-                          setEditingForm({...editingForm, sampleWeight: isNaN(value) ? 0 : value});
+                          // Accetta solo cifre, un singolo punto o virgola
+                          let v = e.target.value.replace(',', '.');
+                          // Filtra caratteri non validi mantenendo al massimo un punto
+                          if (!/^[0-9]*\.?[0-9]*$/.test(v)) return;
+                          setSampleWeightInput(v);
+                          // Aggiorna il valore numerico nel form solo se la stringa è valida
+                          if (v === '' || v === '.') {
+                            setEditingForm({...editingForm, sampleWeight: 0});
+                          } else {
+                            const num = parseFloat(v);
+                            if (!isNaN(num)) {
+                              setEditingForm({...editingForm, sampleWeight: num});
+                            }
+                          }
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            const raw = e.currentTarget.value.replace(',', '.').replace(/[^0-9.]/g, '');
-                            const value = raw === '' ? 0 : parseFloat(raw);
-                            moveToNextField('sampleWeight', isNaN(value) ? 0 : value);
+                            const v = e.currentTarget.value.replace(',', '.');
+                            const num = v === '' || v === '.' ? 0 : parseFloat(v);
+                            moveToNextField('sampleWeight', isNaN(num) ? 0 : num);
                           }
                         }}
                         className="w-full h-10 md:h-8 px-3 md:px-2 text-base md:text-sm border rounded 
                                  focus:outline-none focus:ring-2 focus:ring-blue-400 bg-yellow-50
                                  touch-manipulation"
-                        placeholder="100 (es. 1.500)"
+                        placeholder="es. 1.500"
                         required
                         autoFocus
                       />
