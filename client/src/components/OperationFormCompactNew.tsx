@@ -73,6 +73,9 @@ export default function OperationFormCompact({
   const [isLoading, setIsLoading] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingValues, setPendingValues] = useState<any>(null);
+  // Stato testuale separato per "Grammi sample": evita che React sostituisca
+  // "1." con "1" durante la digitazione, rendendo impossibile inserire decimali
+  const [sampleWeightText, setSampleWeightText] = useState<string>('');
 
   // Queries per i dati
   const { data: baskets } = useQuery({ queryKey: ['/api/baskets'] });
@@ -427,15 +430,36 @@ export default function OperationFormCompact({
                       name="sampleWeight"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-medium">Peso campione (grammi)</FormLabel>
+                          <FormLabel className="text-sm font-medium">Grammi sample</FormLabel>
                           <FormControl>
                             <Input 
-                              type="number" 
-                              step="0.001"
+                              type="text"
+                              inputMode="decimal"
                               className="h-10"
-                              placeholder="Es. 1.500"
-                              value={field.value || ''} 
-                              onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                              placeholder="es. 1.500"
+                              value={sampleWeightText}
+                              onChange={(e) => {
+                                // Converti virgola in punto; blocca caratteri non numerici
+                                const v = e.target.value.replace(',', '.');
+                                if (!/^[0-9]*\.?[0-9]*$/.test(v)) return;
+                                setSampleWeightText(v);
+                                // Aggiorna il form solo quando il numero è completo
+                                if (v === '' || v === '.') {
+                                  field.onChange(null);
+                                } else {
+                                  const num = parseFloat(v);
+                                  if (!isNaN(num)) field.onChange(num);
+                                }
+                              }}
+                              onBlur={() => {
+                                // Al blur: normalizza la visualizzazione
+                                const num = parseFloat(sampleWeightText.replace(',', '.'));
+                                if (!isNaN(num)) {
+                                  setSampleWeightText(String(num));
+                                  field.onChange(num);
+                                }
+                                field.onBlur();
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
