@@ -4326,9 +4326,10 @@ export default function SpreadsheetOperations() {
                           <input
                             type="number"
                             value={row.sampleWeight || ''}
-                            onChange={(e) => updateCell(row.basketId, 'sampleWeight', Number(e.target.value))}
+                            onChange={(e) => updateCell(row.basketId, 'sampleWeight', e.target.value ? parseFloat(e.target.value) : 0)}
                             className="w-full h-6 px-1 text-xs border-0 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-white"
                             min="0"
+                            step="0.001"
                             placeholder="0"
                             required
                           />
