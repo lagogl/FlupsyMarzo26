@@ -89,6 +89,7 @@ export default function FlupsyHeatmap() {
           .sort((a: any, b: any) => a.position - b.position);
 
         let totalAnimals = 0;
+        let totalDeadCount = 0;
         let activeCount = 0;
         let mortSum = 0;
         let mortN = 0;
@@ -99,6 +100,7 @@ export default function FlupsyHeatmap() {
             const op = latestOpsMap?.[b.id];
             if (op) {
               totalAnimals += op.animalCount || 0;
+              totalDeadCount += op.deadCount || 0;
               if (op.lastMortalityRate != null) {
                 mortSum += op.lastMortalityRate;
                 mortN++;
@@ -112,6 +114,7 @@ export default function FlupsyHeatmap() {
           dxBaskets,
           sxBaskets,
           totalAnimals,
+          totalDeadCount,
           activeCount,
           totalBaskets: baskets.length,
           avgMort: mortN > 0 ? mortSum / mortN : null,
@@ -188,6 +191,7 @@ interface FlupsyCardProps {
   dxBaskets: any[];
   sxBaskets: any[];
   totalAnimals: number;
+  totalDeadCount: number;
   activeCount: number;
   totalBaskets: number;
   avgMort: number | null;
@@ -201,6 +205,7 @@ function FlupsyCard({
   dxBaskets,
   sxBaskets,
   totalAnimals,
+  totalDeadCount,
   activeCount,
   totalBaskets,
   avgMort,
@@ -250,9 +255,14 @@ function FlupsyCard({
               <span className="text-xs">animali</span>
             </span>
             {avgMort !== null && (
-              <span className={`text-xs ${mortColor}`}>
-                {avgMort > 10 && <AlertTriangle className="inline h-3 w-3 mr-0.5" />}
-                Mort. {avgMort.toFixed(1)}%
+              <span className={`text-xs flex items-center gap-1 ${mortColor}`}>
+                {avgMort > 10 && <AlertTriangle className="inline h-3 w-3" />}
+                <span>Mort. {avgMort.toFixed(1)}%</span>
+                {totalDeadCount > 0 && (
+                  <span className="opacity-75">
+                    ({fmtAnimals(totalDeadCount)})
+                  </span>
+                )}
               </span>
             )}
           </div>
