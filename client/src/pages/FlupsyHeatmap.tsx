@@ -93,16 +93,25 @@ export default function FlupsyHeatmap() {
           .sort((a: any, b: any) => a.position - b.position);
 
         let totalAnimals = 0;
+        let totalSellableAnimals = 0;
         let activeCount = 0;
         let mortSum = 0;
         let mortN = 0;
+
+        // Soglia vendibilità: <= 29000 animali/kg (taglia grande, TP-3000 o superiore)
+        const VENDIBILE_THRESHOLD = 29000;
 
         baskets.forEach((b: any) => {
           if (b.currentCycleId) {
             activeCount++;
             const op = latestOpsMap?.[b.id];
             if (op) {
-              totalAnimals += op.animalCount || 0;
+              const count = op.animalCount || 0;
+              totalAnimals += count;
+              const apk = op.measurementAnimalsPerKg || op.animalsPerKg;
+              if (apk != null && apk <= VENDIBILE_THRESHOLD) {
+                totalSellableAnimals += count;
+              }
               if (op.lastMortalityRate != null) {
                 mortSum += op.lastMortalityRate;
                 mortN++;
@@ -118,13 +127,21 @@ export default function FlupsyHeatmap() {
           dxBaskets,
           sxBaskets,
           totalAnimals,
+          totalSellableAnimals,
           totalDeadCount,
           activeCount,
           totalBaskets: baskets.length,
           avgMort: mortN > 0 ? mortSum / mortN : null,
         };
       })
-      .filter((d) => d.totalBaskets > 0);
+      .filter((d) => d.totalBaskets > 0)
+      // Ordina: prima per animali vendibili (desc), poi per totale animali (desc)
+      .sort((a, b) => {
+        if (b.totalSellableAnimals !== a.totalSellableAnimals) {
+          return b.totalSellableAnimals - a.totalSellableAnimals;
+        }
+        return b.totalAnimals - a.totalAnimals;
+      });
   }, [allFlupsys, allBaskets, latestOpsMap, totalDeathsMap]);
 
   if (isLoading) {
@@ -195,6 +212,7 @@ interface FlupsyCardProps {
   dxBaskets: any[];
   sxBaskets: any[];
   totalAnimals: number;
+  totalSellableAnimals: number;
   totalDeadCount: number | null;
   activeCount: number;
   totalBaskets: number;
@@ -209,6 +227,7 @@ function FlupsyCard({
   dxBaskets,
   sxBaskets,
   totalAnimals,
+  totalSellableAnimals,
   totalDeadCount,
   activeCount,
   totalBaskets,
@@ -258,6 +277,12 @@ function FlupsyCard({
               <span className="font-bold text-gray-800">{fmtAnimals(totalAnimals)}</span>{" "}
               <span className="text-xs">animali</span>
             </span>
+            {totalSellableAnimals > 0 && (
+              <span className="text-gray-500">
+                <span className="font-bold text-green-700">{fmtAnimals(totalSellableAnimals)}</span>{" "}
+                <span className="text-xs text-green-600">vendibili</span>
+              </span>
+            )}
             {avgMort !== null && (
               <span className={`text-xs flex items-center gap-1 ${mortColor}`}>
                 {avgMort > 10 && <AlertTriangle className="inline h-3 w-3" />}
