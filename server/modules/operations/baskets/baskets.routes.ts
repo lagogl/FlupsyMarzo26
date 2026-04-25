@@ -108,12 +108,15 @@ router.get('/daily-trend', async (req: Request, res: Response) => {
       LEFT JOIN initial_counts ic ON ic.basket_id = ys.basket_id
     `);
     const row = result.rows[0] as any;
+    const yDead    = Number(row?.yesterday_dead    ?? 0);
+    const yInitial = Number(row?.yesterday_initial ?? 0);
+    const yMort    = yInitial > 0 ? (yDead / yInitial) * 100 : null;
     res.json({
       success: true,
       data: {
-        yesterdayAnimals:   Number(row?.yesterday_animals  ?? 0),
-        yesterdayAvgMort:   row?.yesterday_avg_mort != null ? parseFloat(row.yesterday_avg_mort) : null,
-        yesterdaySellable:  Number(row?.yesterday_sellable ?? 0),
+        yesterdayAnimals:  Number(row?.yesterday_animals  ?? 0),
+        yesterdayAvgMort:  yMort,
+        yesterdaySellable: Number(row?.yesterday_sellable ?? 0),
       }
     });
   } catch (err: any) {

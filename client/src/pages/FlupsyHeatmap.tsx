@@ -387,15 +387,25 @@ function FlupsyCard({
               </span>
             )}
             {avgMort !== null && (
-              <span className={`text-xs flex items-center gap-1 ${mortColor}`}>
-                {avgMort > 10 && <AlertTriangle className="inline h-3 w-3" />}
-                <span>Mort. {avgMort.toFixed(1)}%</span>
-                {totalDeadCount > 0 && (
-                  <span className="opacity-75">
-                    ({fmtAnimals(totalDeadCount)})
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={`text-xs flex items-center gap-1 cursor-help ${mortColor}`}>
+                    {avgMort > 10 && <AlertTriangle className="inline h-3 w-3" />}
+                    <span>Mort. {avgMort.toFixed(2)}%</span>
+                    {totalDeadCount != null && totalDeadCount > 0 && (
+                      <span className="opacity-75">({fmtAnimals(totalDeadCount)})</span>
+                    )}
                   </span>
-                )}
-              </span>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs space-y-0.5">
+                  <div className="font-semibold text-gray-200 mb-1">Mortalità cumulativa ciclo attuale</div>
+                  <div>Morti registrati: <span className="font-bold">{totalDeadCount?.toLocaleString("it-IT") ?? "—"}</span></div>
+                  <div>Animali al carico: <span className="font-bold">{totalInitialAnimals?.toLocaleString("it-IT") ?? "—"}</span></div>
+                  <div className="border-t border-gray-600 pt-1 mt-1">
+                    = morti / carico × 100 = <span className="font-bold">{avgMort.toFixed(2)}%</span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>
