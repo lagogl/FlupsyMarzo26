@@ -241,6 +241,7 @@ function WebSocketListener() {
 // Importiamo il componente di integrazione WebSocket-Query
 import { WebSocketQueryIntegration } from './lib/websocketQueryIntegration';
 import { OperationListener } from '@/components/OperationListener';
+import MorningSummaryOverlay from '@/components/MorningSummaryOverlay';
 
 function App() {
   return (
@@ -267,6 +268,9 @@ function App() {
           
           {/* Indicatore di stato della connessione WebSocket */}
           <WebSocketIndicator />
+          
+          {/* Riepilogo mattutino - appare una volta al giorno al primo accesso */}
+          <MorningSummaryOverlay />
           
           <Toaster />
         </TooltipProvider>
