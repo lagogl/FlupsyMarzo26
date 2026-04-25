@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { format } from "date-fns";
-import { AlertTriangle, LayoutGrid } from "lucide-react";
+import { AlertTriangle, LayoutGrid, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 // --- Helpers ---
 
@@ -53,6 +53,53 @@ const LEGEND_ENTRIES = [
   { code: "TP-10000", label: "Grande" },
 ];
 
+// --- Trend KPI ---
+
+interface TrendKpiProps {
+  label: string;
+  today: number | null;
+  yesterday: number | null;
+  format: (n: number | null) => string;
+  positiveIsGood: boolean; // true = aumento è positivo; false = aumento è negativo (es. mortalità)
+}
+
+function TrendKpi({ label, today, yesterday, format, positiveIsGood }: TrendKpiProps) {
+  const diff = today != null && yesterday != null ? today - yesterday : null;
+  const pct = diff != null && yesterday && yesterday !== 0 ? (diff / Math.abs(yesterday)) * 100 : null;
+
+  let trend: "up" | "down" | "flat" = "flat";
+  if (diff != null) {
+    if (Math.abs(diff) < (Math.abs(yesterday ?? 1) * 0.001)) trend = "flat"; // < 0.1% → flat
+    else if (diff > 0) trend = "up";
+    else trend = "down";
+  }
+
+  const isPositive = trend === "flat" ? null : (trend === "up") === positiveIsGood;
+  const trendColor = isPositive == null ? "text-gray-400" : isPositive ? "text-green-600" : "text-red-500";
+  const bgColor = isPositive == null ? "bg-gray-50 border-gray-200" : isPositive ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200";
+
+  return (
+    <div className={`rounded-xl border p-3 flex flex-col gap-1 ${bgColor}`}>
+      <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className="text-2xl font-black text-gray-900 leading-none">{format(today)}</div>
+      <div className={`flex items-center gap-1 text-xs font-semibold ${trendColor}`}>
+        {trend === "up" && <TrendingUp className="h-3.5 w-3.5" />}
+        {trend === "down" && <TrendingDown className="h-3.5 w-3.5" />}
+        {trend === "flat" && <Minus className="h-3.5 w-3.5" />}
+        {diff != null ? (
+          <span>
+            {diff > 0 ? "+" : diff < 0 ? "−" : ""}{format(Math.abs(diff))}
+            {pct != null && ` (${pct > 0 ? "+" : ""}${pct.toFixed(1)}%)`}
+            <span className="text-gray-400 font-normal ml-1">vs ieri</span>
+          </span>
+        ) : (
+          <span className="text-gray-400 font-normal">Nessun dato ieri</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- Main Page ---
 
 export default function FlupsyHeatmap() {
@@ -75,6 +122,10 @@ export default function FlupsyHeatmap() {
   const { data: totalDeathsMap } = useQuery<{ success: boolean; data: Record<number, number> }>({
     queryKey: ["/api/baskets/total-deaths-by-flupsy"],
     staleTime: 120000,
+  });
+  const { data: dailyTrend } = useQuery<{ success: boolean; data: { yesterdayAnimals: number; yesterdayAvgMort: number | null; yesterdaySellable: number } }>({
+    queryKey: ["/api/baskets/daily-trend"],
+    staleTime: 300000,
   });
 
   const isLoading = lFlupsys || lBaskets || lOps;
@@ -144,6 +195,21 @@ export default function FlupsyHeatmap() {
       });
   }, [allFlupsys, allBaskets, latestOpsMap, totalDeathsMap]);
 
+  // Aggregati globali di oggi (somma di tutti i FLUPSY)
+  const todayTotals = useMemo(() => {
+    if (!flupsyData.length) return null;
+    let totalAnimals = 0;
+    let totalSellable = 0;
+    let mortSum = 0;
+    let mortN = 0;
+    for (const d of flupsyData) {
+      totalAnimals += d.totalAnimals;
+      totalSellable += d.totalSellableAnimals;
+      if (d.avgMort != null) { mortSum += d.avgMort; mortN++; }
+    }
+    return { totalAnimals, totalSellable, avgMort: mortN > 0 ? mortSum / mortN : null };
+  }, [flupsyData]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-400 gap-3">
@@ -187,6 +253,33 @@ export default function FlupsyHeatmap() {
             </span>
           </div>
         </div>
+
+        {/* Pannello trend giornaliero */}
+        {todayTotals && (
+          <div className="grid grid-cols-3 gap-3">
+            <TrendKpi
+              label="Animali totali"
+              today={todayTotals.totalAnimals}
+              yesterday={dailyTrend?.data?.yesterdayAnimals ?? null}
+              format={fmtAnimals}
+              positiveIsGood={true}
+            />
+            <TrendKpi
+              label="Quasi vendibili+"
+              today={todayTotals.totalSellable}
+              yesterday={dailyTrend?.data?.yesterdaySellable ?? null}
+              format={fmtAnimals}
+              positiveIsGood={true}
+            />
+            <TrendKpi
+              label="Mortalità media"
+              today={todayTotals.avgMort}
+              yesterday={dailyTrend?.data?.yesterdayAvgMort ?? null}
+              format={(n) => n != null ? `${n.toFixed(1)}%` : "—"}
+              positiveIsGood={false}
+            />
+          </div>
+        )}
 
         {/* FLUPSY Cards */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
