@@ -17,8 +17,7 @@ import { eq, and, gte, lte, sql, inArray, desc } from "drizzle-orm";
 import OpenAI from "openai";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_BASE_URL = 'https://api.deepseek.com';
-const AI_MODEL = 'deepseek-chat';
+const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 
 let aiClient: OpenAI | null = null;
 
@@ -27,7 +26,6 @@ function initializeAIClient() {
   if (currentApiKey && currentApiKey.length > 10) {
     aiClient = new OpenAI({
       apiKey: currentApiKey,
-      baseURL: AI_BASE_URL,
       timeout: 30000,
     });
     return true;

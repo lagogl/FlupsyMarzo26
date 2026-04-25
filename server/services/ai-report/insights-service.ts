@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 
-const AI_BASE_URL = 'https://api.deepseek.com';
-const AI_MODEL = 'deepseek-chat';
+const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 
 /**
  * Servizio per generare insights AI dai dati estratti

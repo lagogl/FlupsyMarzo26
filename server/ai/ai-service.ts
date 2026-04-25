@@ -3,7 +3,7 @@ import { AutonomousAIService } from "./autonomous-ai-service";
 
 // Configurazione OpenAI GPT-4o con API key personale dell'utente
 const AI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_MODEL = 'gpt-4o'; // ChatGPT Omni
+const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 
 console.log('🔧 OpenAI GPT-4o Config:', { 
   model: AI_MODEL,

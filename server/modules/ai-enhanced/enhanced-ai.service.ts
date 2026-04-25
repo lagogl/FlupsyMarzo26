@@ -19,7 +19,7 @@ import {
 } from "./metadata.service.js";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_MODEL = 'gpt-4o'; // ChatGPT Omni
+const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 
 // Client OpenAI con API key personale dell'utente
 let aiClient: OpenAI | null = null;

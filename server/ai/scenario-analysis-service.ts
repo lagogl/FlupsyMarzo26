@@ -5,6 +5,8 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
+
 interface ScenarioContext {
   currentInventory: Array<{
     sizeName: string;
@@ -103,7 +105,7 @@ Rispondi alla domanda basandoti sui dati forniti. Usa i CALCOLI CUMULATIVI per v
 
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: AI_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

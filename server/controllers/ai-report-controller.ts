@@ -9,7 +9,7 @@ import { getCachedQuery, setCachedQuery, invalidateQueryCache, getCacheStats, ge
 import { generateDataInsights, formatInsightsForUser, createInsightsSheet } from "../services/ai-report/insights-service";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_MODEL = 'gpt-4o';
+const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 
 let aiClient: OpenAI | null = null;
 
