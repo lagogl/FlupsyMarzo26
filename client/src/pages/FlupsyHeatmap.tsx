@@ -217,6 +217,12 @@ function FlupsyCard({
       ? "text-amber-500 font-semibold"
       : "text-green-600";
 
+  const allBaskets = [...dxBaskets, ...sxBaskets];
+  const maxAnimals = Math.max(
+    ...allBaskets.map((b: any) => latestOpsMap[b.id]?.animalCount ?? 0),
+    1
+  );
+
   const rows = [
     { label: "DX", baskets: dxBaskets },
     { label: "SX", baskets: sxBaskets },
@@ -267,6 +273,7 @@ function FlupsyCard({
                   basket={basket}
                   op={latestOpsMap[basket.id]}
                   sizes={sizes}
+                  maxAnimals={maxAnimals}
                   onNavigate={onNavigate}
                 />
               ))}
@@ -284,70 +291,117 @@ interface BasketTileProps {
   basket: any;
   op: any;
   sizes: any[];
+  maxAnimals: number;
   onNavigate: (path: string) => void;
 }
 
-function BasketTile({ basket, op, sizes, onNavigate }: BasketTileProps) {
+function BasketTile({ basket, op, sizes, maxAnimals, onNavigate }: BasketTileProps) {
   const isActive = !!basket.currentCycleId;
   const animalsPerKg = op?.measurementAnimalsPerKg || op?.animalsPerKg;
   const sizeCode = isActive && animalsPerKg ? getSizeCodeFromAnimalsPerKg(animalsPerKg, sizes) : null;
-  const { bg, text } = sizeCode && sizeCode !== "N/D"
-    ? getSizeHexColor(sizeCode)
+  const hasSize = !!(sizeCode && sizeCode !== "N/D");
+
+  const { bg } = hasSize
+    ? getSizeHexColor(sizeCode!)
     : isActive
-    ? { bg: "#dbeafe", text: "#1d4ed8" }
-    : { bg: "#f1f5f9", text: "#94a3b8" };
+    ? { bg: "#93c5fd" }   // blue-300 per ceste attive senza taglia
+    : { bg: "#cbd5e1" };  // slate-300 per ceste vuote
 
   const animalCount = op?.animalCount ?? null;
   const mort = op?.lastMortalityRate ?? null;
   const highMort = mort !== null && mort > 10;
 
+  // Fill level: rapporto tra animali di questa cesta e il massimo nel FLUPSY
+  const fillPct = hasSize && animalCount && maxAnimals > 0
+    ? Math.max(8, Math.round((animalCount / maxAnimals) * 100))
+    : 0;
+
   const tile = (
     <div
       onClick={() => isActive && basket.currentCycleId && onNavigate(`/cycles/${basket.currentCycleId}`)}
-      style={{ backgroundColor: bg, color: text }}
       className={`
-        relative flex flex-col items-center justify-center gap-1
-        rounded-xl w-[100px] h-[92px] select-none
+        relative overflow-hidden flex flex-col items-center justify-center gap-1
+        rounded-xl w-[96px] h-[100px] select-none border border-white/30
         transition-all duration-150
-        ${isActive ? "cursor-pointer hover:scale-105 hover:shadow-lg" : "cursor-default opacity-40"}
+        ${isActive ? "cursor-pointer hover:scale-105 hover:shadow-lg" : "cursor-default opacity-35"}
       `}
+      style={{ backgroundColor: "#f0f4f8" }}
     >
-      {/* High mortality dot */}
-      {highMort && (
+      {/* === FILL LEVEL: sale dal basso, colore della taglia === */}
+      <div
+        className="absolute bottom-0 left-0 right-0 transition-all duration-700 ease-out"
+        style={{
+          height: `${fillPct}%`,
+          backgroundColor: bg,
+          opacity: hasSize ? 1 : 0.3,
+        }}
+      />
+
+      {/* Separatore orizzontale che indica il livello */}
+      {fillPct > 0 && fillPct < 100 && (
         <div
-          className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white shadow"
-          title="Alta mortalità"
+          className="absolute left-0 right-0 h-[2px] bg-white/60"
+          style={{ bottom: `${fillPct}%` }}
         />
       )}
 
-      {/* Top: basket number + size badge */}
-      <div className="flex items-center justify-between w-full px-1.5">
-        <span className="text-[10px] font-bold opacity-75">C#{basket.physicalNumber}</span>
-        {sizeCode && sizeCode !== "N/D" && (
-          <span className="text-[9px] font-bold opacity-80 bg-black/20 rounded px-1 py-0.5 leading-none">
-            {sizeCode}
+      {/* === CONTENUTO (sopra il fill) === */}
+      <div className="relative z-10 flex flex-col items-center w-full px-1.5 gap-1">
+
+        {/* Numero cesta + badge taglia */}
+        <div className="flex items-center justify-between w-full">
+          <span
+            className="text-[10px] font-bold leading-none"
+            style={{ color: fillPct > 60 ? "#fff" : "#475569", textShadow: fillPct > 60 ? "0 1px 2px rgba(0,0,0,0.4)" : "none" }}
+          >
+            C#{basket.physicalNumber}
           </span>
+          {hasSize && (
+            <span
+              className="text-[9px] font-bold rounded px-1 py-0.5 leading-none"
+              style={{
+                backgroundColor: fillPct > 60 ? "rgba(255,255,255,0.25)" : bg + "33",
+                color: fillPct > 60 ? "#fff" : "#334155",
+              }}
+            >
+              {sizeCode}
+            </span>
+          )}
+        </div>
+
+        {/* Numero animali — elemento dominante */}
+        {hasSize ? (
+          <div
+            className="text-[24px] font-black leading-none tracking-tight"
+            style={{
+              color: fillPct > 40 ? "#fff" : "#1e293b",
+              textShadow: fillPct > 40 ? "0 1px 3px rgba(0,0,0,0.5)" : "none",
+            }}
+          >
+            {fmtAnimals(animalCount)}
+          </div>
+        ) : isActive ? (
+          <div className="text-[11px] text-slate-400 text-center leading-snug">
+            Attiva<br /><span className="text-[10px]">N/D</span>
+          </div>
+        ) : (
+          <div className="text-[11px] text-slate-400 text-center">Vuota</div>
+        )}
+
+        {/* % di riempimento relativo */}
+        {fillPct > 0 && (
+          <div
+            className="text-[9px] font-semibold leading-none"
+            style={{ color: fillPct > 55 ? "rgba(255,255,255,0.8)" : "#64748b" }}
+          >
+            {fillPct}%
+          </div>
         )}
       </div>
 
-      {/* Center: animal count — dominant element */}
-      {sizeCode && sizeCode !== "N/D" ? (
-        <div className="text-[26px] font-black leading-none tracking-tight">
-          {fmtAnimals(animalCount)}
-        </div>
-      ) : isActive ? (
-        <div className="text-[12px] opacity-70 text-center leading-snug">
-          Attiva<br /><span className="text-[10px]">N/D</span>
-        </div>
-      ) : (
-        <div className="text-[11px] opacity-40 text-center">Vuota</div>
-      )}
-
-      {/* Bottom: weight if available */}
-      {op?.totalWeight != null && (
-        <div className="text-[9px] opacity-70 leading-none">
-          {(op.totalWeight / 1000).toFixed(1)} kg
-        </div>
+      {/* Alta mortalità — pallino rosso */}
+      {highMort && (
+        <div className="absolute top-1.5 left-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white shadow z-20" />
       )}
     </div>
   );
