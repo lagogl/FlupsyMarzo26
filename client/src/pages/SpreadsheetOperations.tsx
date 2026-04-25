@@ -4621,22 +4621,24 @@ export default function SpreadsheetOperations() {
                       <input
                         ref={sampleWeightRef}
                         type="number"
-                        value={editingForm.sampleWeight || ''}
+                        value={editingForm.sampleWeight ?? ''}
                         onChange={(e) => {
-                          const value = Number(e.target.value);
+                          const value = e.target.value ? parseFloat(e.target.value) : 0;
                           setEditingForm({...editingForm, sampleWeight: value});
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            const value = Number(e.currentTarget.value);
+                            const value = e.currentTarget.value ? parseFloat(e.currentTarget.value) : 0;
                             moveToNextField('sampleWeight', value);
                           }
                         }}
                         className="w-full h-10 md:h-8 px-3 md:px-2 text-base md:text-sm border rounded 
                                  focus:outline-none focus:ring-2 focus:ring-blue-400 bg-yellow-50
                                  touch-manipulation"
-                        min="1"
+                        min="0.001"
+                        step="0.001"
+                        inputMode="decimal"
                         placeholder="100"
                         required
                         autoFocus
