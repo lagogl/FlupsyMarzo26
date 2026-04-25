@@ -4620,26 +4620,26 @@ export default function SpreadsheetOperations() {
                       <label className="text-sm md:text-xs text-gray-600 mb-2 md:mb-1 block font-medium">Peso campione (g)</label>
                       <input
                         ref={sampleWeightRef}
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={editingForm.sampleWeight ?? ''}
                         onChange={(e) => {
-                          const value = e.target.value ? parseFloat(e.target.value) : 0;
-                          setEditingForm({...editingForm, sampleWeight: value});
+                          const raw = e.target.value.replace(',', '.').replace(/[^0-9.]/g, '');
+                          const value = raw === '' ? 0 : parseFloat(raw);
+                          setEditingForm({...editingForm, sampleWeight: isNaN(value) ? 0 : value});
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            const value = e.currentTarget.value ? parseFloat(e.currentTarget.value) : 0;
-                            moveToNextField('sampleWeight', value);
+                            const raw = e.currentTarget.value.replace(',', '.').replace(/[^0-9.]/g, '');
+                            const value = raw === '' ? 0 : parseFloat(raw);
+                            moveToNextField('sampleWeight', isNaN(value) ? 0 : value);
                           }
                         }}
                         className="w-full h-10 md:h-8 px-3 md:px-2 text-base md:text-sm border rounded 
                                  focus:outline-none focus:ring-2 focus:ring-blue-400 bg-yellow-50
                                  touch-manipulation"
-                        min="0.001"
-                        step="0.001"
-                        inputMode="decimal"
-                        placeholder="100"
+                        placeholder="100 (es. 1.500)"
                         required
                         autoFocus
                       />
