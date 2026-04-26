@@ -236,16 +236,18 @@ export default function FlupsyHeatmap() {
     if (!flupsyData.length) return null;
     let totalAnimals = 0;
     let totalSellable = 0;
+    let totalSellableWeighted = 0;
     let totalDead = 0;
     let totalInitial = 0;
     for (const d of flupsyData) {
       totalAnimals += d.totalAnimals;
       totalSellable += d.totalSellableAnimals;
+      totalSellableWeighted += d.totalSellableWeighted;
       if (d.totalDeadCount != null) totalDead += d.totalDeadCount;
       if (d.totalInitialAnimals != null) totalInitial += d.totalInitialAnimals;
     }
     const avgMort = totalInitial > 0 ? (totalDead / totalInitial) * 100 : null;
-    return { totalAnimals, totalSellable, avgMort };
+    return { totalAnimals, totalSellable, totalSellableWeighted, avgMort };
   }, [flupsyData]);
 
   if (isLoading) {
@@ -302,13 +304,30 @@ export default function FlupsyHeatmap() {
               format={fmtAnimals}
               positiveIsGood={true}
             />
-            <TrendKpi
-              label="Quasi vendibili+"
-              today={todayTotals.totalSellable}
-              yesterday={dailyTrend?.data?.yesterdaySellable ?? null}
-              format={fmtAnimals}
-              positiveIsGood={true}
-            />
+            <div className="relative">
+              <TrendKpi
+                label="Quasi vendibili+"
+                today={todayTotals.totalSellable}
+                yesterday={dailyTrend?.data?.yesterdaySellable ?? null}
+                format={fmtAnimals}
+                positiveIsGood={true}
+              />
+              {todayTotals.totalSellableWeighted > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 border border-amber-400 text-amber-800 text-[10px] font-bold cursor-help shadow-sm">
+                      <Scale className="h-2.5 w-2.5" />
+                      +{fmtAnimals(todayTotals.totalSellableWeighted)}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs max-w-xs">
+                    Animali aggiuntivi <span className="font-bold">potenzialmente vendibili</span> in base
+                    all'ultima pesata: la taglia stimata dal peso ≤ TP-3000, ma la taglia ufficiale registrata non è ancora vendibile.
+                    Serve un'operazione di <span className="font-bold">misura</span> per confermare.
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             <TrendKpi
               label="Mortalità media"
               today={todayTotals.avgMort}
@@ -344,6 +363,7 @@ interface FlupsyCardProps {
   sxBaskets: any[];
   totalAnimals: number;
   totalSellableAnimals: number;
+  totalSellableWeighted: number;
   totalDeadCount: number | null;
   totalInitialAnimals: number | null;
   activeCount: number;
@@ -360,6 +380,7 @@ function FlupsyCard({
   sxBaskets,
   totalAnimals,
   totalSellableAnimals,
+  totalSellableWeighted,
   totalDeadCount,
   totalInitialAnimals,
   activeCount,
@@ -422,6 +443,21 @@ function FlupsyCard({
                 <span className="font-bold text-green-700">{fmtAnimals(totalSellableAnimals)}</span>{" "}
                 <span className="text-xs text-green-600">vendibili</span>
               </span>
+            )}
+            {totalSellableWeighted > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-400 text-amber-800 text-xs font-bold cursor-help">
+                    <Scale className="h-3 w-3" />
+                    +{fmtAnimals(totalSellableWeighted)} stimati
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">
+                  Animali in ceste dove l'ultima pesata indica una taglia ≤ TP-3000
+                  (vendibile), ma la taglia ufficiale registrata non è ancora vendibile.
+                  Serve una <span className="font-bold">misura</span> per confermare.
+                </TooltipContent>
+              </Tooltip>
             )}
             {toMeasureCount > 0 && (
               <Tooltip>
