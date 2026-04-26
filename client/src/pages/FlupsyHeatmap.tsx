@@ -51,16 +51,19 @@ function getWeightedSizeInfo(
 }
 
 // Returns { bg, text } hex colors for a TP-XXXX code
+// TP-3000 e oltre = vendibili → tutte tonalità di verde
+// Sotto TP-3000 = non vendibili → rosso/ambra/giallo
 function getSizeHexColor(sizeCode: string): { bg: string; text: string } {
   if (!sizeCode || !sizeCode.startsWith("TP-")) return { bg: "#f1f5f9", text: "#64748b" };
   const num = parseInt(sizeCode.substring(3));
   if (num <= 500)   return { bg: "#dc2626", text: "#fff" };   // red-600
   if (num <= 1000)  return { bg: "#ef4444", text: "#fff" };   // red-500
   if (num <= 2000)  return { bg: "#f59e0b", text: "#fff" };   // amber-500
-  if (num <= 3000)  return { bg: "#eab308", text: "#fff" };   // yellow-500
+  // === Soglia vendibilità ===
+  if (num <= 3000)  return { bg: "#4ade80", text: "#fff" };   // green-400 (TP-3000 — soglia)
   if (num <= 6000)  return { bg: "#22c55e", text: "#fff" };   // green-500
-  if (num <= 10000) return { bg: "#3b82f6", text: "#fff" };   // blue-500
-  return { bg: "#1e293b", text: "#fff" };                      // slate-900
+  if (num <= 10000) return { bg: "#15803d", text: "#fff" };   // green-700
+  return { bg: "#064e3b", text: "#fff" };                      // green-900
 }
 
 // Readable name for legend
@@ -315,7 +318,7 @@ export default function FlupsyHeatmap() {
               {todayTotals.totalSellableWeighted > 0 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 border border-amber-400 text-amber-800 text-[10px] font-bold cursor-help shadow-sm">
+                    <div className="absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-100 border border-green-500 text-green-800 text-[10px] font-bold cursor-help shadow-sm">
                       <Scale className="h-2.5 w-2.5" />
                       +{fmtAnimals(todayTotals.totalSellableWeighted)}
                     </div>
@@ -447,7 +450,7 @@ function FlupsyCard({
             {totalSellableWeighted > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-400 text-amber-800 text-xs font-bold cursor-help">
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 border border-green-500 text-green-700 text-xs font-bold cursor-help">
                     <Scale className="h-3 w-3" />
                     +{fmtAnimals(totalSellableWeighted)} stimati
                   </span>
