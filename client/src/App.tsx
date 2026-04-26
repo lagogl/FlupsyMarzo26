@@ -140,8 +140,8 @@ function Router() {
       <ProtectedRoute path="/statistics" component={Statistics} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/lots-analytics" component={LotsAnalytics} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/mixed-lots-analytics" component={MixedLotsAnalytics} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/report-lotto/:lotId" component={ReportLotto} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/report-lotto" component={ReportLotto} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/report-lotto/:lotId" component={ReportLotto}/>
+      <ProtectedRoute path="/report-lotto" component={ReportLotto}/>
       <ProtectedRoute path="/vagliature-sospette" component={VagliatureSospette} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/lot-ledger-statistics" component={LotLedgerStatistics} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/inventory" component={Inventory}/>
