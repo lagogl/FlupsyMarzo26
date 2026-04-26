@@ -142,6 +142,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       color: 'text-blue-600',
       items: [
         { icon: <Home className="h-6 w-6 mr-2 text-black font-bold" />, label: translations.menuItems.dashboard, path: "/" },
+        { icon: <LayoutGrid className="h-5 w-5 mr-2 text-indigo-600" />, label: "Mappa termica FLUPSY", path: "/flupsy-heatmap" },
         { icon: <Globe className="h-5 w-5 mr-2 text-cyan-600" />, label: "Mappa GIS Laguna", path: "/mappa-gis" },
         { icon: <Package2 className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.lotManagement, path: "/lots" },
         { icon: <Package className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.basketManagement, path: "/baskets" },
@@ -152,8 +153,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <ArrowLeftRight className="h-5 w-5 mr-2 text-violet-600" />, label: "Trasferimento Ciclo", path: "/trasferimento-ciclo" },
         { icon: <History className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.screeningHistory || "Storico Vagliature", path: "/screenings" },
         { icon: <Tag className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.nfcTagManagement, path: "/nfc-tags" },
-        { icon: <Radio className="h-5 w-5 mr-2 text-red-600" />, label: "Gestione Tag RFID UHF", path: "/rfid-uhf-tags" },
-        ...(user?.username?.toLowerCase() === 'gianluigi' ? [{ icon: <LayoutGrid className="h-5 w-5 mr-2 text-indigo-600" />, label: "Mappa termica FLUPSY", path: "/flupsy-heatmap" }] : [])
+        { icon: <Radio className="h-5 w-5 mr-2 text-red-600" />, label: "Gestione Tag RFID UHF", path: "/rfid-uhf-tags" }
       ]
     },
     {

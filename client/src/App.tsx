@@ -199,8 +199,8 @@ function Router() {
       
       {/* Modulo selezione rimosso - ora si usa solo Vagliatura con Mappa */}
       
-      {/* Vista Mappa FLUPSY (solo gianluigi) */}
-      <ProtectedRoute path="/flupsy-heatmap" component={FlupsyHeatmap} requiredUsername="gianluigi"/>
+      {/* Mappa termica FLUPSY (accessibile a tutti gli utenti autenticati) */}
+      <ProtectedRoute path="/flupsy-heatmap" component={FlupsyHeatmap}/>
 
       {/* Vagliatura con Mappa routes */}
       <ProtectedRoute path="/vagliatura" component={VagliaturaConMappa}/>
