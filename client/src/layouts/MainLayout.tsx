@@ -153,7 +153,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <History className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.screeningHistory || "Storico Vagliature", path: "/screenings" },
         { icon: <Tag className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.nfcTagManagement, path: "/nfc-tags" },
         { icon: <Radio className="h-5 w-5 mr-2 text-red-600" />, label: "Gestione Tag RFID UHF", path: "/rfid-uhf-tags" },
-        ...(user?.username?.toLowerCase() === 'gianluigi' ? [{ icon: <LayoutGrid className="h-5 w-5 mr-2 text-indigo-600" />, label: "Vista Mappa FLUPSY", path: "/flupsy-heatmap" }] : [])
+        ...(user?.username?.toLowerCase() === 'gianluigi' ? [{ icon: <LayoutGrid className="h-5 w-5 mr-2 text-indigo-600" />, label: "Mappa termica FLUPSY", path: "/flupsy-heatmap" }] : [])
       ]
     },
     {

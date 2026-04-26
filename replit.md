@@ -28,10 +28,10 @@ Preferred communication style: Simple, everyday language.
 
 ### Key Features
 - **Core Entities**: Manages FLUPSY Systems, Baskets, Cycles, Operations, Lots, Selections/Screenings, Advanced Sales, and DDT (Documento di Trasporto).
-- **Business Logic**: Inventory Management, Growth Forecasting (size-specific SGR calculations), Mortality Tracking, External Data Synchronization, Quality Control, and Advanced Sales with DDT Generation.
+- **Business Logic**: Inventory Management, Growth Forecasting, Mortality Tracking, External Data Synchronization, Quality Control, and Advanced Sales with DDT Generation.
 - **AI Integration**: Hybrid system using GPT-4o for predictive growth analysis, anomaly detection, sustainability analysis, business analytics, AI-enhanced performance scoring, report generation, and experimental natural language database querying.
-- **Growth Prediction System**: Interactive forecasting with automatic weight calculation and customizable projections. The "Ceste in arrivo" dashboard endpoint (`/api/size-predictions`) uses `maxAnimalsPerKg` (lightest animal in size range) as the entry threshold for "arrival at target size" — a basket is considered to have reached size X when its currentWeight ≥ 1,000,000/maxAnimalsPerKg of size X (e.g., TP-3000 entry = ~34.5mg from max=29,000 an/kg). Operations within each basket are sorted by `date DESC, id DESC` and filtered to the current cycle first (with fallback) to avoid same-day cycle confusion.
-- **DDT System**: Generates transport documents with three-state tracking, immutable customer data snapshots, traceability, subtotals by size, and dual independent integration: Fatture in Cloud (FIC) and external FCloud app. The two channels are architecturally independent — FCloud fires first (non-blocking), FIC runs separately. FIC can be disabled in future without affecting FCloud. Company mapping: FIC 1017299 → `ecotapes-001`, FIC 1052922 → `deltafuturo-001`. Client matching by P.IVA. State tracked via `fcloud_ddt_id`, `fcloud_ddt_numero`, `fcloud_stato` columns on `ddt` table.
+- **Growth Prediction System**: Interactive forecasting with automatic weight calculation and customizable projections.
+- **DDT System**: Generates transport documents with three-state tracking, immutable customer data snapshots, traceability, subtotals by size, and dual independent integration with Fatture in Cloud and an external FCloud app.
 - **Dynamic Logo System**: Automates company logo integration in PDF reports.
 - **NFC Tag Management**: System for programming NFC tags with manual basket state override and timestamp tracking.
 - **Spreadsheet Operations Module**: Mobile-first, editable cell interface for rapid data entry, real-time validation, auto-save, batch operations, and visual performance indicators.
@@ -42,8 +42,7 @@ Preferred communication style: Simple, everyday language.
 - **Shared Orders Module**: Direct database connection to external application for collaborative order management with automatic residual quantity calculation and delivery tracking.
 - **Operators Synchronization System**: Event-driven push architecture for synchronizing operators from Delta Futuro to an external app database for mobile authentication.
 - **Size Range Protection System**: Database-level protection against modification of size ranges after use.
-- **Query Optimization Pattern**: Utilizes simple separate queries, application-side data aggregation with `reduce()`, and `Promise.all()`.
-- **Basket Selection Data Loading**: Ensures complete datasets for accurate UI indicators.
+- **Query Optimization Pattern**: Utilizes simple separate queries, application-side data aggregation, and `Promise.all()`.
 - **Animal Count Validation System**: Dual-layer validation (frontend + backend) for operation limits.
 - **Operation Date Modification**: Supports date modification for "Misura" operations with validation and chronological order enforcement.
 - **OperationsLifecycleService**: Centralized service for handling all operation deletions to prevent state misalignment.
@@ -57,15 +56,17 @@ Preferred communication style: Simple, everyday language.
 - **Audit Logging System**: Tracks critical operations in an `audit_logs` table.
 - **Cross-FLUPSY Screening System**: Extended screening module to support basket transfers between different FLUPSY installations, including `is_cross_flupsy` flag and transport metadata.
 - **LCI Module (Life Cycle Inventory)**: Independent module for Life Cycle Inventory management, integrated for ECOTAPES project, with dedicated database tables, API, and Excel report generation.
-- **AI Recommended Activities Module**: Intelligent operational recommendations system analyzing basket data and generating prioritized activity suggestions (e.g., cleaning, sampling, harvest readiness).
-- **Production Variance Analysis Module**: AI-powered production forecast and variance analysis comparing budget targets, orders, and projected production, calculating inventory by size category and seeding requirements.
+- **AI Recommended Activities Module**: Intelligent operational recommendations system analyzing basket data and generating prioritized activity suggestions.
+- **Production Variance Analysis Module**: AI-powered production forecast and variance analysis comparing budget targets, orders, and projected production.
 - **Order Coverage Verification Module**: Dynamic simulation module verifying inventory sufficiency for orders over time, accounting for growth, with monthly snapshots and gap/coverage analysis.
-- **Growth Projection Module**: Planning module showing month-by-month progression of current inventory toward a target sale size (default TP-3000), simulating day-by-day growth with mortality.
+- **Growth Projection Module**: Planning module showing month-by-month progression of current inventory toward a target sale size, simulating day-by-day growth with mortality.
 - **Basket Transfer Module**: Atomic transfer of animals from one active basket to one or more available baskets, with total or partial transfer modes and atomic database transactions.
-- **Sieve Selection System (Setacci Vagliatura)**: DraggableCalculator extended with optional `showSieve` prop showing two dropdowns (maglia sup. +, maglia inf. -) from predefined micron sizes. Selected sieves stored in `selection_destination_baskets.sieve_up/sieve_down` and propagated to new `cycles.sieve_up/sieve_down` columns. cycleCode automatically includes sieve suffix `[+UP -DOWN]`. Utility: `client/src/lib/sieveUtils.ts`.
-- **Environmental Log (Diario Ambientale)**: Automatic daily snapshot of environmental data triggered at each login (non-blocking). Captures: Copernicus/Open-Meteo marine data (SST, wave height/period, chlorophyll, salinity) and buoy readings from ARPAV Vallona and ARPAE Gorino 2 (temperature, pH, salinity, O₂ saturation, turbidity, chlorophyll). One record per day, updated if values change. New page at `/diario-ambientale` with 6 trend charts + full data table + CSV export. Menu item under MONITORAGGIO (teal color). Table: `environmental_log`. API: `GET /api/environmental-log?days=N`, `POST /api/environmental-log/refresh`.
-- **Sales Planning Module (Pianificazione Vendite Ottimizzata)**: Dual-engine planning module balancing cash flow, revenue, and order coverage across 6-36 month horizons. Three modes: `cassa` (sell ASAP to meet monthly cash budget), `bilanciato` (orders + cash + hold rest), `ricavo` (hold all, liquidate at end). Two engines selectable via `engine` query param: (a) `greedy` — fast heuristic (<100ms), good but not provably optimal; (b) `lp` — Linear Programming via `javascript-lp-solver`, provably optimal, slower (~1-3s on 12 months). LP model variables: `x[basket,month]` (animals sold) + `alive[basket,month]` (surviving population) + slack vars for orders/cash. Constraints: conservation `alive[b,m] = alive[b,m-1]*(1-mort) - x[b,m]`, orders by size with shortfall slack, cash target by month with gap slack. Objective: `max revenue*weight - LAMBDA_ORDERS*shortfall - LAMBDA_CASH*cashGap` (weights vary by mode). Both engines share growth simulation (per-basket day-by-day SGR + size-specific mortality, hatchery arrivals). **Pricing model**: animals are sold per number (not per kg); prices in `sales_price_list.price_per_animal` are €/animale. Revenue formula: `revenue = animals_sold × price_per_animal`. UI displays animal counts per size (not kg). Tables: `sales_price_list` (size_code, price_per_animal), `sales_cash_targets` (year, month, min_revenue). Routes: `/api/pianificazione-vendite/*` (plan with engine toggle, price-list CRUD, cash-targets CRUD). Page: `/pianificazione-vendite`. UI shows engine badge + solver status (feasible/bounded/objective).
-- **Quality Classification System (PREMIUM/NORMAL/SUB)**: Cycles are automatically classified at creation based on their vagliatura history. Column `quality_class` on `cycles` table (values: 'premium', 'normal', 'sub'). Column `screening_position` on `selection_destination_baskets` ('sopra'/'sotto'). Logic: `inferScreeningPosition()` auto-detects from animalsPerKg comparison among siblings (25% threshold); `computeQualityClass()` respects parent lineage history. Frontend auto-suggests position in VagliaturaConMappa with colored badges. Badge displayed in LineageAnimali cycle rows. Historical backfill: `npx tsx scripts/backfill-quality-class.ts`.
+- **Sieve Selection System (Setacci Vagliatura)**: DraggableCalculator extended with optional `showSieve` prop showing two dropdowns (maglia sup. +, maglia inf. -) from predefined micron sizes.
+- **Environmental Log (Diario Ambientale)**: Automatic daily snapshot of environmental data (Copernicus/Open-Meteo marine data, buoy readings) triggered at each login, with a dedicated page showing trend charts, data table, and CSV export.
+- **Sales Planning Module (Pianificazione Vendite Ottimizzata)**: Dual-engine planning module balancing cash flow, revenue, and order coverage across 6-36 month horizons with three modes (`cassa`, `bilanciato`, `ricavo`) and two engines (`greedy`, `lp`).
+- **Quality Classification System (PREMIUM/NORMAL/SUB)**: Cycles are automatically classified at creation based on their vagliatura history.
+- **Report Lotto**: Dedicated page for lot reports with balance, current distribution, and history timeline.
+- **Vendite Avanzate Multi-Cliente**: Extension for generating multiple sales (one per client) from the same source operations in a single submission.
 
 ### Weight Unit Conventions
 - **Database Storage**: All weights are stored in **GRAMS**.
@@ -95,20 +96,8 @@ Preferred communication style: Simple, everyday language.
 - `@hookform/resolvers`
 
 ### Third-party Integrations
-- OpenAI GPT-4o (for AI capabilities)
-- Fatture in Cloud (for client and DDT management)
-### Report Lotto (Aprile 2026)
-- Pagina dedicata `/report-lotto` (e `/report-lotto/:lotId`) con 3 sezioni:
-  1. **Bilancio**: iniziali, morti, venduti, attivi (oggi pro-quota), residuo non spiegato, % sopravvivenza, barra impilata 100%.
-  2. **Distribuzione attuale**: tabella ceste attive con quota lotto (% e animali), taglia, ultima operazione, indicatore puro/misto.
-  3. **Cronologia**: timeline verticale degli eventi `lot_ledger` (in/activation/transfer_in/transfer_out/sale/mortality) con riferimento a cesta, FLUPSY, vagliatura e ciclo origine/destinazione.
-- Backend: `server/controllers/lot-report-controller.ts` espone `GET /api/lot-report/list` e `GET /api/lot-report/:lotId` aggregando `lot_ledger`, `basket_lot_composition` e `screening_operations`.
-- Voce di menu in **Analisi** (icona Package).
-
-### Vendite Avanzate Multi-Cliente (Aprile 2026)
-- Estensione di "Gestione Vendite Avanzate" per generare più vendite (una per cliente, con DDT/fattura separati) dalle stesse operazioni sorgente in una singola sottomissione.
-- È ammesso un residuo non allocato: le operazioni non utilizzate da nessun cliente restano "Disponibili".
-- Il flusso "singolo cliente" esistente resta invariato; nel tab "Nuova Vendita" uno switch "Modalità multi-cliente" permette di passare da un flusso all'altro.
-- Backend: `POST /api/advanced-sales/multi` (`createMultiCustomerSale` in `server/controllers/advanced-sales-controller.ts`). In una singola transazione: `SELECT ... FOR UPDATE` sulle operations selezionate, ricalcolo capacity, generazione progressiva di N numeri `VAV-NNNNNN`, creazione di N `advanced_sales` con i propri `sale_bags`, `bag_allocations` e `sale_operations_ref` (soltanto per le operazioni effettivamente usate da ciascuna vendita).
-- Validazioni server-side: invariante per-sacco `animalCount == sum(allocations.allocatedAnimals)`, somma allocazioni per operationId ≤ animali disponibili, customer obbligatorio per ogni vendita, allocazioni positive.
-- Frontend: nuovo componente `client/src/components/MultiCustomerSaleForm.tsx` con elenco "card cliente" (+ aggiungi cliente), per ogni cliente combobox o inserimento manuale + lista sacchi inline (cestello sorgente, animali, peso netto in kg), riepilogo live disponibili/allocati/residuo per cestello e globale.
+- OpenAI GPT-4o
+- Fatture in Cloud
+- Copernicus/Open-Meteo
+- ARPAV Vallona
+- ARPAE Gorino 2

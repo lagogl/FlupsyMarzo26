@@ -99,6 +99,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     expectedSize: string;
     hasExpectedSizeChange: boolean;
     daysSinceLastMeasurement: number;
+    expectedAnimalsPerKg?: number;
   }>>({
     queryKey: ['/api/baskets/expected-sizes'],
     staleTime: 120000, // 2 minutes
@@ -122,13 +123,14 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
 
   // Create a map for quick lookup of expected size changes
   const expectedSizesMap = useMemo(() => {
-    const map = new Map<number, { expectedSize: string; daysSince: number }>();
+    const map = new Map<number, { expectedSize: string; daysSince: number; expectedAnimalsPerKg?: number }>();
     if (expectedSizesData) {
       for (const item of expectedSizesData) {
         if (item.hasExpectedSizeChange) {
           map.set(item.basketId, {
             expectedSize: item.expectedSize,
-            daysSince: item.daysSinceLastMeasurement
+            daysSince: item.daysSinceLastMeasurement,
+            expectedAnimalsPerKg: item.expectedAnimalsPerKg
           });
         }
       }
@@ -435,6 +437,50 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     // animalsPerKg <= 29000 significa taglia vendibile (animali grandi)
     return animalsPerKg <= 29000;
   };
+
+  // Helper: la cesta NON è registrata come pronta, ma una pesata ≤5gg implica taglia ≥ TP-3000
+  // Cerca la pesata più recente tra TUTTE le operazioni del cestello (non solo l'ultima),
+  // così non si perde il caso in cui dopo la pesata sia stata registrata una nota o altra op.
+  const isReadyByPeso = (basket: any): boolean => {
+    if (!basket || (basket.state !== 'active' && basket.state !== 'occupied')) return false;
+    if (hasLargeSize(basket)) return false; // già "reale": esclusa per evitare doppio conteggio
+    if (!allOperations || !Array.isArray(allOperations)) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Trova la pesata più recente del cestello entro gli ultimi 5 giorni
+    let latestPeso: any = null;
+    for (const op of allOperations) {
+      if (op.basketId !== basket.id) continue;
+      if (op.type !== 'peso') continue;
+      if (!op.date || !op.animalsPerKg) continue;
+      const opDate = new Date(op.date);
+      const diffDays = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0 || diffDays > 5) continue;
+      if (!latestPeso || new Date(op.date).getTime() > new Date(latestPeso.date).getTime()) {
+        latestPeso = op;
+      }
+    }
+    if (!latestPeso) return false;
+    return latestPeso.animalsPerKg <= 29000;
+  };
+
+  // Helper: la cesta NON è pronta né per registrazione né per peso recente,
+  // ma la proiezione SGR (basata sui giorni trascorsi dall'ultima misura) la stima ≥ TP-3000
+  const isReadyBySgr = (basket: any): boolean => {
+    if (!basket || (basket.state !== 'active' && basket.state !== 'occupied')) return false;
+    if (hasLargeSize(basket)) return false;
+    if (isReadyByPeso(basket)) return false;
+    const exp = getExpectedSizeInfo(basket.id);
+    if (!exp || !exp.expectedAnimalsPerKg) return false;
+    return exp.expectedAnimalsPerKg <= 29000;
+  };
+
+  // Unione delle tre categorie: usata dal filtro "Pronte raccolta"
+  const isReadyForHarvestAny = (basket: any): boolean => {
+    return hasLargeSize(basket) || isReadyByPeso(basket) || isReadyBySgr(basket);
+  };
   
   // Helper function to get size code from the sizes table based on animalsPerKg
   const getSizeCodeFromAnimalsPerKg = (animalsPerKg: number): string => {
@@ -690,7 +736,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Render a basket position within a FLUPSY
-  const renderBasketPosition = (flupsy: any, basket: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, qualityView: boolean = false) => {
+  const renderBasketPosition = (flupsy: any, basket: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, qualityView: boolean = false, harvestHighlight: boolean = false) => {
     if (!basket) return null;
     
     // Get the latest operation for tooltip info
@@ -724,7 +770,26 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
         opacityClasses = 'opacity-40';
       }
     }
-    
+
+    // "Pronte raccolta" mode: 3 categorie con stili distinti
+    // Reale (registrata TP-3000+) → aureola dorata pulsante
+    // Da peso (peso ≤5gg implica TP-3000+) → bordo ambra
+    // Da SGR (proiezione SGR TP-3000+) → bordo blu
+    const harvestRealReady = harvestHighlight && hasLargeSize(basket);
+    const harvestPesoReady = harvestHighlight && !harvestRealReady && isReadyByPeso(basket);
+    const harvestSgrReady = harvestHighlight && !harvestRealReady && !harvestPesoReady && isReadyBySgr(basket);
+    if (harvestHighlight) {
+      if (harvestRealReady) {
+        highlightClasses = 'ring-4 ring-yellow-400 ring-offset-2 shadow-lg animate-pulse';
+      } else if (harvestPesoReady) {
+        highlightClasses = 'ring-4 ring-amber-500 ring-offset-2 shadow-md';
+      } else if (harvestSgrReady) {
+        highlightClasses = 'ring-2 ring-blue-500 ring-offset-2 ring-dashed shadow-sm';
+      } else {
+        opacityClasses = 'opacity-40';
+      }
+    }
+
     // Expected size change mode: blink effect
     if (highlightExpectedSizes) {
       if (hasExpectedChange) {
@@ -758,12 +823,30 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {!qualityView && renderQualityRibbon(basketQuality)}
               {/* Fascia diagonale larga - visibile in Vista Qualità */}
               {qualityView && renderQualityDiagonalBand(basketQuality)}
-              {/* Star badge for sellable baskets in highlight mode */}
-              {highlightLargeSizes && isSellableSize && (
-                <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 shadow-md">
+              {/* Star badge for sellable baskets in highlight mode (Con taglie grandi OPPURE Pronte raccolta - reali) */}
+              {((highlightLargeSizes && isSellableSize) || harvestRealReady) && (
+                <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 shadow-md" title="Pronte raccolta (taglia registrata TP-3000+)">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-800" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
+                </div>
+              )}
+              {/* Bilancia badge: Pronte da peso recente (≤5gg) */}
+              {harvestPesoReady && (
+                <div
+                  className="absolute -top-2 -right-2 bg-amber-500 rounded-full p-1 shadow-md flex items-center justify-center"
+                  title="Pronte stimate da pesata recente (≤5 giorni). Conferma con misura ufficiale."
+                >
+                  <Scale className="h-4 w-4 text-white" />
+                </div>
+              )}
+              {/* Clock badge: Pronte previste da proiezione SGR */}
+              {harvestSgrReady && (
+                <div
+                  className="absolute -top-2 -right-2 bg-blue-500 rounded-full p-1 shadow-md flex items-center justify-center"
+                  title="Pronte previste dalla proiezione SGR (modello di crescita). Effettuare una pesata per confermare."
+                >
+                  <Clock className="h-4 w-4 text-white" />
                 </div>
               )}
               {/* Mortality indicator - skull icon with freshness color in top-left corner */}
@@ -1025,7 +1108,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             include = needsMeasurement(basket.id);
             break;
           case 'readyHarvest':
-            include = isReadyForHarvest(basket);
+            include = isReadyForHarvestAny(basket);
             break;
           case 'heavyWeight':
             include = hasHeavyWeight(basket);
@@ -1211,7 +1294,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   // Function to render a single FLUPSY
-  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, basketFilter?: (basket: any) => boolean, qualityView: boolean = false) => {
+  const renderFlupsy = (flupsy: any, highlightLargeSizes: boolean = false, highlightExpectedSizes: boolean = false, basketFilter?: (basket: any) => boolean, qualityView: boolean = false, harvestHighlight: boolean = false) => {
     // Estrai il valore max_positions dal database (accettando varie possibili denominazioni)
     const maxPositionsFromDB = flupsy.max_positions || flupsy.maxPositions || flupsy.maxPosition || flupsy["max-positions"];
     const maxPositions = maxPositionsFromDB || 10; // Fallback se il valore non è presente
@@ -1424,7 +1507,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste DX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {dxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes, qualityView) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes, qualityView, harvestHighlight) : (
                     <div 
                       key={`empty-dx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -1459,7 +1542,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               {/* Ceste SX */}
               <div className="flex flex-row gap-2 overflow-x-auto pb-2">
                 {sxPositionsArray.map((basket, index) => (
-                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes, qualityView) : (
+                  basket ? renderBasketPosition(flupsy, basket, highlightLargeSizes, highlightExpectedSizes, qualityView, harvestHighlight) : (
                     <div 
                       key={`empty-sx-${index}`}
                       className="border border-dashed border-gray-300 rounded-md p-2 min-w-[140px] text-center"
@@ -1507,6 +1590,48 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               const activeFd = fd.filter((d: any) => d.basket.state === 'active');
               const totalAnimals = activeFd.reduce((sum: number, d: any) => sum + (d.latestOp?.animalCount || 0), 0);
               const basketCount = activeFd.length;
+
+              // Breakdown specifico per "Pronte raccolta": reali + da peso + da SGR
+              // Allineato agli helper: include sia 'active' sia 'occupied' (lo stesso che mostra il tab)
+              if (selectedTab === 'readyHarvest') {
+                const harvestFd = fd.filter((d: any) => d.basket.state === 'active' || d.basket.state === 'occupied');
+                const realFd = harvestFd.filter((d: any) => hasLargeSize(d.basket));
+                const pesoFd = harvestFd.filter((d: any) => isReadyByPeso(d.basket));
+                const sgrFd = harvestFd.filter((d: any) => isReadyBySgr(d.basket));
+                // Totali coerenti col tab: usano harvestFd (active + occupied), non solo active
+                const harvestTotalAnimals = harvestFd.reduce((sum: number, d: any) => sum + (d.latestOp?.animalCount || 0), 0);
+                const harvestBasketCount = harvestFd.length;
+                return (
+                  <div className="flex items-center flex-wrap gap-2 text-sm">
+                    <span
+                      className="px-2 py-0.5 rounded bg-yellow-50 border border-yellow-300 text-yellow-800 font-medium"
+                      title="Ceste con taglia REALE registrata ≥ TP-3000 (vendibili)"
+                    >
+                      {realFd.length} reali
+                    </span>
+                    <span className="text-gray-400">·</span>
+                    <span
+                      className="px-2 py-0.5 rounded bg-amber-50 border border-amber-300 text-amber-800 font-medium flex items-center gap-1"
+                      title="Stimate ≥ TP-3000 da pesata recente (≤5 giorni). Da confermare con misura."
+                    >
+                      <Scale className="h-3 w-3" />+{pesoFd.length} da peso
+                    </span>
+                    <span className="text-gray-400">·</span>
+                    <span
+                      className="px-2 py-0.5 rounded bg-blue-50 border border-blue-300 text-blue-800 font-medium flex items-center gap-1"
+                      title="Previste ≥ TP-3000 dalla proiezione SGR (modello di crescita)"
+                    >
+                      <Clock className="h-3 w-3" />+{sgrFd.length} previste (SGR)
+                    </span>
+                    <span className="text-gray-400">·</span>
+                    <span className="px-2 py-0.5 rounded bg-green-50 border border-green-200 text-green-800 font-medium">
+                      {harvestTotalAnimals.toLocaleString('it-IT')} animali
+                    </span>
+                    <span className="text-xs text-gray-400 italic">({harvestBasketCount} ceste · Pronte raccolta)</span>
+                  </div>
+                );
+              }
+
               return (
                 <div className="flex items-center gap-3 text-sm">
                   <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 font-medium">
@@ -1584,7 +1709,14 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   <TooltipTrigger asChild>
                     <TabsTrigger value="readyHarvest" className={selectedTab === 'readyHarvest' ? 'bg-purple-500 text-white' : 'bg-purple-100'}>Pronte raccolta</TabsTrigger>
                   </TooltipTrigger>
-                  <TooltipContent>Cestelli con taglia TP-3000 o superiore, pronti per la vendita</TooltipContent>
+                  <TooltipContent className="max-w-xs">
+                    <div className="space-y-1 text-xs">
+                      <div className="font-semibold">Pronte raccolta — 3 categorie:</div>
+                      <div>• <span className="font-medium text-yellow-700">Reali</span>: registrate TP-3000+ (anello dorato ⭐)</div>
+                      <div>• <span className="font-medium text-amber-700">Da peso</span>: pesata ≤5gg implica TP-3000+ (anello ambra ⚖)</div>
+                      <div>• <span className="font-medium text-blue-700">SGR</span>: proiezione di crescita prevede TP-3000+ (anello blu ⏱)</div>
+                    </div>
+                  </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider>
@@ -1729,8 +1861,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
             <TabsContent value="readyHarvest" className="space-y-4">
               {flupsys?.filter((flupsy: any) => {
                 const flupsyBaskets = filteredBaskets?.filter((b: any) => b.flupsyId === flupsy.id);
-                return flupsyBaskets?.some((b: any) => isReadyForHarvest(b));
-              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, isReadyForHarvest, showQualityView))}
+                return flupsyBaskets?.some((b: any) => isReadyForHarvestAny(b));
+              }).map((flupsy: any) => renderFlupsy(flupsy, false, false, isReadyForHarvestAny, showQualityView, true))}
             </TabsContent>
 
             <TabsContent value="heavyWeight" className="space-y-4">
