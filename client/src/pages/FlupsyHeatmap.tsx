@@ -160,7 +160,8 @@ export default function FlupsyHeatmap() {
           .sort((a: any, b: any) => a.position - b.position);
 
         let totalAnimals = 0;
-        let totalSellableAnimals = 0;
+        let totalSellableAnimals = 0;       // taglia ufficiale registrata <= TP-3000
+        let totalSellableWeighted = 0;       // EXTRA: solo da stima peso (ultima op peso) quando registrata non vendibile
         let activeCount = 0;
         let totalInitialAnimals = 0;
         let totalDeadCount = 0;
@@ -177,9 +178,16 @@ export default function FlupsyHeatmap() {
               const initial = op.initialAnimalCount || 0;
               totalAnimals += current;
 
-              const apk = op.measurementAnimalsPerKg || op.animalsPerKg;
-              if (apk != null && apk <= VENDIBILE_THRESHOLD) {
+              const registeredApk = op.measurementAnimalsPerKg;
+              const latestApk = op.animalsPerKg;
+              const isSellableRegistered = registeredApk != null && registeredApk <= VENDIBILE_THRESHOLD;
+              const isSellableLatest = latestApk != null && latestApk <= VENDIBILE_THRESHOLD;
+
+              if (isSellableRegistered) {
                 totalSellableAnimals += current;
+              } else if (isSellableLatest) {
+                // Vendibile solo nell'ipotesi del peso più recente — la taglia ufficiale non lo è ancora
+                totalSellableWeighted += current;
               }
 
               // Mortalità = differenza tra animali iniziali del ciclo e attuali
@@ -205,6 +213,7 @@ export default function FlupsyHeatmap() {
           sxBaskets,
           totalAnimals,
           totalSellableAnimals,
+          totalSellableWeighted,
           totalDeadCount: totalInitialAnimals > 0 ? totalDeadCount : null,
           totalInitialAnimals: totalInitialAnimals > 0 ? totalInitialAnimals : null,
           activeCount,
@@ -607,12 +616,12 @@ function BasketTile({ basket, op, sizes, maxAnimals, onNavigate }: BasketTilePro
       {/* Badge "stima dal peso" — quando ultima op è peso con taglia diversa dalla registrata */}
       {needsRemeasure && weightedInfo && (
         <div
-          className="absolute bottom-1 right-1 z-20 flex items-center gap-0.5 rounded px-1 py-0.5 bg-amber-500 text-white text-[8px] font-bold leading-none shadow"
+          className="absolute bottom-1 right-1 z-20 flex items-center gap-0.5 rounded px-1 py-0.5 bg-white text-amber-700 border border-amber-600 text-[8px] font-bold leading-none shadow-md"
           title="Taglia stimata dall'ultimo peso, diversa dalla taglia registrata"
         >
           <Scale className="h-2 w-2" />
           <span>{weightedInfo.code.replace("TP-", "")}</span>
-          <span className="text-[7px] opacity-90">{weightedInfo.grew ? "↑" : "↓"}</span>
+          <span className="text-[7px]">{weightedInfo.grew ? "↑" : "↓"}</span>
         </div>
       )}
     </div>
