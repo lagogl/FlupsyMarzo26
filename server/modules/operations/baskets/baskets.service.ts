@@ -682,7 +682,7 @@ export class BasketsService {
         INNER JOIN baskets b ON o.basket_id = b.id
         WHERE b.current_cycle_id IS NOT NULL
           AND o.cycle_id = b.current_cycle_id
-          AND o.type = 'prima-attivazione'
+          AND o.type IN ('prima-attivazione', 'prima-attivazione-da-vagliatura')
           AND o.animal_count IS NOT NULL
           AND o.animal_count > 0
       )
