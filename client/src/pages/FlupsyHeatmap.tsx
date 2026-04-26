@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { format } from "date-fns";
-import { AlertTriangle, LayoutGrid, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { AlertTriangle, LayoutGrid, TrendingUp, TrendingDown, Minus, Scale } from "lucide-react";
 
 // --- Helpers ---
 
@@ -28,6 +28,26 @@ function getSizeCodeFromAnimalsPerKg(animalsPerKg: number, sizes: any[]): string
     return animalsPerKg >= Number(min) && animalsPerKg <= Number(max);
   });
   return match?.code ?? "N/D";
+}
+
+// Calcola la taglia "stimata dal peso" quando l'ultima op è peso
+// e differisce dalla taglia ufficiale registrata (da ultima misura/prima-attivazione)
+function getWeightedSizeInfo(
+  op: any,
+  sizes: any[],
+): { code: string; differs: boolean; grew: boolean } | null {
+  if (!op || op.type !== "peso") return null;
+  const pesoApk = op.animalsPerKg;
+  const measApk = op.measurementAnimalsPerKg;
+  if (!pesoApk || !measApk) return null;
+  const pesoSize = getSizeCodeFromAnimalsPerKg(pesoApk, sizes);
+  const measSize = getSizeCodeFromAnimalsPerKg(measApk, sizes);
+  if (pesoSize === "N/D" || measSize === "N/D") return null;
+  return {
+    code: pesoSize,
+    differs: pesoSize !== measSize,
+    grew: pesoApk < measApk, // meno animali/kg = animali più grandi = cresciuti
+  };
 }
 
 // Returns { bg, text } hex colors for a TP-XXXX code
@@ -355,6 +375,13 @@ function FlupsyCard({
     1
   );
 
+  // Conteggio ceste con taglia stimata dal peso diversa dalla registrata (da misurare)
+  const toMeasureCount = allBaskets.filter((b: any) => {
+    if (!b.currentCycleId) return false;
+    const info = getWeightedSizeInfo(latestOpsMap[b.id], sizes);
+    return info?.differs;
+  }).length;
+
   const rows = [
     { label: "DX", baskets: dxBaskets },
     { label: "SX", baskets: sxBaskets },
@@ -386,6 +413,20 @@ function FlupsyCard({
                 <span className="font-bold text-green-700">{fmtAnimals(totalSellableAnimals)}</span>{" "}
                 <span className="text-xs text-green-600">vendibili</span>
               </span>
+            )}
+            {toMeasureCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold cursor-help">
+                    <Scale className="h-3 w-3" />
+                    {toMeasureCount} da misurare
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">
+                  Ceste in cui l'ultimo peso indica una taglia diversa da quella registrata.
+                  Serve un'operazione di <span className="font-bold">misura</span> per aggiornare la taglia ufficiale.
+                </TooltipContent>
+              </Tooltip>
             )}
             {avgMort !== null && (
               <Tooltip>
@@ -455,6 +496,10 @@ function BasketTile({ basket, op, sizes, maxAnimals, onNavigate }: BasketTilePro
   const sizeCode = isActive && animalsPerKg ? getSizeCodeFromAnimalsPerKg(animalsPerKg, sizes) : null;
   const hasSize = !!(sizeCode && sizeCode !== "N/D");
 
+  // Taglia stimata dal peso (solo se ultima op è 'peso' e differisce dalla registrata)
+  const weightedInfo = isActive ? getWeightedSizeInfo(op, sizes) : null;
+  const needsRemeasure = !!weightedInfo?.differs;
+
   const { bg } = hasSize
     ? getSizeHexColor(sizeCode!)
     : isActive
@@ -475,8 +520,9 @@ function BasketTile({ basket, op, sizes, maxAnimals, onNavigate }: BasketTilePro
       onClick={() => isActive && basket.currentCycleId && onNavigate(`/cycles/${basket.currentCycleId}`)}
       className={`
         relative overflow-hidden flex flex-col items-center justify-center gap-1
-        rounded-xl w-[96px] h-[100px] select-none border border-white/30
+        rounded-xl w-[96px] h-[100px] select-none
         transition-all duration-150
+        ${needsRemeasure ? "border-2 border-amber-500 shadow-amber-200 shadow-md" : "border border-white/30"}
         ${isActive ? "cursor-pointer hover:scale-105 hover:shadow-lg" : "cursor-default opacity-35"}
       `}
       style={{ backgroundColor: "#f0f4f8" }}
@@ -557,6 +603,18 @@ function BasketTile({ basket, op, sizes, maxAnimals, onNavigate }: BasketTilePro
       {highMort && (
         <div className="absolute top-1.5 left-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white shadow z-20" />
       )}
+
+      {/* Badge "stima dal peso" — quando ultima op è peso con taglia diversa dalla registrata */}
+      {needsRemeasure && weightedInfo && (
+        <div
+          className="absolute bottom-1 right-1 z-20 flex items-center gap-0.5 rounded px-1 py-0.5 bg-amber-500 text-white text-[8px] font-bold leading-none shadow"
+          title="Taglia stimata dall'ultimo peso, diversa dalla taglia registrata"
+        >
+          <Scale className="h-2 w-2" />
+          <span>{weightedInfo.code.replace("TP-", "")}</span>
+          <span className="text-[7px] opacity-90">{weightedInfo.grew ? "↑" : "↓"}</span>
+        </div>
+      )}
     </div>
   );
 
@@ -573,8 +631,18 @@ function BasketTile({ basket, op, sizes, maxAnimals, onNavigate }: BasketTilePro
           </div>
           {sizeCode && sizeCode !== "N/D" && (
             <div className="flex justify-between">
-              <span className="text-gray-500">Taglia</span>
+              <span className="text-gray-500">Taglia registrata</span>
               <span className="font-semibold">{sizeCode}</span>
+            </div>
+          )}
+          {weightedInfo?.differs && (
+            <div className="flex justify-between bg-amber-50 -mx-1 px-1 py-0.5 rounded">
+              <span className="text-amber-700 flex items-center gap-1">
+                <Scale className="h-3 w-3" /> Stima dal peso
+              </span>
+              <span className="font-bold text-amber-700">
+                {weightedInfo.code} {weightedInfo.grew ? "↑" : "↓"}
+              </span>
             </div>
           )}
           {animalCount != null && (
