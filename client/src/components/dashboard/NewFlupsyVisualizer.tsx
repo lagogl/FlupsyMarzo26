@@ -9,7 +9,7 @@ import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus, Download, Users, StickyNote } from 'lucide-react';
+import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus, Download, Users, StickyNote, Scale } from 'lucide-react';
 import { getOperationTypeLabel } from '@/lib/utils';
 import * as ExcelJS from 'exceljs';
 import { AssignGroupDialog } from '@/components/AssignGroupDialog';
@@ -795,16 +795,43 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
               )}
               <div className="text-xs text-center text-gray-500 font-medium">CESTA #{basket.physicalNumber}</div>
               
-              {latestOperation && (
+              {latestOperation && (() => {
+                // Taglia stimata da peso recente (≤5 giorni di calendario): vince sulla proiezione SGR
+                const registeredSize = measurementAnimalsPerKg
+                  ? getSizeCodeFromAnimalsPerKg(measurementAnimalsPerKg)
+                  : null;
+
+                let pesoSize: string | null = null;
+                if (latestOperation.type === 'peso' && latestOperation.date && latestOperation.animalsPerKg) {
+                  const opDate = new Date(latestOperation.date);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const diffDays = Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24));
+                  if (diffDays >= 0 && diffDays <= 5) {
+                    const code = getSizeCodeFromAnimalsPerKg(latestOperation.animalsPerKg);
+                    if (code && code !== registeredSize) {
+                      pesoSize = code;
+                    }
+                  }
+                }
+
+                return (
                 <>
-                  {/* Taglia registrata + taglia attesa se diversa - usa measurementAnimalsPerKg */}
+                  {/* Taglia registrata + (taglia da peso recente OPPURE taglia attesa SGR) */}
                   <div className="font-bold text-sm text-center mt-1">
-                    {measurementAnimalsPerKg && getSizeCodeFromAnimalsPerKg(measurementAnimalsPerKg)}
-                    {hasExpectedChange && (
+                    {registeredSize}
+                    {pesoSize ? (
+                      <span
+                        className="text-amber-600 ml-1 inline-flex items-center gap-0.5"
+                        title="Taglia stimata dall'ultima pesata (≤5 giorni). Vince sulla proiezione SGR finché non viene fatta una misura ufficiale."
+                      >
+                        → <Scale className="h-3 w-3 inline-block" />{pesoSize}
+                      </span>
+                    ) : hasExpectedChange ? (
                       <span className="text-blue-600 ml-1">
                         → {expectedSizeInfo?.expectedSize}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   
                   {/* Peso totale e densità */}
@@ -841,7 +868,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                     )}
                   </div>
                 </>
-              )}
+                );
+              })()}
               
               {!latestOperation && (
                 <div className="text-xs text-center my-2 text-gray-500">
