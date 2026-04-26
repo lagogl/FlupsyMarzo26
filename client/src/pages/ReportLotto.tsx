@@ -8,7 +8,29 @@ import {
   Package, Search, ArrowLeft, AlertCircle, TrendingUp,
   Activity, Boxes, Skull, ShoppingCart, GitMerge, GitBranch,
   Calendar, MapPin, Hash, Layers, ChevronRight, Info, HelpCircle, Eye, Heart, EyeOff,
+  ShieldCheck, ShieldAlert, ShieldQuestion, Shield,
 } from 'lucide-react';
+
+// ============ COMPONENTI CONFIDENZA ============
+type ConfLevel = 'high' | 'medium' | 'low' | 'none';
+
+const CONF_META: Record<ConfLevel, { label: string; cls: string; icon: any; desc: string }> = {
+  high:   { label: 'Alta',      cls: 'bg-emerald-100 text-emerald-800 border-emerald-300', icon: ShieldCheck,    desc: 'Numeri prevalentemente misurati su cesti puri' },
+  medium: { label: 'Media',     cls: 'bg-amber-100 text-amber-800 border-amber-300',       icon: Shield,         desc: 'Quota significativa stimata da cesti misti' },
+  low:    { label: 'Bassa',     cls: 'bg-red-100 text-red-800 border-red-300',             icon: ShieldAlert,    desc: 'Buona parte degli animali è stimata o fuori tracciamento' },
+  none:   { label: 'N/D',       cls: 'bg-gray-100 text-gray-500 border-gray-300',          icon: ShieldQuestion, desc: 'Dati insufficienti per un giudizio' },
+};
+
+function ConfidenceBadge({ level, score, compact }: { level: ConfLevel; score?: number; compact?: boolean }) {
+  const meta = CONF_META[level] ?? CONF_META.none;
+  const Icon = meta.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium ${meta.cls}`} title={meta.desc}>
+      <Icon className="w-3 h-3" />
+      {compact ? `${score ?? '–'}%` : `Confidenza ${meta.label}${score != null ? ` (${score}%)` : ''}`}
+    </span>
+  );
+}
 
 const fmt = (n: number) => Number.isFinite(n) ? new Intl.NumberFormat('it-IT').format(Math.round(n)) : '—';
 const fmtPct = (n: number) => Number.isFinite(n) ? `${n.toFixed(1)}%` : '—';
@@ -31,6 +53,10 @@ interface Lot {
   deaths: number;
   sales: number;
   survival_pct: number | null;
+  pure_baskets: number;
+  mixed_baskets: number;
+  confidence_score: number;
+  confidence_level: ConfLevel;
 }
 
 function LotPicker() {
@@ -78,7 +104,7 @@ function LotPicker() {
           {isLoading && <div className="p-6 text-center text-gray-400">Caricamento...</div>}
           {!isLoading && (() => {
             const hasLost = filtered.some(l => l.lost_tracking > 0);
-            const colCount = hasLost ? 12 : 11;
+            const colCount = hasLost ? 13 : 12;
 
             // Totali
             const totInitial    = filtered.reduce((s, l) => s + (l.animal_count ?? 0), 0);
@@ -120,6 +146,11 @@ function LotPicker() {
                       <th className="py-2 px-3 text-right text-xs font-semibold text-blue-600">
                         <span className="flex items-center justify-end gap-1"><Heart className="w-3 h-3" />Sopravv.</span>
                       </th>
+                      <th className="py-2 px-3 text-center text-xs font-semibold text-gray-600">
+                        <span className="flex items-center justify-center gap-1" title="Quanto sono affidabili i numeri di questo lotto">
+                          <ShieldCheck className="w-3 h-3" />Confid.
+                        </span>
+                      </th>
                       <th className="py-2 px-3 text-center text-xs font-semibold text-gray-600">Stato</th>
                       <th></th>
                     </tr>
@@ -160,6 +191,9 @@ function LotPicker() {
                           {l.survival_pct !== null ? `${l.survival_pct.toFixed(1)}%` : '—'}
                         </td>
                         <td className="py-2 px-3 text-center">
+                          <ConfidenceBadge level={l.confidence_level ?? 'none'} score={l.confidence_score} compact />
+                        </td>
+                        <td className="py-2 px-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${l.state === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                             {l.state === 'active' ? 'Attivo' : 'Esaurito'}
                           </span>
@@ -189,7 +223,7 @@ function LotPicker() {
                         <td className={`py-2 px-3 text-right text-xs font-bold ${survColor(totSurvPct ?? null)}`}>
                           {totSurvPct !== null ? `${totSurvPct.toFixed(1)}%` : '—'}
                         </td>
-                        <td colSpan={2}></td>
+                        <td colSpan={3}></td>
                       </tr>
                     </tfoot>
                   )}
@@ -220,6 +254,16 @@ interface ReportData {
     wasScreened: boolean;
     lastTrackedDate: string | null;
   };
+  confidence: {
+    score: number;
+    level: ConfLevel;
+    measuredAnimals: number;
+    estimatedAnimals: number;
+    untrackedAnimals: number;
+    pureBasketsCount: number;
+    mixedBasketsCount: number;
+    untrackedBasketsCount: number;
+  };
   distribution: any[];
   lostTracking: any[];
   timeline: any[];
@@ -245,9 +289,14 @@ function LotReportDetail({ lotId }: { lotId: number }) {
     </div>
   );
 
-  const { lot, bilancio, distribution, lostTracking, timeline } = data;
+  const { lot, bilancio, confidence, distribution, lostTracking, timeline } = data;
   const balanced = Math.abs(bilancio.residualPct) < 1;
   const hasLostTracking = (lostTracking?.length ?? 0) > 0;
+  const conf = confidence ?? { score: 0, level: 'none' as ConfLevel, measuredAnimals: 0, estimatedAnimals: 0, untrackedAnimals: 0, pureBasketsCount: 0, mixedBasketsCount: 0, untrackedBasketsCount: 0 };
+  const confTotal = conf.measuredAnimals + conf.estimatedAnimals + conf.untrackedAnimals;
+  const measuredPct = confTotal > 0 ? (conf.measuredAnimals / confTotal) * 100 : 0;
+  const estimatedPct = confTotal > 0 ? (conf.estimatedAnimals / confTotal) * 100 : 0;
+  const untrackedPct = confTotal > 0 ? (conf.untrackedAnimals / confTotal) * 100 : 0;
 
   // Stato umanamente leggibile del lotto
   let statusBadge: { label: string; cls: string; desc: string };
@@ -388,7 +437,11 @@ function LotReportDetail({ lotId }: { lotId: number }) {
             <Stat
               label="Attivi oggi"
               value={fmt(bilancio.activeNow)}
-              sub={`${fmtPct(bilancio.activeNowPct)} · ${distribution.length} ${distribution.length === 1 ? 'cesta' : 'ceste'}`}
+              sub={
+                conf.mixedBasketsCount > 0
+                  ? `${fmtPct(bilancio.activeNowPct)} · ${conf.pureBasketsCount} pure + ${conf.mixedBasketsCount} miste`
+                  : `${fmtPct(bilancio.activeNowPct)} · ${distribution.length} ${distribution.length === 1 ? 'cesta' : 'ceste'}`
+              }
               color="text-emerald-700"
               icon={Boxes}
             />
@@ -425,6 +478,88 @@ function LotReportDetail({ lotId }: { lotId: number }) {
                 {bilancio.residual >= 0 ? '+' : ''}{fmt(bilancio.residual)}{' '}
                 <span className="text-xs font-normal">({bilancio.residualPct >= 0 ? '+' : ''}{fmtPct(bilancio.residualPct)})</span>
                 {bilancio.residual < 0 && <span className="text-xs font-normal text-gray-500 ml-2">(animali in più rispetto agli iniziali — tipico delle vagliature pro-quota a causa degli arrotondamenti)</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Pannello Qualità del tracciamento */}
+          {confTotal > 0 && (
+            <div className="mt-4 p-3 rounded-lg border bg-slate-50 border-slate-200">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-slate-600" />
+                  <span className="text-sm font-semibold text-slate-800">Qualità del tracciamento</span>
+                  <ConfidenceBadge level={conf.level} score={conf.score} />
+                </div>
+                <span className="text-xs text-slate-500" title="Animali misurati direttamente · Animali stimati da cesti misti · Animali fuori tracciamento">
+                  <HelpCircle className="w-3 h-3 inline mr-1" />
+                  pesi: misurato 100% · stimato 60% · fuori tracc. 0%
+                </span>
+              </div>
+
+              {/* Barra impilata misurato/stimato/fuori-tracciamento */}
+              <div className="h-5 w-full rounded overflow-hidden flex bg-gray-100 border">
+                {measuredPct > 0.1 && (
+                  <div className="h-full flex items-center justify-center text-[10px] font-medium text-white bg-emerald-500"
+                    style={{ width: `${measuredPct}%` }} title={`Misurato: ${fmt(conf.measuredAnimals)}`}>
+                    {measuredPct > 8 ? `${measuredPct.toFixed(0)}%` : ''}
+                  </div>
+                )}
+                {estimatedPct > 0.1 && (
+                  <div className="h-full flex items-center justify-center text-[10px] font-medium text-white bg-amber-400"
+                    style={{ width: `${estimatedPct}%` }} title={`Stimato: ${fmt(conf.estimatedAnimals)}`}>
+                    {estimatedPct > 8 ? `${estimatedPct.toFixed(0)}%` : ''}
+                  </div>
+                )}
+                {untrackedPct > 0.1 && (
+                  <div className="h-full flex items-center justify-center text-[10px] font-medium text-gray-700 bg-gray-300"
+                    style={{ width: `${untrackedPct}%` }} title={`Fuori tracciamento: ${fmt(conf.untrackedAnimals)}`}>
+                    {untrackedPct > 8 ? `${untrackedPct.toFixed(0)}%` : ''}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                <div className="p-2 rounded bg-white border border-emerald-200">
+                  <div className="flex items-center gap-1 text-emerald-700 font-medium">
+                    <span className="w-2 h-2 rounded-sm bg-emerald-500" />
+                    Misurato
+                  </div>
+                  <div className="text-base font-semibold text-emerald-800 mt-1">{fmt(conf.measuredAnimals)}</div>
+                  <div className="text-[11px] text-gray-500">
+                    {conf.pureBasketsCount} {conf.pureBasketsCount === 1 ? 'cesta pura' : 'ceste pure'} (un solo lotto)
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-white border border-amber-200">
+                  <div className="flex items-center gap-1 text-amber-700 font-medium">
+                    <span className="w-2 h-2 rounded-sm bg-amber-400" />
+                    Stimato
+                  </div>
+                  <div className="text-base font-semibold text-amber-800 mt-1">{fmt(conf.estimatedAnimals)}</div>
+                  <div className="text-[11px] text-gray-500">
+                    {conf.mixedBasketsCount} {conf.mixedBasketsCount === 1 ? 'cesta mista' : 'ceste miste'} (calcolo pro-quota)
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-white border border-gray-200">
+                  <div className="flex items-center gap-1 text-gray-700 font-medium">
+                    <span className="w-2 h-2 rounded-sm bg-gray-300" />
+                    Fuori tracciamento
+                  </div>
+                  <div className="text-base font-semibold text-gray-800 mt-1">{fmt(conf.untrackedAnimals)}</div>
+                  <div className="text-[11px] text-gray-500">
+                    {conf.untrackedBasketsCount} {conf.untrackedBasketsCount === 1 ? 'cesta' : 'ceste'} con tracciamento perso
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 text-[11px] text-slate-600">
+                <Info className="w-3 h-3 inline mr-1" />
+                {conf.level === 'high'  && 'Affidabilità alta: i numeri arrivano in larga parte da misurazioni dirette su cesti puri.'}
+                {conf.level === 'medium' && 'Affidabilità media: una parte significativa proviene da stime su cesti misti.'}
+                {conf.level === 'low'   && 'Affidabilità bassa: gran parte degli animali è stimata o fuori tracciamento. Interpretare con prudenza.'}
+                {conf.level === 'none'  && 'Dati insufficienti per un giudizio.'}
               </div>
             </div>
           )}

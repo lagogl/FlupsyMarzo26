@@ -217,6 +217,48 @@ export async function getLotReport(req: Request, res: Response) {
       notes: r.notes,
     }));
 
+    // ============ CONFIDENCE / QUALITÀ TRACCIAMENTO ============
+    // Classifica gli animali in 3 categorie di affidabilità:
+    //  - measured: in cesti puri (1 solo lotto) → numero esatto
+    //  - estimated: in cesti misti → quota proporzionale (stima)
+    //  - untracked: in cicli chiusi senza propagazione (fuori tracciamento)
+    // Score 0-100 = (measured*1.0 + estimated*0.6 + untracked*0) / total
+    const pureBasketsCount = distribution.filter(d => !d.isMixed).length;
+    const mixedBasketsCount = distribution.filter(d => d.isMixed).length;
+    const untrackedBasketsCount = lostTracking.length;
+
+    const measuredAnimals = bilancio.activeInPure;
+    const estimatedAnimals = bilancio.activeInMixed;
+    const untrackedAnimals = bilancio.lostTracking;
+    const totalTrackedOrLost = measuredAnimals + estimatedAnimals + untrackedAnimals;
+
+    let confidenceScore: number;
+    if (totalTrackedOrLost === 0) {
+      // Nessun animale ancora "vivo nel sistema" → score basato su lost_tracking
+      confidenceScore = (lot.animal_count > 0 && untrackedAnimals === 0) ? 100 : 0;
+    } else {
+      confidenceScore = Math.round(
+        ((measuredAnimals * 1.0 + estimatedAnimals * 0.6 + untrackedAnimals * 0.0) / totalTrackedOrLost) * 100
+      );
+    }
+
+    let confidenceLevel: 'high' | 'medium' | 'low' | 'none';
+    if (totalTrackedOrLost === 0 && initial === 0) confidenceLevel = 'none';
+    else if (confidenceScore >= 80) confidenceLevel = 'high';
+    else if (confidenceScore >= 50) confidenceLevel = 'medium';
+    else confidenceLevel = 'low';
+
+    const confidence = {
+      score: confidenceScore,
+      level: confidenceLevel,
+      measuredAnimals,
+      estimatedAnimals,
+      untrackedAnimals,
+      pureBasketsCount,
+      mixedBasketsCount,
+      untrackedBasketsCount,
+    };
+
     return res.json({
       lot: {
         id: lot.id,
@@ -229,6 +271,7 @@ export async function getLotReport(req: Request, res: Response) {
         state: lot.state,
       },
       bilancio,
+      confidence,
       distribution,
       lostTracking,
       timeline,
@@ -246,6 +289,12 @@ export async function getLotReport(req: Request, res: Response) {
 export async function getLotsForReport(req: Request, res: Response) {
   try {
     const rows = await db.execute(sql`
+      WITH basket_lot_count AS (
+        /* Conta quanti lotti distinti coesistono in ogni coppia (cestello, ciclo) */
+        SELECT basket_id, cycle_id, COUNT(DISTINCT lot_id) AS lot_count
+        FROM basket_lot_composition
+        GROUP BY basket_id, cycle_id
+      )
       SELECT
         l.id,
         l.arrival_date,
@@ -262,7 +311,40 @@ export async function getLotsForReport(req: Request, res: Response) {
           WHERE blc.lot_id = l.id AND c.state = 'active'
         ) AS active_baskets,
 
-        /* Animali attivi oggi (pro-quota su cesti attivi con blc) */
+        /* Cesti attivi PURI (1 solo lotto in basket_lot_composition) +
+           cicli mono-lotto sul cycles.lot_id senza composition */
+        (
+          (
+            SELECT COUNT(DISTINCT blc.basket_id)
+            FROM basket_lot_composition blc
+            JOIN cycles c ON c.id = blc.cycle_id
+            JOIN basket_lot_count blcnt
+              ON blcnt.basket_id = blc.basket_id AND blcnt.cycle_id = blc.cycle_id
+            WHERE blc.lot_id = l.id AND c.state = 'active' AND blcnt.lot_count = 1
+          )
+          +
+          (
+            SELECT COUNT(DISTINCT c.basket_id)
+            FROM cycles c
+            WHERE c.lot_id = l.id AND c.state = 'active'
+              AND NOT EXISTS (
+                SELECT 1 FROM basket_lot_composition blc2
+                WHERE blc2.basket_id = c.basket_id AND blc2.cycle_id = c.id
+              )
+          )
+        ) AS pure_baskets,
+
+        /* Cesti attivi MISTI (>=2 lotti in basket_lot_composition) */
+        (
+          SELECT COUNT(DISTINCT blc.basket_id)
+          FROM basket_lot_composition blc
+          JOIN cycles c ON c.id = blc.cycle_id
+          JOIN basket_lot_count blcnt
+            ON blcnt.basket_id = blc.basket_id AND blcnt.cycle_id = blc.cycle_id
+          WHERE blc.lot_id = l.id AND c.state = 'active' AND blcnt.lot_count > 1
+        ) AS mixed_baskets,
+
+        /* Animali attivi oggi (pro-quota su cesti attivi con blc) + fallback mono-lotto */
         COALESCE((
           SELECT SUM(
             CASE
@@ -278,9 +360,24 @@ export async function getLotsForReport(req: Request, res: Response) {
             ORDER BY date DESC, id DESC LIMIT 1
           ) last_op ON TRUE
           WHERE blc.lot_id = l.id AND c.state = 'active'
+        ), 0)
+        + COALESCE((
+          /* Fallback: cicli attivi mono-lotto su cycles.lot_id senza alcuna riga in BLC */
+          SELECT SUM(COALESCE(last_op.animal_count, 0))
+          FROM cycles c
+          LEFT JOIN LATERAL (
+            SELECT animal_count FROM operations
+            WHERE basket_id = c.basket_id AND cycle_id = c.id
+            ORDER BY date DESC, id DESC LIMIT 1
+          ) last_op ON TRUE
+          WHERE c.lot_id = l.id AND c.state = 'active'
+            AND NOT EXISTS (
+              SELECT 1 FROM basket_lot_composition blcx
+              WHERE blcx.basket_id = c.basket_id AND blcx.cycle_id = c.id
+            )
         ), 0) AS active_now,
 
-        /* Fuori tracciamento: cesti chiusi con blc per questo lotto */
+        /* Fuori tracciamento: cesti chiusi con blc per questo lotto + fallback mono-lotto */
         COALESCE((
           SELECT SUM(
             CASE
@@ -296,6 +393,21 @@ export async function getLotsForReport(req: Request, res: Response) {
             ORDER BY date DESC, id DESC LIMIT 1
           ) last_op ON TRUE
           WHERE blc.lot_id = l.id AND c.state = 'closed'
+        ), 0)
+        + COALESCE((
+          /* Fallback: cicli chiusi mono-lotto su cycles.lot_id senza alcuna riga in BLC */
+          SELECT SUM(COALESCE(last_op.animal_count, 0))
+          FROM cycles c
+          LEFT JOIN LATERAL (
+            SELECT animal_count FROM operations
+            WHERE basket_id = c.basket_id AND cycle_id = c.id
+            ORDER BY date DESC, id DESC LIMIT 1
+          ) last_op ON TRUE
+          WHERE c.lot_id = l.id AND c.state = 'closed'
+            AND NOT EXISTS (
+              SELECT 1 FROM basket_lot_composition blcx
+              WHERE blcx.basket_id = c.basket_id AND blcx.cycle_id = c.id
+            )
         ), 0) AS lost_tracking,
 
         /* Data primo evento fuori tracciamento (= fine tracciamento integrale) */
@@ -334,15 +446,44 @@ export async function getLotsForReport(req: Request, res: Response) {
       const lostTracking = Number(r.lost_tracking) || 0;
       const deaths = Number(r.deaths) || 0;
       const sales = Number(r.sales) || 0;
+      const pureBaskets = Number(r.pure_baskets) || 0;
+      const mixedBaskets = Number(r.mixed_baskets) || 0;
       const survivalPct = initial > 0 ? ((activeNow + sales + lostTracking) / initial) * 100 : null;
+
+      // Confidence score (0-100): pesi animali misurati/stimati/non tracciati
+      // Proxy per la lista: usiamo il rapporto cesti puri/misti per stimare quanto degli
+      // active_now è "misurato" vs "stimato pro-quota". I lost_tracking pesano 0.
+      const totalAnchor = activeNow + lostTracking;
+      let confScore = 0;
+      let confLevel: 'high' | 'medium' | 'low' | 'none';
+
+      if (totalAnchor === 0) {
+        // Lotto esaurito o senza animali tracciati → nessun giudizio di affidabilità
+        confLevel = 'none';
+      } else {
+        const totalActiveBaskets = pureBaskets + mixedBaskets;
+        const pureRatio = totalActiveBaskets > 0 ? pureBaskets / totalActiveBaskets : 1;
+        const measuredEst = activeNow * pureRatio;
+        const estimatedEst = activeNow * (1 - pureRatio);
+        const raw = ((measuredEst * 1.0 + estimatedEst * 0.6) / totalAnchor) * 100;
+        confScore = Math.max(0, Math.min(100, Math.round(raw)));
+        if (confScore >= 80) confLevel = 'high';
+        else if (confScore >= 50) confLevel = 'medium';
+        else confLevel = 'low';
+      }
+
       return {
         ...r,
         active_now: activeNow,
         lost_tracking: lostTracking,
         deaths,
         sales,
+        pure_baskets: pureBaskets,
+        mixed_baskets: mixedBaskets,
         survival_pct: survivalPct !== null ? Math.round(survivalPct * 10) / 10 : null,
         last_tracked_date: r.last_tracked_date ?? null,
+        confidence_score: confScore,
+        confidence_level: confLevel,
       };
     });
 
