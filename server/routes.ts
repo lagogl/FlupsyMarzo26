@@ -65,6 +65,7 @@ import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import basketTransferRouter from "./modules/operations/transfer/basket-transfer.routes";
 import { getBasketLotComposition } from "./services/basket-lot-composition.service";
 import { determineSizeByAnimalsPerKg } from "./utils/size-determination";
+import { computeMisuraAnimalCount, recomputeCycleMisure } from "./utils/misura-mortality";
 import { operationsLifecycleService } from "./services/operations-lifecycle.service";
 
 // Importazione del router per le API esterne
@@ -3224,55 +3225,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // === MORTALITÀ CUMULATIVA ===
-        let finalAnimalCount = animalCount || null;
-        let calculatedMortalityRate = null;
-        let calculatedSampleCount = null;
+        // === REGOLA MORTALITÀ "GUSCI CHE VOLANO VIA" ===
+        // Se la mortalità rilevata è ≤ alla massima storica (prima-attivazione + misure
+        // precedenti), si presume siano gli stessi morti già conteggiati: non si scala nulla.
+        // Se è maggiore, viene applicato solo il delta come nuova mortalità reale.
         let operationNotes = notes || null;
-        
-        const primaAttivazioneResult = await db
-          .select({ animalCount: schema.operations.animalCount })
-          .from(schema.operations)
-          .where(
-            and(
-              eq(schema.operations.cycleId, cycleId),
-              eq(schema.operations.type, 'prima-attivazione')
-            )
-          )
-          .orderBy(sql`${schema.operations.id} ASC`)
-          .limit(1);
-        
-        const lastOperationResult = await db
-          .select({ animalCount: schema.operations.animalCount })
-          .from(schema.operations)
-          .where(eq(schema.operations.cycleId, cycleId))
-          .orderBy(sql`${schema.operations.id} DESC`)
-          .limit(1);
-        
-        const originalCount = primaAttivazioneResult.length > 0 ? primaAttivazioneResult[0].animalCount || 0 : 0;
-        const lastCount = lastOperationResult.length > 0 ? lastOperationResult[0].animalCount || 0 : originalCount;
-        
-        console.log(`📊 MISURA ALLINEATA - Prima attivazione: ${originalCount} animali, Ultima operazione: ${lastCount} animali`);
-        
-        const hasMortality = deadCount && deadCount > 0;
-        const effectiveLiveAnimals = liveAnimals || 0;
-        const effectiveDeadCount = deadCount || 0;
-        const totalSample = effectiveLiveAnimals + effectiveDeadCount;
-        
-        // Flusso UNIFICATO: stessa logica sia con mortalità che senza
-        const mortalityRate = (hasMortality && totalSample > 0) ? effectiveDeadCount / totalSample : 0;
-        const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
-        finalAnimalCount = Math.min(calculatedCount, lastCount);
-        calculatedMortalityRate = mortalityRate * 100;
-        calculatedSampleCount = totalSample > 0 ? totalSample : null;
-        
-        if (hasMortality) {
-          console.log(`🔴 MISURA ALLINEATA - Mortalità: ${(mortalityRate * 100).toFixed(2)}%`);
-        } else {
-          console.log(`🟢 MISURA ALLINEATA - Senza mortalità: 0%, mantengo ultimo conteggio`);
-        }
-        console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
-        console.log(`   Vincolo (min con ${lastCount}): ${finalAnimalCount}`);
+
+        const misuraCalc = await computeMisuraAnimalCount({
+          cycleId,
+          liveAnimals: liveAnimals || 0,
+          deadCount: deadCount || 0,
+        });
+
+        const finalAnimalCount = misuraCalc.finalAnimalCount;
+        const calculatedMortalityRate = misuraCalc.mortalityRatePct;
+        const calculatedSampleCount = misuraCalc.sampleCount;
+
+        console.log(`📊 MISURA ALLINEATA - Riferimento mort. ${misuraCalc.referenceMortalityPct.toFixed(2)}%, ultimo conteggio ${misuraCalc.lastCount}`);
+        console.log(`   ${misuraCalc.applied}: ${misuraCalc.reason}`);
+        console.log(`   → animal_count finale: ${finalAnimalCount}`);
         
         // === LOTTI MISTI: Arricchire note e metadata ===
         let operationMetadata = null;
@@ -4608,6 +4579,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Endpoint di amministrazione per sincronizzare la sequenza degli ID dei lotti
+  // === RICALCOLO MISURE: regola "gusci che volano via" ===
+  // GET /api/admin/recalc-misure?cycleId=NN  → anteprima per un singolo ciclo
+  // GET /api/admin/recalc-misure              → anteprima per TUTTI i cicli (solo righe che cambiano)
+  app.get("/api/admin/recalc-misure", async (req, res) => {
+    try {
+      const cycleIdParam = req.query.cycleId ? parseInt(String(req.query.cycleId)) : null;
+
+      let cycleIds: number[];
+      if (cycleIdParam && !isNaN(cycleIdParam)) {
+        cycleIds = [cycleIdParam];
+      } else {
+        const rows = await db
+          .selectDistinct({ cycleId: schema.operations.cycleId })
+          .from(schema.operations)
+          .where(sql`${schema.operations.cycleId} IS NOT NULL AND ${schema.operations.type} = 'misura'`);
+        cycleIds = rows.map(r => r.cycleId).filter((x): x is number => x != null);
+      }
+
+      const allChanges: any[] = [];
+      let totalAnimalsRecovered = 0;
+      let cyclesAffected = 0;
+
+      for (const cId of cycleIds) {
+        const recalc = await recomputeCycleMisure(cId);
+        const changed = recalc.filter(r => r.changed);
+        if (changed.length > 0) {
+          cyclesAffected++;
+          for (const row of changed) {
+            const delta = (row.newAnimalCount || 0) - (row.oldAnimalCount || 0);
+            totalAnimalsRecovered += delta;
+            allChanges.push({ cycleId: cId, ...row, delta });
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        mode: 'preview',
+        cyclesScanned: cycleIds.length,
+        cyclesAffected,
+        operationsChanged: allChanges.length,
+        totalAnimalsRecovered,
+        changes: allChanges,
+      });
+    } catch (error) {
+      console.error("Errore nel ricalcolo misure (preview):", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // POST /api/admin/recalc-misure/apply?cycleId=NN  → applica gli update al DB
+  app.post("/api/admin/recalc-misure/apply", async (req, res) => {
+    try {
+      const cycleIdParam = req.query.cycleId ? parseInt(String(req.query.cycleId)) : null;
+
+      let cycleIds: number[];
+      if (cycleIdParam && !isNaN(cycleIdParam)) {
+        cycleIds = [cycleIdParam];
+      } else {
+        const rows = await db
+          .selectDistinct({ cycleId: schema.operations.cycleId })
+          .from(schema.operations)
+          .where(sql`${schema.operations.cycleId} IS NOT NULL AND ${schema.operations.type} = 'misura'`);
+        cycleIds = rows.map(r => r.cycleId).filter((x): x is number => x != null);
+      }
+
+      let totalUpdates = 0;
+      let totalAnimalsRecovered = 0;
+      const updatedOps: any[] = [];
+
+      for (const cId of cycleIds) {
+        const recalc = await recomputeCycleMisure(cId);
+        const changedRows = recalc.filter(r => r.changed);
+        if (changedRows.length === 0) continue;
+
+        await db.transaction(async (tx) => {
+          for (const row of changedRows) {
+            await tx
+              .update(schema.operations)
+              .set({ animalCount: row.newAnimalCount })
+              .where(eq(schema.operations.id, row.operationId));
+          }
+        });
+
+        for (const row of changedRows) {
+          totalUpdates++;
+          totalAnimalsRecovered += (row.newAnimalCount || 0) - (row.oldAnimalCount || 0);
+          updatedOps.push({ cycleId: cId, ...row, delta: (row.newAnimalCount || 0) - (row.oldAnimalCount || 0) });
+        }
+      }
+
+      res.json({
+        success: true,
+        mode: 'apply',
+        cyclesScanned: cycleIds.length,
+        operationsUpdated: totalUpdates,
+        totalAnimalsRecovered,
+        updatedOps,
+      });
+    } catch (error) {
+      console.error("Errore nel ricalcolo misure (apply):", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   app.post("/api/admin/lots/sync-sequence", async (req, res) => {
     try {
       // Importa il controller per la sequenza dei lotti

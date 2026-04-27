@@ -67,6 +67,7 @@ Preferred communication style: Simple, everyday language.
 - **Quality Classification System (PREMIUM/NORMAL/SUB)**: Cycles are automatically classified at creation based on their vagliatura history.
 - **Report Lotto**: Dedicated page for lot reports with balance, current distribution, and history timeline.
 - **Vendite Avanzate Multi-Cliente**: Extension for generating multiple sales (one per client) from the same source operations in a single submission.
+- **Misura Mortality Rule "Gusci che volano via"** (April 2026): When a `misura` operation records a mortality% ≤ the rolling-max mortality% from prior cycle operations (`prima-attivazione`, `prima-attivazione-da-vagliatura`, previous `misura`), the animal count is NOT reduced — the dead shells are presumed to be the same already counted at first activation, washing away. Only excess mortality (delta over the historical max) reduces the count. Implemented in `server/utils/misura-mortality.ts`, applied at insertion time in both `server/routes.ts` (MISURA ALLINEATA endpoint) and `server/direct-operations.ts`. Admin endpoints `GET/POST /api/admin/recalc-misure[/apply]` available for backfill (excludes cancelled operations, transactional per cycle).
 
 ### Weight Unit Conventions
 - **Database Storage**: All weights are stored in **GRAMS**.

@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import { invalidateAllCaches } from './services/operations-lifecycle.service.js';
 import { LotAutoStatsService } from './services/lot-auto-stats-service.js';
 import { determineSizeByAnimalsPerKg } from './utils/size-determination.js';
+import { computeMisuraAnimalCount } from './utils/misura-mortality.js';
 
 /**
  * Wrapper for backward compatibility
@@ -562,62 +563,26 @@ export function implementDirectOperationRoute(app: Express) {
       // 3. VINCOLO: animalCount non può MAI superare l'ultimo valore (i morti non risorgono)
       // 4. Se mortalità = 0%, mantieni l'ultimo animalCount
       else if (operationData.type === 'misura') {
-        console.log(`🔄 NUOVA LOGICA MORTALITÀ CUMULATIVA per operazione misura`);
-        
-        // Trova il cycleId (già calcolato o da basket)
+        console.log(`🔄 REGOLA MORTALITÀ "GUSCI CHE VOLANO VIA" per operazione misura`);
+
         const effectiveCycleId = operationData.cycleId || basket.currentCycleId;
-        
+
         if (effectiveCycleId) {
-          // 1. Recupera la prima attivazione del ciclo (ordinata per ID per determinismo)
-          const primaAttivazioneResult = await db
-            .select({ animalCount: operations.animalCount })
-            .from(operations)
-            .where(
-              and(
-                eq(operations.cycleId, effectiveCycleId),
-                eq(operations.type, 'prima-attivazione')
-              )
-            )
-            .orderBy(sql`${operations.id} ASC`) // Prima attivazione = ID più basso
-            .limit(1);
-          
-          // 2. Recupera l'ultima operazione del ciclo (per il vincolo)
-          const lastOperationResult = await db
-            .select({ animalCount: operations.animalCount })
-            .from(operations)
-            .where(eq(operations.cycleId, effectiveCycleId))
-            .orderBy(sql`${operations.id} DESC`)
-            .limit(1);
-          
-          const originalCount = primaAttivazioneResult.length > 0 ? primaAttivazioneResult[0].animalCount || 0 : 0;
-          const lastCount = lastOperationResult.length > 0 ? lastOperationResult[0].animalCount || 0 : originalCount;
-          
-          console.log(`📊 Prima attivazione: ${originalCount} animali, Ultima operazione: ${lastCount} animali`);
-          
-          // Mortalità presente se deadCount > 0 (liveAnimals può essere 0 o assente)
-          const hasMortality = operationData.deadCount && operationData.deadCount > 0;
-          const liveAnimals = operationData.liveAnimals || 0;
-          const deadCount = operationData.deadCount || 0;
-          const totalSample = liveAnimals + deadCount;
-          
-          // Flusso UNIFICATO: stessa logica sia con mortalità che senza
-          const mortalityRate = (hasMortality && totalSample > 0) ? deadCount / totalSample : 0;
-          const calculatedCount = Math.round(originalCount - (originalCount * mortalityRate));
-          const finalCount = Math.min(calculatedCount, lastCount);
-          
-          if (hasMortality) {
-            console.log(`🔴 MORTALITÀ RILEVATA: ${(mortalityRate * 100).toFixed(2)}%`);
-          } else {
-            console.log(`🟢 MISURA SENZA MORTALITÀ: mortalità 0%, mantengo ultimo conteggio`);
-          }
-          console.log(`   Calcolo: ${originalCount} - ${(mortalityRate * 100).toFixed(2)}% = ${calculatedCount}`);
-          console.log(`   Vincolo (min con ${lastCount}): ${finalCount}`);
-          
-          operationData.animalCount = finalCount;
-          operationData.mortalityRate = mortalityRate * 100;
-          operationData.sampleCount = totalSample > 0 ? totalSample : null;
+          const calc = await computeMisuraAnimalCount({
+            cycleId: effectiveCycleId,
+            liveAnimals: operationData.liveAnimals || 0,
+            deadCount: operationData.deadCount || 0,
+          });
+
+          console.log(`📊 Riferimento mort. ${calc.referenceMortalityPct.toFixed(2)}%, ultimo conteggio ${calc.lastCount}`);
+          console.log(`   ${calc.applied}: ${calc.reason}`);
+          console.log(`   → animal_count finale: ${calc.finalAnimalCount}`);
+
+          operationData.animalCount = calc.finalAnimalCount;
+          operationData.mortalityRate = calc.mortalityRatePct;
+          operationData.sampleCount = calc.sampleCount;
         } else {
-          console.warn(`⚠️ Impossibile applicare logica mortalità cumulativa: cycleId non disponibile`);
+          console.warn(`⚠️ Impossibile applicare regola mortalità: cycleId non disponibile`);
           // Fallback: mantieni il valore calcolato precedentemente
         }
       }
