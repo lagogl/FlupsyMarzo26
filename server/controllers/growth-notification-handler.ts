@@ -261,7 +261,10 @@ export async function checkCyclesForTargetSizes(): Promise<number> {
 
     const currentDate = new Date();
     
-    // Ottieni tutti i cicli attivi con l'ultima operazione di peso o prima-attivazione
+    // Ottieni tutti i cicli attivi con l'ultima operazione utile (peso, prima-attivazione, misura)
+    // NB: si legge direttamente il campo animals_per_kg già calcolato in fase di inserimento.
+    // Non ricalcolarlo da animal_count/total_weight perché total_weight ha significati diversi
+    // a seconda del tipo (peso cestello vs peso campione).
     const activeCyclesWithLastWeightOp = await db.execute(sql`
       WITH last_weight_operations AS (
         SELECT 
@@ -269,13 +272,17 @@ export async function checkCyclesForTargetSizes(): Promise<number> {
           o.basket_id,
           o.total_weight,
           o.animal_count,
+          o.animals_per_kg,
           o.date,
           o.size_id,
           o.id as operation_id,
           ROW_NUMBER() OVER (PARTITION BY o.cycle_id ORDER BY o.date DESC, o.id DESC) as rn
         FROM operations o
         JOIN cycles c ON o.cycle_id = c.id
-        WHERE o.type IN ('peso', 'prima-attivazione') AND c.state = 'active' AND o.total_weight IS NOT NULL AND o.animal_count IS NOT NULL
+        WHERE o.type IN ('peso', 'prima-attivazione', 'misura')
+          AND c.state = 'active'
+          AND o.animals_per_kg IS NOT NULL AND o.animals_per_kg > 0
+          AND o.cancelled_at IS NULL
       )
       SELECT 
         lwo.cycle_id,
@@ -285,7 +292,7 @@ export async function checkCyclesForTargetSizes(): Promise<number> {
         lwo.animal_count,
         lwo.date,
         lwo.operation_id,
-        CAST(lwo.animal_count::float / lwo.total_weight AS numeric) as animals_per_kg,
+        lwo.animals_per_kg,
         c.start_date,
         s.name as size_name
       FROM last_weight_operations lwo
@@ -376,6 +383,8 @@ export async function checkOperationForTargetSize(operationId: number): Promise<
         o.basket_id,
         o.total_weight,
         o.animal_count,
+        o.animals_per_kg,
+        o.cancelled_at,
         o.date,
         o.size_id,
         o.type,
@@ -393,13 +402,15 @@ export async function checkOperationForTargetSize(operationId: number): Promise<
 
     const operation = operationData.rows[0] as any;
 
-    // Verifica che sia un'operazione di peso o prima-attivazione e che il ciclo sia attivo
-    if (!['peso', 'prima-attivazione'].includes(operation.type) || operation.cycle_state !== 'active') {
+    // Verifica che sia un'operazione di peso, prima-attivazione o misura, ciclo attivo e non annullata
+    if (!['peso', 'prima-attivazione', 'misura'].includes(operation.type)
+        || operation.cycle_state !== 'active'
+        || operation.cancelled_at !== null) {
       return false;
     }
 
-    // Verifica che ci siano dati sufficienti
-    if (!operation.total_weight || !operation.animal_count) {
+    // Verifica che il valore canonico animals_per_kg sia disponibile
+    if (!operation.animals_per_kg || Number(operation.animals_per_kg) <= 0) {
       return false;
     }
 
@@ -422,8 +433,10 @@ export async function checkOperationForTargetSize(operationId: number): Promise<
       targetSizeIds = configuredSizeIds;
     }
 
-    // Calcola animali per kg dall'operazione appena creata
-    const currentAnimalsPerKg = operation.animal_count / operation.total_weight;
+    // Usa il valore animals_per_kg già canonico memorizzato nell'operazione.
+    // Non lo si ricalcola da animal_count/total_weight perché total_weight ha
+    // semantica diversa per tipo di operazione (peso cestello vs peso campione).
+    const currentAnimalsPerKg = Number(operation.animals_per_kg);
     
     // CASISTICA 1 (Real-time): usa il valore REALE misurato dall'operazione
     // NON applicare proiezione SGR - quella è solo per il controllo batch a mezzanotte
