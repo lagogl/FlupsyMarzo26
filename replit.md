@@ -71,6 +71,29 @@ Preferred communication style: Simple, everyday language.
 
 - **Growth Notification Fix — Unit Bug & Misura Inclusion** (April 2026): The target-size growth notification handler (`server/controllers/growth-notification-handler.ts`) had two bugs producing false alerts (e.g. cycle 467 falsely flagged as TP-4000 while real size was TP-500): (1) the SQL formula computed `animal_count / total_weight` treating `total_weight` as kilograms when it is actually stored in grams (off by factor 1000); (2) the type filter included only `peso` and `prima-attivazione`, excluding the more recent `misura` operations. Fix: both `checkCyclesForTargetSizes` (batch) and `checkOperationForTargetSize` (real-time) now read the canonical `animals_per_kg` column directly from the operation record (avoiding the unit ambiguity, since `total_weight` has different semantics per type — basket weight vs sample weight) and now include `misura` in the considered operation types. Cancelled operations are excluded.
 
+### Size (Taglia) Scale — CRITICAL RULES — DO NOT GET WRONG
+The `sizes` table (`id, code, name, min_animals_per_kg, max_animals_per_kg`) encodes the commercial size classification of shellfish.
+
+**The `id` column is ARBITRARY and must NEVER be used to compare or order sizes.**
+
+The only correct way to determine or compare a taglia is by checking which `(min_animals_per_kg, max_animals_per_kg)` range a measured `animals_per_kg` value falls into, then ordering by `min_animals_per_kg` ascending.
+
+**Scale direction (memorize this):**
+- **More animals/kg → smaller individual animal → smaller commercial taglia** (e.g. TP-180 at 70M–100M/kg are larvae; TP-10000 at 801–1200/kg are large animals)
+- **Fewer animals/kg → bigger individual animal → bigger commercial taglia**
+
+Ordered scale (position 1 = biggest animals, position 29 = smallest):
+1. TP-10000 (801–1,200/kg) — biggest/heaviest animals
+2. TP-9000 (1,201–1,800/kg)
+...
+29. TP-180 (70,000,001–100,000,000/kg) — smallest (larvae)
+
+**Anomaly detection logic for misura/peso operations:**
+- Find positionA = position of previous operation's `animals_per_kg` in the ordered scale
+- Find positionB = position of new operation's `animals_per_kg` in the ordered scale
+- **Regression (taglia inferiore)**: positionB > positionA → animals got smaller → anomaly, ask confirmation
+- **Jump > 1 size forward**: positionB < positionA − 1 → animals grew more than one size class in one step → anomaly, ask confirmation
+
 ### Weight Unit Conventions
 - **Database Storage**: All weights are stored in **GRAMS**.
 - **Form Input**: All weight input fields accept values in **GRAMS** with clear labels.
