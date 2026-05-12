@@ -834,7 +834,10 @@ export default function SpreadsheetOperations() {
           // Nome FLUPSY per visualizzazione quando "TUTTI" selezionato
           flupsyName: basket.flupsyName,
           // Storico note del ciclo per tooltip
-          allCycleNotes: cycleNotes
+          allCycleNotes: cycleNotes,
+          // Anagrafica cesta: maglia rete e tara (per display e calcolo peso lordo/netto)
+          netMesh: (basket as any).netMesh ?? null,
+          tareWeightG: (basket as any).tareWeightG ?? null
         };
       });
       
