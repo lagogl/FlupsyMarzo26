@@ -530,62 +530,6 @@ export default function BasketForm({
           />
         </div>
 
-        {/* Campi opzionali: Tara e Maglia Rete */}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="tareWeightG"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tara (grammi)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    placeholder="es. 1200"
-                    min={0}
-                    value={field.value === null || field.value === undefined ? '' : field.value}
-                    onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Peso tara della cesta vuota (opzionale)
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="netMesh"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Maglia rete (µm)</FormLabel>
-                <Select
-                  onValueChange={(value) => field.onChange(value === '__none__' ? null : Number(value))}
-                  value={field.value === null || field.value === undefined ? '__none__' : field.value.toString()}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Nessuna" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="__none__">Nessuna</SelectItem>
-                    {NET_MESH_OPTIONS.map((m) => (
-                      <SelectItem key={m} value={m.toString()}>{m} µm</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  Maglia della rete (opzionale)
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
         <div className="flex justify-end space-x-2">
           <Button variant="outline" type="button" onClick={() => form.reset()}>
             Annulla
