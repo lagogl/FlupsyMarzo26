@@ -1036,7 +1036,12 @@ export default function Baskets() {
                     return (
                       <tr key={basket.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
                         <td className={`px-2 py-2 text-sm font-semibold text-gray-900 ${hasExpectedChange ? 'animate-expected-size-blink-bg' : ''}`}>
-                          #{basket.physicalNumber}
+                          <div className="flex flex-col leading-tight">
+                            <span>#{basket.physicalNumber}</span>
+                            {(basket as any).netMesh && (
+                              <span className="text-[10px] font-normal text-indigo-600 leading-tight">{(basket as any).netMesh} µm</span>
+                            )}
+                          </div>
                         </td>
                         <td className={`px-2 py-2 text-sm text-gray-700 ${hasExpectedChange ? 'animate-expected-size-blink-bg' : ''}`}>
                           <span className="font-medium">{basket.flupsyName || `FLUPSY #${basket.flupsyId}`}</span>
