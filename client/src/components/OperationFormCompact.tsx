@@ -312,6 +312,12 @@ export default function OperationFormCompact({
       return false;
     }
 
+    // Blocca submit se peso lordo ≤ tara (impossibile fisicamente)
+    if (formErrors.totalWeight) {
+      console.log('⛔ SUBMIT BLOCCATO: Errore validazione peso totale:', formErrors.totalWeight.message);
+      return false;
+    }
+
     // Validazione specifica per tipo operazione
     switch (watchType) {
       case 'prima-attivazione':
@@ -787,6 +793,13 @@ export default function OperationFormCompact({
       return;
     }
     
+    // Per Peso, il conteggio animali rimane invariato rispetto all'ultima operazione.
+    // NON deve essere ricalcolato come apk × peso (vedi descrizione campo peso totale).
+    // L'apk viene ricalcolato dall'onChange del campo peso usando il count fisso.
+    if (watchType === 'peso') {
+      return;
+    }
+    
     if (watchTotalWeight && watchAnimalsPerKg && watchAnimalsPerKg > 0) {
       // FORMULA v1: cascata mortalità - i morti del campione vanno scalati dal totale
       // Step 1: totali proiettati = animalsPerKg × peso totale (kg)
@@ -1083,7 +1096,8 @@ export default function OperationFormCompact({
       totalWeight: values.totalWeight ? (() => {
         let tw = Number(values.totalWeight);
         if (values.type === 'peso' && isGrossMode && selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0) {
-          tw = Math.max(1, tw - selectedBasket.tareWeightG);
+          // Sottrai la tara. La validazione (gross > tare) è già garantita dal submit gate.
+          tw = tw - selectedBasket.tareWeightG;
         }
         return tw;
       })() : null,
@@ -1755,14 +1769,36 @@ export default function OperationFormCompact({
                       <span className="text-amber-700 font-medium">Modalità:</span>
                       <button
                         type="button"
-                        onClick={() => setIsGrossMode(true)}
+                        onClick={() => {
+                          setIsGrossMode(true);
+                          form.clearErrors('totalWeight');
+                          const tw = form.getValues('totalWeight');
+                          const ac = form.getValues('animalCount');
+                          const tare = selectedBasket?.tareWeightG || 0;
+                          if (tw && ac && tare > 0 && tw > tare) {
+                            const net = tw - tare;
+                            form.setValue('animalsPerKg', Math.round((ac * 1000) / net));
+                          } else {
+                            form.setValue('animalsPerKg', null);
+                          }
+                        }}
                         className={`px-2 py-1 rounded text-xs font-medium ${isGrossMode ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-400'}`}
                       >
                         Peso lordo
                       </button>
                       <button
                         type="button"
-                        onClick={() => setIsGrossMode(false)}
+                        onClick={() => {
+                          setIsGrossMode(false);
+                          form.clearErrors('totalWeight');
+                          const tw = form.getValues('totalWeight');
+                          const ac = form.getValues('animalCount');
+                          if (tw && ac && tw > 0) {
+                            form.setValue('animalsPerKg', Math.round((ac * 1000) / tw));
+                          } else {
+                            form.setValue('animalsPerKg', null);
+                          }
+                        }}
                         className={`px-2 py-1 rounded text-xs font-medium ${!isGrossMode ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-400'}`}
                       >
                         Peso netto
@@ -1802,8 +1838,19 @@ export default function OperationFormCompact({
                                   // Calcola il peso netto per il conteggio animali/kg
                                   const tare = (selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && isGrossMode)
                                     ? selectedBasket.tareWeightG : 0;
-                                  const netWeight = Math.max(1, numValue - tare);
-                                  
+
+                                  // Validazione: in modalità lordo, il peso lordo deve essere > tara
+                                  if (isGrossMode && tare > 0 && numValue <= tare) {
+                                    form.setError('totalWeight', {
+                                      type: 'manual',
+                                      message: `Il peso lordo (${numValue}g) deve essere maggiore della tara (${tare}g)`
+                                    });
+                                    form.setValue('animalsPerKg', null);
+                                    return;
+                                  }
+                                  form.clearErrors('totalWeight');
+
+                                  const netWeight = numValue - tare;
                                   const animalCount = form.getValues('animalCount');
                                   if (animalCount && netWeight > 0) {
                                     const calculatedAnimalsPerKg = Math.round((animalCount * 1000) / netWeight);
@@ -1817,9 +1864,9 @@ export default function OperationFormCompact({
                             ref={field.ref}
                           />
                         </FormControl>
-                        {selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && isGrossMode && field.value && (
+                        {selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && isGrossMode && field.value && field.value > selectedBasket.tareWeightG && (
                           <div className="text-xs text-amber-700 mt-1">
-                            Peso netto calcolato: <span className="font-semibold">{Math.max(1, field.value - selectedBasket.tareWeightG).toLocaleString('it-IT')} g</span>
+                            Peso netto calcolato: <span className="font-semibold">{(field.value - selectedBasket.tareWeightG).toLocaleString('it-IT')} g</span>
                             {' '}(sarà questo il valore salvato)
                           </div>
                         )}

@@ -1481,7 +1481,15 @@ export default function SpreadsheetOperations() {
       const currentBasket = basketsArr.find((b: any) => b.id === editingForm.basketId);
       const tare = (isGrossMode && currentBasket?.tareWeightG && currentBasket.tareWeightG > 0) ? currentBasket.tareWeightG : 0;
       if (tare > 0 && newRow.totalWeight && newRow.totalWeight > 0) {
-        newRow.totalWeight = Math.max(1, newRow.totalWeight - tare);
+        if (newRow.totalWeight <= tare) {
+          toast({
+            title: "Peso lordo non valido",
+            description: `Il peso lordo (${newRow.totalWeight}g) deve essere maggiore della tara (${tare}g).`,
+            variant: "destructive"
+          });
+          return;
+        }
+        newRow.totalWeight = newRow.totalWeight - tare;
       }
 
       const animalCount = newRow.animalCount || 0; // Numero animali dell'operazione precedente (fisso)
@@ -4834,7 +4842,10 @@ export default function SpreadsheetOperations() {
                 const basketTare: number = (pesoBasket as any)?.tareWeightG || 0;
                 const hasTare = basketTare > 0;
                 const enteredWeight = editingForm.totalWeight || 0;
-                const netWeight = hasTare && isGrossMode ? Math.max(1, enteredWeight - basketTare) : enteredWeight;
+                const isInvalidGross = hasTare && isGrossMode && enteredWeight > 0 && enteredWeight <= basketTare;
+                const netWeight = hasTare && isGrossMode
+                  ? (enteredWeight > basketTare ? enteredWeight - basketTare : 0)
+                  : enteredWeight;
                 return (
                 <div className="space-y-3">
                   {/* Toggle modalità lordo/netto - visibile solo se la cesta ha tara configurata */}
@@ -4894,9 +4905,14 @@ export default function SpreadsheetOperations() {
                         autoFocus
                         required
                       />
-                      {hasTare && isGrossMode && enteredWeight > 0 && (
+                      {hasTare && isGrossMode && enteredWeight > 0 && !isInvalidGross && (
                         <div className="text-xs text-amber-700 mt-1">
                           Netto: <span className="font-semibold">{netWeight.toLocaleString('it-IT')} g</span>
+                        </div>
+                      )}
+                      {isInvalidGross && (
+                        <div className="text-xs text-red-600 mt-1 font-medium">
+                          ⚠ Peso lordo ({enteredWeight}g) ≤ tara ({basketTare}g)
                         </div>
                       )}
                     </div>
