@@ -1305,6 +1305,26 @@ export default function Baskets() {
                       </div>
                     )}
 
+                    {((selectedBasket as any).tareWeightG || (selectedBasket as any).netMesh) && (
+                      <div className="col-span-2 border-t pt-3 mt-2">
+                        <p className="text-sm font-semibold text-muted-foreground mb-2">Caratteristiche cesta</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {(selectedBasket as any).tareWeightG && (
+                            <div>
+                              <p className="text-xs text-muted-foreground">Tara</p>
+                              <p className="font-medium">{((selectedBasket as any).tareWeightG).toLocaleString('it-IT')} g</p>
+                            </div>
+                          )}
+                          {(selectedBasket as any).netMesh && (
+                            <div>
+                              <p className="text-xs text-muted-foreground">Maglia rete</p>
+                              <p className="font-medium">{(selectedBasket as any).netMesh} µm</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {selectedBasket.nfcData && (
                       <div className="col-span-2 border-t pt-3 mt-2">
                         <p className="text-sm font-medium text-muted-foreground">Dati NFC</p>
