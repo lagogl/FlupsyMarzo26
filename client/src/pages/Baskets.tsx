@@ -1199,7 +1199,9 @@ export default function Baskets() {
                 physicalNumber: selectedBasket.physicalNumber,
                 flupsyId: selectedBasket.flupsyId,
                 row: selectedBasket.row || undefined,
-                position: selectedBasket.position || undefined
+                position: selectedBasket.position || undefined,
+                tareWeightG: (selectedBasket as any).tareWeightG ?? null,
+                netMesh: (selectedBasket as any).netMesh ?? null,
               }}
             />
           )}

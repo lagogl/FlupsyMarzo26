@@ -262,6 +262,7 @@ export default function SpreadsheetOperations() {
   
   // Stati per il nuovo sistema di editing inline
   const [editingRow, setEditingRow] = useState<number | null>(null);
+  const [isGrossMode, setIsGrossMode] = useState<boolean>(true);
   const [editingForm, setEditingForm] = useState<{
     basketId: number;
     type: string;
@@ -1475,6 +1476,14 @@ export default function SpreadsheetOperations() {
     
     // Applica calcoli automatici per peso
     if (selectedOperationType === 'peso') {
+      // Sottrai tara se in modalità peso lordo
+      const basketsArr = Array.isArray(baskets) ? baskets : [];
+      const currentBasket = basketsArr.find((b: any) => b.id === editingForm.basketId);
+      const tare = (isGrossMode && currentBasket?.tareWeightG && currentBasket.tareWeightG > 0) ? currentBasket.tareWeightG : 0;
+      if (tare > 0 && newRow.totalWeight && newRow.totalWeight > 0) {
+        newRow.totalWeight = Math.max(1, newRow.totalWeight - tare);
+      }
+
       const animalCount = newRow.animalCount || 0; // Numero animali dell'operazione precedente (fisso)
       const totalWeight = newRow.totalWeight || 0; // Peso totale della cesta (nuovo)
       
@@ -4819,8 +4828,37 @@ export default function SpreadsheetOperations() {
                 </div>
               )}
 
-              {selectedOperationType === 'peso' && (
+              {selectedOperationType === 'peso' && (() => {
+                const basketsArr = Array.isArray(baskets) ? baskets : [];
+                const pesoBasket = basketsArr.find((b: any) => b.id === editingForm.basketId);
+                const basketTare: number = (pesoBasket as any)?.tareWeightG || 0;
+                const hasTare = basketTare > 0;
+                const enteredWeight = editingForm.totalWeight || 0;
+                const netWeight = hasTare && isGrossMode ? Math.max(1, enteredWeight - basketTare) : enteredWeight;
+                return (
                 <div className="space-y-3">
+                  {/* Toggle modalità lordo/netto - visibile solo se la cesta ha tara configurata */}
+                  {hasTare && (
+                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs">
+                      <span className="text-amber-700 font-medium">Modalità:</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsGrossMode(true)}
+                        className={`px-2 py-1 rounded text-xs font-medium ${isGrossMode ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-400'}`}
+                      >
+                        Peso lordo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsGrossMode(false)}
+                        className={`px-2 py-1 rounded text-xs font-medium ${!isGrossMode ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-400'}`}
+                      >
+                        Peso netto
+                      </button>
+                      <span className="text-amber-600 ml-1">Tara: {basketTare.toLocaleString('it-IT')} g</span>
+                    </div>
+                  )}
+
                   {/* Layout per operazione Peso - numero animali fisso, solo peso modificabile */}
                   <div className="grid grid-cols-3 gap-3 items-end">
                     <div>
@@ -4832,7 +4870,9 @@ export default function SpreadsheetOperations() {
                     </div>
                     
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">Peso totale (g)</label>
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        {hasTare && isGrossMode ? 'Peso lordo (g)' : 'Peso netto (g)'}
+                      </label>
                       <input
                         ref={totalWeightRef}
                         type="number"
@@ -4850,17 +4890,22 @@ export default function SpreadsheetOperations() {
                         }}
                         className="w-full h-8 px-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-yellow-50"
                         min="1"
-                        placeholder={editingForm.suggestedTotalWeight ? editingForm.suggestedTotalWeight.toLocaleString() : "Inserisci peso totale"}
+                        placeholder={editingForm.suggestedTotalWeight ? editingForm.suggestedTotalWeight.toLocaleString() : "Inserisci peso"}
                         autoFocus
                         required
                       />
+                      {hasTare && isGrossMode && enteredWeight > 0 && (
+                        <div className="text-xs text-amber-700 mt-1">
+                          Netto: <span className="font-semibold">{netWeight.toLocaleString('it-IT')} g</span>
+                        </div>
+                      )}
                     </div>
                     
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Peso Medio (mg)</label>
                       <div className="h-8 px-2 text-sm bg-blue-50 border-2 border-blue-200 rounded flex items-center font-medium text-blue-800">
-                        {(editingForm.animalCount && editingForm.totalWeight && editingForm.animalCount > 0)
-                          ? (editingForm.totalWeight / editingForm.animalCount).toFixed(2)
+                        {(editingForm.animalCount && netWeight && editingForm.animalCount > 0)
+                          ? (netWeight / editingForm.animalCount).toFixed(2)
                           : '-'}
                       </div>
                     </div>
@@ -4871,8 +4916,8 @@ export default function SpreadsheetOperations() {
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Animali/kg</label>
                       <div className="h-8 px-2 text-sm bg-blue-50 border-2 border-blue-200 rounded flex items-center font-medium text-blue-800">
-                        {(editingForm.animalCount && editingForm.totalWeight && editingForm.animalCount > 0)
-                          ? Math.round(1000 / (editingForm.totalWeight / editingForm.animalCount)).toLocaleString()
+                        {(editingForm.animalCount && netWeight && editingForm.animalCount > 0)
+                          ? Math.round(1000 / (netWeight / editingForm.animalCount)).toLocaleString()
                           : '-'}
                       </div>
                     </div>
@@ -4880,9 +4925,9 @@ export default function SpreadsheetOperations() {
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Taglia (calcolata)</label>
                       <div className="h-8 px-2 text-sm bg-green-50 border-2 border-green-200 rounded flex items-center font-medium text-green-800">
-                        {(editingForm.animalCount && editingForm.totalWeight && editingForm.animalCount > 0)
+                        {(editingForm.animalCount && netWeight && editingForm.animalCount > 0)
                           ? (() => {
-                              const animalsPerKg = Math.round(1000 / (editingForm.totalWeight / editingForm.animalCount));
+                              const animalsPerKg = Math.round(1000 / (netWeight / editingForm.animalCount));
                               const sizesArray = Array.isArray(sizes) ? sizes : [];
                               const size = sizesArray.find((s: any) => 
                                 s.minAnimalsPerKg !== null && 
@@ -4909,7 +4954,8 @@ export default function SpreadsheetOperations() {
                     />
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {(selectedOperationType === 'pulizia' || selectedOperationType === 'trattamento' || selectedOperationType === 'vagliatura') && (
                 <div className="space-y-3">

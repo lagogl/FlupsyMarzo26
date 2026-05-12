@@ -27,6 +27,8 @@ import BasketExistsCheck from "./BasketExistsCheck";
 import BasketPositionCheck from "./BasketPositionCheck";
 import FlupsyMiniMapOptimized from "./FlupsyMiniMapOptimized";
 
+const NET_MESH_OPTIONS = [200, 300, 500, 700, 1000, 1500, 2000];
+
 // Create a schema for basket validation
 const basketFormSchema = z.object({
   physicalNumber: z.coerce.number()
@@ -43,6 +45,8 @@ const basketFormSchema = z.object({
     .int()
     .positive("La posizione deve essere un numero positivo")
     .min(1, "La posizione deve essere almeno 1"),
+  tareWeightG: z.coerce.number().int().min(0, "La tara deve essere ≥ 0").nullable().optional(),
+  netMesh: z.coerce.number().int().nullable().optional(),
 });
 
 type BasketFormValues = z.infer<typeof basketFormSchema>;
@@ -463,6 +467,62 @@ export default function BasketForm({
                   ) : (
                     `Numero progressivo della posizione (max ${maxPositions} per fila)`
                   )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Campi opzionali: Tara e Maglia Rete */}
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="tareWeightG"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tara (grammi)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="es. 1200"
+                    min={0}
+                    value={field.value === null || field.value === undefined ? '' : field.value}
+                    onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Peso tara della cesta vuota (opzionale)
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="netMesh"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Maglia rete (µm)</FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(value === '__none__' ? null : Number(value))}
+                  value={field.value === null || field.value === undefined ? '__none__' : field.value.toString()}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Nessuna" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nessuna</SelectItem>
+                    {NET_MESH_OPTIONS.map((m) => (
+                      <SelectItem key={m} value={m.toString()}>{m} µm</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Maglia della rete (opzionale)
                 </FormDescription>
                 <FormMessage />
               </FormItem>

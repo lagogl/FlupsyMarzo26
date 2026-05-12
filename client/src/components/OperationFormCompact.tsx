@@ -447,6 +447,7 @@ export default function OperationFormCompact({
   // Filtra i cestelli per FLUPSY selezionato
   const [flupsyBaskets, setFlupsyBaskets] = useState<any[]>([]);
   const [isLoadingFlupsyBaskets, setIsLoadingFlupsyBaskets] = useState<boolean>(false);
+  const [isGrossMode, setIsGrossMode] = useState<boolean>(true);
   
   // Auto-seleziona FLUPSY se c'è solo un FLUPSY con cestelli disponibili
   useEffect(() => {
@@ -1079,7 +1080,13 @@ export default function OperationFormCompact({
         values.date,
       animalCount: values.animalCount ? Number(values.animalCount) : null,
       animalsPerKg: values.animalsPerKg ? Number(values.animalsPerKg) : null,
-      totalWeight: values.totalWeight ? Number(values.totalWeight) : null,
+      totalWeight: values.totalWeight ? (() => {
+        let tw = Number(values.totalWeight);
+        if (values.type === 'peso' && isGrossMode && selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0) {
+          tw = Math.max(1, tw - selectedBasket.tareWeightG);
+        }
+        return tw;
+      })() : null,
       sampleWeight: values.sampleWeight ? Number(values.sampleWeight) : null,
       liveAnimals: values.liveAnimals ? Number(values.liveAnimals) : null,
       deadCount: values.deadCount != null ? Number(values.deadCount) : 0,
@@ -1742,17 +1749,45 @@ export default function OperationFormCompact({
                   <Scale className="h-4 w-4 mr-1" /> Dati Peso
                 </h3>
                 <div className="grid grid-cols-1 gap-3">
+                  {/* Toggle modalità lordo/netto - visibile solo se la cesta ha tara configurata */}
+                  {selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && (
+                    <div className="flex items-center gap-2 bg-amber-100 rounded px-3 py-2 text-xs">
+                      <span className="text-amber-700 font-medium">Modalità:</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsGrossMode(true)}
+                        className={`px-2 py-1 rounded text-xs font-medium ${isGrossMode ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-400'}`}
+                      >
+                        Peso lordo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsGrossMode(false)}
+                        className={`px-2 py-1 rounded text-xs font-medium ${!isGrossMode ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 border border-amber-400'}`}
+                      >
+                        Peso netto
+                      </button>
+                      <span className="text-amber-600 ml-1">Tara: {selectedBasket.tareWeightG.toLocaleString('it-IT')} g</span>
+                    </div>
+                  )}
+
                   {/* Total Weight - UNICO CAMPO RICHIESTO PER OPERAZIONE PESO */}
                   <FormField
                     control={form.control}
                     name="totalWeight"
                     render={({ field }) => (
                       <FormItem className="mb-1">
-                        <FormLabel className="text-xs font-medium">Peso totale (grammi) <span className="text-red-500">*</span></FormLabel>
+                        <FormLabel className="text-xs font-medium">
+                          {selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && isGrossMode
+                            ? <>Peso lordo (grammi) <span className="text-red-500">*</span></>
+                            : <>Peso netto (grammi) <span className="text-red-500">*</span></>}
+                        </FormLabel>
                         <FormControl>
                           <Input 
                             type="text" 
-                            placeholder="Inserisci peso totale"
+                            placeholder={selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && isGrossMode
+                              ? "Inserisci peso lordo (tara verrà sottratta)"
+                              : "Inserisci peso netto"}
                             className="h-8 text-sm"
                             value={field.value === null || field.value === undefined ? '' : field.value.toString()}
                             onChange={(e) => {
@@ -1764,12 +1799,14 @@ export default function OperationFormCompact({
                                 if (!isNaN(numValue) && numValue <= 999999) {
                                   field.onChange(numValue);
                                   
-                                  // Se è un'operazione di tipo peso e abbiamo un conteggio animali,
-                                  // calcoliamo automaticamente gli animali per kg
+                                  // Calcola il peso netto per il conteggio animali/kg
+                                  const tare = (selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && isGrossMode)
+                                    ? selectedBasket.tareWeightG : 0;
+                                  const netWeight = Math.max(1, numValue - tare);
+                                  
                                   const animalCount = form.getValues('animalCount');
-                                  if (animalCount && numValue > 0) {
-                                    // Calcolo animali per kg = (animalCount * 1000) / pesoTotale
-                                    const calculatedAnimalsPerKg = Math.round((animalCount * 1000) / numValue);
+                                  if (animalCount && netWeight > 0) {
+                                    const calculatedAnimalsPerKg = Math.round((animalCount * 1000) / netWeight);
                                     form.setValue('animalsPerKg', calculatedAnimalsPerKg);
                                   }
                                 }
@@ -1780,6 +1817,12 @@ export default function OperationFormCompact({
                             ref={field.ref}
                           />
                         </FormControl>
+                        {selectedBasket?.tareWeightG && selectedBasket.tareWeightG > 0 && isGrossMode && field.value && (
+                          <div className="text-xs text-amber-700 mt-1">
+                            Peso netto calcolato: <span className="font-semibold">{Math.max(1, field.value - selectedBasket.tareWeightG).toLocaleString('it-IT')} g</span>
+                            {' '}(sarà questo il valore salvato)
+                          </div>
+                        )}
                         <FormDescription className="text-xs">
                           Il conteggio degli animali rimane invariato rispetto all'ultima operazione
                         </FormDescription>

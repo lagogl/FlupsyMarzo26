@@ -89,6 +89,8 @@ export const baskets = pgTable("baskets", {
   row: text("row").notNull(), // fila in cui si trova la cesta (DX o SX)
   position: integer("position").notNull(), // posizione numerica nella fila (1, 2, 3, ecc.)
   groupId: integer("group_id"), // reference to basket group (optional - null if not in any group)
+  tareWeightG: integer("tare_weight_g"), // peso tara della cesta in grammi (opzionale)
+  netMesh: integer("net_mesh"), // maglia rete in µm - valori ammessi: 200, 300, 500, 700, 1000, 1500, 2000 (opzionale)
 }, (table) => ({
   flupsyIdIdx: index("baskets_flupsy_id_idx").on(table.flupsyId),
   groupIdIdx: index("baskets_group_id_idx").on(table.groupId),

@@ -1956,7 +1956,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         state: z.string().optional(),
         nfcData: z.string().nullable().optional(),
         nfcLastProgrammedAt: z.string().nullable().optional(),
-        currentCycleId: z.number().nullable().optional()
+        currentCycleId: z.number().nullable().optional(),
+        tareWeightG: z.number().int().nullable().optional(),
+        netMesh: z.number().int().nullable().optional(),
       });
 
       const parsedData = updateSchema.safeParse(req.body);
