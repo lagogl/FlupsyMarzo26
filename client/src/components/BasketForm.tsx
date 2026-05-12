@@ -279,6 +279,7 @@ export default function BasketForm({
         <BasketExistsCheck 
           flupsyId={form.watch('flupsyId')} 
           basketNumber={form.watch('physicalNumber')}
+          basketId={basketId}
           onValidationChange={setIsBasketNumberValid}
         />
         
