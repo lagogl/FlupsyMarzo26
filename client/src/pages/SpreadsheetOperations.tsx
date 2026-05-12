@@ -3665,7 +3665,7 @@ export default function SpreadsheetOperations() {
                         <span className="flex flex-col leading-tight">
                           <span>#{row.physicalNumber}</span>
                           {(row as any).netMesh && (
-                            <span className="text-[9px] font-normal text-indigo-600">{(row as any).netMesh} µm</span>
+                            <span className="text-[9px] font-normal text-green-800">{(row as any).netMesh} µm</span>
                           )}
                         </span>
                         {(() => {
