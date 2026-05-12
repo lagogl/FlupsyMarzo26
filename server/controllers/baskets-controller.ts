@@ -231,6 +231,7 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
         b.id, b.physical_number, b.flupsy_id, b.cycle_code, 
         b.state, b.current_cycle_id, b.nfc_data, b.nfc_last_programmed_at, b.row, b.position, b.group_id,
         b.rfid_uhf_epc, b.rfid_uhf_user_data, b.rfid_uhf_programmed_at,
+        b.tare_weight_g, b.net_mesh,
         f.name as flupsy_name,
         COUNT(*) OVER() as total_count,
         -- Solo dati essenziali per performance massime
@@ -326,7 +327,9 @@ export async function getBasketsOptimized(options: BasketsOptions = {}) {
         position: row.position,
         groupId: row.group_id,
         flupsyName: row.flupsy_name,
-        vagliatureNote: row.vagliature_note || null
+        vagliatureNote: row.vagliature_note || null,
+        tareWeightG: row.tare_weight_g ?? null,
+        netMesh: row.net_mesh ?? null
       };
       
       // Costruisci oggetto posizione corrente
