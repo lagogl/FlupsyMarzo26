@@ -671,7 +671,9 @@ export default function SpreadsheetOperations() {
           flupsyName: flupsy?.name,
           lastOperation: lastOp,
           activationOperation: activationOp,
-          vagliatureNote: basket.vagliatureNote || null
+          vagliatureNote: basket.vagliatureNote || null,
+          netMesh: (basket as any).netMesh ?? null,
+          tareWeightG: (basket as any).tareWeightG ?? null
         };
       })
       .sort((a, b) => {
@@ -2582,7 +2584,7 @@ export default function SpreadsheetOperations() {
   })();
 
   return (
-    <div className="container mx-auto py-2 space-y-2">
+    <div className="w-full px-2 py-2 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <h1 className="text-xl font-bold">Spreadsheet Operazioni</h1>
@@ -3657,7 +3659,12 @@ export default function SpreadsheetOperations() {
                         }} />
                       )}
                       <div className="flex items-center justify-between w-full">
-                        <span>#{row.physicalNumber}</span>
+                        <span className="flex flex-col leading-tight">
+                          <span>#{row.physicalNumber}</span>
+                          {(row as any).netMesh && (
+                            <span className="text-[9px] font-normal text-indigo-600">{(row as any).netMesh} µm</span>
+                          )}
+                        </span>
                         {(() => {
                           const perfScore = calculatePerformanceScore(row);
                           const color = perfScore >= 80 ? 'text-green-600' : 
