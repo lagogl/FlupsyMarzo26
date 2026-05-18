@@ -1,9 +1,12 @@
 import { db } from "../../db";
 import { sql } from "drizzle-orm";
+import { immSnapshots } from "@shared/schema";
 
 export type IMMComponents = {
   immSize: number;
   immTime: number;
+  immQuality: number;
+  immReliability: number;
 };
 
 export type CycleIMM = {
@@ -18,11 +21,13 @@ export type CycleIMM = {
   semeApk: number | null;
   currApk: number | null;
   currAnimalCount: number | null;
+  semeAnimalCount: number | null;
   currSizeCode: string | null;
   currDate: string | null;
   daysElapsed: number;
   sgrDaily: number;
   daysRemaining: number | null;
+  cumulativeMortalityPct: number;
   imm: number;
   components: IMMComponents;
 };
@@ -34,6 +39,10 @@ export type IMMAggregate = {
   animalCount: number;
   cycleCount: number;
   imm: number;
+  immSize: number;
+  immTime: number;
+  immQuality: number;
+  immReliability: number;
 };
 
 export type IMMDistributionBin = {
@@ -45,19 +54,28 @@ export type IMMDistributionBin = {
   pctOfTotal: number;
 };
 
+export type IMMConfig = {
+  targetSizeCode: string;
+  horizonDays: number;
+  weightSize: number;
+  weightTime: number;
+  weightQuality: number;
+  weightReliability: number;
+  fallbackSgrDaily: number;
+  baselineMortalityPct: number;
+  maxMortalityPct: number;
+};
+
 export type IMMInventoryResult = {
-  config: {
-    targetSizeCode: string;
-    targetMinApk: number;
-    horizonDays: number;
-    weightSize: number;
-    weightTime: number;
-    fallbackSgrDaily: number;
-  };
+  config: IMMConfig & { targetMinApk: number };
   totals: {
     totalAnimals: number;
     totalCycles: number;
     immGlobal: number;
+    immSize: number;
+    immTime: number;
+    immQuality: number;
+    immReliability: number;
   };
   distribution: IMMDistributionBin[];
   byFlupsy: IMMAggregate[];
@@ -65,20 +83,16 @@ export type IMMInventoryResult = {
   cycles: CycleIMM[];
 };
 
-export type IMMConfig = {
-  targetSizeCode: string;
-  horizonDays: number;
-  weightSize: number;
-  weightTime: number;
-  fallbackSgrDaily: number;
-};
-
 export const DEFAULT_IMM_CONFIG: IMMConfig = {
   targetSizeCode: "TP-3000",
   horizonDays: 180,
   weightSize: 40,
   weightTime: 35,
+  weightQuality: 15,
+  weightReliability: 10,
   fallbackSgrDaily: 0.005,
+  baselineMortalityPct: 5,
+  maxMortalityPct: 30,
 };
 
 type RawRow = {
@@ -92,17 +106,19 @@ type RawRow = {
   start_date: string;
   seme_apk: number | null;
   seme_date: string | null;
+  seme_animal_count: number | null;
   curr_apk: number | null;
   curr_animal_count: number | null;
   curr_size_id: number | null;
   curr_size_code: string | null;
   curr_date: string | null;
+  total_dead_count: number | null;
 };
 
 function daysBetween(a: string, b: string): number {
   const da = new Date(a).getTime();
-  const db = new Date(b).getTime();
-  return Math.max(0, Math.round((db - da) / 86400000));
+  const db_ = new Date(b).getTime();
+  return Math.max(0, Math.round((db_ - da) / 86400000));
 }
 
 function clamp(x: number, lo: number, hi: number): number {
@@ -144,16 +160,56 @@ function computeImmTime(daysRemaining: number, horizon: number): number {
   return clamp(100 * (1 - daysRemaining / horizon), 0, 100);
 }
 
-function weightedAvg(items: Array<{ imm: number; w: number }>): number {
+function computeImmQuality(qualityClass: string | null): number {
+  const q = (qualityClass ?? "").toLowerCase();
+  if (q === "premium") return 100;
+  if (q === "normal") return 85;
+  if (q === "sub") return 60;
+  return 75; // neutro per cicli senza classificazione
+}
+
+function computeImmReliability(
+  mortalityPct: number,
+  baselinePct: number,
+  maxPct: number,
+): number {
+  if (!isFinite(mortalityPct) || mortalityPct < 0) return 80; // default neutro
+  if (mortalityPct <= baselinePct) return 100;
+  if (mortalityPct >= maxPct) return 0;
+  const span = maxPct - baselinePct;
+  if (span <= 0) return 50;
+  return clamp(100 * (1 - (mortalityPct - baselinePct) / span), 0, 100);
+}
+
+type WItem = { imm: number; size: number; time: number; quality: number; reliability: number; w: number };
+
+function weightedAvgs(items: WItem[]): {
+  imm: number; size: number; time: number; quality: number; reliability: number;
+} {
   let sumW = 0;
-  let sumIW = 0;
+  const acc = { imm: 0, size: 0, time: 0, quality: 0, reliability: 0 };
   for (const it of items) {
-    if (it.w > 0 && isFinite(it.imm)) {
+    if (it.w > 0) {
       sumW += it.w;
-      sumIW += it.imm * it.w;
+      acc.imm += it.imm * it.w;
+      acc.size += it.size * it.w;
+      acc.time += it.time * it.w;
+      acc.quality += it.quality * it.w;
+      acc.reliability += it.reliability * it.w;
     }
   }
-  return sumW > 0 ? sumIW / sumW : 0;
+  if (sumW <= 0) return { imm: 0, size: 0, time: 0, quality: 0, reliability: 0 };
+  return {
+    imm: acc.imm / sumW,
+    size: acc.size / sumW,
+    time: acc.time / sumW,
+    quality: acc.quality / sumW,
+    reliability: acc.reliability / sumW,
+  };
+}
+
+function round2(x: number): number {
+  return Math.round(x * 100) / 100;
 }
 
 export async function computeInventoryIMM(
@@ -167,7 +223,7 @@ export async function computeInventoryIMM(
     WHERE code = ${config.targetSizeCode}
     LIMIT 1
   `);
-  const targetRec = (targetRow.rows?.[0] ?? (targetRow as any)[0]) as
+  const targetRec = ((targetRow as any).rows?.[0] ?? (targetRow as any)[0]) as
     | { code: string; min_animals_per_kg: number }
     | undefined;
   if (!targetRec || !targetRec.min_animals_per_kg) {
@@ -195,19 +251,30 @@ export async function computeInventoryIMM(
         AND o.cancelled_at IS NULL
         AND o.type IN ('misura','peso','prima-attivazione','prima-attivazione-da-vagliatura')
         AND o.animals_per_kg IS NOT NULL
+    ),
+    mortality AS (
+      SELECT cycle_id, COALESCE(SUM(dead_count), 0) AS total_dead_count
+      FROM operations
+      WHERE cycle_id IN (SELECT cycle_id FROM active)
+        AND cancelled_at IS NULL
+        AND dead_count IS NOT NULL
+      GROUP BY cycle_id
     )
     SELECT a.cycle_id, a.basket_id, a.physical_number, a.flupsy_id, a.flupsy_name,
            a.lot_id, a.quality_class, a.start_date,
            seme.animals_per_kg AS seme_apk,
            seme.date AS seme_date,
+           seme.animal_count AS seme_animal_count,
            curr.animals_per_kg AS curr_apk,
            curr.animal_count AS curr_animal_count,
            curr.size_id AS curr_size_id,
            curr.size_code AS curr_size_code,
-           curr.date AS curr_date
+           curr.date AS curr_date,
+           m.total_dead_count
     FROM active a
     LEFT JOIN ranked seme ON seme.cycle_id = a.cycle_id AND seme.rn_asc = 1
     LEFT JOIN ranked curr ON curr.cycle_id = a.cycle_id AND curr.rn_desc = 1
+    LEFT JOIN mortality m ON m.cycle_id = a.cycle_id
     ORDER BY a.flupsy_name, a.physical_number
   `);
 
@@ -215,14 +282,18 @@ export async function computeInventoryIMM(
 
   const wSize = config.weightSize;
   const wTime = config.weightTime;
-  const wTot = wSize + wTime;
+  const wQual = config.weightQuality;
+  const wRel = config.weightReliability;
+  const wTot = wSize + wTime + wQual + wRel;
 
   const cycles: CycleIMM[] = rows.map((r) => {
     const seme = r.seme_apk != null ? Number(r.seme_apk) : null;
     const curr = r.curr_apk != null ? Number(r.curr_apk) : null;
     const animalCount = r.curr_animal_count != null ? Number(r.curr_animal_count) : null;
+    const semeAnimalCount = r.seme_animal_count != null ? Number(r.seme_animal_count) : null;
     const daysElapsed =
       r.seme_date && r.curr_date ? daysBetween(r.seme_date, r.curr_date) : 0;
+    const deadCount = r.total_dead_count != null ? Number(r.total_dead_count) : 0;
 
     let immSize = 0;
     let immTime = 0;
@@ -237,7 +308,22 @@ export async function computeInventoryIMM(
       immTime = computeImmTime(dr, config.horizonDays);
     }
 
-    const imm = wTot > 0 ? (wSize * immSize + wTime * immTime) / wTot : 0;
+    const immQuality = computeImmQuality(r.quality_class);
+
+    // Mortalità cumulativa: dead_count totale / (animal_count seme + dead_count totale)
+    // Questo approccio è robusto: il denominatore rappresenta il pool iniziale "vivo + morto registrato".
+    const mortBase = (semeAnimalCount ?? animalCount ?? 0) + deadCount;
+    const cumulativeMortalityPct = mortBase > 0 ? (deadCount / mortBase) * 100 : 0;
+    const immReliability = computeImmReliability(
+      cumulativeMortalityPct,
+      config.baselineMortalityPct,
+      config.maxMortalityPct,
+    );
+
+    const imm =
+      wTot > 0
+        ? (wSize * immSize + wTime * immTime + wQual * immQuality + wRel * immReliability) / wTot
+        : 0;
 
     return {
       cycleId: Number(r.cycle_id),
@@ -251,15 +337,19 @@ export async function computeInventoryIMM(
       semeApk: seme,
       currApk: curr,
       currAnimalCount: animalCount,
+      semeAnimalCount,
       currSizeCode: r.curr_size_code,
       currDate: r.curr_date,
       daysElapsed,
       sgrDaily,
       daysRemaining,
-      imm: Math.round(imm * 100) / 100,
+      cumulativeMortalityPct: round2(cumulativeMortalityPct),
+      imm: round2(imm),
       components: {
-        immSize: Math.round(immSize * 100) / 100,
-        immTime: Math.round(immTime * 100) / 100,
+        immSize: round2(immSize),
+        immTime: round2(immTime),
+        immQuality: round2(immQuality),
+        immReliability: round2(immReliability),
       },
     };
   });
@@ -267,8 +357,15 @@ export async function computeInventoryIMM(
   // Aggregations
   const validCycles = cycles.filter((c) => c.currAnimalCount && c.currAnimalCount > 0);
   const totalAnimals = validCycles.reduce((s, c) => s + (c.currAnimalCount || 0), 0);
-  const immGlobal = weightedAvg(
-    validCycles.map((c) => ({ imm: c.imm, w: c.currAnimalCount || 0 })),
+  const globalAvg = weightedAvgs(
+    validCycles.map((c) => ({
+      imm: c.imm,
+      size: c.components.immSize,
+      time: c.components.immTime,
+      quality: c.components.immQuality,
+      reliability: c.components.immReliability,
+      w: c.currAnimalCount || 0,
+    })),
   );
 
   // By FLUPSY
@@ -277,18 +374,28 @@ export async function computeInventoryIMM(
     if (!flupsyMap.has(c.flupsyId)) flupsyMap.set(c.flupsyId, { name: c.flupsyName, items: [] });
     flupsyMap.get(c.flupsyId)!.items.push(c);
   }
-  const byFlupsy: IMMAggregate[] = Array.from(flupsyMap.entries())
-    .map(([id, { name, items }]) => ({
-      scope: "flupsy",
-      scopeId: id,
-      scopeName: name,
+  const buildAgg = (scope: string, scopeId: number | null, scopeName: string, items: CycleIMM[]): IMMAggregate => {
+    const avg = weightedAvgs(items.map((c) => ({
+      imm: c.imm,
+      size: c.components.immSize,
+      time: c.components.immTime,
+      quality: c.components.immQuality,
+      reliability: c.components.immReliability,
+      w: c.currAnimalCount || 0,
+    })));
+    return {
+      scope, scopeId, scopeName,
       animalCount: items.reduce((s, c) => s + (c.currAnimalCount || 0), 0),
       cycleCount: items.length,
-      imm:
-        Math.round(
-          weightedAvg(items.map((c) => ({ imm: c.imm, w: c.currAnimalCount || 0 }))) * 100,
-        ) / 100,
-    }))
+      imm: round2(avg.imm),
+      immSize: round2(avg.size),
+      immTime: round2(avg.time),
+      immQuality: round2(avg.quality),
+      immReliability: round2(avg.reliability),
+    };
+  };
+  const byFlupsy: IMMAggregate[] = Array.from(flupsyMap.entries())
+    .map(([id, { name, items }]) => buildAgg("flupsy", id, name, items))
     .sort((a, b) => b.imm - a.imm);
 
   // By Lot
@@ -299,17 +406,7 @@ export async function computeInventoryIMM(
     lotMap.get(c.lotId)!.push(c);
   }
   const byLot: IMMAggregate[] = Array.from(lotMap.entries())
-    .map(([lotId, items]) => ({
-      scope: "lot",
-      scopeId: lotId,
-      scopeName: `Lotto ${lotId}`,
-      animalCount: items.reduce((s, c) => s + (c.currAnimalCount || 0), 0),
-      cycleCount: items.length,
-      imm:
-        Math.round(
-          weightedAvg(items.map((c) => ({ imm: c.imm, w: c.currAnimalCount || 0 }))) * 100,
-        ) / 100,
-    }))
+    .map(([lotId, items]) => buildAgg("lot", lotId, `Lotto ${lotId}`, items))
     .sort((a, b) => b.imm - a.imm);
 
   // Distribution
@@ -333,18 +430,15 @@ export async function computeInventoryIMM(
   });
 
   return {
-    config: {
-      targetSizeCode: config.targetSizeCode,
-      targetMinApk: targetApk,
-      horizonDays: config.horizonDays,
-      weightSize: config.weightSize,
-      weightTime: config.weightTime,
-      fallbackSgrDaily: config.fallbackSgrDaily,
-    },
+    config: { ...config, targetMinApk: targetApk },
     totals: {
       totalAnimals,
       totalCycles: validCycles.length,
-      immGlobal: Math.round(immGlobal * 100) / 100,
+      immGlobal: round2(globalAvg.imm),
+      immSize: round2(globalAvg.size),
+      immTime: round2(globalAvg.time),
+      immQuality: round2(globalAvg.quality),
+      immReliability: round2(globalAvg.reliability),
     },
     distribution,
     byFlupsy,
@@ -359,4 +453,111 @@ export async function computeCycleIMM(
 ): Promise<CycleIMM | null> {
   const all = await computeInventoryIMM(configOverride);
   return all.cycles.find((c) => c.cycleId === cycleId) ?? null;
+}
+
+/**
+ * Salva uno snapshot giornaliero dell'IMM (globale + per FLUPSY + per Lotto).
+ * Idempotente: per (snapshot_date, scope, scope_id) sovrascrive l'eventuale record esistente.
+ */
+export async function saveDailySnapshot(
+  configOverride: Partial<IMMConfig> = {},
+  snapshotDate?: string,
+): Promise<{ inserted: number; date: string }> {
+  const date = snapshotDate ?? new Date().toISOString().slice(0, 10);
+  const result = await computeInventoryIMM(configOverride);
+  const configJson = JSON.stringify(result.config);
+
+  const records: Array<{
+    scope: string; scopeId: number | null; scopeName: string;
+    animalCount: number; cycleCount: number;
+    imm: number; immSize: number; immTime: number; immQuality: number; immReliability: number;
+  }> = [];
+
+  records.push({
+    scope: "global",
+    scopeId: null,
+    scopeName: "Magazzino",
+    animalCount: result.totals.totalAnimals,
+    cycleCount: result.totals.totalCycles,
+    imm: result.totals.immGlobal,
+    immSize: result.totals.immSize,
+    immTime: result.totals.immTime,
+    immQuality: result.totals.immQuality,
+    immReliability: result.totals.immReliability,
+  });
+  for (const f of result.byFlupsy) {
+    records.push({
+      scope: "flupsy", scopeId: f.scopeId, scopeName: f.scopeName,
+      animalCount: f.animalCount, cycleCount: f.cycleCount,
+      imm: f.imm, immSize: f.immSize, immTime: f.immTime,
+      immQuality: f.immQuality, immReliability: f.immReliability,
+    });
+  }
+  for (const l of result.byLot) {
+    records.push({
+      scope: "lot", scopeId: l.scopeId, scopeName: l.scopeName,
+      animalCount: l.animalCount, cycleCount: l.cycleCount,
+      imm: l.imm, immSize: l.immSize, immTime: l.immTime,
+      immQuality: l.immQuality, immReliability: l.immReliability,
+    });
+  }
+
+  // DELETE+INSERT atomico per evitare race condition tra scheduler e trigger manuale
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      DELETE FROM imm_snapshots
+      WHERE snapshot_date = ${date}
+        AND target_size_code = ${result.config.targetSizeCode}
+    `);
+    if (records.length > 0) {
+      await tx.insert(immSnapshots).values(
+        records.map((r) => ({
+          snapshotDate: date,
+          scope: r.scope,
+          scopeId: r.scopeId,
+          scopeName: r.scopeName,
+          targetSizeCode: result.config.targetSizeCode,
+          animalCount: r.animalCount,
+          cycleCount: r.cycleCount,
+          imm: r.imm,
+          immSize: r.immSize,
+          immTime: r.immTime,
+          immQuality: r.immQuality,
+          immReliability: r.immReliability,
+          config: configJson,
+        })),
+      );
+    }
+  });
+
+  return { inserted: records.length, date };
+}
+
+export async function getSnapshotHistory(opts: {
+  scope?: string;
+  scopeId?: number | null;
+  targetSizeCode?: string;
+  fromDate?: string;
+  toDate?: string;
+  limit?: number;
+} = {}) {
+  const scope = opts.scope ?? "global";
+  const targetSizeCode = opts.targetSizeCode ?? DEFAULT_IMM_CONFIG.targetSizeCode;
+  const fromDate = opts.fromDate ?? new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  const toDate = opts.toDate ?? new Date().toISOString().slice(0, 10);
+  const limit = Math.min(opts.limit ?? 365, 1000);
+
+  const result = await db.execute(sql`
+    SELECT snapshot_date, scope, scope_id, scope_name, target_size_code,
+           animal_count, cycle_count, imm, imm_size, imm_time, imm_quality, imm_reliability
+    FROM imm_snapshots
+    WHERE scope = ${scope}
+      AND target_size_code = ${targetSizeCode}
+      AND snapshot_date >= ${fromDate}
+      AND snapshot_date <= ${toDate}
+      ${opts.scopeId != null ? sql`AND scope_id = ${opts.scopeId}` : sql``}
+    ORDER BY snapshot_date ASC
+    LIMIT ${limit}
+  `);
+  return (result as any).rows ?? (result as any);
 }

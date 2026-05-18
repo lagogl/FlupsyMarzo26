@@ -1715,3 +1715,27 @@ export const insertEnvironmentalLogSchema = createInsertSchema(environmentalLog)
 
 export type EnvironmentalLog = typeof environmentalLog.$inferSelect;
 export type InsertEnvironmentalLog = z.infer<typeof insertEnvironmentalLogSchema>;
+
+// IMM Snapshots: storia giornaliera dell'Indice di Maturità del Magazzino
+export const immSnapshots = pgTable("imm_snapshots", {
+  id: serial("id").primaryKey(),
+  snapshotDate: date("snapshot_date").notNull(),
+  scope: text("scope").notNull(), // 'global' | 'flupsy' | 'lot'
+  scopeId: integer("scope_id"),
+  scopeName: text("scope_name"),
+  targetSizeCode: text("target_size_code").notNull(),
+  animalCount: integer("animal_count").notNull().default(0),
+  cycleCount: integer("cycle_count").notNull().default(0),
+  imm: real("imm").notNull(),
+  immSize: real("imm_size"),
+  immTime: real("imm_time"),
+  immQuality: real("imm_quality"),
+  immReliability: real("imm_reliability"),
+  config: text("config"), // JSON serialized
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  dateScopeIdx: index("imm_snapshots_date_scope_idx").on(table.snapshotDate, table.scope),
+  scopeIdIdx: index("imm_snapshots_scope_id_idx").on(table.scope, table.scopeId),
+}));
+
+export type ImmSnapshot = typeof immSnapshots.$inferSelect;

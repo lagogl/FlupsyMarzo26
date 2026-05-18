@@ -124,6 +124,16 @@ async function runBackgroundInitialization() {
     console.error("⚠️ Errore durante l'inizializzazione dello scheduler integrità:", error);
   }
 
+  // Inizializza lo scheduler snapshot IMM giornaliero
+  console.log("📸 Inizializzazione scheduler snapshot IMM...");
+  try {
+    const { startImmSnapshotScheduler } = await import('./services/imm-snapshot-scheduler.service');
+    startImmSnapshotScheduler({ hour: 3, minute: 30 });
+    console.log("✅ Scheduler IMM attivo (snapshot ore 03:30)");
+  } catch (error) {
+    console.error("⚠️ Errore durante l'inizializzazione dello scheduler IMM:", error);
+  }
+
   // Inizializza lo scheduler di backup automatico giornaliero
   console.log("💾 Inizializzazione scheduler backup automatico...");
   try {
