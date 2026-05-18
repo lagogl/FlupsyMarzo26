@@ -9259,6 +9259,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/reports', salesReportsModule.salesReportsRoutes);
   console.log('✅ Modulo SALES REPORTS registrato su /api/reports/sales/*');
 
+  // Registra il modulo IMM (Indice di Maturità del Magazzino)
+  const immModule = await import('./modules/imm');
+  app.use('/api/imm', immModule.immRoutes);
+  console.log('✅ Modulo IMM registrato su /api/imm/*');
+
 
   // Middleware anti-cache per API critiche
   function forceNoCacheHeaders(res: any) {

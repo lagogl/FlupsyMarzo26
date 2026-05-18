@@ -11,6 +11,7 @@ import FlupsyCenterFilter from '@/components/dashboard/FlupsyCenterFilter';
 import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
 import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
+import IMMCard from '@/components/dashboard/IMMCard';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
 import MortalityTemporalCard from '@/components/dashboard/MortalityTemporalCard';
 import MortalityAlertsCard from '@/components/dashboard/MortalityAlertsCard';
@@ -500,10 +501,11 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Dashboard Summary - Seconda riga: Analisi Mortalità */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      {/* Dashboard Summary - Seconda riga: Analisi Mortalità + IMM */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <MortalityTemporalCard selectedFlupsyIds={selectedFlupsyIds} />
         <MortalityAlertsCard selectedFlupsyIds={selectedFlupsyIds} />
+        <IMMCard />
       </div>
 
       {/* FLUPSY Visualizer */}

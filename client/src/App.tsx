@@ -96,6 +96,8 @@ import MenuSettings from "@/pages/MenuSettings";
 import PendingClosures from "@/pages/PendingClosures";
 import CesteDaRiallineare from "@/pages/CesteDaRiallineare";
 import ReportPesoCeste from "@/pages/ReportPesoCeste";
+// Importazione IMM (Indice di Maturità del Magazzino)
+import IMM from "@/pages/IMM";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
@@ -145,6 +147,7 @@ function Router() {
       <ProtectedRoute path="/vagliature-sospette" component={VagliatureSospette} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/lot-ledger-statistics" component={LotLedgerStatistics} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/inventory" component={Inventory}/>
+      <ProtectedRoute path="/imm" component={IMM}/>
       <ProtectedRoute path="/sizes" component={Sizes}/>
       <ProtectedRoute path="/sgr" component={Sgr} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/sgr-lineage" component={SgrLineage}/>
