@@ -1,0 +1,181 @@
+
+Handoff — Coorti, Genealogia e IMM (per applicazione in produzione)
+Destinatario: sviluppatore che lavora sulla copia dell'app collegata al database di PRODUZIONE. Stato di questo documento: istruzioni operative complete. Leggere tutto prima di toccare il DB. Ambiente di riferimento: la presente app gira su DB di sviluppo. Le stesse modifiche devono essere replicate in produzione nello stesso ordine indicato.
+
+1. Concetti — devi capirli prima di scrivere SQL
+1.1 Cos'è un ciclo (cycles)
+Un ciclo rappresenta la vita di un cestello dal momento della sua attivazione (primo popolamento con animali) fino alla chiusura. Ogni cestello ha al massimo un ciclo attivo (cycles.state = 'active'). Un ciclo è univocamente legato a un cestello tramite cycles.basket_id.
+
+1.2 Cos'è una coorte (cohort)
+Una coorte è un gruppo di animali con stessa origine biologica che attraversa nel tempo uno o più cicli. La coorte non è una riga della tabella cycles: è il risultato della risalita genealogica lungo i legami parent_cycle_id.
+
+Esempio:
+
+Ciclo A (cestello 1, lotto L1, attivato il 1/1) → vagliato il 1/3 in cicli B, C, D (cestelli 2, 3, 4).
+Le coorti attive sono B, C, D, ma tutte e tre hanno origine dal ciclo A (che è chiuso).
+A è il "tronco", B/C/D sono "foglie".
+Foglia attiva = cycles.state='active' e nessun ciclo figlio attivo che la referenzia tramite parent_cycle_id. La pagina "Giacenza Ponderata" mostra una riga per ogni foglia attiva.
+
+1.3 Due modi in cui nasce un ciclo (CRITICO)
+Nuova semina di lotto — operazione prima-attivazione. Il cestello viene popolato con animali appena arrivati di un lotto (operations.lot_id). Il ciclo non ha parent_cycle_id (è un tronco).
+Derivazione da vagliatura/selezione — operazione prima-attivazione-da-vagliatura (TIPO NUOVO INTRODOTTO DA QUESTA RELEASE). Il cestello riceve animali da uno o più cicli sorgente già esistenti. Il ciclo ha parent_cycle_id valorizzato.
+Prima di questa release entrambi i casi usavano prima-attivazione — era impossibile distinguerli senza ispezionare selection_basket_history. Le query KPI che filtravano solo prima-attivazione continuano a funzionare, ma se NON aggiungi prima-attivazione-da-vagliatura al filtro dopo il backfill, le 36 operazioni rietichettate spariranno dalle statistiche.
+
+1.4 Genealogia — tre fonti di "parent"
+Per ricostruire l'albero parent→child di un ciclo derivato esistono tre tabelle che vanno UNITE:
+
+Fonte	Quando viene popolata	Note
+cycles.parent_cycle_id	Dovrebbe essere popolata sempre al momento della derivazione	Bug storico: prima di questa release veniva popolata solo in alcuni flussi. Il backfill la ripristina.
+screening_basket_history (sorgente/destinazione cicli da modulo "screening")	Modulo screening	Già corretta storicamente.
+selection_basket_history (sorgente/destinazione cicli da modulo "selezione/vagliatura")	Modulo vagliatura	Bug storico: il campo destination_cycle_id veniva sempre scritto a 0 → tutti gli edge sono inutilizzabili senza fix.
+1.5 Cos'è l'IMM
+IMM = Indice di Maturità di Mercato, normalizzato 0–100.
+
+Significato: quanto la coorte è vicina alla taglia di vendita.
+
+IMM = 0 → coorte appena seminata, animali piccolissimi (es. TP-180, larvae).
+IMM = 100 → coorte alla taglia commerciale massima (TP-10000).
+Calcolo: si determina la posizione della taglia corrente nella scala ordinata delle sizes (vedi sezione 1.6) e si normalizza linearmente sull'intervallo [0, 100] rispetto al numero totale di taglie.
+
+Formula (semplificata):
+
+posizione = indice (1-based) della size corrente nella scala ordinata per min_animals_per_kg ASC
+IMM = round( 100 * (totale_taglie - posizione) / (totale_taglie - 1) )
+
+Quindi:
+
+size più piccola (TP-180, posizione 29) → IMM ≈ 0
+size più grande (TP-10000, posizione 1) → IMM = 100
+ATTENZIONE — non usare sizes.id per calcolare la posizione. L'id è arbitrario. La posizione corretta si ottiene solo ordinando per min_animals_per_kg ASC.
+
+1.6 Scala delle taglie — regola sacra
+Tabella sizes(id, code, name, min_animals_per_kg, max_animals_per_kg).
+
+Più animali per kg → animale più piccolo → taglia commerciale più piccola.
+
+Ordine corretto (posizione 1 = animale più grande):
+
+TP-10000 (801–1.200/kg) — animali grandi
+TP-9000 (1.201–1.800/kg) ... (29 taglie totali)
+TP-180 (70M–100M/kg) — larvae
+La taglia di un'operazione si determina trovando l'intervallo [min_animals_per_kg, max_animals_per_kg] che contiene il valore animals_per_kg misurato. Non fidarti mai di sizes.id per ordinamenti o confronti.
+
+2. Cosa è stato cambiato in questa release (riassunto)
+#	Cosa	Dove	Tipo
+1	Nuovo tipo operazione prima-attivazione-da-vagliatura aggiunto a operationTypes	shared/schema.ts	Schema TS
+2	Il flusso "completa vagliatura" ora crea operazioni di tipo prima-attivazione-da-vagliatura invece di prima-attivazione	server/controllers/selection-controller.ts + server/controllers/selection-controller-fixed.ts	Comportamento
+3	Fix bug selection_basket_history.destination_cycle_id = 0 → ora scrive l'ID reale del nuovo ciclo	stessi due file	Bug fix
+4	Controller coorti che unisce 3 fonti di genealogia (cycles.parent_cycle_id, screening_basket_history, selection_basket_history) e ritorna originType	server/controllers/cohorts-controller.ts	Nuovo
+5	Filtri di lettura su KPI/forecast/report estesi per includere il nuovo tipo	vari file (vedi sezione 5)	Read-only
+6	Cascade delete tratta il nuovo tipo come prima-attivazione	server/services/operations-lifecycle.service.ts, server/db-storage.ts	Comportamento
+7	UI "Giacenza Ponderata" mostra colonna Origine con badge "Nuova semina" / "Da vagliatura"	client/src/pages/GiacenzaPonderata.tsx	UI
+8	Endpoint admin POST /api/cohorts/backfill-selections (dry-run + ?apply=1, transazionale, protetto da ruolo admin)	server/controllers/cohorts-controller.ts + server/routes.ts	Nuovo
+3. ORDINE DI APPLICAZIONE IN PRODUZIONE (non saltare passi)
+Passo 0 — Backup
+Esegui un backup completo del DB di produzione prima di qualunque cosa. Il backfill scrive su operations, cycles, selection_basket_history.
+
+Passo 1 — Deploy del codice
+Allinea i sorgenti alla release. Il codice deve essere deployato prima del backfill, perché:
+
+L'endpoint di backfill è registrato dal codice;
+Il check di ruolo admin sull'endpoint è nel codice;
+Il fix sul flusso vagliatura "in tempo reale" è nel codice — finché non lo deployi, ogni nuova vagliatura continuerà a creare righe sbagliate (e a corrompere ulteriormente la history).
+Passo 2 — Verifica pre-backfill (sola lettura)
+Esegui sul DB di produzione le query di seguito e annota i numeri. Servono come baseline per validare il backfill.
+
+-- (a) Quanti edge della history hanno destination_cycle_id=0 (bug storico)
+SELECT COUNT(*) AS edge_zero
+FROM selection_basket_history
+WHERE destination_cycle_id = 0;
+-- (b) Quante operazioni 'prima-attivazione' su cestelli destinazione di vagliature
+-- (sono i candidati da rietichettare in 'prima-attivazione-da-vagliatura')
+SELECT COUNT(*) AS ops_da_rilabeling
+FROM operations o
+WHERE o.type = 'prima-attivazione'
+  AND EXISTS (
+    SELECT 1 FROM selection_destination_baskets sdb
+    WHERE sdb.basket_id = o.basket_id
+      AND sdb.cycle_id  = o.cycle_id
+  );
+-- (c) Quanti cicli derivati hanno parent_cycle_id NULL ma una riga in
+-- selection_destination_baskets (sono i parent_cycle_id da popolare)
+SELECT COUNT(*) AS cicli_senza_parent
+FROM cycles c
+WHERE c.parent_cycle_id IS NULL
+  AND EXISTS (
+    SELECT 1 FROM selection_destination_baskets sdb
+    WHERE sdb.basket_id = c.basket_id AND sdb.cycle_id = c.id
+  );
+
+Per riferimento, in sviluppo prima del backfill i numeri erano: (a) 175, (b) 36, (c) 36. In produzione saranno diversi — segna i valori reali.
+
+Passo 3 — Dry-run del backfill
+Endpoint: POST /api/cohorts/backfill-selections senza ?apply=1. Devi essere autenticato come admin (il controller fa req.session.user.role === 'admin'). Restituisce conteggi senza scrivere. Confrontali con la sezione 2: devono coincidere con (a)/(b)/(c) del Passo 2.
+
+Se i conteggi divergono di molto, fermati e indaga prima di applicare.
+
+Passo 4 — Applicazione del backfill
+POST /api/cohorts/backfill-selections?apply=1 (sempre come admin). Il controller esegue tutto in una singola transazione: o tutte le scritture vanno a buon fine, o tutto rollback.
+
+Cosa fa, in ordine:
+
+Aggiorna selection_basket_history.destination_cycle_id da 0 all'ID reale del ciclo destinazione, recuperato da selection_destination_baskets.
+Rietichetta in prima-attivazione-da-vagliatura le operazioni prima-attivazione su (basket_id, cycle_id) che corrispondono a un selection_destination_baskets.
+Popola cycles.parent_cycle_id sui cicli destinazione con il parent_cycle_id derivato dalla history (per cicli con più sorgenti, si prende il sorgente "dominante" — quello con più animali contribuiti; in caso di parità, l'ID minore).
+Passo 5 — Verifica post-backfill
+SELECT COUNT(*) FROM selection_basket_history WHERE destination_cycle_id = 0; -- atteso: ≈ 0 (residui = righe orfane senza SDB row)
+SELECT COUNT(*) FROM operations WHERE type = 'prima-attivazione-da-vagliatura'; -- atteso: pari a (b) del Passo 2
+SELECT COUNT(*) FROM cycles WHERE parent_cycle_id IS NOT NULL; -- deve essere aumentato di (c) del Passo 2
+
+Edge case noto: dopo il backfill restano in selection_basket_history alcune righe con destination_cycle_id=0 quando NON esiste la corrispondente selection_destination_baskets (orfani storici). Lasciale così — il controller coorti le ignora già con un filtro WHERE destination_cycle_id <> 0.
+
+Passo 6 — Smoke test funzionale
+Pagina Giacenza Ponderata: la colonna Origine deve popolarsi con badge "Nuova semina" (azzurro) e "Da vagliatura" (viola).
+Clic su una coorte derivata → albero genealogico deve risalire al ciclo padre (e oltre, se ci sono più livelli).
+Aprire una pagina Report Lotto di un lotto che ha avuto vagliature: i conteggi non devono essere cambiati rispetto a prima (i filtri di lettura sono stati estesi proprio per evitare regressioni).
+Forecast di produzione: gli scenari devono includere tutte le coorti attive — controllo numeri totali animali prima/dopo deploy: devono combaciare.
+4. Endpoint nuovo — sicurezza
+POST /api/cohorts/backfill-selections[?apply=1]
+
+Autorizzazione: controllo nel controller — req.session.user.role !== 'admin' → 403.
+Idempotenza: il backfill è idempotente — rieseguirlo non duplica operazioni. Le clausole WHERE filtrano già i record non ancora migrati.
+Disattivazione consigliata dopo l'uso: una volta completata la migrazione in produzione, valuta di commentare la registrazione della route in server/routes.ts per ridurre la superficie di attacco. Non è strettamente necessario perché c'è il check ruolo, ma è una buona pratica.
+5. File toccati nei filtri di lettura (per ispezione/diff)
+Tutti questi punti sono stati estesi da IN ('misura','peso','prima-attivazione') a IN ('misura','peso','prima-attivazione','prima-attivazione-da-vagliatura') (o equivalente JS). Solo letture — nessuna mutazione di stato.
+
+server/ai/production-forecast-service.ts (3 query)
+server/controllers/growth-notification-handler.ts (2 punti)
+server/controllers/lot-report-controller.ts (1 query)
+server/routes.ts:
+giacenze attive (2 query)
+taglie attese (1 query)
+active-baskets-animals (1 query)
+distribuzione per taglia (2 query)
+check taglia operazione (2 punti)
+Se trovi altri filtri legacy WHERE type = 'prima-attivazione' o IN ('misura','peso','prima-attivazione') non aggiornati, estendili nello stesso modo. Cerca con:
+
+rg -n "'prima-attivazione'" server/ shared/ --type ts | rg -v 'prima-attivazione-da-vagliatura'
+
+Considera però che i percorsi di scrittura/creazione (es. routes.ts linee 2640, 2837, 2967, 3118, 3423, 3743 — creazione ciclo all'inserimento di una prima-attivazione, validazione zod z.literal('prima-attivazione'), ecc.) NON vanno toccati: la nuova semina di lotto resta prima-attivazione, e quel ramo non deve creare cicli per vagliature (che invece sono gestite dal controller vagliatura).
+
+6. Cosa NON fare (errori che ti costerebbero ore di rollback)
+Non eseguire il backfill prima di aver deployato il codice. Le scritture sono safe ma le successive vagliature continuerebbero a generare bug.
+Non aggiungere prima-attivazione-da-vagliatura alla validazione Zod del payload di creazione operazione manuale (es. z.literal('prima-attivazione') in routes.ts). Quel tipo deve essere creato solo dal controller vagliatura — mai a mano dall'utente.
+Non usare sizes.id per calcolare IMM o anomalie di taglia. Usa sempre la posizione ordinata per min_animals_per_kg ASC.
+Non assumere che total_weight sia in kg. È in grammi (vedi replit.md). animals_per_kg è una colonna a sé sull'operazione — leggila direttamente, non ricalcolarla.
+Non riapplicare il backfill su un DB già migrato. È idempotente ma rumoroso nei log; preferisci il dry-run per verificare lo stato.
+Non toccare drizzle.config.ts, package.json, server/vite.ts, vite.config.ts.
+7. Rollback di emergenza
+Se dopo il backfill noti dati corrotti:
+
+Stop dell'app.
+Restore del backup del Passo 0.
+Revert del deploy del codice (le scritture realtime del nuovo flusso vagliatura comunque sono compatibili con il codice vecchio in lettura — quindi il restore del solo DB potrebbe bastare se il deploy del codice rimane in piedi, ma per pulizia ripristina entrambi).
+Non esiste uno script di "un-backfill" automatico: le rietichettature non sono tracciate in audit dedicato (sono comunque visibili in audit_logs se hai abilitato il logging). Il rollback è solo via backup.
+
+8. Riferimenti rapidi
+Tabelle chiave: cycles, operations, baskets, sizes, selection_basket_history, selection_destination_baskets, screening_basket_history.
+Controller centrale del calcolo coorti/genealogia: server/controllers/cohorts-controller.ts.
+Pagina UI: client/src/pages/GiacenzaPonderata.tsx.
+Documento di scala taglie e convenzioni pesi: replit.md (sezione "Size (Taglia) Scale — CRITICAL RULES" e "Weight Unit Conventions").
+Per dubbi prima di applicare in produzione: esegui sempre prima il dry-run (Passo 3) e confronta i conteggi con il Passo 2. Se non combaciano, fermati e indaga.
