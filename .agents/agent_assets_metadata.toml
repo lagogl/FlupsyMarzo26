@@ -12,3 +12,21 @@ id = "V1sA1O4mRfkUbIORj6DdB"
 uri = "file://riepilogo_operatori_19marzo2026.pdf"
 type = "pdf"
 title = "Novita per gli Operatori — 19 Marzo 2026"
+
+[[outputs]]
+id = "c7jowfKEC3-No0g8SY6vG"
+uri = "file://exports/FLUPSY_Guida_IMM_Operatori.pdf"
+type = "pdf"
+title = "Guida Operatori — IMM (PDF, 7 pagine)"
+
+[[outputs]]
+id = "Aj-AdbJ6VqTM6-ypAGRvi"
+uri = "file://exports/FLUPSY_Manuale_IT.pdf"
+type = "pdf"
+title = "Manuale FLUPSY completo — Italiano (PDF, 58 pagine)"
+
+[[outputs]]
+id = "_y8cV4wZ9kaU52bDu1LKm"
+uri = "file://exports/FLUPSY_Manual_EN.pdf"
+type = "pdf"
+title = "FLUPSY Manual — English (PDF, 55 pages)"

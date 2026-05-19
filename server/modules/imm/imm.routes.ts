@@ -11,6 +11,7 @@ import {
   savePersistedConfig,
   IMMConfig,
 } from "./imm.service";
+import { generateManualPDF } from "../../services/manual-pdf.service";
 
 export const immRoutes = Router();
 
@@ -272,6 +273,27 @@ immRoutes.get("/export", async (req: Request, res: Response) => {
   } catch (e: any) {
     console.error("IMM export error:", e);
     res.status(500).json({ success: false, message: e?.message || "Errore export Excel" });
+  }
+});
+
+// Manuale PDF: guida operatori IMM o manuale completo app
+immRoutes.get("/manual.pdf", async (req: Request, res: Response) => {
+  try {
+    const lang = (req.query.lang === "en" ? "en" : "it") as "it" | "en";
+    const chapterId = typeof req.query.chapter === "string" ? req.query.chapter : undefined;
+    const title = chapterId === "imm"
+      ? (lang === "it" ? "Guida Operatori — IMM" : "Operator Guide — IMM")
+      : undefined;
+    const buf = await generateManualPDF({ lang, chapterId, title });
+    const fname = chapterId
+      ? `FLUPSY_${chapterId}_${lang}.pdf`
+      : `FLUPSY_Manuale_${lang}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${fname}"`);
+    res.send(buf);
+  } catch (e: any) {
+    console.error("Manual PDF error:", e);
+    res.status(500).json({ success: false, message: e?.message || "Errore generazione PDF" });
   }
 });
 
