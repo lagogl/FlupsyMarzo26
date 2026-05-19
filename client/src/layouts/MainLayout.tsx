@@ -188,8 +188,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <Scale className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.sizeTable, path: "/sizes" },
         { icon: <Boxes className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockInventory, path: "/inventory" },
         { icon: <CalendarDays className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockRangeCalculation, path: "/giacenze-range" },
-        { icon: <Gauge className="h-5 w-5 mr-2 text-orange-600" />, label: "IMM — Maturità Magazzino", path: "/imm" },
-        { icon: <BookOpen className="h-5 w-5 mr-2 text-blue-600" />, label: "Manuale / Manual", path: "/manuale" }
+        { icon: <Gauge className="h-5 w-5 mr-2 text-orange-600" />, label: "IMM — Maturità Magazzino", path: "/imm" }
       ]
     },
     {
@@ -247,6 +246,15 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <CloudIcon className="h-5 w-5 mr-2 text-blue-600" />, label: translations.menuItems.invoicesInCloud, path: "/fatture-in-cloud" },
         { icon: <Database className="h-5 w-5 mr-2 text-gray-600" />, label: translations.menuItems.databaseBackup, path: "/backup" },
         { icon: <Zap className="h-5 w-5 mr-2 text-gray-600" />, label: translations.menuItems.adminUtilities, path: "/amministrazione-utilita" }
+      ]
+    },
+    {
+      id: 'help',
+      label: 'Documentazione',
+      icon: <BookOpen className="h-5 w-5" />,
+      color: 'text-blue-600',
+      items: [
+        { icon: <BookOpen className="h-5 w-5 mr-2 text-blue-600" />, label: "Manuale / Manual", path: "/manuale" }
       ]
     }
   ].filter(cat => cat.id !== 'system' || user?.role === 'admin')
