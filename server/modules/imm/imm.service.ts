@@ -30,6 +30,11 @@ export type CycleIMM = {
   cumulativeMortalityPct: number;
   imm: number;
   components: IMMComponents;
+  pricePerAnimalCurrent: number | null;
+  pricePerAnimalTarget: number | null;
+  valoreAttuale: number;
+  valorePotenziale: number;
+  valoreMaturo: number;
 };
 
 export type IMMAggregate = {
@@ -43,6 +48,9 @@ export type IMMAggregate = {
   immTime: number;
   immQuality: number;
   immReliability: number;
+  valoreAttuale: number;
+  valorePotenziale: number;
+  valoreMaturo: number;
 };
 
 export type IMMDistributionBin = {
@@ -76,6 +84,9 @@ export type IMMInventoryResult = {
     immTime: number;
     immQuality: number;
     immReliability: number;
+    valoreAttuale: number;
+    valorePotenziale: number;
+    valoreMaturo: number;
   };
   distribution: IMMDistributionBin[];
   byFlupsy: IMMAggregate[];
@@ -231,6 +242,13 @@ export async function computeInventoryIMM(
   }
   const targetApk = Number(targetRec.min_animals_per_kg);
 
+  // Carica listino prezzi €/animale per taglia
+  const priceRows = await db.execute(sql`SELECT size_code, price_per_animal FROM sales_price_list`);
+  const priceArr = ((priceRows as any).rows ?? (priceRows as any)) as Array<{ size_code: string; price_per_animal: number }>;
+  const priceMap = new Map<string, number>();
+  for (const p of priceArr) priceMap.set(p.size_code, Number(p.price_per_animal));
+  const targetPrice = priceMap.get(config.targetSizeCode) ?? 0;
+
   const result = await db.execute(sql`
     WITH active AS (
       SELECT c.id AS cycle_id, c.basket_id, c.lot_id, c.quality_class, c.start_date,
@@ -325,6 +343,14 @@ export async function computeInventoryIMM(
         ? (wSize * immSize + wTime * immTime + wQual * immQuality + wRel * immReliability) / wTot
         : 0;
 
+    // Valore: prezzo €/animale per taglia attuale e per target
+    const pCurr = r.curr_size_code ? priceMap.get(r.curr_size_code) ?? null : null;
+    const pTarget = targetPrice > 0 ? targetPrice : null;
+    const animals = animalCount ?? 0;
+    const valoreAttuale = pCurr != null ? animals * pCurr : 0;
+    const valorePotenziale = pTarget != null ? animals * pTarget : 0;
+    const valoreMaturo = valorePotenziale * (imm / 100);
+
     return {
       cycleId: Number(r.cycle_id),
       basketId: Number(r.basket_id),
@@ -351,6 +377,11 @@ export async function computeInventoryIMM(
         immQuality: round2(immQuality),
         immReliability: round2(immReliability),
       },
+      pricePerAnimalCurrent: pCurr,
+      pricePerAnimalTarget: pTarget,
+      valoreAttuale: round2(valoreAttuale),
+      valorePotenziale: round2(valorePotenziale),
+      valoreMaturo: round2(valoreMaturo),
     };
   });
 
@@ -392,6 +423,9 @@ export async function computeInventoryIMM(
       immTime: round2(avg.time),
       immQuality: round2(avg.quality),
       immReliability: round2(avg.reliability),
+      valoreAttuale: round2(items.reduce((s, c) => s + c.valoreAttuale, 0)),
+      valorePotenziale: round2(items.reduce((s, c) => s + c.valorePotenziale, 0)),
+      valoreMaturo: round2(items.reduce((s, c) => s + c.valoreMaturo, 0)),
     };
   };
   const byFlupsy: IMMAggregate[] = Array.from(flupsyMap.entries())
@@ -439,6 +473,9 @@ export async function computeInventoryIMM(
       immTime: round2(globalAvg.time),
       immQuality: round2(globalAvg.quality),
       immReliability: round2(globalAvg.reliability),
+      valoreAttuale: round2(validCycles.reduce((s, c) => s + c.valoreAttuale, 0)),
+      valorePotenziale: round2(validCycles.reduce((s, c) => s + c.valorePotenziale, 0)),
+      valoreMaturo: round2(validCycles.reduce((s, c) => s + c.valoreMaturo, 0)),
     },
     distribution,
     byFlupsy,
@@ -531,6 +568,93 @@ export async function saveDailySnapshot(
   });
 
   return { inserted: records.length, date };
+}
+
+// Stati ordine considerati "aperti" (non evasi/annullati). Include "N/A" perché tipico import FIC.
+const OPEN_ORDER_STATES = ["N/A", "aperto", "open", "confermato", "confirmed", "in lavorazione"];
+
+export type OrderCoverageRow = {
+  sizeCode: string;
+  demand: number;       // animali ordinati aperti
+  supply: number;       // animali attualmente in magazzino di quella taglia
+  matureSupply: number; // animali con IMM ≥ 75 (pronti vendita)
+  pricePerAnimal: number | null;
+  demandValue: number;
+  gap: number;          // domanda − offerta (positivo = scoperto)
+  coverage: number;     // %, min(100, supply/demand*100). 100 se demand=0.
+};
+
+export async function computeOrdersCoverage(
+  configOverride: Partial<IMMConfig> = {},
+): Promise<{ rows: OrderCoverageRow[]; totals: { totalDemand: number; totalValue: number; totalGap: number } }> {
+  const inv = await computeInventoryIMM(configOverride);
+
+  // Carica righe ordini aperte; parsa la taglia da `nome` o `codice`
+  const ordRows = await db.execute(sql`
+    SELECT r.nome, r.codice, r.quantita, r.prezzo_unitario, o.stato
+    FROM ordini_righe r
+    JOIN ordini o ON o.id = r.ordine_id
+  `);
+  const orderRowsArr = ((ordRows as any).rows ?? (ordRows as any)) as Array<{
+    nome: string; codice: string | null; quantita: string; prezzo_unitario: string; stato: string | null;
+  }>;
+
+  const sizeRegex = /screen\s*(\d{3,5})/i; // estrae 3000 da "screen3000"
+  const demandBySize = new Map<string, number>();
+  for (const row of orderRowsArr) {
+    const stato = (row.stato ?? "N/A").toLowerCase();
+    if (!OPEN_ORDER_STATES.some((s) => s.toLowerCase() === stato)) continue;
+    const m = row.nome?.match(sizeRegex);
+    if (!m) continue;
+    const sizeCode = `TP-${m[1]}`;
+    const qty = Number(row.quantita) || 0;
+    if (qty <= 0) continue;
+    demandBySize.set(sizeCode, (demandBySize.get(sizeCode) ?? 0) + qty);
+  }
+
+  // Offerta per taglia: somma animali nei cicli con currSizeCode = quella taglia
+  const supplyBySize = new Map<string, number>();
+  const matureBySize = new Map<string, number>();
+  for (const c of inv.cycles) {
+    if (!c.currSizeCode || !c.currAnimalCount) continue;
+    supplyBySize.set(c.currSizeCode, (supplyBySize.get(c.currSizeCode) ?? 0) + c.currAnimalCount);
+    if (c.imm >= 75) {
+      matureBySize.set(c.currSizeCode, (matureBySize.get(c.currSizeCode) ?? 0) + c.currAnimalCount);
+    }
+  }
+
+  // Listino prezzi
+  const priceRows = await db.execute(sql`SELECT size_code, price_per_animal FROM sales_price_list`);
+  const priceArr = ((priceRows as any).rows ?? (priceRows as any)) as Array<{ size_code: string; price_per_animal: number }>;
+  const priceMap = new Map<string, number>();
+  for (const p of priceArr) priceMap.set(p.size_code, Number(p.price_per_animal));
+
+  // Unione di tutte le taglie comparse
+  const allSizes = new Set<string>([...demandBySize.keys(), ...supplyBySize.keys()]);
+  const rows: OrderCoverageRow[] = Array.from(allSizes).map((sizeCode) => {
+    const demand = demandBySize.get(sizeCode) ?? 0;
+    const supply = supplyBySize.get(sizeCode) ?? 0;
+    const matureSupply = matureBySize.get(sizeCode) ?? 0;
+    const price = priceMap.get(sizeCode) ?? null;
+    const demandValue = price != null ? demand * price : 0;
+    const gap = demand - supply;
+    const coverage = demand > 0 ? Math.min(100, (supply / demand) * 100) : 100;
+    return {
+      sizeCode,
+      demand,
+      supply,
+      matureSupply,
+      pricePerAnimal: price,
+      demandValue: round2(demandValue),
+      gap,
+      coverage: round2(coverage),
+    };
+  }).sort((a, b) => b.demand - a.demand);
+
+  const totalDemand = rows.reduce((s, r) => s + r.demand, 0);
+  const totalValue = round2(rows.reduce((s, r) => s + r.demandValue, 0));
+  const totalGap = rows.reduce((s, r) => s + Math.max(0, r.gap), 0);
+  return { rows, totals: { totalDemand, totalValue, totalGap } };
 }
 
 export async function getSnapshotHistory(opts: {

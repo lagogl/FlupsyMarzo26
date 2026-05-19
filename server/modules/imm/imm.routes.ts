@@ -5,6 +5,7 @@ import {
   DEFAULT_IMM_CONFIG,
   saveDailySnapshot,
   getSnapshotHistory,
+  computeOrdersCoverage,
 } from "./imm.service";
 
 export const immRoutes = Router();
@@ -51,6 +52,18 @@ immRoutes.get("/cycle/:cycleId", async (req: Request, res: Response) => {
 
 immRoutes.get("/config/defaults", (_req: Request, res: Response) => {
   res.json({ success: true, data: DEFAULT_IMM_CONFIG });
+});
+
+// Copertura ordini per taglia
+immRoutes.get("/orders-coverage", async (req: Request, res: Response) => {
+  try {
+    const cfg = parseConfig(req);
+    const data = await computeOrdersCoverage(cfg);
+    res.json({ success: true, data });
+  } catch (e: any) {
+    console.error("IMM orders-coverage error:", e);
+    res.status(500).json({ success: false, message: e?.message || "Errore copertura ordini" });
+  }
 });
 
 // Storia snapshot (per trend chart)

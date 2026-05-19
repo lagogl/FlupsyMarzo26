@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Gauge, Info, Camera, TrendingUp } from 'lucide-react';
+import { Gauge, Info, Camera, TrendingUp, Euro, ShoppingCart } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   Legend, ResponsiveContainer,
@@ -30,12 +30,24 @@ type CycleIMM = {
   daysElapsed: number; sgrDaily: number; daysRemaining: number | null;
   cumulativeMortalityPct: number;
   imm: number; components: IMMComponents;
+  pricePerAnimalCurrent: number | null; pricePerAnimalTarget: number | null;
+  valoreAttuale: number; valorePotenziale: number; valoreMaturo: number;
 };
 
 type IMMAggregate = {
   scope: string; scopeId: number | null; scopeName: string;
   animalCount: number; cycleCount: number;
   imm: number; immSize: number; immTime: number; immQuality: number; immReliability: number;
+  valoreAttuale: number; valorePotenziale: number; valoreMaturo: number;
+};
+
+type OrderCoverageRow = {
+  sizeCode: string; demand: number; supply: number; matureSupply: number;
+  pricePerAnimal: number | null; demandValue: number; gap: number; coverage: number;
+};
+type CoverageResponse = {
+  success: boolean;
+  data: { rows: OrderCoverageRow[]; totals: { totalDemand: number; totalValue: number; totalGap: number } };
 };
 
 type IMMResponse = {
@@ -49,6 +61,7 @@ type IMMResponse = {
     totals: {
       totalAnimals: number; totalCycles: number;
       immGlobal: number; immSize: number; immTime: number; immQuality: number; immReliability: number;
+      valoreAttuale: number; valorePotenziale: number; valoreMaturo: number;
     };
     distribution: Array<{
       range: string; minImm: number; maxImm: number;
@@ -114,6 +127,13 @@ export default function IMM() {
   const toDate = new Date().toISOString().slice(0, 10);
   const historyKey = ['/api/imm/history', { scope: 'global', targetSizeCode, fromDate, toDate }];
   const { data: history } = useQuery<HistoryResponse>({ queryKey: historyKey });
+
+  const coverageKey = ['/api/imm/orders-coverage', { targetSizeCode, horizonDays }];
+  const { data: coverage } = useQuery<CoverageResponse>({ queryKey: coverageKey });
+  const cov = coverage?.data;
+
+  const fmtEur = (v: number) =>
+    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
   const snapshotMutation = useMutation({
     mutationFn: async () => {
@@ -196,7 +216,7 @@ export default function IMM() {
       </Card>
 
       {/* KPI principale */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -233,6 +253,39 @@ export default function IMM() {
             <p className="text-xs text-gray-500 mt-2">
               Ultima `animal_count` per ciclo attivo.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Euro className="h-4 w-4 text-gray-500" />
+              <p className="text-sm text-gray-500">Valore attuale</p>
+            </div>
+            <p className="text-3xl font-bold text-blue-700">{fmtEur(d?.totals.valoreAttuale ?? 0)}</p>
+            <p className="text-xs text-gray-500 mt-2">Prezzo €/animale × taglia corrente.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Euro className="h-4 w-4 text-gray-500" />
+              <p className="text-sm text-gray-500">Valore a target</p>
+            </div>
+            <p className="text-3xl font-bold text-emerald-700">{fmtEur(d?.totals.valorePotenziale ?? 0)}</p>
+            <p className="text-xs text-gray-500 mt-2">Potenziale se tutti raggiungono {d?.config.targetSizeCode}.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Euro className="h-4 w-4 text-gray-500" />
+              <p className="text-sm text-gray-500">Valore maturo</p>
+            </div>
+            <p className="text-3xl font-bold text-green-700">{fmtEur(d?.totals.valoreMaturo ?? 0)}</p>
+            <p className="text-xs text-gray-500 mt-2">Valore potenziale × IMM/100.</p>
           </CardContent>
         </Card>
       </div>
@@ -318,6 +371,81 @@ export default function IMM() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Copertura ordini per taglia */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShoppingCart className="h-4 w-4" /> Copertura ordini per taglia
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!cov ? (
+            <p className="text-sm text-gray-500 py-4">Caricamento…</p>
+          ) : cov.rows.length === 0 ? (
+            <p className="text-sm text-gray-500 py-4">Nessun ordine aperto trovato.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-500">Domanda totale aperta</p>
+                  <p className="text-2xl font-bold">{cov.totals.totalDemand.toLocaleString('it-IT')}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-500">Valore domanda</p>
+                  <p className="text-2xl font-bold text-emerald-700">{fmtEur(cov.totals.totalValue)}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-500">Gap totale (scoperto)</p>
+                  <p className="text-2xl font-bold text-red-700">{cov.totals.totalGap.toLocaleString('it-IT')}</p>
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Taglia</TableHead>
+                    <TableHead className="text-right">Domanda</TableHead>
+                    <TableHead className="text-right">Offerta</TableHead>
+                    <TableHead className="text-right">Pronti (IMM≥75)</TableHead>
+                    <TableHead className="text-right">Gap</TableHead>
+                    <TableHead className="text-right">Copertura</TableHead>
+                    <TableHead className="text-right">€/animale</TableHead>
+                    <TableHead className="text-right">Valore</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cov.rows.map((r) => {
+                    const covColor =
+                      r.coverage >= 100 ? 'text-green-700' :
+                      r.coverage >= 50 ? 'text-amber-600' : 'text-red-600';
+                    return (
+                      <TableRow key={r.sizeCode}>
+                        <TableCell className="font-medium">{r.sizeCode}</TableCell>
+                        <TableCell className="text-right">{r.demand.toLocaleString('it-IT')}</TableCell>
+                        <TableCell className="text-right">{r.supply.toLocaleString('it-IT')}</TableCell>
+                        <TableCell className="text-right text-green-700">{r.matureSupply.toLocaleString('it-IT')}</TableCell>
+                        <TableCell className={`text-right ${r.gap > 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                          {r.gap > 0 ? '+' : ''}{r.gap.toLocaleString('it-IT')}
+                        </TableCell>
+                        <TableCell className={`text-right font-bold ${covColor}`}>{r.coverage.toFixed(1)}%</TableCell>
+                        <TableCell className="text-right text-xs">
+                          {r.pricePerAnimal != null ? `€${r.pricePerAnimal.toFixed(4)}` : '-'}
+                        </TableCell>
+                        <TableCell className="text-right">{r.demandValue > 0 ? fmtEur(r.demandValue) : '-'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <p className="text-xs text-gray-500 mt-3">
+                Domanda = animali su ordini aperti per quella taglia (estratta da nome riga "screen{'{N}'}").
+                Offerta = animali nei cicli con taglia corrente uguale.
+                Pronti = sottoinsieme con IMM ≥ 75.
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
 
