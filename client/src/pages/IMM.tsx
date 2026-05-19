@@ -167,6 +167,18 @@ export default function IMM() {
 
   const fmtEur = (v: number) =>
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  const fmtEurCompact = (v: number) => {
+    const abs = Math.abs(v);
+    if (abs >= 1_000_000) return `${(v / 1_000_000).toLocaleString('it-IT', { maximumFractionDigits: 2 })} M €`;
+    if (abs >= 10_000) return `${(v / 1_000).toLocaleString('it-IT', { maximumFractionDigits: 1 })} k €`;
+    return fmtEur(v);
+  };
+  const fmtNumCompact = (v: number) => {
+    const abs = Math.abs(v);
+    if (abs >= 1_000_000) return `${(v / 1_000_000).toLocaleString('it-IT', { maximumFractionDigits: 2 })} M`;
+    if (abs >= 10_000) return `${(v / 1_000).toLocaleString('it-IT', { maximumFractionDigits: 1 })} k`;
+    return v.toLocaleString('it-IT');
+  };
 
   const snapshotMutation = useMutation({
     mutationFn: async () => {
@@ -325,42 +337,77 @@ export default function IMM() {
       </Card>
 
       {/* KPI principale */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Gauge className={`h-10 w-10 ${immColor(imm)}`} />
-              <div>
-                <p className="text-sm text-gray-500">IMM Magazzino</p>
-                <p className={`text-5xl font-bold ${immColor(imm)}`}>
+            <div className="flex items-center gap-2">
+              <Gauge className={`h-8 w-8 shrink-0 ${immColor(imm)}`} />
+              <div className="min-w-0">
+                <p className="text-xs text-gray-500">IMM Magazzino</p>
+                <p className={`text-3xl font-bold tabular-nums ${immColor(imm)}`}>
                   {isLoading ? '…' : imm.toFixed(1)}
                 </p>
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-3">
-              Media ponderata per animali. Target {d?.config.targetSizeCode}.
+            <p className="text-xs text-gray-500 mt-3 truncate" title={`Target ${d?.config.targetSizeCode}`}>
+              Media pond. · Target {d?.config.targetSizeCode}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-gray-500">Cicli attivi inclusi</p>
-            <p className="text-4xl font-bold">{d?.totals.totalCycles ?? 0}</p>
-            <p className="text-xs text-gray-500 mt-2">
-              Con misura/peso disponibile (cancellate escluse).
+            <p className="text-xs text-gray-500">Cicli attivi inclusi</p>
+            <p className="text-3xl font-bold tabular-nums">{d?.totals.totalCycles ?? 0}</p>
+            <p className="text-xs text-gray-500 mt-2 truncate" title="Con misura/peso disponibile (cancellate escluse)">
+              Con misura/peso disp.
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-gray-500">Totale animali in magazzino</p>
-            <p className="text-4xl font-bold">
-              {(d?.totals.totalAnimals ?? 0).toLocaleString('it-IT')}
+            <p className="text-xs text-gray-500">Totale animali</p>
+            <p
+              className="text-3xl font-bold tabular-nums"
+              title={(d?.totals.totalAnimals ?? 0).toLocaleString('it-IT')}
+            >
+              {fmtNumCompact(d?.totals.totalAnimals ?? 0)}
             </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Ultima `animal_count` per ciclo attivo.
+            <p className="text-xs text-gray-500 mt-2 truncate">Ultima animal_count per ciclo.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Euro className="h-4 w-4 text-gray-500 shrink-0" />
+              <p className="text-xs text-gray-500 truncate">Valore attuale</p>
+            </div>
+            <p
+              className="text-2xl font-bold text-blue-700 tabular-nums"
+              title={fmtEur(d?.totals.valoreAttuale ?? 0)}
+            >
+              {fmtEurCompact(d?.totals.valoreAttuale ?? 0)}
+            </p>
+            <p className="text-xs text-gray-500 mt-2 truncate">€/animale × taglia corrente.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Euro className="h-4 w-4 text-gray-500 shrink-0" />
+              <p className="text-xs text-gray-500 truncate">Valore a target</p>
+            </div>
+            <p
+              className="text-2xl font-bold text-emerald-700 tabular-nums"
+              title={fmtEur(d?.totals.valorePotenziale ?? 0)}
+            >
+              {fmtEurCompact(d?.totals.valorePotenziale ?? 0)}
+            </p>
+            <p className="text-xs text-gray-500 mt-2 truncate" title={`Se tutti raggiungono ${d?.config.targetSizeCode}`}>
+              Se tutti a {d?.config.targetSizeCode}.
             </p>
           </CardContent>
         </Card>
@@ -368,33 +415,16 @@ export default function IMM() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 mb-1">
-              <Euro className="h-4 w-4 text-gray-500" />
-              <p className="text-sm text-gray-500">Valore attuale</p>
+              <Euro className="h-4 w-4 text-gray-500 shrink-0" />
+              <p className="text-xs text-gray-500 truncate">Valore maturo</p>
             </div>
-            <p className="text-3xl font-bold text-blue-700">{fmtEur(d?.totals.valoreAttuale ?? 0)}</p>
-            <p className="text-xs text-gray-500 mt-2">Prezzo €/animale × taglia corrente.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 mb-1">
-              <Euro className="h-4 w-4 text-gray-500" />
-              <p className="text-sm text-gray-500">Valore a target</p>
-            </div>
-            <p className="text-3xl font-bold text-emerald-700">{fmtEur(d?.totals.valorePotenziale ?? 0)}</p>
-            <p className="text-xs text-gray-500 mt-2">Potenziale se tutti raggiungono {d?.config.targetSizeCode}.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 mb-1">
-              <Euro className="h-4 w-4 text-gray-500" />
-              <p className="text-sm text-gray-500">Valore maturo</p>
-            </div>
-            <p className="text-3xl font-bold text-green-700">{fmtEur(d?.totals.valoreMaturo ?? 0)}</p>
-            <p className="text-xs text-gray-500 mt-2">Valore potenziale × IMM/100.</p>
+            <p
+              className="text-2xl font-bold text-green-700 tabular-nums"
+              title={fmtEur(d?.totals.valoreMaturo ?? 0)}
+            >
+              {fmtEurCompact(d?.totals.valoreMaturo ?? 0)}
+            </p>
+            <p className="text-xs text-gray-500 mt-2 truncate">Val. potenziale × IMM/100.</p>
           </CardContent>
         </Card>
       </div>
