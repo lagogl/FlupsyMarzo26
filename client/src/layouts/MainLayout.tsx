@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Home, Package, FileText, RefreshCw, Package2, BarChart2, 
   Scale, TrendingUp, Settings as SettingsIcon, Menu, Bell, 
-  User, Waves, Zap, Move, Boxes, GitCompare,
+  User, Waves, Zap, Move, Boxes, GitCompare, Gauge,
   Tag, X as CloseIcon, LineChart, ChevronDown,
   ChevronRight, LayoutDashboard, PieChart, BarChart, BarChart3, Filter,
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
@@ -187,7 +187,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <AlertCircle className="h-5 w-5 mr-2 text-red-600" />, label: "Chiusure Pendenti", path: "/pending-closures", badge: pendingClosuresCount > 0 ? pendingClosuresCount : undefined },
         { icon: <Scale className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.sizeTable, path: "/sizes" },
         { icon: <Boxes className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockInventory, path: "/inventory" },
-        { icon: <CalendarDays className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockRangeCalculation, path: "/giacenze-range" }
+        { icon: <CalendarDays className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockRangeCalculation, path: "/giacenze-range" },
+        { icon: <Gauge className="h-5 w-5 mr-2 text-orange-600" />, label: "IMM — Maturità Magazzino", path: "/imm" }
       ]
     },
     {
