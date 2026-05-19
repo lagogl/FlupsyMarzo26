@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Gauge, Info, Camera, TrendingUp, Euro, ShoppingCart } from 'lucide-react';
+import { Gauge, Info, Camera, TrendingUp, Euro, ShoppingCart, Download, Settings, Save } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   Legend, ResponsiveContainer,
@@ -132,6 +132,39 @@ export default function IMM() {
   const { data: coverage } = useQuery<CoverageResponse>({ queryKey: coverageKey });
   const cov = coverage?.data;
 
+  // Config persistita
+  type PersistedConfig = {
+    targetSizeCode: string; horizonDays: number;
+    weightSize: number; weightTime: number; weightQuality: number; weightReliability: number;
+    fallbackSgrDaily: number; baselineMortalityPct: number; maxMortalityPct: number;
+  };
+  const { data: cfgResp } = useQuery<{ success: boolean; data: PersistedConfig }>({
+    queryKey: ['/api/imm/config'],
+  });
+  const [cfgDraft, setCfgDraft] = useState<PersistedConfig | null>(null);
+  const persistedCfg = cfgResp?.data;
+  const effCfg = cfgDraft ?? persistedCfg;
+
+  const saveCfgMutation = useMutation({
+    mutationFn: async (patch: Partial<PersistedConfig>) =>
+      apiRequest({ url: '/api/imm/config', method: 'PUT', body: patch }),
+    onSuccess: () => {
+      toast({ title: 'Configurazione salvata' });
+      queryClient.invalidateQueries({ queryKey: ['/api/imm/config'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/imm/inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/imm/orders-coverage'] });
+      setCfgDraft(null);
+    },
+    onError: (e: any) => {
+      toast({ title: 'Errore salvataggio', description: e?.message ?? 'errore', variant: 'destructive' });
+    },
+  });
+
+  const handleExport = () => {
+    const url = `/api/imm/export?targetSizeCode=${targetSizeCode}&horizonDays=${horizonDays}`;
+    window.open(url, '_blank');
+  };
+
   const fmtEur = (v: number) =>
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
@@ -211,7 +244,83 @@ export default function IMM() {
                 {snapshotMutation.isPending ? 'Salvataggio...' : 'Snapshot ora'}
               </Button>
             </div>
+            <div className="flex items-end gap-2">
+              <Button variant="outline" onClick={handleExport} className="w-full">
+                <Download className="h-4 w-4 mr-2" /> Esporta Excel
+              </Button>
+            </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Configurazione persistita */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings className="h-4 w-4" /> Configurazione pesi e soglie (salvata su DB)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!effCfg ? (
+            <p className="text-sm text-gray-500">Caricamento…</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {[
+                  { k: 'weightSize' as const, l: 'Peso Size', step: 1, min: 0, max: 100 },
+                  { k: 'weightTime' as const, l: 'Peso Time', step: 1, min: 0, max: 100 },
+                  { k: 'weightQuality' as const, l: 'Peso Quality', step: 1, min: 0, max: 100 },
+                  { k: 'weightReliability' as const, l: 'Peso Reliability', step: 1, min: 0, max: 100 },
+                  { k: 'horizonDays' as const, l: 'Orizzonte (gg)', step: 1, min: 30, max: 730 },
+                  { k: 'fallbackSgrDaily' as const, l: 'SGR fallback', step: 0.001, min: 0, max: 0.1 },
+                  { k: 'baselineMortalityPct' as const, l: 'Mort. baseline %', step: 0.5, min: 0, max: 100 },
+                  { k: 'maxMortalityPct' as const, l: 'Mort. max %', step: 0.5, min: 0, max: 100 },
+                ].map(({ k, l, step, min, max }) => (
+                  <div key={k}>
+                    <Label className="text-xs">{l}</Label>
+                    <Input
+                      type="number"
+                      step={step} min={min} max={max}
+                      value={(effCfg as any)[k]}
+                      onChange={(e) => setCfgDraft({ ...(effCfg as PersistedConfig), [k]: Number(e.target.value) })}
+                    />
+                  </div>
+                ))}
+                <div>
+                  <Label className="text-xs">Taglia target (default)</Label>
+                  <Select
+                    value={effCfg.targetSizeCode}
+                    onValueChange={(v) => setCfgDraft({ ...(effCfg as PersistedConfig), targetSizeCode: v })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TARGET_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 mt-4">
+                <Button
+                  onClick={() => cfgDraft && saveCfgMutation.mutate(cfgDraft)}
+                  disabled={!cfgDraft || saveCfgMutation.isPending}
+                  size="sm"
+                >
+                  <Save className="h-4 w-4 mr-1" />
+                  {saveCfgMutation.isPending ? 'Salvataggio...' : 'Salva configurazione'}
+                </Button>
+                {cfgDraft && (
+                  <Button variant="ghost" size="sm" onClick={() => setCfgDraft(null)}>Annulla</Button>
+                )}
+                <span className="text-xs text-gray-500">
+                  Somma pesi attuale:{' '}
+                  <strong>
+                    {((effCfg.weightSize ?? 0) + (effCfg.weightTime ?? 0) + (effCfg.weightQuality ?? 0) + (effCfg.weightReliability ?? 0)).toFixed(0)}
+                  </strong>
+                  {' '}(vengono normalizzati al 100%).
+                </span>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

@@ -106,6 +106,56 @@ export const DEFAULT_IMM_CONFIG: IMMConfig = {
   maxMortalityPct: 30,
 };
 
+// Carica configurazione persistita dal DB (singleton id=1). Fallback ai default.
+export async function loadPersistedConfig(): Promise<IMMConfig> {
+  try {
+    const res = await db.execute(sql`SELECT * FROM imm_config WHERE id = 1`);
+    const rows = ((res as any).rows ?? (res as any)) as any[];
+    if (!rows || rows.length === 0) return { ...DEFAULT_IMM_CONFIG };
+    const r = rows[0];
+    return {
+      targetSizeCode: r.target_size_code ?? DEFAULT_IMM_CONFIG.targetSizeCode,
+      horizonDays: Number(r.horizon_days) || DEFAULT_IMM_CONFIG.horizonDays,
+      weightSize: Number(r.weight_size) || DEFAULT_IMM_CONFIG.weightSize,
+      weightTime: Number(r.weight_time) || DEFAULT_IMM_CONFIG.weightTime,
+      weightQuality: Number(r.weight_quality) || DEFAULT_IMM_CONFIG.weightQuality,
+      weightReliability: Number(r.weight_reliability) || DEFAULT_IMM_CONFIG.weightReliability,
+      fallbackSgrDaily: Number(r.fallback_sgr_daily) || DEFAULT_IMM_CONFIG.fallbackSgrDaily,
+      baselineMortalityPct: Number(r.baseline_mortality_pct) || DEFAULT_IMM_CONFIG.baselineMortalityPct,
+      maxMortalityPct: Number(r.max_mortality_pct) || DEFAULT_IMM_CONFIG.maxMortalityPct,
+    };
+  } catch (e) {
+    console.error("loadPersistedConfig error, usando default:", e);
+    return { ...DEFAULT_IMM_CONFIG };
+  }
+}
+
+export async function savePersistedConfig(patch: Partial<IMMConfig>): Promise<IMMConfig> {
+  const current = await loadPersistedConfig();
+  const merged: IMMConfig = { ...current, ...patch };
+  await db.execute(sql`
+    INSERT INTO imm_config (id, target_size_code, horizon_days, weight_size, weight_time,
+      weight_quality, weight_reliability, fallback_sgr_daily, baseline_mortality_pct,
+      max_mortality_pct, updated_at)
+    VALUES (1, ${merged.targetSizeCode}, ${merged.horizonDays}, ${merged.weightSize},
+      ${merged.weightTime}, ${merged.weightQuality}, ${merged.weightReliability},
+      ${merged.fallbackSgrDaily}, ${merged.baselineMortalityPct}, ${merged.maxMortalityPct},
+      NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      target_size_code = EXCLUDED.target_size_code,
+      horizon_days = EXCLUDED.horizon_days,
+      weight_size = EXCLUDED.weight_size,
+      weight_time = EXCLUDED.weight_time,
+      weight_quality = EXCLUDED.weight_quality,
+      weight_reliability = EXCLUDED.weight_reliability,
+      fallback_sgr_daily = EXCLUDED.fallback_sgr_daily,
+      baseline_mortality_pct = EXCLUDED.baseline_mortality_pct,
+      max_mortality_pct = EXCLUDED.max_mortality_pct,
+      updated_at = NOW()
+  `);
+  return merged;
+}
+
 type RawRow = {
   cycle_id: number;
   basket_id: number;
@@ -225,8 +275,10 @@ function round2(x: number): number {
 
 export async function computeInventoryIMM(
   configOverride: Partial<IMMConfig> = {},
+  baseConfig?: IMMConfig,
 ): Promise<IMMInventoryResult> {
-  const config: IMMConfig = { ...DEFAULT_IMM_CONFIG, ...configOverride };
+  const base = baseConfig ?? (await loadPersistedConfig());
+  const config: IMMConfig = { ...base, ...configOverride };
 
   const targetRow = await db.execute(sql`
     SELECT code, min_animals_per_kg

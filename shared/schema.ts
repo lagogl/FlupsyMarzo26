@@ -1739,3 +1739,20 @@ export const immSnapshots = pgTable("imm_snapshots", {
 }));
 
 export type ImmSnapshot = typeof immSnapshots.$inferSelect;
+
+// IMM Config: configurazione persistita singleton (id=1)
+export const immConfig = pgTable("imm_config", {
+  id: integer("id").primaryKey().default(1),
+  targetSizeCode: text("target_size_code").notNull().default("TP-3000"),
+  horizonDays: integer("horizon_days").notNull().default(180),
+  weightSize: real("weight_size").notNull().default(40),
+  weightTime: real("weight_time").notNull().default(35),
+  weightQuality: real("weight_quality").notNull().default(15),
+  weightReliability: real("weight_reliability").notNull().default(10),
+  fallbackSgrDaily: real("fallback_sgr_daily").notNull().default(0.005),
+  baselineMortalityPct: real("baseline_mortality_pct").notNull().default(5),
+  maxMortalityPct: real("max_mortality_pct").notNull().default(30),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type ImmConfigRow = typeof immConfig.$inferSelect;
