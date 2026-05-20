@@ -7,7 +7,7 @@
  */
 import { Request, Response } from "express";
 import { db } from "../db";
-import { eq, and, or, isNull, isNotNull, sql, desc } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, ne, inArray, sql, desc } from "drizzle-orm";
 import { 
   selections, 
   selectionSourceBaskets, 
@@ -1021,6 +1021,41 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       console.log(`   Questo è supportato: prima verranno cessati, poi riattivati con nuovo ciclo.`);
     }
 
+    // ====== GUARD-RAIL: cestelli destinazione devono essere disponibili ======
+    // Prevenzione bug "doppio ciclo aperto sulla stessa cesta": un cestello destinazione
+    // che NON è anche fra le origini deve avere state='available' e nessun ciclo attivo.
+    // Senza questo controllo, una vagliatura può aprire un secondo ciclo "fantasma" su
+    // una cesta già attiva (es. caso cesta #20 Flupsy 1 Bianco Vetroresina, 19/05/2026).
+    const destOnlyBasketIds = Array.from(destBasketsIds).filter(bid => !sourceBasketsIds.has(bid));
+    if (destOnlyBasketIds.length > 0) {
+      const occupiedDest = await db.select({
+        id: baskets.id,
+        physicalNumber: baskets.physicalNumber,
+        flupsyId: baskets.flupsyId,
+        state: baskets.state,
+        currentCycleId: baskets.currentCycleId,
+        cycleCode: baskets.cycleCode,
+      })
+        .from(baskets)
+        .where(and(
+          inArray(baskets.id, destOnlyBasketIds),
+          or(ne(baskets.state, 'available'), isNotNull(baskets.currentCycleId))
+        ));
+
+      if (occupiedDest.length > 0) {
+        const details = occupiedDest.map(b =>
+          `Cesta #${b.physicalNumber} (id ${b.id}, flupsy ${b.flupsyId}): stato='${b.state}', ciclo attivo ${b.currentCycleId ?? 'nessuno'}${b.cycleCode ? ` (${b.cycleCode})` : ''}`
+        ).join('; ');
+        console.warn(`⛔ Vagliatura BLOCCATA: ${occupiedDest.length} cestelli destinazione non disponibili — ${details}`);
+        return res.status(409).json({
+          success: false,
+          code: 'DESTINATION_BASKET_NOT_AVAILABLE',
+          error: `Impossibile completare la vagliatura: ${occupiedDest.length} cestello/i destinazione ha/hanno già un ciclo attivo. ${details}. Chiudi prima i cicli esistenti oppure inserisci queste ceste anche tra le origini.`,
+          conflicts: occupiedDest,
+        });
+      }
+    }
+
     // TRANSAZIONE CORRETTA
     // Array per salvare gli ID delle operazioni di vendita create
     const saleOperationIds: number[] = [];
@@ -1409,9 +1444,18 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             console.log(`      📍 Cestello venduto ${destBasket.basketId} liberato senza posizione`);
           }
 
-          await tx.update(baskets)
+          // CAS atomico: la cesta deve essere disponibile (o appena liberata in FASE 1)
+          const soldUpdate = await tx.update(baskets)
             .set(updateData)
-            .where(eq(baskets.id, destBasket.basketId));
+            .where(and(
+              eq(baskets.id, destBasket.basketId),
+              eq(baskets.state, 'available'),
+              isNull(baskets.currentCycleId)
+            ))
+            .returning({ id: baskets.id });
+          if (soldUpdate.length === 0) {
+            throw new Error(`CONCURRENT_DESTINATION_CONFLICT: cesta destinazione id=${destBasket.basketId} non era disponibile al momento dell'attivazione (vendita) — ciclo ${newCycle.id} annullato`);
+          }
 
         } else {
           // POSIZIONAMENTO NORMALE
@@ -1429,7 +1473,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             const cycleCode = `${destBasketInfo?.physicalNumber || destBasket.basketId}-${destBasket.flupsyId || 1}-${yearMonth}`;
             
             // FIX: Dissocia dal gruppo anche le ceste destinazione posizionate
-            await tx.update(baskets)
+            // CAS atomico: la cesta deve essere disponibile (o appena liberata in FASE 1)
+            // Previene il bug del doppio ciclo aperto sotto race condition tra vagliature concorrenti.
+            const posUpdate = await tx.update(baskets)
               .set({
                 flupsyId: destBasket.flupsyId || 1,
                 row: row,
@@ -1439,7 +1485,15 @@ export async function completeSelectionFixed(req: Request, res: Response) {
                 cycleCode: cycleCode,
                 groupId: null // Dissocia dal gruppo dopo vagliatura
               })
-              .where(eq(baskets.id, destBasket.basketId));
+              .where(and(
+                eq(baskets.id, destBasket.basketId),
+                eq(baskets.state, 'available'),
+                isNull(baskets.currentCycleId)
+              ))
+              .returning({ id: baskets.id });
+            if (posUpdate.length === 0) {
+              throw new Error(`CONCURRENT_DESTINATION_CONFLICT: cesta destinazione id=${destBasket.basketId} non era disponibile al momento dell'attivazione — ciclo ${newCycle.id} annullato`);
+            }
           }
         }
 

@@ -631,6 +631,8 @@ export class BasketsService {
         FROM operations o
         INNER JOIN baskets b ON o.basket_id = b.id
         WHERE b.current_cycle_id IS NOT NULL
+          AND o.cycle_id = b.current_cycle_id
+          AND o.cancelled_at IS NULL
           AND o.type NOT IN ('chiusura-ciclo-vagliatura', 'chiusura-ciclo')
       ),
       last_measurement AS (
@@ -646,6 +648,8 @@ export class BasketsService {
         FROM operations o
         INNER JOIN baskets b ON o.basket_id = b.id
         WHERE b.current_cycle_id IS NOT NULL
+          AND o.cycle_id = b.current_cycle_id
+          AND o.cancelled_at IS NULL
           AND o.type IN ('misura', 'prima-attivazione')
           AND o.animals_per_kg IS NOT NULL
           AND o.animals_per_kg > 0
