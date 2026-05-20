@@ -3046,7 +3046,7 @@ export default function VagliaturaConMappa() {
             sampleWeight: data.sampleWeight,
             sampleCount: data.sampleCount,
             totalWeight: totalWeightInGrams,
-            animalsPerKg: data.apkForSize ?? data.animalsPerKg,
+            animalsPerKg: data.animalsPerKg,
             saleDate: null,
             saleClient: null,
             selectionId: 0,

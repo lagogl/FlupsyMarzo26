@@ -124,8 +124,8 @@ export default function DraggableCalculator({
     ? parseFloat(((sampleWeight / totalSample) * 1000).toFixed(2))
     : (calculatedAnimalsPerKg > 0 ? parseFloat((1000 / calculatedAnimalsPerKg).toFixed(2)) : 0);
   
-  // Taglia commerciale calcolata da apk_taglia (incl. morti) → riflette peso individuale reale
-  const calculatedSize = getSizeCodeFromAnimalsPerKg(apkForSize, sizes as any[]);
+  // Taglia commerciale calcolata da animali VIVI per kg (canonico in tutta l'app)
+  const calculatedSize = getSizeCodeFromAnimalsPerKg(calculatedAnimalsPerKg, sizes as any[]);
   
   // Gestione drag
   const handleMouseDown = (e: React.MouseEvent) => {
