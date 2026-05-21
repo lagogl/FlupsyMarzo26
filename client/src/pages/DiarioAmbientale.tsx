@@ -28,10 +28,27 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { RefreshCw, Download, Thermometer, Waves, Droplets, Wind, Activity, CloudSun, Database } from 'lucide-react';
+import { RefreshCw, Download, Thermometer, Waves, Droplets, Wind, Activity, CloudSun, Database, Users } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import type { EnvironmentalLog } from '@shared/schema';
+import type { EnvironmentalLog, SgrGiornaliero } from '@shared/schema';
+
+const SITE_LABEL: Record<string, string> = {
+  ca_pisani: 'Ca\' Pisani',
+  delta_futuro: 'Delta Futuro',
+};
+
+function fmtDateTime(d: string | Date | null | undefined): string {
+  if (!d) return '—';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  if (isNaN(date.getTime())) return '—';
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yy = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+}
 
 type Periodo = '30' | '60' | '90' | '180' | '365' | '730' | 'all';
 
@@ -315,8 +332,10 @@ export default function DiarioAmbientale() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [periodo, setPeriodo] = useState<Periodo>('90');
-  const [tab, setTab] = useState<'grafici' | 'tabella'>('grafici');
+  const [tab, setTab] = useState<'grafici' | 'tabella' | 'operatori'>('grafici');
   const [tablePage, setTablePage] = useState(1);
+  const [opPage, setOpPage] = useState(1);
+  const [opSite, setOpSite] = useState<'all' | 'ca_pisani' | 'delta_futuro'>('all');
   const TABLE_PAGE_SIZE = 50;
 
   const days = periodo === 'all' ? 9999 : parseInt(periodo);
@@ -332,6 +351,27 @@ export default function DiarioAmbientale() {
       return res.json();
     },
   });
+
+  const { data: operatoriRaw, isLoading: isLoadingOp, isError: isErrorOp, error: errorOp, refetch: refetchOp } = useQuery<SgrGiornaliero[]>({
+    queryKey: ['/api/sgr-giornalieri'],
+    enabled: tab === 'operatori',
+  });
+
+  const operatoriFiltered = (() => {
+    if (!operatoriRaw) return [] as SgrGiornaliero[];
+    const cutoff = periodo === 'all' ? null : (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - days);
+      return d;
+    })();
+    return operatoriRaw
+      .filter(r => {
+        if (cutoff && new Date(r.recordDate) < cutoff) return false;
+        if (opSite !== 'all' && r.site !== opSite) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
+  })();
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
@@ -355,6 +395,35 @@ export default function DiarioAmbientale() {
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
+
+  // Riallinea pagina operatori quando cambiano i filtri o il dataset
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(operatoriFiltered.length / TABLE_PAGE_SIZE));
+    if (opPage > totalPages) setOpPage(totalPages);
+  }, [operatoriFiltered.length, opPage]);
+
+  // CSV-safe: escaping standard + neutralizzazione formula injection (Excel/LibreOffice)
+  function csvCell(v: any): string {
+    if (v == null) return '';
+    let s = String(v);
+    // Anteporre apostrofo se inizia con caratteri pericolosi per formule
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    // Quoting RFC4180 se contiene separatore, virgolette o newline
+    if (/[";\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function downloadCsv(filename: string, headers: string[], rows: any[][]) {
+    const csv = [headers.map(csvCell), ...rows.map(r => r.map(csvCell))]
+      .map(r => r.join(';')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   const startBackfill = async () => {
     const startDate = '2020-01-01';
@@ -559,22 +628,23 @@ export default function DiarioAmbientale() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b">
-        {(['grafici', 'tabella'] as const).map(t => (
+        {(['grafici', 'tabella', 'operatori'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
               tab === t
                 ? 'border-teal-600 text-teal-700'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t === 'grafici' ? 'Grafici' : 'Tabella dati'}
+            {t === 'operatori' && <Users className="h-4 w-4" />}
+            {t === 'grafici' ? 'Grafici' : t === 'tabella' ? 'Tabella dati' : 'Rilevazioni Operatori'}
           </button>
         ))}
       </div>
 
-      {isLoading && (
+      {tab !== 'operatori' && isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-56 rounded-xl" />
@@ -582,7 +652,7 @@ export default function DiarioAmbientale() {
         </div>
       )}
 
-      {!isLoading && (!logs || logs.length === 0) && (
+      {tab !== 'operatori' && !isLoading && (!logs || logs.length === 0) && (
         <Card>
           <CardContent className="py-12 text-center text-gray-400">
             <Activity className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -592,7 +662,7 @@ export default function DiarioAmbientale() {
         </Card>
       )}
 
-      {!isLoading && logs && logs.length > 0 && (
+      {tab !== 'operatori' && !isLoading && logs && logs.length > 0 && (
         <>
           {tab === 'grafici' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -727,6 +797,197 @@ export default function DiarioAmbientale() {
                     >
                       Ultima
                     </Button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </>
+      )}
+
+      {tab === 'operatori' && (
+        <>
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600">Sito:</span>
+              <Select value={opSite} onValueChange={v => { setOpSite(v as any); setOpPage(1); }}>
+                <SelectTrigger className="w-44 h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti i siti</SelectItem>
+                  <SelectItem value="ca_pisani">Ca' Pisani</SelectItem>
+                  <SelectItem value="delta_futuro">Delta Futuro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={operatoriFiltered.length === 0}
+              onClick={() => {
+                const headers = [
+                  'Data/ora','Sito','Operatore','Temp acqua °C','pH','Salinità ‰','O₂ mg/L','NH₃','Ammoniaca',
+                  'Disco Secchi cm','Microalghe cell/mL','Specie microalghe','Colore acqua','Meteo',
+                  'Temp aria min °C','Temp aria max °C','Mortalità','Note'
+                ];
+                const rows = operatoriFiltered.map(r => [
+                  fmtDateTime(r.recordDate), SITE_LABEL[r.site ?? ''] ?? (r.site ?? ''), r.operatorName ?? '',
+                  r.waterTemperature ?? r.temperature ?? '', r.pH ?? '', r.salinity ?? '', r.oxygen ?? '',
+                  r.nh3 ?? '', r.ammonia ?? '', r.secchiDisk ?? '', r.microalgaeConcentration ?? '',
+                  r.microalgaeSpecies ?? '', r.waterColor ?? '', r.meteo ?? '',
+                  r.airTempMin ?? '', r.airTempMax ?? '', r.mortality ?? '', r.notes ?? '',
+                ]);
+                downloadCsv(`rilevazioni_operatori_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+              }}
+            >
+              <Download className="h-4 w-4 mr-1" /> CSV
+            </Button>
+            <span className="text-xs text-gray-500 ml-auto">
+              {operatoriFiltered.length} rilevazioni
+            </span>
+          </div>
+
+          {isLoadingOp && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-56 rounded-xl" />
+              ))}
+            </div>
+          )}
+
+          {!isLoadingOp && isErrorOp && (
+            <Card className="border-red-200 bg-red-50/50">
+              <CardContent className="py-8 text-center">
+                <Activity className="h-10 w-10 mx-auto mb-3 text-red-400" />
+                <p className="text-sm font-medium text-red-700">Errore nel caricamento delle rilevazioni operatori</p>
+                <p className="text-xs text-red-600 mt-1">{(errorOp as any)?.message ?? 'Errore sconosciuto'}</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => refetchOp()}>
+                  <RefreshCw className="h-4 w-4 mr-1" /> Riprova
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {!isLoadingOp && !isErrorOp && operatoriFiltered.length === 0 && (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-400">
+                <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Nessuna rilevazione operatore per il periodo / sito selezionato.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!isLoadingOp && !isErrorOp && operatoriFiltered.length > 0 && (() => {
+            const chartData = operatoriFiltered.slice().reverse().map(r => ({
+              date: fmtDateTime(r.recordDate),
+              waterTemp: r.waterTemperature ?? r.temperature ?? null,
+              oxygen: r.oxygen ?? null,
+              salinity: r.salinity ?? null,
+              secchi: r.secchiDisk ?? null,
+              microalgae: r.microalgaeConcentration ?? null,
+              ph: r.pH ?? null,
+            }));
+
+            const OP_CHARTS: { title: string; icon: React.ReactNode; lines: { key: string; label: string; color: string; unit: string }[] }[] = [
+              { title: 'Temperatura Acqua (°C)', icon: <Thermometer className="h-4 w-4 text-blue-600" />, lines: [{ key: 'waterTemp', label: 'Temp acqua', color: '#1d4ed8', unit: '°C' }] },
+              { title: 'Ossigeno disciolto (mg/L)', icon: <Wind className="h-4 w-4 text-red-500" />, lines: [{ key: 'oxygen', label: 'O₂', color: '#dc2626', unit: 'mg/L' }] },
+              { title: 'Salinità (‰)', icon: <Droplets className="h-4 w-4 text-amber-600" />, lines: [{ key: 'salinity', label: 'Salinità', color: '#92400e', unit: '‰' }] },
+              { title: 'Disco di Secchi (cm)', icon: <Activity className="h-4 w-4 text-cyan-600" />, lines: [{ key: 'secchi', label: 'Secchi', color: '#0d9488', unit: 'cm' }] },
+              { title: 'Microalghe (cell/mL)', icon: <Activity className="h-4 w-4 text-green-600" />, lines: [{ key: 'microalgae', label: 'Conc.', color: '#16a34a', unit: 'cell/mL' }] },
+              { title: 'pH', icon: <Activity className="h-4 w-4 text-purple-600" />, lines: [{ key: 'ph', label: 'pH', color: '#7c3aed', unit: '' }] },
+            ];
+
+            const totalPages = Math.max(1, Math.ceil(operatoriFiltered.length / TABLE_PAGE_SIZE));
+            const safePage = Math.min(opPage, totalPages);
+            const pageRows = operatoriFiltered.slice((safePage - 1) * TABLE_PAGE_SIZE, safePage * TABLE_PAGE_SIZE);
+
+            return (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {OP_CHARTS.map(ch => (
+                    <Card key={ch.title}>
+                      <CardHeader className="pb-1">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          {ch.icon}{ch.title}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={chartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+                            <YAxis tick={{ fontSize: 10 }} width={50} />
+                            <Tooltip
+                              formatter={(v: any) => {
+                                const l = ch.lines[0];
+                                return [`${v != null ? Number(v).toFixed(2) : '—'} ${l.unit}`, l.label];
+                              }}
+                            />
+                            {ch.lines.map(l => (
+                              <Line key={l.key} type="monotone" dataKey={l.key} stroke={l.color} dot={{ r: 2 }} strokeWidth={1.5} connectNulls />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="overflow-auto rounded-lg border mt-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="bg-purple-700 text-white text-[11px] font-bold px-1.5 py-1">Data/ora</TableHead>
+                        <TableHead className="bg-purple-700 text-white text-[11px] font-bold px-1.5 py-1">Sito</TableHead>
+                        <TableHead className="bg-purple-700 text-white text-[11px] font-bold px-1.5 py-1">Operatore</TableHead>
+                        <TableHead className="bg-blue-700 text-white text-[11px] font-bold px-1.5 py-1">T.acqua °C</TableHead>
+                        <TableHead className="bg-blue-700 text-white text-[11px] font-bold px-1.5 py-1">pH</TableHead>
+                        <TableHead className="bg-blue-700 text-white text-[11px] font-bold px-1.5 py-1">Sal ‰</TableHead>
+                        <TableHead className="bg-blue-700 text-white text-[11px] font-bold px-1.5 py-1">O₂ mg/L</TableHead>
+                        <TableHead className="bg-blue-700 text-white text-[11px] font-bold px-1.5 py-1">NH₃</TableHead>
+                        <TableHead className="bg-blue-700 text-white text-[11px] font-bold px-1.5 py-1">Secchi cm</TableHead>
+                        <TableHead className="bg-green-700 text-white text-[11px] font-bold px-1.5 py-1">Microalghe cell/mL</TableHead>
+                        <TableHead className="bg-green-700 text-white text-[11px] font-bold px-1.5 py-1">Specie</TableHead>
+                        <TableHead className="bg-green-700 text-white text-[11px] font-bold px-1.5 py-1">Colore acqua</TableHead>
+                        <TableHead className="bg-orange-600 text-white text-[11px] font-bold px-1.5 py-1">Meteo</TableHead>
+                        <TableHead className="bg-orange-600 text-white text-[11px] font-bold px-1.5 py-1">T.aria min/max</TableHead>
+                        <TableHead className="bg-gray-700 text-white text-[11px] font-bold px-1.5 py-1">Mortalità</TableHead>
+                        <TableHead className="bg-gray-700 text-white text-[11px] font-bold px-1.5 py-1">Note</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pageRows.map((r, idx) => (
+                        <TableRow key={r.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
+                          <TableCell className="text-[11px] font-mono px-1.5 py-1 whitespace-nowrap">{fmtDateTime(r.recordDate)}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 whitespace-nowrap">{SITE_LABEL[r.site ?? ''] ?? (r.site ?? '—')}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 whitespace-nowrap">{r.operatorName ?? '—'}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.waterTemperature ?? r.temperature)}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.pH)}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.salinity)}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.oxygen)}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.nh3 ?? r.ammonia, 3)}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.secchiDisk, 0)}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-green-50">{r.microalgaeConcentration != null ? r.microalgaeConcentration.toLocaleString('it-IT') : '—'}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-green-50 max-w-[140px] truncate" title={r.microalgaeSpecies ?? ''}>{r.microalgaeSpecies ?? '—'}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-green-50">{r.waterColor ?? '—'}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-orange-50">{r.meteo ?? '—'}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 bg-orange-50 whitespace-nowrap">{r.airTempMin != null || r.airTempMax != null ? `${fmt(r.airTempMin, 0)} / ${fmt(r.airTempMax, 0)}` : '—'}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 max-w-[160px] truncate" title={r.mortality ?? ''}>{r.mortality ?? '—'}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 max-w-[200px] truncate" title={r.notes ?? ''}>{r.notes ?? '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setOpPage(1)}>Prima</Button>
+                    <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setOpPage(p => Math.max(1, p - 1))}>← Prec</Button>
+                    <span className="text-xs font-medium">Pagina {safePage} di {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setOpPage(p => Math.min(totalPages, p + 1))}>Succ →</Button>
+                    <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setOpPage(totalPages)}>Ultima</Button>
                   </div>
                 )}
               </>
