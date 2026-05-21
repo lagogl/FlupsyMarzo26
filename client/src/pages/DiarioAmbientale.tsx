@@ -33,6 +33,16 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import type { EnvironmentalLog, SgrGiornaliero } from '@shared/schema';
 
+// Due formati storici convivono in DB: slug (ca_pisani, delta_futuro)
+// e label vecchio (Ca' Pisani, Delta Futuro). Normalizziamo entrambi.
+function normalizeSite(s?: string | null): 'ca_pisani' | 'delta_futuro' | 'other' {
+  if (!s) return 'other';
+  const k = s.toLowerCase().replace(/[^a-z]/g, '');
+  if (k === 'capisani') return 'ca_pisani';
+  if (k === 'deltafuturo') return 'delta_futuro';
+  return 'other';
+}
+
 const SITE_LABEL: Record<string, string> = {
   ca_pisani: 'Ca\' Pisani',
   delta_futuro: 'Delta Futuro',
@@ -367,7 +377,7 @@ export default function DiarioAmbientale() {
     return operatoriRaw
       .filter(r => {
         if (cutoff && new Date(r.recordDate) < cutoff) return false;
-        if (opSite !== 'all' && r.site !== opSite) return false;
+        if (opSite !== 'all' && normalizeSite(r.site) !== opSite) return false;
         return true;
       })
       .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
@@ -832,7 +842,7 @@ export default function DiarioAmbientale() {
                   'Temp aria min °C','Temp aria max °C','Mortalità','Note'
                 ];
                 const rows = operatoriFiltered.map(r => [
-                  fmtDateTime(r.recordDate), SITE_LABEL[r.site ?? ''] ?? (r.site ?? ''), r.operatorName ?? '',
+                  fmtDateTime(r.recordDate), SITE_LABEL[normalizeSite(r.site)] ?? (r.site ?? ''), r.operatorName ?? '',
                   r.waterTemperature ?? r.temperature ?? '', r.pH ?? '', r.salinity ?? '', r.oxygen ?? '',
                   r.nh3 ?? '', r.ammonia ?? '', r.secchiDisk ?? '', r.microalgaeConcentration ?? '',
                   r.microalgaeSpecies ?? '', r.waterColor ?? '', r.meteo ?? '',
@@ -960,7 +970,7 @@ export default function DiarioAmbientale() {
                       {pageRows.map((r, idx) => (
                         <TableRow key={r.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
                           <TableCell className="text-[11px] font-mono px-1.5 py-1 whitespace-nowrap">{fmtDateTime(r.recordDate)}</TableCell>
-                          <TableCell className="text-[11px] px-1.5 py-1 whitespace-nowrap">{SITE_LABEL[r.site ?? ''] ?? (r.site ?? '—')}</TableCell>
+                          <TableCell className="text-[11px] px-1.5 py-1 whitespace-nowrap">{SITE_LABEL[normalizeSite(r.site)] ?? (r.site ?? '—')}</TableCell>
                           <TableCell className="text-[11px] px-1.5 py-1 whitespace-nowrap">{r.operatorName ?? '—'}</TableCell>
                           <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.waterTemperature ?? r.temperature)}</TableCell>
                           <TableCell className="text-[11px] px-1.5 py-1 bg-blue-50">{fmt(r.pH)}</TableCell>
