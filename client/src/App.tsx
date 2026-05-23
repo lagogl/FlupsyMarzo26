@@ -250,7 +250,9 @@ function WebSocketListener() {
 // Importiamo il componente di integrazione WebSocket-Query
 import { WebSocketQueryIntegration } from './lib/websocketQueryIntegration';
 import { OperationListener } from '@/components/OperationListener';
-import MorningSummaryOverlay from '@/components/MorningSummaryOverlay';
+// Riepilogo mattutino temporaneamente disabilitato (tenuto in standby).
+// Per riattivarlo: ripristinare l'import e il tag <MorningSummaryOverlay /> più sotto.
+// import MorningSummaryOverlay from '@/components/MorningSummaryOverlay';
 import FlupsyHeatmap from '@/pages/FlupsyHeatmap';
 
 function App() {
@@ -279,8 +281,8 @@ function App() {
           {/* Indicatore di stato della connessione WebSocket */}
           <WebSocketIndicator />
           
-          {/* Riepilogo mattutino - appare una volta al giorno al primo accesso */}
-          <MorningSummaryOverlay />
+          {/* Riepilogo mattutino temporaneamente disabilitato (standby). Per riattivare, rimuovere il commento qui sotto e l'import in alto. */}
+          {/* <MorningSummaryOverlay /> */}
           
           <Toaster />
         </TooltipProvider>
