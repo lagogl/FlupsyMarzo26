@@ -1967,55 +1967,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: errorMessage });
       }
       
-      // Se il cestello non è attivo e si sta cercando di cambiare la posizione
-      if (!hasActiveCycle && 
-          ((parsedData.data.row !== undefined && parsedData.data.row !== basket.row) || 
-           (parsedData.data.position !== undefined && parsedData.data.position !== basket.position))) {
-        return res.status(400).json({ 
-          message: "Impossibile cambiare la posizione di un cestello non attivo. Solo i cestelli con ciclo attivo possono essere riposizionati." 
-        });
-      }
-      
-      // If position data is changing, verify no duplicates
-      if ((parsedData.data.row !== undefined && parsedData.data.row !== basket.row) || 
-          (parsedData.data.position !== undefined && parsedData.data.position !== basket.position)) {
-        
-        // Only check if both row and position are provided
-        if (parsedData.data.row && parsedData.data.position) {
-          // Get the FLUPSY ID (either from update or from existing basket)
-          const flupsyId = parsedData.data.flupsyId || basket.flupsyId;
-          
-          // Get all baskets for this FLUPSY
-          const flupsyBaskets = await storage.getBasketsByFlupsy(flupsyId);
-          
-          // Check if there's already a different basket at this position
-          const basketAtPosition = flupsyBaskets.find(b => 
-            b.id !== id && 
-            b.row === parsedData.data.row && 
-            b.position === parsedData.data.position
-          );
-          
-          if (basketAtPosition) {
-            // Se viene richiesta un'operazione da frontend, restituiamo informazioni
-            // sul cestello occupante per consentire uno switch
-            return res.status(200).json({
-              positionOccupied: true,
-              basketAtPosition: {
-                id: basketAtPosition.id,
-                physicalNumber: basketAtPosition.physicalNumber,
-                flupsyId: basketAtPosition.flupsyId,
-                row: basketAtPosition.row,
-                position: basketAtPosition.position
-              },
-              message: `Esiste già una cesta (numero ${basketAtPosition.physicalNumber}) in questa posizione`
-            });
-          }
-          
-          // Sistema cronologia posizioni rimosso per performance
-          // La gestione delle posizioni avviene ora direttamente tramite i campi della tabella baskets
-          console.log(`Sistema ottimizzato - aggiornamento diretto posizione cestello ${id}`);
-        }
-      }
+      // ⚠️ Controlli posizione rimossi (richiesta utente):
+      // - Tara (peso) e maglia rete sono dati FISICI del contenitore, modificabili sempre,
+      //   anche se la cesta non ha un ciclo attivo.
+      // - La posizione non è un vincolo gestito: niente blocco "cesta non attiva",
+      //   niente verifica duplicati su (row, position). Eventuali sovrapposizioni
+      //   sono gestite a livello UI/processo, non server-side.
+      void hasActiveCycle;
       
       // Assicuriamoci che vengano aggiornati tutti i dati di posizione e flupsyId
       // quando vengono specificati entrambi row e position
