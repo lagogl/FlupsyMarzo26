@@ -2070,7 +2070,22 @@ export default function SpreadsheetOperations() {
         const basketOps = ((operations as any[]) || [])
           .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
+
+        // LINEAGE FIX (trasferimento): se sul ciclo corrente abbiamo <2 op utili
+        // e l'unica op è 'prima-attivazione' pura (= trasferimento), risali al
+        // ciclo padre prendendo la sua ultima op utile come "previous".
+        if (basketOps.length < 2 && basketOps[0]?.type === 'prima-attivazione') {
+          const cycleRow = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
+          if (cycleRow?.parentCycleId) {
+            const parentLastOp = ((operations as any[]) || [])
+              .filter((op: any) => op.cycleId === cycleRow.parentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
+              .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            if (parentLastOp && new Date(parentLastOp.date) < new Date(basketOps[0].date)) {
+              basketOps.push(parentLastOp);
+            }
+          }
+        }
+
         let sgrMisuraValue = null;
         if (basketOps.length >= 2) {
           const latest = basketOps[0];
@@ -2254,7 +2269,20 @@ export default function SpreadsheetOperations() {
         const basketOps = ((operations as any[]) || [])
           .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
+
+        // LINEAGE FIX (trasferimento): fallback al ciclo padre se serve.
+        if (basketOps.length < 2 && basketOps[0]?.type === 'prima-attivazione') {
+          const cycleRow = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
+          if (cycleRow?.parentCycleId) {
+            const parentLastOp = ((operations as any[]) || [])
+              .filter((op: any) => op.cycleId === cycleRow.parentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
+              .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            if (parentLastOp && new Date(parentLastOp.date) < new Date(basketOps[0].date)) {
+              basketOps.push(parentLastOp);
+            }
+          }
+        }
+
         let sgrMisuraValue: number | null = null;
         if (basketOps.length >= 2) {
           const latest = basketOps[0];
@@ -4339,7 +4367,20 @@ export default function SpreadsheetOperations() {
                         const basketOps = ((operations as any[]) || [])
                           .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
                           .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                        
+
+                        // LINEAGE FIX (trasferimento): fallback al ciclo padre se serve.
+                        if (basketOps.length < 2 && basketOps[0]?.type === 'prima-attivazione') {
+                          const cycleRow = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
+                          if (cycleRow?.parentCycleId) {
+                            const parentLastOp = ((operations as any[]) || [])
+                              .filter((op: any) => op.cycleId === cycleRow.parentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
+                              .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                            if (parentLastOp && new Date(parentLastOp.date) < new Date(basketOps[0].date)) {
+                              basketOps.push(parentLastOp);
+                            }
+                          }
+                        }
+
                         if (basketOps.length >= 2) {
                           const latest = basketOps[0];
                           const previous = basketOps[1];

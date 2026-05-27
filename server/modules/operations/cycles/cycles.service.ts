@@ -739,7 +739,42 @@ class CyclesService {
         isNotNull(operations.averageWeight)
       ))
       .orderBy(asc(operations.date), asc(operations.id));
-    
+
+    // LINEAGE FIX (trasferimento): se il ciclo nasce da TRASFERIMENTO
+    // (prima op = 'prima-attivazione' pura, non da vagliatura) e ha un
+    // parentCycleId, antepone l'ultima op utile del ciclo padre come
+    // "seme" reale di crescita. Per le vagliature ('prima-attivazione-da-vagliatura')
+    // resta il comportamento precedente perché lì il peso può ricampionare la popolazione.
+    if (relevantOps.length >= 1 && relevantOps[0].type === 'prima-attivazione') {
+      const [cycleRow] = await db
+        .select({ parentCycleId: cycles.parentCycleId })
+        .from(cycles)
+        .where(eq(cycles.id, cycleId))
+        .limit(1);
+
+      if (cycleRow?.parentCycleId) {
+        const [parentLastOp] = await db
+          .select()
+          .from(operations)
+          .where(and(
+            eq(operations.cycleId, cycleRow.parentCycleId),
+            sql`${operations.type} IN ('peso', 'prima-attivazione', 'misura')`,
+            isNotNull(operations.averageWeight)
+          ))
+          .orderBy(desc(operations.date), desc(operations.id))
+          .limit(1);
+
+        if (parentLastOp && parentLastOp.averageWeight && parentLastOp.averageWeight > 0) {
+          const transferDate = new Date(relevantOps[0].date);
+          const parentDate = new Date(parentLastOp.date);
+          if (parentDate < transferDate) {
+            relevantOps.unshift(parentLastOp);
+            console.log(`📊 SGR-PESO: Lineage trasferimento — seme dal ciclo padre ${cycleRow.parentCycleId} (op ${parentLastOp.id}, ${parentLastOp.date})`);
+          }
+        }
+      }
+    }
+
     console.log(`📊 SGR-PESO: Trovate ${relevantOps.length} operazioni rilevanti`);
     
     if (relevantOps.length < 2) {
