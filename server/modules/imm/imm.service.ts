@@ -332,9 +332,17 @@ export async function computeInventoryIMM(
     )
     SELECT a.cycle_id, a.basket_id, a.physical_number, a.flupsy_id, a.flupsy_name,
            a.lot_id, a.quality_class, a.start_date,
-           seme.animals_per_kg AS seme_apk,
-           seme.date AS seme_date,
-           seme.animal_count AS seme_animal_count,
+           -- "Seme" effettivo per il calcolo SGR:
+           --   - se il ciclo è nato da TRASFERIMENTO (parentCycleId IS NOT NULL e
+           --     la prima operazione del ciclo figlio è 'prima-attivazione' "pura",
+           --     NON 'prima-attivazione-da-vagliatura') → si usa l'ultima
+           --     operazione utile del ciclo padre (la crescita non si "resetta"
+           --     al giorno del trasferimento, che è una mera ridistribuzione).
+           --   - altrimenti (ciclo nuovo o nato da vagliatura) → si usa la
+           --     prima operazione del ciclo corrente (comportamento storico).
+           COALESCE(parent_last.animals_per_kg, seme.animals_per_kg) AS seme_apk,
+           COALESCE(parent_last.date,           seme.date)           AS seme_date,
+           COALESCE(parent_last.animal_count,   seme.animal_count)   AS seme_animal_count,
            curr.animals_per_kg AS curr_apk,
            curr.animal_count AS curr_animal_count,
            curr.size_id AS curr_size_id,
@@ -345,6 +353,33 @@ export async function computeInventoryIMM(
     LEFT JOIN ranked seme ON seme.cycle_id = a.cycle_id AND seme.rn_asc = 1
     LEFT JOIN ranked curr ON curr.cycle_id = a.cycle_id AND curr.rn_desc = 1
     LEFT JOIN mortality m ON m.cycle_id = a.cycle_id
+    LEFT JOIN LATERAL (
+      SELECT parent_op.animals_per_kg, parent_op.animal_count, parent_op.date
+      FROM cycles child_cycle
+      JOIN operations parent_op
+        ON parent_op.cycle_id = child_cycle.parent_cycle_id
+       AND parent_op.cancelled_at IS NULL
+       AND parent_op.type IN ('misura','peso','prima-attivazione','prima-attivazione-da-vagliatura')
+       AND parent_op.animals_per_kg IS NOT NULL
+      WHERE child_cycle.id = a.cycle_id
+        AND child_cycle.parent_cycle_id IS NOT NULL
+        -- Gate: il figlio deve essere nato da TRASFERIMENTO, non da vagliatura.
+        -- Si controlla il tipo della VERA prima operazione del ciclo figlio
+        -- (ordine cronologico, poi id come tie-breaker). Robusto anche su dati
+        -- storici "sporchi" in cui possono coesistere più tipi di prima-attivazione.
+        --   - trasferimento → prima op = 'prima-attivazione'
+        --   - vagliatura    → prima op = 'prima-attivazione-da-vagliatura'
+        AND (
+          SELECT child_first.type
+          FROM operations child_first
+          WHERE child_first.cycle_id = a.cycle_id
+            AND child_first.cancelled_at IS NULL
+          ORDER BY child_first.date ASC, child_first.id ASC
+          LIMIT 1
+        ) = 'prima-attivazione'
+      ORDER BY parent_op.date DESC, parent_op.id DESC
+      LIMIT 1
+    ) parent_last ON true
     ORDER BY a.flupsy_name, a.physical_number
   `);
 
