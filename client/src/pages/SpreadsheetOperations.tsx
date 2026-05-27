@@ -2573,10 +2573,50 @@ export default function SpreadsheetOperations() {
     const animalsPerKgValues = filteredRows.map(r => r.animalsPerKg).filter((v): v is number => v !== null && v !== undefined && v > 0);
     const animalCountValues = filteredRows.map(r => r.animalCount).filter((v): v is number => v !== null && v !== undefined && v > 0);
     const totalWeightValues = filteredRows.map(r => r.totalWeight).filter((v): v is number => v !== null && v !== undefined && v > 0);
-    const sgrPesoValues = filteredRows.map(r => r.sgrPeso).filter((v): v is number => v !== null && v !== undefined && v > 0);
-    const sgrMedioValues = filteredRows.map(r => r.sgrMedio).filter((v): v is number => v !== null && v !== undefined && v > 0);
     const deadCountValues = filteredRows.map(r => r.deadCount).filter((v): v is number => v !== null && v !== undefined && v > 0);
     const mortalityRateValues = filteredRows.map(r => r.mortalityRate).filter((v): v is number => v !== null && v !== undefined && v > 0);
+
+    // Calcola SGR per ogni riga filtrata (stesso metodo delle celle tabella)
+    const sgrPesoValues: number[] = [];
+    const sgrMisuraValues: number[] = [];
+    const sgrMedioValues: number[] = [];
+    filteredRows.forEach(row => {
+      // SGR-Peso: da batch API
+      const sgrPesoData = ((sgrPesoBatch as any[]) || []).find((s: any) => s.basketId === row.basketId);
+      const sgrP = sgrPesoData?.sgrPesoMedio;
+
+      // SGR-Misura: ultime 2 op misura/prima-attivazione del ciclo (con lineage fix)
+      const basketOps = ((operations as any[]) || [])
+        .filter((op: any) => op.basketId === row.basketId && op.cycleId === row.currentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (basketOps.length < 2 && basketOps[0]?.type === 'prima-attivazione') {
+        const cycleRow = ((cycles as any[]) || []).find((c: any) => c.id === row.currentCycleId);
+        if (cycleRow?.parentCycleId) {
+          const parentLastOp = ((operations as any[]) || [])
+            .filter((op: any) => op.cycleId === cycleRow.parentCycleId && (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'chiusura-ciclo-vagliatura' || op.type === 'chiusura-ciclo') && op.animalsPerKg && op.animalsPerKg > 0)
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+          if (parentLastOp && new Date(parentLastOp.date) < new Date(basketOps[0]?.date)) {
+            basketOps.push(parentLastOp);
+          }
+        }
+      }
+      let sgrM: number | null = null;
+      if (basketOps.length >= 2) {
+        const latest = basketOps[0];
+        const previous = basketOps[1];
+        const days = Math.max(1, Math.round((new Date(latest.date).getTime() - new Date(previous.date).getTime()) / (1000 * 60 * 60 * 24)));
+        if (latest.animalsPerKg > 0 && previous.animalsPerKg > 0 && latest.animalsPerKg !== previous.animalsPerKg) {
+          sgrM = (Math.log(previous.animalsPerKg / latest.animalsPerKg) / days) * 100;
+        } else if (latest.animalsPerKg > 0 && previous.animalsPerKg > 0) {
+          sgrM = 0;
+        }
+      }
+
+      if (sgrP != null && sgrP > 0) sgrPesoValues.push(sgrP);
+      if (sgrM != null && sgrM > 0) sgrMisuraValues.push(sgrM);
+      const sgrMed = sgrP != null && sgrM != null ? (sgrP + sgrM) / 2 : sgrP ?? sgrM;
+      if (sgrMed != null && sgrMed > 0) sgrMedioValues.push(sgrMed);
+    });
 
     // Calcola statistiche per colonna
     const calcStats = (values: number[]) => {
@@ -2607,6 +2647,7 @@ export default function SpreadsheetOperations() {
       animalCount: calcStats(animalCountValues),
       totalWeight: calcStats(totalWeightValues),
       sgrPeso: calcStats(sgrPesoValues),
+      sgrMisura: calcStats(sgrMisuraValues),
       sgrMedio: calcStats(sgrMedioValues),
       deadCount: calcStats(deadCountValues),
       mortalityRate: calcStats(mortalityRateValues),
@@ -3129,18 +3170,30 @@ export default function SpreadsheetOperations() {
                 </div>
 
                 {/* Statistiche SGR */}
-                {(advancedStats.sgrPeso.avg || advancedStats.sgrMedio.avg) && (
-                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border">
-                    <div className="text-[10px] text-gray-500 uppercase mb-0.5">SGR (%)</div>
-                    <div className="flex gap-2 text-xs">
-                      {advancedStats.sgrPeso.avg && (
-                        <>
-                          <span className="text-gray-600">Media: <span className="font-semibold text-purple-700">{advancedStats.sgrPeso.avg.toFixed(2)}</span></span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-gray-600">Min: <span className="font-medium text-green-600">{advancedStats.sgrPeso.min?.toFixed(2) || '-'}</span></span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-gray-600">Max: <span className="font-medium text-red-600">{advancedStats.sgrPeso.max?.toFixed(2) || '-'}</span></span>
-                        </>
+                {(advancedStats.sgrPeso.avg != null || advancedStats.sgrMisura.avg != null || advancedStats.sgrMedio.avg != null) && (
+                  <div className="bg-white rounded-lg px-3 py-1.5 shadow-sm border border-purple-200">
+                    <div className="text-[10px] text-gray-500 uppercase mb-1">SGR (%/giorno)</div>
+                    <div className="flex flex-col gap-0.5 text-xs">
+                      {advancedStats.sgrPeso.avg != null && (
+                        <div className="flex gap-1.5 items-center">
+                          <span className="text-[10px] text-purple-500 font-semibold w-10">SGR-P</span>
+                          <span className="text-gray-600">Med: <span className="font-semibold text-purple-700">{advancedStats.sgrPeso.avg.toFixed(2)}</span></span>
+                          <span className="text-gray-400 text-[10px]">min {advancedStats.sgrPeso.min?.toFixed(2) || '-'} max {advancedStats.sgrPeso.max?.toFixed(2) || '-'}</span>
+                        </div>
+                      )}
+                      {advancedStats.sgrMisura.avg != null && (
+                        <div className="flex gap-1.5 items-center">
+                          <span className="text-[10px] text-green-600 font-semibold w-10">SGR-M</span>
+                          <span className="text-gray-600">Med: <span className="font-semibold text-green-700">{advancedStats.sgrMisura.avg.toFixed(2)}</span></span>
+                          <span className="text-gray-400 text-[10px]">min {advancedStats.sgrMisura.min?.toFixed(2) || '-'} max {advancedStats.sgrMisura.max?.toFixed(2) || '-'}</span>
+                        </div>
+                      )}
+                      {advancedStats.sgrMedio.avg != null && (
+                        <div className="flex gap-1.5 items-center">
+                          <span className="text-[10px] text-blue-500 font-semibold w-10">SGR</span>
+                          <span className="text-gray-600">Med: <span className="font-semibold text-blue-700">{advancedStats.sgrMedio.avg.toFixed(2)}</span></span>
+                          <span className="text-gray-400 text-[10px]">min {advancedStats.sgrMedio.min?.toFixed(2) || '-'} max {advancedStats.sgrMedio.max?.toFixed(2) || '-'}</span>
+                        </div>
                       )}
                     </div>
                   </div>
