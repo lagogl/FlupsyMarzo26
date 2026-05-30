@@ -112,12 +112,14 @@ export default function DraggableCalculator({
     ? Math.round((totalSample / sampleWeight) * 1000)
     : calculatedAnimalsPerKg;
   
-  // Vivi nel cestello = totalWeight (kg) × densità vivi (vivi/kg)
-  // Equivalente a: (sampleCount / sampleWeight g) × totalWeight (kg) × 1000
-  // NB: sampleWeight è in GRAMMI, totalWeight è in KG → serve il fattore 1000
+  // Vivi nel cestello = totalWeight (kg) × densità vivi (vivi/kg) × (1 - mort%)
+  // Formula: peso_totale × (vivi_campione / peso_campione_g × 1000) × (1 - mortalità)
+  // Esempio: 10kg × 90.000 pz/kg × (1 - 10%) = 810.000 animali vivi
+  // NB: sampleWeight in GRAMMI, totalWeight in KG → fattore 1000
+  const survivalRate = 1 - mortalityRate / 100;
   const animalCount = sampleWeight > 0 && sampleCount > 0
-    ? Math.round((sampleCount * totalWeight * 1000) / sampleWeight)
-    : Math.round(totalWeight * calculatedAnimalsPerKg);
+    ? Math.round((sampleCount * totalWeight * 1000) / sampleWeight * survivalRate)
+    : Math.round(totalWeight * calculatedAnimalsPerKg * survivalRate);
   
   // Peso individuale medio reale (mg) - include i morti nel calcolo
   const averageWeightMg = totalSample > 0 && sampleWeight > 0
