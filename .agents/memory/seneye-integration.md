@@ -8,3 +8,8 @@ description: How the DF SIFONI Seneye probe integration works and its non-obviou
 - `pollAndStore` throttles: it skips inserting if the latest stored row is < 5 min old (anti-abuse / anti-bloat), since the endpoint is unauthenticated.
 
 **Why:** `total_weight`/id-based identification proved unreliable; the user's device-id secret was wrong, so name resolution is the source of truth.
+
+## Raccolta dati 24/7 (decisione)
+Per acquisire i dati anche quando nessuno apre l'app, la scelta adottata è una "sveglia" esterna gratuita (es. cron-job.org) che fa `POST` ogni 30 min all'endpoint pubblico `/api/seneye/poll` della deployment autoscale. Sveglia l'app, che legge la sonda e salva.
+
+**Why:** la deployment è autoscale (si spegne senza traffico), quindi lo scheduler in-process non gira a riposo. La via "Scheduled Deployment" nativa richiederebbe la migrazione multi-artifact dell'intera app di produzione (pesante + rischiosa + costo), sproporzionata per un cron. L'endpoint è già protetto da un throttle di 5 min contro doppioni/abuso. Esiste anche `scripts/poll-seneye.ts` per un poll manuale/diretto al DB.
