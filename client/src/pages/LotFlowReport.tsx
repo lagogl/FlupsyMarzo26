@@ -18,11 +18,22 @@ interface FlowRow {
   animali: number;
 }
 
+interface StageBalanceRow {
+  tappa: string;
+  entrati: number;
+  usciti: number;
+  morti: number;
+  saldo: number;
+  giacenza: number;
+  perditaNonSpiegata: number;
+}
+
 interface FlowResponse {
   from: string;
   to: string;
   suppliers: string[] | string;
   matrix: FlowRow[];
+  stageBalance: StageBalanceRow[];
 }
 
 const CATS = ['RACEWAY', 'BINS', 'FLUPSY', 'MINI FLUPSY', '(altro)'];
@@ -86,47 +97,54 @@ export default function LotFlowReport() {
         { animali: 0, eventi: 0 },
       );
 
-  // Tappe principali richieste
-  const racewayToBins = sumBetween(['RACEWAY'], ['BINS']);
-  const binsToFlupsy = sumBetween(['BINS'], ['FLUPSY', 'MINI FLUPSY']);
-  const racewayToFlupsyDirect = sumBetween(['RACEWAY'], ['FLUPSY', 'MINI FLUPSY']);
-  // Ingressi nei flupsy/mini PROVENIENTI DA FUORI (esclude i movimenti interni
-  // flupsy↔flupsy che gonfierebbero il dato di "arrivati").
-  const totalToFlupsy = sumBetween(
-    ['RACEWAY', 'BINS', '(altro)'],
-    ['FLUPSY', 'MINI FLUPSY'],
-  );
+  // Percorso corretto: RACEWAY → (BINS → MINI FLUPSY → FLUPSY) → vendita.
+  // Bins e mini-flupsy possono mancare; la vendita avviene da flupsy o mini-flupsy.
+  // Uscite dalle raceway verso le tappe di ingrasso successive.
+  const racewayForward = sumBetween(['RACEWAY'], ['BINS', 'MINI FLUPSY', 'FLUPSY']);
+  // Passaggio dai bins alle tappe successive (mini-flupsy o flupsy).
+  const binsForward = sumBetween(['BINS'], ['MINI FLUPSY', 'FLUPSY']);
+  // Passaggio dal mini-flupsy al flupsy.
+  const miniToFlupsy = sumBetween(['MINI FLUPSY'], ['FLUPSY']);
+  // Arrivi al flupsy (ultima tappa prima della vendita) da qualunque tappa precedente.
+  const arrivedAtFlupsy = sumBetween(['RACEWAY', 'BINS', 'MINI FLUPSY', '(altro)'], ['FLUPSY']);
 
   const stageCards = [
     {
-      title: '1️⃣ Raceway → Bins',
-      desc: 'Animali spostati dalle raceway ai bins',
+      title: '1️⃣ Raceway → ingrasso',
+      desc: 'Uscite dalle raceway verso bins, mini-flupsy o flupsy',
       icon: <Boxes className="h-5 w-5 text-amber-600" />,
-      data: racewayToBins,
+      data: racewayForward,
       color: 'border-amber-200',
     },
     {
-      title: '2️⃣ Bins → Flupsy / Mini-flupsy',
-      desc: 'Animali spostati dai bins ai flupsy',
+      title: '2️⃣ Bins → Mini / Flupsy',
+      desc: 'Avanzamento dai bins (tappa opzionale)',
       icon: <Waves className="h-5 w-5 text-emerald-600" />,
-      data: binsToFlupsy,
+      data: binsForward,
       color: 'border-emerald-200',
     },
     {
-      title: '↪️ Raceway → Flupsy (diretto)',
-      desc: 'Spostati direttamente senza passare dai bins',
-      icon: <GitBranch className="h-5 w-5 text-sky-600" />,
-      data: racewayToFlupsyDirect,
-      color: 'border-sky-200',
+      title: '3️⃣ Mini-flupsy → Flupsy',
+      desc: 'Avanzamento dal mini-flupsy (tappa opzionale)',
+      icon: <GitBranch className="h-5 w-5 text-teal-600" />,
+      data: miniToFlupsy,
+      color: 'border-teal-200',
     },
     {
-      title: '✅ Arrivati ai Flupsy/Mini (da fuori)',
-      desc: 'Ingressi da raceway/bins, esclusi i movimenti interni tra flupsy',
+      title: '✅ Arrivati al Flupsy',
+      desc: 'Ingressi nel flupsy, ultima tappa prima della vendita',
       icon: <Package className="h-5 w-5 text-indigo-600" />,
-      data: totalToFlupsy,
+      data: arrivedAtFlupsy,
       color: 'border-indigo-300 bg-indigo-50/40',
     },
   ];
+
+  // Ordine del percorso per evidenziare nella matrice i passaggi "in avanti".
+  const PATH_ORDER: Record<string, number> = {
+    RACEWAY: 0, BINS: 1, 'MINI FLUPSY': 2, FLUPSY: 3,
+  };
+  const isForwardStep = (o: string, d: string) =>
+    o in PATH_ORDER && d in PATH_ORDER && PATH_ORDER[d] > PATH_ORDER[o];
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -205,6 +223,75 @@ export default function LotFlowReport() {
             ))}
           </div>
 
+          {/* Bilancio per tappa: dove si perdono gli animali */}
+          {data?.stageBalance && data.stageBalance.length > 0 && (
+            <Card className="border-rose-200">
+              <CardHeader>
+                <CardTitle className="text-base">⚠️ Dove si perdono gli animali — Bilancio per tappa</CardTitle>
+                <CardDescription>
+                  Per ogni contenitore: quanti animali sono <strong>entrati</strong>, quanti sono{' '}
+                  <strong>usciti vivi</strong> verso altre tappe o vendita, quanti risultano{' '}
+                  <strong>morti</strong> e quanti sono <strong>ancora presenti adesso</strong>{' '}
+                  (giacenza). La differenza che resta è la <strong>perdita non spiegata</strong>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="text-xs text-muted-foreground">
+                      <th className="p-2 text-left">Tappa</th>
+                      <th className="p-2 text-right">Entrati</th>
+                      <th className="p-2 text-right">Usciti vivi</th>
+                      <th className="p-2 text-right">Morti</th>
+                      <th className="p-2 text-right">% mortalità</th>
+                      <th className="p-2 text-right">Saldo teorico</th>
+                      <th className="p-2 text-right">Giacenza attuale</th>
+                      <th className="p-2 text-right">Perdita non spiegata</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.stageBalance.map((r) => {
+                      const pct = r.entrati > 0 ? (r.morti / r.entrati) * 100 : 0;
+                      return (
+                        <tr key={r.tappa} className="border-t">
+                          <td className="p-2">
+                            <Badge variant="outline" className={CAT_COLOR[r.tappa] ?? CAT_COLOR['(altro)']}>
+                              {r.tappa}
+                            </Badge>
+                          </td>
+                          <td className="p-2 text-right tabular-nums">{fmt(r.entrati)}</td>
+                          <td className="p-2 text-right tabular-nums">{fmt(r.usciti)}</td>
+                          <td className="p-2 text-right tabular-nums text-rose-700 font-medium">{fmt(r.morti)}</td>
+                          <td className={`p-2 text-right tabular-nums font-semibold ${pct >= 20 ? 'text-rose-700' : pct >= 10 ? 'text-amber-600' : 'text-emerald-700'}`}>
+                            {pct.toFixed(1)}%
+                          </td>
+                          <td className="p-2 text-right tabular-nums text-muted-foreground">{fmt(r.saldo)}</td>
+                          <td className="p-2 text-right tabular-nums text-sky-700 font-medium">{fmt(r.giacenza)}</td>
+                          <td className={`p-2 text-right tabular-nums font-semibold ${r.perditaNonSpiegata > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                            {fmt(r.perditaNonSpiegata)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  <strong>Saldo teorico</strong> = Entrati − Usciti − Morti (quanti dovrebbero esserci).{' '}
+                  <strong>Giacenza attuale</strong> = animali realmente presenti adesso nelle ceste attive
+                  di quella tappa (conteggio dell'ultima operazione, ripartito sui lotti selezionati).{' '}
+                  <strong>Perdita non spiegata</strong> = Saldo teorico − Giacenza: animali spariti senza
+                  mortalità o vendita registrata. La % mortalità è calcolata sugli animali entrati nella tappa.
+                </p>
+                <p className="mt-2 text-xs text-amber-700">
+                  ⚠️ La <strong>perdita non spiegata</strong> è attendibile solo quando il periodo parte
+                  dall'arrivo dei lotti (1 dicembre 2025): il saldo conta i movimenti del periodo scelto,
+                  mentre la giacenza è quella attuale. Con un periodo più corto i due valori non sono
+                  confrontabili e il risultato può apparire negativo.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Matrice completa */}
           <Card>
             <CardHeader>
@@ -235,9 +322,7 @@ export default function LotFlowReport() {
                       </td>
                       {CATS.map((d) => {
                         const c = cell(o, d);
-                        const isStage =
-                          (o === 'RACEWAY' && d === 'BINS') ||
-                          (o === 'BINS' && (d === 'FLUPSY' || d === 'MINI FLUPSY'));
+                        const isStage = isForwardStep(o, d);
                         return (
                           <td
                             key={d}

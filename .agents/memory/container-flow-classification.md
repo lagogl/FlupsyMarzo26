@@ -38,11 +38,42 @@ avoid internal flupsy↔flupsy moves inflating the total.
 **Caveat — cycle→basket.flupsy_id is the CURRENT basket position**, not historical.
 The selections columns are the authoritative historical origin/dest; prefer them.
 
-# Real-world finding (Roem/Ecotapes, late 2025–mid 2026)
+# Canonical production path (confirmed by user, May 2026)
 
-The strict chain raceway→bins→flupsy barely exists. Animals mostly go raceway→raceway
-(internal sorting), raceway→mini/flupsy directly; bins is a side/temporary stop and
-bins→flupsy is ~0. Report should show the full origin→destination matrix, not a forced chain.
+Authoritative sequence: **RACEWAY → (BINS → MINI FLUPSY → FLUPSY) → vendita**.
+BINS and MINI FLUPSY are OPTIONAL (can be skipped). Sale happens from FLUPSY **or**
+MINI FLUPSY (not only flupsy). Use PATH_ORDER {RACEWAY:0,BINS:1,MINI FLUPSY:2,FLUPSY:3}
+and treat a move as "forward/progress" when destIdx > origIdx; everything else is
+internal/backward (e.g. raceway→raceway sorting, flupsy→raceway return for sale).
 
-Implemented as report module `server/modules/reports/lot-flow` + page `LotFlowReport.tsx`
-(route `/flusso-animali`).
+# lot_ledger type semantics (per-lot ledger)
+
+- `activation` (quantity NEGATIVE): animals leave the lot storage pool INTO a cycle = "in coltivazione". Use ABS for "entrati in produzione".
+- `transfer_in` / `transfer_out`: internal moves between cycles; net-zero for the lot total alive but DOUBLE-COUNT in any per-stage entrati/usciti sum. Counts are MOVEMENTS not unique animals.
+- `mortality`: deaths. Recorded ~100% at LOT level via VAGLIATURA (no basket_id) → looks like "perdite occulte". Attribute to a container via COALESCE(NULLIF(selections.origin,'(altro)'), operation.cesta) to localize where losses happen.
+- `sale`: sold; resolve container via basket_id→flupsy.
+
+# Current giacenza (standing inventory) per container — HYBRID allocation
+
+`giacenza attuale` of OUR lots per container category = for each ACTIVE basket take the
+authoritative current count (`DISTINCT ON (basket_id)` latest op of type misura/peso/
+prima-attivazione, ORDER BY date DESC,id DESC, **AND `cancelled_at IS NULL`**), then
+ALLOCATE it to our lots by fraction `our_cnt/tot_cnt` from `basket_lot_composition`
+(current cycle) when composition rows exist, else 100% if `cycles.lot_id` supplier matches,
+else 0. **Do NOT** use composition.animal_count directly as giacenza (stale vs latest op);
+**do NOT** assign full basket count to cycle.lot_id for mixed baskets (over-counts — e.g.
+RACEWAY 21.6M full-count vs 1.95M composition-only). The hybrid (latest-count × our-fraction)
+is the defensible middle.
+
+**perditaNonSpiegata = saldo(period) − giacenza(current) is only temporally coherent
+when the report window starts at lot inception** (the report defaults from 2025-12-01,
+the Roem/Ecotapes arrival). For shorter windows the two are different time domains and
+the value is meaningless (can go negative) — surfaced as an amber caveat in the UI.
+
+# Implementation
+
+Report module `server/modules/reports/lot-flow/lot-flow.routes.ts` (computeLotFlow matrix,
+computeStageBalance, computeCurrentInventory, /lot-flow + /lot-flow/export ExcelJS with
+safeCell() formula-injection guard) + page `LotFlowReport.tsx` (route `/flusso-animali`).
+The strict chain rarely happens in practice; the report shows the full origin→destination
+matrix plus a per-stage balance (entrati/usciti/morti/saldo/giacenza/perdita), not a forced chain.
