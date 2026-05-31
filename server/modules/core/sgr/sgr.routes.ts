@@ -19,6 +19,9 @@ router.post("/sgr-giornalieri", (req, res) => sgrController.createSgrGiornaliero
 router.patch("/sgr-giornalieri/:id", (req, res) => sgrController.updateSgrGiornaliero(req, res));
 router.delete("/sgr-giornalieri/:id", (req, res) => sgrController.deleteSgrGiornaliero(req, res));
 
+// ========== SGR Matrix (Reale per Taglia × Mese) ==========
+router.get("/sgr-matrix", (req, res) => sgrController.getSgrMatrix(req, res));
+
 // ========== SGR Per Taglia (Calculated SGR) Routes ==========
 router.get("/sgr-per-taglia", (req, res) => sgrController.getAllSgrPerTaglia(req, res));
 router.post("/sgr-per-taglia/calculate", (req, res) => sgrController.triggerSgrCalculation(req, res));

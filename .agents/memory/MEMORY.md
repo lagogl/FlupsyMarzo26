@@ -1,0 +1,1 @@
+- [SGR Matrix module](sgr-matrix-module.md) — real SGR Taglia×Mese matrix at /sgr-matrix; both SGR-P/SGR-M per cell, start-month/start-taglia attribution, deviation vs seed.

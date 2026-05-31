@@ -5,6 +5,7 @@ import { fromZodError } from "zod-validation-error";
 import { z } from "zod";
 import { sgrScheduler } from "./sgr-scheduler";
 import { sgrCalculationService } from "./sgr-calculation.service";
+import { sgrMatrixService } from "./sgr-matrix.service";
 import { broadcastMessage } from "../../../websocket";
 import ExcelJS from "exceljs";
 
@@ -360,6 +361,35 @@ export class SgrController {
     } catch (error) {
       console.error("Error triggering all-months SGR calculation:", error);
       res.status(500).json({ message: "Failed to trigger all-months SGR calculation" });
+    }
+  }
+
+  // ========== SGR Matrix (Reale per Taglia × Mese) ==========
+
+  /**
+   * GET /api/sgr-matrix
+   * Calcola la matrice SGR reale (Taglia × Mese) da tutti i cicli.
+   * Query params: state ('all'|'active'|'closed'), year, flupsyId
+   */
+  async getSgrMatrix(req: Request, res: Response) {
+    try {
+      const stateRaw = (req.query.state as string) || "all";
+      const state = ["all", "active", "closed"].includes(stateRaw)
+        ? (stateRaw as "all" | "active" | "closed")
+        : "all";
+
+      const yearRaw = req.query.year as string | undefined;
+      const year = yearRaw && !isNaN(parseInt(yearRaw)) ? parseInt(yearRaw) : null;
+
+      const flupsyRaw = req.query.flupsyId as string | undefined;
+      const flupsyId =
+        flupsyRaw && !isNaN(parseInt(flupsyRaw)) ? parseInt(flupsyRaw) : null;
+
+      const result = await sgrMatrixService.computeMatrix({ state, year, flupsyId });
+      res.json(result);
+    } catch (error) {
+      console.error("Error computing SGR matrix:", error);
+      res.status(500).json({ message: "Failed to compute SGR matrix" });
     }
   }
 

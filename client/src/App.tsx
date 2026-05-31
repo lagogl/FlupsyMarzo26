@@ -19,6 +19,7 @@ import Lots from "@/pages/Lots";
 import Statistics from "@/pages/Statistics";
 import Sizes from "@/pages/Sizes";
 import Sgr from "@/pages/Sgr";
+import SgrMatrix from "@/pages/SgrMatrix";
 import Settings from "@/pages/Settings";
 import Flupsys from "@/pages/Flupsys";
 import FlupsyDetails from "@/pages/FlupsyDetails";
@@ -153,6 +154,7 @@ function Router() {
       <ProtectedRoute path="/manual" component={Manuale}/>
       <ProtectedRoute path="/sizes" component={Sizes}/>
       <ProtectedRoute path="/sgr" component={Sgr} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/sgr-matrix" component={SgrMatrix}/>
       <ProtectedRoute path="/sgr-lineage" component={SgrLineage}/>
       <ProtectedRoute path="/settings" component={Settings} requiredRole="admin" />
       <ProtectedRoute path="/test" component={TestView}/>
