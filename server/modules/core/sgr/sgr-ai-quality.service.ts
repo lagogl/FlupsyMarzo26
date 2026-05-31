@@ -93,13 +93,15 @@ export class SgrAiQualityService {
         continue;
       }
       
-      // Check 4: Unrealistic animalsPerKg (< 1 or > 1000)
-      if (op.animalsPerKg! < 1 || op.animalsPerKg! > 1000) {
+      // Check 4: animalsPerKg deve essere > 0
+      // NOTA: in questo sistema i valori vanno da ~800 (TP-10000) a >100.000.000 (TP-180 larve)
+      // Non si applica un limite superiore perché le larve hanno densità altissime
+      if (op.animalsPerKg! < 1) {
         anomalies.push({
           operationId: op.id,
           basketId: op.basketId,
           date: op.date,
-          reason: `Unrealistic animalsPerKg: ${op.animalsPerKg}`,
+          reason: `Valore animalsPerKg non valido: ${op.animalsPerKg}`,
           severity: 'error',
           suggested: 'Excluded from SGR calculation'
         });
