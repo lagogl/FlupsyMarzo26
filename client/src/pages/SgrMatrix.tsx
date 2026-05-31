@@ -177,20 +177,84 @@ export default function SgrMatrix() {
 
   const handleExport = () => {
     if (!data) return;
-    const rows: any[] = [];
+    const wb = XLSX.utils.book_new();
+
+    // ── Foglio 1: Matrice (formato largo) — P, M, Reale, Stimato, Δ per mese ──
+    const matrixRows: any[] = [];
     for (const size of data.sizes) {
-      const row: any = { Taglia: size.code, 'Animali/kg': `${size.minAnimalsPerKg ?? ''}–${size.maxAnimalsPerKg ?? ''}` };
+      const row: any = {
+        Taglia: size.code,
+        'Animali/kg': `${size.minAnimalsPerKg ?? ''}–${size.maxAnimalsPerKg ?? ''}`,
+      };
       for (let m = 0; m < 12; m++) {
         const cell = data.matrix[String(size.id)]?.[m];
-        row[`${data.monthsIt[m]} SGR-P`] = cell?.sgrP ?? '';
-        row[`${data.monthsIt[m]} SGR-M`] = cell?.sgrM ?? '';
-        row[`${data.monthsIt[m]} Stimato`] = cell?.estimated ?? '';
+        const label = data.monthsIt[m].substring(0, 3);
+        row[`${label} P`] = cell?.sgrP ?? '';
+        row[`${label} M`] = cell?.sgrM ?? '';
+        row[`${label} Reale`] = cell?.real ?? '';
+        row[`${label} Stimato`] = cell?.estimated ?? '';
+        row[`${label} Δ`] = cell?.deviation ?? '';
       }
-      rows.push(row);
+      matrixRows.push(row);
     }
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Matrice SGR');
+    const wsMatrix = XLSX.utils.json_to_sheet(matrixRows);
+    XLSX.utils.book_append_sheet(wb, wsMatrix, 'Matrice');
+
+    // ── Foglio 2: Dettaglio (formato lungo) — una riga per Taglia × Mese ──
+    const detailRows: any[] = [];
+    for (const size of data.sizes) {
+      for (let m = 0; m < 12; m++) {
+        const cell = data.matrix[String(size.id)]?.[m];
+        if (!cell) continue;
+        if (cell.sgrP == null && cell.sgrM == null && cell.estimated == null) continue;
+        detailRows.push({
+          Taglia: size.code,
+          'Animali/kg': `${size.minAnimalsPerKg ?? ''}–${size.maxAnimalsPerKg ?? ''}`,
+          Mese: data.monthsIt[m],
+          'SGR-P (peso)': cell.sgrP ?? '',
+          'SGR-M (animali/kg)': cell.sgrM ?? '',
+          'SGR Reale': cell.real ?? '',
+          'SGR Stimato': cell.estimated ?? '',
+          'Δ (reale-stimato)': cell.deviation ?? '',
+          'N. campioni': Math.max(cell.countP, cell.countM),
+          'Incoerente P/M': isDivergent(cell) ? 'Sì' : '',
+        });
+      }
+    }
+    const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+    XLSX.utils.book_append_sheet(wb, wsDetail, 'Dettaglio');
+
+    // ── Foglio 3: Riepilogo ──
+    const flupsyName =
+      flupsyId === 'all'
+        ? 'Tutti'
+        : (flupsys || []).find((f) => String(f.id) === flupsyId)?.name ?? flupsyId;
+    const stateLabel =
+      state === 'all' ? 'Tutti (aperti + chiusi)' : state === 'active' ? 'Solo aperti' : 'Solo chiusi';
+    const summaryRows = [
+      { Voce: 'Cicli', Valore: stateLabel },
+      { Voce: 'Anno', Valore: year === 'all' ? 'Tutti gli anni' : year },
+      { Voce: 'FLUPSY', Valore: flupsyName },
+      { Voce: 'Segmenti analizzati', Valore: data.summary.totalSegments },
+      { Voce: 'Taglie con dati', Valore: data.summary.sizesCount },
+      {
+        Voce: 'Crescita migliore',
+        Valore: data.summary.bestCell
+          ? `${data.summary.bestCell.value}% (${data.summary.bestCell.sizeName} · ${data.summary.bestCell.month})`
+          : '—',
+      },
+      {
+        Voce: 'Crescita peggiore',
+        Valore: data.summary.worstCell
+          ? `${data.summary.worstCell.value}% (${data.summary.worstCell.sizeName} · ${data.summary.worstCell.month})`
+          : '—',
+      },
+      { Voce: 'Celle incoerenti (P/M)', Valore: divergentCount },
+      { Voce: 'Esportato il', Valore: new Date().toLocaleString('it-IT') },
+    ];
+    const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Riepilogo');
+
     XLSX.writeFile(wb, 'matrice_sgr_reale.xlsx');
   };
 
@@ -208,7 +272,7 @@ export default function SgrMatrix() {
             Ogni cella mostra <strong>SGR-P</strong> (peso) e <strong>SGR-M</strong> (animali/kg) affiancati.
           </p>
         </div>
-        <Button onClick={handleExport} disabled={!data} variant="outline" data-testid="button-export">
+        <Button onClick={handleExport} disabled={!data} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-export">
           <Download className="h-4 w-4 mr-2" /> Esporta Excel
         </Button>
       </div>
