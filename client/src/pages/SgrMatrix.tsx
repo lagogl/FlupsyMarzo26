@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Download, TrendingUp, TrendingDown, Info, Layers, AlertTriangle } from 'lucide-react';
+import { Loader2, Download, TrendingUp, TrendingDown, Info, Layers, AlertTriangle, LineChart as LineChartIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -61,6 +62,13 @@ interface Flupsy {
 // la cella è considerata "incoerente" e viene evidenziata.
 const DIVERGENCE_THRESHOLD = 1.5;
 
+// Palette colori per le linee del grafico (una per taglia)
+const CHART_COLORS = [
+  '#2563eb', '#16a34a', '#db2777', '#ea580c', '#7c3aed',
+  '#0891b2', '#ca8a04', '#dc2626', '#059669', '#9333ea',
+  '#0284c7', '#65a30d',
+];
+
 function isDivergent(cell?: Cell): boolean {
   if (!cell || cell.sgrP == null || cell.sgrM == null) return false;
   return Math.abs(cell.sgrP - cell.sgrM) >= DIVERGENCE_THRESHOLD;
@@ -89,6 +97,8 @@ export default function SgrMatrix() {
   const [year, setYear] = useState<string>('all');
   const [flupsyId, setFlupsyId] = useState<string>('all');
   const [selectedCell, setSelectedCell] = useState<{ sizeId: number; month: number; sizeName: string } | null>(null);
+  const [chartMetric, setChartMetric] = useState<'real' | 'sgrP' | 'sgrM'>('real');
+  const [chartSizeIds, setChartSizeIds] = useState<number[]>([]);
 
   const { data: flupsys } = useQuery<Flupsy[]>({ queryKey: ['/api/flupsys'] });
 
@@ -121,6 +131,49 @@ export default function SgrMatrix() {
     }
     return count;
   }, [data]);
+
+  // Seleziona di default le prime 5 taglie con più dati quando arriva la matrice
+  useEffect(() => {
+    if (!data || data.sizes.length === 0) {
+      setChartSizeIds([]);
+      return;
+    }
+    const ranked = [...data.sizes]
+      .map((s) => {
+        let samples = 0;
+        for (let m = 0; m < 12; m++) {
+          const c = data.matrix[String(s.id)]?.[m];
+          if (c) samples += Math.max(c.countP, c.countM);
+        }
+        return { id: s.id, samples };
+      })
+      .sort((a, b) => b.samples - a.samples)
+      .slice(0, 5)
+      .map((x) => x.id);
+    setChartSizeIds(ranked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // Dati per il grafico: una serie per ogni taglia selezionata, lungo i 12 mesi
+  const chartData = useMemo(() => {
+    if (!data) return [];
+    return data.monthsIt.map((mName, m) => {
+      const row: Record<string, any> = { mese: mName.substring(0, 3) };
+      for (const sizeId of chartSizeIds) {
+        const size = data.sizes.find((s) => s.id === sizeId);
+        if (!size) continue;
+        const cell = data.matrix[String(sizeId)]?.[m];
+        row[size.code] = cell ? cell[chartMetric] : null;
+      }
+      return row;
+    });
+  }, [data, chartSizeIds, chartMetric]);
+
+  const toggleChartSize = (sizeId: number) => {
+    setChartSizeIds((prev) =>
+      prev.includes(sizeId) ? prev.filter((id) => id !== sizeId) : [...prev, sizeId]
+    );
+  };
 
   const handleExport = () => {
     if (!data) return;
@@ -328,6 +381,85 @@ export default function SgrMatrix() {
           )}
         </CardContent>
       </Card>
+
+      {/* Grafico lineare */}
+      {data && data.sizes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <LineChartIcon className="h-5 w-5 text-purple-600" /> Andamento per mese
+                </CardTitle>
+                <CardDescription>
+                  Una linea per taglia lungo i 12 mesi. Seleziona la metrica e le taglie da confrontare.
+                </CardDescription>
+              </div>
+              <div className="w-full md:w-48">
+                <Select value={chartMetric} onValueChange={(v) => setChartMetric(v as any)}>
+                  <SelectTrigger data-testid="select-chart-metric"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="real">SGR Reale (media P/M)</SelectItem>
+                    <SelectItem value="sgrP">SGR-P (peso)</SelectItem>
+                    <SelectItem value="sgrM">SGR-M (animali/kg)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Selettore taglie */}
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {data.sizes.map((size, idx) => {
+                const active = chartSizeIds.includes(size.id);
+                const color = CHART_COLORS[chartSizeIds.indexOf(size.id) % CHART_COLORS.length];
+                return (
+                  <button
+                    key={size.id}
+                    onClick={() => toggleChartSize(size.id)}
+                    data-testid={`chart-size-${size.id}`}
+                    className={`text-xs px-2 py-1 rounded-full border transition-colors ${active ? 'text-white border-transparent' : 'text-muted-foreground bg-muted/40 hover:bg-muted'}`}
+                    style={active ? { backgroundColor: color } : undefined}
+                  >
+                    {size.code}
+                  </button>
+                );
+              })}
+            </div>
+
+            {chartSizeIds.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground text-sm">
+                Seleziona almeno una taglia per visualizzare il grafico.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={360}>
+                <RechartsLineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="mese" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} label={{ value: 'SGR %/giorno', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
+                  <Tooltip formatter={(value: any) => [value != null ? `${value}%` : '—', '']} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {chartSizeIds.map((sizeId, idx) => {
+                    const size = data.sizes.find((s) => s.id === sizeId);
+                    if (!size) return null;
+                    return (
+                      <Line
+                        key={sizeId}
+                        type="monotone"
+                        dataKey={size.code}
+                        stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        connectNulls
+                      />
+                    );
+                  })}
+                </RechartsLineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Drill-down */}
       <Dialog open={!!selectedCell} onOpenChange={(o) => !o && setSelectedCell(null)}>
