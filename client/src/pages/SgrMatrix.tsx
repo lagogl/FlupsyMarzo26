@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Download, TrendingUp, TrendingDown, Info, Layers } from 'lucide-react';
+import { Loader2, Download, TrendingUp, TrendingDown, Info, Layers, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -57,6 +57,15 @@ interface Flupsy {
   name: string;
 }
 
+// Soglia di divergenza tra SGR-P e SGR-M (punti percentuali) oltre la quale
+// la cella è considerata "incoerente" e viene evidenziata.
+const DIVERGENCE_THRESHOLD = 1.5;
+
+function isDivergent(cell?: Cell): boolean {
+  if (!cell || cell.sgrP == null || cell.sgrM == null) return false;
+  return Math.abs(cell.sgrP - cell.sgrM) >= DIVERGENCE_THRESHOLD;
+}
+
 // Colore heatmap in base al valore SGR (rosso = lento, verde = veloce)
 function heatColor(value: number | null): string {
   if (value == null) return 'transparent';
@@ -101,6 +110,17 @@ export default function SgrMatrix() {
     if (!selectedCell || !data) return [];
     return data.details[`${selectedCell.sizeId}_${selectedCell.month}`] || [];
   }, [selectedCell, data]);
+
+  const divergentCount = useMemo(() => {
+    if (!data) return 0;
+    let count = 0;
+    for (const size of data.sizes) {
+      for (let m = 0; m < 12; m++) {
+        if (isDivergent(data.matrix[String(size.id)]?.[m])) count++;
+      }
+    }
+    return count;
+  }, [data]);
 
   const handleExport = () => {
     if (!data) return;
@@ -249,17 +269,19 @@ export default function SgrMatrix() {
                       {data.monthsIt.map((_, m) => {
                         const cell = data.matrix[String(size.id)]?.[m];
                         const hasReal = cell && (cell.sgrP != null || cell.sgrM != null);
+                        const divergent = isDivergent(cell);
                         return (
                           <td
                             key={m}
-                            className={`border p-1 text-center align-top ${hasReal ? 'cursor-pointer hover:ring-2 hover:ring-purple-400' : ''}`}
+                            className={`border p-1 text-center align-top ${hasReal ? 'cursor-pointer hover:ring-2 hover:ring-purple-400' : ''} ${divergent ? 'ring-2 ring-inset ring-amber-500' : ''}`}
                             style={{ backgroundColor: heatColor(cell?.real ?? null) }}
                             onClick={() => hasReal && setSelectedCell({ sizeId: size.id, month: m, sizeName: size.code })}
                             data-testid={`cell-${size.id}-${m}`}
+                            title={divergent ? `Incoerenza: P e M differiscono di ${Math.abs((cell!.sgrP! - cell!.sgrM!)).toFixed(1)} punti` : undefined}
                           >
                             {cell ? (
                               <div className="space-y-0.5">
-                                <div className="flex justify-center gap-1">
+                                <div className="flex justify-center items-center gap-1">
                                   <span className="font-semibold text-blue-700" title="SGR Peso">
                                     P {cell.sgrP != null ? cell.sgrP.toFixed(1) : '–'}
                                   </span>
@@ -267,6 +289,7 @@ export default function SgrMatrix() {
                                   <span className="font-semibold text-emerald-700" title="SGR Misura">
                                     M {cell.sgrM != null ? cell.sgrM.toFixed(1) : '–'}
                                   </span>
+                                  {divergent && <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />}
                                 </div>
                                 {(cell.countP > 0 || cell.countM > 0) && (
                                   <div className="text-[9px] text-muted-foreground">
@@ -295,6 +318,11 @@ export default function SgrMatrix() {
                 <span className="flex items-center gap-1"><span className="font-medium">Δ</span> = reale − stimato</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: heatColor(0.5) }} /> lento</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: heatColor(5.5) }} /> veloce</span>
+                <span className="flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 text-amber-500" />
+                  P e M divergono ≥ {DIVERGENCE_THRESHOLD} punti (dato da verificare)
+                  {divergentCount > 0 && <span className="font-medium text-amber-600">— {divergentCount} {divergentCount === 1 ? 'cella' : 'celle'}</span>}
+                </span>
               </div>
             </div>
           )}
