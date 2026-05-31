@@ -285,13 +285,6 @@ lotFlowRoutes.get("/lot-flow/export", async (req: Request, res: Response) => {
 
     const find = (o: string, d: string) =>
       matrix.find((r) => r.origine === o && r.destinazione === d);
-    const sumBetween = (origins: string[], dests: string[]) =>
-      matrix
-        .filter((r) => origins.includes(r.origine) && dests.includes(r.destinazione))
-        .reduce(
-          (acc, r) => ({ animali: acc.animali + r.animali, eventi: acc.eventi + r.eventi }),
-          { animali: 0, eventi: 0 },
-        );
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "FLUPSY";
@@ -299,11 +292,14 @@ lotFlowRoutes.get("/lot-flow/export", async (req: Request, res: Response) => {
     const fmtInt = "#,##0";
 
     // Foglio 1: Riepilogo tappe
+    // I valori derivano dagli STESSI dati del "Bilancio per tappa" (stageBalance),
+    // così i riquadri/riepilogo coincidono sempre con la tabella di dettaglio.
+    const sbVal = (t: string, k: "entrati" | "usciti" | "morti" | "saldo" | "giacenza") =>
+      stageBalance.find((r) => r.tappa === t)?.[k] ?? 0;
     const s1 = wb.addWorksheet("Riepilogo tappe");
     s1.columns = [
-      { header: "Tappa", key: "k", width: 40 },
-      { header: "Animali (movimenti)", key: "a", width: 22, style: { numFmt: fmtInt } },
-      { header: "N. movimenti", key: "n", width: 16, style: { numFmt: fmtInt } },
+      { header: "Voce", key: "k", width: 48 },
+      { header: "Animali", key: "a", width: 22, style: { numFmt: fmtInt } },
     ];
     s1.getRow(1).font = { bold: true };
     const supplierLabel = params.suppliers === "all" ? "Tutti" : params.suppliers.join(", ");
@@ -311,12 +307,12 @@ lotFlowRoutes.get("/lot-flow/export", async (req: Request, res: Response) => {
       { k: "Periodo", a: safeCell(`${params.from} → ${params.to}`) },
       { k: "Fornitori", a: safeCell(supplierLabel) },
       { k: "", a: "" },
-      { k: "1) Raceway → ingrasso (Bins / Mini / Flupsy)", a: sumBetween(["RACEWAY"], ["BINS", "MINI FLUPSY", "FLUPSY"]).animali, n: sumBetween(["RACEWAY"], ["BINS", "MINI FLUPSY", "FLUPSY"]).eventi },
-      { k: "2) Bins → Mini-flupsy / Flupsy (tappa opzionale)", a: sumBetween(["BINS"], ["MINI FLUPSY", "FLUPSY"]).animali, n: sumBetween(["BINS"], ["MINI FLUPSY", "FLUPSY"]).eventi },
-      { k: "3) Mini-flupsy → Flupsy (tappa opzionale)", a: sumBetween(["MINI FLUPSY"], ["FLUPSY"]).animali, n: sumBetween(["MINI FLUPSY"], ["FLUPSY"]).eventi },
-      { k: "Arrivati al Flupsy (ultima tappa prima della vendita)", a: sumBetween(["RACEWAY", "BINS", "MINI FLUPSY", "(altro)"], ["FLUPSY"]).animali, n: sumBetween(["RACEWAY", "BINS", "MINI FLUPSY", "(altro)"], ["FLUPSY"]).eventi },
+      { k: "1) Uscite dalle Raceway (verso tappe successive o vendita)", a: sbVal("RACEWAY", "usciti") },
+      { k: "2) Uscite dai Bins (tappa opzionale)", a: sbVal("BINS", "usciti") },
+      { k: "3) Uscite dai Mini-flupsy (tappa opzionale)", a: sbVal("MINI FLUPSY", "usciti") },
+      { k: "Entrati nel Flupsy (trasferimenti + attivazioni dirette)", a: sbVal("FLUPSY", "entrati") },
       { k: "", a: "" },
-      { k: "Nota", a: "Percorso: Raceway → (Bins → Mini-flupsy → Flupsy) → vendita. Bins e mini-flupsy possono mancare; la vendita avviene da flupsy o mini-flupsy. I numeri indicano i movimenti di animali, non animali unici: lo stesso animale che passa più tappe è contato a ogni passaggio." },
+      { k: "Nota", a: "Questi valori coincidono con il foglio 'Bilancio per tappa'. Le 'Uscite' sono gli animali usciti vivi da ogni tappa (verso la tappa successiva o la vendita); gli 'Entrati nel Flupsy' includono sia i trasferimenti da altre tappe sia gli animali attivati direttamente nel flupsy. Non vanno confusi con le singole celle della 'Matrice passaggi', che contano solo i trasferimenti registrati." },
     ]);
 
     // Foglio 2: Matrice completa (origine x destinazione)

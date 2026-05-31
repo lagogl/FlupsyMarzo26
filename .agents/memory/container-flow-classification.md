@@ -70,6 +70,19 @@ when the report window starts at lot inception** (the report defaults from 2025-
 the Roem/Ecotapes arrival). For shorter windows the two are different time domains and
 the value is meaningless (can go negative) — surfaced as an amber caveat in the UI.
 
+# Summary cards must mirror stageBalance, not the matrix
+
+The lot-flow page (and Excel "Riepilogo tappe" sheet) summary cards must derive from
+`stageBalance` (per-stage entrati/usciti/morti), NOT from the `computeLotFlow` matrix.
+**Why:** the matrix counts only raw `transfer_in` movements (and resolves origine by the
+basket's *current* flupsy), while stageBalance.entrati additionally includes animals
+**activated directly** in a stage. They diverge a lot (e.g. "arrivati al flupsy" via matrix
+transfers = 57M vs FLUPSY entrati = 134M, the ~78M gap = lots activated directly in flupsy).
+Showing both on one page made the cards contradict the balance table and confused the user.
+**How to apply:** cards = `usciti` per stage (raceway/bins/mini) + `entrati` for flupsy, so each
+card equals exactly one table cell. The matrix is a separate "movimenti/trasferimenti" view —
+keep it visually distinct and never reconcile its single cells with the balance table.
+
 # lot_ledger.basket_id semantics (critical for transfer resolution)
 
 `lot_ledger.basket_id` = **destination** basket for `transfer_in` rows, **source** basket

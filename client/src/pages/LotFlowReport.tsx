@@ -89,52 +89,41 @@ export default function LotFlowReport() {
   const cell = (o: string, d: string): FlowRow | undefined =>
     matrix.find((r) => r.origine === o && r.destinazione === d);
 
-  const sumBetween = (origins: string[], dests: string[]) =>
-    matrix
-      .filter((r) => origins.includes(r.origine) && dests.includes(r.destinazione))
-      .reduce(
-        (acc, r) => ({ animali: acc.animali + r.animali, eventi: acc.eventi + r.eventi }),
-        { animali: 0, eventi: 0 },
-      );
-
-  // Percorso corretto: RACEWAY → (BINS → MINI FLUPSY → FLUPSY) → vendita.
-  // Bins e mini-flupsy possono mancare; la vendita avviene da flupsy o mini-flupsy.
-  // Uscite dalle raceway verso le tappe di ingrasso successive.
-  const racewayForward = sumBetween(['RACEWAY'], ['BINS', 'MINI FLUPSY', 'FLUPSY']);
-  // Passaggio dai bins alle tappe successive (mini-flupsy o flupsy).
-  const binsForward = sumBetween(['BINS'], ['MINI FLUPSY', 'FLUPSY']);
-  // Passaggio dal mini-flupsy al flupsy.
-  const miniToFlupsy = sumBetween(['MINI FLUPSY'], ['FLUPSY']);
-  // Arrivi al flupsy (ultima tappa prima della vendita) da qualunque tappa precedente.
-  const arrivedAtFlupsy = sumBetween(['RACEWAY', 'BINS', 'MINI FLUPSY', '(altro)'], ['FLUPSY']);
+  // I riquadri riepilogo derivano dagli STESSI valori del "Bilancio per tappa"
+  // (stageBalance) qui sotto, così i numeri in alto coincidono sempre con la
+  // tabella. Mostrano gli animali usciti vivi da ogni tappa (verso la tappa
+  // successiva o la vendita) e gli entrati nel flupsy (trasferimenti + attivazioni
+  // dirette). NON sono i soli trasferimenti della matrice: per questo possono
+  // differire dalle singole celle della matrice.
+  const sb = (t: string) => data?.stageBalance?.find((r) => r.tappa === t);
 
   const stageCards = [
     {
-      title: '1️⃣ Raceway → ingrasso',
-      desc: 'Uscite dalle raceway verso bins, mini-flupsy o flupsy',
+      title: '1️⃣ Uscite dalle Raceway',
+      desc: 'Animali usciti vivi dalle raceway verso le tappe successive o la vendita',
       icon: <Boxes className="h-5 w-5 text-amber-600" />,
-      data: racewayForward,
+      value: sb('RACEWAY')?.usciti ?? 0,
       color: 'border-amber-200',
     },
     {
-      title: '2️⃣ Bins → Mini / Flupsy',
-      desc: 'Avanzamento dai bins (tappa opzionale)',
+      title: '2️⃣ Uscite dai Bins',
+      desc: 'Animali usciti vivi dai bins (tappa opzionale)',
       icon: <Waves className="h-5 w-5 text-emerald-600" />,
-      data: binsForward,
+      value: sb('BINS')?.usciti ?? 0,
       color: 'border-emerald-200',
     },
     {
-      title: '3️⃣ Mini-flupsy → Flupsy',
-      desc: 'Avanzamento dal mini-flupsy (tappa opzionale)',
+      title: '3️⃣ Uscite dai Mini-flupsy',
+      desc: 'Animali usciti vivi dai mini-flupsy verso il flupsy o la vendita',
       icon: <GitBranch className="h-5 w-5 text-teal-600" />,
-      data: miniToFlupsy,
+      value: sb('MINI FLUPSY')?.usciti ?? 0,
       color: 'border-teal-200',
     },
     {
-      title: '✅ Arrivati al Flupsy',
-      desc: 'Ingressi nel flupsy, ultima tappa prima della vendita',
+      title: '✅ Entrati nel Flupsy',
+      desc: 'Trasferiti da altre tappe + attivati direttamente nel flupsy (ultima tappa prima della vendita)',
       icon: <Package className="h-5 w-5 text-indigo-600" />,
-      data: arrivedAtFlupsy,
+      value: sb('FLUPSY')?.entrati ?? 0,
       color: 'border-indigo-300 bg-indigo-50/40',
     },
   ];
@@ -215,8 +204,8 @@ export default function LotFlowReport() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-2xl font-bold">{fmt(s.data.animali)}</p>
-                  <p className="text-xs text-muted-foreground">animali · {s.data.eventi} movimenti</p>
+                  <p className="text-2xl font-bold">{fmt(s.value)}</p>
+                  <p className="text-xs text-muted-foreground">animali</p>
                   <CardDescription className="mt-1 text-xs">{s.desc}</CardDescription>
                 </CardContent>
               </Card>
