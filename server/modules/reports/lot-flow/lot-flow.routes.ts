@@ -70,10 +70,15 @@ async function computeLotFlow(p: FlowParams): Promise<FlowRow[]> {
   }
 
   const query = `
+    -- NB: in lot_ledger, le.basket_id = cesta di DESTINAZIONE per i transfer_in
+    -- (cesta di ORIGINE per i transfer_out). Qui la query filtra solo transfer_in,
+    -- quindi bdir = cesta di arrivo: è la fonte più affidabile della destinazione
+    -- (risolve ~784/807 righe contro le ~213 del solo ciclo destinazione, perché i
+    -- cicli/ceste destinazione possono essere stati eliminati o riorganizzati).
     WITH base AS (
       SELECT le.quantity,
-        COALESCE(sel.origin_flupsy_id, bs.flupsy_id)      AS origin_fid,
-        COALESCE(sel.destination_flupsy_id, bd.flupsy_id) AS dest_fid
+        COALESCE(sel.origin_flupsy_id, bs.flupsy_id)                  AS origin_fid,
+        COALESCE(sel.destination_flupsy_id, bdir.flupsy_id, bd.flupsy_id) AS dest_fid
       FROM lot_ledger le
       JOIN lots l ON l.id = le.lot_id
       LEFT JOIN selections sel ON sel.id = le.selection_id
@@ -81,6 +86,7 @@ async function computeLotFlow(p: FlowParams): Promise<FlowRow[]> {
       LEFT JOIN baskets bs ON bs.id = cs.basket_id
       LEFT JOIN cycles cd ON cd.id = le.dest_cycle_id
       LEFT JOIN baskets bd ON bd.id = cd.basket_id
+      LEFT JOIN baskets bdir ON bdir.id = le.basket_id
       WHERE le.date >= $1 AND le.date <= $2
         AND le.type = 'transfer_in'
         ${supplierClause}
@@ -202,10 +208,14 @@ async function computeStageBalance(p: FlowParams): Promise<StageBalanceRow[]> {
       LEFT JOIN selections sel ON sel.id = le.selection_id
       LEFT JOIN flupsys fo ON fo.id = COALESCE(sel.origin_flupsy_id,
         (SELECT b.flupsy_id FROM cycles c JOIN baskets b ON b.id = c.basket_id WHERE c.id = le.source_cycle_id))
-      LEFT JOIN flupsys fd ON fd.id = COALESCE(sel.destination_flupsy_id,
-        (SELECT b.flupsy_id FROM cycles c JOIN baskets b ON b.id = c.basket_id WHERE c.id = le.dest_cycle_id))
       LEFT JOIN baskets ba ON ba.id = le.basket_id
       LEFT JOIN flupsys fb ON fb.id = ba.flupsy_id
+      -- ba.flupsy_id (cesta della riga) va usata come DESTINAZIONE solo per i
+      -- transfer_in (lì le.basket_id è la cesta di arrivo); per i transfer_out
+      -- le.basket_id è invece la cesta di ORIGINE, quindi NON usarla qui.
+      LEFT JOIN flupsys fd ON fd.id = COALESCE(sel.destination_flupsy_id,
+        CASE WHEN le.type = 'transfer_in' THEN ba.flupsy_id END,
+        (SELECT b.flupsy_id FROM cycles c JOIN baskets b ON b.id = c.basket_id WHERE c.id = le.dest_cycle_id))
     ), pos AS (
       SELECT cat.*,
         array_position(${PATH}, cat.origine) AS po,

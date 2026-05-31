@@ -70,6 +70,25 @@ when the report window starts at lot inception** (the report defaults from 2025-
 the Roem/Ecotapes arrival). For shorter windows the two are different time domains and
 the value is meaningless (can go negative) — surfaced as an amber caveat in the UI.
 
+# lot_ledger.basket_id semantics (critical for transfer resolution)
+
+`lot_ledger.basket_id` = **destination** basket for `transfer_in` rows, **source** basket
+for `transfer_out` rows (verified: across all transfer rows basket_id always equals either the
+source-cycle or dest-cycle basket, never an unrelated one). Use it to resolve a transfer's
+destination flupsy: for transfer_in, `basket_id`→flupsy resolves ~784/807 rows vs only ~213
+via `dest_cycle→basket` (and ~569 via selection.destination_flupsy_id). **Why so much better:**
+dest cycles/baskets are frequently deleted/reorganized after the move, so the dest_cycle FK
+dangles; basket_id is written at insert time and survives better. Resolution precedence for a
+transfer destination: `selection.destination_flupsy_id` → (transfer_in only) `basket_id`→flupsy
+→ `dest_cycle→basket→flupsy`. **Never** use basket_id for the destination of a transfer_out
+(there it is the origin). origine for direct transfers still resolved via source_cycle→basket→
+**current** flupsy (no historical snapshot except selections' origin_flupsy_id).
+
+**Orphaned-destination data limitation:** some forward moves (e.g. the BINS→mini/flupsy moves in
+the Roem/Ecotapes dataset) point to destination baskets/cycles that were fully deleted — they
+survive only in `basket_lot_composition` (which has no flupsy link), so the destination flupsy is
+unrecoverable. These correctly fall into the matrix "(altro)" column; not a query bug.
+
 # Stage-balance "entrati"/"usciti" definition (May 2026, user rule)
 
 Per-stage `entrati`/`usciti` must NOT sum raw ledger transfer counts — that triple-counts

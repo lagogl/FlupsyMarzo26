@@ -351,7 +351,10 @@ export default function LotFlowReport() {
               <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1">
                 <ArrowRight className="h-3 w-3" />
                 Le celle evidenziate in giallo sono le due tappe richieste (raceway→bins e bins→flupsy).
-                "(altro)" = movimenti in cui non è stato possibile risalire al contenitore.
+                "(altro)" = movimenti il cui contenitore di partenza o arrivo non è più
+                presente nel sistema (cesta o ciclo eliminato/riorganizzato), quindi non è
+                possibile attribuirli a una tappa precisa. La diagonale (es. bins→bins,
+                flupsy→flupsy) sono spostamenti interni alla stessa tappa.
               </p>
             </CardContent>
           </Card>
