@@ -7,7 +7,8 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { ArrowRight, Loader2, Waves, Package, Boxes, GitBranch } from 'lucide-react';
+import { ArrowRight, Loader2, Waves, Package, Boxes, GitBranch, FileSpreadsheet } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import PageHeader from '@/components/PageHeader';
 
 interface FlowRow {
@@ -57,6 +58,8 @@ export default function LotFlowReport() {
 
   const fromIso = toIso(from);
   const toIsoStr = toIso(to);
+
+  const exportUrl = `/api/reports/lot-flow/export?from=${fromIso}&to=${toIsoStr}&suppliers=${encodeURIComponent(suppliers)}`;
 
   const { data, isLoading } = useQuery<FlowResponse>({
     queryKey: ['/api/reports/lot-flow', fromIso, toIsoStr, suppliers],
@@ -158,6 +161,15 @@ export default function LotFlowReport() {
                 Ecotapes Zeeland
               </label>
             </div>
+          </div>
+          <div className="flex flex-col gap-1 ml-auto">
+            <Label className="text-xs">&nbsp;</Label>
+            <Button asChild variant="outline" className="gap-2">
+              <a href={exportUrl} download>
+                <FileSpreadsheet className="h-4 w-4" />
+                Esporta Excel
+              </a>
+            </Button>
           </div>
         </CardContent>
       </Card>
