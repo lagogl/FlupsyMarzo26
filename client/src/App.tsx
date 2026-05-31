@@ -69,6 +69,7 @@ import ScreeningDetail from "@/pages/ScreeningDetail";
 import LotsAnalytics from "@/pages/LotsAnalytics";
 import MixedLotsAnalytics from "@/pages/MixedLotsAnalytics";
 import LotLedgerStatistics from "@/pages/LotLedgerStatistics";
+import LotFlowReport from "@/pages/LotFlowReport";
 // Importazione AI Growth Variability Analysis
 import GrowthVariabilityAnalysis from "@/pages/GrowthVariabilityAnalysis";
 // Importazione LCI Module (ECOTAPES)
@@ -149,6 +150,7 @@ function Router() {
       <ProtectedRoute path="/report-lotto" component={ReportLotto}/>
       <ProtectedRoute path="/vagliature-sospette" component={VagliatureSospette} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/lot-ledger-statistics" component={LotLedgerStatistics} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/flusso-animali" component={LotFlowReport} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/inventory" component={Inventory}/>
       <ProtectedRoute path="/imm" component={IMM}/>
       <ProtectedRoute path="/manuale" component={Manuale}/>

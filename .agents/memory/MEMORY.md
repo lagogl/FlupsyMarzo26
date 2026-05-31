@@ -1,3 +1,4 @@
 - [Backend auth posture](backend-auth-posture.md) — this app has NO server-side auth middleware; all API modules are mounted openly, the React frontend gates access via ProtectedRoute.
 - [Seneye probe integration](seneye-integration.md) — Seneye probe resolved by device NAME not env id; quirks of the API and credentials.
 - [SGR Matrix module](sgr-matrix-module.md) — design conventions for the real SGR Taglia×Mese matrix under ANALISI.
+- [Container flow classification](container-flow-classification.md) — raceway/bins/flupsy/mini are flupsys by NAME; reconstruct movements from lot_ledger transfer_in COALESCEing selections flupsy then cycle→basket.

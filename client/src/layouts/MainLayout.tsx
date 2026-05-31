@@ -207,6 +207,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <BarChart2 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.lotsAnalytics, path: "/lots-analytics" },
         { icon: <Split className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.mixedLotsAnalytics, path: "/mixed-lots-analytics" },
         { icon: <Filter className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.lotLedgerStatistics, path: "/lot-ledger-statistics" },
+        { icon: <ArrowLeftRight className="h-5 w-5 mr-2 text-purple-600" />, label: "Flusso Animali per Tappe", path: "/flusso-animali" },
         { icon: <TrendingUp className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.sgrIndices, path: "/sgr" },
         { icon: <BarChart3 className="h-5 w-5 mr-2 text-purple-600" />, label: "Matrice SGR Reale", path: "/sgr-matrix" },
         { icon: <PieChart className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.salesReports, path: "/sales-reports" },
