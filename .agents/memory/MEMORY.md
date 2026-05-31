@@ -2,3 +2,4 @@
 - [Seneye probe integration](seneye-integration.md) — Seneye probe resolved by device NAME not env id; quirks of the API and credentials.
 - [SGR Matrix module](sgr-matrix-module.md) — design conventions for the real SGR Taglia×Mese matrix under ANALISI.
 - [Container flow classification](container-flow-classification.md) — raceway/bins/flupsy/mini are flupsys by NAME; reconstruct movements from lot_ledger transfer_in COALESCEing selections flupsy then cycle→basket.
+- [Operations registry loading](operations-registry-loading.md) — /operations filters client-side over ALL ops; fetch with includeAll=true, derive pagination/counts from filteredOperations, not raw fetch.

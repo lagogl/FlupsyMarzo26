@@ -611,7 +611,7 @@ export default function Operations() {
   
   // AGGIORNAMENTO REAL-TIME: staleTime=0 per refresh immediato via WebSocket
   const { data: operations = [], isLoading: operationsLoading, error: operationsError } = useQuery({
-    queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
+    queryKey: ['/api/operations', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false, // Non rifare richieste quando torni nella pagina
     refetchOnMount: false, // Non rifare richieste al mount se hai dati
@@ -707,13 +707,9 @@ export default function Operations() {
   // Non serve più estrarli da unifiedData
   // lots e sizes sono già disponibili dalle query separate
   
-  // Update pagination state when data changes
-  React.useEffect(() => {
-    if (operations?.length > 0) {
-      setTotalOperations(operations.length);
-      setTotalPages(Math.ceil(operations.length / pageSize));
-    }
-  }, [operations, pageSize]);
+  // La paginazione viene calcolata più sotto in base alle operazioni FILTRATE
+  // (vedi effetto vicino a `filteredOperations`), non al totale grezzo: così il
+  // conteggio "X a Y di Z" rispecchia sempre ciò che è effettivamente mostrato.
   
   // Loading states
   const isLoadingOperations = isLoadingAny;
@@ -1536,6 +1532,25 @@ export default function Operations() {
     return sorted;
     
   }, [operations, cycles, baskets, lots, sizes, flupsys, filters.searchTerm, filters.typeFilter, filters.dateFilter, filters.flupsyFilter, filters.cycleFilter, filters.cycleStateFilter, filters.lotFilter, sortConfig]);
+
+  // Pagina corrente delle operazioni filtrate: la tabella mostra solo questa
+  // fetta, così con migliaia di operazioni non si renderizzano tutte le righe.
+  const paginatedOperations = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredOperations.slice(start, start + pageSize);
+  }, [filteredOperations, currentPage, pageSize]);
+
+  // Aggiorna conteggio e numero di pagine in base alle operazioni FILTRATE,
+  // e riporta alla pagina 1 se quella corrente non esiste più (es. dopo un filtro).
+  React.useEffect(() => {
+    const total = filteredOperations.length;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    setTotalOperations(total);
+    setTotalPages(pages);
+    if (currentPage > pages) {
+      setCurrentPage(1);
+    }
+  }, [filteredOperations, pageSize, currentPage]);
   
   // Get filtered cycles based on selected filters
   const filteredCycleIds = useMemo(() => {
@@ -2707,7 +2722,7 @@ export default function Operations() {
                       </td>
                     </tr>
                   ) : (
-                    filteredOperations.map((op) => (
+                    paginatedOperations.map((op) => (
                       <tr key={op.id}>
                         <td
                           className="px-1 py-1 whitespace-nowrap text-xs text-gray-500"
@@ -3379,7 +3394,12 @@ export default function Operations() {
               
               {/* Elenco operazioni (stile simile ai cicli) */}
               <div className="divide-y divide-gray-200">
-                {operations && operations.map((op: any) => {
+                {filteredOperations.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-gray-500">
+                    Nessuna operazione trovata
+                  </div>
+                ) : (
+                paginatedOperations.map((op: any) => {
                   // Ottieni informazioni correlate
                   const basket = op.basket || (op.basketId ? baskets?.find((b: any) => b.id === op.basketId) : null);
                   const cycle = op.cycle || (op.cycleId ? cycles?.find((c: any) => c.id === op.cycleId) : null);
@@ -3555,7 +3575,8 @@ export default function Operations() {
                       </div>
                     </div>
                   );
-                })}
+                })
+                )}
               </div>
               
               {/* Controlli di paginazione per mobile nella vista tabellare */}

@@ -53,6 +53,7 @@ export interface OperationsOptions {
   dateFrom?: Date | string | null;
   dateTo?: Date | string | null;
   type?: string;
+  includeAll?: boolean;
 }
 
 class OperationsService {
@@ -66,6 +67,11 @@ class OperationsService {
     const page = options.page || 1;
     const pageSize = options.pageSize || 20;
     const offset = (page - 1) * pageSize;
+    // Quando includeAll è true, restituiamo TUTTE le operazioni filtrate
+    // senza limite di paginazione. Serve al Registro Operazioni che filtra
+    // lato client: senza questo, le operazioni più vecchie del taglio (es. le
+    // 500 più recenti) non verrebbero mai caricate e i filtri non le troverebbero.
+    const includeAll = options.includeAll === true;
     
     // Converte date da string a oggetti Date se necessario
     const dateFrom = options.dateFrom instanceof Date ? options.dateFrom : 
@@ -78,6 +84,7 @@ class OperationsService {
     const cacheKey = OperationsCache.generateCacheKey({
       page,
       pageSize,
+      includeAll,
       cycleId: options.cycleId,
       flupsyId: options.flupsyId,
       basketId: options.basketId,
@@ -168,10 +175,13 @@ class OperationsService {
           eq(selectionDestinationBaskets.basketId, operations.basketId),
           eq(selectionDestinationBaskets.cycleId, operations.cycleId)
         ))
-        .orderBy(desc(operations.date))
-        .limit(pageSize)
-        .offset(offset);
-      
+        .orderBy(desc(operations.date));
+
+      // Applica la paginazione solo se NON è richiesto l'elenco completo
+      if (!includeAll) {
+        query.limit(pageSize).offset(offset);
+      }
+
       if (whereClause) {
         query.where(whereClause);
       }

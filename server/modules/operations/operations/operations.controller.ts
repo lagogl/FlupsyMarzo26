@@ -42,6 +42,9 @@ export class OperationsController {
       // Tipo di operazione
       const type = req.query.type as string | undefined;
       
+      // Quando includeAll=true restituiamo tutte le operazioni (no paginazione)
+      const includeAll = req.query.includeAll === 'true';
+      
       console.log("Utilizzo implementazione ottimizzata per le operazioni");
       
       // Applica headers anti-cache
@@ -55,7 +58,8 @@ export class OperationsController {
         basketId,
         dateFrom,
         dateTo,
-        type
+        type,
+        includeAll
       });
       
       const duration = Date.now() - startTime;
