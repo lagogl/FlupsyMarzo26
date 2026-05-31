@@ -4,6 +4,7 @@ import { insertSgrSchema, insertSgrGiornalieriSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { z } from "zod";
 import { sgrScheduler } from "./sgr-scheduler";
+import { sgrCalculationService } from "./sgr-calculation.service";
 import { broadcastMessage } from "../../../websocket";
 import ExcelJS from "exceljs";
 
@@ -312,6 +313,53 @@ export class SgrController {
     } catch (error) {
       console.error("Error triggering SGR calculation:", error);
       res.status(500).json({ message: "Failed to trigger SGR calculation" });
+    }
+  }
+
+  /**
+   * POST /api/sgr-calculation/recalculate-all
+   * Ricalcola SGR per tutti i 12 mesi basandosi sullo stesso mese dell'anno scorso
+   */
+  async triggerSgrCalculationAllMonths(req: Request, res: Response) {
+    try {
+      console.log("🔧 SGR CONTROLLER: All-months calculation triggered");
+
+      broadcastMessage("sgr_calculation_start", {});
+
+      setTimeout(async () => {
+        try {
+          broadcastMessage("sgr_calculation_operations_loaded", { totalOperations: 0 });
+
+          const result = await sgrCalculationService.calculateAndStoreSgrForAllMonths(
+            (month, monthIndex, results) => {
+              broadcastMessage("sgr_calculation_month_complete", {
+                month,
+                monthIndex,
+                totalMonths: 12,
+                sizesCount: results.length
+              });
+            }
+          );
+
+          broadcastMessage("sgr_calculation_complete", {
+            totalResults: result.totalResults,
+            byMonth: result.byMonth,
+            year: result.year
+          });
+
+        } catch (error) {
+          console.error("Error during all-months SGR calculation:", error);
+          broadcastMessage("sgr_calculation_error", {
+            error: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      }, 100);
+
+      res.status(202).json({ message: "SGR all-months calculation started", status: "processing" });
+
+    } catch (error) {
+      console.error("Error triggering all-months SGR calculation:", error);
+      res.status(500).json({ message: "Failed to trigger all-months SGR calculation" });
     }
   }
 

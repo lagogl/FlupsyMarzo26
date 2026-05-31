@@ -26,4 +26,7 @@ router.post("/sgr-per-taglia/calculate", (req, res) => sgrController.triggerSgrC
 // Alias route for recalculation (for backward compatibility)
 router.post("/sgr-calculation/recalculate", (req, res) => sgrController.triggerSgrCalculation(req, res));
 
+// Ricalcola tutti i 12 mesi
+router.post("/sgr-calculation/recalculate-all", (req, res) => sgrController.triggerSgrCalculationAllMonths(req, res));
+
 export default router;

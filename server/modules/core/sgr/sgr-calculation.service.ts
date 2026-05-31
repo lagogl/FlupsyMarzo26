@@ -283,6 +283,58 @@ export class SgrCalculationService {
   }
 
   /**
+   * Calculate and store SGR for ALL 12 months based on same months last year
+   */
+  async calculateAndStoreSgrForAllMonths(
+    onMonthComplete?: (month: string, monthIndex: number, results: Array<{ sizeId: number; sizeName: string; sgr: number; sampleCount: number }>) => void
+  ): Promise<{
+    year: number;
+    totalResults: number;
+    byMonth: Array<{ month: string; count: number }>;
+  }> {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const lastYear = new Date().getFullYear() - 1;
+    const sizes = await storage.getAllSizes();
+    const sizeMap = new Map(sizes.map(s => [s.id, s]));
+
+    let totalResults = 0;
+    const byMonth: Array<{ month: string; count: number }> = [];
+
+    for (let i = 0; i < months.length; i++) {
+      const month = months[i];
+      console.log(`🗓️ SGR ALL MONTHS: Processing ${month} ${lastYear} (${i + 1}/12)`);
+
+      const sgrBySize = await this.calculateSgrForMonth(month, lastYear);
+      const monthResults: Array<{ sizeId: number; sizeName: string; sgr: number; sampleCount: number }> = [];
+
+      for (const [sizeId, data] of sgrBySize.entries()) {
+        const size = sizeMap.get(sizeId);
+        if (!size) continue;
+        await storage.upsertSgrPerTaglia(
+          month,
+          sizeId,
+          data.sgr,
+          data.sampleCount,
+          `Calculated from ${month} ${lastYear} historical data`
+        );
+        monthResults.push({ sizeId, sizeName: size.name, sgr: data.sgr, sampleCount: data.sampleCount });
+      }
+
+      byMonth.push({ month, count: monthResults.length });
+      totalResults += monthResults.length;
+
+      if (onMonthComplete) onMonthComplete(month, i + 1, monthResults);
+      console.log(`✅ SGR ALL MONTHS: ${month} done — ${monthResults.length} taglie`);
+    }
+
+    console.log(`🏁 SGR ALL MONTHS: Completato. ${totalResults} valori totali salvati.`);
+    return { year: lastYear, totalResults, byMonth };
+  }
+
+  /**
    * Calculate and store SGR for current month based on same month last year
    */
   async calculateAndStoreSgrForCurrentMonth(): Promise<{

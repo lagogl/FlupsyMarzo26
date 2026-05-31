@@ -240,10 +240,10 @@ export default function Sgr() {
     }
   });
 
-  // Recalculate SGR Per Taglia mutation
+  // Recalculate SGR Per Taglia mutation — tutti i 12 mesi
   const recalculateSgrMutation = useMutation({
     mutationFn: () => apiRequest({ 
-      url: '/api/sgr-calculation/recalculate', 
+      url: '/api/sgr-calculation/recalculate-all', 
       method: 'POST'
     }),
     onSuccess: () => {
@@ -260,12 +260,18 @@ export default function Sgr() {
   useWebSocketMessage('sgr_calculation_start', () => {
     setIsCalculating(true);
     setCalculationProgress(0);
-    setCalculationStatus('Inizio calcolo SGR...');
+    setCalculationStatus('Inizio calcolo SGR (tutti i mesi)...');
   });
 
-  useWebSocketMessage('sgr_calculation_operations_loaded', (data: any) => {
-    setCalculationProgress(20);
-    setCalculationStatus(`Caricate ${data?.totalOperations || 0} operazioni`);
+  useWebSocketMessage('sgr_calculation_operations_loaded', () => {
+    setCalculationProgress(5);
+    setCalculationStatus('Operazioni caricate, elaborazione in corso...');
+  });
+
+  useWebSocketMessage('sgr_calculation_month_complete', (data: any) => {
+    const progress = 5 + (data?.monthIndex / 12) * 90;
+    setCalculationProgress(progress);
+    setCalculationStatus(`Completato ${data?.month} (${data?.monthIndex}/12) — ${data?.sizesCount} taglie`);
   });
 
   useWebSocketMessage('sgr_calculation_size_complete', (data: any) => {
@@ -276,19 +282,20 @@ export default function Sgr() {
 
   useWebSocketMessage('sgr_calculation_complete', () => {
     setCalculationProgress(100);
-    setCalculationStatus('Calcolo completato!');
+    setCalculationStatus('Calcolo completato per tutti i 12 mesi!');
+    queryClient.invalidateQueries({ queryKey: ['/api/sgr-per-taglia'] });
     setTimeout(() => {
       setIsCalculating(false);
       setCalculationProgress(0);
       setCalculationStatus('');
-    }, 2000);
+    }, 2500);
   });
 
   // Handle SGR recalculation
   const handleRecalculateSgr = () => {
     setIsCalculating(true);
     setCalculationProgress(0);
-    setCalculationStatus('Avvio calcolo...');
+    setCalculationStatus('Avvio calcolo tutti i mesi...');
     recalculateSgrMutation.mutate();
   };
 
