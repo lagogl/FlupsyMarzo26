@@ -233,6 +233,9 @@ export default function LotFlowReport() {
                   <strong>usciti vivi</strong> verso altre tappe o vendita, quanti risultano{' '}
                   <strong>morti</strong> e quanti sono <strong>ancora presenti adesso</strong>{' '}
                   (giacenza). La differenza che resta è la <strong>perdita non spiegata</strong>.
+                  Negli <strong>entrati</strong> delle raceway contano <strong>solo gli arrivi reali
+                  dai fornitori</strong> (Roem / Ecotapes Zeeland): gli spostamenti da una raceway
+                  all'altra sono movimenti interni e non vengono contati come nuovi arrivi.
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">

@@ -70,6 +70,30 @@ when the report window starts at lot inception** (the report defaults from 2025-
 the Roem/Ecotapes arrival). For shorter windows the two are different time domains and
 the value is meaningless (can go negative) — surfaced as an amber caveat in the UI.
 
+# Stage-balance "entrati"/"usciti" definition (May 2026, user rule)
+
+Per-stage `entrati`/`usciti` must NOT sum raw ledger transfer counts — that triple-counts
+internal recirculation. User rule: **raceway "entrati" counts ONLY real supplier arrivals**
+(activation of Roem/Ecotapes Zeeland lots); raceway↔raceway moves are internal shuffling,
+not arrivals (the 231M intra-raceway transfer_in was the false inflation, raceway↔raceway
+"prime attivazioni interne" in the user's words).
+
+Implemented model in computeStageBalance:
+- `entrati(X)` = forward `transfer_in` (PATH position dest > origine, PATH=
+  [RACEWAY,BINS,MINI FLUPSY,FLUPSY] via `array_position`, NULL origine→excluded) + `activation`(ABS) by cesta.
+  → raceway has nothing before it, so raceway entrati = supplier activations only (~261.7M). ✓
+- `usciti(X)` = non-intra `transfer_in` grouped by ORIGINE (`origine IS DISTINCT FROM destinazione`) + `sale`.
+  **Why use transfer_in for usciti, not transfer_out:** ledger transfer_in/transfer_out are NOT
+  reliably paired and transfer_out's destination often won't resolve; using forward transfer_in
+  by origine for usciti zeroes out bins exits, so use NON-intra (all-direction) transfer_in by origine.
+- This combo keeps all saldos coherent/positive (tiny mini negative ~3% = noise, healthy).
+- `morti(X)` unchanged (mortality attributed to origine of vagliatura, fallback cesta).
+
+**Why the asymmetry (forward-in for entrati, non-intra-in for usciti):** entrati = genuine
+forward progression + external arrivals (returns into a stage aren't new arrivals); usciti =
+any departure that isn't pure intra-stage shuffle. Returns (backward) are counted as usciti of
+the source but not re-counted as entrati of the destination.
+
 # Implementation
 
 Report module `server/modules/reports/lot-flow/lot-flow.routes.ts` (computeLotFlow matrix,

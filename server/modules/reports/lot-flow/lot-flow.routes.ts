@@ -110,8 +110,8 @@ async function computeLotFlow(p: FlowParams): Promise<FlowRow[]> {
 
 interface StageBalanceRow {
   tappa: string;
-  entrati: number; // animali arrivati nella tappa (transfer_in dest + attivazioni)
-  usciti: number; // animali usciti vivi (transfer_out origine + vendite)
+  entrati: number; // arrivi reali: attivazioni fornitori + trasferimenti in avanti lungo il percorso (no movimenti interni/ritorni)
+  usciti: number; // animali usciti vivi verso un'altra tappa (transfer non interni) + vendite
   morti: number; // mortalità attribuita alla tappa (origine vagliatura / cesta operazione)
   saldo: number; // entrati - usciti - morti (giacenza teorica residua nella tappa)
   giacenza: number; // animali realmente presenti adesso nella tappa (conteggio ultima operazione)
@@ -166,9 +166,20 @@ async function computeCurrentInventory(p: FlowParams): Promise<Record<string, nu
 }
 
 // Bilancio per tappa: per ogni contenitore quanti animali sono entrati, usciti
-// vivi e morti. La mortalità viene attribuita alla tappa di ORIGINE della
-// vagliatura (dove gli animali si trovavano prima del conteggio), con fallback
-// alla cesta dell'operazione.
+// vivi e morti.
+//
+// ENTRATI = solo arrivi REALI lungo il percorso produttivo
+// RACEWAY → BINS → MINI FLUPSY → FLUPSY:
+//   - le attivazioni dei lotti dei fornitori (Roem / Ecotapes Zeeland) = animali
+//     davvero arrivati dall'esterno; per la RACEWAY questo è l'unico ingresso reale
+//     (i trasferimenti raceway↔raceway sono spostamenti interni, NON arrivi);
+//   - i trasferimenti "in avanti" lungo il percorso (origine prima della
+//     destinazione), cioè animali che progrediscono da una tappa alla successiva.
+//   Sono esclusi i movimenti interni alla stessa tappa e i ritorni indietro.
+// USCITI = trasferimenti verso un'altra tappa (esclusi quelli interni alla stessa
+//   tappa) + vendite.
+// La mortalità viene attribuita alla tappa di ORIGINE della vagliatura (dove gli
+// animali si trovavano prima del conteggio), con fallback alla cesta.
 async function computeStageBalance(p: FlowParams): Promise<StageBalanceRow[]> {
   const queryParams: any[] = [p.from, p.to];
   let supplierClause = "";
@@ -177,6 +188,7 @@ async function computeStageBalance(p: FlowParams): Promise<StageBalanceRow[]> {
     supplierClause = `AND LOWER(l.supplier) LIKE ANY($3::text[])`;
   }
 
+  const PATH = `ARRAY['RACEWAY','BINS','MINI FLUPSY','FLUPSY']`;
   const query = `
     WITH filt AS (
       SELECT le.* FROM lot_ledger le JOIN lots l ON l.id = le.lot_id
@@ -194,15 +206,22 @@ async function computeStageBalance(p: FlowParams): Promise<StageBalanceRow[]> {
         (SELECT b.flupsy_id FROM cycles c JOIN baskets b ON b.id = c.basket_id WHERE c.id = le.dest_cycle_id))
       LEFT JOIN baskets ba ON ba.id = le.basket_id
       LEFT JOIN flupsys fb ON fb.id = ba.flupsy_id
+    ), pos AS (
+      SELECT cat.*,
+        array_position(${PATH}, cat.origine) AS po,
+        array_position(${PATH}, cat.destinazione) AS pd
+      FROM cat
     )
     SELECT c.k AS tappa,
-      COALESCE(SUM(CASE WHEN cat.type='transfer_in' AND cat.destinazione=c.k THEN cat.quantity END),0)::bigint
-        + COALESCE(SUM(CASE WHEN cat.type='activation' AND cat.cesta=c.k THEN ABS(cat.quantity) END),0)::bigint AS entrati,
-      COALESCE(SUM(CASE WHEN cat.type='transfer_out' AND cat.origine=c.k THEN cat.quantity END),0)::bigint
-        + COALESCE(SUM(CASE WHEN cat.type='sale' AND cat.cesta=c.k THEN cat.quantity END),0)::bigint AS usciti,
-      COALESCE(SUM(CASE WHEN cat.type='mortality' AND COALESCE(NULLIF(cat.origine,'(altro)'),cat.cesta)=c.k THEN cat.quantity END),0)::bigint AS morti
+      COALESCE(SUM(CASE WHEN pos.type='transfer_in' AND pos.destinazione=c.k
+            AND pos.po IS NOT NULL AND pos.pd > pos.po THEN pos.quantity END),0)::bigint
+        + COALESCE(SUM(CASE WHEN pos.type='activation' AND pos.cesta=c.k THEN ABS(pos.quantity) END),0)::bigint AS entrati,
+      COALESCE(SUM(CASE WHEN pos.type='transfer_in' AND pos.origine=c.k
+            AND pos.origine IS DISTINCT FROM pos.destinazione THEN pos.quantity END),0)::bigint
+        + COALESCE(SUM(CASE WHEN pos.type='sale' AND pos.cesta=c.k THEN pos.quantity END),0)::bigint AS usciti,
+      COALESCE(SUM(CASE WHEN pos.type='mortality' AND COALESCE(NULLIF(pos.origine,'(altro)'),pos.cesta)=c.k THEN pos.quantity END),0)::bigint AS morti
     FROM (VALUES ('RACEWAY'),('BINS'),('MINI FLUPSY'),('FLUPSY'),('(altro)')) AS c(k)
-    LEFT JOIN cat ON TRUE
+    LEFT JOIN pos ON TRUE
     GROUP BY c.k`;
 
   const [result, inventory] = await Promise.all([
