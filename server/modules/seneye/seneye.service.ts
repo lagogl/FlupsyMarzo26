@@ -18,6 +18,7 @@ interface SeneyeDevice {
 interface SeneyeExpValue {
   curr?: string | number | null;
   avg?: string | number | null;
+  trend?: string | number | null;
 }
 
 interface SeneyeExps {
@@ -63,6 +64,15 @@ function toNum(v: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Normalizza il trend Seneye: "1" = in salita, "-1" = in discesa, "0" = stabile.
+function toTrend(v: string | number | null | undefined): number | null {
+  const n = toNum(v);
+  if (n === null) return null;
+  if (n > 0) return 1;
+  if (n < 0) return -1;
+  return 0;
+}
+
 export async function fetchDevices(): Promise<SeneyeDevice[]> {
   return await seneyeGet<SeneyeDevice[]>("/devices");
 }
@@ -84,6 +94,7 @@ export async function resolveDeviceId(forceRefresh = false): Promise<string> {
 export interface CurrentReading {
   deviceId: string;
   deviceName: string;
+  recordDate: string;
   temperature: number | null;
   ph: number | null;
   nh3: number | null;
@@ -92,6 +103,10 @@ export interface CurrentReading {
   lux: number | null;
   par: number | null;
   kelvin: number | null;
+  temperatureTrend: number | null;
+  phTrend: number | null;
+  nh3Trend: number | null;
+  o2Trend: number | null;
 }
 
 export async function fetchCurrentReading(): Promise<CurrentReading> {
@@ -100,6 +115,7 @@ export async function fetchCurrentReading(): Promise<CurrentReading> {
   return {
     deviceId,
     deviceName: TARGET_DEVICE_NAME,
+    recordDate: new Date().toISOString(),
     temperature: toNum(exps.temperature?.curr),
     ph: toNum(exps.ph?.curr),
     nh3: toNum(exps.nh3?.curr),
@@ -108,6 +124,10 @@ export async function fetchCurrentReading(): Promise<CurrentReading> {
     lux: toNum(exps.lux?.curr),
     par: toNum(exps.par?.curr),
     kelvin: toNum(exps.kelvin?.curr),
+    temperatureTrend: toTrend(exps.temperature?.trend),
+    phTrend: toTrend(exps.ph?.trend),
+    nh3Trend: toTrend(exps.nh3?.trend),
+    o2Trend: toTrend(exps.o2?.trend),
   };
 }
 
