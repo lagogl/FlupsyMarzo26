@@ -33,10 +33,36 @@ export const seneyeController = {
   async getReadings(req: Request, res: Response) {
     try {
       const { from, to, limit } = req.query;
+
+      let fromDate: Date | undefined;
+      if (from !== undefined) {
+        fromDate = new Date(String(from));
+        if (isNaN(fromDate.getTime())) {
+          return res.status(400).json({ error: "Parametro 'from' non valido" });
+        }
+      }
+
+      let toDate: Date | undefined;
+      if (to !== undefined) {
+        toDate = new Date(String(to));
+        if (isNaN(toDate.getTime())) {
+          return res.status(400).json({ error: "Parametro 'to' non valido" });
+        }
+      }
+
+      let limitNum: number | undefined;
+      if (limit !== undefined) {
+        limitNum = parseInt(String(limit), 10);
+        if (isNaN(limitNum) || limitNum <= 0) {
+          return res.status(400).json({ error: "Parametro 'limit' non valido" });
+        }
+        limitNum = Math.min(limitNum, 5000);
+      }
+
       const readings = await service.getReadings({
-        from: from ? new Date(String(from)) : undefined,
-        to: to ? new Date(String(to)) : undefined,
-        limit: limit ? parseInt(String(limit), 10) : undefined,
+        from: fromDate,
+        to: toDate,
+        limit: limitNum,
       });
       res.json(readings);
     } catch (e: any) {

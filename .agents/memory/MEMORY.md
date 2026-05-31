@@ -1,1 +1,3 @@
-- [SGR Matrix module](sgr-matrix-module.md) — real SGR Taglia×Mese matrix at /sgr-matrix; both SGR-P/SGR-M per cell, start-month/start-taglia attribution, deviation vs seed.
+- [Backend auth posture](backend-auth-posture.md) — this app has NO server-side auth middleware; all API modules are mounted openly, the React frontend gates access via ProtectedRoute.
+- [Seneye probe integration](seneye-integration.md) — Seneye probe resolved by device NAME not env id; quirks of the API and credentials.
+- [SGR Matrix module](sgr-matrix-module.md) — design conventions for the real SGR Taglia×Mese matrix under ANALISI.

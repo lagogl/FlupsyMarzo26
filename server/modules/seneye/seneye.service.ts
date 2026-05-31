@@ -111,8 +111,18 @@ export async function fetchCurrentReading(): Promise<CurrentReading> {
   };
 }
 
+// Intervallo minimo tra due snapshot salvati (anti-abuso / anti-bloat).
+// La sonda Seneye si aggiorna ogni ~30 min, quindi un dato ogni 5 min è più che sufficiente.
+const MIN_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
 // Legge la lettura corrente dall'API e la salva in DB (uno snapshot).
+// Se l'ultimo snapshot è troppo recente, restituisce quello esistente senza
+// effettuare una nuova chiamata all'API esterna.
 export async function pollAndStore(): Promise<SeneyeReading> {
+  const last = await getLatestStored();
+  if (last && Date.now() - new Date(last.recordDate).getTime() < MIN_POLL_INTERVAL_MS) {
+    return last;
+  }
   const r = await fetchCurrentReading();
   const [row] = await db
     .insert(seneyeReadings)
