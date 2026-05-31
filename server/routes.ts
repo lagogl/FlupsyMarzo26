@@ -296,6 +296,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/diario', diarioModule.diarioRoutes);
   console.log('✅ Modulo DIARIO registrato su /api/diario/*');
 
+  // Registra il modulo SENEYE (sonda DF SIFONI)
+  const seneyeModule = await import('./modules/seneye');
+  app.use('/api/seneye', seneyeModule.seneyeRoutes);
+  console.log('✅ Modulo SENEYE registrato su /api/seneye/*');
+
   // Registra il modulo ADVANCED-SALES
   const advancedSalesModule = await import('./modules/sales/advanced-sales');
   app.use('/api/advanced-sales', advancedSalesModule.advancedSalesRoutes);

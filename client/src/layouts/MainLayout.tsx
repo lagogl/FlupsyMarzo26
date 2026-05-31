@@ -173,6 +173,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <Package className="h-5 w-5 mr-2 text-emerald-600" />, label: translations.menuItems.reportLotto, path: "/report-lotto" },
         { icon: <AlertCircle className="h-5 w-5 mr-2 text-amber-600" />, label: "Vagliature sospette", path: "/vagliature-sospette" },
         { icon: <Leaf className="h-5 w-5 mr-2 text-teal-600" />, label: "Diario Ambientale", path: "/diario-ambientale" },
+        { icon: <Waves className="h-5 w-5 mr-2 text-cyan-600" />, label: "Sonda DF SIFONI", path: "/sonda-df-sifoni" },
         { icon: <Ruler className="h-5 w-5 mr-2 text-blue-600" />, label: "Ceste da Riallineare", path: "/ceste-da-riallineare" },
         { icon: <Scale className="h-5 w-5 mr-2 text-blue-600" />, label: "Report Peso Ceste", path: "/report-peso-ceste" }
       ]

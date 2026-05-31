@@ -12,6 +12,7 @@ import FlupsySelector from '@/components/dashboard/FlupsySelector';
 import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredictions';
 import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
 import IMMCard from '@/components/dashboard/IMMCard';
+import SeneyeCard from '@/components/dashboard/SeneyeCard';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
 import MortalityTemporalCard from '@/components/dashboard/MortalityTemporalCard';
 import MortalityAlertsCard from '@/components/dashboard/MortalityAlertsCard';
@@ -397,7 +398,12 @@ export default function Dashboard() {
           preferredFlupsyIds={preferredFlupsyIds}
         />
       </div>
-      
+
+      {/* Sonda ambientale DF SIFONI (Seneye) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 my-6">
+        <SeneyeCard />
+      </div>
+
       {/* Dashboard Summary - Prima riga: Statistiche principali */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <TooltipTrigger 

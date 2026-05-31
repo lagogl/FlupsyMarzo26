@@ -164,6 +164,16 @@ async function runBackgroundInitialization() {
     console.error("⚠️ Errore durante l'inizializzazione dello scheduler diario ambientale:", error);
   }
 
+  // Inizializza lo scheduler sonda Seneye DF SIFONI (ogni 30 minuti)
+  console.log("🌊 Inizializzazione scheduler sonda Seneye...");
+  try {
+    const { startSeneyeScheduler } = await import('./services/seneye-scheduler.service');
+    startSeneyeScheduler();
+    console.log("✅ Scheduler Seneye attivo (lettura ogni 30 minuti)");
+  } catch (error) {
+    console.error("⚠️ Errore durante l'inizializzazione dello scheduler Seneye:", error);
+  }
+
   // Inizializza il modulo LCI (Life Cycle Inventory) per ECOTAPES
   console.log("🌿 Inizializzazione modulo LCI...");
   try {

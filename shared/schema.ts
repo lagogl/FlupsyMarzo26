@@ -463,6 +463,34 @@ export const sgrGiornalieri = pgTable("sgr_giornalieri", {
   mortality: text("mortality"),
 });
 
+// Letture automatiche dalla sonda Seneye (es. "DF SIFONI") via API api.seneye.com.
+// Ogni record è uno snapshot dell'ultima lettura disponibile, salvato dallo scheduler.
+export const seneyeReadings = pgTable("seneye_readings", {
+  id: serial("id").primaryKey(),
+  deviceId: text("device_id").notNull(),
+  deviceName: text("device_name").notNull(),
+  recordDate: timestamp("record_date").notNull().defaultNow(),
+  temperature: real("temperature"),
+  ph: real("ph"),
+  nh3: real("nh3"),
+  nh4: real("nh4"),
+  o2: real("o2"),
+  lux: real("lux"),
+  par: real("par"),
+  kelvin: real("kelvin"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  deviceDateIdx: index("seneye_readings_device_date_idx").on(table.deviceId, table.recordDate),
+}));
+
+export const insertSeneyeReadingSchema = createInsertSchema(seneyeReadings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type SeneyeReading = typeof seneyeReadings.$inferSelect;
+export type InsertSeneyeReading = z.infer<typeof insertSeneyeReadingSchema>;
+
 // SGR Per Taglia (SGR calcolato da dati reali specifico per mese e taglia)
 export const sgrPerTaglia = pgTable("sgr_per_taglia", {
   id: serial("id").primaryKey(),
