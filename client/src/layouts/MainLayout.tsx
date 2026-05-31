@@ -257,8 +257,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <BookOpen className="h-5 w-5 mr-2 text-blue-600" />, label: "Manuale / Manual", path: "/manuale" }
       ]
     }
-  ].filter(cat => cat.id !== 'system' || user?.role === 'admin')
-   .filter(cat => cat.id !== 'analysis' || user?.username?.toLowerCase() === 'gianluigi');
+  ].filter(cat => cat.id !== 'system' || user?.role === 'admin');
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -415,6 +414,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       {category.icon}
                     </div>
                     <span className="font-medium text-sm">{category.label}</span>
+                    {category.id === 'analysis' && (
+                      <span className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-100 text-amber-700 border border-amber-300 leading-none">
+                        BETA
+                      </span>
+                    )}
                   </div>
                   {expandedCategories[category.id] ? 
                     <ChevronDown className="h-4 w-4" /> : 
