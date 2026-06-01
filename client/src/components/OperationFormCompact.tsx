@@ -178,6 +178,8 @@ export default function OperationFormCompact({
   const queryClient = useQueryClient();
   const [pendingValues, setPendingValues] = useState<any>(null);
   const [prevOperationData, setPrevOperationData] = useState<any>(null);
+  const [showWeightWarning, setShowWeightWarning] = useState<boolean>(false);
+  const [weightWarningInfo, setWeightWarningInfo] = useState<{ prev: number; next: number } | null>(null);
   const { toast } = useToast();
   
   // Rimosso sistema refresh keys - uso la stessa logica della tabella operazioni
@@ -1109,9 +1111,42 @@ export default function OperationFormCompact({
       notes: values.notes || null
     };
     
+    // Controllo PESO IN CALO (misura e peso): il peso totale di un ciclo dovrebbe
+    // sempre crescere. Se il nuovo peso è inferiore a quello dell'ultima operazione
+    // mostriamo un avviso NON bloccante che richiede conferma esplicita.
+    if ((values.type === 'misura' || values.type === 'peso') && formattedValues.totalWeight != null) {
+      const prevWeight = getPreviousTotalWeight(values.basketId, values.cycleId);
+      if (prevWeight != null && prevWeight > 0 && formattedValues.totalWeight < prevWeight) {
+        console.log(`Peso in calo rilevato: nuovo ${formattedValues.totalWeight}g < precedente ${prevWeight}g`);
+        setWeightWarningInfo({ prev: prevWeight, next: formattedValues.totalWeight });
+        setPendingValues(formattedValues);
+        setShowWeightWarning(true);
+        return;
+      }
+    }
+
+    dispatchSubmit(formattedValues);
+  };
+
+  // Recupera il peso totale dell'ultima operazione (per cestello + ciclo) dall'elenco operazioni
+  const getPreviousTotalWeight = (basketId: number, cycleId: number | null | undefined): number | null => {
+    if (!operations || !Array.isArray(operations) || !cycleId) return null;
+    const ops = operations
+      .filter((op: any) =>
+        op.basketId === basketId &&
+        op.cycleId === cycleId &&
+        op.totalWeight != null &&
+        Number(op.totalWeight) > 0
+      )
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return ops.length > 0 ? Number(ops[0].totalWeight) : null;
+  };
+
+  // Invia i valori al parent, gestendo il flusso di conferma misura
+  const dispatchSubmit = (formattedValues: any) => {
     // Flusso UNIFICATO per operazioni misura: sempre conferma prima dell'invio
-    if (values.type === 'misura' && prevOperationData) {
-      const hasMortality = values.deadCount && values.deadCount > 0;
+    if (formattedValues.type === 'misura' && prevOperationData) {
+      const hasMortality = formattedValues.deadCount && formattedValues.deadCount > 0;
       if (hasMortality) {
         console.log("Misurazione con mortalità > 0: verrà calcolato un nuovo conteggio animali");
       } else {
@@ -1121,7 +1156,7 @@ export default function OperationFormCompact({
       setShowConfirmDialog(true);
       return;
     }
-    
+
     // Chiamata diretta alla funzione di submit per gli altri casi
     // Il parent (Operations.tsx) gestisce chiusura dialog, toast e invalidazione cache
     if (onSubmit) {
@@ -2705,6 +2740,43 @@ export default function OperationFormCompact({
               }}
             >
               Conferma
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Avviso peso in calo rispetto all'operazione precedente (non bloccante) */}
+      <AlertDialog open={showWeightWarning} onOpenChange={setShowWeightWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Attenzione: peso in calo</AlertDialogTitle>
+            <AlertDialogDescription>
+              {weightWarningInfo && (
+                <div className="space-y-3">
+                  <p>
+                    Il peso totale inserito (<span className="font-semibold">{weightWarningInfo.next.toLocaleString('it-IT')} g</span>)
+                    è <span className="font-semibold text-amber-600">inferiore</span> a quello dell'ultima operazione
+                    (<span className="font-semibold">{weightWarningInfo.prev.toLocaleString('it-IT')} g</span>).
+                  </p>
+                  <p>Di norma il peso di un ciclo cresce nel tempo. Verifica che il valore sia corretto.</p>
+                  <p>Vuoi procedere comunque con la registrazione?</p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowWeightWarning(false)}>
+              Annulla
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowWeightWarning(false);
+                if (pendingValues) {
+                  dispatchSubmit(pendingValues);
+                }
+              }}
+            >
+              Procedi comunque
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

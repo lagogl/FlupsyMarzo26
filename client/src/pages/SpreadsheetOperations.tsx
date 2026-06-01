@@ -11,6 +11,16 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download, PieChart, X, Award } from "lucide-react";
 import ExcelJS from 'exceljs';
 import PivotTableUI from 'react-pivottable/PivotTableUI';
@@ -272,11 +282,16 @@ export default function SpreadsheetOperations() {
     totalWeight?: number;
     animalCount?: number;
     lastAnimalCount?: number; // Nr animali precedente per calcolo mortalità (MISURA)
+    suggestedTotalWeight?: number; // Peso totale dell'ultima operazione (suggerimento)
     notes?: string;
     date?: string;
     lotId?: number;
   } | null>(null);
   const [editingPosition, setEditingPosition] = useState<{top: number, left: number} | null>(null);
+
+  // Avviso peso in calo rispetto all'operazione precedente (non bloccante)
+  const [showWeightWarning, setShowWeightWarning] = useState<boolean>(false);
+  const [weightWarningInfo, setWeightWarningInfo] = useState<{ prev: number; next: number } | null>(null);
   
   // Stato locale testuale per il campo "Peso campione" del modal misura/peso
   // Necessario per consentire decimali (1.500, 0.875) senza che React resetti l'input
@@ -420,9 +435,13 @@ export default function SpreadsheetOperations() {
     
     // Validazioni specifiche per tipo operazione
     if (selectedOperationType === 'misura') {
-      // Per misura: peso campione, animali vivi, morti sono obbligatori
-      // totalWeight viene pre-popolato dall'ultima operazione (non modificabile)
+      // Per misura: peso campione, animali vivi, morti e peso totale sono obbligatori
+      // totalWeight è ora MODIFICABILE: l'operatore inserisce il peso reale (il valore
+      // dell'ultima operazione è mostrato come suggerimento nel placeholder)
       // lastAnimalCount è richiesto per il calcolo mortalità
+      if (!editingForm.totalWeight || editingForm.totalWeight <= 0) {
+        errors.push('Peso totale è obbligatorio e deve essere maggiore di 0');
+      }
       if (!editingForm.sampleWeight || editingForm.sampleWeight <= 0) {
         errors.push('Peso campione è obbligatorio e deve essere maggiore di 0');
       }
@@ -1385,9 +1404,11 @@ export default function SpreadsheetOperations() {
       initData.animalCount = row.animalCount; // Usa il valore precedente, non modificabile
     }
     
-    // Per operazioni MISURA: pre-popola totalWeight e lastAnimalCount dall'operazione precedente
+    // Per operazioni MISURA: il peso totale è ora MODIFICABILE.
+    // Lasciamo il campo vuoto (il valore precedente è mostrato come suggerimento nel
+    // placeholder) così l'operatore inserisce il peso reale invece di ereditarne uno vecchio.
     if (selectedOperationType === 'misura') {
-      initData.totalWeight = row.lastOperation?.totalWeight || undefined; // Pre-popola peso totale (read-only)
+      initData.totalWeight = undefined;
       initData.lastAnimalCount = row.animalCount || 0; // Nr animali precedente per calcolo mortalità
     }
     
@@ -1402,7 +1423,7 @@ export default function SpreadsheetOperations() {
   };
 
   // Salva i dati dal form di editing e crea nuova riga
-  const saveEditingForm = async () => {
+  const saveEditingForm = async (skipWeightWarning: boolean = false) => {
     if (!editingForm) return;
 
     // Validazione completa del form (include anche validazione date)
@@ -1419,6 +1440,44 @@ export default function SpreadsheetOperations() {
 
     const originalRow = operationRows.find(r => r.basketId === editingForm.basketId);
     if (!originalRow) return;
+
+    // Controllo PESO IN CALO (misura e peso): il peso totale di un ciclo dovrebbe
+    // sempre crescere. Se il nuovo peso netto è inferiore a quello dell'ultima
+    // operazione mostriamo un avviso NON bloccante che richiede conferma esplicita.
+    if (!skipWeightWarning && (selectedOperationType === 'misura' || selectedOperationType === 'peso')) {
+      // Baseline = ultima operazione CON PESO del ciclo corrente (non solo del cestello,
+      // per evitare di confrontare con cicli chiusi precedenti)
+      const cycleId = (originalRow as any).currentCycleId;
+      const cycleOps = ((operations as any[]) || [])
+        .filter((op: any) =>
+          op.basketId === editingForm.basketId &&
+          op.cycleId === cycleId &&
+          op.totalWeight != null &&
+          Number(op.totalWeight) > 0
+        )
+        .sort((a: any, b: any) => {
+          const idDiff = (b.id || 0) - (a.id || 0);
+          if (idDiff !== 0) return idDiff;
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+      const prevWeight = cycleOps.length > 0 ? Number(cycleOps[0].totalWeight) : null;
+      let newWeight = editingForm.totalWeight || 0;
+      // Per il peso lordo sottraiamo la tara prima del confronto (i pesi salvati sono netti)
+      if (selectedOperationType === 'peso') {
+        const basketsArr = Array.isArray(baskets) ? baskets : [];
+        const currentBasket = basketsArr.find((b: any) => b.id === editingForm.basketId);
+        const tare = (isGrossMode && (currentBasket as any)?.tareWeightG && (currentBasket as any).tareWeightG > 0) ? (currentBasket as any).tareWeightG : 0;
+        if (tare > 0 && newWeight > tare) {
+          newWeight = newWeight - tare;
+        }
+      }
+      if (prevWeight != null && prevWeight > 0 && newWeight > 0 && newWeight < prevWeight) {
+        console.log(`Peso in calo rilevato (spreadsheet): nuovo ${newWeight}g < precedente ${prevWeight}g`);
+        setWeightWarningInfo({ prev: prevWeight, next: newWeight });
+        setShowWeightWarning(true);
+        return;
+      }
+    }
 
     // Crea una nuova riga con i dati compilati
     const newRow = { 
@@ -4869,11 +4928,22 @@ export default function SpreadsheetOperations() {
                     </div>
                     
                     <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Peso totale (g)</label>
-                      <div className="h-8 px-2 text-sm bg-gray-100 border rounded flex items-center text-gray-600">
-                        {editingForm.totalWeight?.toLocaleString() || '-'}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-1">Non modificabile</div>
+                      <label className="text-xs text-gray-600 mb-1 block">Peso totale (g)</label>
+                      <input
+                        type="number"
+                        value={editingForm.totalWeight || ''}
+                        onChange={(e) => {
+                          const value = e.target.value === '' ? undefined : Number(e.target.value);
+                          setEditingForm({...editingForm, totalWeight: value});
+                        }}
+                        className="w-full h-8 px-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-yellow-50"
+                        min="1"
+                        placeholder={editingForm.suggestedTotalWeight ? editingForm.suggestedTotalWeight.toLocaleString() : "Inserisci peso reale"}
+                        required
+                      />
+                      {editingForm.suggestedTotalWeight ? (
+                        <div className="text-xs text-gray-400 mt-1">Precedente: {editingForm.suggestedTotalWeight.toLocaleString()} g</div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -5386,6 +5456,41 @@ export default function SpreadsheetOperations() {
           </div>
         );
       })()}
+
+      {/* Avviso peso in calo rispetto all'operazione precedente (non bloccante) */}
+      <AlertDialog open={showWeightWarning} onOpenChange={setShowWeightWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Attenzione: peso in calo</AlertDialogTitle>
+            <AlertDialogDescription>
+              {weightWarningInfo && (
+                <div className="space-y-3">
+                  <p>
+                    Il peso totale inserito (<span className="font-semibold">{weightWarningInfo.next.toLocaleString('it-IT')} g</span>)
+                    è <span className="font-semibold text-amber-600">inferiore</span> a quello dell'ultima operazione
+                    (<span className="font-semibold">{weightWarningInfo.prev.toLocaleString('it-IT')} g</span>).
+                  </p>
+                  <p>Di norma il peso di un ciclo cresce nel tempo. Verifica che il valore sia corretto.</p>
+                  <p>Vuoi procedere comunque?</p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowWeightWarning(false)}>
+              Annulla
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowWeightWarning(false);
+                saveEditingForm(true);
+              }}
+            >
+              Procedi comunque
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );
