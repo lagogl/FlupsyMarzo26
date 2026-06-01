@@ -143,20 +143,20 @@ function Router() {
       <ProtectedRoute path="/ceste-da-riallineare" component={CesteDaRiallineare}/>
       <ProtectedRoute path="/report-peso-ceste" component={ReportPesoCeste}/>
       <ProtectedRoute path="/lots" component={Lots}/>
-      <ProtectedRoute path="/statistics" component={Statistics} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/lots-analytics" component={LotsAnalytics} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/mixed-lots-analytics" component={MixedLotsAnalytics} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/statistics" component={Statistics}/>
+      <ProtectedRoute path="/lots-analytics" component={LotsAnalytics}/>
+      <ProtectedRoute path="/mixed-lots-analytics" component={MixedLotsAnalytics}/>
       <ProtectedRoute path="/report-lotto/:lotId" component={ReportLotto}/>
       <ProtectedRoute path="/report-lotto" component={ReportLotto}/>
       <ProtectedRoute path="/vagliature-sospette" component={VagliatureSospette} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/lot-ledger-statistics" component={LotLedgerStatistics} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/flusso-animali" component={LotFlowReport} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/lot-ledger-statistics" component={LotLedgerStatistics}/>
+      <ProtectedRoute path="/flusso-animali" component={LotFlowReport}/>
       <ProtectedRoute path="/inventory" component={Inventory}/>
       <ProtectedRoute path="/imm" component={IMM}/>
       <ProtectedRoute path="/manuale" component={Manuale}/>
       <ProtectedRoute path="/manual" component={Manuale}/>
       <ProtectedRoute path="/sizes" component={Sizes}/>
-      <ProtectedRoute path="/sgr" component={Sgr} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/sgr" component={Sgr}/>
       <ProtectedRoute path="/sgr-matrix" component={SgrMatrix}/>
       <ProtectedRoute path="/sgr-lineage" component={SgrLineage}/>
       <ProtectedRoute path="/settings" component={Settings} requiredRole="admin" />
@@ -168,26 +168,26 @@ function Router() {
       <ProtectedRoute path="/grow-journey" component={GrowJourney}/>
       <ProtectedRoute path="/basket-selection" component={BasketSelection}/>
       <ProtectedRoute path="/backup" component={BackupPage} requiredRole="admin" />
-      <ProtectedRoute path="/diario-di-impianto" component={DiarioDiBordo} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/diario-di-impianto" component={DiarioDiBordo}/>
       <ProtectedRoute path="/diario-di-bordo" component={DiarioDiBordo}/>
       <ProtectedRoute path="/notification-settings" component={NotificationManager} />
       <ProtectedRoute path="/menu-settings" component={MenuSettings} />
       <ProtectedRoute path="/amministrazione-utilita" component={AmministrazioneUtilita} requiredRole="admin" />
-      <ProtectedRoute path="/eco-impact" component={EcoImpact} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/sales-reports" component={SalesReports} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/ai-dashboard" component={AIDashboard} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/ai-report-generator" component={AIReportGenerator} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/ai-enhanced" component={AIEnhanced} requiredUsername="gianluigi"/>
-      <ProtectedRoute path="/attivita-consigliate" component={AttivitaConsigliate} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/eco-impact" component={EcoImpact}/>
+      <ProtectedRoute path="/sales-reports" component={SalesReports}/>
+      <ProtectedRoute path="/ai-dashboard" component={AIDashboard}/>
+      <ProtectedRoute path="/ai-report-generator" component={AIReportGenerator}/>
+      <ProtectedRoute path="/ai-enhanced" component={AIEnhanced}/>
+      <ProtectedRoute path="/attivita-consigliate" component={AttivitaConsigliate}/>
       <ProtectedRoute path="/verifica-copertura" component={VerificaCoperturaOrdini}/>
       <ProtectedRoute path="/proiezione-crescita" component={ProiezioneCrescita}/>
       <ProtectedRoute path="/pianificazione-vendite" component={PianificazioneVendite} requiredUsername="gianluigi"/>
       <ProtectedRoute path="/gestione-mortalita" component={GestioneMortalita}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
-      <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>
       <ProtectedRoute path="/task-management" component={TaskManagement}/>
       <ProtectedRoute path="/operators" component={Operators}/>
-      <ProtectedRoute path="/lci" component={LCIModule} requiredUsername="gianluigi"/>
+      <ProtectedRoute path="/lci" component={LCIModule}/>
       <ProtectedRoute path="/storia-animali" component={LineageAnimali}/>
       <ProtectedRoute path="/diario-ambientale" component={DiarioAmbientale}/>
       <ProtectedRoute path="/sonda-df-sifoni" component={SeneyeMonitor}/>
