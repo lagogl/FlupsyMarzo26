@@ -3,3 +3,4 @@
 - [SGR Matrix module](sgr-matrix-module.md) — design conventions for the real SGR Taglia×Mese matrix under ANALISI.
 - [Container flow classification](container-flow-classification.md) — raceway/bins/flupsy/mini are flupsys by NAME; reconstruct movements from lot_ledger transfer_in COALESCEing selections flupsy then cycle→basket.
 - [Operations registry loading](operations-registry-loading.md) — /operations filters client-side over ALL ops; fetch with includeAll=true, derive pagination/counts from filteredOperations, not raw fetch.
+- [Misura weight/size fields](misura-weight-fields.md) — in misura, trust animals_per_kg (sample) for taglia, not average_weight (= total_weight/count, breaks on wrong typed basket weight).
