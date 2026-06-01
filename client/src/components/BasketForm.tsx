@@ -24,7 +24,6 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Info } from "lucide-react";
 import BasketExistsCheck from "./BasketExistsCheck";
-import BasketPositionCheck from "./BasketPositionCheck";
 import FlupsyMiniMapOptimized from "./FlupsyMiniMapOptimized";
 
 const NET_MESH_OPTIONS = [200, 300, 500, 700, 1000, 1500, 2000];
@@ -84,7 +83,6 @@ export default function BasketForm({
     basketId ? defaultValues.row || null : null
   );
   const [isBasketNumberValid, setIsBasketNumberValid] = useState(true);
-  const [isPositionValid, setIsPositionValid] = useState(true);
   const [maxPositions, setMaxPositions] = useState<number>(10); // Default a 10
   const [availablePositionsCount, setAvailablePositionsCount] = useState<{DX: number, SX: number}>({ DX: 0, SX: 0 });
 
@@ -190,27 +188,14 @@ export default function BasketForm({
     }
   }, [nextBasketNumber, form, basketId]);
   
-  // Update maxPositions when next position data is fetched
+  // Update maxPositions when next position data is fetched (solo informativo, nessun blocco)
   useEffect(() => {
     if (nextPositionData && nextPositionData.maxPositions) {
       // Calcola il numero massimo di posizioni per fila (metà del totale)
       const maxPositionsPerRow = Math.floor(nextPositionData.maxPositions / 2);
       setMaxPositions(maxPositionsPerRow);
-      
-      // Aggiorna lo schema di validazione con il valore massimo di posizione PER FILA
-      basketFormSchema.shape.position = z.coerce.number()
-        .int()
-        .positive("La posizione deve essere un numero positivo")
-        .min(1, "La posizione deve essere almeno 1")
-        .max(maxPositionsPerRow, `La posizione non può superare ${maxPositionsPerRow} (limite massimo per fila di questo FLUPSY)`);
-      
-      // Se la posizione corrente è superiore al massimo, azzera il valore
-      const currentPosition = form.getValues('position');
-      if (currentPosition && currentPosition > maxPositionsPerRow) {
-        form.setValue('position', undefined);
-      }
     }
-  }, [nextPositionData, form]);
+  }, [nextPositionData]);
   
   // Suggerisci automaticamente la posizione disponibile quando si seleziona una fila
   useEffect(() => {
@@ -229,7 +214,9 @@ export default function BasketForm({
 
   // Define custom submit handler to prevent submission if there are validation errors
   const handleSubmit = (e: React.FormEvent) => {
-    if (!isBasketNumberValid || !isPositionValid) {
+    // Nessun controllo sulla posizione: l'operatore può salvare liberamente.
+    // Si verifica solo che il numero della cesta non sia duplicato.
+    if (!isBasketNumberValid) {
       e.preventDefault();
       toast({
         title: "Errore di validazione",
@@ -239,23 +226,11 @@ export default function BasketForm({
       return;
     }
     
-    // Verifica che la posizione non superi il limite massimo
-    const position = form.getValues('position');
-    if (position > maxPositions) {
-      e.preventDefault();
-      toast({
-        title: "Posizione non valida",
-        description: `La posizione non può superare ${maxPositions} (limite massimo per fila di questo FLUPSY)`,
-        variant: "destructive"
-      });
-      return;
-    }
-    
     form.handleSubmit(onSubmit)(e);
   };
 
-  // Check if form is valid to enable/disable submit button
-  const isFormValid = isBasketNumberValid && isPositionValid;
+  // Check if form is valid to enable/disable submit button (solo numero cesta)
+  const isFormValid = isBasketNumberValid;
   
   // Ottieni il valore FLUPSY selezionato come oggetto completo
   const selectedFlupsy = selectedFlupsyId ? flupsys.find((f: any) => f.id === selectedFlupsyId) : null;
@@ -281,15 +256,6 @@ export default function BasketForm({
           basketNumber={form.watch('physicalNumber')}
           basketId={basketId}
           onValidationChange={setIsBasketNumberValid}
-        />
-        
-        {/* Validazione della posizione se sono compilati tutti i campi necessari */}
-        <BasketPositionCheck
-          flupsyId={form.watch('flupsyId')}
-          row={form.watch('row')}
-          position={form.watch('position')}
-          basketId={basketId}
-          onValidationChange={setIsPositionValid}
         />
       
         <FormField
@@ -515,7 +481,6 @@ export default function BasketForm({
                     placeholder="Inserisci la posizione nella fila..."
                     value={field.value || ""}
                     onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                    className={!isPositionValid ? "border-amber-400 focus-visible:ring-amber-400" : ""}
                   />
                 </FormControl>
                 <FormDescription>
