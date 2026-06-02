@@ -143,20 +143,37 @@ function TrendKpi({ label, today, yesterday, format, positiveIsGood }: TrendKpiP
 export default function FlupsyHeatmap() {
   const [, navigate] = useLocation();
 
-  // --- Soglie configurabili per gli alert ---
-  const [highMortThreshold, setHighMortThreshold] = useState(5);
-  const [cumulMortThreshold, setCumulMortThreshold] = useState(15);
-  const [highWeightKgThreshold, setHighWeightKgThreshold] = useState(30);
-  const [staleMeasurementDays, setStaleMeasurementDays] = useState(7);
-  const [staleOpDays, setStaleOpDays] = useState(14);
+  // --- Soglie configurabili per gli alert (persistite in localStorage) ---
+  const LS = "flupsy_alert_settings";
+  const loadLS = () => {
+    try { return JSON.parse(localStorage.getItem(LS) || "{}"); } catch { return {}; }
+  };
+  const saveLS = (patch: Record<string, unknown>) => {
+    try { localStorage.setItem(LS, JSON.stringify({ ...loadLS(), ...patch })); } catch {}
+  };
+
+  const [highMortThreshold, setHighMortThresholdRaw] = useState<number>(() => loadLS().highMortThreshold ?? 5);
+  const [cumulMortThreshold, setCumulMortThresholdRaw] = useState<number>(() => loadLS().cumulMortThreshold ?? 15);
+  const [highWeightKgThreshold, setHighWeightKgThresholdRaw] = useState<number>(() => loadLS().highWeightKgThreshold ?? 30);
+  const [staleMeasurementDays, setStaleMeasurementDaysRaw] = useState<number>(() => loadLS().staleMeasurementDays ?? 7);
+  const [staleOpDays, setStaleOpDaysRaw] = useState<number>(() => loadLS().staleOpDays ?? 14);
+
+  const setHighMortThreshold     = (v: number) => { setHighMortThresholdRaw(v);     saveLS({ highMortThreshold: v }); };
+  const setCumulMortThreshold    = (v: number) => { setCumulMortThresholdRaw(v);    saveLS({ cumulMortThreshold: v }); };
+  const setHighWeightKgThreshold = (v: number) => { setHighWeightKgThresholdRaw(v); saveLS({ highWeightKgThreshold: v }); };
+  const setStaleMeasurementDays  = (v: number) => { setStaleMeasurementDaysRaw(v);  saveLS({ staleMeasurementDays: v }); };
+  const setStaleOpDays           = (v: number) => { setStaleOpDaysRaw(v);           saveLS({ staleOpDays: v }); };
+
   const [showAlertSettings, setShowAlertSettings] = useState(false);
-  const [enabledAlerts, setEnabledAlerts] = useState<Set<string>>(
-    () => new Set(Object.keys(ALERT_META))
-  );
+  const [enabledAlerts, setEnabledAlerts] = useState<Set<string>>(() => {
+    const saved: string[] | undefined = loadLS().enabledAlerts;
+    return saved ? new Set(saved) : new Set(Object.keys(ALERT_META));
+  });
   const toggleAlert = (key: string) =>
     setEnabledAlerts(prev => {
       const s = new Set(prev);
       s.has(key) ? s.delete(key) : s.add(key);
+      saveLS({ enabledAlerts: Array.from(s) });
       return s;
     });
 
