@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { format } from "date-fns";
-import { AlertTriangle, LayoutGrid, TrendingUp, TrendingDown, Minus, Scale } from "lucide-react";
+import { AlertTriangle, LayoutGrid, TrendingUp, TrendingDown, Minus, Scale, Clock, Tag, Settings2, ChevronDown, ChevronUp } from "lucide-react";
 
 // --- Helpers ---
 
@@ -76,6 +76,21 @@ const LEGEND_ENTRIES = [
   { code: "TP-10000", label: "Grande" },
 ];
 
+// --- Alert metadata ---
+
+const ALERT_META: Record<string, { label: string; colorClass: string }> = {
+  weightDecrease:    { label: "Peso in calo",         colorClass: "bg-red-100 text-red-700 border-red-200" },
+  sizeRegression:    { label: "Taglia regredita",     colorClass: "bg-red-100 text-red-700 border-red-200" },
+  highMortality:     { label: "Alta mortalità",       colorClass: "bg-orange-100 text-orange-700 border-orange-200" },
+  highCumulativeMort:{ label: "Mortalità ciclo alta", colorClass: "bg-orange-100 text-orange-700 border-orange-200" },
+  readyToSell:       { label: "Pronta per vendita",   colorClass: "bg-green-100 text-green-700 border-green-200" },
+  highWeight:        { label: "Peso elevato",         colorClass: "bg-blue-100 text-blue-700 border-blue-200" },
+  staleMeasurement:  { label: "Da misurare",          colorClass: "bg-amber-100 text-amber-700 border-amber-200" },
+  staleOperation:    { label: "Operazioni ferme",     colorClass: "bg-slate-100 text-slate-600 border-slate-200" },
+  sizeEstimateWorse: { label: "Stima peggiorata",     colorClass: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  neverMeasured:     { label: "Mai misurata",         colorClass: "bg-slate-100 text-slate-600 border-slate-200" },
+};
+
 // --- Trend KPI ---
 
 interface TrendKpiProps {
@@ -127,6 +142,14 @@ function TrendKpi({ label, today, yesterday, format, positiveIsGood }: TrendKpiP
 
 export default function FlupsyHeatmap() {
   const [, navigate] = useLocation();
+
+  // --- Soglie configurabili per gli alert ---
+  const [highMortThreshold, setHighMortThreshold] = useState(5);
+  const [cumulMortThreshold, setCumulMortThreshold] = useState(15);
+  const [highWeightKgThreshold, setHighWeightKgThreshold] = useState(30);
+  const [staleMeasurementDays, setStaleMeasurementDays] = useState(7);
+  const [staleOpDays, setStaleOpDays] = useState(14);
+  const [showAlertSettings, setShowAlertSettings] = useState(false);
 
   const { data: allFlupsys, isLoading: lFlupsys } = useQuery<any[]>({
     queryKey: ["/api/flupsys", { includeAll: true }],
@@ -253,6 +276,120 @@ export default function FlupsyHeatmap() {
     return { totalAnimals, totalSellable, totalSellableWeighted, avgMort };
   }, [flupsyData]);
 
+  // --- Calcolo alert per cesta ---
+  const alertBaskets = useMemo(() => {
+    if (!allBaskets || !latestOpsMap || !sizes || !allFlupsys) return [];
+    const today = new Date();
+    const VENDIBILE_THRESHOLD = 29000;
+
+    const results: Array<{
+      basket: any;
+      flupsy: any;
+      op: any;
+      alerts: string[];
+      sizeCode: string;
+      daysSinceOp: number;
+      daysSinceMeasurement: number | null;
+    }> = [];
+
+    for (const basket of allBaskets) {
+      if (!basket.currentCycleId) continue;
+      const op = latestOpsMap[basket.id];
+      if (!op) continue;
+
+      const flupsy = allFlupsys.find((f: any) => f.id === basket.flupsyId);
+      const alerts: string[] = [];
+
+      const opDate = op.date ? new Date(op.date) : null;
+      const daysSinceOp = opDate
+        ? Math.floor((today.getTime() - opDate.getTime()) / (1000 * 60 * 60 * 24))
+        : 999;
+
+      const measDate = op.measurementDate ? new Date(op.measurementDate) : null;
+      const daysSinceMeasurement = measDate
+        ? Math.floor((today.getTime() - measDate.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+
+      // 1. Peso in calo rispetto all'operazione precedente
+      if (op.totalWeight != null && op.prevTotalWeight != null && op.totalWeight < op.prevTotalWeight) {
+        alerts.push("weightDecrease");
+      }
+
+      // 2. Taglia regredita (confronto ultima misura vs misura precedente)
+      if (
+        op.measurementAnimalsPerKg != null &&
+        op.prevMeasurementAnimalsPerKg != null &&
+        // più animali/kg = animali più piccoli = taglia peggiorata
+        Number(op.measurementAnimalsPerKg) > Number(op.prevMeasurementAnimalsPerKg)
+      ) {
+        alerts.push("sizeRegression");
+      }
+
+      // 3. Alta mortalità ultima operazione registrata
+      if (op.lastMortalityRate != null && op.lastMortalityRate > highMortThreshold) {
+        alerts.push("highMortality");
+      }
+
+      // 4. Alta mortalità cumulativa del ciclo corrente
+      if (op.initialAnimalCount && op.animalCount && op.initialAnimalCount > op.animalCount) {
+        const cumulMort = ((op.initialAnimalCount - op.animalCount) / op.initialAnimalCount) * 100;
+        if (cumulMort > cumulMortThreshold) {
+          alerts.push("highCumulativeMort");
+        }
+      }
+
+      // 5. Pronta per la vendita (taglia ufficiale ≤ TP-3000 → animali/kg ≤ 29.000)
+      const apkForSell = op.measurementAnimalsPerKg ?? op.animalsPerKg;
+      if (apkForSell != null && Number(apkForSell) <= VENDIBILE_THRESHOLD) {
+        alerts.push("readyToSell");
+      }
+
+      // 6. Peso elevato (soglia configurabile in kg)
+      if (op.totalWeight != null && op.totalWeight > highWeightKgThreshold * 1000) {
+        alerts.push("highWeight");
+      }
+
+      // 7. Da misurare: N giorni senza misura ufficiale
+      if (daysSinceMeasurement != null && daysSinceMeasurement > staleMeasurementDays) {
+        alerts.push("staleMeasurement");
+      }
+
+      // 8. Operazioni ferme: N giorni senza nessuna operazione
+      if (daysSinceOp > staleOpDays) {
+        alerts.push("staleOperation");
+      }
+
+      // 9. Stima dal peso peggiorata (ultima pesata indica animali più piccoli della misura)
+      const weightedInfo = getWeightedSizeInfo(op, sizes);
+      if (weightedInfo?.differs && !weightedInfo.grew) {
+        alerts.push("sizeEstimateWorse");
+      }
+
+      // 10. Mai misurata (ancora alla prima attivazione, nessuna misura successiva)
+      if (op.type === "prima-attivazione" || op.type === "prima-attivazione-da-vagliatura") {
+        alerts.push("neverMeasured");
+      }
+
+      if (alerts.length > 0) {
+        const sizeCode = getSizeCodeFromAnimalsPerKg(Number(apkForSell) || 0, sizes);
+        results.push({ basket, flupsy, op, alerts, sizeCode, daysSinceOp, daysSinceMeasurement });
+      }
+    }
+
+    // Ordina: prima le anomalie critiche (peso/taglia), poi per numero di alert
+    const PRIORITY = ["weightDecrease", "sizeRegression"];
+    return results.sort((a, b) => {
+      const aPrio = PRIORITY.some(k => a.alerts.includes(k)) ? 1 : 0;
+      const bPrio = PRIORITY.some(k => b.alerts.includes(k)) ? 1 : 0;
+      if (bPrio !== aPrio) return bPrio - aPrio;
+      return b.alerts.length - a.alerts.length;
+    });
+  }, [
+    allBaskets, allFlupsys, latestOpsMap, sizes,
+    highMortThreshold, cumulMortThreshold, highWeightKgThreshold,
+    staleMeasurementDays, staleOpDays,
+  ]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-400 gap-3">
@@ -353,6 +490,184 @@ export default function FlupsyHeatmap() {
             />
           ))}
         </div>
+
+        {/* ========== PANNELLO SEGNALAZIONI ========== */}
+        <div className="rounded-2xl border border-amber-200 bg-white shadow overflow-hidden">
+
+          {/* Intestazione */}
+          <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <h2 className="text-base font-bold text-gray-800">Segnalazioni operative</h2>
+                {alertBaskets.length > 0 && (
+                  <span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-bold rounded-full">
+                    {alertBaskets.length} ceste
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowAlertSettings(s => !s)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-amber-200 text-amber-700 hover:bg-amber-50 transition-colors"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                Soglie
+                {showAlertSettings
+                  ? <ChevronUp className="h-3.5 w-3.5" />
+                  : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+
+            {/* Pannello soglie configurabili */}
+            {showAlertSettings && (
+              <div className="mt-3 pt-3 border-t border-amber-200 grid grid-cols-2 md:grid-cols-5 gap-3">
+                {([
+                  { label: "Mortalità ultima op. (%)", value: highMortThreshold,      setter: setHighMortThreshold,      min: 1, max: 50 },
+                  { label: "Mortalità ciclo (%)",      value: cumulMortThreshold,     setter: setCumulMortThreshold,     min: 1, max: 80 },
+                  { label: "Peso elevato (kg)",        value: highWeightKgThreshold,  setter: setHighWeightKgThreshold,  min: 1, max: 500 },
+                  { label: "Senza misura (gg)",        value: staleMeasurementDays,   setter: setStaleMeasurementDays,   min: 1, max: 60 },
+                  { label: "Senza operazioni (gg)",    value: staleOpDays,            setter: setStaleOpDays,            min: 1, max: 90 },
+                ] as const).map(({ label, value, setter, min, max }) => (
+                  <div key={label} className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide leading-tight">{label}</label>
+                    <input
+                      type="number"
+                      min={min}
+                      max={max}
+                      value={value}
+                      onChange={e => (setter as (v: number) => void)(Math.max(min, Math.min(max, Number(e.target.value))))}
+                      className="w-full px-2 py-1 text-sm border border-amber-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Sommario per tipo di alert */}
+            {alertBaskets.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {Object.entries(ALERT_META).map(([key, meta]) => {
+                  const count = alertBaskets.filter(r => r.alerts.includes(key)).length;
+                  if (!count) return null;
+                  return (
+                    <span
+                      key={key}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.colorClass}`}
+                    >
+                      {count} {meta.label}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Tabella ceste */}
+          {alertBaskets.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 text-sm flex flex-col items-center gap-2">
+              <span className="text-2xl">✓</span>
+              Nessuna segnalazione con le soglie attuali
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">FLUPSY</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Cesta</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Pos.</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Taglia</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Animali</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Peso</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                      <Clock className="inline h-3 w-3 mr-0.5" />Ultima op.
+                    </th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Segnalazioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alertBaskets.map(({ basket, flupsy, op, alerts, sizeCode, daysSinceOp, daysSinceMeasurement }) => {
+                    const { bg } = sizeCode && sizeCode !== "N/D" ? getSizeHexColor(sizeCode) : { bg: "#cbd5e1" };
+                    const hasCritical = alerts.includes("weightDecrease") || alerts.includes("sizeRegression");
+                    return (
+                      <tr
+                        key={basket.id}
+                        onClick={() => op.cycleId && navigate(`/cycles/${op.cycleId}`)}
+                        className={`border-b border-gray-100 cursor-pointer transition-colors ${hasCritical ? "bg-red-50/40 hover:bg-red-50" : "hover:bg-amber-50/40"}`}
+                      >
+                        <td className="px-3 py-2 text-xs font-medium text-gray-700 whitespace-nowrap">{flupsy?.name ?? "—"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className="font-bold text-gray-800">C#{basket.physicalNumber}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{basket.row} {basket.position}</td>
+                        <td className="px-3 py-2">
+                          {sizeCode && sizeCode !== "N/D" ? (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap"
+                              style={{ backgroundColor: bg + "33", color: "#1e293b", border: `1px solid ${bg}66` }}
+                            >
+                              {sizeCode}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">N/D</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs font-medium text-gray-700 whitespace-nowrap">
+                          {fmtAnimals(op.animalCount)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-600 whitespace-nowrap">
+                          {op.totalWeight != null ? `${(op.totalWeight / 1000).toFixed(1)} kg` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className={`text-[11px] font-semibold whitespace-nowrap ${
+                              daysSinceOp > staleOpDays ? "text-red-500"
+                              : daysSinceOp > 7 ? "text-amber-500"
+                              : "text-gray-600"
+                            }`}>
+                              {daysSinceOp === 0 ? "oggi" : `${daysSinceOp}gg fa`}
+                            </span>
+                            <span className="text-[9px] text-gray-400 whitespace-nowrap">{op.type}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {alerts.map(alertKey => {
+                              const meta = ALERT_META[alertKey];
+                              if (!meta) return null;
+                              let detail = "";
+                              if (alertKey === "highMortality" && op.lastMortalityRate != null)
+                                detail = ` ${op.lastMortalityRate.toFixed(1)}%`;
+                              if (alertKey === "highCumulativeMort" && op.initialAnimalCount && op.animalCount)
+                                detail = ` ${((op.initialAnimalCount - op.animalCount) / op.initialAnimalCount * 100).toFixed(0)}%`;
+                              if (alertKey === "highWeight" && op.totalWeight)
+                                detail = ` ${(op.totalWeight / 1000).toFixed(0)}kg`;
+                              if (alertKey === "staleMeasurement" && daysSinceMeasurement != null)
+                                detail = ` ${daysSinceMeasurement}gg`;
+                              if (alertKey === "staleOperation")
+                                detail = ` ${daysSinceOp}gg`;
+                              if (alertKey === "weightDecrease" && op.prevTotalWeight != null && op.totalWeight != null)
+                                detail = ` ${(op.prevTotalWeight / 1000).toFixed(1)}→${(op.totalWeight / 1000).toFixed(1)}kg`;
+                              return (
+                                <span
+                                  key={alertKey}
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap ${meta.colorClass}`}
+                                >
+                                  {meta.label}{detail}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
       </div>
     </TooltipProvider>
   );

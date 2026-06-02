@@ -749,11 +749,18 @@ export class BasketsService {
         lm.mortality_date as "lastMortalityDate",
         lm.mortality_op_type as "lastMortalityOpType",
         fa.initial_animal_count as "initialAnimalCount",
-        fa.activation_date as "activationDate"
+        fa.activation_date as "activationDate",
+        po.prev_total_weight    as "prevTotalWeight",
+        po.prev_animals_per_kg  as "prevAnimalsPerKg",
+        po.prev_date            as "prevDate",
+        po.prev_type            as "prevType",
+        pm.prev_measurement_apk as "prevMeasurementAnimalsPerKg"
       FROM ranked_operations ro
       LEFT JOIN last_measurement lmeas ON ro.basket_id = lmeas.basket_id AND lmeas.rn = 1
       LEFT JOIN last_mortality lm ON ro.basket_id = lm.basket_id AND lm.rn = 1
       LEFT JOIN first_activation fa ON ro.basket_id = fa.basket_id AND fa.rn = 1
+      LEFT JOIN prev_operation po ON ro.basket_id = po.basket_id AND po.rn = 2
+      LEFT JOIN prev_measurement pm ON ro.basket_id = pm.basket_id AND pm.rn = 2
       WHERE ro.rn = 1
       ORDER BY ro.basket_id
     `);
@@ -786,7 +793,13 @@ export class BasketsService {
         lastMortalityOpType: row.lastMortalityOpType,
         // Campi da prima attivazione (animali iniziali)
         initialAnimalCount: row.initialAnimalCount,
-        activationDate: row.activationDate
+        activationDate: row.activationDate,
+        // Campi da operazione precedente (per anomaly detection)
+        prevTotalWeight: row.prevTotalWeight ? parseFloat(row.prevTotalWeight) : null,
+        prevAnimalsPerKg: row.prevAnimalsPerKg ? Number(row.prevAnimalsPerKg) : null,
+        prevDate: row.prevDate,
+        prevType: row.prevType,
+        prevMeasurementAnimalsPerKg: row.prevMeasurementAnimalsPerKg ? Number(row.prevMeasurementAnimalsPerKg) : null,
       };
     }
     
