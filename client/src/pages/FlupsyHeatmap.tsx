@@ -150,6 +150,15 @@ export default function FlupsyHeatmap() {
   const [staleMeasurementDays, setStaleMeasurementDays] = useState(7);
   const [staleOpDays, setStaleOpDays] = useState(14);
   const [showAlertSettings, setShowAlertSettings] = useState(false);
+  const [enabledAlerts, setEnabledAlerts] = useState<Set<string>>(
+    () => new Set(Object.keys(ALERT_META))
+  );
+  const toggleAlert = (key: string) =>
+    setEnabledAlerts(prev => {
+      const s = new Set(prev);
+      s.has(key) ? s.delete(key) : s.add(key);
+      return s;
+    });
 
   const { data: allFlupsys, isLoading: lFlupsys } = useQuery<any[]>({
     queryKey: ["/api/flupsys", { includeAll: true }],
@@ -370,9 +379,11 @@ export default function FlupsyHeatmap() {
         alerts.push("neverMeasured");
       }
 
-      if (alerts.length > 0) {
+      // Filtra solo alert attivi (toggle abilitato dall'operatore)
+      const activeAlerts = alerts.filter(k => enabledAlerts.has(k));
+      if (activeAlerts.length > 0) {
         const sizeCode = getSizeCodeFromAnimalsPerKg(Number(apkForSell) || 0, sizes);
-        results.push({ basket, flupsy, op, alerts, sizeCode, daysSinceOp, daysSinceMeasurement });
+        results.push({ basket, flupsy, op, alerts: activeAlerts, sizeCode, daysSinceOp, daysSinceMeasurement });
       }
     }
 
@@ -387,7 +398,7 @@ export default function FlupsyHeatmap() {
   }, [
     allBaskets, allFlupsys, latestOpsMap, sizes,
     highMortThreshold, cumulMortThreshold, highWeightKgThreshold,
-    staleMeasurementDays, staleOpDays,
+    staleMeasurementDays, staleOpDays, enabledAlerts,
   ]);
 
   if (isLoading) {
@@ -518,44 +529,107 @@ export default function FlupsyHeatmap() {
               </button>
             </div>
 
-            {/* Pannello soglie configurabili */}
+            {/* Pannello impostazioni: toggle + soglie */}
             {showAlertSettings && (
-              <div className="mt-3 pt-3 border-t border-amber-200 grid grid-cols-2 md:grid-cols-5 gap-3">
-                {([
-                  { label: "Mortalità ultima op. (%)", value: highMortThreshold,      setter: setHighMortThreshold,      min: 1, max: 50 },
-                  { label: "Mortalità ciclo (%)",      value: cumulMortThreshold,     setter: setCumulMortThreshold,     min: 1, max: 80 },
-                  { label: "Peso elevato (kg)",        value: highWeightKgThreshold,  setter: setHighWeightKgThreshold,  min: 1, max: 500 },
-                  { label: "Senza misura (gg)",        value: staleMeasurementDays,   setter: setStaleMeasurementDays,   min: 1, max: 60 },
-                  { label: "Senza operazioni (gg)",    value: staleOpDays,            setter: setStaleOpDays,            min: 1, max: 90 },
-                ] as const).map(({ label, value, setter, min, max }) => (
-                  <div key={label} className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide leading-tight">{label}</label>
-                    <input
-                      type="number"
-                      min={min}
-                      max={max}
-                      value={value}
-                      onChange={e => (setter as (v: number) => void)(Math.max(min, Math.min(max, Number(e.target.value))))}
-                      className="w-full px-2 py-1 text-sm border border-amber-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
-                    />
+              <div className="mt-3 pt-3 border-t border-amber-200 space-y-3">
+
+                {/* Alert senza soglia numerica */}
+                <div>
+                  <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1.5">
+                    Alert automatici — clicca per attivare / disattivare
                   </div>
-                ))}
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["weightDecrease","sizeRegression","readyToSell","sizeEstimateWorse","neverMeasured"] as const).map(key => {
+                      const active = enabledAlerts.has(key);
+                      const meta = ALERT_META[key];
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => toggleAlert(key)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer select-none ${
+                            active ? meta.colorClass + " opacity-100" : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
+                          }`}
+                        >
+                          <span className="text-[9px]">{active ? "✓" : "✗"}</span>
+                          {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Alert con soglia numerica */}
+                <div>
+                  <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1.5">
+                    Alert con soglia — checkbox per attivare, campo per cambiare valore
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {([
+                      { key: "highMortality",      label: "Mortalità ultima op. (%)", value: highMortThreshold,     setter: setHighMortThreshold,     min: 1, max: 50 },
+                      { key: "highCumulativeMort", label: "Mortalità ciclo (%)",      value: cumulMortThreshold,    setter: setCumulMortThreshold,    min: 1, max: 80 },
+                      { key: "highWeight",         label: "Peso elevato (kg)",        value: highWeightKgThreshold, setter: setHighWeightKgThreshold, min: 1, max: 500 },
+                      { key: "staleMeasurement",   label: "Senza misura (gg)",        value: staleMeasurementDays,  setter: setStaleMeasurementDays,  min: 1, max: 60 },
+                      { key: "staleOperation",     label: "Senza operazioni (gg)",    value: staleOpDays,           setter: setStaleOpDays,           min: 1, max: 90 },
+                    ] as const).map(({ key, label, value, setter, min, max }) => {
+                      const active = enabledAlerts.has(key);
+                      return (
+                        <div key={key} className={`flex flex-col gap-1 transition-opacity ${active ? "" : "opacity-40"}`}>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => toggleAlert(key)}
+                              className={`w-4 h-4 rounded flex-shrink-0 border-2 transition-colors flex items-center justify-center text-[8px] font-bold ${
+                                active ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-gray-300"
+                              }`}
+                              title={active ? "Disattiva" : "Attiva"}
+                            >
+                              {active ? "✓" : ""}
+                            </button>
+                            <label
+                              onClick={() => toggleAlert(key)}
+                              className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide leading-tight cursor-pointer"
+                            >
+                              {label}
+                            </label>
+                          </div>
+                          <input
+                            type="number"
+                            min={min}
+                            max={max}
+                            value={value}
+                            disabled={!active}
+                            onChange={e => active && (setter as (v: number) => void)(Math.max(min, Math.min(max, Number(e.target.value))))}
+                            className={`w-full px-2 py-1 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                              active ? "border-amber-200 bg-white" : "border-gray-200 bg-gray-50 cursor-not-allowed"
+                            }`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
               </div>
             )}
 
-            {/* Sommario per tipo di alert */}
-            {alertBaskets.length > 0 && (
+            {/* Sommario per tipo di alert — cliccabili per toggle rapido */}
+            {(alertBaskets.length > 0 || enabledAlerts.size < Object.keys(ALERT_META).length) && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {Object.entries(ALERT_META).map(([key, meta]) => {
+                  const isEnabled = enabledAlerts.has(key);
                   const count = alertBaskets.filter(r => r.alerts.includes(key)).length;
-                  if (!count) return null;
+                  if (isEnabled && count === 0) return null;
                   return (
-                    <span
+                    <button
                       key={key}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.colorClass}`}
+                      onClick={() => toggleAlert(key)}
+                      title={isEnabled ? "Clicca per disattivare questo alert" : "Clicca per riattivare"}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border cursor-pointer transition-all hover:opacity-75 ${
+                        isEnabled ? meta.colorClass : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
+                      }`}
                     >
-                      {count} {meta.label}
-                    </span>
+                      {isEnabled && count > 0 ? `${count} ` : ""}{meta.label}
+                      {!isEnabled && <span className="text-[9px] ml-0.5 no-underline">(off)</span>}
+                    </button>
                   );
                 })}
               </div>
