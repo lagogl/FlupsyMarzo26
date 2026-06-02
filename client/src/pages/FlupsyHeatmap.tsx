@@ -79,16 +79,16 @@ const LEGEND_ENTRIES = [
 // --- Alert metadata ---
 
 const ALERT_META: Record<string, { label: string; colorClass: string }> = {
-  weightDecrease:    { label: "Peso in calo",         colorClass: "bg-red-100 text-red-700 border-red-200" },
-  sizeRegression:    { label: "Taglia regredita",     colorClass: "bg-red-100 text-red-700 border-red-200" },
-  highMortality:     { label: "Alta mortalità",       colorClass: "bg-orange-100 text-orange-700 border-orange-200" },
-  highCumulativeMort:{ label: "Mortalità ciclo alta", colorClass: "bg-orange-100 text-orange-700 border-orange-200" },
-  readyToSell:       { label: "Pronta per vendita",   colorClass: "bg-green-100 text-green-700 border-green-200" },
-  highWeight:        { label: "Peso elevato",         colorClass: "bg-blue-100 text-blue-700 border-blue-200" },
-  staleMeasurement:  { label: "Da misurare",          colorClass: "bg-amber-100 text-amber-700 border-amber-200" },
-  staleOperation:    { label: "Operazioni ferme",     colorClass: "bg-slate-100 text-slate-600 border-slate-200" },
-  sizeEstimateWorse: { label: "Stima peggiorata",     colorClass: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  neverMeasured:     { label: "Mai misurata",         colorClass: "bg-slate-100 text-slate-600 border-slate-200" },
+  weightDecrease:    { label: "Peso in calo",         colorClass: "bg-red-600 text-white border-red-700" },
+  sizeRegression:    { label: "Taglia regredita",     colorClass: "bg-red-600 text-white border-red-700" },
+  highMortality:     { label: "Alta mortalità",       colorClass: "bg-orange-500 text-white border-orange-600" },
+  highCumulativeMort:{ label: "Mortalità ciclo alta", colorClass: "bg-orange-400 text-white border-orange-500" },
+  readyToSell:       { label: "Pronta per vendita",   colorClass: "bg-emerald-500 text-white border-emerald-600" },
+  highWeight:        { label: "Peso elevato",         colorClass: "bg-blue-500 text-white border-blue-600" },
+  staleMeasurement:  { label: "Da misurare",          colorClass: "bg-amber-500 text-white border-amber-600" },
+  staleOperation:    { label: "Operazioni ferme",     colorClass: "bg-slate-500 text-white border-slate-600" },
+  sizeEstimateWorse: { label: "Stima peggiorata",     colorClass: "bg-yellow-400 text-gray-900 border-yellow-500" },
+  neverMeasured:     { label: "Mai misurata",         colorClass: "bg-slate-400 text-white border-slate-500" },
 };
 
 // --- Trend KPI ---
@@ -644,68 +644,79 @@ export default function FlupsyHeatmap() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">FLUPSY</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Cesta</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Pos.</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Taglia</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Animali</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Peso</th>
-                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                      <Clock className="inline h-3 w-3 mr-0.5" />Ultima op.
+                  <tr className="bg-slate-700 text-white">
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">FLUPSY</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Cesta</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Pos.</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Taglia</th>
+                    <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider">Animali</th>
+                    <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider">Peso</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                      <Clock className="inline h-3.5 w-3.5 mr-0.5 opacity-80" />Ultima op.
                     </th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Segnalazioni</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Segnalazioni</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {alertBaskets.map(({ basket, flupsy, op, alerts, sizeCode, daysSinceOp, daysSinceMeasurement }) => {
-                    const { bg } = sizeCode && sizeCode !== "N/D" ? getSizeHexColor(sizeCode) : { bg: "#cbd5e1" };
+                  {alertBaskets.map(({ basket, flupsy, op, alerts, sizeCode, daysSinceOp, daysSinceMeasurement }, idx) => {
+                    const { bg, text: sizeText } = sizeCode && sizeCode !== "N/D"
+                      ? getSizeHexColor(sizeCode)
+                      : { bg: "#cbd5e1", text: "#334155" };
                     const hasCritical = alerts.includes("weightDecrease") || alerts.includes("sizeRegression");
+                    const rowBg = hasCritical
+                      ? "bg-red-50 border-l-4 border-l-red-500"
+                      : idx % 2 === 0 ? "bg-white" : "bg-slate-50";
                     return (
                       <tr
                         key={basket.id}
                         onClick={() => op.cycleId && navigate(`/cycles/${op.cycleId}`)}
-                        className={`border-b border-gray-100 cursor-pointer transition-colors ${hasCritical ? "bg-red-50/40 hover:bg-red-50" : "hover:bg-amber-50/40"}`}
+                        className={`border-b border-gray-200 cursor-pointer transition-colors hover:bg-indigo-50/50 ${rowBg}`}
                       >
-                        <td className="px-3 py-2 text-xs font-medium text-gray-700 whitespace-nowrap">{flupsy?.name ?? "—"}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <span className="font-bold text-gray-800">C#{basket.physicalNumber}</span>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                          {flupsy?.name ?? "—"}
                         </td>
-                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{basket.row} {basket.position}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-base font-black text-gray-900">C#{basket.physicalNumber}</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                          {basket.row} {basket.position}
+                        </td>
+                        <td className="px-4 py-3">
                           {sizeCode && sizeCode !== "N/D" ? (
                             <span
-                              className="px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap"
-                              style={{ backgroundColor: bg + "33", color: "#1e293b", border: `1px solid ${bg}66` }}
+                              className="px-2 py-1 rounded-md text-xs font-bold whitespace-nowrap shadow-sm"
+                              style={{ backgroundColor: bg, color: sizeText }}
                             >
                               {sizeCode}
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">N/D</span>
+                            <span className="text-gray-400 text-sm">N/D</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right text-xs font-medium text-gray-700 whitespace-nowrap">
-                          {fmtAnimals(op.animalCount)}
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <span className="text-sm font-bold text-gray-900">{fmtAnimals(op.animalCount)}</span>
                         </td>
-                        <td className="px-3 py-2 text-right text-xs text-gray-600 whitespace-nowrap">
-                          {op.totalWeight != null ? `${(op.totalWeight / 1000).toFixed(1)} kg` : "—"}
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <span className="text-sm text-gray-700">
+                            {op.totalWeight != null ? `${(op.totalWeight / 1000).toFixed(1)} kg` : "—"}
+                          </span>
                         </td>
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-4 py-3 text-center">
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className={`text-[11px] font-semibold whitespace-nowrap ${
-                              daysSinceOp > staleOpDays ? "text-red-500"
-                              : daysSinceOp > 7 ? "text-amber-500"
-                              : "text-gray-600"
+                            <span className={`text-sm font-bold whitespace-nowrap ${
+                              daysSinceOp > staleOpDays ? "text-red-600"
+                              : daysSinceOp > 7 ? "text-amber-600"
+                              : "text-gray-700"
                             }`}>
                               {daysSinceOp === 0 ? "oggi" : `${daysSinceOp}gg fa`}
                             </span>
-                            <span className="text-[9px] text-gray-400 whitespace-nowrap">{op.type}</span>
+                            <span className="text-[10px] text-gray-400 whitespace-nowrap">{op.type}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1.5">
                             {alerts.map(alertKey => {
                               const meta = ALERT_META[alertKey];
                               if (!meta) return null;
@@ -725,7 +736,7 @@ export default function FlupsyHeatmap() {
                               return (
                                 <span
                                   key={alertKey}
-                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap ${meta.colorClass}`}
+                                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap border shadow-sm ${meta.colorClass}`}
                                 >
                                   {meta.label}{detail}
                                 </span>
