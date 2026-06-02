@@ -243,7 +243,11 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
   });
 
   const isReadOnly = operation.type === 'prima-attivazione';
-  
+
+  const { data: editFormSizes = [] } = useQuery<any[]>({
+    queryKey: ['/api/sizes'],
+  });
+
   // Calcoli derivati
   const derivedValues = useMemo(() => {
     const animalCount = form.watch('animalCount') || 0;
@@ -253,13 +257,21 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
     const animalsPerKgCalc = totalWeight > 0 ? Math.round(animalCount / (totalWeight / 1000)) : 0;
     const averageWeightCalc = animalCount > 0 ? Math.round((totalWeight / animalCount) * 1000) / 1000 : 0;
     const mortalityRateCalc = animalCount > 0 ? Math.round((deadCount / animalCount) * 100 * 100) / 100 : 0;
+
+    const derivedSize = animalsPerKgCalc > 0
+      ? (editFormSizes as any[]).find((s: any) =>
+          animalsPerKgCalc >= (s.minAnimalsPerKg || 0) &&
+          animalsPerKgCalc <= (s.maxAnimalsPerKg || Number.MAX_SAFE_INTEGER)
+        ) ?? null
+      : null;
     
     return {
       animalsPerKg: animalsPerKgCalc,
       averageWeight: averageWeightCalc,
-      mortalityRate: mortalityRateCalc
+      mortalityRate: mortalityRateCalc,
+      size: derivedSize,
     };
-  }, [form.watch('animalCount'), form.watch('totalWeight'), form.watch('deadCount')]);
+  }, [form.watch('animalCount'), form.watch('totalWeight'), form.watch('deadCount'), editFormSizes]);
 
   const onSubmit = (data: EditOperationFormData) => {
     const payload = {
@@ -272,6 +284,7 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
         animalsPerKg: derivedValues.animalsPerKg || operation.animalsPerKg,
         averageWeight: derivedValues.averageWeight || operation.averageWeight,
         mortalityRate: derivedValues.mortalityRate || operation.mortalityRate,
+        sizeId: derivedValues.size?.id ?? operation.sizeId,
         notes: data.notes || operation.notes
       }
     };
@@ -399,7 +412,7 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium">Animali per kg</label>
                   <div className="text-sm text-gray-600 mt-1 p-2 bg-blue-50 rounded">
@@ -413,6 +426,14 @@ function EditOperationForm({ operation, onClose }: { operation: Operation; onClo
                   <div className="text-sm text-gray-600 mt-1 p-2 bg-blue-50 rounded">
                     {derivedValues.averageWeight}g
                     <span className="text-xs text-blue-600 ml-1">(Calcolato)</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Taglia</label>
+                  <div className="text-sm mt-1 p-2 bg-blue-50 rounded font-semibold text-blue-800">
+                    {derivedValues.size ? derivedValues.size.name : '—'}
+                    <span className="text-xs text-blue-600 ml-1 font-normal">(Calcolata)</span>
                   </div>
                 </div>
               </div>

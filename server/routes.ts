@@ -3994,6 +3994,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log dei dati di aggiornamento
       console.log(`Aggiornamento operazione ${id} di tipo ${operationType}:`, JSON.stringify(updateData, null, 2));
       
+      // Ricalcola sizeId automaticamente se animalsPerKg viene aggiornato
+      if (updateData.animalsPerKg && Number(updateData.animalsPerKg) > 0) {
+        const recalcSizeId = await determineSizeByAnimalsPerKg(Number(updateData.animalsPerKg));
+        if (recalcSizeId) {
+          updateData.sizeId = recalcSizeId;
+          console.log(`📊 PATCH operazione ${id}: Taglia ricalcolata → sizeId=${recalcSizeId} (animalsPerKg=${updateData.animalsPerKg})`);
+        }
+      }
+      
       // Update the operation
       // 🎯 GESTIONE LOTTI MISTI: Verifica se la modifica impatta la composizione
       await handleBasketLotCompositionOnUpdate(operation, updateData);
