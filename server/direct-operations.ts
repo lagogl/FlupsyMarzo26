@@ -197,7 +197,7 @@ export function implementDirectOperationRoute(app: Express) {
   });
   
   // Bypass completo della route esistente con una versione specializzata
-  app.post('/api/direct-operations', async (req, res) => {
+  const handleDirectOperation = async (req: any, res: any) => {
     console.log("============= DIRECT OPERATION ROUTE START =============");
     console.log("Ricevuta richiesta per creazione diretta operazione:");
     console.log(JSON.stringify(req.body, null, 2));
@@ -1086,7 +1086,26 @@ export function implementDirectOperationRoute(app: Express) {
         detailedError: process.env.NODE_ENV !== 'production' ? errorMessage : undefined
       });
     }
-  });
-  
+  };
+
+  // Endpoint aperto usato dal frontend (browser, stessa origine, senza API key)
+  app.post('/api/direct-operations', handleDirectOperation);
+
+  // Endpoint protetto per app esterne: richiede header x-api-key === SYNC_API_KEY
+  const requireSyncApiKey = (req: any, res: any, next: any) => {
+    const provided = req.headers['x-api-key'] as string | undefined;
+    const expected = process.env.SYNC_API_KEY;
+    if (!expected) {
+      console.error('❌ SYNC_API_KEY non configurata: endpoint esterno /api/external/operations disabilitato');
+      return res.status(503).json({ success: false, error: 'Endpoint non configurato sul server (manca API key)' });
+    }
+    if (!provided || provided !== expected) {
+      console.warn('⛔ /api/external/operations: API key mancante o non valida');
+      return res.status(401).json({ success: false, error: 'Unauthorized: invalid or missing API key' });
+    }
+    next();
+  };
+  app.post('/api/external/operations', requireSyncApiKey, handleDirectOperation);
+
   console.log("Route diretta per le operazioni registrata con successo");
 }
