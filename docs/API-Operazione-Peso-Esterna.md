@@ -25,13 +25,12 @@ Vantaggi:
 | | |
 |---|---|
 | **Metodo** | `POST` |
-| **URL produzione** | `https://<URL-DI-PRODUZIONE>/api/external/operations` |
+| **URL produzione** | `https://flupsy-delta-futuro-copy.replit.app/api/external/operations` |
 | **Content-Type** | `application/json` |
 | **Autenticazione** | Header `x-api-key: <SYNC_API_KEY>` |
 
-> **Nota sull'URL:** sostituire `<URL-DI-PRODUZIONE>` con il dominio definitivo
-> `.replit.app` dell'app pubblicata (verrà comunicato a parte).
-> L'endpoint risponde solo via **HTTPS**.
+> **Nota sull'URL:** `flupsy-delta-futuro-copy.replit.app` è il dominio di produzione
+> definitivo dell'app pubblicata. L'endpoint risponde solo via **HTTPS**.
 
 > **Nota sulla chiave:** `SYNC_API_KEY` è una chiave segreta condivisa, comunicata
 > separatamente in modo sicuro. Non va inserita nel codice sorgente versionato:
@@ -170,7 +169,7 @@ Formato comune:
 
 ### cURL
 ```bash
-curl -X POST "https://<URL-DI-PRODUZIONE>/api/external/operations" \
+curl -X POST "https://flupsy-delta-futuro-copy.replit.app/api/external/operations" \
   -H "Content-Type: application/json" \
   -H "x-api-key: <SYNC_API_KEY>" \
   -d '{
@@ -184,7 +183,7 @@ curl -X POST "https://<URL-DI-PRODUZIONE>/api/external/operations" \
 
 ### JavaScript (fetch)
 ```js
-const res = await fetch("https://<URL-DI-PRODUZIONE>/api/external/operations", {
+const res = await fetch("https://flupsy-delta-futuro-copy.replit.app/api/external/operations", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -224,7 +223,7 @@ if (!res.ok) {
 
 ## 10. Riferimenti rapidi
 
-- **Endpoint**: `POST https://<URL-DI-PRODUZIONE>/api/external/operations`
+- **Endpoint**: `POST https://flupsy-delta-futuro-copy.replit.app/api/external/operations`
 - **Header obbligatorio**: `x-api-key: <SYNC_API_KEY>`
 - **Body minimo**: `{ "type": "peso", "cycleId", "basketId", "totalWeight" }`
 - **Unità peso**: grammi
