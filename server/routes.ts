@@ -359,9 +359,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ Modulo SYSTEM MAINTENANCE registrato su /api/operations/:id/update, /api/test-delete/:id, /api/database-snapshot');
 
   // API esterne disabilitate - Aggiungi solo una risposta di status per evitare errori 401
-  // Eccezione: /api/external/notify-update è attivo per invalidazione cache da app esterna
+  // Eccezioni attive: /api/external/notify-update (invalidazione cache) e
+  // /api/external/operations (creazione operazioni da app esterne, protetto da API key)
   app.all("/api/external/*", (req, res, next) => {
-    if (req.path === '/api/external/notify-update') {
+    if (req.path === '/api/external/notify-update' || req.path === '/api/external/operations') {
       return next();
     }
     return res.status(503).json({
