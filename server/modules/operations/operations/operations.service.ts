@@ -8,6 +8,7 @@ import { operations, baskets, flupsys, lots, sizes, basketLotComposition, cycles
 import { sql, eq, and, or, between, desc, inArray } from 'drizzle-orm';
 import { OperationsCache } from '../../../operations-cache-service';
 import { isBasketMixedLot, getBasketLotComposition } from '../../../services/basket-lot-composition.service';
+import { determineSizeByAnimalsPerKg } from '../../../utils/size-determination';
 
 // Colonne per le query ottimizzate
 const OPERATION_COLUMNS = {
@@ -711,6 +712,29 @@ class OperationsService {
         data.notes = systemPart;
       }
       console.log(`📝 Nota lotto misto combinata: sistema="${systemPart.substring(0, 50)}..." + operatore="${operatorNote}"`);
+    }
+
+    // 4b. Per operazioni PESO: se cambia il peso totale (o il conteggio animali),
+    //     ricalcola animali/kg e peso medio, così la taglia si aggiorna anche
+    //     modificando un'operazione già registrata (stesso comportamento della creazione).
+    if (existingOperation.type === 'peso') {
+      const effectiveAnimalCount = Number(data.animalCount ?? existingOperation.animalCount);
+      const effectiveTotalWeight = Number(data.totalWeight ?? existingOperation.totalWeight);
+      const totalWeightKg = (effectiveTotalWeight || 0) / 1000;
+      if (totalWeightKg > 0 && effectiveAnimalCount > 0) {
+        data.animalsPerKg = Math.round(effectiveAnimalCount / totalWeightKg);
+        data.averageWeight = 1000000 / data.animalsPerKg;
+        console.log(`📊 UPDATE PESO ${id}: Ricalcolato animalsPerKg=${data.animalsPerKg} da totalWeight=${effectiveTotalWeight}g, animalCount=${effectiveAnimalCount}`);
+      }
+    }
+
+    // 4c. Ricalcola sizeId automaticamente se animali/kg è presente/aggiornato
+    if (data.animalsPerKg && Number(data.animalsPerKg) > 0) {
+      const recalcSizeId = await determineSizeByAnimalsPerKg(Number(data.animalsPerKg));
+      if (recalcSizeId) {
+        data.sizeId = recalcSizeId;
+        console.log(`📊 UPDATE ${id}: Taglia ricalcolata → sizeId=${recalcSizeId} (animalsPerKg=${data.animalsPerKg})`);
+      }
     }
 
     // 5. Esegui l'aggiornamento

@@ -740,14 +740,14 @@ export default function SpreadsheetOperations() {
         const lastOp = basket.lastOperation;
         const sizesArray = Array.isArray(sizes) ? sizes : [];
         
-        // Calcola taglia corrente basandosi SOLO su operazioni misura o prima-attivazione
-        // Le operazioni di tipo "peso" NON incidono sulla determinazione della taglia
+        // Calcola taglia corrente basandosi su misura, prima-attivazione E peso
+        // Anche le operazioni di tipo "peso" aggiornano la taglia (comportamento ripristinato)
         const basketOperationsForSize = ((operations as any[]) || []).filter((op: any) => op.basketId === basket.id);
         const lastOperationWithAnimalsPerKg = basketOperationsForSize
           .filter((op: any) => 
             op.animalsPerKg && 
             op.animalsPerKg > 0 && 
-            (op.type === 'misura' || op.type === 'prima-attivazione') // Solo misura e prima-attivazione
+            (op.type === 'misura' || op.type === 'prima-attivazione' || op.type === 'peso') // misura, prima-attivazione e peso
           )
           .sort((a: any, b: any) => {
             // Prima ordina per ID (più recente = ID più alto)

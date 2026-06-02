@@ -3994,6 +3994,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log dei dati di aggiornamento
       console.log(`Aggiornamento operazione ${id} di tipo ${operationType}:`, JSON.stringify(updateData, null, 2));
       
+      // Per operazioni PESO in MODIFICA: se cambia il peso totale, ricalcola animali/kg
+      // dal peso e dal conteggio animali, così la taglia si aggiorna anche modificando
+      // un'operazione già registrata (stesso comportamento della creazione).
+      if (operationType === 'peso') {
+        const effectiveAnimalCount = Number(updateData.animalCount ?? operation.animalCount);
+        const effectiveTotalWeight = Number(updateData.totalWeight ?? operation.totalWeight);
+        const totalWeightKg = (effectiveTotalWeight || 0) / 1000;
+        if (totalWeightKg > 0 && effectiveAnimalCount > 0) {
+          updateData.animalsPerKg = Math.round(effectiveAnimalCount / totalWeightKg);
+          updateData.averageWeight = 1000000 / updateData.animalsPerKg;
+          console.log(`📊 PATCH PESO operazione ${id}: Ricalcolato animalsPerKg=${updateData.animalsPerKg} da totalWeight=${effectiveTotalWeight}g, animalCount=${effectiveAnimalCount}`);
+        }
+      }
+
       // Ricalcola sizeId automaticamente se animalsPerKg viene aggiornato
       if (updateData.animalsPerKg && Number(updateData.animalsPerKg) > 0) {
         const recalcSizeId = await determineSizeByAnimalsPerKg(Number(updateData.animalsPerKg));
