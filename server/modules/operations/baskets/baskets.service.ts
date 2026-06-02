@@ -635,6 +635,42 @@ export class BasketsService {
           AND o.cancelled_at IS NULL
           AND o.type NOT IN ('chiusura-ciclo-vagliatura', 'chiusura-ciclo')
       ),
+      prev_operation AS (
+        SELECT
+          o.basket_id,
+          o.total_weight   AS prev_total_weight,
+          o.animals_per_kg AS prev_animals_per_kg,
+          o.date           AS prev_date,
+          o.type           AS prev_type,
+          ROW_NUMBER() OVER (
+            PARTITION BY o.basket_id
+            ORDER BY o.date DESC, o.id DESC
+          ) AS rn
+        FROM operations o
+        INNER JOIN baskets b ON o.basket_id = b.id
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.cycle_id = b.current_cycle_id
+          AND o.cancelled_at IS NULL
+          AND o.type NOT IN ('chiusura-ciclo-vagliatura', 'chiusura-ciclo')
+      ),
+      prev_measurement AS (
+        SELECT
+          o.basket_id,
+          o.animals_per_kg AS prev_measurement_apk,
+          o.date           AS prev_measurement_date,
+          ROW_NUMBER() OVER (
+            PARTITION BY o.basket_id
+            ORDER BY o.date DESC, o.id DESC
+          ) AS rn
+        FROM operations o
+        INNER JOIN baskets b ON o.basket_id = b.id
+        WHERE b.current_cycle_id IS NOT NULL
+          AND o.cycle_id = b.current_cycle_id
+          AND o.cancelled_at IS NULL
+          AND o.type IN ('misura', 'prima-attivazione')
+          AND o.animals_per_kg IS NOT NULL
+          AND o.animals_per_kg > 0
+      ),
       last_measurement AS (
         SELECT 
           o.basket_id,
