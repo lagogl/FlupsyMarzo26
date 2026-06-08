@@ -36,3 +36,9 @@ id = "qw05YyLlZwQOtx-qwbxaB"
 uri = "file://docs/API-Operazione-Peso-Esterna.md"
 type = "text"
 title = "API esterna – Operazione Peso (documento tecnico)"
+
+[[outputs]]
+id = "IYvqkQli8FEXzB5FknNOb"
+uri = "file://docs/Integrazione-Seneye.md"
+type = "text"
+title = "Integrazione Seneye (documento tecnico)"
