@@ -42,3 +42,9 @@ id = "IYvqkQli8FEXzB5FknNOb"
 uri = "file://docs/Integrazione-Seneye.md"
 type = "text"
 title = "Integrazione Seneye (documento tecnico)"
+
+[[outputs]]
+id = "P3jAdym20f74TRSJRqGuZ"
+uri = "file://exports/confronto_conteggi_vagliature_vendite.xlsx"
+type = "table"
+title = "Confronto conteggi — Registrato vs Corretto"
