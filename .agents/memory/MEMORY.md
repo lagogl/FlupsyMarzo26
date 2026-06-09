@@ -1,2 +1,3 @@
 - [Operations PATCH route shadowing](operations-patch-route-shadowing.md) — modular `/api/operations` router wins over inline app.patch in routes.ts; edit logic belongs in operations.service.ts updateOperation.
 - [External routes maintenance guard](external-routes-maintenance-guard.md) — app.all('/api/external/*') in routes.ts 503s everything except an allowlist; whitelist new external routes there or they're shadowed.
+- [Animal count vs mortality convention](animal-count-mortality-convention.md) — dead are in the sample weight, so live count = animalsPerKg × totalWeight; never re-apply (1−mortality). Misura is server-governed (gusci rule), leave it.

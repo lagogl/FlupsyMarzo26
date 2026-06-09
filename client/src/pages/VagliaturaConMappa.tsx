@@ -598,15 +598,11 @@ export default function VagliaturaConMappa() {
         const exactMortalityPercent = (newData.deadCount / totalSampleAnimals) * 100;
         newData.mortalityRate = Math.round(exactMortalityPercent * 100) / 100; // 2 decimali
         
-        // Calcola animali vivi usando la mortalità ESATTA (non arrotondata)
-        if (newData.totalWeight > 0 && newData.animalsPerKg > 0) {
-          // Calcola il totale teorico (considerando come se fossero tutti vivi)
-          const totalTheoretical = Math.round(newData.totalWeight * newData.animalsPerKg);
-          
-          // Applica la percentuale di mortalità ESATTA per ottenere i vivi reali
-          const mortalityFactor = exactMortalityPercent / 100;
-          newData.animalCount = Math.round(totalTheoretical * (1 - mortalityFactor));
-        }
+        // NOTA: animalCount NON viene scalato di nuovo per la mortalità.
+        // animalsPerKg è già la densità dei SOLI vivi (vivi_campione / peso_campione) e
+        // il peso del campione include i morti: quindi animalCount = peso × densità
+        // (già calcolato sopra) è GIÀ il numero dei vivi reali. Applicare (1 - mortalità)
+        // sarebbe un doppio sconto. La mortalità resta salvata solo come dato.
       } else {
         newData.mortalityRate = 0;
       }

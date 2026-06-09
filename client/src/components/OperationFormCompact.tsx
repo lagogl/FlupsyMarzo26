@@ -746,10 +746,11 @@ export default function OperationFormCompact({
     }
   }, [watchAnimalsPerKg, sizes, form, watchManualCountAdjustment, watchType]);
   
-  // Per operazioni Vendita: calcola animalCount da campione (APK + mortalità)
-  // Formula: (pesoTotale / 1000) × APK × (1 - mortalità%)
+  // Per operazioni Vendita: calcola animalCount da campione (densità VIVI)
+  // Formula: (pesoTotale / 1000) × APK   (NO ×(1-mortalità): sarebbe un doppio sconto,
+  // perché APK è già densità dei soli vivi e i morti sono nel peso del campione)
   // APK viene dal campione: liveAnimals / (sampleWeight / 1000)
-  // mortalità dal campione: deadCount / (liveAnimals + deadCount) × 100
+  // mortalità dal campione: deadCount / (liveAnimals + deadCount) × 100 (solo come dato)
   useEffect(() => {
     if (watchType !== 'vendita') return;
 
@@ -765,10 +766,11 @@ export default function OperationFormCompact({
       form.setValue('mortalityRate', mortRate > 0 ? mortRate : null);
       form.setValue('totalSample', totalSample > 0 ? totalSample : null);
 
-      // FORMULA v1: cascata mortalità - vivi finali = (peso × apk) × (1 - mort%)
+      // apk è già densità dei SOLI vivi (liveAnimals / peso campione, morti inclusi nel
+      // peso): animalCount = peso × apk è GIÀ il numero dei vivi. NON si applica
+      // (1 - mortalità), sarebbe un doppio sconto. La mortalità resta salvata come dato.
       if (watchTotalWeight && watchTotalWeight > 0) {
-        const mortalityFactor = mortRate > 0 ? (1 - mortRate / 100) : 1;
-        const calculatedAnimalCount = Math.round((watchTotalWeight / 1000) * apk * mortalityFactor);
+        const calculatedAnimalCount = Math.round((watchTotalWeight / 1000) * apk);
         form.setValue('animalCount', calculatedAnimalCount > 0 ? calculatedAnimalCount : null);
 
         // Trova e imposta taglia
@@ -803,31 +805,15 @@ export default function OperationFormCompact({
     }
     
     if (watchTotalWeight && watchAnimalsPerKg && watchAnimalsPerKg > 0) {
-      // FORMULA v1: cascata mortalità - i morti del campione vanno scalati dal totale
-      // Step 1: totali proiettati = animalsPerKg × peso totale (kg)
-      const totalAnimalsProjected = Math.round(watchAnimalsPerKg * (watchTotalWeight / 1000));
+      // animalsPerKg è la densità dei SOLI vivi (vivi campione / peso campione, con i
+      // morti inclusi nel peso). Quindi animalCount = animalsPerKg × peso è GIÀ il numero
+      // dei vivi: NON si sottraggono di nuovo i morti, sarebbe un doppio sconto.
+      // La mortalità resta salvata a parte come dato (mortalityRate).
+      const calculatedAnimalCount = Math.round(watchAnimalsPerKg * (watchTotalWeight / 1000));
       
-      // Step 2: % mortalità dal campione (vivi + morti)
-      let mortalityRate = 0;
-      if (watchLiveAnimals && deadCount > 0) {
-        const totalSample = watchLiveAnimals + deadCount;
-        mortalityRate = (deadCount / totalSample) * 100;
-      }
-      
-      // Step 3: morti stimati nel cestello
-      const deadAnimalsEstimated = Math.round(totalAnimalsProjected * (mortalityRate / 100));
-      
-      // Step 4: vivi finali = totali proiettati - morti stimati
-      const calculatedAnimalCount = totalAnimalsProjected - deadAnimalsEstimated;
-      
-      console.log('🧮 CALCOLO ANIMALI v1 (cascata):', {
+      console.log('🧮 CALCOLO ANIMALI (densità vivi, no doppio sconto):', {
         animalsPerKg: watchAnimalsPerKg,
         totalWeight: watchTotalWeight,
-        totalProjected: totalAnimalsProjected,
-        liveInSample: watchLiveAnimals,
-        deadInSample: deadCount,
-        mortalityRate: mortalityRate.toFixed(2) + '%',
-        deadEstimated: deadAnimalsEstimated,
         liveAnimals: calculatedAnimalCount
       });
       
