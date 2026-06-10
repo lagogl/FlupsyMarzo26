@@ -963,7 +963,9 @@ export default function VagliaturaConMappa() {
         }
         
         let finalSizeId = basket.sizeId || 0;
-        if (finalAnimalsPerKg > 0 && sizes) {
+        // Se l'operatore ha scelto esplicitamente la taglia nel calcolatore, la rispettiamo.
+        // Altrimenti la ricaviamo dalla densità degli animali vivi (comportamento storico).
+        if (!basket.sizeManuallySelected && finalAnimalsPerKg > 0 && sizes) {
           const matchingSize = sizes.find(size => 
             finalAnimalsPerKg >= (size.minAnimalsPerKg ?? 0) && finalAnimalsPerKg <= (size.maxAnimalsPerKg ?? Infinity)
           );
@@ -3046,7 +3048,8 @@ export default function VagliaturaConMappa() {
             saleDate: null,
             saleClient: null,
             selectionId: 0,
-            sizeId: measurementData.sizeId,
+            sizeId: data.selectedSizeId ?? measurementData.sizeId,
+            sizeManuallySelected: true,
             isAlsoSource: measurementData.isAlsoSource,
             screeningPosition: data.screeningPosition,
             qualityNote: data.qualityNote,

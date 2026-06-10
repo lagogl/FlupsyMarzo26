@@ -99,6 +99,7 @@ export interface DestinationBasket {
   totalWeight: number | null;
   animalsPerKg: number | null;
   sizeId?: number | null;
+  sizeManuallySelected?: boolean; // true se la taglia è stata scelta dall'operatore nel calcolatore
   saleDate?: string | null;
   saleClient?: string | null;
   createdAt?: string;

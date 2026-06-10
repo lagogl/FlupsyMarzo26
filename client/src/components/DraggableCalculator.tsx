@@ -19,6 +19,9 @@ interface DraggableCalculatorProps {
     animalsPerKg: number;
     averageWeight?: number; // mg, peso individuale reale (incl. morti) - formula v2
     apkForSize?: number; // apk per classificazione taglia (incl. morti) - formula v2
+    selectedSizeId?: number | null; // id taglia scelta dall'operatore
+    selectedSizeCode?: string; // codice taglia scelta (es. TP-2800)
+    sizeSource?: 'live' | 'total'; // base di calcolo della taglia scelta
     formulaVersion?: number; // 2 = nuova formula
     mortalityRate: number;
     position: number;
@@ -68,6 +71,8 @@ export default function DraggableCalculator({
   const [customNote, setCustomNote] = useState(initialData.customNote || '');
   const [meshSopra, setMeshSopra] = useState<number | null>(initialData.meshSopra ?? null);
   const [meshSotto, setMeshSotto] = useState<number | null>(initialData.meshSotto ?? null);
+  // Base di calcolo taglia scelta dall'operatore quando le due taglie differiscono
+  const [sizeSource, setSizeSource] = useState<'total' | 'live'>('total');
 
   const calculatorRef = useRef<HTMLDivElement>(null);
   
@@ -89,6 +94,11 @@ export default function DraggableCalculator({
     queryKey: ['/api/sizes'],
     enabled: isOpen
   });
+
+  // Reset della scelta taglia ad ogni apertura (default: ragionamento nuovo = densità totale)
+  useEffect(() => {
+    if (isOpen) setSizeSource('total');
+  }, [isOpen]);
 
   // Query per ottenere le maglie di vagliatura
   const { data: meshOptions = [] } = useQuery<{ id: number; microni: number; descrizione: string | null }[]>({
@@ -128,8 +138,29 @@ export default function DraggableCalculator({
     ? parseFloat(((sampleWeight / totalSample) * 1000).toFixed(2))
     : (calculatedAnimalsPerKg > 0 ? parseFloat((1000 / calculatedAnimalsPerKg).toFixed(2)) : 0);
   
-  // Taglia commerciale calcolata da animali VIVI per kg (canonico in tutta l'app)
-  const calculatedSize = getSizeCodeFromAnimalsPerKg(calculatedAnimalsPerKg, sizes as any[]);
+  // === TAGLIA: doppio calcolo ===
+  // (A) da densità VIVI (vivi/kg) — canonico storico in tutta l'app
+  // (B) da densità TOTALE (vivi+morti / kg) = peso individuale reale incl. morti — ragionamento nuovo
+  const sizesArr = sizes as any[];
+  const sizeObjFromLive = sizesArr.find((s: any) =>
+    calculatedAnimalsPerKg >= (s.minAnimalsPerKg ?? 0) && calculatedAnimalsPerKg <= (s.maxAnimalsPerKg ?? Infinity)
+  );
+  const sizeObjFromTotal = sizesArr.find((s: any) =>
+    apkForSize >= (s.minAnimalsPerKg ?? 0) && apkForSize <= (s.maxAnimalsPerKg ?? Infinity)
+  );
+  const sizeCodeFromLive = sizeObjFromLive?.code ?? getSizeCodeFromAnimalsPerKg(calculatedAnimalsPerKg, sizesArr);
+  const sizeCodeFromTotal = sizeObjFromTotal?.code ?? getSizeCodeFromAnimalsPerKg(apkForSize, sizesArr);
+  // Le due taglie sono diverse solo se entrambe risolte e con id differente
+  const sizesDiffer = !!sizeObjFromLive && !!sizeObjFromTotal && sizeObjFromLive.id !== sizeObjFromTotal.id;
+  // Quando coincidono non c'è scelta da fare: si usa il valore (uguale) basato sul totale
+  const effectiveSizeSource: 'total' | 'live' = sizesDiffer ? sizeSource : 'total';
+  const chosenSizeObj = effectiveSizeSource === 'live'
+    ? (sizeObjFromLive ?? sizeObjFromTotal)
+    : (sizeObjFromTotal ?? sizeObjFromLive);
+  const chosenSizeCode = chosenSizeObj?.code ?? getSizeCodeFromAnimalsPerKg(apkForSize, sizesArr);
+  const chosenSizeId = chosenSizeObj?.id ?? null;
+  // Mantengo il nome usato nel resto del componente (taglia mostrata/salvata)
+  const calculatedSize = chosenSizeCode;
   
   // Gestione drag
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -175,6 +206,9 @@ export default function DraggableCalculator({
       animalsPerKg: Math.round(calculatedAnimalsPerKg),
       averageWeight: averageWeightMg,
       apkForSize: Math.round(apkForSize),
+      selectedSizeId: chosenSizeId,
+      selectedSizeCode: chosenSizeCode,
+      sizeSource: effectiveSizeSource,
       formulaVersion: 2,
       mortalityRate,
       position: basketPosition,
@@ -312,12 +346,46 @@ export default function DraggableCalculator({
             
             {/* Taglia calcolata */}
             <div className="grid grid-cols-1 gap-2 text-xs">
-              <div>
-                <Label className="text-xs text-indigo-700">Taglia</Label>
-                <div className="h-7 px-2 py-1 border rounded text-xs bg-indigo-50 text-indigo-700 flex items-center font-medium">
-                  {calculatedSize}
+              {!sizesDiffer ? (
+                <div>
+                  <Label className="text-xs text-indigo-700">Taglia</Label>
+                  <div className="h-7 px-2 py-1 border rounded text-xs bg-indigo-50 text-indigo-700 flex items-center font-medium">
+                    {chosenSizeCode}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="border-2 border-amber-300 bg-amber-50 rounded p-2 space-y-1.5">
+                  <div className="text-[11px] font-semibold text-amber-800">
+                    ⚠ Due taglie possibili — scegli quale salvare
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="sizeSource"
+                      checked={effectiveSizeSource === 'total'}
+                      onChange={() => setSizeSource('total')}
+                      className="w-3.5 h-3.5 mt-0.5"
+                    />
+                    <span className="leading-tight">
+                      <span className="font-semibold text-indigo-700">{sizeCodeFromTotal}</span>
+                      <span className="text-[10px] text-gray-500 block">peso individuale reale (incl. morti) · {apkForSize.toLocaleString('it-IT')}/kg</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="sizeSource"
+                      checked={effectiveSizeSource === 'live'}
+                      onChange={() => setSizeSource('live')}
+                      className="w-3.5 h-3.5 mt-0.5"
+                    />
+                    <span className="leading-tight">
+                      <span className="font-semibold text-indigo-700">{sizeCodeFromLive}</span>
+                      <span className="text-[10px] text-gray-500 block">densità animali vivi · {calculatedAnimalsPerKg.toLocaleString('it-IT')}/kg</span>
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
             
             {/* Risultati compatti - FORMULA v2 */}

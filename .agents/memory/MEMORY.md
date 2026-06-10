@@ -1,3 +1,4 @@
 - [Operations PATCH route shadowing](operations-patch-route-shadowing.md) — modular `/api/operations` router wins over inline app.patch in routes.ts; edit logic belongs in operations.service.ts updateOperation.
 - [External routes maintenance guard](external-routes-maintenance-guard.md) — app.all('/api/external/*') in routes.ts 503s everything except an allowlist; whitelist new external routes there or they're shadowed.
+- [Vagliatura taglia operator choice](vagliatura-taglia-operator-choice.md) — destination basket sizeId may intentionally NOT match its animals_per_kg range (operator picks total vs live density taglia); don't "fix" it.
 - [Animal count vs mortality convention](animal-count-mortality-convention.md) — dead are in the sample weight, so live count = animalsPerKg × totalWeight; never re-apply (1−mortality). Misura is server-governed (gusci rule), leave it.

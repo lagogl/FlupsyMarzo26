@@ -94,6 +94,8 @@ Ordered scale (position 1 = biggest animals, position 29 = smallest):
 - **Regression (taglia inferiore)**: positionB > positionA → animals got smaller → anomaly, ask confirmation
 - **Jump > 1 size forward**: positionB < positionA − 1 → animals grew more than one size class in one step → anomaly, ask confirmation
 
+**Vagliatura operator-chosen taglia (June 2026):** In the vagliatura Calcolatore (DraggableCalculator) the taglia can be derived from the live density (`animals_per_kg` = live/sampleWeight×1000) OR from the total density including dead (`apkForSize` = (live+dead)/sampleWeight×1000 = true average individual weight). When the two map to different sizes, the calculator shows BOTH and the operator selects which to store (default = total density / new reasoning); only the chosen `sizeId` is saved. The live count (`animalCount`) and `animals_per_kg` stay on the live density and are NOT changed. **Consequence: a vagliatura destination basket's stored `sizeId` may legitimately NOT fall within the range of its stored `animals_per_kg`. This is intentional — do NOT "fix" it as a bug.** The choice is flagged client-side (`sizeManuallySelected`) so the submit-time recompute is skipped; server `completeSelectionFixed` uses a non-zero `destBasket.sizeId` verbatim, else falls back to `determineSizeId(animals_per_kg)`. The other two destination paths (manual measurement dialog, direct sale dialog) do not set the flag and keep the historical live-density recompute.
+
 ### Weight Unit Conventions
 - **Database Storage**: All weights are stored in **GRAMS**.
 - **Form Input**: All weight input fields accept values in **GRAMS** with clear labels.
