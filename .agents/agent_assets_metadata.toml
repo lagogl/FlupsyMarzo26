@@ -48,3 +48,9 @@ id = "P3jAdym20f74TRSJRqGuZ"
 uri = "file://exports/confronto_conteggi_vagliature_vendite.xlsx"
 type = "table"
 title = "Confronto conteggi — Registrato vs Corretto"
+
+[[outputs]]
+id = "DKnt4k1TfkyRQS0AQl-Rx"
+uri = "file://exports/Piano_Sopravvivenza_FLUPSY.pdf"
+type = "pdf"
+title = "Piano Sopravvivenza FLUPSY (PDF da condividere)"
