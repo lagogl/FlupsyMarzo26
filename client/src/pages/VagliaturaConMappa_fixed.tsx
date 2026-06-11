@@ -78,6 +78,10 @@ export default function VagliaturaConMappa() {
     animalsPerKg: 0,
     selectedBasketId: null as number | null
   });
+
+  // FASE 1 — Stato del controllo di bilancio alla chiusura vagliatura
+  const [balanceCheck, setBalanceCheck] = useState<{ type: 'confirm' | 'anomaly'; data: any } | null>(null);
+  const [balanceNote, setBalanceNote] = useState('');
   
   // Query per i dati
   const { data: flupsys = [], isLoading: isLoadingFlupsys } = useQuery<Flupsy[]>({
@@ -107,15 +111,35 @@ export default function VagliaturaConMappa() {
         },
         body: JSON.stringify(screeningData)
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Errore durante il completamento della selezione');
+
+      const body = await response.json().catch(() => ({}));
+
+      // FASE 1 — Bilancio di chiusura: anomalia (destinazione > origine), blocco non aggirabile
+      if (response.status === 422 && body?.code === 'BALANCE_ANOMALY_GAIN') {
+        return { status: 'anomaly', data: { ...body, selectionId: screeningData.selectionId } };
       }
-      
-      return await response.json();
+      // FASE 1 — Bilancio fuori tolleranza: richiesta conferma (registra mortalità / correggi)
+      if (response.status === 422 && body?.requiresConfirmation) {
+        return { status: 'needs_confirm', data: { ...body, selectionId: screeningData.selectionId } };
+      }
+
+      if (!response.ok) {
+        throw new Error(body?.message || 'Errore durante il completamento della selezione');
+      }
+
+      return { status: 'ok', data: body };
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      if (result?.status === 'needs_confirm') {
+        setBalanceCheck({ type: 'confirm', data: result.data });
+        return;
+      }
+      if (result?.status === 'anomaly') {
+        setBalanceCheck({ type: 'anomaly', data: result.data });
+        return;
+      }
+      setBalanceCheck(null);
+      setBalanceNote('');
       toast({
         title: "Vagliatura completata",
         description: "La vagliatura è stata completata con successo",
@@ -907,6 +931,88 @@ export default function VagliaturaConMappa() {
               setIsDirectSaleDialogOpen(false);
             }}>Conferma</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* FASE 1 — Dialogo del controllo di bilancio alla chiusura vagliatura */}
+      <Dialog
+        open={balanceCheck !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBalanceCheck(null);
+            setBalanceNote('');
+          }
+        }}
+      >
+        <DialogContent>
+          {balanceCheck?.type === 'anomaly' ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-red-600">Anomalia nel bilancio</DialogTitle>
+                <DialogDescription>
+                  In destinazione risultano più animali che in origine: non è possibile.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span>Animali in origine</span><span className="font-semibold">{Number(balanceCheck.data.totalAnimalsOrigin).toLocaleString('it-IT')}</span></div>
+                <div className="flex justify-between"><span>Animali in destinazione</span><span className="font-semibold">{Number(balanceCheck.data.totalAnimalsDestination).toLocaleString('it-IT')}</span></div>
+                <div className="flex justify-between text-red-600"><span>Differenza</span><span className="font-semibold">+{Math.abs(Number(balanceCheck.data.mortality)).toLocaleString('it-IT')} ({Number(balanceCheck.data.discrepancyPct).toFixed(2)}%)</span></div>
+                <p className="text-muted-foreground pt-2">Controlla i conteggi dei cestelli e correggi prima di completare.</p>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => { setBalanceCheck(null); setBalanceNote(''); }}>Torna e correggi</Button>
+              </DialogFooter>
+            </>
+          ) : balanceCheck ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Bilancio di chiusura: differenza rilevata</DialogTitle>
+                <DialogDescription>
+                  La destinazione è inferiore all'origine oltre la tolleranza dell'1%.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span>Animali in origine</span><span className="font-semibold">{Number(balanceCheck.data.totalAnimalsOrigin).toLocaleString('it-IT')}</span></div>
+                <div className="flex justify-between"><span>Animali in destinazione</span><span className="font-semibold">{Number(balanceCheck.data.totalAnimalsDestination).toLocaleString('it-IT')}</span></div>
+                <div className="flex justify-between text-amber-700"><span>Differenza (mortalità)</span><span className="font-semibold">{Number(balanceCheck.data.mortality).toLocaleString('it-IT')} ({Number(balanceCheck.data.discrepancyPct).toFixed(2)}%)</span></div>
+                {balanceCheck.data.isSuspicious && (
+                  <p className="text-red-600 pt-1">Attenzione: superata la soglia di sospetto del {balanceCheck.data.suspiciousThreshold}%. Verrà inviata una segnalazione.</p>
+                )}
+                <div className="pt-2">
+                  <label className="text-xs text-muted-foreground">Nota (facoltativa)</label>
+                  <textarea
+                    className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                    rows={2}
+                    placeholder="Es. causa della mortalità, osservazioni..."
+                    value={balanceNote}
+                    onChange={(e) => setBalanceNote(e.target.value)}
+                  />
+                </div>
+                <p className="text-muted-foreground pt-1">Vuoi registrare la differenza come mortalità, oppure correggere i conteggi?</p>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  disabled={completeScreeningMutation.isPending}
+                  onClick={() => { setBalanceCheck(null); setBalanceNote(''); }}
+                >
+                  Correggi conteggi
+                </Button>
+                <Button
+                  disabled={completeScreeningMutation.isPending}
+                  onClick={() => {
+                    completeScreeningMutation.mutate({
+                      selectionId: balanceCheck.data.selectionId,
+                      confirmedSuspicious: true,
+                      suspiciousNote: balanceNote.trim() || undefined,
+                    });
+                  }}
+                >
+                  {completeScreeningMutation.isPending ? 'Registrazione...' : 'Registra come mortalità'}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

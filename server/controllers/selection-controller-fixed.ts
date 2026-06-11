@@ -28,6 +28,9 @@ import { format } from "date-fns";
 import { sendSuspiciousScreeningEmail } from "../services/screening-suspicious-email";
 
 const SUSPICIOUS_THRESHOLD_PCT = 3;
+// FASE 1 "Niente sparizioni": tolleranza del bilancio di chiusura (origine = destinazione + mortalità).
+// Oltre questa soglia (in valore assoluto) serve la conferma esplicita dell'operatore.
+const BALANCE_TOLERANCE_PCT = 1;
 
 /**
  * COMPLETA SELEZIONE - IMPLEMENTAZIONE CORRETTA
@@ -116,39 +119,79 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       });
     }
 
-    // CALCOLA MORTALITÀ
+    // CALCOLA MORTALITÀ (bilancio di chiusura ciclo: origine = destinazione + mortalità)
     const totalAnimalsOrigin = sourceBaskets.reduce((sum, sb) => sum + (sb.animalCount || 0), 0);
     const totalAnimalsDestination = destinationBaskets.reduce((sum, db) => sum + (db.animalCount || 0), 0);
     const mortality = totalAnimalsOrigin - totalAnimalsDestination;
-    const discrepancyPct = totalAnimalsOrigin > 0 && mortality > 0
-      ? (mortality / totalAnimalsOrigin) * 100
+    // Discrepanza simmetrica: vale sia per le perdite (mortalità) sia per i guadagni impossibili.
+    const discrepancyPct = totalAnimalsOrigin > 0
+      ? (Math.abs(mortality) / totalAnimalsOrigin) * 100
       : 0;
 
-    console.log(`📊 CALCOLO MORTALITÀ:`);
+    console.log(`📊 BILANCIO VAGLIATURA:`);
     console.log(`   Animali origine: ${totalAnimalsOrigin}`);
     console.log(`   Animali destinazione: ${totalAnimalsDestination}`);
-    console.log(`   Mortalità calcolata: ${mortality} (${mortality > 0 ? 'perdita' : 'guadagno'}) — discrepanza ${discrepancyPct.toFixed(2)}%`);
+    console.log(`   Differenza: ${mortality} (${mortality > 0 ? 'perdita' : mortality < 0 ? 'guadagno' : 'pari'}) — discrepanza ${discrepancyPct.toFixed(2)}%`);
 
-    // ====== GUARD-RAIL: vagliatura sospetta ======
-    // Se la destinazione è molto inferiore all'origine (>= 3%), serve conferma esplicita.
     const confirmedSuspicious = req.body?.confirmedSuspicious === true;
     const suspiciousNote: string | null = typeof req.body?.suspiciousNote === 'string'
       ? req.body.suspiciousNote.trim().slice(0, 1000) || null
       : null;
-    const isSuspicious = discrepancyPct >= SUSPICIOUS_THRESHOLD_PCT;
 
-    if (isSuspicious && !confirmedSuspicious) {
-      console.warn(`⛔ Vagliatura #${selection[0].selectionNumber} BLOCCATA: discrepanza ${discrepancyPct.toFixed(2)}% ≥ ${SUSPICIOUS_THRESHOLD_PCT}% — richiesta conferma operatore`);
+    // ====== FASE 1 — NIENTE SPARIZIONI: BILANCIO DI CHIUSURA ======
+    // Regola: origine = destinazione + mortalità. Tolleranza ±1% per il rumore di conteggio.
+
+    // 0) Origine a zero ma destinazione con animali → guadagno impossibile (la % non è calcolabile).
+    if (totalAnimalsOrigin === 0 && totalAnimalsDestination > 0) {
+      console.warn(`⛔ Vagliatura #${selection[0].selectionNumber} ANOMALIA: origine = 0 ma destinazione = ${totalAnimalsDestination}`);
       return res.status(422).json({
         success: false,
-        requiresConfirmation: true,
-        code: 'SUSPICIOUS_SCREENING',
-        threshold: SUSPICIOUS_THRESHOLD_PCT,
+        requiresConfirmation: false,
+        code: 'BALANCE_ANOMALY_GAIN',
+        threshold: BALANCE_TOLERANCE_PCT,
+        totalAnimalsOrigin,
+        totalAnimalsDestination,
+        mortality,
+        discrepancyPct: 100,
+        message: `Anomalia: l'origine non ha animali ma in destinazione ne risultano ${totalAnimalsDestination.toLocaleString('it-IT')}. Non è possibile avere più animali in uscita che in entrata: controlla i conteggi.`,
+      });
+    }
+
+    // 1) Guadagno impossibile: destinazione > origine oltre tolleranza → ANOMALIA, blocco non aggirabile.
+    if (mortality < 0 && discrepancyPct > BALANCE_TOLERANCE_PCT) {
+      console.warn(`⛔ Vagliatura #${selection[0].selectionNumber} ANOMALIA: destinazione (${totalAnimalsDestination}) > origine (${totalAnimalsOrigin}) di ${Math.abs(mortality)} (${discrepancyPct.toFixed(2)}%)`);
+      return res.status(422).json({
+        success: false,
+        requiresConfirmation: false,
+        code: 'BALANCE_ANOMALY_GAIN',
+        threshold: BALANCE_TOLERANCE_PCT,
         totalAnimalsOrigin,
         totalAnimalsDestination,
         mortality,
         discrepancyPct,
-        message: `La destinazione è inferiore all'origine di ${mortality.toLocaleString('it-IT')} animali (${discrepancyPct.toFixed(2)}%). Soglia di sospetto: ${SUSPICIOUS_THRESHOLD_PCT}%. Conferma esplicita richiesta.`,
+        message: `Anomalia: in destinazione risultano ${Math.abs(mortality).toLocaleString('it-IT')} animali in più rispetto all'origine (${discrepancyPct.toFixed(2)}%). Non è possibile avere più animali in uscita che in entrata: controlla i conteggi.`,
+      });
+    }
+
+    // 2) Perdita oltre tolleranza → conferma esplicita (registra mortalità) oppure correggi.
+    const isMismatch = mortality > 0 && discrepancyPct > BALANCE_TOLERANCE_PCT;
+    // Soglia "sospetta" più alta (≥3%) → invio email di alert (escalation).
+    const isSuspicious = mortality > 0 && discrepancyPct >= SUSPICIOUS_THRESHOLD_PCT;
+
+    if (isMismatch && !confirmedSuspicious) {
+      console.warn(`⚠️ Vagliatura #${selection[0].selectionNumber} bilancio fuori tolleranza: ${discrepancyPct.toFixed(2)}% > ${BALANCE_TOLERANCE_PCT}% — richiesta conferma operatore`);
+      return res.status(422).json({
+        success: false,
+        requiresConfirmation: true,
+        code: 'SUSPICIOUS_SCREENING',
+        threshold: BALANCE_TOLERANCE_PCT,
+        suspiciousThreshold: SUSPICIOUS_THRESHOLD_PCT,
+        isSuspicious,
+        totalAnimalsOrigin,
+        totalAnimalsDestination,
+        mortality,
+        discrepancyPct,
+        message: `Bilancio: origine ${totalAnimalsOrigin.toLocaleString('it-IT')}, destinazione ${totalAnimalsDestination.toLocaleString('it-IT')}. Differenza di ${mortality.toLocaleString('it-IT')} animali (${discrepancyPct.toFixed(2)}%). Vuoi registrare la differenza come mortalità?`,
       });
     }
 
@@ -615,8 +658,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       }
 
       // ====== FASE 5: FINALIZZAZIONE SELEZIONE ======
-      const finalNotes = isSuspicious
-        ? `[VAGLIATURA SOSPETTA confermata dall'operatore — discrepanza ${discrepancyPct.toFixed(2)}% (${mortality.toLocaleString('it-IT')} animali). Soglia: ${SUSPICIOUS_THRESHOLD_PCT}%]${suspiciousNote ? ` Nota: ${suspiciousNote}` : ''}${selection[0].notes ? ` | ${selection[0].notes}` : ''}`
+      const finalNotes = (isMismatch && confirmedSuspicious)
+        ? `[Bilancio confermato dall'operatore — differenza ${discrepancyPct.toFixed(2)}% (${mortality.toLocaleString('it-IT')} animali) registrata come mortalità${isSuspicious ? ' — SOGLIA SOSPETTA superata' : ''}]${suspiciousNote ? ` Nota: ${suspiciousNote}` : ''}${selection[0].notes ? ` | ${selection[0].notes}` : ''}`
         : selection[0].notes;
 
       await tx.update(selections)
