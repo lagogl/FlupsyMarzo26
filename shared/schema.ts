@@ -60,6 +60,7 @@ export const flupsys = pgTable("flupsys", {
   active: boolean("active").notNull().default(true), // se il FLUPSY è attualmente attivo
   maxPositions: integer("max_positions").notNull().default(10), // numero massimo di posizioni per fila (da 10 a 20)
   productionCenter: text("production_center"), // centro di produzione (ad es. "Ca Pisani", "Goro", ecc.)
+  moduleType: text("module_type", { enum: ["flupsy", "raceway", "bins"] }).notNull().default("flupsy"), // FASE 5.0: etichetta vera di tipo modulo (non dedotta dal nome)
 });
 
 // Basket Groups (Gruppi Ceste)

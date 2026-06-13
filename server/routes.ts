@@ -4742,6 +4742,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ====== FASE 5: CRUSCOTTO DI IMPIANTO (sopravvivenza ponderata, per tipo e per modulo) ======
+  app.get("/api/plant-survival", async (req, res) => {
+    try {
+      const { getPlantSurvival } = await import('./services/plant-survival');
+      const plant = await getPlantSurvival();
+      res.json({ success: true, plant });
+    } catch (error) {
+      console.error("Errore cruscotto sopravvivenza impianto:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // ====== FASE 3: BACKFILL COORTI STORICHE (admin, idempotente) ======
   app.post("/api/admin/backfill-cohorts", async (req, res) => {
     try {

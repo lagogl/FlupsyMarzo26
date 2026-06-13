@@ -18,6 +18,14 @@ import FlupsyTableView from "@/components/flupsy/FlupsyTableView";
 import { useEffect } from "react";
 
 // Definizione del tipo per un'unità Flupsy
+type ModuleType = "flupsy" | "raceway" | "bins";
+
+const MODULE_TYPE_OPTIONS: { value: ModuleType; label: string }[] = [
+  { value: "flupsy", label: "FLUPSY" },
+  { value: "raceway", label: "Raceway" },
+  { value: "bins", label: "Bins" },
+];
+
 interface Flupsy {
   id: number;
   name: string;
@@ -26,6 +34,7 @@ interface Flupsy {
   active: boolean;
   maxPositions: number;
   productionCenter?: string;
+  moduleType?: ModuleType;
   // Statistiche
   totalBaskets?: number;
   activeBaskets?: number;
@@ -54,7 +63,8 @@ export default function Flupsys() {
     description: "",
     active: true,
     maxPositions: 10,
-    productionCenter: ""
+    productionCenter: "",
+    moduleType: "flupsy" as ModuleType
   });
 
   // Aggiornamento dell'interfaccia per includere le statistiche aggiuntive
@@ -110,7 +120,8 @@ export default function Flupsys() {
         description: "",
         active: true,
         maxPositions: 10,
-        productionCenter: ""
+        productionCenter: "",
+        moduleType: "flupsy"
       });
       toast({
         title: "Success",
@@ -573,6 +584,22 @@ export default function Flupsys() {
                     />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
+                    <Label htmlFor="moduleType" className="sm:text-right">
+                      Tipo modulo
+                    </Label>
+                    <select
+                      id="moduleType"
+                      name="moduleType"
+                      value={newFlupsy.moduleType}
+                      onChange={(e) => setNewFlupsy({ ...newFlupsy, moduleType: e.target.value as ModuleType })}
+                      className="sm:col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {MODULE_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
                     <Label htmlFor="active" className="sm:text-right">
                       Attivo
                     </Label>
@@ -679,6 +706,22 @@ export default function Flupsys() {
                     className="col-span-3"
                     placeholder="es. Chioggia, Taranto, ecc."
                   />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-moduleType" className="text-right">
+                    Tipo modulo
+                  </Label>
+                  <select
+                    id="edit-moduleType"
+                    name="moduleType"
+                    value={editingFlupsy.moduleType || "flupsy"}
+                    onChange={(e) => setEditingFlupsy(prev => prev ? { ...prev, moduleType: e.target.value as ModuleType } : null)}
+                    className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {MODULE_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="edit-active" className="text-right">
