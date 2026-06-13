@@ -26,6 +26,7 @@ import {
 } from "../../shared/schema";
 import { format } from "date-fns";
 import { sendSuspiciousScreeningEmail } from "../services/screening-suspicious-email";
+import { recomputeLotMortality } from "../services/lot-mortality";
 
 const SUSPICIOUS_THRESHOLD_PCT = 3;
 // FASE 1 "Niente sparizioni": tolleranza del bilancio di chiusura (origine = destinazione + mortalità).
@@ -627,19 +628,11 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         }
       }
 
-      // ====== FASE 3: REGISTRAZIONE MORTALITÀ SUL LOTTO ======
-      if (primaryLotId && mortality !== 0) {
-        console.log(`📈 FASE 3: Registrazione mortalità ${mortality} su lotto ${primaryLotId}`);
-        
-        // Aggiorna mortalità del lotto
-        await tx.update(lots)
-          .set({ 
-            totalMortality: sql`COALESCE(total_mortality, 0) + ${mortality}`,
-            lastMortalityDate: selection[0].date,
-            mortalityNotes: sql`COALESCE(mortality_notes, '') || ${`Vagliatura #${selection[0].selectionNumber}: ${mortality} animali. `}`
-          })
-          .where(eq(lots.id, primaryLotId));
-      }
+      // ====== MORTALITÀ LOTTO ======
+      // FASE 2 "Mortalità per differenza di vivi": NON si somma più in modo incrementale
+      // (questo causava doppio conteggio e attribuiva tutto a un solo lotto). La mortalità
+      // viene RICALCOLATA in modo canonico e idempotente dopo il commit della transazione,
+      // a partire da tutte le vagliature del lotto (vedi sotto, fuori dalla transazione).
 
       // ====== FASE 4: STORICIZZAZIONE RELAZIONI ======
       console.log(`📝 FASE 4: Storicizzazione relazioni vagliatura`);
@@ -672,6 +665,23 @@ export async function completeSelectionFixed(req: Request, res: Response) {
 
       console.log(`✅ VAGLIATURA COMPLETATA CORRETTAMENTE!`);
     });
+
+    // ====== FASE 2: RICALCOLO CANONICO MORTALITÀ LOTTI (contata una sola volta) ======
+    try {
+      const affected = await db.execute(sql`
+        SELECT DISTINCT lot_id FROM selection_source_baskets
+        WHERE selection_id = ${Number(id)} AND lot_id IS NOT NULL
+      `);
+      const affectedLotIds = (affected.rows as any[])
+        .map((r) => Number(r.lot_id))
+        .filter((n) => !Number.isNaN(n));
+      if (affectedLotIds.length > 0) {
+        await recomputeLotMortality(affectedLotIds);
+        console.log(`📈 FASE 2: Mortalità ricalcolata per lotti ${affectedLotIds.join(", ")}`);
+      }
+    } catch (recErr) {
+      console.error(`⚠️ FASE 2: Errore ricalcolo mortalità (vagliatura comunque salvata):`, recErr);
+    }
 
     // ====== EMAIL ALERT VAGLIATURA SOSPETTA ======
     if (isSuspicious) {

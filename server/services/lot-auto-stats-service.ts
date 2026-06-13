@@ -83,23 +83,13 @@ export class LotAutoStatsService {
       const stats = statsQuery[0];
       if (!stats) return;
 
-      // Calcola mortalità percentuale
-      const mortalityCount = Number(stats.totalDeadCount);
-      const mortalityPercentage = initialCount > 0 ? (mortalityCount / initialCount) * 100 : 0;
-      
-      // Aggiorna i campi del lotto
-      const updateData: any = {
-        totalMortality: mortalityCount,
-        lastMortalityDate: mortalityCount > 0 ? stats.lastOperationDate : null,
-        mortalityNotes: `Aggiornato automaticamente da ${stats.totalOperations} operazioni. Mortalità: ${mortalityPercentage.toFixed(2)}%`
-      };
-
-      await db
-        .update(lots)
-        .set(updateData)
-        .where(eq(lots.id, lotId));
-
-      console.log(`✅ AUTO-STATS: Statistiche aggiornate - Lotto ${lotId}: ${mortalityCount} morti (${mortalityPercentage.toFixed(2)}%)`);
+      // FASE 2 "Mortalità per differenza di vivi":
+      // NON si scrive più la mortalità sommando il deadCount grezzo delle operazioni
+      // (questo contava i gusci del campione di misura come morti veri e sovrascriveva
+      //  il valore corretto delle vagliature). La mortalità del lotto è ora di proprietà
+      //  esclusiva del ricalcolo canonico da vagliature (server/services/lot-mortality.ts),
+      //  invocato al completamento di ogni vagliatura/screening. La misura resta un indicatore.
+      console.log(`ℹ️ AUTO-STATS: Mortalità lotto ${lotId} gestita dal ricalcolo canonico da vagliature (misura = solo indicatore)`);
       
     } catch (error) {
       console.error(`❌ AUTO-STATS: Errore calcolo statistiche lotto ${lotId}:`, error);
@@ -129,11 +119,8 @@ export class LotAutoStatsService {
           break;
         case 'peso':
         case 'misura':
-          // Per peso/misura, registra mortalità se presente
-          if (operation.deadCount > 0) {
-            ledgerType = 'mortality';
-            quantity = -(operation.deadCount); // Negativo per mortalità
-          }
+          // FASE 2: peso/misura sono SOLO indicatori — non registrano mortalità nel ledger.
+          // I gusci del campione ("gusci che volano via") non sono morti reali del lotto.
           break;
         case 'cessazione':
           ledgerType = 'transfer_out';

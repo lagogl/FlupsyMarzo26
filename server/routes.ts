@@ -4678,6 +4678,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ====== FASE 2: RICALCOLO MORTALITÀ LOTTI (da vagliature, contata una sola volta) ======
+  // GET  /api/admin/recalc-lot-mortality  → anteprima (dry-run) senza scrivere
+  // POST /api/admin/recalc-lot-mortality  → applica il ricalcolo a tutti i lotti
+  app.get("/api/admin/recalc-lot-mortality", async (req, res) => {
+    try {
+      const { computeRecalcPreview } = await import('./services/lot-mortality-preview');
+      const preview = await computeRecalcPreview();
+      res.json({ success: true, mode: 'preview', ...preview });
+    } catch (error) {
+      console.error("Errore anteprima ricalcolo mortalità lotti:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/admin/recalc-lot-mortality", async (req, res) => {
+    try {
+      const { recomputeAllLotsMortality } = await import('./services/lot-mortality');
+      const results = await recomputeAllLotsMortality();
+      const changed = results.filter(r => r.finalMortality > 0);
+      const clamped = results.filter(r => r.clamped);
+      res.json({
+        success: true,
+        mode: 'apply',
+        lotsProcessed: results.length,
+        lotsWithMortality: changed.length,
+        lotsClampedLowReliability: clamped.length,
+        clampedLotIds: clamped.map(r => r.lotId),
+      });
+    } catch (error) {
+      console.error("Errore ricalcolo mortalità lotti (apply):", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   app.post("/api/admin/lots/sync-sequence", async (req, res) => {
     try {
       // Importa il controller per la sequenza dei lotti

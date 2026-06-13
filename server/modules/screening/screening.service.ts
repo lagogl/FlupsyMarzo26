@@ -17,10 +17,10 @@ import NodeCache from 'node-cache';
 import {
   calculateAggregatedComposition,
   distributeCompositionToDestinations,
-  calculateAndRegisterMortality,
   type SourceBasket,
   type DestinationBasket
 } from '../operations/shared/allocation';
+import { recomputeLotMortality } from '../../services/lot-mortality';
 import { balancedRounding } from '../../utils/balanced-rounding';
 
 /**
@@ -399,15 +399,18 @@ export class ScreeningService {
     
     console.log(`📊 Animali origine: ${totalSourceAnimals}, Animali destinazione: ${totalDestinationAnimals}`);
 
-    // 7. Registra mortalità proporzionale per lotto
-    await calculateAndRegisterMortality(
-      aggregatedComposition,
-      totalSourceAnimals,
-      totalDestinationAnimals,
-      result.date,
-      id,
-      'screening'
-    );
+    // 7. FASE 2 "Mortalità per differenza di vivi": ricalcolo canonico e idempotente
+    //    (contata una sola volta) dei lotti coinvolti, invece della vecchia somma incrementale.
+    try {
+      const screeningLotIds = aggregatedComposition
+        .map((l) => l.lotId)
+        .filter((n): n is number => typeof n === 'number' && !Number.isNaN(n));
+      if (screeningLotIds.length > 0) {
+        await recomputeLotMortality(screeningLotIds);
+      }
+    } catch (recErr) {
+      console.error('⚠️ FASE 2: Errore ricalcolo mortalità screening:', recErr);
+    }
 
     // 8. Registra movimenti lot_ledger con balanced rounding
     console.log(`📝 FASE 8: Registrazione lot_ledger per tracciabilità`);
