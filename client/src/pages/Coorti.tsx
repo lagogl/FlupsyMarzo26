@@ -10,10 +10,16 @@ import {
   AlertCircle, Layers, Package,
 } from 'lucide-react';
 
+type Reliability = 'alta' | 'media' | 'bassa';
+
 interface CohortCompositionEntry {
   lotId: number;
   animalCount: number;
   percentage: number;
+  estimatedLiveCount: number;
+  survivalRate: number | null;
+  reliability: Reliability;
+  reliabilityScore: number;
 }
 
 interface CohortSurvival {
@@ -26,6 +32,8 @@ interface CohortSurvival {
   currentLiveCount: number;
   activeCycles: number;
   survivalRate: number | null;
+  reliability: Reliability;
+  reliabilityScore: number;
   composition?: CohortCompositionEntry[];
 }
 
@@ -63,6 +71,44 @@ function statusBadge(status: string) {
     return <Badge variant="secondary">Chiusa</Badge>;
   }
   return <Badge variant="outline">{status}</Badge>;
+}
+
+const RELIABILITY_META: Record<Reliability, { label: string; dot: string; badge: string }> = {
+  alta: {
+    label: 'Affidabilità alta',
+    dot: 'bg-emerald-500',
+    badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  },
+  media: {
+    label: 'Affidabilità media',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-100 text-amber-800 border-amber-300',
+  },
+  bassa: {
+    label: 'Affidabilità bassa',
+    dot: 'bg-red-500',
+    badge: 'bg-red-100 text-red-800 border-red-300',
+  },
+};
+
+function ReliabilityBadge({ level, short = false }: { level: Reliability; short?: boolean }) {
+  const meta = RELIABILITY_META[level] ?? RELIABILITY_META.media;
+  return (
+    <Badge variant="outline" className={`gap-1.5 font-medium ${meta.badge}`} title={meta.label}>
+      <span className={`inline-block h-2 w-2 rounded-full ${meta.dot}`} />
+      {short ? level.charAt(0).toUpperCase() + level.slice(1) : meta.label}
+    </Badge>
+  );
+}
+
+function ReliabilityDot({ level }: { level: Reliability }) {
+  const meta = RELIABILITY_META[level] ?? RELIABILITY_META.media;
+  return (
+    <span className="inline-flex items-center gap-1.5" title={meta.label}>
+      <span className={`inline-block h-2.5 w-2.5 rounded-full ${meta.dot}`} />
+      <span className="text-xs capitalize text-muted-foreground">{level}</span>
+    </span>
+  );
 }
 
 function useLotMap() {
@@ -178,6 +224,10 @@ function CohortsList() {
                     <div className="font-semibold">{fmt(c.currentLiveCount)}</div>
                   </div>
                 </div>
+                <div className="flex items-center justify-between border-t pt-2">
+                  <span className="text-xs text-muted-foreground">Affidabilità dato</span>
+                  <ReliabilityBadge level={c.reliability} short />
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -225,9 +275,12 @@ function CohortDetail({ id }: { id: number }) {
                 </CardTitle>
                 {statusBadge(cohort.status)}
               </div>
-              <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                <Calendar className="h-4 w-4" />
-                Mescolamento: {fmtDate(cohort.mixDate)}
+              <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground mt-1">
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-4 w-4" />
+                  Mescolamento: {fmtDate(cohort.mixDate)}
+                </span>
+                <ReliabilityBadge level={cohort.reliability} />
               </div>
             </CardHeader>
             <CardContent>
@@ -258,10 +311,12 @@ function CohortDetail({ id }: { id: number }) {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Package className="h-4 w-4 text-violet-600" />
-                Composizione congelata per lotto
+                Stima per lotto e affidabilità
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Ripartizione dei vivi all'istante del mescolamento.
+                Vivi correnti stimati per lotto = quota congelata al mescolamento × sopravvivenza
+                misurata della coorte. Il semaforo indica quanto è solido il numero (verde = lotto
+                rimasto a lungo puro / dominante; rosso = mescolato presto / quota piccola).
               </p>
             </CardHeader>
             <CardContent>
@@ -275,8 +330,10 @@ function CohortDetail({ id }: { id: number }) {
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-4 font-medium">Lotto</th>
-                        <th className="py-2 px-4 font-medium text-right">Vivi congelati</th>
-                        <th className="py-2 pl-4 font-medium text-right">Quota</th>
+                        <th className="py-2 px-4 font-medium text-right">Vivi al mix</th>
+                        <th className="py-2 px-4 font-medium text-right">Quota</th>
+                        <th className="py-2 px-4 font-medium text-right">Vivi correnti (stima)</th>
+                        <th className="py-2 pl-4 font-medium text-center">Affidabilità</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -293,8 +350,19 @@ function CohortDetail({ id }: { id: number }) {
                                 {lotLabel(lotMap, entry.lotId)}
                               </Link>
                             </td>
-                            <td className="py-2 px-4 text-right font-semibold">{fmt(entry.animalCount)}</td>
-                            <td className="py-2 pl-4 text-right">{fmtPct(entry.percentage)}</td>
+                            <td className="py-2 px-4 text-right">{fmt(entry.animalCount)}</td>
+                            <td className="py-2 px-4 text-right">{fmtPct(entry.percentage)}</td>
+                            <td className="py-2 px-4 text-right font-semibold">
+                              {fmt(entry.estimatedLiveCount)}
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                ({fmtPct(entry.survivalRate)})
+                              </span>
+                            </td>
+                            <td className="py-2 pl-4">
+                              <div className="flex justify-center">
+                                <ReliabilityDot level={entry.reliability} />
+                              </div>
+                            </td>
                           </tr>
                         ))}
                     </tbody>

@@ -38,5 +38,14 @@ survivalRate = currentLive / initialAnimalCount.
 chronologically. It pre-loads all data in a few bulk queries and writes in batch — NEVER do
 per-selection round-trips inside one transaction (the naive version timed out / rolled back on Neon).
 
-## Scope boundary
-Precise per-lot numbers and a reliability semaphore are Fase 4 — out of Fase 3 scope.
+## Fase 4 — per-lot estimate + reliability semaphore (DONE)
+`cohort-survival.ts` now enriches each cohort: per-lot `estimatedLiveCount = currentLive × frozen
+quota` (pro-quota on frozen composition, rounded with largest-remainder so the per-lot sum equals
+`currentLiveCount` exactly), per-lot `survivalRate` = the cohort's survivalRate, and a reliability
+semaphore `alta|media|bassa`. Score = 0.6·purityRatio + 0.4·dominance, where purityRatio =
+(arrivalDate→firstMixDate)/(arrivalDate→today) per lot (PDF: "lotto a lungo puro" = high), dominance
+= quota. Thresholds 0.66 / 0.33. Cohort-level reliability = quota-weighted avg of lot scores. UI in
+`Coorti.tsx` (semaphore badge on list cards + detail header; per-lot table w/ stima & dot). List
+endpoint drops `composition`; detail keeps it. **Why pro-quota stays:** Piano_Sopravvivenza Fase 4
+mandates "ripartita in proporzione alla popolazione" — the semaphore communicates the uncertainty
+rather than trying to eliminate it.
