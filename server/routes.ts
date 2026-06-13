@@ -4716,7 +4716,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cohorts", async (req, res) => {
     try {
       const { listCohortSurvival } = await import('./services/cohort-survival');
-      const cohorts = await listCohortSurvival();
+      const flupsyIdRaw = req.query.flupsyId;
+      const flupsyId = flupsyIdRaw != null ? Number(flupsyIdRaw) : undefined;
+      const cohorts = await listCohortSurvival(
+        flupsyId != null && Number.isFinite(flupsyId) ? flupsyId : undefined
+      );
       res.json({ success: true, cohorts });
     } catch (error) {
       console.error("Errore elenco coorti:", error);

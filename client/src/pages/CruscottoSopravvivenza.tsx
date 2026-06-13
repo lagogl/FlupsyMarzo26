@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Activity, AlertCircle, Waves, Boxes, Container, Gauge, TrendingUp, Layers, ShieldCheck, HelpCircle,
+  Activity, AlertCircle, Waves, Boxes, Container, Gauge, TrendingUp, Layers, ShieldCheck, HelpCircle, ChevronRight,
 } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend,
@@ -208,6 +209,7 @@ function TypeCard({ t }: { t: TypeSurvival }) {
 }
 
 export default function CruscottoSopravvivenza() {
+  const [, navigate] = useLocation();
   const { data, isLoading, isError } = useQuery<{ success: boolean; plant: PlantSurvival }>({
     queryKey: ['/api/plant-survival'],
   });
@@ -354,9 +356,32 @@ export default function CruscottoSopravvivenza() {
                       {plant.byModule.map((m) => {
                         const meta = TYPE_META[m.moduleType] ?? TYPE_META.flupsy;
                         const Icon = meta.icon;
+                        const goToCohorts = () =>
+                          navigate(
+                            `/coorti?flupsyId=${m.flupsyId}&flupsyName=${encodeURIComponent(m.name)}`
+                          );
                         return (
-                          <tr key={m.flupsyId} className="border-b last:border-0" data-testid={`row-module-${m.flupsyId}`}>
-                            <td className="py-2 pr-4 font-medium">{m.name}</td>
+                          <tr
+                            key={m.flupsyId}
+                            className="border-b last:border-0 cursor-pointer hover:bg-muted/50 transition-colors"
+                            data-testid={`row-module-${m.flupsyId}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={goToCohorts}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                goToCohorts();
+                              }
+                            }}
+                            title={`Vedi le coorti del modulo ${m.name}`}
+                          >
+                            <td className="py-2 pr-4 font-medium">
+                              <span className="inline-flex items-center gap-1.5">
+                                {m.name}
+                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                              </span>
+                            </td>
                             <td className="py-2 px-4">
                               <span className="inline-flex items-center gap-1.5 text-xs">
                                 <Icon className={`h-3.5 w-3.5 ${meta.tint}`} />

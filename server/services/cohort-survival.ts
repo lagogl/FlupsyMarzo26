@@ -431,12 +431,32 @@ function enrichWithLotEstimates(
 }
 
 /** Elenca tutte le coorti con la loro sopravvivenza misurata e affidabilità complessiva (Fase 4). */
-export async function listCohortSurvival(): Promise<CohortSurvival[]> {
-  const allCohorts = await db
+/**
+ * Restituisce gli ID delle coorti che hanno almeno un ciclo ATTIVO collocato nel modulo (flupsy)
+ * indicato. Usato per filtrare l'elenco coorti quando si arriva dal cruscotto di un singolo modulo.
+ */
+async function loadCohortIdsByFlupsy(flupsyId: number): Promise<Set<number>> {
+  const result = await db.execute(sql`
+    SELECT DISTINCT c.cohort_id
+    FROM cycles c
+    JOIN baskets b ON b.id = c.basket_id
+    WHERE c.state = 'active' AND c.cohort_id IS NOT NULL AND b.flupsy_id = ${flupsyId}
+  `);
+  return new Set((result.rows as any[]).map((row) => Number(row.cohort_id)));
+}
+
+export async function listCohortSurvival(flupsyId?: number): Promise<CohortSurvival[]> {
+  let allCohorts = await db
     .select()
     .from(cohorts)
     .orderBy(sql`${cohorts.mixDate} DESC, ${cohorts.id} DESC`);
   if (allCohorts.length === 0) return [];
+
+  if (flupsyId != null && Number.isFinite(flupsyId)) {
+    const cohortIds = await loadCohortIdsByFlupsy(flupsyId);
+    allCohorts = allCohorts.filter((c) => cohortIds.has(c.id));
+    if (allCohorts.length === 0) return [];
+  }
 
   const [liveMap, exitsMap, allComposition, purityMap] = await Promise.all([
     computeCurrentLiveByCohort(),

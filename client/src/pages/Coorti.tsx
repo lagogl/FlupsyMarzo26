@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useLocation, useRoute, Link } from 'wouter';
+import { useLocation, useRoute, useSearch, Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   GitMerge, ArrowLeft, Calendar, Hash, Activity, Heart,
   AlertCircle, Layers, Package, Skull, ShoppingCart, ArrowRightLeft, Shuffle,
+  Filter, X,
 } from 'lucide-react';
 
 type Reliability = 'alta' | 'media' | 'bassa';
@@ -179,8 +180,15 @@ function lotLabel(lotMap: Map<number, Lot>, lotId: number): string {
 // ============ LISTA COORTI ============
 function CohortsList() {
   const [, navigate] = useLocation();
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const flupsyIdParam = searchParams.get('flupsyId');
+  const flupsyId = flupsyIdParam != null && flupsyIdParam !== '' ? Number(flupsyIdParam) : null;
+  const flupsyName = searchParams.get('flupsyName');
+  const isFiltered = flupsyId != null && Number.isFinite(flupsyId);
+
   const { data, isLoading, isError } = useQuery<{ success: boolean; cohorts: CohortSurvival[] }>({
-    queryKey: ['/api/cohorts'],
+    queryKey: isFiltered ? ['/api/cohorts', { flupsyId }] : ['/api/cohorts'],
   });
   const cohorts = data?.cohorts ?? [];
 
@@ -197,6 +205,36 @@ function CohortsList() {
           </p>
         </div>
       </div>
+
+      {isFiltered && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 rounded-lg border bg-muted/40 px-4 py-3" data-testid="banner-flupsy-filter">
+          <div className="flex items-center gap-2 text-sm">
+            <Filter className="h-4 w-4 text-violet-600" />
+            <span>
+              Coorti filtrate per il modulo{' '}
+              <span className="font-semibold">{flupsyName || `#${flupsyId}`}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/coorti')}
+              data-testid="button-clear-flupsy-filter"
+            >
+              <X className="h-4 w-4 mr-1" /> Rimuovi filtro
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/cruscotto-sopravvivenza')}
+              data-testid="button-back-to-dashboard"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" /> Torna al cruscotto
+            </Button>
+          </div>
+        </div>
+      )}
 
       {isLoading && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
