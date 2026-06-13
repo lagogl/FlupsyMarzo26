@@ -120,10 +120,14 @@ export async function backfillCohorts(): Promise<CohortBackfillResult> {
   for (const sel of selectionsList) {
     const selId = Number(sel.id);
 
+    const srcLots = fallbackBySel.get(selId) || [];
     let destComp = destCompBySel.get(selId) || [];
-    if (destComp.length === 0) destComp = fallbackBySel.get(selId) || [];
+    if (destComp.length === 0) destComp = srcLots;
 
-    const isMixed = destComp.length > 1;
+    // isMixed dalla cardinalità dei lotti ORIGINE (parità col percorso live, che usa la
+    // cardinalità di lotComposition aggregata dalle origini), non dalla composizione destinazione
+    // — evita divergenze su arrotondamenti che azzerano un lotto minoritario in destinazione.
+    const isMixed = srcLots.length > 1;
     const totalDest = destComp.reduce((a, b) => a + b.animals, 0);
 
     const src = srcCyclesBySel.get(selId) || { ids: [], hasNull: false };

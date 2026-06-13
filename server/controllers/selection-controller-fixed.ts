@@ -427,6 +427,25 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           }
         }
         console.log(`🧬 FASE 3: Creata coorte #${newCohort.id} "${cohortCode}" — ${totalAnimalsDestination} vivi congelati su ${frozenRows.filter(f => f.animals > 0).length} lotti`);
+      } else if (targetCohortId != null) {
+        // AVANZAMENTO di una coorte esistente: la ripartizione interna per lotto DEVE derivare
+        // dalla foto congelata della coorte (cohort_composition), NON da una nuova stima pro-quota
+        // dalle origini. Questo elimina la deriva sistematica tra una vagliatura e l'altra
+        // (constraint Fase 3: "ripartizione interna congelata al mix, mai ri-stimata").
+        const frozen = await tx.select({
+          lotId: cohortComposition.lotId,
+          percentage: cohortComposition.percentage,
+        })
+          .from(cohortComposition)
+          .where(eq(cohortComposition.cohortId, targetCohortId));
+        if (frozen.length > 0) {
+          lotPercentages = new Map<number, number>();
+          for (const fr of frozen) lotPercentages.set(fr.lotId, Number(fr.percentage));
+          const dom = frozen.reduce((a, b) => (Number(b.percentage) > Number(a.percentage) ? b : a), frozen[0]);
+          primaryLotId = dom.lotId;
+          isMixedLot = frozen.length > 1;
+          console.log(`🧬 FASE 3: Ripartizione interna dalla foto congelata coorte #${targetCohortId} (${frozen.length} lotti, nessuna ri-stima pro-quota)`);
+        }
       }
 
       const basketToCycleMap = new Map<number, number>();
