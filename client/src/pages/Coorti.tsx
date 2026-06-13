@@ -122,19 +122,31 @@ function statusBadge(status: string) {
   return <Badge variant="outline">{status}</Badge>;
 }
 
-const RELIABILITY_META: Record<Reliability, { label: string; dot: string; badge: string }> = {
+const RELIABILITY_META: Record<Reliability, { label: string; tooltip: string; dot: string; badge: string }> = {
   alta: {
     label: 'Affidabilità alta',
+    tooltip:
+      'Affidabilità alta: i lotti che compongono questa coorte sono rimasti puri a lungo prima di essere mescolati ' +
+      'e/o uno di essi domina nettamente la composizione. ' +
+      'La suddivisione dei vivi per lotto è ben tracciata e le stime per lotto sono affidabili.',
     dot: 'bg-emerald-500',
     badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
   },
   media: {
     label: 'Affidabilità media',
+    tooltip:
+      'Affidabilità media: i lotti sono stati mescolati relativamente presto oppure nessuno di essi domina ' +
+      'nettamente la composizione. ' +
+      'I vivi totali della coorte sono affidabili, ma la suddivisione per singolo lotto è una stima con margine di incertezza.',
     dot: 'bg-amber-500',
     badge: 'bg-amber-100 text-amber-800 border-amber-300',
   },
   bassa: {
     label: 'Affidabilità bassa',
+    tooltip:
+      'Affidabilità bassa: i lotti sono stati mescolati molto presto o la composizione è molto frammentata tra tanti lotti. ' +
+      'La suddivisione per lotto è una stima approssimativa. ' +
+      'Il dato totale rimane valido, ma interpretare le quote per lotto con prudenza.',
     dot: 'bg-red-500',
     badge: 'bg-red-100 text-red-800 border-red-300',
   },
@@ -143,7 +155,7 @@ const RELIABILITY_META: Record<Reliability, { label: string; dot: string; badge:
 function ReliabilityBadge({ level, short = false }: { level: Reliability; short?: boolean }) {
   const meta = RELIABILITY_META[level] ?? RELIABILITY_META.media;
   return (
-    <Badge variant="outline" className={`gap-1.5 font-medium ${meta.badge}`} title={meta.label}>
+    <Badge variant="outline" className={`gap-1.5 font-medium ${meta.badge}`} title={meta.tooltip}>
       <span className={`inline-block h-2 w-2 rounded-full ${meta.dot}`} />
       {short ? level.charAt(0).toUpperCase() + level.slice(1) : meta.label}
     </Badge>
@@ -153,7 +165,7 @@ function ReliabilityBadge({ level, short = false }: { level: Reliability; short?
 function ReliabilityDot({ level }: { level: Reliability }) {
   const meta = RELIABILITY_META[level] ?? RELIABILITY_META.media;
   return (
-    <span className="inline-flex items-center gap-1.5" title={meta.label}>
+    <span className="inline-flex items-center gap-1.5" title={meta.tooltip}>
       <span className={`inline-block h-2.5 w-2.5 rounded-full ${meta.dot}`} />
       <span className="text-xs capitalize text-muted-foreground">{level}</span>
     </span>
