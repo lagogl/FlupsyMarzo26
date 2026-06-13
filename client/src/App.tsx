@@ -102,6 +102,8 @@ import ReportPesoCeste from "@/pages/ReportPesoCeste";
 // Importazione IMM (Indice di Maturità del Magazzino)
 import IMM from "@/pages/IMM";
 import Manuale from "@/pages/Manuale";
+// Importazione Coorti di Mescolamento (Fase 3)
+import Coorti from "@/pages/Coorti";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
@@ -189,6 +191,8 @@ function Router() {
       <ProtectedRoute path="/operators" component={Operators}/>
       <ProtectedRoute path="/lci" component={LCIModule}/>
       <ProtectedRoute path="/storia-animali" component={LineageAnimali}/>
+      <ProtectedRoute path="/coorti/:id" component={Coorti}/>
+      <ProtectedRoute path="/coorti" component={Coorti}/>
       <ProtectedRoute path="/diario-ambientale" component={DiarioAmbientale}/>
       <ProtectedRoute path="/sonda-df-sifoni" component={SeneyeMonitor}/>
       <ProtectedRoute path="/mappa-gis" component={MappaGISLaguna}/>

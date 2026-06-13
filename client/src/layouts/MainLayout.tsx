@@ -10,7 +10,7 @@ import {
   FileJson, Download, Database, Leaf, LogOut, LayoutGrid,
   CloudIcon, Table, Brain, CalendarDays, Globe, History, FileSpreadsheet, Split,
   ClipboardList, Users, FolderOpen, Sparkles, Radio, Target, Eye, EyeOff, Star,
-  AlertCircle, ShieldCheck, Skull, ArrowLeftRight, Ruler
+  AlertCircle, ShieldCheck, Skull, ArrowLeftRight, Ruler, GitMerge
 } from "lucide-react";
 import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
@@ -170,6 +170,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <ClipboardList className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.taskManagement || "Gestione Attività", path: "/task-management" },
         { icon: <Users className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.operators || "Gestione Operatori", path: "/operators" },
         { icon: <History className="h-5 w-5 mr-2 text-emerald-600" />, label: "Storia Animali", path: "/storia-animali" },
+        { icon: <GitMerge className="h-5 w-5 mr-2 text-violet-600" />, label: "Coorti di Mescolamento", path: "/coorti" },
         { icon: <Package className="h-5 w-5 mr-2 text-emerald-600" />, label: translations.menuItems.reportLotto, path: "/report-lotto" },
         { icon: <AlertCircle className="h-5 w-5 mr-2 text-amber-600" />, label: "Vagliature sospette", path: "/vagliature-sospette" },
         { icon: <Leaf className="h-5 w-5 mr-2 text-teal-600" />, label: "Diario Ambientale", path: "/diario-ambientale" },
