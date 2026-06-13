@@ -38,6 +38,7 @@ interface NavItem {
   label: string;
   path: string;
   badge?: number | string;
+  gianluigiOnly?: boolean;
 }
 
 // Definizione del tipo per le categorie di menu
@@ -55,6 +56,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
+  const isGianluigi = user?.username?.toLowerCase() === 'gianluigi';
   const { translations, currentLanguage, changeLanguage } = useTranslation();
   const queryClient = useQueryClient();
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
@@ -200,12 +202,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
       icon: <PieChart className="h-5 w-5" />,
       color: 'text-purple-600',
       items: [
-        { icon: <Brain className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiDashboard, path: "/ai-dashboard" },
-        { icon: <ClipboardList className="h-5 w-5 mr-2 text-purple-600" />, label: "Attività Consigliate", path: "/attivita-consigliate" },
-        { icon: <FileSpreadsheet className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiReportGenerator, path: "/ai-report-generator" },
-        { icon: <Sparkles className="h-5 w-5 mr-2 text-purple-600" />, label: "AI Enhanced (BETA)", path: "/ai-enhanced" },
-        { icon: <BarChart3 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiGrowthVariability, path: "/growth-variability-analysis" },
-        { icon: <BarChart className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.statistics, path: "/statistics" },
+        { icon: <Brain className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiDashboard, path: "/ai-dashboard", gianluigiOnly: true },
+        { icon: <ClipboardList className="h-5 w-5 mr-2 text-purple-600" />, label: "Attività Consigliate", path: "/attivita-consigliate", gianluigiOnly: true },
+        { icon: <FileSpreadsheet className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiReportGenerator, path: "/ai-report-generator", gianluigiOnly: true },
+        { icon: <Sparkles className="h-5 w-5 mr-2 text-purple-600" />, label: "AI Enhanced (BETA)", path: "/ai-enhanced", gianluigiOnly: true },
+        { icon: <BarChart3 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiGrowthVariability, path: "/growth-variability-analysis", gianluigiOnly: true },
+        { icon: <BarChart className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.statistics, path: "/statistics", gianluigiOnly: true },
         { icon: <BarChart2 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.lotsAnalytics, path: "/lots-analytics" },
         { icon: <Split className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.mixedLotsAnalytics, path: "/mixed-lots-analytics" },
         { icon: <Filter className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.lotLedgerStatistics, path: "/lot-ledger-statistics" },
@@ -381,7 +383,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             {compactMode && favoriteMenuItems.length > 0 ? (
               <div className="space-y-1">
                 <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">I tuoi preferiti</div>
-                {navCategories.flatMap(cat => cat.items).filter(item => favoriteMenuItems.includes(item.path) && !hiddenMenuItems.includes(item.path)).map((item) => (
+                {navCategories.flatMap(cat => cat.items).filter(item => favoriteMenuItems.includes(item.path) && !hiddenMenuItems.includes(item.path) && (!item.gianluigiOnly || isGianluigi)).map((item) => (
                   <a
                     key={item.path}
                     onClick={(e) => { e.preventDefault(); handleNavClick(item.path); }}
@@ -405,7 +407,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
               </div>
             ) : (
             navCategories.map((category) => {
-              const visibleItems = category.items.filter(item => !hiddenMenuItems.includes(item.path));
+              const visibleItems = category.items.filter(item => !hiddenMenuItems.includes(item.path) && (!item.gianluigiOnly || isGianluigi));
               if (visibleItems.length === 0) return null;
               return (
               <div key={category.id} className="space-y-1">
