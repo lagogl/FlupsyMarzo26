@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   GitMerge, ArrowLeft, Calendar, Hash, Activity, Heart,
-  AlertCircle, Layers, Package,
+  AlertCircle, Layers, Package, Skull, ShoppingCart, ArrowRightLeft, Shuffle,
 } from 'lucide-react';
 
 type Reliability = 'alta' | 'media' | 'bassa';
@@ -17,7 +17,10 @@ interface CohortCompositionEntry {
   animalCount: number;
   percentage: number;
   estimatedLiveCount: number;
+  estimatedExitCount: number;
+  estimatedMortalityCount: number;
   survivalRate: number | null;
+  mortalityRate: number | null;
   reliability: Reliability;
   reliabilityScore: number;
 }
@@ -32,6 +35,13 @@ interface CohortSurvival {
   currentLiveCount: number;
   activeCycles: number;
   survivalRate: number | null;
+  soldCount: number;
+  transferredCount: number;
+  resortedCount: number;
+  exitCount: number;
+  mortalityCount: number;
+  mortalityRate: number | null;
+  realSurvivalRate: number | null;
   reliability: Reliability;
   reliabilityScore: number;
   composition?: CohortCompositionEntry[];
@@ -60,6 +70,44 @@ function survivalColor(rate: number | null): string {
   if (rate >= 0.85) return 'text-emerald-600';
   if (rate >= 0.6) return 'text-amber-600';
   return 'text-red-600';
+}
+
+function mortalityColor(rate: number | null): string {
+  if (rate == null) return 'text-gray-400';
+  if (rate <= 0.15) return 'text-emerald-600';
+  if (rate <= 0.4) return 'text-amber-600';
+  return 'text-red-600';
+}
+
+function pct(n: number, total: number): number {
+  return total > 0 ? (n / total) * 100 : 0;
+}
+
+/**
+ * Barra impilata che scompone i vivi iniziali in: vivi correnti, venduti, trasferiti,
+ * ri-vagliati e mortalità reale (principio "niente sparizioni").
+ */
+function CohortBreakdownBar({ c }: { c: CohortSurvival }) {
+  const total = c.initialAnimalCount || 0;
+  const segments = [
+    { label: 'Vivi', value: c.currentLiveCount, cls: 'bg-emerald-500' },
+    { label: 'Venduti', value: c.soldCount, cls: 'bg-blue-500' },
+    { label: 'Trasferiti', value: c.transferredCount, cls: 'bg-indigo-500' },
+    { label: 'Ri-vagliati', value: c.resortedCount, cls: 'bg-violet-500' },
+    { label: 'Mortalità', value: c.mortalityCount, cls: 'bg-red-500' },
+  ].filter((s) => s.value > 0);
+  return (
+    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100" data-testid="bar-cohort-breakdown">
+      {segments.map((s) => (
+        <div
+          key={s.label}
+          className={s.cls}
+          style={{ width: `${pct(s.value, total)}%` }}
+          title={`${s.label}: ${fmt(s.value)} (${pct(s.value, total).toFixed(1)}%)`}
+        />
+      ))}
+    </div>
+  );
 }
 
 function statusBadge(status: string) {
@@ -202,16 +250,31 @@ function CohortsList() {
                 <div className="flex items-end justify-between">
                   <div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Heart className="h-3 w-3" /> Sopravvivenza
+                      <Skull className="h-3 w-3" /> Mortalità reale
                     </div>
-                    <div className={`text-2xl font-bold ${survivalColor(c.survivalRate)}`}>
-                      {fmtPct(c.survivalRate)}
+                    <div className={`text-2xl font-bold ${mortalityColor(c.mortalityRate)}`} data-testid={`text-mortality-${c.id}`}>
+                      {fmtPct(c.mortalityRate)}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      Vivi in coorte {fmtPct(c.survivalRate)}
                     </div>
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
                     <div className="flex items-center gap-1 justify-end">
                       <Activity className="h-3 w-3" /> {c.activeCycles} cicli attivi
                     </div>
+                  </div>
+                </div>
+                <div className="space-y-1.5 border-t pt-2">
+                  <CohortBreakdownBar c={c} />
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />Vivi {fmt(c.currentLiveCount)}</span>
+                    {c.exitCount > 0 && (
+                      <span className="flex items-center gap-1"><ArrowRightLeft className="h-3 w-3 text-indigo-500" />Usciti {fmt(c.exitCount)}</span>
+                    )}
+                    {c.mortalityCount > 0 && (
+                      <span className="flex items-center gap-1"><Skull className="h-3 w-3 text-red-500" />Morti {fmt(c.mortalityCount)}</span>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm border-t pt-2">
@@ -283,13 +346,16 @@ function CohortDetail({ id }: { id: number }) {
                 <ReliabilityBadge level={cohort.reliability} />
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Sopravvivenza</div>
-                  <div className={`text-2xl font-bold ${survivalColor(cohort.survivalRate)}`}>
-                    {fmtPct(cohort.survivalRate)}
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Skull className="h-3 w-3" /> Mortalità reale
                   </div>
+                  <div className={`text-2xl font-bold ${mortalityColor(cohort.mortalityRate)}`} data-testid="text-detail-mortality">
+                    {fmtPct(cohort.mortalityRate)}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{fmt(cohort.mortalityCount)} animali</div>
                 </div>
                 <div className="rounded-lg border p-3">
                   <div className="text-xs text-muted-foreground">Vivi iniziali</div>
@@ -298,11 +364,42 @@ function CohortDetail({ id }: { id: number }) {
                 <div className="rounded-lg border p-3">
                   <div className="text-xs text-muted-foreground">Vivi correnti</div>
                   <div className="text-xl font-semibold">{fmt(cohort.currentLiveCount)}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">in coorte {fmtPct(cohort.survivalRate)}</div>
                 </div>
                 <div className="rounded-lg border p-3">
                   <div className="text-xs text-muted-foreground">Cicli attivi</div>
                   <div className="text-xl font-semibold">{fmt(cohort.activeCycles)}</div>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <CohortBreakdownBar c={cohort} />
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
+                  <div className="rounded-md bg-emerald-50 px-2 py-1.5">
+                    <div className="text-[11px] text-emerald-700 flex items-center gap-1"><Heart className="h-3 w-3" />Vivi</div>
+                    <div className="font-semibold">{fmt(cohort.currentLiveCount)}</div>
+                  </div>
+                  <div className="rounded-md bg-blue-50 px-2 py-1.5">
+                    <div className="text-[11px] text-blue-700 flex items-center gap-1"><ShoppingCart className="h-3 w-3" />Venduti</div>
+                    <div className="font-semibold">{fmt(cohort.soldCount)}</div>
+                  </div>
+                  <div className="rounded-md bg-indigo-50 px-2 py-1.5">
+                    <div className="text-[11px] text-indigo-700 flex items-center gap-1"><ArrowRightLeft className="h-3 w-3" />Trasferiti</div>
+                    <div className="font-semibold">{fmt(cohort.transferredCount)}</div>
+                  </div>
+                  <div className="rounded-md bg-violet-50 px-2 py-1.5">
+                    <div className="text-[11px] text-violet-700 flex items-center gap-1"><Shuffle className="h-3 w-3" />Ri-vagliati</div>
+                    <div className="font-semibold">{fmt(cohort.resortedCount)}</div>
+                  </div>
+                  <div className="rounded-md bg-red-50 px-2 py-1.5">
+                    <div className="text-[11px] text-red-700 flex items-center gap-1"><Skull className="h-3 w-3" />Mortalità</div>
+                    <div className="font-semibold">{fmt(cohort.mortalityCount)}</div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Principio "niente sparizioni": la mortalità è ciò che resta dopo aver scontato vivi
+                  correnti e uscite dichiarate (vendite, trasferimenti, ri-vagliature verso altre coorti).
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -333,6 +430,7 @@ function CohortDetail({ id }: { id: number }) {
                         <th className="py-2 px-4 font-medium text-right">Vivi al mix</th>
                         <th className="py-2 px-4 font-medium text-right">Quota</th>
                         <th className="py-2 px-4 font-medium text-right">Vivi correnti (stima)</th>
+                        <th className="py-2 px-4 font-medium text-right">Mortalità (stima)</th>
                         <th className="py-2 pl-4 font-medium text-center">Affidabilità</th>
                       </tr>
                     </thead>
@@ -356,6 +454,14 @@ function CohortDetail({ id }: { id: number }) {
                               {fmt(entry.estimatedLiveCount)}
                               <span className="ml-1 text-xs font-normal text-muted-foreground">
                                 ({fmtPct(entry.survivalRate)})
+                              </span>
+                            </td>
+                            <td className="py-2 px-4 text-right">
+                              <span className={mortalityColor(entry.mortalityRate)}>
+                                {fmt(entry.estimatedMortalityCount)}
+                              </span>
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                ({fmtPct(entry.mortalityRate)})
                               </span>
                             </td>
                             <td className="py-2 pl-4">

@@ -28,7 +28,10 @@ export interface CohortCompositionEntry {
   animalCount: number; // vivi congelati al mix (verità contata)
   percentage: number; // quota (0..1)
   estimatedLiveCount: number; // FASE 4: vivi correnti stimati = currentLive × quota
+  estimatedExitCount: number; // FASE 5: usciti dichiarati stimati (venduti+trasferiti+ri-vagliati) × quota
+  estimatedMortalityCount: number; // FASE 5: mortalità reale stimata × quota
   survivalRate: number | null; // FASE 4: sopravvivenza del lotto (= sopravvivenza coorte, pro-quota)
+  mortalityRate: number | null; // FASE 5: mortalità reale del lotto (= mortalità coorte, pro-quota)
   reliability: Reliability; // FASE 4: semaforo di affidabilità del numero per-lotto
   reliabilityScore: number; // FASE 4: punteggio 0..1 alla base del semaforo
 }
@@ -40,12 +43,27 @@ export interface CohortSurvival {
   mixDate: string;
   status: string;
   initialAnimalCount: number; // vivi congelati al mix
-  currentLiveCount: number; // vivi correnti (cicli attivi)
+  currentLiveCount: number; // vivi correnti (cicli attivi ancora nella coorte)
   activeCycles: number; // numero cicli attivi collegati
   survivalRate: number | null; // vivi correnti ÷ vivi iniziali (0..1), null se iniziale = 0
+  // ===== FASE 5: distinzione morti vs usciti (vendita/trasferimento/ri-vagliatura) =====
+  soldCount: number; // usciti per vendita
+  transferredCount: number; // usciti per trasferimento ad altra cesta
+  resortedCount: number; // usciti per ri-vagliatura → passati ad un'altra coorte
+  exitCount: number; // usciti dichiarati totali = sold + transferred + resorted
+  mortalityCount: number; // mortalità reale = vivi iniziali − vivi correnti − usciti (clamp ≥ 0)
+  mortalityRate: number | null; // mortalità reale ÷ vivi iniziali (0..1), null se iniziale = 0
+  realSurvivalRate: number | null; // (vivi iniziali − mortalità) ÷ vivi iniziali = 1 − mortalityRate
   reliability: Reliability; // FASE 4: affidabilità complessiva della coorte
   reliabilityScore: number; // FASE 4: punteggio 0..1 (media pesata sui lotti)
   composition?: CohortCompositionEntry[];
+}
+
+/** Uscite dichiarate di una coorte, separate dalla mortalità reale (Fase 5). */
+export interface CohortExits {
+  sold: number; // venduti (vendita / selezione-vendita, incl. quota venduta in vagliatura)
+  transferred: number; // trasferiti ad altra cesta (lasciano la coorte)
+  resorted: number; // ri-vagliati: passati ad un'altra coorte (mescolamento successivo)
 }
 
 // Pesi del punteggio di affidabilità per-lotto (Fase 4).
@@ -124,6 +142,132 @@ async function computeCurrentLiveByCohort(
 }
 
 /**
+ * FASE 5 — Calcola le USCITE DICHIARATE di ciascuna coorte, distinte dalla mortalità reale.
+ *
+ * Per ogni ciclo CHIUSO collegato alla coorte si guarda l'ultima operazione (la disposizione
+ * finale degli animali) e la si classifica:
+ *  - `vendita` / `selezione-vendita` → VENDUTI (escono dal sistema).
+ *  - `trasferimento` → TRASFERITI (la cesta di destinazione NON eredita la coorte → lasciano la coorte).
+ *  - `vagliatura` / `chiusura-ciclo-vagliatura` → gli animali entrano in una vagliatura:
+ *      • se la destinazione resta nella STESSA coorte (avanzamento/carry-forward) → NON è un'uscita
+ *        (sono già contati nei "vivi correnti" tramite il ciclo attivo di destinazione → si esclude
+ *        per evitare doppio conteggio);
+ *      • se la destinazione va in un'ALTRA coorte (mescolamento) → RI-VAGLIATI (escono da questa coorte).
+ *        La quota eventualmente venduta nella stessa vagliatura viene attribuita a VENDUTI.
+ *  - altri tipi terminali (cessazione, chiusura-ciclo manuale, …) NON sono uscite → restano nel
+ *    residuo che diventa mortalità reale.
+ *
+ * Nessun tipo di uscita può sovrapporsi ai "vivi correnti": vendita/cessazione chiudono il ciclo
+ * senza rimpiazzo, il trasferimento crea un ciclo senza coorte, e la ri-vagliatura è contata solo
+ * quando porta fuori dalla coorte. Così "vivi correnti + uscite" non doppia mai gli stessi animali.
+ */
+async function computeExitsByCohort(
+  cohortIds?: number[]
+): Promise<Map<number, CohortExits>> {
+  const filter =
+    cohortIds && cohortIds.length > 0
+      ? sql`AND c.cohort_id IN (${sql.join(cohortIds.map((n) => sql`${Number(n)}`), sql`, `)})`
+      : sql``;
+
+  const result = await db.execute(sql`
+    WITH cohort_cycles AS (
+      SELECT c.id AS cycle_id, c.cohort_id
+      FROM cycles c
+      WHERE c.cohort_id IS NOT NULL AND c.state = 'closed'
+      ${filter}
+    ),
+    latest_op AS (
+      SELECT DISTINCT ON (o.cycle_id)
+        o.cycle_id, o.type, o.animal_count
+      FROM operations o
+      JOIN cohort_cycles cc ON cc.cycle_id = o.cycle_id
+      WHERE o.cancelled_at IS NULL AND o.animal_count IS NOT NULL
+      ORDER BY o.cycle_id, o.date DESC, o.id DESC
+    ),
+    classified AS (
+      SELECT cc.cohort_id, lo.cycle_id, lo.type, lo.animal_count
+      FROM latest_op lo
+      JOIN cohort_cycles cc ON cc.cycle_id = lo.cycle_id
+    ),
+    -- Vagliatura che ha chiuso ogni ciclo origine (la più recente in cui compare come origine).
+    src_sel AS (
+      SELECT DISTINCT ON (ssb.cycle_id) ssb.cycle_id, ssb.selection_id
+      FROM selection_source_baskets ssb
+      JOIN selections s ON s.id = ssb.selection_id
+      ORDER BY ssb.cycle_id, s.date DESC, ssb.selection_id DESC
+    ),
+    -- Dettaglio destinazioni della vagliatura, con la coorte di destinazione (NULL se venduta o senza ciclo).
+    sel_dest_detail AS (
+      SELECT sdb.selection_id,
+        sdb.destination_type,
+        dc.cohort_id AS dest_cohort,
+        COALESCE(sdb.live_animals, sdb.animal_count, 0) AS live
+      FROM selection_destination_baskets sdb
+      LEFT JOIN cycles dc ON dc.id = sdb.cycle_id
+    ),
+    -- Totali per selezione: vivi totali in destinazione e quota venduta.
+    sel_agg AS (
+      SELECT selection_id,
+        NULLIF(SUM(live), 0) AS total_a,
+        COALESCE(SUM(live) FILTER (WHERE destination_type = 'sold'), 0) AS sold_a
+      FROM sel_dest_detail
+      GROUP BY selection_id
+    ),
+    -- Vivi posizionati che RESTANO nella stessa coorte (carry-forward), per coorte di destinazione.
+    sel_samecohort AS (
+      SELECT selection_id, dest_cohort AS cohort_id, SUM(live) AS same_a
+      FROM sel_dest_detail
+      WHERE destination_type IS DISTINCT FROM 'sold' AND dest_cohort IS NOT NULL
+      GROUP BY selection_id, dest_cohort
+    ),
+    b AS (
+      SELECT cl.cohort_id, cl.animal_count,
+        cl.type IN ('vendita', 'selezione-vendita') AS is_sale,
+        cl.type = 'trasferimento' AS is_transfer,
+        cl.type IN ('chiusura-ciclo-vagliatura', 'vagliatura') AS is_vag,
+        sa.sold_a, sa.total_a,
+        COALESCE(ssc.same_a, 0) AS same_a
+      FROM classified cl
+      LEFT JOIN src_sel ss ON ss.cycle_id = cl.cycle_id
+      LEFT JOIN sel_agg sa ON sa.selection_id = ss.selection_id
+      -- carry-forward riferito alla coorte ORIGINE di questo ciclo (gestisce vagliature multi-coorte).
+      LEFT JOIN sel_samecohort ssc ON ssc.selection_id = ss.selection_id AND ssc.cohort_id = cl.cohort_id
+    )
+    -- Allocazione a livello di destinazione (gestisce vagliature MISTE: parte carry-forward + parte
+    -- venduta/ri-vagliata). La quota carry-forward (same_a) NON è un'uscita: resta nei vivi correnti.
+    SELECT cohort_id,
+      COALESCE(SUM(
+        CASE
+          WHEN is_sale THEN animal_count
+          WHEN is_vag AND total_a IS NOT NULL
+            THEN ROUND(animal_count * (sold_a::numeric / total_a))
+          ELSE 0
+        END
+      ), 0)::bigint AS sold,
+      COALESCE(SUM(CASE WHEN is_transfer THEN animal_count ELSE 0 END), 0)::bigint AS transferred,
+      COALESCE(SUM(
+        CASE
+          WHEN is_vag AND total_a IS NOT NULL
+            THEN ROUND(animal_count * (GREATEST(total_a - sold_a - same_a, 0)::numeric / total_a))
+          ELSE 0
+        END
+      ), 0)::bigint AS resorted
+    FROM b
+    GROUP BY cohort_id
+  `);
+
+  const map = new Map<number, CohortExits>();
+  for (const row of result.rows as any[]) {
+    map.set(Number(row.cohort_id), {
+      sold: Number(row.sold) || 0,
+      transferred: Number(row.transferred) || 0,
+      resorted: Number(row.resorted) || 0,
+    });
+  }
+  return map;
+}
+
+/**
  * Carica, per ogni lotto, la data di arrivo e la data del PRIMO mescolamento in cui compare.
  * Serve a stimare la "durata pura" del lotto (arrivo → primo mix), base dell'affidabilità Fase 4.
  */
@@ -184,11 +328,29 @@ function computeLotReliabilityScore(
 
 function buildSurvival(
   cohort: typeof cohorts.$inferSelect,
-  live: { currentLive: number; activeCycles: number } | undefined
+  live: { currentLive: number; activeCycles: number } | undefined,
+  exits: CohortExits | undefined
 ): CohortSurvival {
   const currentLiveCount = live?.currentLive ?? 0;
   const activeCycles = live?.activeCycles ?? 0;
   const initial = cohort.initialAnimalCount || 0;
+
+  // FASE 5 — Uscite dichiarate vs mortalità reale (principio "niente sparizioni").
+  // Le uscite non possono superare ciò che resta dopo i vivi correnti.
+  const soldRaw = exits?.sold ?? 0;
+  const transferredRaw = exits?.transferred ?? 0;
+  const resortedRaw = exits?.resorted ?? 0;
+  const exitRaw = soldRaw + transferredRaw + resortedRaw;
+  const exitCount = Math.max(0, Math.min(exitRaw, Math.max(0, initial - currentLiveCount)));
+  // Se le uscite vengono limitate (anomalie/arrotondamenti), si riscalano proporzionalmente.
+  const scale = exitRaw > 0 ? exitCount / exitRaw : 0;
+  const soldCount = Math.round(soldRaw * scale);
+  const transferredCount = Math.round(transferredRaw * scale);
+  const resortedCount = Math.max(0, exitCount - soldCount - transferredCount);
+
+  // Mortalità reale = vivi iniziali − vivi correnti − uscite dichiarate (clamp ≥ 0).
+  const mortalityCount = Math.max(0, initial - currentLiveCount - exitCount);
+
   return {
     id: cohort.id,
     code: cohort.code,
@@ -199,6 +361,13 @@ function buildSurvival(
     currentLiveCount,
     activeCycles,
     survivalRate: initial > 0 ? currentLiveCount / initial : null,
+    soldCount,
+    transferredCount,
+    resortedCount,
+    exitCount,
+    mortalityCount,
+    mortalityRate: initial > 0 ? mortalityCount / initial : null,
+    realSurvivalRate: initial > 0 ? (initial - mortalityCount) / initial : null,
     reliability: "media",
     reliabilityScore: 0,
   };
@@ -228,8 +397,12 @@ function enrichWithLotEstimates(
   const normFractions =
     fracSum > 0 ? fractions.map((f) => f / fracSum) : composition.map(() => 1 / composition.length);
   const estimates = distributePreservingSum(normFractions, survival.currentLiveCount);
+  // FASE 5 — stessa ripartizione pro-quota anche per uscite e mortalità reale.
+  const exitEstimates = distributePreservingSum(normFractions, survival.exitCount);
+  const mortalityEstimates = distributePreservingSum(normFractions, survival.mortalityCount);
 
   const cohortSurvivalRate = survival.survivalRate;
+  const cohortMortalityRate = survival.mortalityRate;
   let weightedScore = 0;
   let weightSum = 0;
 
@@ -243,7 +416,10 @@ function enrichWithLotEstimates(
       animalCount: e.animalCount,
       percentage: e.percentage,
       estimatedLiveCount: estimates[idx] ?? 0,
+      estimatedExitCount: exitEstimates[idx] ?? 0,
+      estimatedMortalityCount: mortalityEstimates[idx] ?? 0,
       survivalRate: cohortSurvivalRate,
+      mortalityRate: cohortMortalityRate,
       reliability: scoreToReliability(score),
       reliabilityScore: Number(score.toFixed(3)),
     };
@@ -262,8 +438,9 @@ export async function listCohortSurvival(): Promise<CohortSurvival[]> {
     .orderBy(sql`${cohorts.mixDate} DESC, ${cohorts.id} DESC`);
   if (allCohorts.length === 0) return [];
 
-  const [liveMap, allComposition, purityMap] = await Promise.all([
+  const [liveMap, exitsMap, allComposition, purityMap] = await Promise.all([
     computeCurrentLiveByCohort(),
+    computeExitsByCohort(),
     db.select().from(cohortComposition),
     loadLotPurityData(),
   ]);
@@ -277,7 +454,7 @@ export async function listCohortSurvival(): Promise<CohortSurvival[]> {
 
   const referenceDate = new Date().toISOString().slice(0, 10);
   return allCohorts.map((c) => {
-    const survival = buildSurvival(c, liveMap.get(c.id));
+    const survival = buildSurvival(c, liveMap.get(c.id), exitsMap.get(c.id));
     enrichWithLotEstimates(survival, compByCohort.get(c.id) ?? [], purityMap, referenceDate);
     // La lista non espone la composizione dettagliata (resta nel dettaglio).
     delete survival.composition;
@@ -290,13 +467,14 @@ export async function getCohortSurvival(cohortId: number): Promise<CohortSurviva
   const [cohort] = await db.select().from(cohorts).where(eq(cohorts.id, cohortId)).limit(1);
   if (!cohort) return null;
 
-  const [liveMap, composition, purityMap] = await Promise.all([
+  const [liveMap, exitsMap, composition, purityMap] = await Promise.all([
     computeCurrentLiveByCohort([cohortId]),
+    computeExitsByCohort([cohortId]),
     db.select().from(cohortComposition).where(eq(cohortComposition.cohortId, cohortId)),
     loadLotPurityData(),
   ]);
 
-  const survival = buildSurvival(cohort, liveMap.get(cohortId));
+  const survival = buildSurvival(cohort, liveMap.get(cohortId), exitsMap.get(cohortId));
   const referenceDate = new Date().toISOString().slice(0, 10);
   enrichWithLotEstimates(
     survival,

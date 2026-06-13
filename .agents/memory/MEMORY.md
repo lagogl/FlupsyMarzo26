@@ -6,3 +6,4 @@
 - [Cohorts Fase 3](cohorts-fase3.md) — vagliatura mix freezes a per-lot live snapshot as one counted unit; survival = current÷frozen. Creation rule must stay identical in live path and backfill (incl. totalDest>0 guard).
 - [Lot mortality canonical recompute](lot-mortality-canonical-recompute.md) — lot mortality only from vagliature/screening, counted once via idempotent recomputeLotMortality; misura is indicator-only, never inflates it.
 - [Vagliatura closure balance check](vagliatura-balance-check.md) — origine=destinazione+mortalità; ±1% tolerance, loss>1% needs confirm, gain (incl. origin=0) is non-bypassable anomaly; 3% email threshold is separate.
+- [Cohort exits vs mortality](cohort-exits-vs-mortality.md) — survival must subtract declared exits (sale/transfer/re-sort) before calling the rest mortality; carry-forward vagliatura excluded (already in currentLive).
