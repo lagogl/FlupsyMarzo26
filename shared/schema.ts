@@ -370,6 +370,32 @@ export const basketLotComposition = pgTable("basket_lot_composition", {
   notes: text("notes") // Note aggiuntive
 });
 
+// FASE 3 — COORTI DI MESCOLAMENTO
+// Una coorte rappresenta un gruppo di animali fisicamente mescolato e indistinguibile,
+// nato da una vagliatura che combina lotti/coorti diversi. Al momento del mix si
+// "fotografa" e si CONGELA il conteggio vivi per lotto: da lì la coorte è seguita come
+// un'unica unità contata, senza ri-stimare le proporzioni ad ogni vagliatura successiva.
+export const cohorts = pgTable("cohorts", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull(), // Etichetta parlante, es. "COORTE #12 (31/03)"
+  sourceSelectionId: integer("source_selection_id"), // Vagliatura che ha generato il mescolamento
+  mixDate: date("mix_date").notNull(), // Data dell'evento di mescolamento
+  initialAnimalCount: integer("initial_animal_count").notNull(), // Totale vivi congelato all'istante del mix (verità contata)
+  status: text("status", { enum: ["active", "closed"] }).notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Composizione congelata della coorte: per ogni lotto, vivi e percentuale all'istante del mix.
+export const cohortComposition = pgTable("cohort_composition", {
+  id: serial("id").primaryKey(),
+  cohortId: integer("cohort_id").notNull(), // Riferimento alla coorte
+  lotId: integer("lot_id").notNull(), // Lotto componente
+  animalCount: integer("animal_count").notNull(), // Vivi di questo lotto congelati al mix
+  percentage: real("percentage").notNull(), // Quota del lotto nella coorte (0..1)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Sizes (Taglie) - DEVE essere definita PRIMA di operations per il foreign key
 export const sizes = pgTable("sizes", {
   id: serial("id").primaryKey(),
@@ -394,6 +420,7 @@ export const cycles = pgTable("cycles", {
   lineageGroupId: integer("lineage_group_id"), // ID del ciclo radice della genealogia (uguale per tutti i cicli dello stesso gruppo animali)
   qualityClass: text("quality_class"), // Classificazione qualitativa: 'premium'=TESTE, 'normal'=MEDI, 'sub'=CODE — derivata dalla storia di vagliatura
   screeningLabel: text("screening_label"), // Etichetta parlante vagliatura: es. "31/03 -2500 +1500 (1)"
+  cohortId: integer("cohort_id"), // FASE 3: coorte di mescolamento di appartenenza (null = lotto puro mai mescolato). Nessuna FK (definita dopo).
 }, (table) => ({
   stateIdx: index("cycles_state_idx").on(table.state),
   basketIdIdx: index("cycles_basket_id_idx").on(table.basketId),
@@ -777,6 +804,16 @@ export const insertBasketLotCompositionSchema = createInsertSchema(basketLotComp
   createdAt: true
 });
 
+export const insertCohortSchema = createInsertSchema(cohorts).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertCohortCompositionSchema = createInsertSchema(cohortComposition).omit({
+  id: true,
+  createdAt: true
+});
+
 // Types
 export type Flupsy = typeof flupsys.$inferSelect;
 export type InsertFlupsy = z.infer<typeof insertFlupsySchema>;
@@ -872,6 +909,12 @@ export type InsertSelectionTaskAssignment = z.infer<typeof insertSelectionTaskAs
 
 export type BasketLotComposition = typeof basketLotComposition.$inferSelect;
 export type InsertBasketLotComposition = z.infer<typeof insertBasketLotCompositionSchema>;
+
+export type Cohort = typeof cohorts.$inferSelect;
+export type InsertCohort = z.infer<typeof insertCohortSchema>;
+
+export type CohortComposition = typeof cohortComposition.$inferSelect;
+export type InsertCohortComposition = z.infer<typeof insertCohortCompositionSchema>;
 
 // Extended schemas for validation
 export const operationSchema = insertOperationSchema.extend({

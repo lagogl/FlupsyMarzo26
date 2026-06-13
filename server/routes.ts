@@ -4712,6 +4712,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ====== FASE 3: COORTI DI MESCOLAMENTO (lettura) ======
+  app.get("/api/cohorts", async (req, res) => {
+    try {
+      const { listCohortSurvival } = await import('./services/cohort-survival');
+      const cohorts = await listCohortSurvival();
+      res.json({ success: true, cohorts });
+    } catch (error) {
+      console.error("Errore elenco coorti:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/cohorts/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ success: false, message: "ID coorte non valido" });
+      }
+      const { getCohortSurvival } = await import('./services/cohort-survival');
+      const cohort = await getCohortSurvival(id);
+      if (!cohort) {
+        return res.status(404).json({ success: false, message: `Coorte ${id} non trovata` });
+      }
+      res.json({ success: true, cohort });
+    } catch (error) {
+      console.error("Errore dettaglio coorte:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // ====== FASE 3: BACKFILL COORTI STORICHE (admin, idempotente) ======
+  app.post("/api/admin/backfill-cohorts", async (req, res) => {
+    try {
+      const { backfillCohorts } = await import('./services/cohort-backfill');
+      const result = await backfillCohorts();
+      res.json({ success: true, mode: 'apply', ...result });
+    } catch (error) {
+      console.error("Errore backfill coorti:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   app.post("/api/admin/lots/sync-sequence", async (req, res) => {
     try {
       // Importa il controller per la sequenza dei lotti

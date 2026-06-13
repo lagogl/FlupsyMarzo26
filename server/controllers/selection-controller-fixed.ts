@@ -7,7 +7,7 @@
  */
 import { Request, Response } from "express";
 import { db } from "../db";
-import { eq, and, or, isNull, isNotNull, sql } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, inArray, sql } from "drizzle-orm";
 import { 
   selections, 
   selectionSourceBaskets, 
@@ -15,6 +15,8 @@ import {
   selectionBasketHistory, 
   selectionLotReferences,
   basketLotComposition,
+  cohorts,
+  cohortComposition,
   operations,
   cycles,
   baskets,
@@ -348,6 +350,85 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         }
       }
       
+      // ====== FASE 3: DETERMINAZIONE COORTE DI MESCOLAMENTO ======
+      // Stabilisce se questa vagliatura: (a) avanza un'unica coorte esistente senza nuovi lotti
+      // (trascina avanti lo stesso cohortId, NESSUNA ri-foto), (b) crea una nuova coorte
+      // (mescolamento reale: lotti puri diversi, coorti diverse, o coorte + lotto esterno) con
+      // foto congelata dai vivi correnti, oppure (c) lotto puro mai mescolato → nessuna coorte.
+      const sourceCycleIds = Array.from(new Set(
+        sourceBasketData.map(sb => sb.cycleId).filter((x): x is number => x != null)
+      ));
+      const sourceCohortIds = new Set<number>();
+      let hasPureSource = false;
+      if (sourceCycleIds.length > 0) {
+        const srcCycles = await tx.select({ id: cycles.id, cohortId: cycles.cohortId })
+          .from(cycles)
+          .where(inArray(cycles.id, sourceCycleIds));
+        for (const c of srcCycles) {
+          if (c.cohortId != null) sourceCohortIds.add(c.cohortId);
+          else hasPureSource = true;
+        }
+        if (srcCycles.length < sourceCycleIds.length) hasPureSource = true;
+      } else {
+        hasPureSource = true;
+      }
+
+      let targetCohortId: number | null = null;
+      let createNewCohort = false;
+
+      if (sourceCohortIds.size === 1 && !hasPureSource) {
+        // Avanzamento di un'unica coorte esistente, nessun nuovo lotto/coorte: trascina avanti.
+        targetCohortId = Array.from(sourceCohortIds)[0];
+        console.log(`🧬 FASE 3: Avanzamento coorte esistente #${targetCohortId} (foto congelata invariata, nessuna ri-stima)`);
+      } else if ((sourceCohortIds.size >= 1 || isMixedLot) && totalAnimalsDestination > 0) {
+        // Mescolamento reale con vivi in destinazione → nuova coorte.
+        // Il vincolo totalAnimalsDestination > 0 mantiene la parità con il backfill ed evita
+        // coorti con vivi iniziali = 0 (composizione vuota).
+        createNewCohort = true;
+      }
+      // else: lotto puro mai mescolato → targetCohortId resta null (nessuna coorte).
+
+      if (createNewCohort) {
+        const cohortCode = `COORTE #${selection[0].selectionNumber} (${selection[0].date})`;
+        const mergedCohorts = Array.from(sourceCohortIds);
+        const [newCohort] = await tx.insert(cohorts).values({
+          code: cohortCode,
+          sourceSelectionId: Number(id),
+          mixDate: selection[0].date,
+          initialAnimalCount: totalAnimalsDestination,
+          status: 'active',
+          notes: mergedCohorts.length > 0
+            ? `Mescolamento vagliatura #${selection[0].selectionNumber}. Fonde coorti precedenti: ${mergedCohorts.join(', ')}.`
+            : `Mescolamento vagliatura #${selection[0].selectionNumber} di ${lotComposition.size} lotti.`,
+        }).returning();
+        targetCohortId = newCohort.id;
+
+        // Congela la composizione: proporzioni dell'origine applicate al totale vivi destinazione (verità contata).
+        let frozenTotal = 0;
+        const frozenRows: { lotId: number; animals: number; percentage: number }[] = [];
+        for (const [lotId, percentage] of Array.from(lotPercentages.entries())) {
+          const animals = Math.round(totalAnimalsDestination * percentage);
+          frozenRows.push({ lotId, animals, percentage });
+          frozenTotal += animals;
+        }
+        const frozenRemainder = totalAnimalsDestination - frozenTotal;
+        if (frozenRemainder !== 0 && frozenRows.length > 0) {
+          const dom = frozenRows.reduce((a, b) => (b.animals > a.animals ? b : a), frozenRows[0]);
+          dom.animals += frozenRemainder;
+        }
+        for (const fr of frozenRows) {
+          if (fr.animals > 0) {
+            await tx.insert(cohortComposition).values({
+              cohortId: newCohort.id,
+              lotId: fr.lotId,
+              animalCount: fr.animals,
+              percentage: fr.percentage,
+            });
+          }
+        }
+        console.log(`🧬 FASE 3: Creata coorte #${newCohort.id} "${cohortCode}" — ${totalAnimalsDestination} vivi congelati su ${frozenRows.filter(f => f.animals > 0).length} lotti`);
+      }
+
       const basketToCycleMap = new Map<number, number>();
       
       for (const destBasket of destinationBaskets) {
@@ -359,7 +440,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           basketId: destBasket.basketId,
           lotId: primaryLotId, // ✅ LOTTO PRINCIPALE per compatibilità DB
           startDate: selection[0].date,
-          state: 'active'
+          state: 'active',
+          cohortId: targetCohortId, // FASE 3: coorte di mescolamento (null se lotto puro)
         }).returning();
 
         basketToCycleMap.set(destBasket.basketId, newCycle.id);
