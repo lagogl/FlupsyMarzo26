@@ -4750,7 +4750,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/plant-survival", async (req, res) => {
     try {
       const { getPlantSurvival } = await import('./services/plant-survival');
-      const plant = await getPlantSurvival();
+      const days = Math.min(365, Math.max(30, Number(req.query.days) || 90));
+      const plant = await getPlantSurvival(days);
       res.json({ success: true, plant });
     } catch (error) {
       console.error("Errore cruscotto sopravvivenza impianto:", error);

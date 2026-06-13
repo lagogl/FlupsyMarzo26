@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -125,7 +125,13 @@ function SurvivalBar({ rate }: { rate: number | null }) {
   );
 }
 
-function TrendChart({ trend }: { trend: TrendPoint[] }) {
+const TREND_OPTIONS: { label: string; days: number }[] = [
+  { label: '90 gg', days: 90 },
+  { label: '6 mesi', days: 180 },
+  { label: '1 anno', days: 365 },
+];
+
+function TrendChart({ trend, days }: { trend: TrendPoint[]; days: number }) {
   const data = useMemo(
     () =>
       trend.map((p) => ({
@@ -141,7 +147,7 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
         <TrendingUp className="h-8 w-8 mb-2 opacity-40" />
-        <p className="text-sm">Nessuna vagliatura negli ultimi 90 giorni per calcolare la tendenza.</p>
+        <p className="text-sm">Nessuna vagliatura negli ultimi {days} giorni per calcolare la tendenza.</p>
       </div>
     );
   }
@@ -210,8 +216,9 @@ function TypeCard({ t }: { t: TypeSurvival }) {
 
 export default function CruscottoSopravvivenza() {
   const [, navigate] = useLocation();
+  const [trendDays, setTrendDays] = useState(90);
   const { data, isLoading, isError } = useQuery<{ success: boolean; plant: PlantSurvival }>({
-    queryKey: ['/api/plant-survival'],
+    queryKey: ['/api/plant-survival', { days: trendDays }],
   });
   const plant = data?.plant;
 
@@ -292,17 +299,36 @@ export default function CruscottoSopravvivenza() {
           {/* GRAFICO DI TENDENZA */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-cyan-600" />
-                Tendenza sopravvivenza (finestra mobile 30 / 90 giorni)
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Tasso misurato alle vagliature: vivi in uscita ÷ vivi in ingresso. La verità contata
-                nel tempo, mediata sulla finestra mobile.
-              </p>
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-cyan-600" />
+                    Tendenza sopravvivenza (finestra mobile 30 / 90 giorni)
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tasso misurato alle vagliature: vivi in uscita ÷ vivi in ingresso. La verità contata
+                    nel tempo, mediata sulla finestra mobile.
+                  </p>
+                </div>
+                <div className="flex items-center rounded-lg border overflow-hidden shrink-0">
+                  {TREND_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.days}
+                      onClick={() => setTrendDays(opt.days)}
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${
+                        trendDays === opt.days
+                          ? 'bg-cyan-600 text-white'
+                          : 'bg-white text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <TrendChart trend={plant.trend} />
+              <TrendChart trend={plant.trend} days={trendDays} />
             </CardContent>
           </Card>
 

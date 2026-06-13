@@ -137,13 +137,13 @@ async function loadFlupsyInfo(): Promise<Map<number, { name: string; moduleType:
 }
 
 /**
- * Tendenza 30/90 giorni: tasso a finestra mobile misurato alle vagliature completate.
- * Per ogni vagliatura: vivi in ingresso (ceste origine) e vivi in uscita (ceste destinazione,
- * incl. vendute = animali usciti vivi). Survival del tratto = uscita ÷ ingresso.
- * Per ogni giorno degli ultimi 90 giorni, il tasso è Σ(uscita) ÷ Σ(ingresso) delle vagliature
- * nella finestra trailing di 30 / 90 giorni.
+ * Tendenza a finestra mobile misurata alle vagliature completate.
+ * @param days  Numero di giorni da mostrare sull'asse x (default 90; max 365).
+ *              Il DB viene interrogato su un intervallo più ampio (days + 90) per coprire
+ *              la finestra mobile di 90 giorni anche all'inizio del grafico.
  */
-async function computeTrend(): Promise<TrendPoint[]> {
+async function computeTrend(days: number = 90): Promise<TrendPoint[]> {
+  const fetchDays = days + 90; // buffer extra per la finestra trailing di 90 gg al primo punto
   const result = await db.execute(sql`
     SELECT s.date::text AS date,
       (SELECT COALESCE(SUM(ssb.animal_count), 0)
@@ -152,7 +152,7 @@ async function computeTrend(): Promise<TrendPoint[]> {
          FROM selection_destination_baskets sdb WHERE sdb.selection_id = s.id) AS dst
     FROM selections s
     WHERE s.status = 'completed' AND s.purpose = 'vagliatura'
-      AND s.date >= (CURRENT_DATE - INTERVAL '120 days')
+      AND s.date >= (CURRENT_DATE - (${fetchDays} * INTERVAL '1 day'))
   `);
 
   // Punti misurati: (timestamp giorno, src, dst), solo dove ingresso > 0 e uscita ≤ ingresso (anomalie escluse).
@@ -169,7 +169,7 @@ async function computeTrend(): Promise<TrendPoint[]> {
   today.setHours(0, 0, 0, 0);
   const trend: TrendPoint[] = [];
 
-  for (let i = 89; i >= 0; i--) {
+  for (let i = days - 1; i >= 0; i--) {
     const dayEnd = today.getTime() - i * DAY;
     const win30 = dayEnd - 30 * DAY;
     const win90 = dayEnd - 90 * DAY;
@@ -190,12 +190,12 @@ async function computeTrend(): Promise<TrendPoint[]> {
 }
 
 /** Calcola il cruscotto di impianto (Fase 5): sintesi, per tipo modulo, per singolo modulo, tendenza. */
-export async function getPlantSurvival(): Promise<PlantSurvival> {
+export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival> {
   const [cohorts, cycleLive, flupsyInfo, trend] = await Promise.all([
     listCohortSurvival(),
     loadActiveCohortCycleLive(),
     loadFlupsyInfo(),
-    computeTrend(),
+    computeTrend(days),
   ]);
 
   const rateByCohort = new Map<number, number | null>();
