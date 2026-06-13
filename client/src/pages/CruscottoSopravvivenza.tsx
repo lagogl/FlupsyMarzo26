@@ -95,7 +95,7 @@ function CertaintyBadge({ level, fraction }: { level: Certainty; fraction?: numb
       <Badge
         variant="outline"
         className="gap-1 font-medium bg-emerald-100 text-emerald-800 border-emerald-300"
-        title="Certo: tutti i vivi sono contati all'ultima vagliatura"
+        title="Certo: il numero di vivi è stato contato fisicamente durante l'ultima vagliatura (conteggio diretto, non stimato)"
       >
         <ShieldCheck className="h-3 w-3" /> Certo
       </Badge>
@@ -107,8 +107,8 @@ function CertaintyBadge({ level, fraction }: { level: Certainty; fraction?: numb
       className="gap-1 font-medium bg-amber-100 text-amber-800 border-amber-300"
       title={
         fraction != null
-          ? `Stimato: ${fmtPct(fraction, 0)} dei vivi è contato, il resto viene dalle misure (campione)`
-          : 'Stimato: numero dedotto dalle misure dopo l\'ultima vagliatura'
+          ? `Stimato: solo il ${fmtPct(fraction, 0)} dei vivi è stato contato fisicamente (vagliatura). Il restante ${fmtPct(1 - (fraction ?? 0), 0)} viene calcolato dalle misure su campione: densità rilevata su un sotto-campione × peso totale della cesta.`
+          : 'Stimato: dopo l\'ultima vagliatura sono state eseguite solo misure su campione. Il numero di vivi viene calcolato moltiplicando la densità del campione (animali/kg) per il peso totale della cesta — è un\'approssimazione, non un conteggio diretto.'
       }
     >
       <HelpCircle className="h-3 w-3" /> Stimato
