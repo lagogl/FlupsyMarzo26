@@ -63,6 +63,7 @@ import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-
 import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
 import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import basketTransferRouter from "./modules/operations/transfer/basket-transfer.routes";
+import whatsappRouter from "./modules/whatsapp/whatsapp.routes";
 import { getBasketLotComposition } from "./services/basket-lot-composition.service";
 import { determineSizeByAnimalsPerKg } from "./utils/size-determination";
 import { computeMisuraAnimalCount, recomputeCycleMisure } from "./utils/misura-mortality";
@@ -396,6 +397,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Registra route per trasferimento ciclo ceste
   app.use('/api/basket-transfer', basketTransferRouter);
   console.log("✅ Modulo TRASFERIMENTO CICLO registrato su /api/basket-transfer/*");
+
+  // Registra route per invio mappa termica su WhatsApp (gruppo Delta Futuro Equipe Tecnica)
+  app.use('/api/whatsapp', whatsappRouter);
+  console.log("✅ Modulo WHATSAPP registrato su /api/whatsapp/*");
 
   // Registra il modulo MARINE DATA (dati mare Delta Po/Adriatico)
   const marineDataRoutes = await import('./routes/marine-data.routes');

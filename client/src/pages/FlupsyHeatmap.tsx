@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { SendHeatmapWhatsApp } from "@/components/heatmap/SendHeatmapWhatsApp";
 import {
   Tooltip,
   TooltipContent,
@@ -174,6 +175,7 @@ function TrendKpi({ label, today, yesterday, format, positiveIsGood }: TrendKpiP
 
 export default function FlupsyHeatmap() {
   const [, navigate] = useLocation();
+  const alertsPanelRef = useRef<HTMLDivElement>(null);
 
   // --- Soglie configurabili per gli alert (persistite in localStorage) ---
   const LS = "flupsy_alert_settings";
@@ -697,7 +699,10 @@ export default function FlupsyHeatmap() {
         </div>
 
         {/* ========== PANNELLO SEGNALAZIONI ========== */}
-        <div className="rounded-2xl border border-amber-200 bg-white shadow overflow-hidden">
+        <div className="flex items-center justify-end">
+          <SendHeatmapWhatsApp captureRef={alertsPanelRef} />
+        </div>
+        <div ref={alertsPanelRef} className="rounded-2xl border border-amber-200 bg-white shadow overflow-hidden">
 
           {/* Intestazione */}
           <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
