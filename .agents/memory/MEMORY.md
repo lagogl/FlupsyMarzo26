@@ -2,6 +2,7 @@
 - [External routes maintenance guard](external-routes-maintenance-guard.md) — app.all('/api/external/*') in routes.ts 503s everything except an allowlist; whitelist new external routes there or they're shadowed.
 - [Vagliatura taglia operator choice](vagliatura-taglia-operator-choice.md) — destination basket sizeId may intentionally NOT match its animals_per_kg range (operator picks total vs live density taglia); don't "fix" it.
 - [Animal count vs mortality convention](animal-count-mortality-convention.md) — dead are in the sample weight, so live count = animalsPerKg × totalWeight; never re-apply (1−mortality). Misura is server-governed (gusci rule), leave it.
+- [Post-merge push data loss](post-merge-push-data-loss.md) — `db:push --force` can silently TRUNCATE on schema/DB drift; declare all FKs in schema + post-merge pg_dump before push.
 - [Drizzle push _key vs _unique drift](drizzle-push-constraint-naming.md) — post-merge db:push hangs on truncate prompt from constraint name mismatch; fix with `--force` + rename `<t>_<col>_key`→`_unique` (only schema-declared ones); raise post-merge timeout to 180s.
 - [Cohorts Fase 3](cohorts-fase3.md) — vagliatura mix freezes a per-lot live snapshot as one counted unit; survival = current÷frozen. Creation rule must stay identical in live path and backfill (incl. totalDest>0 guard).
 - [Lot mortality canonical recompute](lot-mortality-canonical-recompute.md) — lot mortality only from vagliature/screening, counted once via idempotent recomputeLotMortality; misura is indicator-only, never inflates it.

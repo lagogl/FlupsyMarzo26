@@ -89,7 +89,7 @@ export const baskets = pgTable("baskets", {
   rfidUhfProgrammedAt: timestamp("rfid_uhf_programmed_at", { mode: 'string' }), // data e ora programmazione tag RFID UHF
   row: text("row").notNull(), // fila in cui si trova la cesta (DX o SX)
   position: integer("position").notNull(), // posizione numerica nella fila (1, 2, 3, ecc.)
-  groupId: integer("group_id"), // reference to basket group (optional - null if not in any group)
+  groupId: integer("group_id").references(() => basketGroups.id, { onDelete: "set null" }), // reference to basket group (optional - null if not in any group)
   tareWeightG: integer("tare_weight_g"), // peso tara della cesta in grammi (opzionale)
   netMesh: integer("net_mesh"), // maglia rete in µm - valori ammessi: 200, 300, 500, 700, 1000, 1500, 2000 (opzionale)
 }, (table) => ({
