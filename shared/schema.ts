@@ -409,6 +409,17 @@ export const sizes = pgTable("sizes", {
   color: text("color"), // colore HEX per visualizzazione grafica
 });
 
+// Basket Size Capacity (Capacità massima per taglia)
+// Definisce, per ogni taglia, la capacità massima di una cesta espressa con DUE limiti:
+// numero massimo di animali E peso massimo (in grammi). L'allarme scatta al raggiungimento
+// del PRIMO dei due limiti. Entrambi i campi sono opzionali (nullable).
+export const basketSizeCapacity = pgTable("basket_size_capacity", {
+  id: serial("id").primaryKey(),
+  sizeId: integer("size_id").notNull().unique().references(() => sizes.id, { onDelete: 'cascade' }), // una riga per taglia
+  maxAnimals: integer("max_animals"), // numero massimo di animali per cesta
+  maxWeightGrams: integer("max_weight_grams"), // peso massimo per cesta, in GRAMMI
+});
+
 // Cycles (Cicli Produttivi) - DEVE essere definita PRIMA di operations per il foreign key
 export const cycles = pgTable("cycles", {
   id: serial("id").primaryKey(),
@@ -662,6 +673,10 @@ export const insertSizeSchema = createInsertSchema(sizes).omit({
   id: true 
 });
 
+export const insertBasketSizeCapacitySchema = createInsertSchema(basketSizeCapacity).omit({
+  id: true
+});
+
 export const insertSgrSchema = createInsertSchema(sgr).omit({ 
   id: true,
   calculatedFromReal: true
@@ -834,6 +849,9 @@ export type InsertCycle = z.infer<typeof insertCycleSchema>;
 
 export type Size = typeof sizes.$inferSelect;
 export type InsertSize = z.infer<typeof insertSizeSchema>;
+
+export type BasketSizeCapacity = typeof basketSizeCapacity.$inferSelect;
+export type InsertBasketSizeCapacity = z.infer<typeof insertBasketSizeCapacitySchema>;
 
 export type Sgr = typeof sgr.$inferSelect;
 export type InsertSgr = z.infer<typeof insertSgrSchema>;
