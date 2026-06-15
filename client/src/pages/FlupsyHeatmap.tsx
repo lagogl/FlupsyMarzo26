@@ -79,19 +79,31 @@ const LEGEND_ENTRIES = [
 
 // --- Alert metadata ---
 
-const ALERT_META: Record<string, { label: string; colorClass: string }> = {
-  weightDecrease:    { label: "Peso in calo",         colorClass: "bg-red-600 text-white border-red-700" },
-  sizeRegression:    { label: "Taglia regredita",     colorClass: "bg-red-600 text-white border-red-700" },
-  highMortality:     { label: "Alta mortalità",       colorClass: "bg-orange-500 text-white border-orange-600" },
-  highCumulativeMort:{ label: "Mortalità ciclo alta", colorClass: "bg-orange-400 text-white border-orange-500" },
-  readyToSell:       { label: "Pronta per vendita",   colorClass: "bg-emerald-500 text-white border-emerald-600" },
-  highWeight:        { label: "Peso elevato",         colorClass: "bg-blue-500 text-white border-blue-600" },
-  staleMeasurement:  { label: "Da misurare",          colorClass: "bg-amber-500 text-white border-amber-600" },
-  staleOperation:    { label: "Operazioni ferme",     colorClass: "bg-slate-500 text-white border-slate-600" },
-  sizeEstimateWorse: { label: "Stima peggiorata",     colorClass: "bg-yellow-400 text-gray-900 border-yellow-500" },
-  neverMeasured:     { label: "Mai misurata",         colorClass: "bg-slate-400 text-white border-slate-500" },
-  capacityExceeded:  { label: "Capacità superata",    colorClass: "bg-fuchsia-600 text-white border-fuchsia-700" },
-  capacityApproaching:{ label: "Capacità vicina",      colorClass: "bg-pink-500 text-white border-pink-600" },
+const ALERT_META: Record<string, { label: string; colorClass: string; description: string }> = {
+  weightDecrease:    { label: "Peso in calo",         colorClass: "bg-red-600 text-white border-red-700",
+    description: "Il peso totale della cesta è diminuito rispetto alla misurazione precedente. Può indicare mortalità, una vendita/trasferimento parziale o un errore di misura da verificare." },
+  sizeRegression:    { label: "Taglia regredita",     colorClass: "bg-red-600 text-white border-red-700",
+    description: "La taglia commerciale risulta più piccola rispetto alla misura precedente (più animali per kg). Gli animali non rimpiccioliscono: di solito è un errore di conteggio/misura da controllare." },
+  highMortality:     { label: "Alta mortalità",       colorClass: "bg-orange-500 text-white border-orange-600",
+    description: "L'ultima operazione ha registrato una percentuale di mortalità superiore alla soglia impostata. Da controllare per individuare eventuali problemi sanitari o ambientali." },
+  highCumulativeMort:{ label: "Mortalità ciclo alta", colorClass: "bg-orange-400 text-white border-orange-500",
+    description: "La mortalità accumulata dall'inizio del ciclo (dalla prima attivazione a oggi) supera la soglia impostata. Indica una perdita complessiva elevata su tutta la durata del ciclo." },
+  readyToSell:       { label: "Pronta per vendita",   colorClass: "bg-emerald-500 text-white border-emerald-600",
+    description: "La cesta ha raggiunto una taglia adatta alla vendita. È un'opportunità commerciale: valuta la commercializzazione." },
+  highWeight:        { label: "Peso elevato",         colorClass: "bg-blue-500 text-white border-blue-600",
+    description: "Il peso totale della cesta supera la soglia in kg impostata. Utile per segnalare ceste molto cariche da gestire o ripartire." },
+  staleMeasurement:  { label: "Da misurare",          colorClass: "bg-amber-500 text-white border-amber-600",
+    description: "È passato troppo tempo dall'ultima misurazione (oltre la soglia in giorni impostata). I dati di crescita potrebbero non essere aggiornati: conviene rimisurare." },
+  staleOperation:    { label: "Operazioni ferme",     colorClass: "bg-slate-500 text-white border-slate-600",
+    description: "Non si registra alcuna operazione sulla cesta da troppi giorni (oltre la soglia impostata). La cesta potrebbe essere stata dimenticata." },
+  sizeEstimateWorse: { label: "Stima peggiorata",     colorClass: "bg-yellow-400 text-gray-900 border-yellow-500",
+    description: "La taglia stimata oggi (in base alla crescita prevista) è inferiore a quella misurata in precedenza. Segnala una crescita più lenta del previsto." },
+  neverMeasured:     { label: "Mai misurata",         colorClass: "bg-slate-400 text-white border-slate-500",
+    description: "La cesta non è mai stata misurata dopo l'attivazione. Manca un dato di peso reale: effettua una prima misurazione." },
+  capacityExceeded:  { label: "Capacità superata",    colorClass: "bg-fuchsia-600 text-white border-fuchsia-700",
+    description: "La cesta ha già superato la capacità massima impostata per la sua taglia (per numero di animali o per peso). Conviene dividerla o venderla. La percentuale indica quanto è oltre il limite." },
+  capacityApproaching:{ label: "Capacità vicina",      colorClass: "bg-pink-500 text-white border-pink-600",
+    description: "In base alla crescita prevista (SGR), la cesta raggiungerà il peso massimo della sua taglia entro pochi giorni. Il valore \"~Ngg\" indica fra quanti giorni circa. Pianifica per tempo divisione o vendita." },
 };
 
 // --- Trend KPI ---
@@ -748,17 +760,26 @@ export default function FlupsyHeatmap() {
                   const count = alertBaskets.filter(r => r.alerts.includes(key)).length;
                   if (isEnabled && count === 0) return null;
                   return (
-                    <button
-                      key={key}
-                      onClick={() => toggleAlert(key)}
-                      title={isEnabled ? "Clicca per disattivare questo alert" : "Clicca per riattivare"}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border cursor-pointer transition-all hover:opacity-75 ${
-                        isEnabled ? meta.colorClass : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
-                      }`}
-                    >
-                      {isEnabled && count > 0 ? `${count} ` : ""}{meta.label}
-                      {!isEnabled && <span className="text-[9px] ml-0.5 no-underline">(off)</span>}
-                    </button>
+                    <Tooltip key={key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => toggleAlert(key)}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border cursor-pointer transition-all hover:opacity-75 ${
+                            isEnabled ? meta.colorClass : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
+                          }`}
+                        >
+                          {isEnabled && count > 0 ? `${count} ` : ""}{meta.label}
+                          {!isEnabled && <span className="text-[9px] ml-0.5 no-underline">(off)</span>}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        <p className="font-semibold mb-1">{meta.label}</p>
+                        <p className="font-normal leading-snug">{meta.description}</p>
+                        <p className="font-normal italic mt-1 opacity-80">
+                          {isEnabled ? "Clicca per disattivare questo avviso." : "Clicca per riattivare questo avviso."}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 })}
               </div>
@@ -878,12 +899,19 @@ export default function FlupsyHeatmap() {
                                 if (fc) detail = ` ~${fc.daysToWeightCapacity}gg`;
                               }
                               return (
-                                <span
-                                  key={alertKey}
-                                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap border shadow-sm ${meta.colorClass}`}
-                                >
-                                  {meta.label}{detail}
-                                </span>
+                                <Tooltip key={alertKey}>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap border shadow-sm cursor-help ${meta.colorClass}`}
+                                    >
+                                      {meta.label}{detail}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="text-xs max-w-xs">
+                                    <p className="font-semibold mb-1">{meta.label}</p>
+                                    <p className="font-normal leading-snug">{meta.description}</p>
+                                  </TooltipContent>
+                                </Tooltip>
                               );
                             })}
                           </div>
@@ -910,9 +938,17 @@ export default function FlupsyHeatmap() {
                   {alertTotals.byType.map(t => (
                     <tr key={t.key} className="bg-slate-50 border-b border-gray-200">
                       <td className="px-4 py-2" colSpan={4}>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${t.colorClass}`}>
-                          {t.label}
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border cursor-help ${t.colorClass}`}>
+                              {t.label}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs max-w-xs">
+                            <p className="font-semibold mb-1">{t.label}</p>
+                            <p className="font-normal leading-snug">{ALERT_META[t.key]?.description}</p>
+                          </TooltipContent>
+                        </Tooltip>
                         <span className="ml-2 text-xs text-gray-500">
                           {t.count} {t.count === 1 ? "cesta" : "ceste"}
                         </span>
