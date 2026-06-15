@@ -7,9 +7,9 @@ channel = "stable-24_05"
 packages = ["curl", "hdf5", "libjpeg", "netcdf", "zlib"]
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["bash", "start.sh"]
-build = ["bash", "-c", "npm run build && curl -fsSL https://nodejs.org/dist/v20.20.0/node-v20.20.0-linux-x64.tar.gz | tar -xz -C /tmp && cp /tmp/node-v20.20.0-linux-x64/bin/node dist/node_bin && chmod +x dist/node_bin"]
+deploymentTarget = "vm"
+run = ["npm", "run", "start"]
+build = ["npm", "run", "build"]
 
 [[ports]]
 localPort = 5000
