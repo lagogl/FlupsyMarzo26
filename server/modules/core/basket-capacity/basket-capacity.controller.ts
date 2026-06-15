@@ -41,11 +41,11 @@ export class BasketCapacityController {
           ? null
           : Number(item.maxWeightGrams);
 
-        if (maxAnimals != null && (!Number.isFinite(maxAnimals) || maxAnimals < 0)) {
-          return res.status(400).json({ message: "maxAnimals deve essere un numero positivo o vuoto" });
+        if (maxAnimals != null && (!Number.isFinite(maxAnimals) || maxAnimals <= 0)) {
+          return res.status(400).json({ message: "maxAnimals deve essere un numero maggiore di zero o vuoto" });
         }
-        if (maxWeightGrams != null && (!Number.isFinite(maxWeightGrams) || maxWeightGrams < 0)) {
-          return res.status(400).json({ message: "maxWeightGrams deve essere un numero positivo o vuoto" });
+        if (maxWeightGrams != null && (!Number.isFinite(maxWeightGrams) || maxWeightGrams <= 0)) {
+          return res.status(400).json({ message: "maxWeightGrams deve essere un numero maggiore di zero o vuoto" });
         }
 
         inputs.push({ sizeId, maxAnimals, maxWeightGrams });

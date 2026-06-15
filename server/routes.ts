@@ -179,6 +179,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/sizes', sizesModule.sizesRoutes);
   console.log('✅ Modulo SIZES registrato su /api/sizes');
 
+  // Registra il modulo BASKET CAPACITY (Capacità massima per taglia)
+  const basketCapacityModule = await import('./modules/core/basket-capacity');
+  app.use('/api/basket-capacity', basketCapacityModule.basketCapacityRoutes);
+  console.log('✅ Modulo BASKET CAPACITY registrato su /api/basket-capacity');
+
   // Registra il modulo SGR (Indici di Crescita)
   const sgrModule = await import('./modules/core/sgr');
   app.use('/api', sgrModule.sgrRoutes);

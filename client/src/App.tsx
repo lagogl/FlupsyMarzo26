@@ -18,6 +18,7 @@ import CycleDetail from "@/pages/CycleDetail";
 import Lots from "@/pages/Lots";
 import Statistics from "@/pages/Statistics";
 import Sizes from "@/pages/Sizes";
+import BasketCapacity from "@/pages/BasketCapacity";
 import Sgr from "@/pages/Sgr";
 import SgrMatrix from "@/pages/SgrMatrix";
 import Settings from "@/pages/Settings";
@@ -159,6 +160,7 @@ function Router() {
       <ProtectedRoute path="/manuale" component={Manuale}/>
       <ProtectedRoute path="/manual" component={Manuale}/>
       <ProtectedRoute path="/sizes" component={Sizes}/>
+      <ProtectedRoute path="/capacita-taglie" component={BasketCapacity}/>
       <ProtectedRoute path="/sgr" component={Sgr}/>
       <ProtectedRoute path="/sgr-matrix" component={SgrMatrix}/>
       <ProtectedRoute path="/sgr-lineage" component={SgrLineage}/>

@@ -90,6 +90,7 @@ const ALERT_META: Record<string, { label: string; colorClass: string }> = {
   staleOperation:    { label: "Operazioni ferme",     colorClass: "bg-slate-500 text-white border-slate-600" },
   sizeEstimateWorse: { label: "Stima peggiorata",     colorClass: "bg-yellow-400 text-gray-900 border-yellow-500" },
   neverMeasured:     { label: "Mai misurata",         colorClass: "bg-slate-400 text-white border-slate-500" },
+  capacityExceeded:  { label: "Capacità superata",    colorClass: "bg-fuchsia-600 text-white border-fuchsia-700" },
 };
 
 // --- Trend KPI ---
@@ -167,8 +168,24 @@ export default function FlupsyHeatmap() {
 
   const [showAlertSettings, setShowAlertSettings] = useState(false);
   const [enabledAlerts, setEnabledAlerts] = useState<Set<string>>(() => {
+    const allKeys = Object.keys(ALERT_META);
     const saved: string[] | undefined = loadLS().enabledAlerts;
-    return saved ? new Set(saved) : new Set(Object.keys(ALERT_META));
+    if (!saved) return new Set(allKeys);
+    // Migrazione: i tipi di allerta introdotti DOPO l'ultimo salvataggio
+    // dell'utente devono risultare attivi di default (altrimenti la nuova
+    // segnalazione sembrerebbe assente). Distinguiamo i tipi "nuovi" da quelli
+    // disattivati volontariamente tramite la lista dei tipi già conosciuti.
+    const known: string[] | undefined = loadLS().knownAlertKeys;
+    const knownSet = new Set(known ?? saved);
+    const next = new Set(saved);
+    let changed = false;
+    for (const k of allKeys) {
+      if (!knownSet.has(k)) { next.add(k); changed = true; }
+    }
+    if (changed || !known) {
+      saveLS({ enabledAlerts: Array.from(next), knownAlertKeys: allKeys });
+    }
+    return next;
   });
   const toggleAlert = (key: string) =>
     setEnabledAlerts(prev => {
@@ -191,6 +208,10 @@ export default function FlupsyHeatmap() {
   const { data: sizes } = useQuery<any[]>({
     queryKey: ["/api/sizes"],
     staleTime: 3600000,
+  });
+  const { data: capacities } = useQuery<any[]>({
+    queryKey: ["/api/basket-capacity"],
+    staleTime: 300000,
   });
   const { data: dailyTrend } = useQuery<{ success: boolean; data: { yesterdayAnimals: number; yesterdayAvgMort: number | null; yesterdaySellable: number } }>({
     queryKey: ["/api/baskets/daily-trend"],
@@ -323,6 +344,20 @@ export default function FlupsyHeatmap() {
     return { totalAnimals, totalSellable, totalSellableWeighted, avgMort };
   }, [flupsyData]);
 
+  // Mappa capacità per taglia: sizeId → { maxAnimals, maxWeightGrams }
+  const capacityBySize = useMemo(() => {
+    const m = new Map<number, { maxAnimals: number | null; maxWeightGrams: number | null }>();
+    for (const c of capacities ?? []) {
+      if (c?.sizeId != null) {
+        m.set(Number(c.sizeId), {
+          maxAnimals: c.maxAnimals ?? null,
+          maxWeightGrams: c.maxWeightGrams ?? null,
+        });
+      }
+    }
+    return m;
+  }, [capacities]);
+
   // --- Calcolo alert per cesta ---
   const alertBaskets = useMemo(() => {
     if (!visibleBaskets || !latestOpsMap || !sizes || !visibleFlupsys) return [];
@@ -417,6 +452,17 @@ export default function FlupsyHeatmap() {
         alerts.push("neverMeasured");
       }
 
+      // 11. Capacità superata: la cesta ha raggiunto il limite massimo configurato per la
+      // sua taglia. Scatta al PRIMO dei due limiti (numero animali O peso in grammi).
+      const cap = op.sizeId != null ? capacityBySize.get(Number(op.sizeId)) : undefined;
+      if (cap) {
+        const overAnimals = cap.maxAnimals != null && op.animalCount != null && op.animalCount >= cap.maxAnimals;
+        const overWeight = cap.maxWeightGrams != null && op.totalWeight != null && op.totalWeight >= cap.maxWeightGrams;
+        if (overAnimals || overWeight) {
+          alerts.push("capacityExceeded");
+        }
+      }
+
       // Filtra solo alert attivi (toggle abilitato dall'operatore)
       const activeAlerts = alerts.filter(k => enabledAlerts.has(k));
       if (activeAlerts.length > 0) {
@@ -434,7 +480,7 @@ export default function FlupsyHeatmap() {
       return b.alerts.length - a.alerts.length;
     });
   }, [
-    visibleBaskets, visibleFlupsys, latestOpsMap, sizes,
+    visibleBaskets, visibleFlupsys, latestOpsMap, sizes, capacityBySize,
     highMortThreshold, cumulMortThreshold, highWeightKgThreshold,
     staleMeasurementDays, staleOpDays, enabledAlerts,
   ]);
@@ -804,6 +850,17 @@ export default function FlupsyHeatmap() {
                                 detail = ` ${daysSinceOp}gg`;
                               if (alertKey === "weightDecrease" && op.prevTotalWeight != null && op.totalWeight != null)
                                 detail = ` ${(op.prevTotalWeight / 1000).toFixed(1)}→${(op.totalWeight / 1000).toFixed(1)}kg`;
+                              if (alertKey === "capacityExceeded" && op.sizeId != null) {
+                                const cap = capacityBySize.get(Number(op.sizeId));
+                                if (cap) {
+                                  const pcts: number[] = [];
+                                  if (cap.maxAnimals != null && op.animalCount != null)
+                                    pcts.push((op.animalCount / cap.maxAnimals) * 100);
+                                  if (cap.maxWeightGrams != null && op.totalWeight != null)
+                                    pcts.push((op.totalWeight / cap.maxWeightGrams) * 100);
+                                  if (pcts.length) detail = ` ${Math.round(Math.max(...pcts))}%`;
+                                }
+                              }
                               return (
                                 <span
                                   key={alertKey}

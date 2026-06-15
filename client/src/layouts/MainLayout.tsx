@@ -191,6 +191,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <RefreshCw className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.productionCycles, path: "/cycles" },
         { icon: <AlertCircle className="h-5 w-5 mr-2 text-red-600" />, label: "Chiusure Pendenti", path: "/pending-closures", badge: pendingClosuresCount > 0 ? pendingClosuresCount : undefined },
         { icon: <Scale className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.sizeTable, path: "/sizes" },
+        { icon: <Gauge className="h-5 w-5 mr-2 text-orange-600" />, label: "Capacità Taglie", path: "/capacita-taglie" },
         { icon: <Boxes className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockInventory, path: "/inventory" },
         { icon: <CalendarDays className="h-5 w-5 mr-2 text-orange-600" />, label: translations.menuItems.stockRangeCalculation, path: "/giacenze-range" },
         { icon: <Gauge className="h-5 w-5 mr-2 text-orange-600" />, label: "IMM — Maturità Magazzino", path: "/imm" }
