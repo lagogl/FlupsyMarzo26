@@ -1,109 +1,37 @@
-// Service Worker per FLUPSY PWA - Versione aggiornata 2025-10-05-critical-fix
-const CACHE_NAME = 'flupsy-v2025-10-05-critical-fix';
-const urlsToCache = [
-  '/',
-  '/manifest.json',
-  '/pwa-icon-192.png',
-  '/pwa-icon-512.png'
-];
+// Service Worker FLUPSY PWA - KILL SWITCH
+// Questo service worker NON memorizza piu nulla in cache.
+// Il suo unico compito e' sbloccare i dispositivi rimasti su una versione
+// vecchia dell'app: svuota tutte le cache, si disregistra da solo e
+// ricarica le pagine aperte cosi' da scaricare sempre il codice piu' recente.
 
-// Installazione del Service Worker
-self.addEventListener('install', function(event) {
-  console.log('[SW] Installing Service Worker');
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(function(cache) {
-        console.log('[SW] Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-  );
+self.addEventListener('install', function() {
+  // Attiva subito la nuova versione senza attendere
+  self.skipWaiting();
 });
 
-// Attivazione del Service Worker
 self.addEventListener('activate', function(event) {
-  console.log('[SW] Activating Service Worker');
-  event.waitUntil(
-    caches.keys().then(function(cacheNames) {
-      return Promise.all(
-        cacheNames.map(function(cacheName) {
-          if (cacheName !== CACHE_NAME) {
-            console.log('[SW] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
+  event.waitUntil((async function() {
+    try {
+      // 1. Elimina tutte le cache esistenti
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(function(name) {
+        return caches.delete(name);
+      }));
 
-// Intercettazione delle richieste di rete
-self.addEventListener('fetch', function(event) {
-  // Non cachare richieste API o POST
-  if (event.request.url.includes('/api/') || event.request.method !== 'GET') {
-    event.respondWith(fetch(event.request));
-    return;
-  }
+      // 2. Rimuove questo service worker
+      await self.registration.unregister();
 
-  // Network First per file JS/CSS (sempre la versione più recente)
-  const isJsOrCss = event.request.url.match(/\.(js|css|tsx|ts)(\?.*)?$/);
-  
-  if (isJsOrCss) {
-    event.respondWith(
-      fetch(event.request)
-        .then(function(response) {
-          // Aggiorna la cache con la nuova versione
-          if (response && response.status === 200) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then(function(cache) {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          return response;
-        })
-        .catch(function() {
-          // Se la rete fallisce, usa la cache come fallback
-          return caches.match(event.request);
-        })
-    );
-    return;
-  }
-
-  // Cache First per altre risorse statiche (immagini, manifest, etc.)
-  event.respondWith(
-    caches.match(event.request)
-      .then(function(response) {
-        if (response) {
-          return response;
+      // 3. Ricarica tutte le schede/finestre aperte per ottenere il codice nuovo
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach(function(client) {
+        if ('navigate' in client) {
+          client.navigate(client.url);
         }
-        
-        return fetch(event.request).then(function(response) {
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-
-          var responseToCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then(function(cache) {
-              cache.put(event.request, responseToCache);
-            });
-
-          return response;
-        });
-      }
-    )
-  );
+      });
+    } catch (err) {
+      // In caso di errore non blocchiamo nulla: la prossima visita ritentera'
+    }
+  })());
 });
 
-// Gestione delle notifiche push (per future implementazioni)
-self.addEventListener('push', function(event) {
-  console.log('[SW] Push received');
-  const options = {
-    body: 'Nuova operazione FLUPSY completata',
-    icon: '/pwa-icon-192.png',
-    badge: '/pwa-icon-72.png'
-  };
-
-  event.waitUntil(
-    self.registration.showNotification('FLUPSY Delta Futuro', options)
-  );
-});
+// Non intercettiamo piu' le richieste di rete: tutto passa direttamente alla rete.
