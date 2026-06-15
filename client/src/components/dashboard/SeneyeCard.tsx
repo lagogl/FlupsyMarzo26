@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 
 interface CurrentResponse {
   source: 'live' | 'stored';
+  measuredAt?: string;
   reading: {
     deviceName: string;
     recordDate?: string;
@@ -51,7 +52,7 @@ export default function SeneyeCard() {
   });
 
   const r = data?.reading;
-  const lastMeasure = formatDateTime(r?.recordDate);
+  const lastMeasure = formatDateTime(data?.measuredAt ?? r?.recordDate);
 
   return (
     <Link href="/sonda-df-sifoni">
@@ -65,7 +66,7 @@ export default function SeneyeCard() {
               <div>
                 <p className="font-semibold text-sm">Sonda DF SIFONI</p>
                 <p className="text-xs text-muted-foreground">
-                  {data?.source === 'stored' ? 'Ultimo dato salvato' : 'In tempo reale'}
+                  Seneye · aggiorna ogni 30 min
                 </p>
               </div>
             </div>
@@ -117,7 +118,7 @@ export default function SeneyeCard() {
                 <div className="flex items-center justify-center gap-1 mt-3 pt-2 border-t border-cyan-100 text-[11px] text-muted-foreground">
                   <Clock className="h-3 w-3" />
                   <span>
-                    {data?.source === 'stored' ? 'Ultima misura' : 'Aggiornato'}: {lastMeasure}
+                    Ultima misura: {lastMeasure}
                   </span>
                 </div>
               )}

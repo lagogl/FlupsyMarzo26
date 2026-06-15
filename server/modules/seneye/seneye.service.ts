@@ -172,6 +172,40 @@ export async function getLatestStored(): Promise<SeneyeReading | null> {
   return row ?? null;
 }
 
+export interface CurrentForCard {
+  source: "stored" | "live";
+  reading: SeneyeReading;
+  measuredAt: string;
+}
+
+// Restituisce la lettura da mostrare nella dashboard con l'orario EFFETTIVO
+// dell'ultima misura.
+//
+// NB: l'API Seneye di questo account NON espone alcun timestamp della misura
+// (né `last_experiment` né un orario per-lettura). L'unico orario reale a
+// disposizione è quello con cui lo scheduler ha acquisito e salvato lo snapshot
+// (ogni ~30 minuti). Per questo NON usiamo l'ora della richiesta/collegamento,
+// ma la data dell'ultimo snapshot salvato. Se lo snapshot è troppo vecchio
+// (scheduler fermo), forziamo una nuova lettura: in quel caso "ora" è davvero
+// il momento dell'acquisizione fresca.
+const STALE_THRESHOLD_MS = 31 * 60 * 1000;
+
+export async function getCurrentForCard(): Promise<CurrentForCard> {
+  let last = await getLatestStored();
+  const isStale =
+    !last || Date.now() - new Date(last.recordDate).getTime() > STALE_THRESHOLD_MS;
+  if (isStale) {
+    // pollAndStore lancia un errore se l'API non è raggiungibile: in tal caso
+    // il controller ripiega sull'ultimo dato salvato (se esiste).
+    last = await pollAndStore();
+  }
+  return {
+    source: "stored",
+    reading: last!,
+    measuredAt: new Date(last!.recordDate).toISOString(),
+  };
+}
+
 export async function getReadings(opts: {
   from?: Date;
   to?: Date;

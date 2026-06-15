@@ -32,6 +32,7 @@ interface SeneyeReading {
 
 interface CurrentResponse {
   source: 'live' | 'stored';
+  measuredAt?: string;
   reading: {
     deviceName: string;
     temperature: number | null;
@@ -237,8 +238,12 @@ export default function SeneyeMonitor() {
       </div>
       {cur && (
         <p className="text-xs text-muted-foreground -mt-2">
-          {current?.source === 'live' ? 'Dato live dall\'API Seneye' : 'Ultimo dato salvato'}
-          {current?.reading.recordDate ? ` · ${new Date(current.reading.recordDate).toLocaleString('it-IT')}` : ''}
+          Ultima misura
+          {current?.measuredAt
+            ? ` · ${new Date(current.measuredAt).toLocaleString('it-IT')}`
+            : current?.reading.recordDate
+              ? ` · ${new Date(current.reading.recordDate).toLocaleString('it-IT')}`
+              : ''}
         </p>
       )}
 

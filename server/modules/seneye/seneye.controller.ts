@@ -15,15 +15,22 @@ export const seneyeController = {
     }
   },
 
-  // Lettura corrente live dall'API (con fallback all'ultimo dato salvato)
+  // Lettura corrente per la dashboard.
+  // Mostra l'orario EFFETTIVO dell'ultima misura acquisita (snapshot dello
+  // scheduler), non l'ora del collegamento. Vedi getCurrentForCard().
   async getCurrent(_req: Request, res: Response) {
     try {
-      const current = await service.fetchCurrentReading();
-      res.json({ source: "live", reading: current });
+      const current = await service.getCurrentForCard();
+      res.json(current);
     } catch (e: any) {
       const last = await service.getLatestStored();
       if (last) {
-        res.json({ source: "stored", reading: last, warning: e?.message });
+        res.json({
+          source: "stored",
+          reading: last,
+          measuredAt: new Date(last.recordDate).toISOString(),
+          warning: e?.message,
+        });
       } else {
         res.status(502).json({ error: e?.message || "Errore nel recupero della lettura corrente" });
       }
