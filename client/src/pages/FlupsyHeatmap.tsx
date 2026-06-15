@@ -60,6 +60,8 @@ function getSizeHexColor(sizeCode: string): { bg: string; text: string } {
   if (num <= 500)   return { bg: "#dc2626", text: "#fff" };   // red-600
   if (num <= 1000)  return { bg: "#ef4444", text: "#fff" };   // red-500
   if (num <= 2000)  return { bg: "#f59e0b", text: "#fff" };   // amber-500
+  // TP-2500 — vicina alla taglia di vendita (non ancora vendibile)
+  if (num <= 2500)  return { bg: "#a3e635", text: "#1a2e05" }; // lime-400
   // === Soglia vendibilità ===
   if (num <= 3000)  return { bg: "#4ade80", text: "#fff" };   // green-400 (TP-3000 — soglia)
   if (num <= 6000)  return { bg: "#22c55e", text: "#fff" };   // green-500
@@ -72,6 +74,7 @@ const LEGEND_ENTRIES = [
   { code: "TP-500",   label: "Seme" },
   { code: "TP-1000",  label: "Piccolo" },
   { code: "TP-2000",  label: "Pre-crescita" },
+  { code: "TP-2500",  label: "Vicina alla vendita" },
   { code: "TP-3000",  label: "Quasi vendibile" },
   { code: "TP-6000",  label: "Accrescimento" },
   { code: "TP-10000", label: "Grande" },
