@@ -60,3 +60,9 @@ id = "Yay-wm-gdixIWtXGk9PYZ"
 uri = "file://docs/Guida-Mappa-Termica.md"
 type = "text"
 title = "Guida alla Mappa Termica FLUPSY (per operatori)"
+
+[[outputs]]
+id = "b6t5KhEOBH17CbRrZ3J5O"
+uri = "file://docs/Guida-Mappa-Termica.pdf"
+type = "pdf"
+title = "Guida alla Mappa Termica (PDF, senza parte AI)"
