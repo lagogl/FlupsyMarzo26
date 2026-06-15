@@ -746,7 +746,7 @@ export default function FlupsyHeatmap() {
                           key={key}
                           onClick={() => toggleAlert(key)}
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer select-none ${
-                            active ? meta.colorClass + " opacity-100" : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
+                            active ? meta.colorClass + " opacity-100" : "bg-gray-100 text-gray-600 border-gray-300 line-through opacity-90"
                           }`}
                         >
                           <span className="text-[9px]">{active ? "✓" : "✗"}</span>
@@ -823,7 +823,7 @@ export default function FlupsyHeatmap() {
                         <button
                           onClick={() => toggleAlert(key)}
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border cursor-pointer transition-all hover:opacity-75 ${
-                            isEnabled ? meta.colorClass : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
+                            isEnabled ? meta.colorClass : "bg-gray-100 text-gray-600 border-gray-300 line-through opacity-90"
                           }`}
                         >
                           {isEnabled && count > 0 ? `${count} ` : ""}{meta.label}
