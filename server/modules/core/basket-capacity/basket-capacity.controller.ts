@@ -17,6 +17,23 @@ export class BasketCapacityController {
   }
 
   /**
+   * GET /api/basket-capacity/forecast?horizon=5
+   * Previsione (Fase 1): per quali ceste il PESO totale raggiungerà il limite della
+   * taglia entro N giorni, usando l'SGR storico.
+   */
+  async forecast(req: Request, res: Response) {
+    try {
+      const horizonRaw = Number(req.query.horizon);
+      const horizon = Number.isFinite(horizonRaw) && horizonRaw > 0 ? horizonRaw : 5;
+      const result = await basketCapacityService.getCapacityForecast(horizon);
+      res.json(result);
+    } catch (error) {
+      console.error("Error computing capacity forecast:", error);
+      res.status(500).json({ message: "Impossibile calcolare la previsione di capacità" });
+    }
+  }
+
+  /**
    * POST /api/basket-capacity
    * Salva (upsert) le capacità per le taglie. Body: { capacities: [{ sizeId, maxAnimals, maxWeightGrams }] }
    */

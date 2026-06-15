@@ -1,6 +1,22 @@
 import { db } from "../../../db";
 import { sizes, operations, basketSizeCapacity } from "@shared/schema";
 import { sql, eq } from "drizzle-orm";
+import { basketsService } from "../../operations/baskets/baskets.service";
+import { loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
+
+export interface CapacityForecastEntry {
+  /** Giorni stimati prima che il PESO totale raggiunga il limite della taglia. */
+  daysToWeightCapacity: number;
+  /** Peso attuale (grammi) e limite, utili per il dettaglio in UI. */
+  currentWeightGrams: number;
+  maxWeightGrams: number;
+}
+
+export interface CapacityForecastResult {
+  horizonDays: number;
+  /** basketId → previsione (solo ceste che supereranno il limite entro l'orizzonte). */
+  forecast: Record<number, CapacityForecastEntry>;
+}
 
 export interface CapacityRow {
   sizeId: number;
@@ -91,6 +107,83 @@ export class BasketCapacityService {
     });
 
     return rows;
+  }
+
+  /**
+   * FASE 1 — Previsione raggiungimento PESO massimo per cesta.
+   *
+   * Per ogni cesta attiva confronta il peso totale attuale con il limite di peso
+   * configurato per la sua taglia e, tramite la simulazione di crescita giornaliera
+   * basata sull'SGR storico (peso × (1 + SGR), mortalità inclusa), stima fra quanti
+   * giorni la cesta raggiungerà quel limite. Restituisce solo le ceste che lo
+   * raggiungeranno ENTRO l'orizzonte indicato (default 5 giorni).
+   *
+   * NB: il limite "numero animali" NON è oggetto di previsione: gli animali non si
+   * moltiplicano, quindi quel limite è un controllo del presente (gestito altrove).
+   * Qui si proietta solo il PESO, che cresce nel tempo.
+   */
+  async getCapacityForecast(horizonDays = 5): Promise<CapacityForecastResult> {
+    const horizon = Number.isFinite(horizonDays) && horizonDays > 0 ? Math.floor(horizonDays) : 5;
+
+    // Limiti di peso configurati per taglia
+    const savedCaps = await db.select().from(basketSizeCapacity);
+    const maxWeightBySize = new Map<number, number>();
+    for (const c of savedCaps) {
+      if (c.maxWeightGrams != null && c.maxWeightGrams > 0) {
+        maxWeightBySize.set(c.sizeId, c.maxWeightGrams);
+      }
+    }
+
+    const forecast: Record<number, CapacityForecastEntry> = {};
+    if (maxWeightBySize.size === 0) {
+      return { horizonDays: horizon, forecast };
+    }
+
+    // Stato attuale di ogni cesta (stessa fonte usata dalla Heatmap)
+    const latestOps = await basketsService.getLatestOperations();
+    const ctx = await loadGrowthSimulationContext();
+    const today = new Date();
+
+    for (const op of Object.values(latestOps) as any[]) {
+      const sizeId = op?.sizeId;
+      const currentWeightGrams = op?.totalWeight;
+      const count = op?.animalCount;
+      if (sizeId == null || currentWeightGrams == null || count == null) continue;
+      if (!(currentWeightGrams > 0) || !(count > 0)) continue;
+
+      const maxWeightGrams = maxWeightBySize.get(Number(sizeId));
+      if (maxWeightGrams == null) continue;
+      // Già a/oltre il limite: gestito dall'allarme "Capacità superata", non qui
+      if (currentWeightGrams >= maxWeightGrams) continue;
+
+      // Stato iniziale per la simulazione: peso per animale in mg
+      let weightMg = (currentWeightGrams * 1000) / count;
+      let cnt = count;
+      const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let daysToReach: number | null = null;
+
+      for (let day = 1; day <= horizon; day++) {
+        cursor.setDate(cursor.getDate() + 1);
+        const next = stepOneDay(ctx, { weightMg, count: cnt }, cursor);
+        weightMg = next.weightMg;
+        cnt = next.count;
+        const totalGrams = (weightMg * cnt) / 1000;
+        if (totalGrams >= maxWeightGrams) {
+          daysToReach = day;
+          break;
+        }
+      }
+
+      if (daysToReach != null) {
+        forecast[op.basketId] = {
+          daysToWeightCapacity: daysToReach,
+          currentWeightGrams: Math.round(currentWeightGrams),
+          maxWeightGrams,
+        };
+      }
+    }
+
+    return { horizonDays: horizon, forecast };
   }
 
   /**

@@ -10,3 +10,4 @@
 - [Lot mortality canonical recompute](lot-mortality-canonical-recompute.md) — lot mortality only from vagliature/screening, counted once via idempotent recomputeLotMortality; misura is indicator-only, never inflates it.
 - [Vagliatura closure balance check](vagliatura-balance-check.md) — origine=destinazione+mortalità; ±1% tolerance, loss>1% needs confirm, gain (incl. origin=0) is non-bypassable anomaly; 3% email threshold is separate.
 - [Cohort exits vs mortality](cohort-exits-vs-mortality.md) — survival must subtract declared exits (sale/transfer/re-sort) before calling the rest mortality; carry-forward vagliatura excluded (already in currentLive).
+- [Capacity forecast](capacity-forecast.md) — per-taglia capacity forecast projects WEIGHT only (count only falls); reuse shared SGR engine (mg/animal); monthly SGR already includes temperature.

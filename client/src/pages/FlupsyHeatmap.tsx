@@ -91,6 +91,7 @@ const ALERT_META: Record<string, { label: string; colorClass: string }> = {
   sizeEstimateWorse: { label: "Stima peggiorata",     colorClass: "bg-yellow-400 text-gray-900 border-yellow-500" },
   neverMeasured:     { label: "Mai misurata",         colorClass: "bg-slate-400 text-white border-slate-500" },
   capacityExceeded:  { label: "Capacità superata",    colorClass: "bg-fuchsia-600 text-white border-fuchsia-700" },
+  capacityApproaching:{ label: "Capacità vicina",      colorClass: "bg-pink-500 text-white border-pink-600" },
 };
 
 // --- Trend KPI ---
@@ -211,6 +212,11 @@ export default function FlupsyHeatmap() {
   });
   const { data: capacities } = useQuery<any[]>({
     queryKey: ["/api/basket-capacity"],
+    staleTime: 300000,
+  });
+  // Previsione (Fase 1): ceste che raggiungeranno il PESO massimo entro 5 giorni
+  const { data: capacityForecast } = useQuery<{ horizonDays: number; forecast: Record<number, { daysToWeightCapacity: number; currentWeightGrams: number; maxWeightGrams: number }> }>({
+    queryKey: ["/api/basket-capacity/forecast", { horizon: 5 }],
     staleTime: 300000,
   });
   const { data: dailyTrend } = useQuery<{ success: boolean; data: { yesterdayAnimals: number; yesterdayAvgMort: number | null; yesterdaySellable: number } }>({
@@ -461,6 +467,12 @@ export default function FlupsyHeatmap() {
         if (overAnimals || overWeight) {
           alerts.push("capacityExceeded");
         }
+        // 12. Capacità vicina (Fase 1): previsione SGR — la cesta raggiungerà il peso
+        // massimo entro l'orizzonte (5 giorni). Solo se NON ha già superato il limite.
+        else {
+          const fc = capacityForecast?.forecast?.[basket.id];
+          if (fc) alerts.push("capacityApproaching");
+        }
       }
 
       // Filtra solo alert attivi (toggle abilitato dall'operatore)
@@ -480,7 +492,7 @@ export default function FlupsyHeatmap() {
       return b.alerts.length - a.alerts.length;
     });
   }, [
-    visibleBaskets, visibleFlupsys, latestOpsMap, sizes, capacityBySize,
+    visibleBaskets, visibleFlupsys, latestOpsMap, sizes, capacityBySize, capacityForecast,
     highMortThreshold, cumulMortThreshold, highWeightKgThreshold,
     staleMeasurementDays, staleOpDays, enabledAlerts,
   ]);
@@ -860,6 +872,10 @@ export default function FlupsyHeatmap() {
                                     pcts.push((op.totalWeight / cap.maxWeightGrams) * 100);
                                   if (pcts.length) detail = ` ${Math.round(Math.max(...pcts))}%`;
                                 }
+                              }
+                              if (alertKey === "capacityApproaching") {
+                                const fc = capacityForecast?.forecast?.[basket.id];
+                                if (fc) detail = ` ~${fc.daysToWeightCapacity}gg`;
                               }
                               return (
                                 <span

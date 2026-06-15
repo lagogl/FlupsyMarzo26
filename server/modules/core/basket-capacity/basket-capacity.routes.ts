@@ -3,6 +3,9 @@ import { basketCapacityController } from "./basket-capacity.controller";
 
 const router = Router();
 
+// GET previsione raggiungimento peso massimo (Fase 1)
+router.get("/forecast", (req, res) => basketCapacityController.forecast(req, res));
+
 // GET capacità per taglia + suggerimenti storici
 router.get("/", (req, res) => basketCapacityController.getAll(req, res));
 
