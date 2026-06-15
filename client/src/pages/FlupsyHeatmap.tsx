@@ -439,6 +439,39 @@ export default function FlupsyHeatmap() {
     staleMeasurementDays, staleOpDays, enabledAlerts,
   ]);
 
+  // Totali di chiusura tabella segnalazioni: totale generale + dettaglio per
+  // tipologia di segnalazione (filtro) attualmente visualizzata.
+  const alertTotals = useMemo(() => {
+    let totAnimals = 0;
+    let totWeight = 0;
+    for (const r of alertBaskets) {
+      totAnimals += r.op.animalCount || 0;
+      if (r.op.totalWeight != null) totWeight += r.op.totalWeight;
+    }
+    const byType = Object.keys(ALERT_META)
+      .filter(key => enabledAlerts.has(key))
+      .map(key => {
+        const rows = alertBaskets.filter(r => r.alerts.includes(key));
+        if (rows.length === 0) return null;
+        let a = 0;
+        let w = 0;
+        for (const r of rows) {
+          a += r.op.animalCount || 0;
+          if (r.op.totalWeight != null) w += r.op.totalWeight;
+        }
+        return {
+          key,
+          label: ALERT_META[key].label,
+          colorClass: ALERT_META[key].colorClass,
+          count: rows.length,
+          animals: a,
+          weight: w,
+        };
+      })
+      .filter((x): x is { key: string; label: string; colorClass: string; count: number; animals: number; weight: number } => x !== null);
+    return { count: alertBaskets.length, animals: totAnimals, weight: totWeight, byType };
+  }, [alertBaskets, enabledAlerts]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-400 gap-3">
@@ -786,7 +819,47 @@ export default function FlupsyHeatmap() {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  {/* Totale generale */}
+                  <tr className="bg-slate-700 text-white font-bold border-t-2 border-slate-800">
+                    <td className="px-4 py-3 text-sm uppercase tracking-wider" colSpan={4}>
+                      Totale ({alertTotals.count} {alertTotals.count === 1 ? "cesta" : "ceste"})
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm whitespace-nowrap">
+                      {fmtAnimals(alertTotals.animals)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm whitespace-nowrap">
+                      {(alertTotals.weight / 1000).toFixed(1)} kg
+                    </td>
+                    <td className="px-4 py-3" colSpan={2}></td>
+                  </tr>
+                  {/* Dettaglio per tipologia di segnalazione visualizzata */}
+                  {alertTotals.byType.map(t => (
+                    <tr key={t.key} className="bg-slate-50 border-b border-gray-200">
+                      <td className="px-4 py-2" colSpan={4}>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${t.colorClass}`}>
+                          {t.label}
+                        </span>
+                        <span className="ml-2 text-xs text-gray-500">
+                          {t.count} {t.count === 1 ? "cesta" : "ceste"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right text-sm font-semibold text-gray-800 whitespace-nowrap">
+                        {fmtAnimals(t.animals)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-sm text-gray-700 whitespace-nowrap">
+                        {(t.weight / 1000).toFixed(1)} kg
+                      </td>
+                      <td className="px-4 py-2" colSpan={2}></td>
+                    </tr>
+                  ))}
+                </tfoot>
               </table>
+              {alertTotals.byType.length > 0 && (
+                <div className="px-4 py-2 text-[11px] text-gray-400 border-t border-gray-100">
+                  Una cesta può comparire in più tipologie: i subtotali per tipo non sono mutuamente esclusivi.
+                </div>
+              )}
             </div>
           )}
         </div>
