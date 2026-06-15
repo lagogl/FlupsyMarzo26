@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.chromium
     pkgs.cairo
     pkgs.pango
     pkgs.nspr
