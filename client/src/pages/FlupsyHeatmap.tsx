@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { AlertTriangle, LayoutGrid, TrendingUp, TrendingDown, Minus, Scale, Clock, Tag, Settings2, ChevronDown, ChevronUp } from "lucide-react";
+import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
 
 // --- Helpers ---
 
@@ -198,12 +199,32 @@ export default function FlupsyHeatmap() {
 
   const isLoading = lFlupsys || lBaskets || lOps;
 
-  const flupsyData = useMemo(() => {
-    if (!allFlupsys || !allBaskets) return [];
+  // Filtra in base alle preferenze FLUPSY salvate nella Dashboard:
+  // se l'utente ha selezionato dei FLUPSY preferiti, la mappa termica mostra solo quelli.
+  const { filterFlupsys, preferredFlupsyIds } = useFlupsyPreferences();
 
-    return allFlupsys
+  const visibleFlupsys = useMemo(
+    () => (allFlupsys ? filterFlupsys(allFlupsys) : allFlupsys),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allFlupsys, preferredFlupsyIds]
+  );
+
+  const visibleFlupsyIds = useMemo(
+    () => new Set((visibleFlupsys ?? []).map((f: any) => f.id)),
+    [visibleFlupsys]
+  );
+
+  const visibleBaskets = useMemo(
+    () => (allBaskets ? allBaskets.filter((b: any) => visibleFlupsyIds.has(b.flupsyId)) : allBaskets),
+    [allBaskets, visibleFlupsyIds]
+  );
+
+  const flupsyData = useMemo(() => {
+    if (!visibleFlupsys || !visibleBaskets) return [];
+
+    return visibleFlupsys
       .map((flupsy: any) => {
-        const baskets = allBaskets.filter((b: any) => b.flupsyId === flupsy.id);
+        const baskets = visibleBaskets.filter((b: any) => b.flupsyId === flupsy.id);
         const dxBaskets = baskets
           .filter((b: any) => b.row === "DX")
           .sort((a: any, b: any) => a.position - b.position);
@@ -281,7 +302,7 @@ export default function FlupsyHeatmap() {
         }
         return b.totalAnimals - a.totalAnimals;
       });
-  }, [allFlupsys, allBaskets, latestOpsMap]);
+  }, [visibleFlupsys, visibleBaskets, latestOpsMap]);
 
   // Aggregati globali di oggi (somma di tutti i FLUPSY)
   const todayTotals = useMemo(() => {
@@ -304,7 +325,7 @@ export default function FlupsyHeatmap() {
 
   // --- Calcolo alert per cesta ---
   const alertBaskets = useMemo(() => {
-    if (!allBaskets || !latestOpsMap || !sizes || !allFlupsys) return [];
+    if (!visibleBaskets || !latestOpsMap || !sizes || !visibleFlupsys) return [];
     const today = new Date();
     const VENDIBILE_THRESHOLD = 29000;
 
@@ -318,12 +339,12 @@ export default function FlupsyHeatmap() {
       daysSinceMeasurement: number | null;
     }> = [];
 
-    for (const basket of allBaskets) {
+    for (const basket of visibleBaskets) {
       if (!basket.currentCycleId) continue;
       const op = latestOpsMap[basket.id];
       if (!op) continue;
 
-      const flupsy = allFlupsys.find((f: any) => f.id === basket.flupsyId);
+      const flupsy = visibleFlupsys.find((f: any) => f.id === basket.flupsyId);
       const alerts: string[] = [];
 
       const opDate = op.date ? new Date(op.date) : null;
@@ -413,7 +434,7 @@ export default function FlupsyHeatmap() {
       return b.alerts.length - a.alerts.length;
     });
   }, [
-    allBaskets, allFlupsys, latestOpsMap, sizes,
+    visibleBaskets, visibleFlupsys, latestOpsMap, sizes,
     highMortThreshold, cumulMortThreshold, highWeightKgThreshold,
     staleMeasurementDays, staleOpDays, enabledAlerts,
   ]);
@@ -468,7 +489,7 @@ export default function FlupsyHeatmap() {
             <TrendKpi
               label="Animali totali"
               today={todayTotals.totalAnimals}
-              yesterday={dailyTrend?.data?.yesterdayAnimals ?? null}
+              yesterday={preferredFlupsyIds.length > 0 ? null : (dailyTrend?.data?.yesterdayAnimals ?? null)}
               format={fmtAnimals}
               positiveIsGood={true}
             />
@@ -476,7 +497,7 @@ export default function FlupsyHeatmap() {
               <TrendKpi
                 label="Quasi vendibili+"
                 today={todayTotals.totalSellable}
-                yesterday={dailyTrend?.data?.yesterdaySellable ?? null}
+                yesterday={preferredFlupsyIds.length > 0 ? null : (dailyTrend?.data?.yesterdaySellable ?? null)}
                 format={fmtAnimals}
                 positiveIsGood={true}
               />
@@ -499,7 +520,7 @@ export default function FlupsyHeatmap() {
             <TrendKpi
               label="Mortalità media"
               today={todayTotals.avgMort}
-              yesterday={dailyTrend?.data?.yesterdayAvgMort ?? null}
+              yesterday={preferredFlupsyIds.length > 0 ? null : (dailyTrend?.data?.yesterdayAvgMort ?? null)}
               format={(n) => n != null ? `${n.toFixed(1)}%` : "—"}
               positiveIsGood={false}
             />
