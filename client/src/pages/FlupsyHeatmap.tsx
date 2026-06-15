@@ -80,6 +80,20 @@ const LEGEND_ENTRIES = [
   { code: "TP-10000", label: "Grande" },
 ];
 
+// Mappa un codice taglia reale (es. TP-2200) alla "fascia" di legenda che lo contiene.
+// Le soglie corrispondono a quelle di getSizeHexColor.
+function getLegendCodeForSizeCode(sizeCode: string): string | null {
+  if (!sizeCode || !sizeCode.startsWith("TP-")) return null;
+  const num = parseInt(sizeCode.substring(3));
+  if (num <= 500)  return "TP-500";
+  if (num <= 1000) return "TP-1000";
+  if (num <= 2000) return "TP-2000";
+  if (num <= 2500) return "TP-2500";
+  if (num <= 3000) return "TP-3000";
+  if (num <= 6000) return "TP-6000";
+  return "TP-10000";
+}
+
 // --- Alert metadata ---
 
 const ALERT_META: Record<string, { label: string; colorClass: string; description: string }> = {
@@ -346,6 +360,26 @@ export default function FlupsyHeatmap() {
       });
   }, [visibleFlupsys, visibleBaskets, latestOpsMap]);
 
+  // Numero di animali (e ceste) appartenenti a ciascuna fascia di taglia della legenda
+  const animalsByLegend = useMemo(() => {
+    const totals: Record<string, { animals: number; baskets: number }> = {};
+    if (!visibleBaskets || !latestOpsMap || !sizes) return totals;
+    for (const basket of visibleBaskets) {
+      if (!basket.currentCycleId) continue;
+      const op = latestOpsMap[basket.id];
+      if (!op) continue;
+      const apk = op.measurementAnimalsPerKg || op.animalsPerKg;
+      if (!apk) continue;
+      const sizeCode = getSizeCodeFromAnimalsPerKg(apk, sizes);
+      const legendCode = getLegendCodeForSizeCode(sizeCode);
+      if (!legendCode) continue;
+      if (!totals[legendCode]) totals[legendCode] = { animals: 0, baskets: 0 };
+      totals[legendCode].animals += op.animalCount || 0;
+      totals[legendCode].baskets += 1;
+    }
+    return totals;
+  }, [visibleBaskets, latestOpsMap, sizes]);
+
   // Aggregati globali di oggi (somma di tutti i FLUPSY)
   const todayTotals = useMemo(() => {
     if (!flupsyData.length) return null;
@@ -572,15 +606,31 @@ export default function FlupsyHeatmap() {
           <div className="flex flex-wrap gap-2 items-center">
             {LEGEND_ENTRIES.map((l) => {
               const { bg, text } = getSizeHexColor(l.code);
+              const stat = animalsByLegend[l.code];
+              const animals = stat?.animals ?? 0;
+              const baskets = stat?.baskets ?? 0;
               return (
-                <span
-                  key={l.code}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm"
-                  style={{ backgroundColor: bg, color: text }}
-                >
-                  {l.code}
-                  <span className="opacity-70 font-normal">{l.label}</span>
-                </span>
+                <Tooltip key={l.code}>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm cursor-help"
+                      style={{ backgroundColor: bg, color: text }}
+                    >
+                      {l.code}
+                      <span className="opacity-70 font-normal">{l.label}</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs max-w-xs">
+                    <p className="font-semibold mb-1">{l.code} — {l.label}</p>
+                    {baskets > 0 ? (
+                      <p className="font-normal leading-snug">
+                        {fmtAnimals(animals)} animali in {baskets} {baskets === 1 ? "cesta" : "ceste"}
+                      </p>
+                    ) : (
+                      <p className="font-normal leading-snug opacity-80">Nessuna cesta in questa taglia</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
               );
             })}
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 shadow-sm">
