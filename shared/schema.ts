@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, real, date, numeric, jsonb, decimal, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, real, date, numeric, jsonb, decimal, index, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -232,7 +232,11 @@ export const selectionSourceBaskets = pgTable("selection_source_baskets", {
   sizeId: integer("size_id"), // Taglia attuale
   lotId: integer("lot_id"), // Lotto di origine
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di aggiunta alla selezione
-});
+}, (table) => ({
+  // Un cestello può comparire una sola volta come origine di una selezione.
+  // Protezione a livello DB contro le duplicazioni da re-invio del frontend.
+  uniqueSelectionBasket: unique("selection_source_baskets_selection_basket_unique").on(table.selectionId, table.basketId),
+}));
 
 // Selection Destination Baskets (Nuove ceste create dalla selezione)
 export const selectionDestinationBaskets = pgTable("selection_destination_baskets", {
@@ -262,7 +266,11 @@ export const selectionDestinationBaskets = pgTable("selection_destination_basket
   meshSotto2: integer("mesh_sotto_2"), // Seconda vagliatura: maglia SOTTO (micron)
   createdAt: timestamp("created_at").notNull().defaultNow(), // Data e ora di creazione
   updatedAt: timestamp("updated_at"), // Data e ora di ultimo aggiornamento
-});
+}, (table) => ({
+  // Un cestello può comparire una sola volta come destinazione di una selezione.
+  // Protezione a livello DB contro le duplicazioni da re-invio del frontend.
+  uniqueSelectionBasket: unique("selection_destination_baskets_selection_basket_unique").on(table.selectionId, table.basketId),
+}));
 
 // Mesh Vagliatura (Tabella lookup per le maglie di vagliatura)
 export const meshVagliatura = pgTable("mesh_vagliatura", {

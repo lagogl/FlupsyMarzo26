@@ -660,9 +660,10 @@ export async function addSourceBaskets(req: Request, res: Response) {
       });
     }
     
-    // Ottieni la data della selezione
+    // Ottieni la data e lo stato della selezione
     const [selection] = await db.select({
-      date: selections.date
+      date: selections.date,
+      status: selections.status
     })
     .from(selections)
     .where(eq(selections.id, Number(id)))
@@ -675,10 +676,21 @@ export async function addSourceBaskets(req: Request, res: Response) {
       });
     }
     
+    // GUARD DI STATO: consenti modifiche ai cestelli solo se la selezione è in bozza.
+    // Evita di sovrascrivere/cancellare dati di vagliature già completate.
+    if (selection.status !== 'draft') {
+      return res.status(400).json({
+        success: false,
+        error: `La selezione non può essere modificata perché è in stato "${selection.status}"`
+      });
+    }
+    
     const selectionDate = new Date(selection.date);
     selectionDate.setHours(23, 59, 59, 999); // Fine della giornata per includere tutto il giorno
     
-    // Inserisci tutti i cestelli origine
+    // PRE-VALIDAZIONE: prepara tutte le righe da inserire PRIMA di toccare il database.
+    // Così, se una validazione fallisce, non abbiamo ancora cancellato nulla.
+    const rowsToInsert: typeof selectionSourceBaskets.$inferInsert[] = [];
     for (const sourceBasket of sourceBaskets) {
       // Prima ottieni il ciclo corrente del cestello E il suo lotto
       const [basketData] = await db.select({
@@ -719,7 +731,7 @@ export async function addSourceBaskets(req: Request, res: Response) {
         });
       }
       
-      const sourceBasketData = {
+      rowsToInsert.push({
         selectionId: Number(id),
         basketId: sourceBasket.basketId,
         cycleId: basketData.currentCycleId,
@@ -730,12 +742,40 @@ export async function addSourceBaskets(req: Request, res: Response) {
         sizeId: sourceBasket.sizeId || null,
         lotId: basketData.lotId, // ✅ Recuperato automaticamente dal ciclo
         notes: sourceBasket.notes || null
-      };
-      
-      await db.insert(selectionSourceBaskets).values(sourceBasketData);
-      
-      console.log(`✅ Cestello origine ${sourceBasket.basketId} aggiunto (${sourceBasket.animalCount} animali)`);
+      });
     }
+    
+    // IDEMPOTENZA + ATOMICITÀ: in un'unica transazione blocca la riga della selezione
+    // (FOR UPDATE), ri-verifica che sia ancora "draft", poi cancella i cestelli origine
+    // già salvati e re-inserisci quelli nuovi. Evita duplicazioni (il frontend re-invia
+    // i cestelli ad ogni tentativo), stati parziali in caso di errore e race condition
+    // con una chiusura (complete) concorrente.
+    let notDraft = false;
+    await db.transaction(async (tx) => {
+      const [locked] = await tx.select({ status: selections.status })
+        .from(selections)
+        .where(eq(selections.id, Number(id)))
+        .for('update')
+        .limit(1);
+      if (!locked || locked.status !== 'draft') {
+        notDraft = true;
+        return;
+      }
+      await tx.delete(selectionSourceBaskets)
+        .where(eq(selectionSourceBaskets.selectionId, Number(id)));
+      if (rowsToInsert.length > 0) {
+        await tx.insert(selectionSourceBaskets).values(rowsToInsert);
+      }
+    });
+    
+    if (notDraft) {
+      return res.status(400).json({
+        success: false,
+        error: "La selezione non è più in stato di bozza e non può essere modificata"
+      });
+    }
+    
+    console.log(`✅ ${rowsToInsert.length} cestelli origine salvati per la selezione ${id}`);
     
     return res.status(200).json({
       success: true,
@@ -774,14 +814,33 @@ export async function addDestinationBaskets(req: Request, res: Response) {
       });
     }
     
-    // Inserisci tutti i cestelli destinazione
-    for (const destBasket of destinationBaskets) {
+    // GUARD DI STATO: consenti modifiche ai cestelli solo se la selezione è in bozza.
+    // Evita di sovrascrivere/cancellare dati di vagliature già completate.
+    const [selection] = await db.select({ status: selections.status })
+      .from(selections)
+      .where(eq(selections.id, Number(id)))
+      .limit(1);
+    
+    if (!selection) {
+      return res.status(404).json({
+        success: false,
+        error: "Selezione non trovata"
+      });
+    }
+    
+    if (selection.status !== 'draft') {
+      return res.status(400).json({
+        success: false,
+        error: `La selezione non può essere modificata perché è in stato "${selection.status}"`
+      });
+    }
+    
+    // Prepara tutte le righe da inserire
+    const rowsToInsert = destinationBaskets.map((destBasket: any) => {
       const destinationType = destBasket.destinationType || 'positioned';
-      
       // Traduce automaticamente destinationType in categoria italiana
       const category = destinationType === 'sold' ? 'Venduta' : 'Riposizionata';
-      
-      await db.insert(selectionDestinationBaskets).values({
+      return {
         selectionId: Number(id),
         basketId: destBasket.basketId,
         cycleId: null, // Sarà creato al completamento
@@ -804,10 +863,38 @@ export async function addDestinationBaskets(req: Request, res: Response) {
         meshSotto: destBasket.meshSotto || null,
         meshSopra2: destBasket.meshSopra2 || null,
         meshSotto2: destBasket.meshSotto2 || null
+      };
+    });
+    
+    // IDEMPOTENZA + ATOMICITÀ: in un'unica transazione blocca la riga della selezione
+    // (FOR UPDATE), ri-verifica che sia ancora "draft", poi cancella i cestelli
+    // destinazione già salvati e re-inserisci quelli nuovi. Evita duplicazioni (il
+    // frontend re-invia i cestelli ad ogni tentativo), stati parziali in caso di errore
+    // e race condition con una chiusura (complete) concorrente.
+    let notDraft = false;
+    await db.transaction(async (tx) => {
+      const [locked] = await tx.select({ status: selections.status })
+        .from(selections)
+        .where(eq(selections.id, Number(id)))
+        .for('update')
+        .limit(1);
+      if (!locked || locked.status !== 'draft') {
+        notDraft = true;
+        return;
+      }
+      await tx.delete(selectionDestinationBaskets)
+        .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
+      await tx.insert(selectionDestinationBaskets).values(rowsToInsert);
+    });
+    
+    if (notDraft) {
+      return res.status(400).json({
+        success: false,
+        error: "La selezione non è più in stato di bozza e non può essere modificata"
       });
-      
-      console.log(`✅ Cestello destinazione ${destBasket.basketId} aggiunto (${destBasket.animalCount} animali) - ${category}`);
     }
+    
+    console.log(`✅ ${rowsToInsert.length} cestelli destinazione salvati per la selezione ${id}`);
     
     return res.status(200).json({
       success: true,
