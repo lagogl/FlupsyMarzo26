@@ -66,3 +66,9 @@ id = "b6t5KhEOBH17CbRrZ3J5O"
 uri = "file://docs/Guida-Mappa-Termica.pdf"
 type = "pdf"
 title = "Guida alla Mappa Termica (PDF, senza parte AI)"
+
+[[outputs]]
+id = "NHGjsOivTvDxE0kDrJ-rk"
+uri = "file://exports/Bins_CaPisani_6-10_ciclo_penultimo-ultimo.xlsx"
+type = "table"
+title = "Vita Bins Ca Pisani 6-10 + Sopravvivenza (Vagliatura #129)"
