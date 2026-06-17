@@ -95,6 +95,10 @@ export const baskets = pgTable("baskets", {
 }, (table) => ({
   flupsyIdIdx: index("baskets_flupsy_id_idx").on(table.flupsyId),
   groupIdIdx: index("baskets_group_id_idx").on(table.groupId),
+  // Impedisce che due ceste occupino la stessa casella (flupsy + fila + posizione).
+  // In DB è DEFERRABLE INITIALLY IMMEDIATE (verifica a fine istruzione) così lo scambio
+  // atomico di posizioni resta possibile; i doppioni reali restano vietati.
+  flupsyRowPositionUnique: unique("baskets_flupsy_row_position_unique").on(table.flupsyId, table.row, table.position),
 }));
 
 // Operation Types (Tipologie operazioni)

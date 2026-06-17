@@ -439,10 +439,22 @@ export class BasketsService {
       position: basket2.position
     };
 
-    // Esegui lo scambio in una transazione
+    // Esegui lo scambio in un'UNICA istruzione atomica.
+    // È obbligatorio un solo UPDATE perché il vincolo
+    // baskets_flupsy_row_position_unique (DEFERRABLE INITIALLY IMMEDIATE)
+    // verifica l'unicità a fine istruzione: due UPDATE separati farebbero
+    // collidere temporaneamente le due ceste sulla stessa casella.
+    await db.execute(sql`
+      UPDATE baskets SET
+        flupsy_id = CASE WHEN id = ${basket1Id} THEN ${position2.flupsyId} ELSE ${position1.flupsyId} END,
+        "row"     = CASE WHEN id = ${basket1Id} THEN ${position2.row} ELSE ${position1.row} END,
+        "position"= CASE WHEN id = ${basket1Id} THEN ${position2.position} ELSE ${position1.position} END
+      WHERE id IN (${basket1Id}, ${basket2Id})
+    `);
+
     const [updatedBasket1, updatedBasket2] = await Promise.all([
-      storage.updateBasket(basket1Id, position2),
-      storage.updateBasket(basket2Id, position1)
+      storage.getBasket(basket1Id),
+      storage.getBasket(basket2Id)
     ]);
 
     // Invalida cache posizioni
