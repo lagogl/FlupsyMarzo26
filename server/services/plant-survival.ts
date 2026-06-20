@@ -23,7 +23,8 @@ export interface ModuleSurvival {
   flupsyId: number;
   name: string;
   moduleType: ModuleType;
-  currentLive: number; // vivi correnti delle coorti presenti nel modulo
+  currentLive: number; // vivi correnti delle coorti presenti nel modulo (parte tracciata)
+  totalLive: number; // vivi correnti TOTALI del modulo (cicli con e senza coorte)
   weightedSurvival: number | null; // sopravvivenza ponderata sul vivo (0..1), null se nessun dato
   certoFraction: number; // quota dei vivi il cui ultimo dato è un conteggio (0..1)
   certainty: CertaintyLevel; // semaforo certo/stimato del modulo
@@ -32,7 +33,8 @@ export interface ModuleSurvival {
 
 export interface TypeSurvival {
   moduleType: ModuleType;
-  currentLive: number;
+  currentLive: number; // vivi tracciati (coorti) di questo tipo modulo
+  totalLive: number; // vivi totali di questo tipo modulo (con e senza coorte)
   weightedSurvival: number | null;
   certoFraction: number;
   certainty: CertaintyLevel;
@@ -47,7 +49,9 @@ export interface TrendPoint {
 
 export interface PlantSurvival {
   summary: {
-    currentLive: number;
+    currentLive: number; // vivi tracciati nelle coorti (base su cui è calcolata la sopravvivenza)
+    totalPlantLive: number; // vivi correnti TOTALI dell'impianto (tutti i moduli, con e senza coorte)
+    coverageFraction: number; // copertura = vivi tracciati ÷ vivi totali impianto (0..1)
     weightedSurvival: number | null;
     certoFraction: number;
     certainty: CertaintyLevel;
@@ -80,7 +84,8 @@ interface ModuleAccumulator {
   flupsyId: number;
   name: string;
   moduleType: ModuleType;
-  liveTotal: number;
+  liveTotal: number; // vivi tracciati nelle coorti presenti nel modulo
+  totalLive: number; // vivi correnti TOTALI del modulo (cicli con e senza coorte)
   liveWithRate: number; // vivi appartenenti a coorti con un tasso di sopravvivenza calcolabile
   weightedNumerator: number; // Σ(tasso coorte × vivi nel modulo)
   certoLive: number;
@@ -119,6 +124,38 @@ async function loadActiveCohortCycleLive(): Promise<
     live: Number(row.live) || 0,
     isCerto: COUNT_OP_TYPES.includes(String(row.type)),
   }));
+}
+
+/**
+ * Vivi correnti TOTALI per modulo: somma dell'ultimo conteggio di OGNI ciclo attivo
+ * (con e senza coorte, tutti i tipi di modulo incluse le raceway). Serve a mostrare la
+ * giacenza viva totale dell'impianto accanto alla parte tracciata nelle coorti.
+ */
+async function loadTotalLiveByModule(): Promise<Map<number, number>> {
+  const result = await db.execute(sql`
+    WITH active_cycle AS (
+      SELECT c.id AS cycle_id, b.flupsy_id
+      FROM cycles c
+      JOIN baskets b ON b.id = c.basket_id
+      WHERE c.state = 'active'
+    ),
+    last_op AS (
+      SELECT DISTINCT ON (o.cycle_id) o.cycle_id, o.animal_count
+      FROM operations o
+      JOIN active_cycle ac ON ac.cycle_id = o.cycle_id
+      WHERE o.animal_count IS NOT NULL
+      ORDER BY o.cycle_id, o.date DESC, o.id DESC
+    )
+    SELECT ac.flupsy_id, COALESCE(SUM(lo.animal_count), 0)::bigint AS total_live
+    FROM active_cycle ac
+    LEFT JOIN last_op lo ON lo.cycle_id = ac.cycle_id
+    GROUP BY ac.flupsy_id
+  `);
+  const map = new Map<number, number>();
+  for (const row of result.rows as any[]) {
+    map.set(Number(row.flupsy_id), Number(row.total_live) || 0);
+  }
+  return map;
 }
 
 /** Carica anagrafica moduli (id → nome, tipo). */
@@ -191,9 +228,10 @@ async function computeTrend(days: number = 90): Promise<TrendPoint[]> {
 
 /** Calcola il cruscotto di impianto (Fase 5): sintesi, per tipo modulo, per singolo modulo, tendenza. */
 export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival> {
-  const [cohorts, cycleLive, flupsyInfo, trend] = await Promise.all([
+  const [cohorts, cycleLive, totalLiveByModule, flupsyInfo, trend] = await Promise.all([
     listCohortSurvival(),
     loadActiveCohortCycleLive(),
+    loadTotalLiveByModule(),
     loadFlupsyInfo(),
     computeTrend(days),
   ]);
@@ -213,6 +251,7 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
         name: info.name,
         moduleType: info.moduleType,
         liveTotal: 0,
+        totalLive: 0,
         liveWithRate: 0,
         weightedNumerator: 0,
         certoLive: 0,
@@ -230,8 +269,33 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
     }
   }
 
+  // Integra i vivi TOTALI di ogni modulo attivo (cicli con e senza coorte, raceway incluse).
+  // Crea anche i moduli che hanno vivi ma nessuna coorte tracciata, così ogni settore di
+  // allevamento è rappresentato nel cruscotto.
+  for (const [flupsyId, totalLive] of totalLiveByModule) {
+    if (totalLive <= 0) continue;
+    const info = flupsyInfo.get(flupsyId);
+    if (!info) continue;
+    let acc = modules.get(flupsyId);
+    if (!acc) {
+      acc = {
+        flupsyId,
+        name: info.name,
+        moduleType: info.moduleType,
+        liveTotal: 0,
+        totalLive: 0,
+        liveWithRate: 0,
+        weightedNumerator: 0,
+        certoLive: 0,
+        cohortIds: new Set<number>(),
+      };
+      modules.set(flupsyId, acc);
+    }
+    acc.totalLive = totalLive;
+  }
+
   const byModule: ModuleSurvival[] = Array.from(modules.values())
-    .filter((m) => m.liveTotal > 0)
+    .filter((m) => m.totalLive > 0 || m.liveTotal > 0)
     .map((m) => {
       const certoFraction = m.liveTotal > 0 ? m.certoLive / m.liveTotal : 0;
       return {
@@ -239,27 +303,29 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
         name: m.name,
         moduleType: m.moduleType,
         currentLive: m.liveTotal,
+        totalLive: m.totalLive,
         weightedSurvival: m.liveWithRate > 0 ? m.weightedNumerator / m.liveWithRate : null,
         certoFraction,
         certainty: certaintyFromFraction(certoFraction),
         activeCohorts: m.cohortIds.size,
       };
     })
-    .sort((a, b) => b.currentLive - a.currentLive);
+    .sort((a, b) => b.totalLive - a.totalLive);
 
   // Aggrega per tipo modulo.
   const typeAcc = new Map<
     ModuleType,
-    { live: number; liveWithRate: number; weightedNumerator: number; certoLive: number; modules: number }
+    { live: number; totalLive: number; liveWithRate: number; weightedNumerator: number; certoLive: number; modules: number }
   >();
   for (const m of modules.values()) {
-    if (m.liveTotal <= 0) continue;
+    if (m.totalLive <= 0 && m.liveTotal <= 0) continue;
     let t = typeAcc.get(m.moduleType);
     if (!t) {
-      t = { live: 0, liveWithRate: 0, weightedNumerator: 0, certoLive: 0, modules: 0 };
+      t = { live: 0, totalLive: 0, liveWithRate: 0, weightedNumerator: 0, certoLive: 0, modules: 0 };
       typeAcc.set(m.moduleType, t);
     }
     t.live += m.liveTotal;
+    t.totalLive += m.totalLive;
     t.liveWithRate += m.liveWithRate;
     t.weightedNumerator += m.weightedNumerator;
     t.certoLive += m.certoLive;
@@ -273,6 +339,7 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
     return {
       moduleType,
       currentLive: t.live,
+      totalLive: t.totalLive,
       weightedSurvival: t.liveWithRate > 0 ? t.weightedNumerator / t.liveWithRate : null,
       certoFraction,
       certainty: certaintyFromFraction(certoFraction),
@@ -293,9 +360,16 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
   }
   const summaryCertoFraction = totalLive > 0 ? totalCerto / totalLive : 0;
 
+  // Vivi totali dell'impianto (tutti i moduli attivi) e copertura della parte tracciata.
+  let totalPlantLive = 0;
+  for (const v of totalLiveByModule.values()) totalPlantLive += v;
+  const coverageFraction = totalPlantLive > 0 ? totalLive / totalPlantLive : 0;
+
   return {
     summary: {
       currentLive: totalLive,
+      totalPlantLive,
+      coverageFraction,
       weightedSurvival: totalLiveWithRate > 0 ? totalWeighted / totalLiveWithRate : null,
       certoFraction: summaryCertoFraction,
       certainty: certaintyFromFraction(summaryCertoFraction),

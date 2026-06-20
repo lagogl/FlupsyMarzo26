@@ -19,6 +19,7 @@ interface ModuleSurvival {
   name: string;
   moduleType: ModuleType;
   currentLive: number;
+  totalLive: number;
   weightedSurvival: number | null;
   certoFraction: number;
   certainty: Certainty;
@@ -28,6 +29,7 @@ interface ModuleSurvival {
 interface TypeSurvival {
   moduleType: ModuleType;
   currentLive: number;
+  totalLive: number;
   weightedSurvival: number | null;
   certoFraction: number;
   certainty: Certainty;
@@ -43,6 +45,8 @@ interface TrendPoint {
 interface PlantSurvival {
   summary: {
     currentLive: number;
+    totalPlantLive: number;
+    coverageFraction: number;
     weightedSurvival: number | null;
     certoFraction: number;
     certainty: Certainty;
@@ -204,7 +208,8 @@ function TypeCard({ t }: { t: TypeSurvival }) {
             {fmtPct(t.weightedSurvival)}
           </div>
           <div className="text-right text-xs text-muted-foreground">
-            <div>{fmt(t.currentLive)} vivi</div>
+            <div className="text-sky-700 font-medium">{fmt(t.totalLive)} vivi totali</div>
+            <div>di cui {fmt(t.currentLive)} tracciati</div>
             <div>{t.modules} moduli</div>
           </div>
         </div>
@@ -231,11 +236,32 @@ export default function CruscottoSopravvivenza() {
         <div>
           <h1 className="text-2xl font-bold">Cruscotto Sopravvivenza Impianto</h1>
           <p className="text-sm text-muted-foreground">
-            Sopravvivenza ponderata sul vivo attuale, tendenza 30/90 giorni e scomposizione per tipo
-            modulo e singolo modulo, con semaforo certo/stimato.
+            Misura <span className="font-medium">quanto bene sopravvivono</span> gli animali, in base ai
+            conteggi reali alle vagliature. È una bussola di qualità dell'allevamento.
           </p>
         </div>
       </div>
+
+      {!isLoading && !isError && plant && (
+        <Card className="mb-6 border-emerald-100 bg-emerald-50/50">
+          <CardContent className="py-4 flex gap-3">
+            <HelpCircle className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-emerald-900 space-y-1">
+              <p>
+                <span className="font-semibold">A cosa serve:</span> questo cruscotto risponde alla
+                domanda «gli animali che alleviamo, sopravvivono bene?». La sopravvivenza è calcolata
+                solo sulla parte <span className="font-medium">tracciata nelle coorti</span> (con
+                conteggio iniziale e attuale), così il dato resta affidabile.
+              </p>
+              <p>
+                <span className="font-semibold">Non è la giacenza:</span> per sapere <em>quanti</em>{' '}
+                animali hai in tutto l'impianto guarda i «Vivi totali impianto» qui sotto o i moduli di
+                inventario. I due numeri sono diversi di proposito.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading && (
         <div className="space-y-6">
@@ -274,10 +300,18 @@ export default function CruscottoSopravvivenza() {
                     <CertaintyBadge level={plant.summary.certainty} fraction={plant.summary.certoFraction} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Vivi correnti</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3" title="Tutti gli animali vivi presenti nell'impianto adesso (tutti i moduli, anche raceway, con e senza coorte). È la giacenza viva totale, NON la base del calcolo di sopravvivenza.">
+                    <div className="text-xs text-sky-700">Vivi totali impianto</div>
+                    <div className="text-xl font-semibold text-sky-900" data-testid="text-plant-total-live">{fmt(plant.summary.totalPlantLive)}</div>
+                  </div>
+                  <div className="rounded-lg border p-3" title="Animali tracciati nelle coorti (con conteggio iniziale e attuale): è la base su cui viene calcolata la sopravvivenza.">
+                    <div className="text-xs text-muted-foreground">Tracciati (coorti)</div>
                     <div className="text-xl font-semibold" data-testid="text-plant-live">{fmt(plant.summary.currentLive)}</div>
+                  </div>
+                  <div className="rounded-lg border p-3" title="Copertura = vivi tracciati ÷ vivi totali impianto. Indica quanta parte dell'impianto è seguita con le coorti. È normale che sia parziale.">
+                    <div className="text-xs text-muted-foreground">Copertura impianto</div>
+                    <div className="text-xl font-semibold" data-testid="text-plant-coverage">{fmtPct(plant.summary.coverageFraction, 0)}</div>
                   </div>
                   <div className="rounded-lg border p-3">
                     <div className="text-xs text-muted-foreground">Coorti attive</div>
@@ -287,7 +321,7 @@ export default function CruscottoSopravvivenza() {
                     <div className="text-xs text-muted-foreground">Moduli attivi</div>
                     <div className="text-xl font-semibold">{fmt(plant.summary.activeModules)}</div>
                   </div>
-                  <div className="rounded-lg border p-3">
+                  <div className="rounded-lg border p-3" title="Quota dei vivi tracciati il cui ultimo dato è un conteggio diretto (certo) e non una stima. Diverso dalla copertura.">
                     <div className="text-xs text-muted-foreground">Quota contata</div>
                     <div className="text-xl font-semibold">{fmtPct(plant.summary.certoFraction, 0)}</div>
                   </div>
@@ -340,7 +374,7 @@ export default function CruscottoSopravvivenza() {
             {plant.byType.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                  Nessun modulo con vivi correnti.
+                  Nessun modulo con animali vivi.
                 </CardContent>
               </Card>
             ) : (
@@ -363,7 +397,7 @@ export default function CruscottoSopravvivenza() {
             <CardContent>
               {plant.byModule.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">
-                  Nessun modulo con vivi correnti.
+                  Nessun modulo con animali vivi.
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -372,7 +406,8 @@ export default function CruscottoSopravvivenza() {
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-4 font-medium">Modulo</th>
                         <th className="py-2 px-4 font-medium">Tipo</th>
-                        <th className="py-2 px-4 font-medium text-right">Vivi correnti</th>
+                        <th className="py-2 px-4 font-medium text-right">Vivi totali</th>
+                        <th className="py-2 px-4 font-medium text-right">Tracciati</th>
                         <th className="py-2 px-4 font-medium text-right">Coorti</th>
                         <th className="py-2 px-4 font-medium">Sopravvivenza</th>
                         <th className="py-2 pl-4 font-medium text-center">Affidabilità</th>
@@ -414,6 +449,7 @@ export default function CruscottoSopravvivenza() {
                                 {meta.label}
                               </span>
                             </td>
+                            <td className="py-2 px-4 text-right tabular-nums font-medium text-sky-700">{fmt(m.totalLive)}</td>
                             <td className="py-2 px-4 text-right tabular-nums">{fmt(m.currentLive)}</td>
                             <td className="py-2 px-4 text-right tabular-nums">{fmt(m.activeCohorts)}</td>
                             <td className="py-2 px-4">
@@ -442,9 +478,11 @@ export default function CruscottoSopravvivenza() {
           </Card>
 
           <p className="text-[11px] text-muted-foreground">
-            La sopravvivenza è la sintesi delle coorti (Fase 3/4) pesata sul vivo attuale.
-            <span className="font-medium"> Certo</span> = vivi contati all'ultima vagliatura;
-            <span className="font-medium"> Stimato</span> = numero dedotto dalle misure successive.
+            <span className="font-medium">Vivi totali</span> = tutti gli animali vivi del modulo (anche
+            non tracciati); <span className="font-medium">Tracciati</span> = quelli seguiti nelle coorti,
+            base del calcolo di sopravvivenza. La sopravvivenza è la sintesi delle coorti (Fase 3/4)
+            pesata sul vivo attuale. <span className="font-medium">Certo</span> = vivi contati all'ultima
+            vagliatura; <span className="font-medium">Stimato</span> = numero dedotto dalle misure successive.
           </p>
         </div>
       )}
