@@ -35,7 +35,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertTriangle, Fish, ShoppingCart, MoveRight, Calendar, Hash } from 'lucide-react';
+import { AlertTriangle, Fish, ShoppingCart, MoveRight, Calendar, Hash, RefreshCw } from 'lucide-react';
 
 // Types
 import { Flupsy, Basket, Selection, SourceBasket, DestinationBasket } from '@/types';
@@ -71,6 +71,9 @@ export default function VagliaturaConMappa() {
   
   // Flag per indicare se la data è stata confermata
   const [isDateConfirmed, setIsDateConfirmed] = useState(false);
+
+  // Stato del pulsante "Aggiorna" (ricarica dati da server)
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Cestelli selezionati
   const [sourceBaskets, setSourceBaskets] = useState<SourceBasket[]>([]);
@@ -197,7 +200,10 @@ export default function VagliaturaConMappa() {
   // Query per recuperare i cestelli con i dati completi delle ultime operazioni
   const { data: baskets = [], isLoading: isLoadingBaskets } = useQuery<Basket[]>({
     queryKey: ['/api/baskets', { includeAll: true }],
-    enabled: true
+    enabled: true,
+    // Ricarica l'elenco ceste quando l'operatore torna sull'app (rispetta lo staleTime di 30s):
+    // evita che una cesta appena attivata risulti "mancante" per dati vecchi nel browser.
+    refetchOnWindowFocus: true,
   });
   
   // Query specifica per recuperare le operazioni - carica TUTTE per evitare esclusioni
@@ -1133,14 +1139,74 @@ export default function VagliaturaConMappa() {
     }
   };
 
+  // Ricarica dei dati dal server (ceste, operazioni, cicli, ecc.): rete di sicurezza manuale
+  // contro elenchi vecchi nel browser che farebbero sparire ceste appena attivate.
+  const refreshData = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/baskets'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/operations'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/flupsys'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/cycles'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/selections'] }),
+      ]);
+      toast({ title: 'Dati aggiornati', description: 'Ceste e operazioni ricaricate dal server.' });
+    } catch (e) {
+      toast({ title: 'Errore aggiornamento', description: 'Riprova tra qualche secondo.', variant: 'destructive' });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Ricarica completa dell'app: svuota la cache PWA e disinstalla il service worker, poi ricarica
+  // il codice più recente. Per i rari casi di versione vecchia bloccata sul dispositivo.
+  const hardReloadApp = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if ('caches' in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n)));
+      }
+    } catch (e) {
+      // ignora: ricarichiamo comunque
+    } finally {
+      window.location.reload();
+    }
+  };
+
   return (
     <div className="container mx-auto py-6">
       <Helmet>
         <title>Vagliatura con Mappa | Flupsy Manager</title>
       </Helmet>
       
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
         <h1 className="text-3xl font-bold">Vagliatura con Mappa</h1>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshData}
+            disabled={isRefreshing}
+            data-testid="button-refresh-data"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Aggiorno…' : 'Aggiorna'}
+          </Button>
+          <button
+            type="button"
+            onClick={hardReloadApp}
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            data-testid="button-hard-reload"
+            title="Svuota la cache dell'app e ricarica il codice più recente"
+          >
+            Ricarica app
+          </button>
+        </div>
       </div>
       
       <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
