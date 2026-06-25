@@ -33,7 +33,7 @@ import {
   lotLedger
 } from "../../shared/schema";
 import { format } from "date-fns";
-import { apiRequest, getConfigValue } from "./fatture-in-cloud-controller";
+import { getConfigValue } from "./fatture-in-cloud-controller";
 import { OperationsCache } from "../operations-cache-service.js";
 import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
@@ -41,67 +41,54 @@ import { dbEsterno, queryEsterno, isDbEsternoAvailable } from "../db-esterno";
 import { consegneCondivise, ordiniCondivisi } from "../schema-esterno";
 
 /**
- * Ottiene il prossimo numero DDT disponibile verificando sia il database locale che Fatture in Cloud
- * @param companyId - ID dell'azienda per cui generare il numero DDT (opzionale)
+ * Ottiene il prossimo numero DDT disponibile leggendo SEMPRE l'ultimo DDT da
+ * Fatture in Cloud (FIC) per l'azienda emittente specificata.
+ *
+ * La numerazione FIC è PER AZIENDA (endpoint /c/{companyId}) e riparte ogni anno,
+ * quindi interroghiamo direttamente l'azienda corretta e l'anno corrente. Il numero
+ * NON viene più derivato dal database locale: la fonte di verità è Fatture in Cloud.
+ *
+ * @param companyId - ID azienda FIC che emette il DDT (OBBLIGATORIO)
  */
 async function getNextAvailableDDTNumber(companyId?: number | null): Promise<number> {
-  try {
-    // 1. Ottieni l'ultimo numero DDT locale
-    const ultimoDDTLocale = await db.select().from(ddt).orderBy(desc(ddt.numero)).limit(1);
-    const numeroLocale = ultimoDDTLocale.length > 0 ? ultimoDDTLocale[0].numero : 0;
-
-    console.log(`📋 Ultimo DDT locale: ${numeroLocale}`);
-
-    // 2. Interroga Fatture in Cloud per ottenere gli ultimi DDT
-    let numeroFIC = 0;
-    
-    try {
-      if (companyId) {
-        // Ottieni anno corrente per filtrare DDT (la numerazione riparte ogni anno)
-        const currentYear = new Date().getFullYear();
-        
-        // Ottieni gli ultimi DDT da FIC per questa azienda FILTRATI PER ANNO CORRENTE
-        // IMPORTANTE: l'API non supporta sort=-number, quindi recuperiamo 100 DDT e ordiniamo client-side
-        // Il parametro year è CRITICO perché FIC riavvia la numerazione ogni anno
-        const ficResponse = await apiRequest('GET', `/issued_documents?type=delivery_note&year=${currentYear}&per_page=100`);
-        
-        if (ficResponse.data?.data && ficResponse.data.data.length > 0) {
-          // Ordina per DATA decrescente (più recente prima), poi per NUMERO decrescente
-          const ddtOrdinati = ficResponse.data.data.sort((a: any, b: any) => {
-            const dateA = new Date(a.date || '1900-01-01');
-            const dateB = new Date(b.date || '1900-01-01');
-            const diffDate = dateB.getTime() - dateA.getTime();
-            if (diffDate !== 0) return diffDate;
-            // Se stessa data, ordina per numero decrescente
-            return (b.number || 0) - (a.number || 0);
-          });
-          numeroFIC = ddtOrdinati[0].number || 0;
-          const ultimaData = ddtOrdinati[0].date;
-          console.log(`📋 Ultimo DDT su Fatture in Cloud per azienda ${companyId} (anno ${currentYear}): #${numeroFIC} del ${ultimaData} (trovati ${ficResponse.data.data.length} DDT totali)`);
-        } else {
-          console.log(`📋 Nessun DDT trovato su Fatture in Cloud per azienda ${companyId} (anno ${currentYear})`);
-        }
-      } else {
-        console.log('⚠️ Company ID non specificato, uso solo numero locale');
-      }
-    } catch (ficError: any) {
-      console.error('⚠️ Errore nel recupero DDT da Fatture in Cloud:', ficError.message);
-      console.log('📋 Continuo con solo numero locale');
-    }
-
-    // 3. Usa il massimo tra locale e FIC, incrementato di 1
-    const prossimoNumero = Math.max(numeroLocale, numeroFIC) + 1;
-    
-    console.log(`✅ Prossimo numero DDT disponibile: ${prossimoNumero}`);
-    
-    return prossimoNumero;
-    
-  } catch (error) {
-    console.error('❌ Errore nel calcolo prossimo numero DDT:', error);
-    // Fallback: usa solo database locale
-    const ultimoDDT = await db.select().from(ddt).orderBy(desc(ddt.numero)).limit(1);
-    return ultimoDDT.length > 0 ? ultimoDDT[0].numero + 1 : 1;
+  if (!companyId) {
+    throw new Error("ID azienda mancante: impossibile leggere la numerazione DDT da Fatture in Cloud. Associare un'azienda emittente alla vendita.");
   }
+
+  const accessToken = await getConfigValue('fatture_in_cloud_access_token');
+  if (!accessToken) {
+    throw new Error("Token Fatture in Cloud mancante: eseguire prima l'autenticazione OAuth2.");
+  }
+
+  // La numerazione FIC riparte ogni anno: filtriamo per anno corrente.
+  const currentYear = new Date().getFullYear();
+
+  // Legge gli ultimi DDT (delivery_note) DELL'AZIENDA specifica direttamente da FIC,
+  // usando lo stesso canale per-azienda dell'invio del DDT (ficApiRequest → /c/{companyId}).
+  // L'API non supporta sort=-number, quindi recuperiamo fino a 100 documenti e
+  // calcoliamo lato server il numero più alto.
+  const ficResponse = await ficApiRequest(
+    'GET',
+    String(companyId),
+    accessToken,
+    `/issued_documents?type=delivery_note&year=${currentYear}&per_page=100`
+  );
+
+  const docs: any[] = ficResponse.data?.data ?? [];
+
+  // I DDT vengono emessi con la serie di numerazione '/ddt' (vedi sendDDTToFIC).
+  // Il campo `number` di FIC è progressivo PER SERIE, quindi consideriamo i documenti
+  // di quella serie; se nessuno corrisponde, ripieghiamo su tutti i DDT dell'anno.
+  const serie = '/ddt';
+  const documentiSerie = docs.filter((d) => (d.numeration || '') === serie);
+  const pool = documentiSerie.length > 0 ? documentiSerie : docs;
+
+  const numeroFIC = pool.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
+  const prossimoNumero = numeroFIC + 1;
+
+  console.log(`✅ Prossimo numero DDT per azienda ${companyId} (anno ${currentYear}, serie "${serie}"): ${prossimoNumero} — ultimo su FIC: ${numeroFIC} (documenti analizzati: ${pool.length})`);
+
+  return prossimoNumero;
 }
 
 /**
@@ -1430,6 +1417,15 @@ export async function generateDDT(req: Request, res: Response) {
 
     // Usa Company ID dalla vendita (se specificato)
     const companyId: number | null = saleData.companyId || null;
+
+    // L'azienda emittente è obbligatoria: il numero DDT viene letto da Fatture in Cloud
+    // per quella specifica azienda. Senza azienda non possiamo determinare la numerazione.
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        error: "Azienda emittente non associata alla vendita. Selezionare l'azienda prima di generare il DDT (il numero viene letto da Fatture in Cloud per azienda)."
+      });
+    }
 
     // Ottieni il prossimo numero DDT disponibile da FIC per questa azienda
     const numeroDDT = await getNextAvailableDDTNumber(companyId);
