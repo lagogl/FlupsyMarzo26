@@ -4,6 +4,8 @@
  * PRINCIPIO (coerente con Fasi 2-4):
  * - La sopravvivenza di impianto è la sintesi delle COORTI (l'unità contata della Fase 3/4),
  *   pesata sul VIVO ATTUALE (gli animali correntemente in vita nelle coorti).
+ * - Si usa la SOPRAVVIVENZA REALE della coorte (1 − mortalità): le uscite dichiarate
+ *   (vendite, trasferimenti, ri-vagliature) NON sono conteggiate come morti.
  * - Ogni coorte porta i suoi animali vivi correnti distribuiti nei moduli (FLUPSY / raceway / bins)
  *   dove si trovano fisicamente i suoi cicli attivi. Attribuiamo la sopravvivenza misurata della
  *   coorte ai moduli in proporzione a dove sono i vivi correnti.
@@ -25,7 +27,7 @@ export interface ModuleSurvival {
   moduleType: ModuleType;
   currentLive: number; // vivi correnti delle coorti presenti nel modulo (parte tracciata)
   totalLive: number; // vivi correnti TOTALI del modulo (cicli con e senza coorte)
-  weightedSurvival: number | null; // sopravvivenza ponderata sul vivo (0..1), null se nessun dato
+  weightedSurvival: number | null; // sopravvivenza REALE ponderata sul vivo (0..1, esclude le uscite), null se nessun dato
   certoFraction: number; // quota dei vivi il cui ultimo dato è un conteggio (0..1)
   certainty: CertaintyLevel; // semaforo certo/stimato del modulo
   activeCohorts: number; // numero coorti distinte con vivi nel modulo
@@ -236,8 +238,12 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
     computeTrend(days),
   ]);
 
+  // Usa la SOPRAVVIVENZA REALE della coorte (1 − mortalità), che scorpora le uscite dichiarate
+  // (vendite, trasferimenti, ri-vagliature). NON usare la survivalRate "vecchio stile"
+  // (vivi correnti ÷ iniziali): conteggia gli animali usciti come se fossero morti, facendo
+  // crollare il dato a ogni ondata di vagliature/vendite anche senza mortalità reale.
   const rateByCohort = new Map<number, number | null>();
-  for (const c of cohorts) rateByCohort.set(c.id, c.survivalRate);
+  for (const c of cohorts) rateByCohort.set(c.id, c.realSurvivalRate);
 
   // Accumula per modulo.
   const modules = new Map<number, ModuleAccumulator>();

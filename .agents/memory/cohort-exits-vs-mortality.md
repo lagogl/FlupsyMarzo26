@@ -48,3 +48,11 @@ mortality. cessazione/manual closures naturally fall into the mortality residual
 Per-lot estimates (estimatedExitCount/estimatedMortalityCount) use the same
 `distributePreservingSum` pro-quota split as estimatedLiveCount, so per-lot sums
 reconcile exactly to the cohort totals.
+
+**Plant dashboard headline uses realSurvivalRate, NOT legacy survivalRate.**
+The Cruscotto Sopravvivenza weighted survival (`plant-survival.ts` rateByCohort)
+must read `cohort.realSurvivalRate` (= 1 − mortalityRate, exits excluded). The legacy
+`survivalRate` (currentLive/initial) makes the headline crash to ~30% after any big
+wave of vagliature/sales/transfers even with near-zero real mortality (those animals
+exited, they didn't die). The trend chart (dst/src at vagliature) is a separate metric
+and is correctly left on its own computation.
