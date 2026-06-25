@@ -1362,9 +1362,19 @@ router.post('/ddt', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Cliente non trovato' });
     }
     
-    // Genera numero DDT progressivo
-    const ultimiDdt = await db.select().from(ddt).orderBy(desc(ddt.numero)).limit(1);
-    const nuovoNumero = ultimiDdt.length > 0 ? ultimiDdt[0].numero + 1 : 1;
+    // Genera numero DDT leggendo SEMPRE l'ultimo DDT da Fatture in Cloud per l'azienda
+    // configurata. apiRequest usa l'azienda globale (fatture_in_cloud_company_id), la stessa
+    // a cui il documento viene poi inviato qui sotto, quindi lettura e invio sono coerenti.
+    // La numerazione FIC riparte ogni anno ed è progressiva per serie ('/ddt').
+    const annoCorrenteDdt = new Date().getFullYear();
+    const ultimiDdtFICResp = await apiRequest('GET', `/issued_documents?type=delivery_note&year=${annoCorrenteDdt}&per_page=100`);
+    const documentiFIC: any[] = ultimiDdtFICResp.data?.data ?? [];
+    const serieDdt = '/ddt';
+    const documentiSerieDdt = documentiFIC.filter((d) => (d.numeration || '') === serieDdt);
+    const poolDdt = documentiSerieDdt.length > 0 ? documentiSerieDdt : documentiFIC;
+    const numeroMassimoFIC = poolDdt.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
+    const nuovoNumero = numeroMassimoFIC + 1;
+    console.log(`✅ Prossimo numero DDT (da report) letto da FIC per azienda configurata (anno ${annoCorrenteDdt}, serie "${serieDdt}"): ${nuovoNumero} — ultimo su FIC: ${numeroMassimoFIC} (documenti analizzati: ${poolDdt.length})`);
     
     // Crea DDT locale prima
     const [nuovoDdt] = await db.insert(ddt).values({
@@ -1458,6 +1468,7 @@ router.post('/ddt', async (req: Request, res: Response) => {
         },
         date: report.dataConsegna,
         number: nuovoDdt.numero,
+        numeration: '/ddt',
         items_list: righeConSubtotali.map(riga => ({
           name: riga.descrizione,
           qty: typeof riga.quantita === 'string' ? parseFloat(riga.quantita) : riga.quantita,
