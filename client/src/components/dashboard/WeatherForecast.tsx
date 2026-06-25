@@ -12,6 +12,8 @@ interface WeatherData {
     weather_code?: number[];
     precipitation_probability_max: number[];
     windspeed_10m_max: number[];
+    sunshine_duration?: number[];
+    daylight_duration?: number[];
   };
 }
 
@@ -54,6 +56,26 @@ function weatherLabel(code: number | null | undefined): string {
   return 'N/D';
 }
 
+// Il weather_code GIORNALIERO di Open-Meteo sovrastima il "coperto" (3): prende la condizione
+// "più significativa" del giorno, così una breve nuvola declassa l'intera giornata a coperto
+// anche con cielo quasi sempre sereno. Correggiamo SOLO il cielo (sereno/nuvole/nebbia, codici
+// 0-3 e 45-48) ricavandolo dalla quota di sole effettivo (ore di sole ÷ ore di luce), più accurata.
+// Pioggia, neve, rovesci e temporali (codici ≥51, qualsiasi intensità) mantengono SEMPRE il codice
+// grezzo: non nascondiamo mai la pioggia.
+function effectiveWeatherCode(
+  rawCode: number | null | undefined,
+  sunshine: number | null | undefined,
+  daylight: number | null | undefined,
+): number | null | undefined {
+  if (rawCode != null && rawCode >= 51) return rawCode; // precipitazione/neve/temporale: invariato
+  if (sunshine == null || daylight == null || daylight <= 0) return rawCode;
+  const sunFrac = sunshine / daylight;
+  if (sunFrac >= 0.8) return 0; // Sereno
+  if (sunFrac >= 0.6) return 1; // Prev. sereno
+  if (sunFrac >= 0.35) return 2; // Parz. nuvoloso
+  return 3; // Coperto
+}
+
 const getDayName = (dateStr: string, index: number) => {
   if (index === 0) return 'Oggi';
   const date = new Date(dateStr);
@@ -67,11 +89,9 @@ export default function WeatherForecast() {
   const { data: weather, isLoading } = useQuery<WeatherData>({
     queryKey: ['weather-forecast'],
     queryFn: async () => {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${avgLat}&longitude=${avgLon}&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,windspeed_10m_max&timezone=Europe/Rome&forecast_days=7`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${avgLat}&longitude=${avgLon}&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,windspeed_10m_max,sunshine_duration,daylight_duration&timezone=Europe/Rome&forecast_days=7`;
       const res = await fetch(url);
       const data = await res.json();
-      const codes = data?.daily?.weather_code ?? data?.daily?.weathercode ?? [];
-      console.log('[WeatherForecast] Codici meteo ricevuti:', codes);
       return data;
     },
     staleTime: 1000 * 60 * 30,
@@ -89,12 +109,14 @@ export default function WeatherForecast() {
 
   const { time, temperature_2m_max, temperature_2m_min, precipitation_probability_max } = weather.daily;
   const weathercodes = weather.daily.weather_code ?? weather.daily.weathercode ?? [];
+  const sunshine = weather.daily.sunshine_duration ?? [];
+  const daylight = weather.daily.daylight_duration ?? [];
 
   return (
     <div className="flex items-center gap-1">
       <span className="text-xs text-gray-500 mr-1 hidden lg:inline">Meteo Delta:</span>
       {time.slice(0, 7).map((date, i) => {
-        const code = weathercodes[i] ?? null;
+        const code = effectiveWeatherCode(weathercodes[i] ?? null, sunshine[i], daylight[i]);
         return (
           <div
             key={date}
