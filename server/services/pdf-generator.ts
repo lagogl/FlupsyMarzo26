@@ -2,9 +2,7 @@
  * Servizio per la generazione di PDF per le vendite avanzate
  * Utilizza Puppeteer per convertire HTML in PDF con layout professionale
  */
-import puppeteer from 'puppeteer';
-import chromium from '@sparticuz/chromium';
-import handlebars from 'handlebars';
+import type handlebars from 'handlebars';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import path from 'path';
@@ -448,6 +446,10 @@ export class PDFGeneratorService {
 
   async init() {
     if (!this.browser) {
+      // Caricamento lazy di puppeteer/chromium (pesanti ~1.5s): solo quando serve un PDF
+      const puppeteer = (await import('puppeteer')).default;
+      const chromium = (await import('@sparticuz/chromium')).default;
+
       // Configura chromium path e args per funzionare su Replit
       chromium.setHeadlessMode = true;
       chromium.setGraphicsMode = false;
@@ -498,6 +500,7 @@ export class PDFGeneratorService {
     const fiscalData = await getCompanyFiscalData(companyId);
 
     // Compila il template
+    const handlebars = (await import('handlebars')).default;
     const template = handlebars.compile(HTML_TEMPLATE);
     
     // Prepara i dati per il template con logo e info azienda completa

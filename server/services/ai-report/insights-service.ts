@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
 
 const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 

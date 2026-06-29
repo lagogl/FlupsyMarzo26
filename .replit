@@ -16,6 +16,42 @@ localPort = 3050
 externalPort = 3002
 
 [[ports]]
+localPort = 3060
+externalPort = 3003
+
+[[ports]]
+localPort = 3061
+externalPort = 4200
+
+[[ports]]
+localPort = 3065
+externalPort = 5000
+
+[[ports]]
+localPort = 3067
+externalPort = 5173
+
+[[ports]]
+localPort = 3068
+externalPort = 6000
+
+[[ports]]
+localPort = 3069
+externalPort = 3001
+
+[[ports]]
+localPort = 3072
+externalPort = 6800
+
+[[ports]]
+localPort = 3074
+externalPort = 8000
+
+[[ports]]
+localPort = 3075
+externalPort = 8008
+
+[[ports]]
 localPort = 5000
 externalPort = 80
 

@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import { db } from '../../../db';
 import { lciMaterials, lciConsumables, lciConsumptionLogs, lciProductionSnapshots, lciReports, lciSettings } from '../../../../shared/lci-schema';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
@@ -213,6 +212,7 @@ export class LciExportService {
   async generateExcelReport(referenceYear: number): Promise<Buffer> {
     const data = await this.generateReportData(referenceYear);
     
+    const XLSX = (await import('xlsx')).default;
     const workbook = XLSX.utils.book_new();
 
     const summarySheet = XLSX.utils.aoa_to_sheet([

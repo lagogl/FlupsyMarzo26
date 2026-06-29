@@ -2,7 +2,6 @@
  * Generatore PDF del Manuale FLUPSY (IT/EN).
  * Sorgente unica: shared/manual-content.ts
  */
-import PDFDocument from "pdfkit";
 import { MANUAL, MANUAL as MAN, Lang, ManualBlock, ManualChapter, getChapter } from "../../shared/manual-content";
 
 interface GenOptions {
@@ -39,6 +38,7 @@ const T = {
 };
 
 export async function generateManualPDF(opts: GenOptions): Promise<Buffer> {
+  const PDFDocument = (await import("pdfkit")).default;
   const lang: Lang = opts.lang === "en" ? "en" : "it";
   const chapters: ManualChapter[] = opts.chapterId
     ? [getChapter(opts.chapterId)].filter(Boolean) as ManualChapter[]

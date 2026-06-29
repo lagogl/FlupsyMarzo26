@@ -2,9 +2,8 @@
  * Servizio per la generazione del PDF delle modifiche al sistema
  * Aggiornamento Gennaio 2026 - Mortalità, Dashboard e Analisi AI
  */
-import PDFDocument from 'pdfkit';
-
 export async function generateMortalityUpdatePDF(): Promise<Buffer> {
+  const PDFDocument = (await import('pdfkit')).default;
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({

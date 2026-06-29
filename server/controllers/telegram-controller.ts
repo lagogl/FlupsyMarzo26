@@ -1,4 +1,3 @@
-import TelegramBot from 'node-telegram-bot-api';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Request, Response } from 'express';
@@ -7,30 +6,36 @@ import { emailConfig } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 /**
- * Inizializza il bot Telegram se c'è un token disponibile
+ * Inizializza il bot Telegram in modo lazy (la libreria node-telegram-bot-api
+ * è pesante ~1s da caricare: la importiamo solo al primo utilizzo, non all'avvio).
  */
-function initTelegramBot() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  
-  if (!token) {
-    console.log('Token Telegram non configurato. Bot non inizializzato.');
-    return null;
-  }
-  
-  try {
-    // Crea il bot con l'opzione polling: false per evitare di ricevere messaggi
-    // Useremo il bot solo per inviare messaggi, non per riceverli
-    const bot = new TelegramBot(token, { polling: false });
-    console.log('Bot Telegram inizializzato con successo');
-    return bot;
-  } catch (error) {
-    console.error('Errore nell\'inizializzazione del bot Telegram:', error);
-    return null;
-  }
-}
+let telegramBotPromise: Promise<any> | null = null;
 
-// Inizializza il bot all'avvio
-const telegramBot = initTelegramBot();
+function getTelegramBot(): Promise<any> {
+  if (telegramBotPromise === null) {
+    telegramBotPromise = (async () => {
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+
+      if (!token) {
+        console.log('Token Telegram non configurato. Bot non inizializzato.');
+        return null;
+      }
+
+      try {
+        const TelegramBot = (await import('node-telegram-bot-api')).default;
+        // Crea il bot con l'opzione polling: false per evitare di ricevere messaggi
+        // Useremo il bot solo per inviare messaggi, non per riceverli
+        const bot = new TelegramBot(token, { polling: false });
+        console.log('Bot Telegram inizializzato con successo');
+        return bot;
+      } catch (error) {
+        console.error('Errore nell\'inizializzazione del bot Telegram:', error);
+        return null;
+      }
+    })();
+  }
+  return telegramBotPromise;
+}
 
 /**
  * Ottiene le configurazioni di Telegram dal database
@@ -208,6 +213,7 @@ function formatTelegramMessage(data: any, date: Date): string {
  * Invia il messaggio a tutte le chat configurate
  */
 async function sendTelegramMessage(message: string, chatIds: string[]): Promise<boolean> {
+  const telegramBot = await getTelegramBot();
   if (!telegramBot) {
     console.error('Bot Telegram non inizializzato. Impossibile inviare messaggio.');
     return false;
@@ -266,6 +272,7 @@ export async function sendTelegramDiario(req: Request, res: Response) {
     }
     
     // Verifica che il bot sia inizializzato
+    const telegramBot = await getTelegramBot();
     if (!telegramBot) {
       console.error('Bot Telegram non inizializzato. Token presente:', !!process.env.TELEGRAM_BOT_TOKEN);
       return res.status(500).json({
@@ -372,6 +379,7 @@ export async function getTelegramConfiguration(req: Request, res: Response) {
 export async function autoSendTelegramDiario(diarioData: any, date: Date): Promise<boolean> {
   try {
     // Verifica che il bot sia inizializzato
+    const telegramBot = await getTelegramBot();
     if (!telegramBot) {
       console.error('Bot Telegram non inizializzato. Impossibile inviare messaggio automatico.');
       return false;

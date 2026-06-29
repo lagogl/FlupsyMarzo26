@@ -1,9 +1,17 @@
-import OpenAI from 'openai';
 import { ProductionForecastService } from './production-forecast-service';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+let __openaiPromise: Promise<any> | null = null;
+function getOpenAI() {
+  if (!__openaiPromise) {
+    __openaiPromise = (async () => {
+      const OpenAI = (await import('openai')).default;
+      return new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      });
+    })();
+  }
+  return __openaiPromise;
+}
 
 const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 
@@ -104,6 +112,7 @@ ${question}
 Rispondi alla domanda basandoti sui dati forniti. Usa i CALCOLI CUMULATIVI per verificare la copertura ordini.`;
 
     try {
+      const openai = await getOpenAI();
       const response = await openai.chat.completions.create({
         model: AI_MODEL,
         messages: [

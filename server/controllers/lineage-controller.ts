@@ -1,7 +1,6 @@
 import type { Request, Response } from "express";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
-import ExcelJS from 'exceljs';
 
 function intsToSql(ids: number[]) {
   return sql.raw(ids.join(', '));
@@ -181,6 +180,7 @@ export async function exportLineageExcel(req: Request, res: Response) {
 
     const { groups } = innerData;
 
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'FLUPSY Management System';
     workbook.created = new Date();

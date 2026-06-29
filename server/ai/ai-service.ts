@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import { AutonomousAIService } from "./autonomous-ai-service";
 
 // Configurazione OpenAI GPT-4o con API key personale dell'utente
@@ -14,10 +14,11 @@ console.log('🔧 OpenAI GPT-4o Config:', {
 // Client OpenAI configurato con ricaricamento dinamico
 let aiClient: OpenAI | null = null;
 
-function initializeAIClient() {
+async function initializeAIClient() {
   const currentApiKey = process.env.OPENAI_API_KEY;
   try {
     if (currentApiKey && currentApiKey.length > 10) {
+      const OpenAI = (await import("openai")).default;
       aiClient = new OpenAI({
         apiKey: currentApiKey,
         timeout: 30000,
@@ -530,7 +531,7 @@ export class AIService {
 
       // Forza reinizializzazione se client non presente
       if (!aiClient) {
-        initializeAIClient();
+        await initializeAIClient();
       }
 
       // Test connessione DeepSeek con diagnostica completa

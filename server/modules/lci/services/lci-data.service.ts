@@ -35,7 +35,16 @@ export class LciDataService {
 
   async isModuleEnabled(): Promise<boolean> {
     const setting = await this.getSetting('lci_module_enabled');
-    return setting?.value === true || setting?.value === 'true';
+    // Predefinito: ABILITATO. Il modulo si disattiva SOLO se l'impostazione
+    // 'lci_module_enabled' è esplicitamente impostata a false.
+    // Motivo: il flusso di Publish copia la STRUTTURA delle tabelle ma non le
+    // righe di configurazione, quindi in produzione 'lci_settings' resta vuota
+    // dopo una pubblicazione; con il default abilitato il modulo funziona
+    // comunque, senza dover reinserire dati a mano in produzione.
+    if (!setting || setting.value === null || setting.value === undefined) {
+      return true;
+    }
+    return setting.value !== false && setting.value !== 'false';
   }
 
   async getProductionSnapshots(year?: number): Promise<LciProductionSnapshot[]> {

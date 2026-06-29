@@ -3,8 +3,6 @@ import { AIService, PredictiveGrowthData } from "../ai/ai-service";
 import { db } from "../db";
 import { baskets, operations, cycles, sgrGiornalieri, sizes, basketLotComposition, lots, flupsys } from "../../shared/schema";
 import { eq, desc, and, gte, lte, sql, isNotNull } from "drizzle-orm";
-import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
 import { 
   createFormattedWorkbook, 
   applyHeaderStyle, 
@@ -981,7 +979,7 @@ export function registerAIRoutes(app: Express) {
         ? (absoluteBySizeRecord[category as string] || 0)
         : Object.values(absoluteBySizeRecord).reduce((sum, v) => sum + v, 0);
       
-      const workbook = createFormattedWorkbook();
+      const workbook = await createFormattedWorkbook();
       const ws = workbook.addWorksheet('Scostamenti Produzione');
       
       const headers = ['Mese', 'Taglia', 'Giacenza', 'Budget', 'Ordini', 'Produzione', 
@@ -1274,7 +1272,7 @@ export function registerAIRoutes(app: Express) {
       }
       
       // Crea workbook formattato con ExcelJS
-      const workbook = createFormattedWorkbook();
+      const workbook = await createFormattedWorkbook();
       
       // FOGLIO 1: Parametri e Inventario
       const ws1 = workbook.addWorksheet('Parametri e Inventario');

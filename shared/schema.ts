@@ -1858,3 +1858,10 @@ export const immConfig = pgTable("imm_config", {
 });
 
 export type ImmConfigRow = typeof immConfig.$inferSelect;
+
+// Modulo LCI (Life Cycle Inventory) — le tabelle sono definite in ./lci-schema.ts.
+// Le ri-esportiamo qui affinché rientrino nello scope di drizzle.config (che punta
+// solo a shared/schema.ts): così `drizzle-kit push` le CREA in sviluppo e NON le
+// rimuove più come tabelle "fuori schema". La propagazione in produzione avviene
+// poi tramite il normale flusso di Publish (diff dev → prod).
+export * from "./lci-schema";

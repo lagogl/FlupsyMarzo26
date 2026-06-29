@@ -1,5 +1,3 @@
-import { google } from 'googleapis';
-
 let connectionSettings: any;
 
 async function getAccessToken() {
@@ -40,6 +38,7 @@ async function getAccessToken() {
 // Access tokens expire, so a new client must be created each time.
 // Always call this function again to get a fresh client.
 export async function getUncachableGmailClient() {
+  const { google } = await import('googleapis');
   const accessToken = await getAccessToken();
 
   const oauth2Client = new google.auth.OAuth2();

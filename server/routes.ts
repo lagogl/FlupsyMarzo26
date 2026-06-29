@@ -26,9 +26,7 @@ import {
   notifications,
   fattureInCloudConfig
 } from "../shared/schema";
-import { registerAIRoutes } from "./controllers/ai-controller";
-import { registerAIReportRoutes } from "./controllers/ai-report-controller";
-import { registerEnhancedAIRoutes } from "./modules/ai-enhanced/enhanced-ai.controller";
+// AI controllers caricati in modo lazy (openai/exceljs/xlsx pesanti) — vedi registerRoutes
 import { 
   getNotificationSettings, 
   updateNotificationSetting
@@ -56,11 +54,11 @@ import { cyclesRoutes } from "./modules/operations/cycles";
 import { registerScreeningRoutes } from "./modules/screening/screening.routes";
 import { registerAnalyticsRoutes } from "./modules/analytics/analytics.routes";
 import { registerIntegrationsRoutes } from "./modules/integrations/integrations.routes";
-import { getLineageData, exportLineageExcel, getAllLineageGroups } from "./controllers/lineage-controller";
+// lineage-controller caricato in modo lazy (exceljs pesante) — vedi registerRoutes
 import { getLotReport, getLotsForReport } from "./controllers/lot-report-controller";
 import { validateBasketRow, validateBasketPosition } from "./utils/validation";
 import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-controller";
-import fattureInCloudRouter from "./controllers/fatture-in-cloud-controller";
+// fatture-in-cloud-controller caricato in modo lazy (pdfkit) — vedi registerRoutes
 import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import basketTransferRouter from "./modules/operations/transfer/basket-transfer.routes";
 import whatsappRouter from "./modules/whatsapp/whatsapp.routes";
@@ -151,7 +149,7 @@ import {
   getBasketLotComposition 
 } from "./services/basket-lot-composition.service";
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express, existingServer?: Server): Promise<Server> {
   // 🎯 MODULI ORGANIZZATI - Registrazione route modularizzate
   app.use('/api/flupsys', flupsyRoutes);
   console.log('✅ Modulo FLUPSYS registrato su /api/flupsys');
@@ -347,9 +345,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerIntegrationsRoutes(app);
 
   // Modulo STORIA ANIMALI (genealogia cicli)
-  app.get('/api/lineage/all', getAllLineageGroups);
-  app.get('/api/lineage', getLineageData);
-  app.get('/api/lineage/export', exportLineageExcel);
+  app.get('/api/lineage/all', (req, res, next) => import("./controllers/lineage-controller").then(m => m.getAllLineageGroups(req, res)).catch(next));
+  app.get('/api/lineage', (req, res, next) => import("./controllers/lineage-controller").then(m => m.getLineageData(req, res)).catch(next));
+  app.get('/api/lineage/export', (req, res, next) => import("./controllers/lineage-controller").then(m => m.exportLineageExcel(req, res)).catch(next));
   console.log('✅ Modulo LINEAGE ANIMALI registrato su /api/lineage');
 
   // Report lotto dedicato (bilancio + distribuzione + timeline)
@@ -387,7 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== ROUTE FATTURE IN CLOUD =====
   console.log("💼 Registrazione route Fatture in Cloud...");
-  app.use('/api/fatture-in-cloud', fattureInCloudRouter);
+  app.use('/api/fatture-in-cloud', (await import("./controllers/fatture-in-cloud-controller")).default);
   console.log("✅ Route Fatture in Cloud registrate con successo");
   
   // Registra route per ordini condivisi (database esterno)
@@ -549,10 +547,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // === Sequence reset routes ===
   app.post("/api/sequences/reset", SequenceController.resetSequence);
 
-  // === AI Routes ===
-  registerAIRoutes(app);
-  registerAIReportRoutes(app);
-  registerEnhancedAIRoutes(app); // 🚀 Modulo AI Potenziato (separato, non interferisce con sistema esistente)
+  // === AI Routes (caricamento lazy: openai/exceljs/xlsx pesanti, fuori dall'avvio) ===
+  (await import("./controllers/ai-controller")).registerAIRoutes(app);
+  (await import("./controllers/ai-report-controller")).registerAIReportRoutes(app);
+  (await import("./modules/ai-enhanced/enhanced-ai.controller")).registerEnhancedAIRoutes(app); // 🚀 Modulo AI Potenziato
   app.get("/api/sequences/info", SequenceController.getSequencesInfo);
   
   // === Lot Lifecycle Management Routes ===
@@ -7413,8 +7411,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create HTTP server
-  const httpServer = createServer(app);
+  // Create HTTP server (or reuse the one already listening for fast health checks)
+  const httpServer = existingServer || createServer(app);
   
   // ========================================
   // 🔄 SCREENING MODULE - MIGRATED

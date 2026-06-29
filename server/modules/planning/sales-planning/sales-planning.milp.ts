@@ -7,8 +7,6 @@
  * - vincolo cassa minima (con slack penalizzato)
  * - obiettivo: max ricavo - λ_ordini × shortfall - λ_cassa × cash_gap
  */
-// @ts-ignore - javascript-lp-solver non ha tipi
-import solver from "javascript-lp-solver";
 import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import {
@@ -404,6 +402,8 @@ export class SalesPlanningMilpService {
     };
 
     const t0 = Date.now();
+    // @ts-ignore - javascript-lp-solver non ha tipi
+    const solver = (await import("javascript-lp-solver")).default;
     const solution = solver.Solve(model);
     const elapsed = Date.now() - t0;
     console.log(`🧮 LP solver completato in ${elapsed}ms, feasible=${solution.feasible}, bounded=${solution.bounded}, obj=${solution.result?.toFixed(2)}`);

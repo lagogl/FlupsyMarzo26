@@ -9,7 +9,6 @@
  * Le due fonti vengono unite con COALESCE (prima la vagliatura, poi il ciclo).
  */
 import { Router, Request, Response } from "express";
-import ExcelJS from "exceljs";
 import { sendError } from "../../../utils/error-handler";
 import { pool } from "../../../db";
 
@@ -286,6 +285,7 @@ lotFlowRoutes.get("/lot-flow/export", async (req: Request, res: Response) => {
     const find = (o: string, d: string) =>
       matrix.find((r) => r.origine === o && r.destinazione === d);
 
+    const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     wb.creator = "FLUPSY";
     wb.created = new Date();

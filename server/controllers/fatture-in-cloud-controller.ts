@@ -1,5 +1,9 @@
 import express from 'express';
-import axios from 'axios';
+let __axiosPromise: Promise<any> | null = null;
+const getAxios = async (): Promise<any> => {
+  if (!__axiosPromise) __axiosPromise = import('axios').then((m) => m.default);
+  return __axiosPromise;
+};
 import type { Request, Response } from 'express';
 import { db } from '../db';
 import { dbEsterno, isDbEsternoAvailable } from '../db-esterno';
@@ -18,7 +22,6 @@ import {
   insertDdtRigheSchema
 } from '@shared/schema';
 import { eq, desc, sql, sum, and, notInArray } from 'drizzle-orm';
-import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 
@@ -142,7 +145,7 @@ export async function apiRequest(method: string, endpoint: string, data?: any) {
   
   console.log(`🔗 API Request: ${method} ${url}`);
   
-  return await axios({
+  return await (await getAxios())({
     method,
     url,
     headers: {
@@ -169,7 +172,7 @@ async function refreshTokenIfNeeded(): Promise<boolean> {
       const clientId = await getConfigValue('fatture_in_cloud_client_id');
       const clientSecret = await getConfigValue('fatture_in_cloud_client_secret');
       
-      const response = await axios.post(`${FATTURE_IN_CLOUD_API_BASE}/oauth/token`, {
+      const response = await (await getAxios()).post(`${FATTURE_IN_CLOUD_API_BASE}/oauth/token`, {
         grant_type: 'refresh_token',
         client_id: clientId,
         client_secret: clientSecret,
@@ -290,7 +293,7 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
     const protocol = req.get('host')?.includes('replit.dev') ? 'https' : req.protocol;
     const redirectUri = `${protocol}://${req.get('host')}/api/fatture-in-cloud/oauth/callback`;
     
-    const tokenResponse = await axios.post(`${FATTURE_IN_CLOUD_API_BASE}/oauth/token`, {
+    const tokenResponse = await (await getAxios()).post(`${FATTURE_IN_CLOUD_API_BASE}/oauth/token`, {
       grant_type: 'authorization_code',
       client_id: clientId,
       client_secret: clientSecret,
@@ -1946,6 +1949,7 @@ router.get('/ddt/:id/pdf', async (req: Request, res: Response) => {
       .orderBy(ddtRighe.id);
     
     // Crea documento PDF (landscape per più spazio)
+    const PDFDocument = (await import('pdfkit')).default;
     const doc = new PDFDocument({ 
       size: 'A4',
       layout: 'landscape',
@@ -2213,7 +2217,7 @@ router.get('/next-ddt-numbers', async (req: Request, res: Response) => {
           throw new Error('Token di accesso mancante');
         }
         
-        const response = await axios({
+        const response = await (await getAxios())({
           method: 'GET',
           url,
           headers: {
@@ -2334,7 +2338,7 @@ router.get('/ddt-numeration-analysis', async (req: Request, res: Response) => {
           throw new Error('Token di accesso mancante');
         }
         
-        const response = await axios({
+        const response = await (await getAxios())({
           method: 'GET',
           url,
           headers: {

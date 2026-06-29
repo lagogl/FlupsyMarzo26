@@ -7,7 +7,6 @@ import { sgrScheduler } from "./sgr-scheduler";
 import { sgrCalculationService } from "./sgr-calculation.service";
 import { sgrMatrixService } from "./sgr-matrix.service";
 import { broadcastMessage } from "../../../websocket";
-import ExcelJS from "exceljs";
 
 export class SgrController {
   // ========== SGR Mensili (Monthly) ==========
@@ -421,6 +420,7 @@ export class SgrController {
       data.sort((a: any, b: any) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
 
       // Create workbook
+      const ExcelJS = (await import("exceljs")).default;
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'FLUPSY Management System';
       workbook.created = new Date();

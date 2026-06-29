@@ -1,7 +1,6 @@
 import { db } from '../db';
 import { marineData } from '@shared/schema';
 import { desc, gte } from 'drizzle-orm';
-import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
@@ -296,7 +295,7 @@ export class MarineDataService {
   }
   
   async exportToExcel(): Promise<string> {
-    const ExcelModule = (ExcelJS as any).default || ExcelJS;
+    const ExcelModule = (await import('exceljs')).default;
     const workbook = new ExcelModule.Workbook();
     const ws = workbook.addWorksheet('Dati Marini Copernicus');
     

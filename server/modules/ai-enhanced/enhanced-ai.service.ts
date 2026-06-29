@@ -7,7 +7,7 @@
  * STRATEGIA #1: Database Knowledge Base implementata
  */
 
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import { pool } from "../../db.js";
 import { 
   generateDatabaseDescription, 
@@ -24,10 +24,11 @@ const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via sec
 // Client OpenAI con API key personale dell'utente
 let aiClient: OpenAI | null = null;
 
-function initializeClient() {
+async function initializeClient() {
   const currentApiKey = process.env.OPENAI_API_KEY;
   
   if (currentApiKey) {
+    const OpenAI = (await import("openai")).default;
     aiClient = new OpenAI({
       apiKey: currentApiKey,
     });

@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import ExcelJS from "exceljs";
 import {
   computeInventoryIMM,
   computeCycleIMM,
@@ -137,6 +136,7 @@ immRoutes.get("/export", async (req: Request, res: Response) => {
       computeOrdersCoverage(cfg),
     ]);
 
+    const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     wb.creator = "FLUPSY IMM";
     wb.created = new Date();

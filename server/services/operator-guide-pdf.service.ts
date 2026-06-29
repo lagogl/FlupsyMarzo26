@@ -2,7 +2,6 @@
  * Servizio per la generazione del PDF guida operatori
  * Documento formativo sulle operazioni del sistema FLUPSY
  */
-import PDFDocument from 'pdfkit';
 import { PassThrough } from 'stream';
 
 interface GuideSection {
@@ -15,6 +14,7 @@ interface GuideSection {
 }
 
 export async function generateOperatorGuidePDF(): Promise<Buffer> {
+  const PDFDocument = (await import('pdfkit')).default;
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({

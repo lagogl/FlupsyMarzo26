@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import type ExcelJS from 'exceljs';
 
 export interface ExcelFormatterOptions {
   headerBgColor?: string;
@@ -134,8 +134,9 @@ export function applyNumberFormat(cell: ExcelJS.Cell, format: string = '#,##0') 
   cell.numFmt = format;
 }
 
-export function createFormattedWorkbook(): ExcelJS.Workbook {
-  const workbook = new ExcelJS.Workbook();
+export async function createFormattedWorkbook(): Promise<ExcelJS.Workbook> {
+  const ExcelJSModule = (await import('exceljs')).default;
+  const workbook = new ExcelJSModule.Workbook();
   workbook.creator = 'FLUPSY Management System';
   workbook.created = new Date();
   return workbook;

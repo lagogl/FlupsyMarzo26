@@ -1,9 +1,6 @@
 import { execSync } from "child_process";
-import QRCode from "qrcode";
-import pkg from "whatsapp-web.js";
 
-const { Client, LocalAuth, MessageMedia } = pkg;
-type WAClient = InstanceType<typeof Client>;
+type WAClient = any;
 
 // Nome del gruppo WhatsApp di destinazione (richiesto: Delta Futuro Equipe Tecnica)
 export const TARGET_GROUP_NAME = "Delta Futuro Equipe Tecnica";
@@ -61,6 +58,8 @@ export async function connect() {
   lastError = null;
   currentQrDataUrl = null;
 
+  const { Client, LocalAuth } = (await import("whatsapp-web.js")).default;
+
   // Distruggi eventuali client orfani prima di crearne uno nuovo
   if (client) {
     const stale = client;
@@ -107,6 +106,7 @@ export async function connect() {
     if (!isCurrent()) return;
     clearWatchdog();
     try {
+      const QRCode = (await import("qrcode")).default;
       currentQrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
       ready = false;
     } catch (e: any) {
@@ -182,6 +182,7 @@ export async function sendImageToTargetGroup(imageBase64: string, caption: strin
     );
   }
   const data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+  const { MessageMedia } = (await import("whatsapp-web.js")).default;
   const media = new MessageMedia("image/png", data, "mappa-termica.png");
   await client.sendMessage(group.id._serialized, media, { caption: caption || undefined });
   return { to: group.name as string };

@@ -1,7 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { db } from "../db";
-import OpenAI from "openai";
-import * as XLSX from 'xlsx';
+import type OpenAI from "openai";
 import { sql } from "drizzle-orm";
 import { getDatabaseSchema, getTableStats } from "../services/ai-report/schema-service";
 import { getAllTemplates, getTemplatesByCategory, getTemplateById, applyTemplateParameters } from "../services/ai-report/report-templates";
@@ -13,9 +12,10 @@ const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via sec
 
 let aiClient: OpenAI | null = null;
 
-function initializeAIClient() {
+async function initializeAIClient() {
   const currentApiKey = process.env.OPENAI_API_KEY;
   if (currentApiKey && currentApiKey.length > 10) {
+    const OpenAI = (await import("openai")).default;
     aiClient = new OpenAI({
       apiKey: currentApiKey,
       timeout: 30000
@@ -371,6 +371,7 @@ Correggi la query e restituisci un JSON con:
       
     } else {
       // Excel (default)
+      const XLSX = (await import('xlsx')).default;
       const workbook = XLSX.utils.book_new();
       
       // Prepara dati con titoli italiani

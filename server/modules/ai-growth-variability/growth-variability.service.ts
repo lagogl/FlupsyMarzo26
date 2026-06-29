@@ -14,16 +14,17 @@ import {
   growthDistributions
 } from "@shared/schema";
 import { eq, and, gte, lte, sql, inArray, desc } from "drizzle-orm";
-import OpenAI from "openai";
+import type OpenAI from "openai";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY;
 const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
 
 let aiClient: OpenAI | null = null;
 
-function initializeAIClient() {
+async function initializeAIClient() {
   const currentApiKey = process.env.OPENAI_API_KEY;
   if (currentApiKey && currentApiKey.length > 10) {
+    const OpenAI = (await import("openai")).default;
     aiClient = new OpenAI({
       apiKey: currentApiKey,
       timeout: 30000,

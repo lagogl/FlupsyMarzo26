@@ -7,7 +7,6 @@ import { db } from '../db.js';
 import { operations, baskets, flupsys, sizes, cycles } from '../../shared/schema.js';
 import { eq, and, gte, lte, sql, isNull, or } from 'drizzle-orm';
 import { format, parseISO, isValid } from 'date-fns';
-import ExcelJS from 'exceljs';
 
 /**
  * Endpoint principale per calcolare le giacenze tra due date
@@ -473,6 +472,7 @@ export async function exportGiacenzeExcel(req: Request, res: Response) {
     
     const giacenzeData = await calculateGiacenzeForRange(startDate, endDate, flupsyId);
 
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'FLUPSY Management System';
     workbook.created = new Date();
