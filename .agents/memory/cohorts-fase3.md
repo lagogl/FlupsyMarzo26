@@ -20,7 +20,22 @@ At each completed vagliatura, given source cycles' cohortId and whether any sour
 **Why the `totalDest > 0` guard:** without it the live path could create a cohort with
 `initialAnimalCount = 0` and empty composition, while backfill skips it → live/backfill divergence.
 Both paths now require it. **How to apply:** if you ever edit one path's branch condition, mirror it
-in the other (`selection-controller-fixed.ts` cohort-determination block and `cohort-backfill.ts`).
+in ALL THREE places (see next section).
+
+## WHICH path is live (critical — do not be fooled by the filename)
+The vagliatura completion that actually runs is the LEGACY `completeSelectionFixed` in
+`server/controllers/selection-controller.ts` — the modular route
+`server/modules/operations/selections/selections.routes.ts` imports it and shadows the inline
+routes.ts route. `selection-controller-fixed.ts` (despite the "fixed" name) is NOT wired up.
+The two are divergent forks: legacy has quality-class + lot_ledger audit + emails; fixed has the
+cohort block + recomputeLotMortality. **The cohort FASE 3 block now lives in the LEGACY file too**
+(determination + create cohort + freeze cohort_composition + set `cycles.cohortId`). So the creation
+rule must stay identical across THREE places: legacy `selection-controller.ts`,
+`selection-controller-fixed.ts`, and `cohort-backfill.ts`.
+**Deliberate omission in legacy:** the fixed file's carry-forward override of `lotPercentages`
+(re-derives distribution from the frozen cohort_composition) was NOT ported, to avoid altering the
+legacy's existing lot distribution / mortality / quality-class behavior. Cohort ID propagation is
+unaffected; only frozen-composition fidelity on mixed-source edge cases can differ — acceptable.
 
 ## Frozen composition source differs by path (intentional, equivalent up to rounding)
 - Live: `lotPercentages × totalAnimalsDestination`, remainder added to dominant lot.
