@@ -144,6 +144,13 @@ export default function ReportMortalita() {
               entrati in vagliatura e quelli ripartiti vivi nelle ceste di destinazione.
             </p>
             <p>
+              <span className="font-semibold">Attenzione a «Lavorati in vagliatura»:</span> è la somma
+              degli animali entrati in <em>ogni</em> vagliatura. Lo stesso animale viene vagliato più
+              volte nell'anno (in media 3-4 volte), quindi è contato più volte: è il <em>lavoro svolto</em>,
+              non il numero di animali distinti. La <span className="font-medium">mortalità %</span> è
+              perciò la media <em>per singola vagliatura</em>, non la perdita annua della popolazione.
+            </p>
+            <p>
               È la stessa verità mostrata nel <span className="font-medium">Cruscotto Sopravvivenza</span>{' '}
               e nel <span className="font-medium">Report Lotto</span>.
             </p>
@@ -181,17 +188,18 @@ export default function ReportMortalita() {
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-5">
-                <div className="text-xs text-muted-foreground">Mortalità media</div>
+              <CardContent className="pt-5" title="Morti ÷ animali lavorati: è la mortalità media di ogni singola vagliatura, non la perdita annua della popolazione.">
+                <div className="text-xs text-muted-foreground">Mortalità media a vagliatura</div>
                 <div className={`text-3xl font-extrabold tabular-nums ${pctColor(report.totals.mortalitaPct)}`} data-testid="text-mortalita-pct">
                   {fmtPct(report.totals.mortalitaPct)}
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-5">
-                <div className="text-xs text-muted-foreground">Animali entrati alle vagliature</div>
+              <CardContent className="pt-5" title="Somma degli animali entrati in OGNI vagliatura del periodo. Lo stesso animale è contato ad ogni vagliatura (in media 3-4 volte l'anno): è il lavoro svolto, NON il numero di animali distinti.">
+                <div className="text-xs text-muted-foreground">Lavorati in vagliatura</div>
                 <div className="text-3xl font-extrabold text-sky-700 tabular-nums">{fmt(report.totals.origine)}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">somma dei passaggi, non animali distinti</div>
               </CardContent>
             </Card>
             <Card>
@@ -355,10 +363,12 @@ export default function ReportMortalita() {
           </Card>
 
           <p className="text-[11px] text-muted-foreground">
-            <span className="font-medium">Entrati</span> = animali entrati alle vagliature nel periodo;{' '}
+            <span className="font-medium">Entrati</span> = somma degli animali entrati alle vagliature del
+            periodo (lo stesso animale è contato ad ogni vagliatura, non sono animali distinti);{' '}
             <span className="font-medium">Morti</span> = entrati − ripartiti vivi (con tetto a 0 sulle
-            anomalie). I morti per FLUPSY sono attribuiti al modulo di origine in proporzione agli animali
-            entrati. I morti per lotto provengono dal registro lotti.
+            anomalie); questi sì sono morti reali, contati una sola volta. I morti per FLUPSY sono
+            attribuiti al modulo di origine in proporzione agli animali entrati. I morti per lotto
+            provengono dal registro lotti.
           </p>
         </div>
       )}

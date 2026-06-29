@@ -306,7 +306,7 @@ export default function CruscottoSopravvivenza() {
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    ultimi {plant.summary.windowDays} giorni · vivi in uscita ÷ vivi in ingresso
+                    ultimi {plant.summary.windowDays} giorni · media per vagliatura (vivi in uscita ÷ vivi in ingresso)
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -318,8 +318,8 @@ export default function CruscottoSopravvivenza() {
                     <div className="text-xs text-red-700">Morti (ultimi {plant.summary.windowDays} gg)</div>
                     <div className="text-xl font-semibold text-red-700" data-testid="text-plant-morti">{fmt(plant.summary.morti)}</div>
                   </div>
-                  <div className="rounded-lg border p-3" title="Animali entrati alle vagliature nella finestra: la base su cui è calcolata la mortalità del periodo.">
-                    <div className="text-xs text-muted-foreground">Entrati alle vagliature</div>
+                  <div className="rounded-lg border p-3" title="Somma degli animali entrati in OGNI vagliatura del periodo. Lo stesso animale è contato ad ogni vagliatura (in media 3-4 volte l'anno): è il lavoro svolto, non gli animali distinti.">
+                    <div className="text-xs text-muted-foreground">Lavorati in vagliatura</div>
                     <div className="text-xl font-semibold" data-testid="text-plant-origine">{fmt(plant.summary.origineVagliature)}</div>
                   </div>
                   <div className="rounded-lg border p-3" title="Morti contati a tutte le vagliature, dall'inizio.">
