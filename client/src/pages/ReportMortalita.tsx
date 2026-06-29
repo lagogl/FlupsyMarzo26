@@ -18,7 +18,7 @@ interface LotRow {
 }
 interface MortalityReport {
   windowDays: number;
-  totals: { origine: number; destinazione: number; morti: number; mortalitaPct: number | null; mortiAllTime: number };
+  totals: { origine: number; destinazione: number; morti: number; mortalitaPct: number | null; mortiAllTime: number; animaliEntrati: number; mortalitaReale: number | null };
   perMonth: MonthRow[];
   perFlupsy: ModuleRow[];
   perLot: LotRow[];
@@ -177,10 +177,23 @@ export default function ReportMortalita() {
 
       {!isLoading && !isError && report && (
         <div className="space-y-6">
-          {/* CARD RIEPILOGO */}
+          {/* CARD RIEPILOGO — la VERITÀ sulla popolazione (animali distinti) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="border-red-200 ring-1 ring-red-100">
+              <CardContent className="pt-5" title="Mortalità reale = morti contati ÷ animali realmente entrati in allevamento (attivazioni). È la quota di animali distinti che è morta.">
+                <div className="text-xs font-medium text-red-700">Mortalità reale (popolazione)</div>
+                <div className={`text-3xl font-extrabold tabular-nums ${pctColor(report.totals.mortalitaReale)}`} data-testid="text-mortalita-reale">
+                  {fmtPct(report.totals.mortalitaReale)}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  {report.totals.mortalitaReale != null && report.totals.mortalitaReale > 1
+                    ? 'periodo breve: include morti di animali entrati prima'
+                    : 'morti ÷ animali entrati'}
+                </div>
+              </CardContent>
+            </Card>
             <Card className="border-red-100">
-              <CardContent className="pt-5">
+              <CardContent className="pt-5" title="Animali morti contati alle vagliature nel periodo. Ogni morte è contata una sola volta: è un numero reale.">
                 <div className="text-xs text-muted-foreground">Morti nel periodo</div>
                 <div className="text-3xl font-extrabold text-red-600 tabular-nums" data-testid="text-morti-window">
                   {fmt(report.totals.morti)}
@@ -188,24 +201,19 @@ export default function ReportMortalita() {
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-5" title="Morti ÷ animali lavorati: è la mortalità media di ogni singola vagliatura, non la perdita annua della popolazione.">
+              <CardContent className="pt-5" title="Animali realmente entrati in allevamento nel periodo (attivazioni dei lotti). Ogni lotto è contato una sola volta: sono animali DISTINTI.">
+                <div className="text-xs text-muted-foreground">Entrati in allevamento</div>
+                <div className="text-3xl font-extrabold text-sky-700 tabular-nums" data-testid="text-entrati-reali">{fmt(report.totals.animaliEntrati)}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">animali distinti (attivazioni)</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5" title="Morti ÷ animali lavorati: mortalità media di OGNI singola vagliatura, non la perdita sulla popolazione. (I lavorati contano lo stesso animale più volte.)">
                 <div className="text-xs text-muted-foreground">Mortalità media a vagliatura</div>
                 <div className={`text-3xl font-extrabold tabular-nums ${pctColor(report.totals.mortalitaPct)}`} data-testid="text-mortalita-pct">
                   {fmtPct(report.totals.mortalitaPct)}
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5" title="Somma degli animali entrati in OGNI vagliatura del periodo. Lo stesso animale è contato ad ogni vagliatura (in media 3-4 volte l'anno): è il lavoro svolto, NON il numero di animali distinti.">
-                <div className="text-xs text-muted-foreground">Lavorati in vagliatura</div>
-                <div className="text-3xl font-extrabold text-sky-700 tabular-nums">{fmt(report.totals.origine)}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">somma dei passaggi, non animali distinti</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5">
-                <div className="text-xs text-muted-foreground">Morti totali (storico)</div>
-                <div className="text-3xl font-extrabold text-gray-700 tabular-nums">{fmt(report.totals.mortiAllTime)}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">su {fmt(report.totals.origine)} lavorati (passaggi)</div>
               </CardContent>
             </Card>
           </div>

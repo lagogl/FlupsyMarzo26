@@ -48,8 +48,10 @@ export interface MortalityReport {
     origine: number;
     destinazione: number;
     morti: number;
-    mortalitaPct: number | null;
+    mortalitaPct: number | null; // morti ÷ lavorati (media per vagliatura)
     mortiAllTime: number;
+    animaliEntrati: number; // animali REALMENTE entrati in allevamento (attivazioni) nella finestra
+    mortalitaReale: number | null; // morti ÷ animali entrati (mortalità sulla popolazione), 0..1
   };
   perMonth: MortalityMonth[];
   perFlupsy: MortalityModule[];
@@ -100,6 +102,17 @@ export async function getMortalityReport(days: number): Promise<MortalityReport>
     FROM base WHERE origine > 0
   `);
   const mortiAllTime = Number((allRes.rows[0] as any)?.morti) || 0;
+
+  // ── Animali REALMENTE entrati in allevamento (attivazioni del registro lotti) ──
+  // Questo è l'unico conteggio di animali DISTINTI: ogni lotto viene attivato una sola
+  // volta. È il denominatore corretto per la mortalità reale sulla popolazione.
+  const actRes = await db.execute(sql`
+    SELECT COALESCE(SUM(ABS(quantity)),0)::bigint AS attivati
+    FROM lot_ledger
+    WHERE type='activation'
+      AND date >= (CURRENT_DATE - (${days}::int * INTERVAL '1 day'))
+  `);
+  const animaliEntrati = Number((actRes.rows[0] as any)?.attivati) || 0;
 
   // ── Per FLUPSY (attribuzione pro-quota al modulo di origine) ────────────
   const modRes = await db.execute(sql`
@@ -181,6 +194,11 @@ export async function getMortalityReport(days: number): Promise<MortalityReport>
       morti: totMorti,
       mortalitaPct: totOrigine > 0 ? totMorti / totOrigine : null,
       mortiAllTime,
+      animaliEntrati,
+      // Ratio grezzo (può superare 1 su finestre brevi: i morti contati possono
+      // riguardare animali entrati PRIMA della finestra selezionata). Non clampato:
+      // l'interfaccia avvisa quando > 100%.
+      mortalitaReale: animaliEntrati > 0 ? totMorti / animaliEntrati : null,
     },
     perMonth,
     perFlupsy,
