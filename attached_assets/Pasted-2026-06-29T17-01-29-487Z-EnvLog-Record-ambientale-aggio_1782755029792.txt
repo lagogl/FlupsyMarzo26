@@ -1,0 +1,100 @@
+2026-06-29T17:01:29.487Z [EnvLog] Record ambientale aggiornato per 2026-06-29 (dati cambiati)
+2026-06-29T17:01:37.940Z 📸 IMM SNAPSHOT: Avvio snapshot giornaliero...
+2026-06-29T17:01:41.387Z ✅ IMM SNAPSHOT: 24 record salvati per 2026-06-29
+2026-06-29T17:02:08.487Z 🌊 SENEYE: snapshot salvato (DF SIFONI) — temp=31.625°C pH=7.57 NH3=0.001 O2=7.3
+2026-06-29T17:03:08.049Z [MarineData] Copernicus script timeout
+2026-06-29T17:30:18.774Z system: received signal terminated
+2026-06-29T17:30:18.775Z 5:30:18 PM [express] Received SIGTERM. Performing graceful shutdown...
+2026-06-29T17:30:18.775Z 5:30:18 PM [express] Server closed
+2026-06-29T17:30:18.813Z command finished successfully with exit code 0
+2026-06-29T17:30:18.813Z main done, exiting
+2026-06-29T17:30:26.489Z metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-06-29T17:30:26.489Z starting up user application
+2026-06-29T17:30:26.490Z forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-06-29T17:30:26.491Z healthcheck failed error=healthcheck /: Get "http://127.0.0.1:1104/": dial tcp 127.0.0.1:1104: connect: connection refused
+2026-06-29T17:30:26.495Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:26.497Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:26.521Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:26.533Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:26.598Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:26.772Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:27.397Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:27.405Z > rest-express@1.0.0 start
+2026-06-29T17:30:27.405Z > NODE_ENV=production node dist/index.js
+2026-06-29T17:30:27.849Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:28.509Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:28.518Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:29.741Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:30.289Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:30.943Z healthcheck failed error=healthcheck / returned status 500
+2026-06-29T17:30:31.976Z 🔧 OpenAI GPT-4o Config: { model: 'gpt-4.1', hasApiKey: true, keyStatus: 'sk-proj-...I24A' }
+2026-06-29T17:30:31.977Z ✅ OpenAI GPT-4o client initialized (AI Dashboard)
+2026-06-29T17:30:31.979Z ✅ Enhanced AI Client initialized (GPT-4o with user API key)
+2026-06-29T17:30:31.981Z Token Telegram non configurato. Bot non inizializzato.
+2026-06-29T17:30:31.984Z 🚀 Cache operazioni con TTL 60s (invalidazione esplicita + scadenza automatica)
+2026-06-29T17:30:31.984Z Servizio cache cestelli inizializzato con TTL 60s
+2026-06-29T17:30:31.987Z 🔄 Servizio sincronizzazione esterno temporaneamente disabilitato per debug
+2026-06-29T17:30:31.993Z ✅ Modulo FLUPSYS registrato su /api/flupsys
+2026-06-29T17:30:31.997Z ✅ Modulo BASKETS registrato su /api/baskets
+2026-06-29T17:30:31.998Z ✅ Modulo CYCLES registrato su /api/cycles
+2026-06-29T17:30:31.998Z ✅ Modulo OPERATIONS registrato su /api/operations
+2026-06-29T17:30:31.999Z ✅ Modulo LOTS registrato su /api/lots
+2026-06-29T17:30:31.999Z ✅ Modulo SIZES registrato su /api/sizes
+2026-06-29T17:30:31.999Z ✅ Modulo BASKET CAPACITY registrato su /api/basket-capacity
+2026-06-29T17:30:32.000Z ✅ Modulo SGR registrato su /api/sgr* e /api/sgr-giornalieri*
+2026-06-29T17:30:32.000Z ✅ Modulo SELECTIONS registrato su /api/selections* e /api/flupsy/available-positions
+2026-06-29T17:30:32.001Z ✅ Modulo TASKS registrato su /api/tasks*, /api/operators*, /api/selections/:id/tasks
+2026-06-29T17:30:32.001Z ✅ Modulo MENU-PREFERENCES registrato su /api/menu-preferences/:userId
+2026-06-29T17:30:32.002Z ✅ Modulo MORTALITY-RATES registrato su /api/mortality-rates*
+2026-06-29T17:30:32.002Z ✅ API MORTALITY-EXPECTATIONS registrate su /api/mortality-expectations*
+2026-06-29T17:30:38.742Z [MarineData] No significant data gaps found
+2026-06-29T17:30:38.742Z [MarineDataScheduler] No data gaps to fill
+2026-06-29T17:30:39.042Z [MarineData] Fetching marine data for both locations...
+2026-06-29T17:30:39.342Z [MarineData] Fetching REAL data from Copernicus Marine...
+2026-06-29T17:30:40.543Z Inizializzazione del sistema di pianificazione email...
+2026-06-29T17:30:40.842Z 📧 Scheduler email inizializzato con successo
+2026-06-29T17:30:41.042Z 🌱 Inizializzazione notifiche di crescita...
+2026-06-29T17:30:41.042Z Timer notifiche crescita: prossima esecuzione 6/30/2026, 12:00:00 AM
+2026-06-29T17:30:42.342Z Scheduler email inizializzato con successo
+2026-06-29T17:30:42.342Z Invio automatico email disabilitato nelle impostazioni
+2026-06-29T17:30:43.542Z   internalQuery: undefined,
+2026-06-29T17:30:43.542Z   code: '42P01',
+2026-06-29T17:30:43.542Z   length: 111,
+2026-06-29T17:30:43.542Z ⚠️ Errore durante l'inizializzazione del modulo LCI: error: relation "lci_settings" does not exist
+2026-06-29T17:30:43.542Z   hint: undefined,
+2026-06-29T17:30:43.542Z     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2026-06-29T17:30:43.542Z     at async LciDataService.getSetting (file:///home/runner/workspace/dist/index.js:39846:24)
+2026-06-29T17:30:43.542Z     at async registerLciModule (file:///home/runner/workspace/dist/index.js:40847:21)
+2026-06-29T17:30:43.542Z   column: undefined,
+2026-06-29T17:30:43.542Z     at async NeonPreparedQuery.execute (file:///home/runner/workspace/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+2026-06-29T17:30:43.542Z   severity: 'ERROR',
+2026-06-29T17:30:43.542Z   position: '63',
+2026-06-29T17:30:43.542Z   detail: undefined,
+2026-06-29T17:30:43.542Z   schema: undefined,
+2026-06-29T17:30:43.542Z   where: undefined,
+2026-06-29T17:30:43.542Z     at async LciDataService.isModuleEnabled (file:///home/runner/workspace/dist/index.js:39863:25)
+2026-06-29T17:30:43.542Z     at async runBackgroundInitialization (file:///home/runner/workspace/dist/index.js:58594:5) {
+2026-06-29T17:30:43.542Z     at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+2026-06-29T17:30:49.943Z ✅ NIGHTLY CHECK: Database consistente (4 controlli in 6200ms)
+2026-06-29T17:30:50.142Z [MarineData] Fetching data for Delta Futuro...
+2026-06-29T17:30:50.142Z [MarineData] Ca' Pisani: ID=8357, SST=27.2°C, Chl-a=nullµg/L, Sal=nullPSU
+2026-06-29T17:30:51.242Z [MarineData] Delta Futuro: ID=8358, SST=28.3°C, Chl-a=nullµg/L, Sal=nullPSU
+2026-06-29T17:30:51.242Z [MarineDataScheduler] Initial data fetch completed successfully
+2026-06-29T17:31:03.242Z [BuoyData] Errore ARPAV: The operation was aborted.
+2026-06-29T17:31:03.742Z 📸 IMM SNAPSHOT: Avvio snapshot giornaliero...
+2026-06-29T17:31:09.042Z ✅ IMM SNAPSHOT: 24 record salvati per 2026-06-29
+2026-06-29T17:31:09.242Z     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+2026-06-29T17:31:09.242Z     at EventTarget.dispatchEvent (node:internal/event_target:766:26)
+2026-06-29T17:31:09.242Z     at process.processTimers (node:internal/timers:519:7) {
+2026-06-29T17:31:09.242Z     at abort (file:///home/runner/workspace/node_modules/node-fetch/src/index.js:70:18)
+2026-06-29T17:31:09.242Z   type: 'aborted'
+2026-06-29T17:31:09.242Z }
+2026-06-29T17:31:09.242Z     at abortSignal (node:internal/abort_controller:370:10)
+2026-06-29T17:31:09.242Z [BuoyData] Errore ARPAE: AbortError: The operation was aborted.
+2026-06-29T17:31:09.242Z     at EventTarget.abortAndFinalize (file:///home/runner/workspace/node_modules/node-fetch/src/index.js:89:4)
+2026-06-29T17:31:09.242Z     at listOnTimeout (node:internal/timers:581:17)
+2026-06-29T17:31:09.242Z     at Timeout._onTimeout (node:internal/abort_controller:127:7)
+2026-06-29T17:31:10.242Z [EnvLogScheduler] Snapshot completato.
+2026-06-29T17:31:10.242Z [EnvLog] Record ambientale aggiornato per 2026-06-29 (dati cambiati)
+2026-06-29T17:31:34.643Z 🌊 SENEYE: snapshot salvato (DF SIFONI) — temp=30.625°C pH=7.57 NH3=0.001 O2=7.4
+2026-06-29T17:32:44.342Z [MarineData] Copernicus script timeout
