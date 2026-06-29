@@ -15,3 +15,4 @@
 - [Selection save idempotency](selection-save-idempotency.md) — addSource/addDestinationBaskets must delete-before-insert; frontend re-POSTs all baskets each save/complete attempt → otherwise rows duplicate and inflate counts/break closure balance.
 - [Capacity forecast](capacity-forecast.md) — per-taglia capacity forecast projects WEIGHT only (count only falls); reuse shared SGR engine (mg/animal); monthly SGR already includes temperature.
 - [WhatsApp group-send integration](whatsapp-integration.md) — Heatmap sends alerts panel image to a WA group; openWA is firewall-blocked so use whatsapp-web.js; needs Chromium + always-on deploy.
+- [Plant survival counted](plant-survival-counted.md) — Cruscotto headline + Report Morti must use survival counted at vagliature (out÷in), not cohort ratios; one truth across pages.

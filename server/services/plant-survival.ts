@@ -27,7 +27,9 @@ export interface ModuleSurvival {
   moduleType: ModuleType;
   currentLive: number; // vivi correnti delle coorti presenti nel modulo (parte tracciata)
   totalLive: number; // vivi correnti TOTALI del modulo (cicli con e senza coorte)
-  weightedSurvival: number | null; // sopravvivenza REALE ponderata sul vivo (0..1, esclude le uscite), null se nessun dato
+  weightedSurvival: number | null; // sopravvivenza CONTATA alle vagliature del modulo (0..1), null se nessuna vagliatura nella finestra
+  morti: number; // animali morti contati alle vagliature del modulo nella finestra
+  origine: number; // animali entrati alle vagliature del modulo nella finestra
   certoFraction: number; // quota dei vivi il cui ultimo dato è un conteggio (0..1)
   certainty: CertaintyLevel; // semaforo certo/stimato del modulo
   activeCohorts: number; // numero coorti distinte con vivi nel modulo
@@ -37,7 +39,9 @@ export interface TypeSurvival {
   moduleType: ModuleType;
   currentLive: number; // vivi tracciati (coorti) di questo tipo modulo
   totalLive: number; // vivi totali di questo tipo modulo (con e senza coorte)
-  weightedSurvival: number | null;
+  weightedSurvival: number | null; // sopravvivenza CONTATA alle vagliature di questo tipo (0..1)
+  morti: number; // morti contati alle vagliature di questo tipo nella finestra
+  origine: number; // animali entrati alle vagliature di questo tipo nella finestra
   certoFraction: number;
   certainty: CertaintyLevel;
   modules: number; // numero moduli di questo tipo con vivi correnti
@@ -54,7 +58,11 @@ export interface PlantSurvival {
     currentLive: number; // vivi tracciati nelle coorti (base su cui è calcolata la sopravvivenza)
     totalPlantLive: number; // vivi correnti TOTALI dell'impianto (tutti i moduli, con e senza coorte)
     coverageFraction: number; // copertura = vivi tracciati ÷ vivi totali impianto (0..1)
-    weightedSurvival: number | null;
+    weightedSurvival: number | null; // sopravvivenza CONTATA alle vagliature nella finestra (0..1)
+    morti: number; // morti contati alle vagliature nella finestra
+    origineVagliature: number; // animali entrati alle vagliature nella finestra
+    mortiAllTime: number; // morti contati alle vagliature di sempre
+    windowDays: number; // ampiezza finestra del calcolo contato
     certoFraction: number;
     certainty: CertaintyLevel;
     activeCohorts: number;
@@ -229,14 +237,108 @@ async function computeTrend(days: number = 90): Promise<TrendPoint[]> {
 }
 
 /** Calcola il cruscotto di impianto (Fase 5): sintesi, per tipo modulo, per singolo modulo, tendenza. */
+interface CountedScope {
+  origine: number;
+  dest: number;
+}
+
+interface CountedSurvival {
+  plant: CountedScope;
+  byModule: Map<number, CountedScope>;
+  mortiAllTime: number;
+}
+
+/**
+ * Sopravvivenza CONTATA alle vagliature (la verità: animali in ingresso − animali in uscita).
+ * Finestra `days`. La destinazione di ogni vagliatura è attribuita ai moduli di ORIGINE in
+ * proporzione agli animali entrati da ciascun modulo. Clamp dest ≤ origine per escludere
+ * anomalie/guadagni (coerente con la tendenza del cruscotto).
+ */
+async function computeCountedSurvival(days: number): Promise<CountedSurvival> {
+  const plantRes = await db.execute(sql`
+    WITH base AS (
+      SELECT s.id,
+        (SELECT COALESCE(SUM(ssb.animal_count),0) FROM selection_source_baskets ssb WHERE ssb.selection_id=s.id) AS origine,
+        (SELECT COALESCE(SUM(COALESCE(sdb.live_animals, sdb.animal_count)),0) FROM selection_destination_baskets sdb WHERE sdb.selection_id=s.id) AS dest
+      FROM selections s
+      WHERE s.status='completed' AND s.purpose='vagliatura'
+        AND s.date >= (CURRENT_DATE - (${days}::int * INTERVAL '1 day'))
+    )
+    SELECT COALESCE(SUM(origine),0)::bigint AS origine,
+           COALESCE(SUM(LEAST(GREATEST(dest,0), origine)),0)::bigint AS dest
+    FROM base WHERE origine > 0
+  `);
+  const plant: CountedScope = {
+    origine: Number((plantRes.rows[0] as any)?.origine) || 0,
+    dest: Number((plantRes.rows[0] as any)?.dest) || 0,
+  };
+
+  const modRes = await db.execute(sql`
+    WITH base AS (
+      SELECT s.id,
+        (SELECT COALESCE(SUM(ssb.animal_count),0) FROM selection_source_baskets ssb WHERE ssb.selection_id=s.id) AS origine,
+        (SELECT COALESCE(SUM(COALESCE(sdb.live_animals, sdb.animal_count)),0) FROM selection_destination_baskets sdb WHERE sdb.selection_id=s.id) AS dest
+      FROM selections s
+      WHERE s.status='completed' AND s.purpose='vagliatura'
+        AND s.date >= (CURRENT_DATE - (${days}::int * INTERVAL '1 day'))
+    ),
+    sel AS (SELECT id, origine, LEAST(GREATEST(dest,0), origine) AS dest FROM base WHERE origine > 0),
+    src AS (
+      SELECT ssb.selection_id, b.flupsy_id, SUM(ssb.animal_count) AS origine_modulo
+      FROM selection_source_baskets ssb JOIN baskets b ON b.id = ssb.basket_id
+      GROUP BY ssb.selection_id, b.flupsy_id
+    )
+    SELECT src.flupsy_id AS flupsy_id,
+      COALESCE(SUM(src.origine_modulo),0)::bigint AS origine,
+      COALESCE(SUM(src.origine_modulo * sel.dest::numeric / NULLIF(sel.origine,0)),0)::bigint AS dest
+    FROM src JOIN sel ON sel.id = src.selection_id
+    GROUP BY src.flupsy_id
+  `);
+  const byModule = new Map<number, CountedScope>();
+  for (const row of modRes.rows as any[]) {
+    byModule.set(Number(row.flupsy_id), { origine: Number(row.origine) || 0, dest: Number(row.dest) || 0 });
+  }
+
+  const allRes = await db.execute(sql`
+    WITH base AS (
+      SELECT s.id,
+        (SELECT COALESCE(SUM(ssb.animal_count),0) FROM selection_source_baskets ssb WHERE ssb.selection_id=s.id) AS origine,
+        (SELECT COALESCE(SUM(COALESCE(sdb.live_animals, sdb.animal_count)),0) FROM selection_destination_baskets sdb WHERE sdb.selection_id=s.id) AS dest
+      FROM selections s WHERE s.status='completed' AND s.purpose='vagliatura'
+    )
+    SELECT COALESCE(SUM(GREATEST(origine - LEAST(GREATEST(dest,0), origine), 0)),0)::bigint AS morti
+    FROM base WHERE origine > 0
+  `);
+  const mortiAllTime = Number((allRes.rows[0] as any)?.morti) || 0;
+
+  return { plant, byModule, mortiAllTime };
+}
+
+const countedRate = (s: CountedScope | undefined): number | null =>
+  s && s.origine > 0 ? Math.min(1, s.dest / s.origine) : null;
+const countedMorti = (s: CountedScope | undefined): number =>
+  s ? Math.max(0, s.origine - Math.min(s.dest, s.origine)) : 0;
+
 export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival> {
-  const [cohorts, cycleLive, totalLiveByModule, flupsyInfo, trend] = await Promise.all([
+  const [cohorts, cycleLive, totalLiveByModule, flupsyInfo, trend, counted] = await Promise.all([
     listCohortSurvival(),
     loadActiveCohortCycleLive(),
     loadTotalLiveByModule(),
     loadFlupsyInfo(),
     computeTrend(days),
+    computeCountedSurvival(days),
   ]);
+
+  // Tipo modulo per il calcolo contato aggregato per tipo.
+  const typeCounted = new Map<ModuleType, CountedScope>();
+  for (const [flupsyId, cs] of counted.byModule) {
+    const info = flupsyInfo.get(flupsyId);
+    if (!info) continue;
+    const t = typeCounted.get(info.moduleType) ?? { origine: 0, dest: 0 };
+    t.origine += cs.origine;
+    t.dest += cs.dest;
+    typeCounted.set(info.moduleType, t);
+  }
 
   // Usa la SOPRAVVIVENZA REALE della coorte (1 − mortalità), che scorpora le uscite dichiarate
   // (vendite, trasferimenti, ri-vagliature). NON usare la survivalRate "vecchio stile"
@@ -304,13 +406,16 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
     .filter((m) => m.totalLive > 0 || m.liveTotal > 0)
     .map((m) => {
       const certoFraction = m.liveTotal > 0 ? m.certoLive / m.liveTotal : 0;
+      const cs = counted.byModule.get(m.flupsyId);
       return {
         flupsyId: m.flupsyId,
         name: m.name,
         moduleType: m.moduleType,
         currentLive: m.liveTotal,
         totalLive: m.totalLive,
-        weightedSurvival: m.liveWithRate > 0 ? m.weightedNumerator / m.liveWithRate : null,
+        weightedSurvival: countedRate(cs),
+        morti: countedMorti(cs),
+        origine: cs?.origine ?? 0,
         certoFraction,
         certainty: certaintyFromFraction(certoFraction),
         activeCohorts: m.cohortIds.size,
@@ -342,11 +447,14 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
   const byType: TypeSurvival[] = TYPE_ORDER.filter((t) => typeAcc.has(t)).map((moduleType) => {
     const t = typeAcc.get(moduleType)!;
     const certoFraction = t.live > 0 ? t.certoLive / t.live : 0;
+    const cs = typeCounted.get(moduleType);
     return {
       moduleType,
       currentLive: t.live,
       totalLive: t.totalLive,
-      weightedSurvival: t.liveWithRate > 0 ? t.weightedNumerator / t.liveWithRate : null,
+      weightedSurvival: countedRate(cs),
+      morti: countedMorti(cs),
+      origine: cs?.origine ?? 0,
       certoFraction,
       certainty: certaintyFromFraction(certoFraction),
       modules: t.modules,
@@ -376,7 +484,11 @@ export async function getPlantSurvival(days: number = 90): Promise<PlantSurvival
       currentLive: totalLive,
       totalPlantLive,
       coverageFraction,
-      weightedSurvival: totalLiveWithRate > 0 ? totalWeighted / totalLiveWithRate : null,
+      weightedSurvival: countedRate(counted.plant),
+      morti: countedMorti(counted.plant),
+      origineVagliature: counted.plant.origine,
+      mortiAllTime: counted.mortiAllTime,
+      windowDays: days,
       certoFraction: summaryCertoFraction,
       certainty: certaintyFromFraction(summaryCertoFraction),
       activeCohorts: allCohorts.size,

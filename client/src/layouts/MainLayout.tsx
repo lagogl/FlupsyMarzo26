@@ -174,6 +174,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <History className="h-5 w-5 mr-2 text-emerald-600" />, label: "Storia Animali", path: "/storia-animali" },
         { icon: <GitMerge className="h-5 w-5 mr-2 text-violet-600" />, label: "Coorti di Mescolamento", path: "/coorti" },
         { icon: <Gauge className="h-5 w-5 mr-2 text-emerald-600" />, label: "Cruscotto Sopravvivenza", path: "/cruscotto-sopravvivenza" },
+        { icon: <Skull className="h-5 w-5 mr-2 text-red-600" />, label: "Report Morti", path: "/report-morti" },
         { icon: <Package className="h-5 w-5 mr-2 text-emerald-600" />, label: translations.menuItems.reportLotto, path: "/report-lotto" },
         { icon: <AlertCircle className="h-5 w-5 mr-2 text-amber-600" />, label: "Vagliature sospette", path: "/vagliature-sospette" },
         { icon: <Leaf className="h-5 w-5 mr-2 text-teal-600" />, label: "Diario Ambientale", path: "/diario-ambientale" },

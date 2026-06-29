@@ -21,6 +21,8 @@ interface ModuleSurvival {
   currentLive: number;
   totalLive: number;
   weightedSurvival: number | null;
+  morti: number;
+  origine: number;
   certoFraction: number;
   certainty: Certainty;
   activeCohorts: number;
@@ -31,6 +33,8 @@ interface TypeSurvival {
   currentLive: number;
   totalLive: number;
   weightedSurvival: number | null;
+  morti: number;
+  origine: number;
   certoFraction: number;
   certainty: Certainty;
   modules: number;
@@ -48,6 +52,10 @@ interface PlantSurvival {
     totalPlantLive: number;
     coverageFraction: number;
     weightedSurvival: number | null;
+    morti: number;
+    origineVagliature: number;
+    mortiAllTime: number;
+    windowDays: number;
     certoFraction: number;
     certainty: Certainty;
     activeCohorts: number;
@@ -201,7 +209,6 @@ function TypeCard({ t }: { t: TypeSurvival }) {
             </div>
             <span className="font-semibold">{meta.label}</span>
           </div>
-          <CertaintyBadge level={t.certainty} fraction={t.certoFraction} />
         </div>
         <div className="flex items-end justify-between">
           <div className={`text-3xl font-bold ${survivalColor(t.weightedSurvival)}`} data-testid={`text-type-survival-${t.moduleType}`}>
@@ -209,7 +216,7 @@ function TypeCard({ t }: { t: TypeSurvival }) {
           </div>
           <div className="text-right text-xs text-muted-foreground">
             <div className="text-sky-700 font-medium">{fmt(t.totalLive)} vivi totali</div>
-            <div>di cui {fmt(t.currentLive)} tracciati</div>
+            <div className="text-red-600 font-medium">{fmt(t.morti)} morti</div>
             <div>{t.modules} moduli</div>
           </div>
         </div>
@@ -249,14 +256,14 @@ export default function CruscottoSopravvivenza() {
             <div className="text-sm text-emerald-900 space-y-1">
               <p>
                 <span className="font-semibold">A cosa serve:</span> questo cruscotto risponde alla
-                domanda «gli animali che alleviamo, sopravvivono bene?». La sopravvivenza è calcolata
-                solo sulla parte <span className="font-medium">tracciata nelle coorti</span> (con
-                conteggio iniziale e attuale), così il dato resta affidabile.
+                domanda «gli animali che alleviamo, sopravvivono bene?». Il numero grande è la
+                sopravvivenza <span className="font-medium">contata alle vagliature</span> (animali in
+                uscita ÷ animali in ingresso): la verità misurata, la stessa del Report Lotto.
               </p>
               <p>
                 <span className="font-semibold">Non è la giacenza:</span> per sapere <em>quanti</em>{' '}
                 animali hai in tutto l'impianto guarda i «Vivi totali impianto» qui sotto o i moduli di
-                inventario. I due numeri sono diversi di proposito.
+                inventario. Per il dettaglio dei morti apri il «Report Morti».
               </p>
             </div>
           </CardContent>
@@ -282,13 +289,13 @@ export default function CruscottoSopravvivenza() {
 
       {!isLoading && !isError && plant && (
         <div className="space-y-6">
-          {/* NUMERO GRANDE — sopravvivenza ponderata di impianto */}
+          {/* NUMERO GRANDE — sopravvivenza contata alle vagliature */}
           <Card className="border-emerald-100">
             <CardContent className="pt-6">
               <div className="grid gap-6 md:grid-cols-[auto_1fr] md:items-center">
                 <div>
                   <div className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                    <Activity className="h-3.5 w-3.5" /> Sopravvivenza ponderata sul vivo
+                    <Activity className="h-3.5 w-3.5" /> Sopravvivenza contata alle vagliature
                   </div>
                   <div className="flex items-center gap-3 mt-1">
                     <span
@@ -297,33 +304,35 @@ export default function CruscottoSopravvivenza() {
                     >
                       {fmtPct(plant.summary.weightedSurvival)}
                     </span>
-                    <CertaintyBadge level={plant.summary.certainty} fraction={plant.summary.certoFraction} />
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    ultimi {plant.summary.windowDays} giorni · vivi in uscita ÷ vivi in ingresso
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3" title="Tutti gli animali vivi presenti nell'impianto adesso (tutti i moduli, anche raceway, con e senza coorte). È la giacenza viva totale, NON la base del calcolo di sopravvivenza.">
+                  <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3" title="Tutti gli animali vivi presenti nell'impianto adesso (tutti i moduli, anche raceway). È la giacenza viva totale, NON la base del calcolo di sopravvivenza.">
                     <div className="text-xs text-sky-700">Vivi totali impianto</div>
                     <div className="text-xl font-semibold text-sky-900" data-testid="text-plant-total-live">{fmt(plant.summary.totalPlantLive)}</div>
                   </div>
-                  <div className="rounded-lg border p-3" title="Animali tracciati nelle coorti (con conteggio iniziale e attuale): è la base su cui viene calcolata la sopravvivenza.">
+                  <div className="rounded-lg border border-red-200 bg-red-50/50 p-3" title="Animali morti contati alle vagliature nella finestra selezionata (entrati − usciti vivi).">
+                    <div className="text-xs text-red-700">Morti (ultimi {plant.summary.windowDays} gg)</div>
+                    <div className="text-xl font-semibold text-red-700" data-testid="text-plant-morti">{fmt(plant.summary.morti)}</div>
+                  </div>
+                  <div className="rounded-lg border p-3" title="Animali entrati alle vagliature nella finestra: la base su cui è calcolata la mortalità del periodo.">
+                    <div className="text-xs text-muted-foreground">Entrati alle vagliature</div>
+                    <div className="text-xl font-semibold" data-testid="text-plant-origine">{fmt(plant.summary.origineVagliature)}</div>
+                  </div>
+                  <div className="rounded-lg border p-3" title="Morti contati a tutte le vagliature, dall'inizio.">
+                    <div className="text-xs text-muted-foreground">Morti totali (storico)</div>
+                    <div className="text-xl font-semibold" data-testid="text-plant-morti-alltime">{fmt(plant.summary.mortiAllTime)}</div>
+                  </div>
+                  <div className="rounded-lg border p-3" title="Animali tracciati nelle coorti (con conteggio iniziale e attuale).">
                     <div className="text-xs text-muted-foreground">Tracciati (coorti)</div>
                     <div className="text-xl font-semibold" data-testid="text-plant-live">{fmt(plant.summary.currentLive)}</div>
                   </div>
-                  <div className="rounded-lg border p-3" title="Copertura = vivi tracciati ÷ vivi totali impianto. Indica quanta parte dell'impianto è seguita con le coorti. È normale che sia parziale.">
+                  <div className="rounded-lg border p-3" title="Copertura = vivi tracciati ÷ vivi totali impianto. Indica quanta parte dell'impianto è seguita con le coorti.">
                     <div className="text-xs text-muted-foreground">Copertura impianto</div>
                     <div className="text-xl font-semibold" data-testid="text-plant-coverage">{fmtPct(plant.summary.coverageFraction, 0)}</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Coorti attive</div>
-                    <div className="text-xl font-semibold">{fmt(plant.summary.activeCohorts)}</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Moduli attivi</div>
-                    <div className="text-xl font-semibold">{fmt(plant.summary.activeModules)}</div>
-                  </div>
-                  <div className="rounded-lg border p-3" title="Quota dei vivi tracciati il cui ultimo dato è un conteggio diretto (certo) e non una stima. Diverso dalla copertura.">
-                    <div className="text-xs text-muted-foreground">Quota contata</div>
-                    <div className="text-xl font-semibold">{fmtPct(plant.summary.certoFraction, 0)}</div>
                   </div>
                 </div>
               </div>
@@ -410,7 +419,7 @@ export default function CruscottoSopravvivenza() {
                         <th className="py-2 px-4 font-medium text-right">Tracciati</th>
                         <th className="py-2 px-4 font-medium text-right">Coorti</th>
                         <th className="py-2 px-4 font-medium">Sopravvivenza</th>
-                        <th className="py-2 pl-4 font-medium text-center">Affidabilità</th>
+                        <th className="py-2 pl-4 font-medium text-right">Morti</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -462,11 +471,7 @@ export default function CruscottoSopravvivenza() {
                                 </div>
                               </div>
                             </td>
-                            <td className="py-2 pl-4">
-                              <div className="flex justify-center">
-                                <CertaintyBadge level={m.certainty} fraction={m.certoFraction} />
-                              </div>
-                            </td>
+                            <td className="py-2 pl-4 text-right tabular-nums font-medium text-red-600">{fmt(m.morti)}</td>
                           </tr>
                         );
                       })}
@@ -479,10 +484,10 @@ export default function CruscottoSopravvivenza() {
 
           <p className="text-[11px] text-muted-foreground">
             <span className="font-medium">Vivi totali</span> = tutti gli animali vivi del modulo (anche
-            non tracciati); <span className="font-medium">Tracciati</span> = quelli seguiti nelle coorti,
-            base del calcolo di sopravvivenza. La sopravvivenza è la sintesi delle coorti (Fase 3/4)
-            pesata sul vivo attuale. <span className="font-medium">Certo</span> = vivi contati all'ultima
-            vagliatura; <span className="font-medium">Stimato</span> = numero dedotto dalle misure successive.
+            non tracciati); <span className="font-medium">Tracciati</span> = quelli seguiti nelle coorti.
+            La <span className="font-medium">sopravvivenza</span> e i <span className="font-medium">morti</span>{' '}
+            sono contati alle vagliature del modulo nella finestra selezionata (vivi in uscita ÷ vivi in
+            ingresso). Per il dettaglio per mese e per lotto apri il «Report Morti».
           </p>
         </div>
       )}

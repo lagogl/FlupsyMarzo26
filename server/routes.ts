@@ -4769,6 +4769,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ====== REPORT MORTI (morti contati alle vagliature: per mese, FLUPSY, lotto) ======
+  app.get("/api/mortality-report", async (req, res) => {
+    try {
+      const { getMortalityReport } = await import('./services/mortality-report');
+      const days = Math.min(3650, Math.max(30, Number(req.query.days) || 365));
+      const report = await getMortalityReport(days);
+      res.json({ success: true, report });
+    } catch (error) {
+      console.error("Errore report morti:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // ====== FASE 3: BACKFILL COORTI STORICHE (admin, idempotente) ======
   app.post("/api/admin/backfill-cohorts", async (req, res) => {
     try {
