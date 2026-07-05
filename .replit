@@ -91,6 +91,9 @@ integrations = ["javascript_database:1.0.0", "google-mail:1.0.0", "javascript_an
 
 [userenv.shared]
 EXTERNAL_NOTIFY_API_KEY = "flupsy-notify-2026-secure-key"
+CAPISANI_USERNAME = "admin"
+CAPISANI_PASSWORD = "admin"
+CAPISANI_BASE_URL = "https://kappa.sinplant.it"
 
 [postMerge]
 path = "scripts/post-merge.sh"

@@ -310,6 +310,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.use('/api/acquascada', acquascadaModule.acquascadaRoutes);
   console.log('✅ Modulo ACQUASCADA registrato su /api/acquascada/*');
 
+  // Registra il modulo CA' PISANI (impianto KAPPA Sinplant: O2, salinità, temperatura)
+  const capisaniModule = await import('./modules/capisani');
+  app.use('/api/capisani', capisaniModule.capisaniRoutes);
+  console.log('✅ Modulo CA\' PISANI registrato su /api/capisani/*');
+
   // Registra il modulo REPORT FLUSSO LOTTI (passaggi tra contenitori)
   const lotFlowModule = await import('./modules/reports/lot-flow');
   app.use('/api/reports', lotFlowModule.lotFlowRoutes);
