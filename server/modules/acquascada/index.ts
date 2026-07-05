@@ -17,14 +17,13 @@ router.get("/measurements", async (_req: Request, res: Response) => {
     return res.json(cache.data);
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
     const response = await fetch(`${BASE_URL}/api/public/v1/measurements`, {
       headers: { "X-API-Key": apiKey },
       signal: controller.signal,
     });
-    clearTimeout(timeout);
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
@@ -40,6 +39,8 @@ router.get("/measurements", async (_req: Request, res: Response) => {
     console.error("[AcquaSCADA] Errore fetch:", err?.message || err);
     if (cache) return res.json(cache.data);
     return res.status(502).json({ error: "Impossibile contattare il servizio AcquaSCADA" });
+  } finally {
+    clearTimeout(timeout);
   }
 });
 
