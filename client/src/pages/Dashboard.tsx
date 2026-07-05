@@ -13,6 +13,7 @@ import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredicti
 import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
 import IMMCard from '@/components/dashboard/IMMCard';
 import SeneyeCard from '@/components/dashboard/SeneyeCard';
+import { AcquaScadaOxygenCard, AcquaScadaLevelsCard } from '@/components/dashboard/AcquaScadaCards';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
 import MortalityTemporalCard from '@/components/dashboard/MortalityTemporalCard';
 import MortalityAlertsCard from '@/components/dashboard/MortalityAlertsCard';
@@ -399,9 +400,11 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Sonda ambientale DF SIFONI (Seneye) */}
+      {/* Sonda ambientale DF SIFONI (Seneye) + AcquaSCADA (ossigeno e livelli) */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 my-6">
         <SeneyeCard />
+        <AcquaScadaOxygenCard />
+        <AcquaScadaLevelsCard />
       </div>
 
       {/* Dashboard Summary - Prima riga: Statistiche principali */}

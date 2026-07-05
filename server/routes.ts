@@ -305,6 +305,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.use('/api/seneye', seneyeModule.seneyeRoutes);
   console.log('✅ Modulo SENEYE registrato su /api/seneye/*');
 
+  // Registra il modulo ACQUASCADA (sonda ossigeno DFRobot + livelli idrici)
+  const acquascadaModule = await import('./modules/acquascada');
+  app.use('/api/acquascada', acquascadaModule.acquascadaRoutes);
+  console.log('✅ Modulo ACQUASCADA registrato su /api/acquascada/*');
+
   // Registra il modulo REPORT FLUSSO LOTTI (passaggi tra contenitori)
   const lotFlowModule = await import('./modules/reports/lot-flow');
   app.use('/api/reports', lotFlowModule.lotFlowRoutes);
