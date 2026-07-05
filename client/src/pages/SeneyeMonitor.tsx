@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import AcquaScadaHistory from '@/components/acquascada/AcquaScadaHistory';
 
 interface SeneyeReading {
   id: number;
@@ -370,6 +371,9 @@ export default function SeneyeMonitor() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Sezione AcquaSCADA: sonda ossigeno SEN0681 + livelli idrici */}
+      <AcquaScadaHistory />
     </div>
   );
 }
