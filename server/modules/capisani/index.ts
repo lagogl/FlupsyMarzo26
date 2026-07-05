@@ -163,6 +163,10 @@ function parseDashboard(html: string) {
   const salinityMatch = html.match(/SALINITÀ\s*<span[^>]*>([^<]+)</);
   const salinityTempMatch = html.match(/TEMP\.\s*<span[^>]*>([^<]+)</);
 
+  // Box aria (in alto nel pannello): temperatura aria e saturazione O2 aria (p.p.m.)
+  const airTempMatch = html.match(/Temperatura<br\s*\/?>Aria<\/span>[\s\S]{0,120}?info-box-number">([^<]+?)\s*°C/i);
+  const airO2Match = html.match(/Saturazione<br\s*\/?>O<sub>2<\/sub>\s*Aria<\/span>[\s\S]{0,120}?info-box-number">([^<]+?)\s*p\.p\.m\./i);
+
   return {
     timestamp: new Date().toISOString(),
     sourceTimestamp,
@@ -171,6 +175,10 @@ function parseDashboard(html: string) {
     salinity: {
       value: parseValue(salinityMatch?.[1]),
       temperature: parseValue(salinityTempMatch?.[1]),
+    },
+    air: {
+      temperature: parseValue(airTempMatch?.[1]),
+      o2Saturation: parseValue(airO2Match?.[1]),
     },
   };
 }

@@ -17,6 +17,7 @@ interface CaPisaniResponse {
   systemState: string | null;
   units: CaPisaniUnit[];
   salinity: { value: number | null; temperature: number | null };
+  air: { temperature: number | null; o2Saturation: number | null };
 }
 
 function fmt(v: number | null | undefined, d = 1): string {
@@ -107,7 +108,7 @@ export default function CaPisaniCard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-center mt-2 pt-2 border-t border-orange-100">
+            <div className="grid grid-cols-3 gap-2 text-center mt-2 pt-2 border-t border-orange-100">
               <div>
                 <div className="flex items-center justify-center text-indigo-600"><Droplets className="h-4 w-4" /></div>
                 <p className="text-base font-bold mt-0.5">{fmt(data?.salinity?.value, 1)}</p>
@@ -117,6 +118,11 @@ export default function CaPisaniCard() {
                 <div className="flex items-center justify-center text-red-400"><Thermometer className="h-4 w-4" /></div>
                 <p className="text-base font-bold mt-0.5">{fmt(data?.salinity?.temperature, 1)}</p>
                 <p className="text-[10px] text-muted-foreground">°C sonda salinità</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-center text-sky-500"><Percent className="h-4 w-4" /></div>
+                <p className="text-base font-bold mt-0.5">{fmt(data?.air?.o2Saturation, 2)}</p>
+                <p className="text-[10px] text-muted-foreground">p.p.m. O2 aria</p>
               </div>
             </div>
 
