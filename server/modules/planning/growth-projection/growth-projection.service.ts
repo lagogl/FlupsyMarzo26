@@ -1,7 +1,7 @@
 import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates } from "../../../../shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 
 const MONTH_NAMES = [
@@ -160,6 +160,27 @@ export class GrowthProjectionService {
       hatcheryByYearMonth[key].forecast += row.quantity;
       if (row.actualQuantity !== null && row.actualQuantity !== undefined) {
         hatcheryByYearMonth[key].actual = (hatcheryByYearMonth[key].actual ?? 0) + row.actualQuantity;
+      }
+    }
+
+    // Il "reale" viene SEMPRE ricalcolato in automatico dai lotti arrivati:
+    // i valori salvati manualmente diventano obsoleti man mano che arrivano nuovi lotti.
+    if (yearsNeeded.length > 0) {
+      const liveSums = await db.execute(sql`
+        SELECT EXTRACT(YEAR FROM arrival_date)::int AS year,
+               EXTRACT(MONTH FROM arrival_date)::int AS month,
+               COALESCE(SUM(animal_count), 0)::bigint AS total
+        FROM lots
+        WHERE EXTRACT(YEAR FROM arrival_date)::int IN (${sql.join(yearsNeeded.map(y => sql`${y}`), sql`, `)})
+        GROUP BY 1, 2
+      `);
+      for (const row of liveSums.rows as any[]) {
+        const key = `${Number(row.year)}-${Number(row.month)}`;
+        const total = Number(row.total);
+        if (total > 0) {
+          if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = { actual: null, forecast: 0 };
+          hatcheryByYearMonth[key].actual = total;
+        }
       }
     }
 

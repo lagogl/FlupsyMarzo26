@@ -79,6 +79,14 @@ interface HatcheryArrival {
   actualLockedAt: string | null;
   sizeCategory: string;
   notes: string | null;
+  calculatedActual?: number;
+}
+
+// Il "Reale" viene sempre ricalcolato in automatico dai lotti arrivati;
+// il valore salvato manualmente è usato solo se non ci sono lotti nel mese.
+function getRealeArrivi(h: HatcheryArrival): number | null {
+  if (h.calculatedActual && h.calculatedActual > 0) return h.calculatedActual;
+  return h.actualQuantity ?? null;
 }
 
 interface ProductionTarget {
@@ -601,7 +609,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
 
       const sortedHatchery = [...allHatcheryData].sort((a, b) => a.year - b.year || a.month - b.month);
       sortedHatchery.forEach((h, idx) => {
-        const actual = h.actualQuantity ?? null;
+        const actual = getRealeArrivi(h);
         const effective = actual ?? h.quantity;
         const variancePct = actual !== null && h.quantity > 0
           ? ((actual - h.quantity) / h.quantity) * 100
@@ -639,8 +647,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       });
 
       const totForecast = sortedHatchery.reduce((s, h) => s + h.quantity, 0);
-      const totActual = sortedHatchery.reduce((s, h) => s + (h.actualQuantity ?? 0), 0);
-      const totEffective = sortedHatchery.reduce((s, h) => s + (h.actualQuantity ?? h.quantity), 0);
+      const totActual = sortedHatchery.reduce((s, h) => s + (getRealeArrivi(h) ?? 0), 0);
+      const totEffective = sortedHatchery.reduce((s, h) => s + (getRealeArrivi(h) ?? h.quantity), 0);
       const totVariancePct = totForecast > 0 ? (totEffective - totForecast) / totForecast : 0;
       const totRow = ws4.addRow(["", t("pc_excel_totale"), totForecast, totActual, totEffective, totVariancePct]);
       totRow.eachCell((cell, colNumber) => {
@@ -1508,8 +1516,8 @@ export default function ProiezioneCrescita() {
 
       {showHatcheryForm && (() => {
         const totalForecast = allHatcheryData.reduce((sum, h) => sum + h.quantity, 0);
-        const totalActual = allHatcheryData.reduce((sum, h) => sum + (h.actualQuantity ?? 0), 0);
-        const totalEffective = allHatcheryData.reduce((sum, h) => sum + (h.actualQuantity ?? h.quantity), 0);
+        const totalActual = allHatcheryData.reduce((sum, h) => sum + (getRealeArrivi(h) ?? 0), 0);
+        const totalEffective = allHatcheryData.reduce((sum, h) => sum + (getRealeArrivi(h) ?? h.quantity), 0);
         const variance = totalActual > 0 ? totalEffective - totalForecast : 0;
         const variancePct = totalForecast > 0 ? (variance / totalForecast) * 100 : 0;
 
@@ -1544,7 +1552,8 @@ export default function ProiezioneCrescita() {
                 const existing = allHatcheryData.find(h => h.year === year && h.month === month);
                 const inputKey = `${year}-${month}`;
                 const isCalculating = calculatingActual === inputKey;
-                const actualVal = existing?.actualQuantity ?? null;
+                const actualVal = existing ? getRealeArrivi(existing) : null;
+                const isAutoActual = !!(existing?.calculatedActual && existing.calculatedActual > 0);
                 const forecastVal = existing?.quantity ?? 0;
                 const variance = actualVal !== null ? actualVal - forecastVal : null;
                 const variancePct = actualVal !== null && forecastVal > 0
@@ -1603,7 +1612,10 @@ export default function ProiezioneCrescita() {
 
                     {/* REALE */}
                     <div className="flex items-center gap-1">
-                      <span className="text-[10px] uppercase font-semibold text-blue-600 w-12">{t("pc_label_reale")}</span>
+                      <span className="text-[10px] uppercase font-semibold text-blue-600 w-12">
+                        {t("pc_label_reale")}
+                        {isAutoActual && <span className="block text-[8px] font-normal text-blue-400">auto</span>}
+                      </span>
                       <Input
                         type="text"
                         inputMode="numeric"

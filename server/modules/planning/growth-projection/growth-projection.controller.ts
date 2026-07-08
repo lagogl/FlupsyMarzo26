@@ -44,7 +44,24 @@ router.get("/hatchery-arrivals", async (req: Request, res: Response) => {
   try {
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
     const arrivals = await db.select().from(hatcheryArrivals).where(eq(hatcheryArrivals.year, year));
-    res.json(arrivals);
+
+    // Calcola in automatico il "reale" dai lotti arrivati (somma per mese)
+    const liveSums = await db.execute(sql`
+      SELECT EXTRACT(MONTH FROM arrival_date)::int AS month,
+             COALESCE(SUM(animal_count), 0)::bigint AS total
+      FROM lots
+      WHERE EXTRACT(YEAR FROM arrival_date)::int = ${year}
+      GROUP BY 1
+    `);
+    const liveByMonth = new Map<number, number>();
+    for (const row of liveSums.rows as any[]) {
+      liveByMonth.set(Number(row.month), Number(row.total));
+    }
+
+    res.json(arrivals.map(a => ({
+      ...a,
+      calculatedActual: liveByMonth.get(a.month) ?? 0,
+    })));
   } catch (error) {
     console.error("Errore lettura arrivi schiuditoio:", error);
     res.status(500).json({ error: "Errore nel recupero dati schiuditoio" });
