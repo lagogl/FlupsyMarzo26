@@ -1,0 +1,107 @@
+Accesso ai dati di produzione fotovoltaica in tempo reale — API SolarEdge
+Documento tecnico per lo sviluppatore: descrive come AcquaSCADA Delta Futuro legge i dati dell'impianto fotovoltaico e come replicare lo stesso accesso da un'altra applicazione.
+
+1. Fonte dei dati
+I dati NON vengono letti direttamente dall'inverter, ma dal cloud SolarEdge tramite la SolarEdge Monitoring API (servizio ufficiale, gratuito, incluso con l'impianto).
+
+Base URL: https://monitoringapi.solaredge.com
+Formato: REST / JSON (HTTPS, nessuna libreria speciale richiesta)
+Documentazione ufficiale: https://knowledge-center.solaredge.com/sites/kc/files/se_monitoring_api.pdf
+2. Credenziali necessarie
+Servono due valori (da richiedere al titolare dell'impianto):
+
+Parametro	Descrizione	Dove si trova
+API_KEY	Chiave API alfanumerica	Portale SolarEdge Monitoring → Admin → Accesso al sito → API
+SITE_ID	ID numerico dell'impianto	Visibile nell'URL del portale monitoring o nella stessa pagina API
+La chiave si passa come parametro querystring api_key su ogni chiamata:
+
+GET https://monitoringapi.solaredge.com/site/{SITE_ID}/overview?api_key=LA_TUA_CHIAVE
+
+Nota sicurezza: la chiave va tenuta lato server (variabile d'ambiente), mai nel codice frontend, perché chiunque la veda può leggere i dati dell'impianto.
+
+3. Endpoint utilizzati
+3.1 Potenza istantanea e totali — /site/{SITE_ID}/overview
+Il più usato per il "tempo reale". Restituisce la potenza attuale e i totali di energia.
+
+GET /site/{SITE_ID}/overview?api_key=...
+
+Risposta (campi principali):
+
+{
+  "overview": {
+    "lastUpdateTime": "2026-07-15 10:42:18",
+    "currentPower":  { "power": 8420.0 },
+    "lastDayData":   { "energy": 31250.0 },
+    "lastMonthData": { "energy": 812000.0 },
+    "lastYearData":  { "energy": 5230000.0 },
+    "lifeTimeData":  { "energy": 18400000.0 }
+  }
+}
+
+currentPower.power = potenza istantanea in Watt
+i campi energy sono in Wh
+3.2 Flusso di potenza (produzione / consumo / rete) — /site/{SITE_ID}/currentPowerFlow
+Mostra in tempo reale quanta energia va dal fotovoltaico ai carichi e da/verso la rete.
+
+GET /site/{SITE_ID}/currentPowerFlow?api_key=...
+
+{
+  "siteCurrentPowerFlow": {
+    "unit": "kW",
+    "PV":   { "status": "Active", "currentPower": 8.42 },
+    "LOAD": { "status": "Active", "currentPower": 5.1 },
+    "GRID": { "status": "Active", "currentPower": 3.32 },
+    "connections": [ { "from": "PV", "to": "Load" }, { "from": "Load", "to": "Grid" } ]
+  }
+}
+
+Attenzione: qui i valori sono in kW (non W).
+La direzione della rete (immissione o prelievo) si ricava dall'array connections: se compare from: "GRID" si sta prelevando, se compare to: "Grid" si sta immettendo.
+3.3 Storico energia — /site/{SITE_ID}/energy
+GET /site/{SITE_ID}/energy?timeUnit=HOUR&startDate=2026-07-14&endDate=2026-07-15&api_key=...
+
+timeUnit: QUARTER_OF_AN_HOUR, HOUR, DAY, WEEK, MONTH, YEAR
+Risposta: energy.values = array di { date, value } (Wh, value può essere null di notte)
+3.4 Dettagli energia (produzione vs consumo) — /site/{SITE_ID}/energyDetails
+Ripartizione tra produzione, autoconsumo, immissione in rete e prelievo, per periodo. Utile per report.
+
+3.5 Benefici ambientali — /site/{SITE_ID}/envBenefits
+CO₂ risparmiata, alberi equivalenti, ecc.
+
+3.6 Anagrafica impianto — /site/{SITE_ID}/details
+Potenza di picco installata (kWp), posizione, stato.
+
+4. Limiti di utilizzo (IMPORTANTE)
+SolarEdge impone un limite di circa 300 richieste al giorno per impianto (per coppia chiave+sito). Superarlo produce errori HTTP 429.
+
+Per questo la nostra app applica una cache lato server:
+
+Dato	Frequenza massima di aggiornamento
+currentPowerFlow	ogni 30 secondi (cache)
+overview	ogni 60 secondi (cache)
+Storici / report	on-demand, senza polling
+Raccomandazione per la nuova app: non chiamare l'API a ogni apertura di pagina. Fare il polling in un unico punto lato server (es. ogni 60 s) e servire il valore in cache a tutti i client. Se entrambe le app usano la stessa chiave, il limite di 300 richieste/giorno è condiviso: coordinare le frequenze (es. 1 chiamata/minuto ≈ 1.440/giorno è già troppo; con cache a 5 minuti si resta a ~288/giorno).
+
+In alternativa si può generare una seconda chiave API dal portale SolarEdge per la nuova app, così i limiti restano separati.
+
+5. Altre note pratiche
+I dati "tempo reale" del cloud SolarEdge hanno comunque un ritardo di ~5-15 minuti rispetto all'inverter (dipende dalla frequenza di upload dell'inverter). Verificare lastUpdateTime.
+Timeout consigliato sulle chiamate: 15 secondi.
+In caso di errore, mantenere l'ultimo valore valido in cache invece di mostrare zero.
+Gli orari restituiti sono nel fuso orario dell'impianto (Europe/Rome), non UTC.
+6. Esempio minimo (Node.js)
+const BASE = "https://monitoringapi.solaredge.com";
+const KEY  = process.env.SOLAREDGE_API_KEY;
+const SITE = process.env.SOLAREDGE_SITE_ID;
+async function potenzaAttuale() {
+  const r = await fetch(`${BASE}/site/${SITE}/overview?api_key=${KEY}`);
+  if (!r.ok) throw new Error(`SolarEdge API ${r.status}`);
+  const { overview } = await r.json();
+  return {
+    potenzaW:     overview.currentPower?.power ?? 0,     // Watt
+    energiaOggiWh: overview.lastDayData?.energy ?? 0,    // Wh
+    aggiornatoAl: overview.lastUpdateTime,
+  };
+}
+
+Lo stesso approccio funziona in qualunque linguaggio (Python, PHP, C#…): è una semplice GET HTTPS con JSON.
