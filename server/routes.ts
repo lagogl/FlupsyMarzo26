@@ -315,6 +315,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.use('/api/capisani', capisaniModule.capisaniRoutes);
   console.log('✅ Modulo CA\' PISANI registrato su /api/capisani/*');
 
+  // Registra il modulo SOLAREDGE (produzione fotovoltaica)
+  const solaredgeModule = await import('./modules/solaredge');
+  app.use('/api/solaredge', solaredgeModule.solaredgeRoutes);
+  console.log('✅ Modulo SOLAREDGE registrato su /api/solaredge/*');
+
   // Registra il modulo REPORT FLUSSO LOTTI (passaggi tra contenitori)
   const lotFlowModule = await import('./modules/reports/lot-flow');
   app.use('/api/reports', lotFlowModule.lotFlowRoutes);

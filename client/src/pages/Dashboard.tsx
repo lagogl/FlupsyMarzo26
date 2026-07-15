@@ -15,6 +15,7 @@ import IMMCard from '@/components/dashboard/IMMCard';
 import SeneyeCard from '@/components/dashboard/SeneyeCard';
 import { AcquaScadaOxygenCard, AcquaScadaLevelsCard } from '@/components/dashboard/AcquaScadaCards';
 import CaPisaniCard from '@/components/dashboard/CaPisaniCard';
+import SolarPowerBanner from '@/components/dashboard/SolarPowerBanner';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
 import MortalityTemporalCard from '@/components/dashboard/MortalityTemporalCard';
 import MortalityAlertsCard from '@/components/dashboard/MortalityAlertsCard';
@@ -399,6 +400,11 @@ export default function Dashboard() {
           isSavingPreferences={isSavingFlupsyPrefs}
           preferredFlupsyIds={preferredFlupsyIds}
         />
+      </div>
+
+      {/* Produzione fotovoltaica (SolarEdge) con allarme se non produce di giorno */}
+      <div className="mt-6">
+        <SolarPowerBanner />
       </div>
 
       {/* Sonda ambientale DF SIFONI (Seneye) + AcquaSCADA (ossigeno e livelli) + Ca' Pisani */}
