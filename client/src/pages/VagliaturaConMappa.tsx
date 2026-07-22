@@ -244,9 +244,21 @@ export default function VagliaturaConMappa() {
     // Popola la mappa SOLO se siamo in modalità 'source'
     // In modalità 'destination', i cestelli disponibili NON devono mostrare dati operativi
     if (mode === 'source') {
+      // Mappa basketId → currentCycleId per filtrare solo le operazioni del ciclo attivo.
+      // CRITICO: senza questo filtro, un'operazione (es. "vendita") di un ciclo CHIUSO
+      // con data più recente sovrascriverebbe i dati del ciclo attivo corrente.
+      const basketCurrentCycleMap: Record<number, number | null> = {};
+      baskets.forEach((b: any) => {
+        basketCurrentCycleMap[b.id] = b.currentCycleId ?? null;
+      });
+
       operations.forEach((operation: any) => {
         const basketId = operation.basketId;
         
+        // Salta l'operazione se non appartiene al ciclo attivo del cestello
+        const activeCycleId = basketCurrentCycleMap[basketId];
+        if (!activeCycleId || operation.cycleId !== activeCycleId) return;
+
         // Se non c'è già un'operazione per questo cestello o questa è più recente, la memorizziamo
         // Confronta prima per data, poi per ID se le date sono uguali
         if (!lastOperationsMap[basketId]) {
