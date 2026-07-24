@@ -4124,34 +4124,61 @@ export default function SpreadsheetOperations() {
                                       }
 
                                       return basketOps.map((op: any, index: number) => (
-                                        <div key={op.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
-                                          <div className={`h-2 w-2 rounded-full ${
+                                        <div key={op.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded text-xs">
+                                          <div className={`h-2 w-2 rounded-full mt-1 flex-shrink-0 ${
                                             op.type === 'prima-attivazione' ? 'bg-green-500' :
+                                            op.type === 'prima-attivazione-da-vagliatura' ? 'bg-teal-500' :
                                             op.type === 'misura' ? 'bg-blue-500' :
                                             op.type === 'peso' ? 'bg-purple-500' :
                                             op.type === 'pulizia' ? 'bg-yellow-500' :
                                             op.type === 'trattamento' ? 'bg-red-500' :
                                             'bg-gray-500'
                                           }`} />
-                                          <div className="flex-1">
-                                            <div className="font-medium capitalize">
-                                              {op.type === 'prima-attivazione' ? 'Prima attivazione' :
-                                               op.type === 'misura' ? 'Misura' :
-                                               op.type === 'peso' ? 'Peso' :
-                                               op.type === 'pulizia' ? 'Pulizia' :
-                                               op.type === 'trattamento' ? 'Trattamento' :
-                                               op.type}
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1">
+                                              <span className="font-medium capitalize">
+                                                {op.type === 'prima-attivazione' ? 'Prima Attivazione' :
+                                                 op.type === 'prima-attivazione-da-vagliatura' ? 'Prima Att. da Vagliatura' :
+                                                 op.type === 'misura' ? 'Misura' :
+                                                 op.type === 'peso' ? 'Peso' :
+                                                 op.type === 'pulizia' ? 'Pulizia' :
+                                                 op.type === 'trattamento' ? 'Trattamento' :
+                                                 op.type}
+                                              </span>
+                                              {index === 0 && (
+                                                <span className="px-1 py-0.5 bg-blue-100 text-blue-600 rounded-full text-xs font-medium leading-none">
+                                                  ULTIMA
+                                                </span>
+                                              )}
                                             </div>
                                             <div className="text-gray-500">
                                               {new Date(op.date).toLocaleDateString('it-IT')}
-                                              {op.animalCount && ` • ${formatNumberWithSeparators(op.animalCount)} animali`}
+                                              {op.animalCount ? ` • ${formatNumberWithSeparators(op.animalCount)} animali` : ''}
+                                            </div>
+                                            {/* Dati misurazione */}
+                                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-gray-600">
+                                              {op.totalWeight != null && (
+                                                <span>
+                                                  <span className="text-gray-400">Peso:</span>{' '}
+                                                  <span className="font-medium">{(op.totalWeight / 1000).toFixed(2)} kg</span>
+                                                </span>
+                                              )}
+                                              {op.animalsPerKg != null && (
+                                                <span>
+                                                  <span className="text-gray-400">Pz/Kg:</span>{' '}
+                                                  <span className="font-medium">{formatNumberWithSeparators(Math.round(op.animalsPerKg))}</span>
+                                                </span>
+                                              )}
+                                              {op.mortalityRate != null && (
+                                                <span>
+                                                  <span className="text-gray-400">Mort.:</span>{' '}
+                                                  <span className={`font-medium ${op.mortalityRate > 20 ? 'text-red-600' : op.mortalityRate > 10 ? 'text-orange-500' : op.mortalityRate > 5 ? 'text-amber-500' : 'text-green-600'}`}>
+                                                    {Number(op.mortalityRate).toFixed(1)}%
+                                                  </span>
+                                                </span>
+                                              )}
                                             </div>
                                           </div>
-                                          {index === 0 && (
-                                            <div className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full text-xs font-medium">
-                                              ULTIMA
-                                            </div>
-                                          )}
                                         </div>
                                       ));
                                     })()}
