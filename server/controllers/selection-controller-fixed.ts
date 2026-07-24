@@ -103,7 +103,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
       meshSotto: selectionDestinationBaskets.meshSotto,
       meshSopra2: selectionDestinationBaskets.meshSopra2,
       meshSotto2: selectionDestinationBaskets.meshSotto2,
-      screeningPosition: selectionDestinationBaskets.screeningPosition
+      screeningPosition: selectionDestinationBaskets.screeningPosition,
+      notes: selectionDestinationBaskets.notes
     })
     .from(selectionDestinationBaskets)
     .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
@@ -521,7 +522,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         }
 
         // 3. OPERAZIONE PRIMA-ATTIVAZIONE (APPROCCIO IBRIDO)
-        let operationNotes = `Da vagliatura #${selection[0].selectionNumber} del ${selection[0].date}${wasAlsoSource ? ' (cestello riutilizzato)' : ''}`;
+        // Parte automatica: provenienza
+        let autoNotes = `Da vagliatura #${selection[0].selectionNumber} del ${selection[0].date}${wasAlsoSource ? ' (cestello riutilizzato)' : ''}`;
         
         if (isMixedLot) {
           // Crea stringa con composizione dettagliata
@@ -532,8 +534,14 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             })
             .join(', ');
           
-          operationNotes += ` - LOTTO MISTO: ${compositionDetails}`;
+          autoNotes += ` - LOTTO MISTO: ${compositionDetails}`;
         }
+
+        // Formato finale: "[nota manuale operatore] | [nota automatica]"
+        // La nota manuale (SOPRA VAGLIATURA, BRUTTI ecc.) viene prima del separatore |
+        // così il client può mostrare solo la parte manuale nella cella
+        const manualNote = (destBasket as any).notes?.trim() || '';
+        const operationNotes = manualNote ? `${manualNote} | ${autoNotes}` : autoNotes;
         
         const operationMetadata = isMixedLot 
           ? JSON.stringify({ isMixed: true, sourceSelection: Number(id), dominantLot: primaryLotId, lotCount: lotComposition.size })
