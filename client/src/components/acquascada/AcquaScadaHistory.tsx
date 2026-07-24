@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Loader2, Download, Activity, Gauge, Percent, Wind, Thermometer, Waves,
+  Loader2, Download, Activity, Gauge, Percent, Wind, Thermometer, Waves, FlaskConical, Droplets,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -12,21 +12,31 @@ import {
 } from 'recharts';
 import { useAcquaScada } from '@/components/dashboard/AcquaScadaCards';
 
-type ScadaParamKey = 'o2sat' | 'o2mgl' | 'o2temp' | 'vasca' | 'laguna';
+type ScadaParamKey =
+  | 'o2sat' | 'o2mgl' | 'o2temp'
+  | 'p71sat' | 'p71mgl' | 'p71temp'
+  | 'p72nh3' | 'p72ph' | 'p72temp'
+  | 'vasca' | 'laguna';
 
-const SCADA_PARAMS: { key: ScadaParamKey; label: string; unit: string; color: string; digits: number }[] = [
-  { key: 'o2sat', label: 'Saturazione O2', unit: '%', color: '#2563eb', digits: 1 },
-  { key: 'o2mgl', label: 'Ossigeno disciolto', unit: 'mg/L', color: '#059669', digits: 2 },
-  { key: 'o2temp', label: 'Temperatura acqua', unit: '°C', color: '#dc2626', digits: 1 },
-  { key: 'vasca', label: 'Livello vasca idrovore', unit: 'cm', color: '#0284c7', digits: 1 },
-  { key: 'laguna', label: 'Livello laguna', unit: 'cm', color: '#0891b2', digits: 1 },
+const SCADA_PARAMS: { key: ScadaParamKey; label: string; unit: string; color: string; digits: number; group: string }[] = [
+  { key: 'o2sat',   label: 'Sat. O₂ Vivaio',    unit: '%',    color: '#2563eb', digits: 1, group: 'Vivaio (ID 70)' },
+  { key: 'o2mgl',   label: 'O₂ disc. Vivaio',   unit: 'mg/L', color: '#059669', digits: 2, group: 'Vivaio (ID 70)' },
+  { key: 'o2temp',  label: 'Temp. Vivaio',       unit: '°C',   color: '#dc2626', digits: 1, group: 'Vivaio (ID 70)' },
+  { key: 'p71sat',  label: 'Sat. O₂ Flupsy',     unit: '%',    color: '#0d9488', digits: 1, group: 'Flupsy (ID 71)' },
+  { key: 'p71mgl',  label: 'O₂ disc. Flupsy',    unit: 'mg/L', color: '#0891b2', digits: 2, group: 'Flupsy (ID 71)' },
+  { key: 'p71temp', label: 'Temp. Flupsy',        unit: '°C',   color: '#b45309', digits: 1, group: 'Flupsy (ID 71)' },
+  { key: 'p72nh3',  label: 'Ammoniaca NH₃',      unit: 'mg/L', color: '#7c3aed', digits: 3, group: 'NH₃/pH (ID 72)' },
+  { key: 'p72ph',   label: 'pH',                 unit: 'pH',   color: '#6d28d9', digits: 2, group: 'NH₃/pH (ID 72)' },
+  { key: 'p72temp', label: 'Temp. SEN0711',       unit: '°C',   color: '#9333ea', digits: 1, group: 'NH₃/pH (ID 72)' },
+  { key: 'vasca',   label: 'Livello vasca',       unit: 'cm',   color: '#0284c7', digits: 1, group: 'Livelli' },
+  { key: 'laguna',  label: 'Livello laguna',      unit: 'cm',   color: '#0891b2', digits: 1, group: 'Livelli' },
 ];
 
 const SCADA_RANGE_OPTIONS = [
   { value: '0.25', label: 'Ultime 6 ore' },
-  { value: '1', label: 'Ultime 24 ore' },
-  { value: '7', label: 'Ultimi 7 giorni' },
-  { value: '30', label: 'Ultimi 30 giorni' },
+  { value: '1',    label: 'Ultime 24 ore' },
+  { value: '7',    label: 'Ultimi 7 giorni' },
+  { value: '30',   label: 'Ultimi 30 giorni' },
 ];
 
 interface HistoryResponse {
@@ -43,6 +53,8 @@ function fmt(v: number | null | undefined, digits = 2): string {
   if (v === null || v === undefined) return '-';
   return v.toFixed(digits);
 }
+
+const GROUPS = ['Vivaio (ID 70)', 'Flupsy (ID 71)', 'NH₃/pH (ID 72)', 'Livelli'];
 
 export default function AcquaScadaHistory() {
   const [param, setParam] = useState<ScadaParamKey>('o2mgl');
@@ -97,18 +109,26 @@ export default function AcquaScadaHistory() {
     XLSX.writeFile(wb, `acquascada_${param}.xlsx`);
   };
 
-  const probe = live?.oxygenProbe;
+  // Valori live per tutte le sonde
+  const vivaio = live?.oxygenProbeVivaio ?? live?.oxygenProbe;
+  const flupsy = live?.oxygenProbeFlupsy;
+  const nh3ph  = live?.nh3phProbe;
   const levels = live?.levels;
+
   const liveCards = [
-    { icon: <Percent className="h-5 w-5 text-blue-500" />, label: 'Saturazione O2', value: fmt(probe?.saturation, 1), unit: '%' },
-    { icon: <Wind className="h-5 w-5 text-emerald-600" />, label: 'Ossigeno disciolto', value: fmt(probe?.dissolvedOxygen, 2), unit: 'mg/L' },
-    { icon: <Thermometer className="h-5 w-5 text-red-500" />, label: 'Temperatura acqua', value: fmt(probe?.temperature, 1), unit: '°C' },
-    { icon: <Waves className="h-5 w-5 text-sky-600" />, label: 'Livello vasca', value: fmt(levels?.vasca?.value, 1), unit: 'cm' },
-    { icon: <Waves className="h-5 w-5 text-cyan-600" />, label: 'Livello laguna', value: fmt(levels?.laguna?.value, 1), unit: 'cm' },
+    { icon: <Percent className="h-4 w-4 text-blue-500" />,    label: 'Sat. O₂ Vivaio',   value: fmt(vivaio?.saturation, 1),    unit: '%' },
+    { icon: <Wind className="h-4 w-4 text-emerald-600" />,    label: 'O₂ disc. Vivaio',  value: fmt(vivaio?.dissolvedOxygen, 2), unit: 'mg/L' },
+    { icon: <Thermometer className="h-4 w-4 text-red-500" />, label: 'Temp. Vivaio',     value: fmt(vivaio?.temperature, 1),    unit: '°C' },
+    { icon: <Percent className="h-4 w-4 text-teal-500" />,    label: 'Sat. O₂ Flupsy',   value: fmt(flupsy?.saturation, 1),    unit: '%' },
+    { icon: <Droplets className="h-4 w-4 text-teal-600" />,   label: 'O₂ disc. Flupsy',  value: fmt(flupsy?.dissolvedOxygen, 2), unit: 'mg/L' },
+    { icon: <FlaskConical className="h-4 w-4 text-violet-500" />, label: 'NH₃',           value: fmt(nh3ph?.ammonia, 3),         unit: 'mg/L' },
+    { icon: <Gauge className="h-4 w-4 text-indigo-500" />,    label: 'pH',               value: fmt(nh3ph?.ph, 2),              unit: 'pH' },
+    { icon: <Waves className="h-4 w-4 text-sky-600" />,       label: 'Livello vasca',    value: fmt(levels?.vasca?.value, 1),   unit: 'cm' },
+    { icon: <Waves className="h-4 w-4 text-cyan-600" />,      label: 'Livello laguna',   value: fmt(levels?.laguna?.value, 1),  unit: 'cm' },
   ];
 
-  const lastUpdate = probe?.lastUpdate
-    ? new Date(probe.lastUpdate).toLocaleString('it-IT')
+  const lastUpdate = vivaio?.lastUpdate
+    ? new Date(vivaio.lastUpdate).toLocaleString('it-IT')
     : null;
 
   const recentRows = useMemo(() => {
@@ -124,11 +144,10 @@ export default function AcquaScadaHistory() {
         <div>
           <div className="flex items-center gap-2">
             <Gauge className="h-6 w-6 text-emerald-600" />
-            <h2 className="text-xl font-bold">AcquaSCADA — Sonda Ossigeno DF (SEN0681) e Livelli</h2>
+            <h2 className="text-xl font-bold">AcquaSCADA — Sonde DFRobot e Livelli</h2>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Dati in tempo reale dall'impianto: ossigeno, temperatura acqua e livelli idrici
-            (vasca idrovore e laguna). Le letture arrivano ogni ~5 secondi.
+            Dati in tempo reale: sonde ossigeno (vivaio + Flupsy), ammoniaca/pH e livelli idrici. Letture ogni ~30 secondi.
           </p>
         </div>
         <Button
@@ -141,21 +160,21 @@ export default function AcquaScadaHistory() {
         </Button>
       </div>
 
-      {/* Valori attuali */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* Valori attuali — griglia compatta */}
+      <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
         {liveCards.map((c) => (
           <Card key={c.label}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                {c.icon} {c.label}
+            <CardContent className="p-3">
+              <div className="flex items-center gap-1 text-muted-foreground text-[10px] mb-1">
+                {c.icon} <span className="truncate">{c.label}</span>
               </div>
-              <div className="mt-2 flex items-baseline gap-1">
+              <div className="flex items-baseline gap-0.5">
                 {isLoadingLive ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 ) : (
                   <>
-                    <span className="text-2xl font-bold">{c.value}</span>
-                    {c.unit && <span className="text-xs text-muted-foreground">{c.unit}</span>}
+                    <span className="text-lg font-bold">{c.value}</span>
+                    {c.unit && <span className="text-[10px] text-muted-foreground">{c.unit}</span>}
                   </>
                 )}
               </div>
@@ -164,7 +183,7 @@ export default function AcquaScadaHistory() {
         ))}
       </div>
       {lastUpdate && (
-        <p className="text-xs text-muted-foreground -mt-2">Ultima misura · {lastUpdate}</p>
+        <p className="text-xs text-muted-foreground -mt-1">Ultima misura · {lastUpdate}</p>
       )}
 
       {/* Grafico storico */}
@@ -190,19 +209,28 @@ export default function AcquaScadaHistory() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {SCADA_PARAMS.map((p) => {
-              const active = param === p.key;
+          {/* Pulsanti raggruppati per sonda */}
+          <div className="space-y-2 mb-4">
+            {GROUPS.map((group) => {
+              const groupParams = SCADA_PARAMS.filter((p) => p.group === group);
               return (
-                <button
-                  key={p.key}
-                  onClick={() => setParam(p.key)}
-                  data-testid={`scada-param-${p.key}`}
-                  className={`text-xs px-2 py-1 rounded-full border transition-colors ${active ? 'text-white border-transparent' : 'text-muted-foreground bg-muted/40 hover:bg-muted'}`}
-                  style={active ? { backgroundColor: p.color } : undefined}
-                >
-                  {p.label}{p.unit ? ` (${p.unit})` : ''}
-                </button>
+                <div key={group} className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-muted-foreground w-24 shrink-0">{group}</span>
+                  {groupParams.map((p) => {
+                    const active = param === p.key;
+                    return (
+                      <button
+                        key={p.key}
+                        onClick={() => setParam(p.key)}
+                        data-testid={`scada-param-${p.key}`}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors ${active ? 'text-white border-transparent' : 'text-muted-foreground bg-muted/40 hover:bg-muted'}`}
+                        style={active ? { backgroundColor: p.color } : undefined}
+                      >
+                        {p.label}{p.unit ? ` (${p.unit})` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>

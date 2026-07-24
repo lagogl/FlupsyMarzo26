@@ -1,0 +1,96 @@
+
+🔌 AcquaSCADA Delta Futuro — API Pubblica v1
+Base URL: https://supervisore-delta-futuro-copia.replit.app
+
+Autenticazione: ogni richiesta deve includere l'intestazione HTTP:
+
+X-API-Key: <chiave da richiedere al responsabile impianto>
+
+1. Misure in tempo reale
+GET /api/public/v1/measurements
+
+Risposta JSON:
+
+{
+  "timestamp": "2026-07-24T11:30:00.000Z",
+  "oxygenProbeVivaio": {
+    "description": "Sonda O2 vivaio (SEN0681, ID 70)",
+    "status": "online",
+    "saturation": 85.3,
+    "dissolvedOxygen": 6.84,
+    "temperature": 22.1,
+    "unit": { "saturation": "%", "dissolvedOxygen": "mg/L", "temperature": "°C" },
+    "lastUpdate": "2026-07-24T11:29:55.000Z"
+  },
+  "oxygenProbeFlupsy": {
+    "description": "Sonda O2 Flupsy (DFRobot, ID 71)",
+    "status": "online",
+    "saturation": 91.0,
+    "dissolvedOxygen": 7.12,
+    "temperature": 21.8,
+    "unit": { "saturation": "%", "dissolvedOxygen": "mg/L", "temperature": "°C" },
+    "lastUpdate": "2026-07-24T11:29:55.000Z"
+  },
+  "nh3phProbe": {
+    "description": "Sonda NH3/pH (DFRobot SEN0711, ID 72)",
+    "status": "online",
+    "ammonia": 0.042,
+    "ph": 7.27,
+    "temperature": 27.9,
+    "unit": { "ammonia": "mg/L", "ph": "pH", "temperature": "°C" },
+    "lastUpdate": "2026-07-24T11:29:55.000Z"
+  },
+  "levels": {
+    "vasca": { "value": 45.2, "unit": "cm", "lastUpdate": "..." },
+    "laguna": { "value": 112.0, "unit": "cm", "lastUpdate": "..." }
+  },
+  "source": { "bridgeStatus": "online", "lastError": null }
+}
+
+status può essere "online" oppure "offline". Quando "offline", i valori numerici sono l'ultimo dato valido ricevuto (non necessariamente in tempo reale).
+
+2. Storico misure
+GET /api/public/v1/history?parameter=<param>&from=<ISO8601>&to=<ISO8601>&limit=<n>
+
+Parametro query	Obbligatorio	Default
+parameter	✅	—
+from	no	inizio storico
+to	no	adesso
+limit	no	1000 (max 5000)
+Valori validi per parameter:
+
+Valore	Grandezza	Unità
+o2sat	Saturazione O₂ vivaio (ID 70)	%
+o2mgl	Ossigeno disciolto vivaio (ID 70)	mg/L
+o2temp	Temperatura vivaio (ID 70)	°C
+p71sat	Saturazione O₂ Flupsy (ID 71)	%
+p71mgl	Ossigeno disciolto Flupsy (ID 71)	mg/L
+p71temp	Temperatura Flupsy (ID 71)	°C
+p72nh3	Ammoniaca NH₃ (ID 72)	mg/L
+p72ph	pH (ID 72)	pH
+p72temp	Temperatura SEN0711 (ID 72)	°C
+vasca	Livello vasca idrovore	cm
+laguna	Livello laguna	cm
+Esempio:
+
+GET /api/public/v1/history?parameter=p72nh3&from=2026-07-01T00:00:00Z&limit=500
+
+Risposta:
+
+{
+  "parameter": "p72nh3",
+  "description": "Ammoniaca NH3 sonda SEN0711 (ID 72)",
+  "unit": "mg/L",
+  "from": "2026-07-01T00:00:00.000Z",
+  "to": null,
+  "count": 142,
+  "readings": [
+    { "recordedAt": "2026-07-01T06:00:00Z", "value": 0.038 },
+    ...
+  ]
+}
+
+Note tecniche
+Le date sono sempre in ISO 8601 UTC
+Il dato viene aggiornato circa ogni 30 secondi (frequenza di polling del bridge)
+Se status = "offline" per più di qualche minuto, il bridge locale (PC di valle) potrebbe essere spento o non connesso a internet

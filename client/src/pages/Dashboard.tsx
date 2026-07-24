@@ -13,7 +13,7 @@ import { TargetSizePredictions } from '@/components/dashboard/TargetSizePredicti
 import HealthSgrCard from '@/components/dashboard/HealthSgrCard';
 import IMMCard from '@/components/dashboard/IMMCard';
 import SeneyeCard from '@/components/dashboard/SeneyeCard';
-import { AcquaScadaOxygenCard, AcquaScadaLevelsCard } from '@/components/dashboard/AcquaScadaCards';
+import { AcquaScadaOxygenCard, AcquaScadaFlupsyCard, AcquaScadaNH3PHCard, AcquaScadaLevelsCard } from '@/components/dashboard/AcquaScadaCards';
 import CaPisaniCard from '@/components/dashboard/CaPisaniCard';
 import SolarPowerBanner from '@/components/dashboard/SolarPowerBanner';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
@@ -407,10 +407,12 @@ export default function Dashboard() {
         <SolarPowerBanner />
       </div>
 
-      {/* Sonda ambientale DF SIFONI (Seneye) + AcquaSCADA (ossigeno e livelli) + Ca' Pisani */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 my-6">
+      {/* Sonde ambientali: Seneye + AcquaSCADA (O₂ vivaio, O₂ Flupsy, NH₃/pH, livelli) + Ca' Pisani */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 my-6">
         <SeneyeCard />
         <AcquaScadaOxygenCard />
+        <AcquaScadaFlupsyCard />
+        <AcquaScadaNH3PHCard />
         <AcquaScadaLevelsCard />
         <CaPisaniCard />
       </div>

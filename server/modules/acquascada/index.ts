@@ -44,7 +44,12 @@ router.get("/measurements", async (_req: Request, res: Response) => {
   }
 });
 
-const VALID_PARAMS = new Set(["o2sat", "o2mgl", "o2temp", "vasca", "laguna"]);
+const VALID_PARAMS = new Set([
+  "o2sat", "o2mgl", "o2temp",
+  "p71sat", "p71mgl", "p71temp",
+  "p72nh3", "p72ph", "p72temp",
+  "vasca", "laguna",
+]);
 
 const historyCache = new Map<string, { data: any; fetchedAt: number }>();
 const HISTORY_CACHE_TTL_MS = 60_000;
@@ -143,7 +148,11 @@ router.get("/history", async (req: Request, res: Response) => {
 
   let readings: { value: number; timestamp: string }[] = [];
   for (const r of okResults) {
-    if (Array.isArray(r.readings)) readings.push(...r.readings);
+    if (Array.isArray(r.readings)) {
+      for (const row of r.readings) {
+        readings.push({ value: row.value, timestamp: row.timestamp ?? row.recordedAt });
+      }
+    }
   }
   readings.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
