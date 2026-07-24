@@ -821,6 +821,24 @@ export default function BasketSelection() {
         return aVal - bVal;
       },
     },
+    {
+      id: 'notes',
+      header: 'Note',
+      cell: (basket) => {
+        const fullNote = basket.lastOperation?.notes || '';
+        // Mostra solo la parte prima di "| LOTTO MISTO" (che è la lineage tecnica)
+        const displayNote = fullNote.split('|')[0].trim();
+        if (!displayNote) return <span className="text-muted-foreground">-</span>;
+        return (
+          <span
+            className="text-xs text-gray-700 max-w-[180px] block truncate cursor-help"
+            title={fullNote}
+          >
+            {displayNote}
+          </span>
+        );
+      },
+    },
   ];
   
   // Calcola gli indicatori visivi (pallini verdi) - usa useMemo per evitare loop infiniti
