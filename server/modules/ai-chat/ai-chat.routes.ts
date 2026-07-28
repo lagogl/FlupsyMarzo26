@@ -28,7 +28,6 @@ async function buildOperatorContext(): Promise<string> {
       JOIN flupsys f ON b.flupsy_id = f.id
       JOIN cycles c ON c.basket_id = b.id AND c.end_date IS NULL AND c.state = 'active'
       JOIN lots l ON c.lot_id = l.id
-      LEFT JOIN sizes s ON op.size_id = s.id
       LEFT JOIN LATERAL (
         SELECT o.animals_per_kg, o.total_weight, o.date, o.type, o.size_id
         FROM operations o
@@ -36,6 +35,7 @@ async function buildOperatorContext(): Promise<string> {
         ORDER BY o.date DESC, o.id DESC
         LIMIT 1
       ) op ON true
+      LEFT JOIN sizes s ON op.size_id = s.id
       LEFT JOIN LATERAL (
         SELECT ((SUM(dead_count)::float / NULLIF(MAX(animal_count), 0)) * 100) AS mortality_percent
         FROM operations
@@ -78,7 +78,14 @@ async function buildOperatorContext(): Promise<string> {
       FROM baskets b
       JOIN flupsys f ON b.flupsy_id = f.id
       JOIN cycles c ON c.basket_id = b.id AND c.end_date IS NULL AND c.state = 'active'
-      LEFT JOIN sizes s ON b.current_size_id = s.id
+      LEFT JOIN LATERAL (
+        SELECT so.code
+        FROM operations lo
+        LEFT JOIN sizes so ON lo.size_id = so.id
+        WHERE lo.basket_id = b.id AND lo.cycle_id = c.id
+        ORDER BY lo.date DESC, lo.id DESC
+        LIMIT 1
+      ) s ON true
       LEFT JOIN operations o ON o.basket_id = b.id AND o.type IN ('vagliatura', 'screening')
       GROUP BY b.physical_number, f.name, s.code
       HAVING MAX(o.date) IS NULL OR CURRENT_DATE - MAX(o.date) > 14
@@ -205,6 +212,10 @@ ${contextSnapshot}`;
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  // Abort upstream stream if the client disconnects
+  const abortController = new AbortController();
+  req.on('close', () => abortController.abort());
+
   try {
     const OpenAI = (await import('openai')).default;
     const client = new OpenAI({ apiKey, timeout: 60000 });
@@ -220,7 +231,7 @@ ${contextSnapshot}`;
       temperature: 0.4,
       max_tokens: 1200,
       stream: true,
-    });
+    }, { signal: abortController.signal });
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta?.content;
@@ -233,8 +244,12 @@ ${contextSnapshot}`;
     res.end();
 
   } catch (err: any) {
+    if (abortController.signal.aborted) {
+      // Client went away — nothing to write
+      return;
+    }
     console.error('[AI Chat] OpenAI error:', err.message);
-    res.write(`data: ${JSON.stringify({ error: 'Errore AI: ' + err.message })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: 'Errore AI temporaneo, riprova tra poco.' })}\n\n`);
     res.end();
   }
 });

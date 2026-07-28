@@ -110,7 +110,6 @@ import ReportMortalita from "@/pages/ReportMortalita";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
-import { WebSocketIndicator } from "@/components/WebSocketIndicator";
 // Importiamo il sistema di tooltip contestuali
 import { TooltipProvider } from "@/contexts/TooltipContext";
 import { ContextualTooltip } from "@/components/ui/contextual-tooltip";
@@ -295,7 +294,6 @@ function App() {
           <ContextualTooltip />
           
           {/* Indicatore di stato della connessione WebSocket */}
-          <WebSocketIndicator />
           
           {/* Riepilogo mattutino temporaneamente disabilitato (standby). Per riattivare, rimuovere il commento qui sotto e l'import in alto. */}
           {/* <MorningSummaryOverlay /> */}

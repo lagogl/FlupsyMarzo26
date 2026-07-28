@@ -72,34 +72,36 @@ export function AIChatWidget() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let accumulated = '';
+      let sseBuffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        // Keep the last (possibly incomplete) line in the buffer
+        sseBuffer = lines.pop() ?? '';
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6).trim();
           if (payload === '[DONE]') break;
 
-          try {
-            const json = JSON.parse(payload);
-            if (json.error) throw new Error(json.error);
-            if (json.delta) {
-              accumulated += json.delta;
-              setMessages(prev => {
-                const updated = [...prev];
-                const lastIdx = updated.length - 1;
-                if (updated[lastIdx]?.role === 'assistant') {
-                  updated[lastIdx] = { role: 'assistant', content: accumulated };
-                }
-                return updated;
-              });
-            }
-          } catch (_) { /* skip malformed */ }
+          let json: any = null;
+          try { json = JSON.parse(payload); } catch (_) { continue; /* incomplete/malformed frame */ }
+          if (json.error) throw new Error(json.error);
+          if (json.delta) {
+            accumulated += json.delta;
+            setMessages(prev => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (updated[lastIdx]?.role === 'assistant') {
+                updated[lastIdx] = { role: 'assistant', content: accumulated };
+              }
+              return updated;
+            });
+          }
         }
       }
 
