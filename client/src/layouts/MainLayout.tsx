@@ -16,6 +16,7 @@ import useIsMobile from "@/hooks/use-mobile";
 import { MarineWeather } from "@/components/MarineWeather";
 import NotificationBell from "@/components/NotificationBell";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import { AIChatWidget } from "@/components/AIChatWidget";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "@/hooks/use-translation";
 import { apiRequest } from "@/lib/queryClient";
@@ -515,6 +516,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
           </div>
         </main>
       </div>
+      {/* AI Chat Widget — floating, always available */}
+      <AIChatWidget />
     </div>
   );
 }

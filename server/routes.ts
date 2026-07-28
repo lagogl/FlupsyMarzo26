@@ -566,6 +566,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   (await import("./controllers/ai-controller")).registerAIRoutes(app);
   (await import("./controllers/ai-report-controller")).registerAIReportRoutes(app);
   (await import("./modules/ai-enhanced/enhanced-ai.controller")).registerEnhancedAIRoutes(app); // 🚀 Modulo AI Potenziato
+  app.use('/api/ai-chat', (await import("./modules/ai-chat/ai-chat.routes.js")).aiChatRoutes); // 💬 Chat AI operatori
   app.get("/api/sequences/info", SequenceController.getSequencesInfo);
   
   // === Lot Lifecycle Management Routes ===
