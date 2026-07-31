@@ -130,7 +130,8 @@ export async function getAvailableSaleOperations(req: Request, res: Response) {
       isNotNull(operations.totalWeight),
       isNotNull(operations.animalsPerKg),
       isNull(operations.cancelledAt), // Esclude operazioni già annullate
-      processed === 'true' ? isNotNull(saleOperationsRef.id) : sql`${saleOperationsRef.id} IS NULL`,
+      // processed=all → nessun filtro (mostra disponibili + storiche)
+      ...(processed === 'all' ? [] : [processed === 'true' ? isNotNull(saleOperationsRef.id) : sql`${saleOperationsRef.id} IS NULL`]),
       ...dateFilter
     ))
     .orderBy(desc(operations.date), desc(operations.id));

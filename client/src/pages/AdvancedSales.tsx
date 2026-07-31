@@ -134,10 +134,11 @@ export default function AdvancedSales() {
   // Calcola animali rimanenti globalmente
   const totalGlobalRemaining = totalGlobalAvailable - totalGlobalAllocated;
 
-  // Query per operazioni di vendita disponibili
+  // Query per operazioni di vendita disponibili (+ storiche se richiesto)
+  const [showHistorical, setShowHistorical] = useState(false);
   const { data: availableOperations, isLoading: loadingOperations } = useQuery({
-    queryKey: ['/api/advanced-sales/operations'],
-    queryFn: () => apiRequest('/api/advanced-sales/operations?processed=false')
+    queryKey: ['/api/advanced-sales/operations', showHistorical ? 'all' : 'false'],
+    queryFn: () => apiRequest(`/api/advanced-sales/operations?processed=${showHistorical ? 'all' : 'false'}`)
   });
 
   // Query per clienti
@@ -638,7 +639,16 @@ export default function AdvancedSales() {
         <TabsContent value="operations" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Operazioni di Vendita Disponibili</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Operazioni di Vendita Disponibili</CardTitle>
+                <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                  <Checkbox
+                    checked={showHistorical}
+                    onCheckedChange={(checked) => setShowHistorical(checked === true)}
+                  />
+                  Mostra vendite storiche (processate)
+                </label>
+              </div>
             </CardHeader>
             <CardContent>
               {loadingOperations ? (
