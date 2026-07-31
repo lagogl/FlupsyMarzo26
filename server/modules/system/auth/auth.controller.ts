@@ -34,6 +34,13 @@ export class AuthController {
         
         const userResponse = authService.sanitizeUser(validatedUser);
 
+        // Crea la sessione server-side
+        req.session.user = {
+          id: validatedUser.id,
+          username: validatedUser.username,
+          role: (validatedUser as any).role || 'user',
+        };
+
         // Registra snapshot ambientale in background (non bloccante)
         recordEnvironmentalSnapshot(validatedUser.id, validatedUser.username).catch(e =>
           console.warn('[EnvLog] Snapshot background error:', e)
@@ -65,6 +72,8 @@ export class AuthController {
    */
   async logout(req: Request, res: Response) {
     try {
+      req.session?.destroy(() => {});
+      res.clearCookie('flupsy.sid');
       return res.status(200).json({
         success: true,
         message: "Logout effettuato con successo"
@@ -126,8 +135,12 @@ export class AuthController {
    * Get current authenticated user
    */
   async getCurrentUser(req: Request, res: Response) {
-    // In a real implementation, verify authentication via session/JWT
-    // For this simplified version, return not authenticated
+    if (req.session?.user?.id) {
+      return res.json({
+        success: true,
+        user: req.session.user
+      });
+    }
     res.json({
       success: false,
       message: "Non autenticato"

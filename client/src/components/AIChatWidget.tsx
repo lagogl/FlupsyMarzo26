@@ -65,6 +65,10 @@ export function AIChatWidget() {
         body: JSON.stringify({ messages: apiMessages }),
       });
 
+      if (response.status === 401) {
+        throw new Error('Sessione scaduta: effettua di nuovo il login per usare l\'assistente AI.');
+      }
+
       if (!response.ok || !response.body) {
         throw new Error(`HTTP ${response.status}`);
       }

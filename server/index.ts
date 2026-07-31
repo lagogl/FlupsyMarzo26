@@ -245,6 +245,32 @@ async function buildApp() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
+  // ── Sessioni server-side (autenticazione) ─────────────────────────────
+  // Store persistente su PostgreSQL (sopravvive a restart/istanze multiple)
+  const session = (await import("express-session")).default;
+  const connectPgSimple = (await import("connect-pg-simple")).default;
+  const { pool } = await import("./db");
+  const PgStore = connectPgSimple(session);
+
+  app.set('trust proxy', 1); // dietro proxy Replit → cookie secure funzionano
+  app.use(session({
+    store: new PgStore({
+      pool: pool as any,
+      tableName: 'user_sessions',
+      createTableIfMissing: true,
+    }),
+    name: 'flupsy.sid',
+    secret: process.env.SESSION_SECRET || 'flupsy-dev-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 giorni
+    },
+  }));
+
   // Rendi disponibile globalmente per l'uso nei controller
   globalThis.app = app;
 
