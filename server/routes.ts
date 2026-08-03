@@ -315,6 +315,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.use('/api/capisani', capisaniModule.capisaniRoutes);
   console.log('✅ Modulo CA\' PISANI registrato su /api/capisani/*');
 
+  // Registra il modulo DF ROBOT (sonda ossigeno Ca' Pisani via Supervisore Delta Futuro)
+  const dfRobotModule = await import('./modules/dfrobot');
+  app.use('/api/df-robot', dfRobotModule.dfRobotRoutes);
+  console.log('✅ Modulo DF ROBOT registrato su /api/df-robot/*');
+
   // Registra il modulo SOLAREDGE (produzione fotovoltaica)
   const solaredgeModule = await import('./modules/solaredge');
   app.use('/api/solaredge', solaredgeModule.solaredgeRoutes);

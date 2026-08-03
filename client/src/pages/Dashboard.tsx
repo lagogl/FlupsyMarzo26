@@ -15,6 +15,7 @@ import IMMCard from '@/components/dashboard/IMMCard';
 import SeneyeCard from '@/components/dashboard/SeneyeCard';
 import { AcquaScadaOxygenCard, AcquaScadaFlupsyCard, AcquaScadaNH3PHCard, AcquaScadaLevelsCard } from '@/components/dashboard/AcquaScadaCards';
 import CaPisaniCard from '@/components/dashboard/CaPisaniCard';
+import DFRobotCard from '@/components/dashboard/DFRobotCard';
 import SolarPowerBanner from '@/components/dashboard/SolarPowerBanner';
 import SizeDistributionPopup from '@/components/dashboard/SizeDistributionPopup';
 import MortalityTemporalCard from '@/components/dashboard/MortalityTemporalCard';
@@ -415,6 +416,7 @@ export default function Dashboard() {
         <AcquaScadaNH3PHCard />
         <AcquaScadaLevelsCard />
         <CaPisaniCard />
+        <DFRobotCard />
       </div>
 
       {/* Dashboard Summary - Prima riga: Statistiche principali */}
