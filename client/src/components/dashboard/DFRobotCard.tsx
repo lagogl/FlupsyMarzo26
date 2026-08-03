@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 interface DFRobotProbe {
   saturation?: number | null;
   oxygen?: number | null;
+  dissolvedOxygen?: number | null;
   temperature?: number | null;
   status?: string | null;
   online?: boolean | null;
@@ -87,7 +88,7 @@ export default function DFRobotCard() {
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
                 <div className="flex items-center justify-center text-emerald-600"><Wind className="h-4 w-4" /></div>
-                <p className="text-base font-bold mt-0.5">{fmt(probe.oxygen, 1)}</p>
+                <p className="text-base font-bold mt-0.5">{fmt(probe.dissolvedOxygen ?? probe.oxygen, 1)}</p>
                 <p className="text-[10px] text-muted-foreground">mg/L O2</p>
               </div>
               <div>
