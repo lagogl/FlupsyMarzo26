@@ -279,6 +279,21 @@ export default function DiarioDiBordo() {
   });
   
   // Carica la giacenza alla data selezionata
+  // Riepilogo mensile (mortalità + entrate nuovi lotti, tutti i mesi)
+  const { data: monthlySummary } = useQuery({
+    queryKey: ['/api/diario/monthly-summary'],
+    queryFn: async () => {
+      const response = await fetch('/api/diario/monthly-summary');
+      if (!response.ok) throw new Error('Errore monthly-summary');
+      return response.json() as Promise<Array<{
+        mese: string;
+        mortalita_netta: number;
+        entrate_nuovi_lotti: number;
+      }>>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: giacenza, isLoading: isLoadingGiacenza } = useQuery({
     queryKey: ['/api/diario/giacenza', formattedDate],
     queryFn: async () => {
@@ -1312,6 +1327,86 @@ export default function DiarioDiBordo() {
                                   <span>
                                     Picco: giorno <strong>{mortalitaChartData.find(d => d.mortalita === mortalitaMax)?.label}</strong>{' '}
                                     ({formatNumberWithCommas(mortalitaMax)})
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                          </CardContent>
+                        </Card>
+
+                        {/* Grafico mortalità + entrate mensile */}
+                        <Card className="sm:col-span-2 border shadow-sm">
+                          <CardHeader className="pb-1 sm:pb-2 p-3 sm:p-4">
+                            <CardTitle className="text-sm sm:text-base">
+                              Andamento Mensile — Mortalità vs Nuovi Arrivi
+                            </CardTitle>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              🟠 Morti netti da vagliatura · 🟢 Animali arrivati come nuovi lotti
+                            </p>
+                          </CardHeader>
+                          <CardContent className="p-3 sm:p-4 pt-0 sm:pt-0">
+                            {!monthlySummary || monthlySummary.length === 0 ? (
+                              <div className="flex items-center justify-center h-40 text-muted-foreground text-xs sm:text-sm">
+                                Nessun dato disponibile.
+                              </div>
+                            ) : (
+                              <>
+                                <ResponsiveContainer width="100%" height={220}>
+                                  <BarChart
+                                    data={monthlySummary}
+                                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                                  >
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                    <XAxis
+                                      dataKey="mese"
+                                      tickFormatter={(v: string) => {
+                                        const [y, m] = v.split('-');
+                                        const months = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+                                        return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
+                                      }}
+                                      tick={{ fontSize: 11 }}
+                                      tickLine={false}
+                                      axisLine={false}
+                                    />
+                                    <YAxis
+                                      tickFormatter={formatYAxis}
+                                      tick={{ fontSize: 11 }}
+                                      tickLine={false}
+                                      axisLine={false}
+                                      width={44}
+                                    />
+                                    <Tooltip
+                                      formatter={(value: number, name: string) => [
+                                        formatNumberWithCommas(value),
+                                        name === 'mortalita_netta' ? 'Morti netti' : 'Nuovi arrivi',
+                                      ]}
+                                      labelFormatter={(label: string) => {
+                                        const [y, m] = label.split('-');
+                                        const months = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+                                        return `${months[parseInt(m) - 1]} ${y}`;
+                                      }}
+                                      contentStyle={{ fontSize: 12, borderRadius: 6 }}
+                                    />
+                                    <Bar dataKey="entrate_nuovi_lotti" fill="#4ade80" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                                    <Bar dataKey="mortalita_netta" fill="#fb923c" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                                  <span>
+                                    Totale morti:{' '}
+                                    <strong>
+                                      {formatNumberWithCommas(
+                                        (monthlySummary ?? []).reduce((s, d) => s + d.mortalita_netta, 0)
+                                      )}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    Totale arrivi:{' '}
+                                    <strong>
+                                      {formatNumberWithCommas(
+                                        (monthlySummary ?? []).reduce((s, d) => s + d.entrate_nuovi_lotti, 0)
+                                      )}
+                                    </strong>
                                   </span>
                                 </div>
                               </>

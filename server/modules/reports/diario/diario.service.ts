@@ -357,6 +357,37 @@ class DiarioService {
     
     return monthData;
   }
+
+  /**
+   * Riepilogo mensile: mortalità netta + entrate da nuovi lotti, per ogni mese
+   */
+  async getMonthlySummary() {
+    const result = await pool.query(`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', date), 'YYYY-MM') AS mese,
+        COALESCE(SUM(CASE WHEN type = 'chiusura-ciclo-vagliatura' THEN animal_count ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN type = 'prima-attivazione' AND notes LIKE 'Da vagliatura%' THEN animal_count ELSE 0 END), 0)
+        AS mortalita_netta,
+        COALESCE(SUM(CASE
+          WHEN type = 'prima-attivazione'
+            AND notes NOT LIKE 'Da vagliatura%'
+            AND notes NOT LIKE 'Trasferimento%'
+          THEN animal_count ELSE 0 END), 0)
+        AS entrate_nuovi_lotti
+      FROM operations
+      WHERE cancelled_at IS NULL
+        AND date IS NOT NULL
+        AND date >= '2025-01-01'
+      GROUP BY DATE_TRUNC('month', date)
+      ORDER BY DATE_TRUNC('month', date)
+    `);
+
+    return result.rows.map(row => ({
+      mese: row.mese as string,
+      mortalita_netta: Number(row.mortalita_netta),
+      entrate_nuovi_lotti: Number(row.entrate_nuovi_lotti),
+    }));
+  }
 }
 
 export const diarioService = new DiarioService();

@@ -117,6 +117,19 @@ class DiarioController {
   }
 
   /**
+   * GET /api/diario/monthly-summary - Riepilogo mortalità + entrate per mese
+   */
+  async getMonthlySummary(req: Request, res: Response) {
+    try {
+      const result = await diarioService.getMonthlySummary();
+      return res.json(result);
+    } catch (error) {
+      console.error('Errore getMonthlySummary:', error);
+      return res.status(500).json({ error: 'Errore nel calcolo del riepilogo mensile' });
+    }
+  }
+
+  /**
    * GET /api/diario/calendar-csv - Export CSV calendario (disabled)
    */
   getCalendarCsv(req: Request, res: Response) {

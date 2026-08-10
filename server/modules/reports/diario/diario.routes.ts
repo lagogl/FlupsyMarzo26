@@ -9,6 +9,7 @@ router.get('/size-stats', (req, res) => diarioController.getSizeStats(req, res))
 router.get('/daily-totals', (req, res) => diarioController.getDailyTotals(req, res));
 router.get('/month-data-old', (req, res) => diarioController.getMonthDataOld(req, res));
 router.get('/month-data', (req, res) => diarioController.getMonthData(req, res));
+router.get('/monthly-summary', (req, res) => diarioController.getMonthlySummary(req, res));
 router.get('/calendar-csv', (req, res) => diarioController.getCalendarCsv(req, res));
 
 export default router;
