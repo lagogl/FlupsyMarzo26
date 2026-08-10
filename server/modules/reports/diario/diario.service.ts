@@ -11,10 +11,8 @@ class DiarioService {
       SELECT id AS cycle_id
       FROM cycles
       WHERE start_date <= ${date}
-      AND (
-        (state = 'active' AND (end_date IS NULL OR end_date > ${date}))
-        OR (state = 'closed' AND end_date = ${date})
-      )
+        AND state = 'active'
+        AND (end_date IS NULL OR end_date > ${date})
     `);
     
     const totaliPerTaglia: Record<string, number> = {};
