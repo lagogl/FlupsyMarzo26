@@ -19,7 +19,8 @@ import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { formatNumberWithCommas } from '@/lib/utils';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  ComposedChart, Line, Legend
 } from 'recharts';
 
 // Mappa dei tipi di operazione alle loro etichette in italiano
@@ -1341,7 +1342,7 @@ export default function DiarioDiBordo() {
                               Andamento Mensile — Mortalità vs Nuovi Arrivi
                             </CardTitle>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              🟠 Morti netti da vagliatura · 🟢 Animali arrivati come nuovi lotti
+                              🟠 Morti netti da vagliatura · 🟢 Animali arrivati come nuovi lotti · <span style={{color:'#6366f1'}}>◆</span> % mortalità
                             </p>
                           </CardHeader>
                           <CardContent className="p-3 sm:p-4 pt-0 sm:pt-0">
@@ -1349,68 +1350,121 @@ export default function DiarioDiBordo() {
                               <div className="flex items-center justify-center h-40 text-muted-foreground text-xs sm:text-sm">
                                 Nessun dato disponibile.
                               </div>
-                            ) : (
-                              <>
-                                <ResponsiveContainer width="100%" height={220}>
-                                  <BarChart
-                                    data={monthlySummary}
-                                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                                  >
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                    <XAxis
-                                      dataKey="mese"
-                                      tickFormatter={(v: string) => {
-                                        const [y, m] = v.split('-');
-                                        const months = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-                                        return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
-                                      }}
-                                      tick={{ fontSize: 11 }}
-                                      tickLine={false}
-                                      axisLine={false}
-                                    />
-                                    <YAxis
-                                      tickFormatter={formatYAxis}
-                                      tick={{ fontSize: 11 }}
-                                      tickLine={false}
-                                      axisLine={false}
-                                      width={44}
-                                    />
-                                    <Tooltip
-                                      formatter={(value: number, name: string) => [
-                                        formatNumberWithCommas(value),
-                                        name === 'mortalita_netta' ? 'Morti netti' : 'Nuovi arrivi',
-                                      ]}
-                                      labelFormatter={(label: string) => {
-                                        const [y, m] = label.split('-');
-                                        const months = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-                                        return `${months[parseInt(m) - 1]} ${y}`;
-                                      }}
-                                      contentStyle={{ fontSize: 12, borderRadius: 6 }}
-                                    />
-                                    <Bar dataKey="entrate_nuovi_lotti" fill="#4ade80" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                                    <Bar dataKey="mortalita_netta" fill="#fb923c" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-                                  <span>
-                                    Totale morti:{' '}
-                                    <strong>
-                                      {formatNumberWithCommas(
-                                        (monthlySummary ?? []).reduce((s, d) => s + d.mortalita_netta, 0)
-                                      )}
-                                    </strong>
-                                  </span>
-                                  <span>
-                                    Totale arrivi:{' '}
-                                    <strong>
-                                      {formatNumberWithCommas(
-                                        (monthlySummary ?? []).reduce((s, d) => s + d.entrate_nuovi_lotti, 0)
-                                      )}
-                                    </strong>
-                                  </span>
-                                </div>
-                              </>
-                            )}
+                            ) : (() => {
+                              const summaryWithPct = (monthlySummary ?? []).map(d => ({
+                                ...d,
+                                percentuale: d.entrate_nuovi_lotti > 0
+                                  ? Math.round((d.mortalita_netta / d.entrate_nuovi_lotti) * 1000) / 10
+                                  : 0,
+                              }));
+                              const totMorti = summaryWithPct.reduce((s, d) => s + d.mortalita_netta, 0);
+                              const totArrivi = summaryWithPct.reduce((s, d) => s + d.entrate_nuovi_lotti, 0);
+                              const totPct = totArrivi > 0 ? Math.round((totMorti / totArrivi) * 1000) / 10 : 0;
+                              const monthLabel = (v: string) => {
+                                const [y, m] = v.split('-');
+                                const months = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+                                return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
+                              };
+                              const monthLabelFull = (v: string) => {
+                                const [y, m] = v.split('-');
+                                const months = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+                                return `${months[parseInt(m) - 1]} ${y}`;
+                              };
+                              return (
+                                <>
+                                  <ResponsiveContainer width="100%" height={240}>
+                                    <ComposedChart
+                                      data={summaryWithPct}
+                                      margin={{ top: 8, right: 44, left: 0, bottom: 0 }}
+                                    >
+                                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                      <XAxis
+                                        dataKey="mese"
+                                        tickFormatter={monthLabel}
+                                        tick={{ fontSize: 11 }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                      />
+                                      <YAxis
+                                        yAxisId="count"
+                                        tickFormatter={formatYAxis}
+                                        tick={{ fontSize: 11 }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        width={44}
+                                      />
+                                      <YAxis
+                                        yAxisId="pct"
+                                        orientation="right"
+                                        tickFormatter={(v: number) => `${v}%`}
+                                        tick={{ fontSize: 11, fill: '#6366f1' }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        width={40}
+                                        domain={[0, 'auto']}
+                                      />
+                                      <Tooltip
+                                        formatter={(value: number, name: string) => {
+                                          if (name === 'percentuale') return [`${value}%`, '% mortalità'];
+                                          if (name === 'mortalita_netta') return [formatNumberWithCommas(value), 'Morti netti'];
+                                          return [formatNumberWithCommas(value), 'Nuovi arrivi'];
+                                        }}
+                                        labelFormatter={monthLabelFull}
+                                        contentStyle={{ fontSize: 12, borderRadius: 6 }}
+                                      />
+                                      <Bar yAxisId="count" dataKey="entrate_nuovi_lotti" fill="#4ade80" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                                      <Bar yAxisId="count" dataKey="mortalita_netta" fill="#fb923c" radius={[4, 4, 0, 0]} maxBarSize={26} />
+                                      <Line
+                                        yAxisId="pct"
+                                        type="monotone"
+                                        dataKey="percentuale"
+                                        stroke="#6366f1"
+                                        strokeWidth={2}
+                                        dot={{ r: 3, fill: '#6366f1', strokeWidth: 0 }}
+                                        activeDot={{ r: 5 }}
+                                      />
+                                    </ComposedChart>
+                                  </ResponsiveContainer>
+                                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                                    <span>
+                                      Totale morti:{' '}
+                                      <strong>{formatNumberWithCommas(totMorti)}</strong>
+                                    </span>
+                                    <span>
+                                      Totale arrivi:{' '}
+                                      <strong>{formatNumberWithCommas(totArrivi)}</strong>
+                                    </span>
+                                    <span style={{ color: '#6366f1' }}>
+                                      Mortalità media:{' '}
+                                      <strong>{totPct}%</strong>
+                                    </span>
+                                  </div>
+                                  {/* Tabella compatta mese per mese */}
+                                  <div className="mt-3 overflow-x-auto">
+                                    <table className="w-full text-xs border-collapse">
+                                      <thead>
+                                        <tr className="text-muted-foreground">
+                                          <th className="text-left pb-1 pr-2 font-medium">Mese</th>
+                                          <th className="text-right pb-1 pr-2 font-medium">Arrivi</th>
+                                          <th className="text-right pb-1 pr-2 font-medium">Morti netti</th>
+                                          <th className="text-right pb-1 font-medium" style={{ color: '#6366f1' }}>% mort.</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {summaryWithPct.map(d => (
+                                          <tr key={d.mese} className="border-t border-gray-100">
+                                            <td className="py-0.5 pr-2 text-muted-foreground">{monthLabel(d.mese)}</td>
+                                            <td className="py-0.5 pr-2 text-right">{formatNumberWithCommas(d.entrate_nuovi_lotti)}</td>
+                                            <td className="py-0.5 pr-2 text-right text-orange-500">{formatNumberWithCommas(d.mortalita_netta)}</td>
+                                            <td className="py-0.5 text-right font-semibold" style={{ color: '#6366f1' }}>{d.percentuale}%</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </CardContent>
                         </Card>
                       </div>
