@@ -160,12 +160,24 @@ class DiarioService {
    */
   async getDailyTotals(date: string) {
     // Use pool directly to avoid issues with drizzle sql template and LIKE '%' patterns
+    // totale_entrate = prima-attivazioni che NON vengono dalla vagliatura (trasferimenti in + esterni)
+    // totale_trasferimenti = animali che escono dalle ceste-origine via trasferimento interno
+    // totale_mortalita = netto vagliatura (chiusura-ciclo - re-entrate da vagliatura)
+    // bilancio_netto = entrate - trasferimenti - vendite - mortalita
     const result = await pool.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN o.type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
+        -- Entrate: prima-attivazioni escluse quelle da vagliatura (interne al processo di vaglio)
+        COALESCE(SUM(CASE
+            WHEN o.type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
+             AND NOT (o.type = 'prima-attivazione' AND o.notes LIKE 'Da vagliatura%')
             THEN o.animal_count ELSE 0 END), 0) AS totale_entrate,
+        -- Uscite: solo vendite/cessazioni (animali che lasciano l'impianto definitivamente)
         COALESCE(SUM(CASE WHEN o.type IN ('vendita','cessazione')
             THEN o.animal_count ELSE 0 END), 0) AS totale_uscite,
+        -- Trasferimenti: animali che lasciano ceste-origine via trasferimento interno
+        COALESCE(SUM(CASE WHEN o.type = 'trasferimento'
+            THEN o.animal_count ELSE 0 END), 0) AS totale_trasferimenti,
+        -- Mortalità netta vagliatura
         GREATEST(0,
           COALESCE(SUM(CASE WHEN o.type = 'chiusura-ciclo-vagliatura'
               THEN o.animal_count ELSE 0 END), 0)
@@ -174,25 +186,22 @@ class DiarioService {
               AND o.notes LIKE 'Da vagliatura%'
               THEN o.animal_count ELSE 0 END), 0)
         ) AS totale_mortalita,
-        COALESCE(SUM(CASE WHEN o.type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
-            THEN o.animal_count ELSE 0 END), 0)
-        - COALESCE(SUM(CASE WHEN o.type IN ('vendita','cessazione')
-            THEN o.animal_count ELSE 0 END), 0)
-        - GREATEST(0,
-            COALESCE(SUM(CASE WHEN o.type = 'chiusura-ciclo-vagliatura'
-                THEN o.animal_count ELSE 0 END), 0)
-            -
-            COALESCE(SUM(CASE WHEN o.type = 'prima-attivazione'
-                AND o.notes LIKE 'Da vagliatura%'
-                THEN o.animal_count ELSE 0 END), 0)
-          ) AS bilancio_netto,
         COUNT(DISTINCT o.id) AS numero_operazioni
       FROM operations o
       WHERE o.date::text = $1
         AND o.cancelled_at IS NULL
     `, [date]);
 
-    return result.rows[0];
+    const row = result.rows[0];
+    const entrate = Number(row.totale_entrate);
+    const uscite = Number(row.totale_uscite);
+    const trasferimenti = Number(row.totale_trasferimenti);
+    const mortalita = Number(row.totale_mortalita);
+
+    return {
+      ...row,
+      bilancio_netto: entrate - trasferimenti - uscite - mortalita,
+    };
   }
 
   /**
@@ -260,10 +269,14 @@ class DiarioService {
     const dailyTotalsResult = await pool.query(`
       SELECT
         date::text AS day,
-        COALESCE(SUM(CASE WHEN type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
+        COALESCE(SUM(CASE
+            WHEN type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
+             AND NOT (type = 'prima-attivazione' AND notes LIKE 'Da vagliatura%')
             THEN animal_count ELSE 0 END), 0) AS totale_entrate,
         COALESCE(SUM(CASE WHEN type IN ('vendita','cessazione')
             THEN animal_count ELSE 0 END), 0) AS totale_uscite,
+        COALESCE(SUM(CASE WHEN type = 'trasferimento'
+            THEN animal_count ELSE 0 END), 0) AS totale_trasferimenti,
         GREATEST(0,
           COALESCE(SUM(CASE WHEN type = 'chiusura-ciclo-vagliatura'
               THEN animal_count ELSE 0 END), 0)
@@ -318,12 +331,14 @@ class DiarioService {
         if (sqlTotals) {
           const entrate = Number(sqlTotals.totale_entrate);
           const uscite = Number(sqlTotals.totale_uscite);
+          const trasferimenti = Number(sqlTotals.totale_trasferimenti);
           const mortalita = Number(sqlTotals.totale_mortalita);
           monthData[dateKey].totals = {
             totale_entrate: entrate,
             totale_uscite: uscite,
+            totale_trasferimenti: trasferimenti,
             totale_mortalita: mortalita,
-            bilancio_netto: entrate - uscite - mortalita,
+            bilancio_netto: entrate - trasferimenti - uscite - mortalita,
             numero_operazioni: Number(sqlTotals.numero_operazioni),
           };
         }

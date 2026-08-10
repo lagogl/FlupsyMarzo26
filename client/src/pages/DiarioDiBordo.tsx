@@ -1153,12 +1153,22 @@ export default function DiarioDiBordo() {
                                   +{totals?.totale_entrate ? formatNumberWithCommas(totals.totale_entrate) : '0'}
                                 </span>
                               </div>
-                              <div className="flex justify-between items-center text-xs sm:text-sm">
-                                <span>Uscite (vendite):</span>
-                                <span className="text-red-600 font-medium">
-                                  -{totals?.totale_uscite ? formatNumberWithCommas(totals.totale_uscite) : '0'}
-                                </span>
-                              </div>
+                              {Number(totals?.totale_trasferimenti) > 0 && (
+                                <div className="flex justify-between items-center text-xs sm:text-sm">
+                                  <span>Trasferimenti (uscita):</span>
+                                  <span className="text-blue-600 font-medium">
+                                    -{formatNumberWithCommas(totals.totale_trasferimenti)}
+                                  </span>
+                                </div>
+                              )}
+                              {Number(totals?.totale_uscite) > 0 && (
+                                <div className="flex justify-between items-center text-xs sm:text-sm">
+                                  <span>Uscite (vendite):</span>
+                                  <span className="text-red-600 font-medium">
+                                    -{formatNumberWithCommas(totals.totale_uscite)}
+                                  </span>
+                                </div>
+                              )}
                               {Number(totals?.totale_mortalita) > 0 && (
                                 <div className="flex justify-between items-center text-xs sm:text-sm">
                                   <span>Morti (vagliatura):</span>
@@ -1305,6 +1315,13 @@ export default function DiarioDiBordo() {
                           <div className="text-2xl font-bold">{totals?.totale_uscite ? formatNumberWithCommas(totals.totale_uscite) : '0'}</div>
                         </div>
                       </div>
+
+                      {Number(totals?.totale_trasferimenti) > 0 && (
+                        <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-between">
+                          <span className="text-blue-800 text-sm font-medium">↔ Trasferimenti (uscita ceste)</span>
+                          <span className="text-blue-700 font-bold text-lg">-{formatNumberWithCommas(totals.totale_trasferimenti)}</span>
+                        </div>
+                      )}
 
                       {Number(totals?.totale_mortalita) > 0 && (
                         <div className="bg-orange-50 p-3 rounded-lg flex items-center justify-between">
