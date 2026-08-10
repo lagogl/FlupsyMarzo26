@@ -120,13 +120,7 @@ const createFormattedText = (data: any, date: Date) => {
   text += `Bilancio netto: ${data.totals.bilancio_netto ? formatNumberWithCommas(data.totals.bilancio_netto) : '0'} animali\n`;
   text += `Totale operazioni: ${data.totals.numero_operazioni}\n\n`;
   
-  // Bilancio finale
-  if (data.giacenza && data.giacenza.totale_giacenza !== undefined) {
-    const bilancioFinale = data.giacenza.totale_giacenza + (parseInt(data.totals.bilancio_netto) || 0);
-    text += `🏁 *BILANCIO FINALE*\n`;
-    text += `Giacenza + Bilancio netto: ${formatNumberWithCommas(bilancioFinale)} animali\n`;
-  }
-  
+
   return text;
 };
 
@@ -1204,11 +1198,12 @@ export default function DiarioDiBordo() {
                         <Card className="sm:col-span-2 border shadow-sm">
                           <CardHeader className="pb-1 sm:pb-2 p-3 sm:p-4">
                             <CardTitle className="text-sm sm:text-base">Giacenza al {format(selectedDate, 'dd/MM/yyyy', { locale: it })}</CardTitle>
+                             <p className="text-xs text-muted-foreground mt-0.5">Ultima misura per cesta attiva · può differire dal bilancio operazioni.</p>
                           </CardHeader>
                           <CardContent className="p-3 sm:p-4 pt-1 sm:pt-2">
                             <div className="space-y-3 sm:space-y-4">
                               <div className="flex justify-between items-center">
-                                <span className="text-xs sm:text-sm font-medium">Totale animali:</span>
+                                <span className="text-xs sm:text-sm font-medium">Animali in cesta:</span>
                                 <span className="text-base sm:text-lg font-bold">{giacenza?.totale_giacenza ? formatNumberWithCommas(giacenza.totale_giacenza) : '0'}</span>
                               </div>
                               
@@ -1223,18 +1218,6 @@ export default function DiarioDiBordo() {
                                       </div>
                                     ))}
                                   </div>
-                                </div>
-                              )}
-                              
-                              {giacenza?.totale_giacenza !== undefined && totals?.bilancio_netto !== undefined && (
-                                <div className="pt-1 sm:pt-2 border-t">
-                                  <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
-                                    <span>Bilancio finale:</span>
-                                    <span className="text-primary">
-                                      {formatNumberWithCommas(Number(giacenza.totale_giacenza) + Number(totals.bilancio_netto))}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-muted-foreground mt-0.5">(giacenza + bilancio netto)</div>
                                 </div>
                               )}
                             </div>
@@ -1370,7 +1353,7 @@ export default function DiarioDiBordo() {
                   <CardContent>
                     <div className="space-y-4">
                       <div className="bg-blue-50 p-4 rounded-lg text-center">
-                        <div className="text-blue-800 text-sm font-medium mb-1">Totale animali</div>
+                        <div className="text-blue-800 text-sm font-medium mb-1">Animali in cesta (ultima misura)</div>
                         <div className="text-3xl font-bold">{giacenza?.totale_giacenza ? formatNumberWithCommas(giacenza.totale_giacenza) : '0'}</div>
                       </div>
                       
