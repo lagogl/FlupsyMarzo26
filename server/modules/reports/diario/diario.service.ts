@@ -1,4 +1,4 @@
-import { db } from '../../../db';
+import { db, pool } from '../../../db';
 import { sql } from 'drizzle-orm';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 
@@ -140,11 +140,14 @@ class DiarioService {
         COALESCE(s.code, 'Non specificata') AS taglia,
         SUM(CASE WHEN o.type IN ('prima-attivazione', 'prima-attivazione-da-vagliatura') 
             THEN o.animal_count ELSE 0 END) AS entrate,
-        SUM(CASE WHEN o.type = 'vendita' THEN o.animal_count ELSE 0 END) AS uscite,
+        SUM(CASE WHEN o.type IN ('vendita', 'cessazione') THEN o.animal_count ELSE 0 END) AS uscite,
+        -- Animali usciti dalle ceste origine per vagliatura (taglia prima della vagliatura)
+        SUM(CASE WHEN o.type = 'chiusura-ciclo-vagliatura' THEN o.animal_count ELSE 0 END) AS mortalita_origine,
         COUNT(o.id) AS num_operazioni
       FROM operations o
       LEFT JOIN sizes s ON o.size_id = s.id
       WHERE o.date::text = ${date}
+        AND o.cancelled_at IS NULL
       GROUP BY s.code
       ORDER BY s.code
     `);
@@ -156,19 +159,39 @@ class DiarioService {
    * Ottieni totali giornalieri
    */
   async getDailyTotals(date: string) {
-    const result = await db.execute(sql`
+    // Use pool directly to avoid issues with drizzle sql template and LIKE '%' patterns
+    const result = await pool.query(`
       SELECT
-        SUM(CASE WHEN o.type IN ('prima-attivazione', 'prima-attivazione-da-vagliatura') 
-            THEN o.animal_count ELSE 0 END) AS totale_entrate,
-        SUM(CASE WHEN o.type IN ('vendita', 'cessazione') THEN o.animal_count ELSE 0 END) AS totale_uscite,
-        SUM(CASE WHEN o.type IN ('prima-attivazione', 'prima-attivazione-da-vagliatura') 
-            THEN o.animal_count ELSE 0 END) - 
-        SUM(CASE WHEN o.type IN ('vendita', 'cessazione') THEN o.animal_count ELSE 0 END) AS bilancio_netto,
+        COALESCE(SUM(CASE WHEN o.type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
+            THEN o.animal_count ELSE 0 END), 0) AS totale_entrate,
+        COALESCE(SUM(CASE WHEN o.type IN ('vendita','cessazione')
+            THEN o.animal_count ELSE 0 END), 0) AS totale_uscite,
+        GREATEST(0,
+          COALESCE(SUM(CASE WHEN o.type = 'chiusura-ciclo-vagliatura'
+              THEN o.animal_count ELSE 0 END), 0)
+          -
+          COALESCE(SUM(CASE WHEN o.type = 'prima-attivazione'
+              AND o.notes LIKE 'Da vagliatura%'
+              THEN o.animal_count ELSE 0 END), 0)
+        ) AS totale_mortalita,
+        COALESCE(SUM(CASE WHEN o.type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
+            THEN o.animal_count ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN o.type IN ('vendita','cessazione')
+            THEN o.animal_count ELSE 0 END), 0)
+        - GREATEST(0,
+            COALESCE(SUM(CASE WHEN o.type = 'chiusura-ciclo-vagliatura'
+                THEN o.animal_count ELSE 0 END), 0)
+            -
+            COALESCE(SUM(CASE WHEN o.type = 'prima-attivazione'
+                AND o.notes LIKE 'Da vagliatura%'
+                THEN o.animal_count ELSE 0 END), 0)
+          ) AS bilancio_netto,
         COUNT(DISTINCT o.id) AS numero_operazioni
       FROM operations o
-      WHERE o.date::text = ${date}
-    `);
-    
+      WHERE o.date::text = $1
+        AND o.cancelled_at IS NULL
+    `, [date]);
+
     return result.rows[0];
   }
 
@@ -271,19 +294,30 @@ class DiarioService {
         let totaleEntrate = 0;
         let totaleUscite = 0;
         
+        let totaleOriginiVagliatura = 0;
+        let totaleDestVagliatura = 0;
+
         operations.forEach(op => {
           const count = parseInt(op.animal_count) || 0;
           if (['prima-attivazione', 'prima-attivazione-da-vagliatura'].includes(op.type)) {
             totaleEntrate += count;
+            if (op.notes && String(op.notes).startsWith('Da vagliatura')) {
+              totaleDestVagliatura += count;
+            }
           } else if (['vendita', 'cessazione'].includes(op.type)) {
             totaleUscite += count;
+          } else if (op.type === 'chiusura-ciclo-vagliatura') {
+            totaleOriginiVagliatura += count;
           }
         });
-        
+
+        const totaleMortalita = Math.max(0, totaleOriginiVagliatura - totaleDestVagliatura);
+
         monthData[dateKey].totals = {
           totale_entrate: totaleEntrate,
           totale_uscite: totaleUscite,
-          bilancio_netto: totaleEntrate - totaleUscite,
+          totale_mortalita: totaleMortalita,
+          bilancio_netto: totaleEntrate - totaleUscite - totaleMortalita,
           numero_operazioni: operations.length
         };
       }

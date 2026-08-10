@@ -1153,11 +1153,19 @@ export default function DiarioDiBordo() {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center text-xs sm:text-sm">
-                                <span>Uscite:</span>
+                                <span>Uscite (vendite):</span>
                                 <span className="text-red-600 font-medium">
                                   -{totals?.totale_uscite ? formatNumberWithCommas(totals.totale_uscite) : '0'}
                                 </span>
                               </div>
+                              {Number(totals?.totale_mortalita) > 0 && (
+                                <div className="flex justify-between items-center text-xs sm:text-sm">
+                                  <span>Morti (vagliatura):</span>
+                                  <span className="text-orange-600 font-medium">
+                                    -{formatNumberWithCommas(totals.totale_mortalita)}
+                                  </span>
+                                </div>
+                              )}
                               <Separator className="my-1" />
                               <div className="flex justify-between items-center text-xs sm:text-sm font-medium">
                                 <span>Bilancio netto:</span>
@@ -1286,10 +1294,17 @@ export default function DiarioDiBordo() {
                           <div className="text-2xl font-bold">{totals?.totale_entrate ? formatNumberWithCommas(totals.totale_entrate) : '0'}</div>
                         </div>
                         <div className="bg-red-50 p-4 rounded-lg text-center">
-                          <div className="text-red-800 text-sm font-medium mb-1">Uscite</div>
+                          <div className="text-red-800 text-sm font-medium mb-1">Uscite (vendite)</div>
                           <div className="text-2xl font-bold">{totals?.totale_uscite ? formatNumberWithCommas(totals.totale_uscite) : '0'}</div>
                         </div>
                       </div>
+
+                      {Number(totals?.totale_mortalita) > 0 && (
+                        <div className="bg-orange-50 p-3 rounded-lg flex items-center justify-between">
+                          <span className="text-orange-800 text-sm font-medium">💀 Morti da vagliatura</span>
+                          <span className="text-orange-700 font-bold text-lg">-{formatNumberWithCommas(totals.totale_mortalita)}</span>
+                        </div>
+                      )}
                       
                       <div className="border-t pt-4">
                         <div className="flex justify-between items-center mb-2">
