@@ -1124,9 +1124,10 @@ export default function DiarioDiBordo() {
                                     <span className="font-medium truncate mr-2">
                                       {taglia.taglia === 'Non specificata' ? 'In attesa' : taglia.taglia}:
                                     </span>
-                                    <span className="flex flex-nowrap whitespace-nowrap">
-                                      {taglia.entrate ? (<><span className="text-green-600">+{formatNumberWithCommas(taglia.entrate)}</span>{' '}</>) : null}
-                                      {taglia.uscite ? (<><span className="text-red-600">-{formatNumberWithCommas(taglia.uscite)}</span>{' '}</>) : null}
+                                    <span className="flex flex-nowrap whitespace-nowrap gap-1">
+                                      {taglia.entrate ? (<span className="text-green-600">+{formatNumberWithCommas(taglia.entrate)}</span>) : null}
+                                      {taglia.uscite ? (<span className="text-red-600">-{formatNumberWithCommas(taglia.uscite)}</span>) : null}
+                                      {Number(taglia.mortalita_origine) > 0 ? (<span className="text-orange-500">💀{formatNumberWithCommas(taglia.mortalita_origine)}</span>) : null}
                                     </span>
                                   </div>
                                 ))}
@@ -1265,6 +1266,12 @@ export default function DiarioDiBordo() {
                               <span className="bg-red-100 text-red-800 px-2 py-1 rounded-md mr-2">Uscite</span>
                               <span className="font-medium">{taglia.uscite ? formatNumberWithCommas(taglia.uscite) : '0'}</span>
                             </div>
+                            {Number(taglia.mortalita_origine) > 0 && (
+                              <div className="flex items-center col-span-2">
+                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-md mr-2">💀 Vagliati</span>
+                                <span className="font-medium text-orange-700">{formatNumberWithCommas(taglia.mortalita_origine)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1491,6 +1498,7 @@ export default function DiarioDiBordo() {
                         <th className="py-1 px-2 text-right font-medium">Operazioni</th>
                         <th className="py-1 px-2 text-right font-medium">Entrate</th>
                         <th className="py-1 px-2 text-right font-medium">Uscite</th>
+                        <th className="py-1 px-2 text-right font-medium text-orange-600">Morti</th>
                         <th className="py-1 px-2 text-right font-medium">Bilancio</th>
                         <th className="py-1 px-2 text-right font-medium">Totale</th>
                         {/* Colonne per le taglie specifiche */}
@@ -1557,6 +1565,10 @@ export default function DiarioDiBordo() {
                             <td className="py-1 px-2 text-right font-medium text-red-600">
                               {dayStats.totals && Number(dayStats.totals.totale_uscite) > 0 ? 
                                 formatNumberWithCommas(dayStats.totals.totale_uscite) : '-'}
+                            </td>
+                            <td className="py-1 px-2 text-right font-medium text-orange-600">
+                              {dayStats.totals && Number(dayStats.totals.totale_mortalita) > 0 ? 
+                                formatNumberWithCommas(dayStats.totals.totale_mortalita) : '-'}
                             </td>
                             <td className="py-1 px-2 text-right font-medium">
                               {dayStats.totals && dayStats.totals.bilancio_netto && Number(dayStats.totals.bilancio_netto) !== 0 ? (

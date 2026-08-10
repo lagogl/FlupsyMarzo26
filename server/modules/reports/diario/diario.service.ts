@@ -256,10 +256,38 @@ class DiarioService {
       };
     });
 
-    // Step 2: Recupera operazioni del mese
+    // Step 2a: Calcola totali per giorno via SQL (pool diretto per evitare problemi drizzle con LIKE '%')
+    const dailyTotalsResult = await pool.query(`
+      SELECT
+        date::text AS day,
+        COALESCE(SUM(CASE WHEN type IN ('prima-attivazione','prima-attivazione-da-vagliatura')
+            THEN animal_count ELSE 0 END), 0) AS totale_entrate,
+        COALESCE(SUM(CASE WHEN type IN ('vendita','cessazione')
+            THEN animal_count ELSE 0 END), 0) AS totale_uscite,
+        GREATEST(0,
+          COALESCE(SUM(CASE WHEN type = 'chiusura-ciclo-vagliatura'
+              THEN animal_count ELSE 0 END), 0)
+          -
+          COALESCE(SUM(CASE WHEN type = 'prima-attivazione'
+              AND notes LIKE 'Da vagliatura%'
+              THEN animal_count ELSE 0 END), 0)
+        ) AS totale_mortalita,
+        COUNT(DISTINCT id) AS numero_operazioni
+      FROM operations
+      WHERE date BETWEEN $1::date AND $2::date
+        AND cancelled_at IS NULL
+      GROUP BY date
+    `, [startDateStr, endDateStr]);
+
+    const dailyTotalsMap: Record<string, any> = {};
+    dailyTotalsResult.rows.forEach((row: any) => {
+      dailyTotalsMap[row.day] = row;
+    });
+
+    // Step 2b: Recupera operazioni del mese (per la lista operazioni per giorno)
     const allOperationsResult = await db.execute(sql`
       SELECT 
-        o.id, o.date, o.type, o.basket_id, o.animal_count,
+        o.id, o.date, o.type, o.basket_id, o.animal_count, o.notes,
         b.physical_number as basket_physical_number,
         f.name as flupsy_name,
         s.code as size_code
@@ -268,58 +296,37 @@ class DiarioService {
       LEFT JOIN flupsys f ON b.flupsy_id = f.id
       LEFT JOIN sizes s ON o.size_id = s.id
       WHERE o.date BETWEEN ${startDateStr} AND ${endDateStr}
+        AND o.cancelled_at IS NULL
     `);
     
     // Organizza operazioni per data
     const operationsByDate: Record<string, any[]> = {};
     allOperationsResult.rows.forEach((op: any) => {
       if (!op.date) return;
-      
       const dateStr = typeof op.date === 'string' 
         ? op.date 
         : format(new Date(op.date), "yyyy-MM-dd");
-        
-      if (!operationsByDate[dateStr]) {
-        operationsByDate[dateStr] = [];
-      }
+      if (!operationsByDate[dateStr]) operationsByDate[dateStr] = [];
       operationsByDate[dateStr].push(op);
     });
     
-    // Popola i dati per ogni giorno
+    // Popola i dati per ogni giorno con totali SQL-calcolati
     for (const [dateKey, operations] of Object.entries(operationsByDate)) {
       if (monthData[dateKey]) {
         monthData[dateKey].operations = operations;
-        
-        // Calcola totali
-        let totaleEntrate = 0;
-        let totaleUscite = 0;
-        
-        let totaleOriginiVagliatura = 0;
-        let totaleDestVagliatura = 0;
-
-        operations.forEach(op => {
-          const count = parseInt(op.animal_count) || 0;
-          if (['prima-attivazione', 'prima-attivazione-da-vagliatura'].includes(op.type)) {
-            totaleEntrate += count;
-            if (op.notes && String(op.notes).startsWith('Da vagliatura')) {
-              totaleDestVagliatura += count;
-            }
-          } else if (['vendita', 'cessazione'].includes(op.type)) {
-            totaleUscite += count;
-          } else if (op.type === 'chiusura-ciclo-vagliatura') {
-            totaleOriginiVagliatura += count;
-          }
-        });
-
-        const totaleMortalita = Math.max(0, totaleOriginiVagliatura - totaleDestVagliatura);
-
-        monthData[dateKey].totals = {
-          totale_entrate: totaleEntrate,
-          totale_uscite: totaleUscite,
-          totale_mortalita: totaleMortalita,
-          bilancio_netto: totaleEntrate - totaleUscite - totaleMortalita,
-          numero_operazioni: operations.length
-        };
+        const sqlTotals = dailyTotalsMap[dateKey];
+        if (sqlTotals) {
+          const entrate = Number(sqlTotals.totale_entrate);
+          const uscite = Number(sqlTotals.totale_uscite);
+          const mortalita = Number(sqlTotals.totale_mortalita);
+          monthData[dateKey].totals = {
+            totale_entrate: entrate,
+            totale_uscite: uscite,
+            totale_mortalita: mortalita,
+            bilancio_netto: entrate - uscite - mortalita,
+            numero_operazioni: Number(sqlTotals.numero_operazioni),
+          };
+        }
       }
     }
     
