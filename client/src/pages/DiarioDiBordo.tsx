@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, isSameDay, getDaysInMonth, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -18,6 +18,9 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { formatNumberWithCommas } from '@/lib/utils';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+} from 'recharts';
 
 // Mappa dei tipi di operazione alle loro etichette in italiano
 const operationLabels: Record<string, string> = {
@@ -410,6 +413,29 @@ export default function DiarioDiBordo() {
     availableSizes.map((size: {id: number, code: string, name: string}) => size.code).sort() : 
     ['TP-315', 'TP-500', 'TP-450', 'TP-200', 'TP-800']; // Fallback in caso di errore
   
+  // Dati mortalità mensile per il grafico (calcolati da monthlyData già in memoria)
+  const mortalitaChartData = useMemo(() => {
+    return Object.entries(monthlyData)
+      .map(([date, data]: [string, any]) => ({
+        giorno: parseInt(date.split('-')[2]),
+        label: date.split('-')[2],
+        mortalita: Number(data.totals?.totale_mortalita ?? 0),
+      }))
+      .filter(d => d.mortalita > 0)
+      .sort((a, b) => a.giorno - b.giorno);
+  }, [monthlyData]);
+
+  const mortalitaMax = useMemo(() =>
+    Math.max(...mortalitaChartData.map(d => d.mortalita), 1),
+  [mortalitaChartData]);
+
+  // Formatta asse Y in M/K
+  const formatYAxis = (v: number) => {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+    return String(v);
+  };
+
   // Inizializza un set per tenere traccia di tutte le taglie presenti nei dati
   const uniqueSizes = new Set<string>();
   
@@ -1221,6 +1247,75 @@ export default function DiarioDiBordo() {
                                 </div>
                               )}
                             </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Grafico mortalità mensile */}
+                        <Card className="sm:col-span-2 border shadow-sm">
+                          <CardHeader className="pb-1 sm:pb-2 p-3 sm:p-4">
+                            <CardTitle className="text-sm sm:text-base">
+                              Mortalità da Vagliatura — {format(selectedDate, 'MMMM yyyy', { locale: it })}
+                            </CardTitle>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Morti netti per ogni vagliatura del mese · giorno evidenziato = data selezionata
+                            </p>
+                          </CardHeader>
+                          <CardContent className="p-3 sm:p-4 pt-0 sm:pt-0">
+                            {mortalitaChartData.length === 0 ? (
+                              <div className="flex items-center justify-center h-32 text-muted-foreground text-xs sm:text-sm">
+                                Nessuna vagliatura registrata in questo mese.
+                              </div>
+                            ) : (
+                              <>
+                                <ResponsiveContainer width="100%" height={180}>
+                                  <BarChart data={mortalitaChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                    <XAxis
+                                      dataKey="label"
+                                      tick={{ fontSize: 11 }}
+                                      tickLine={false}
+                                      axisLine={false}
+                                    />
+                                    <YAxis
+                                      tickFormatter={formatYAxis}
+                                      tick={{ fontSize: 11 }}
+                                      tickLine={false}
+                                      axisLine={false}
+                                      width={42}
+                                    />
+                                    <Tooltip
+                                      formatter={(value: number) => [formatNumberWithCommas(value), 'Morti netti']}
+                                      labelFormatter={(label) => `Giorno ${label}`}
+                                      contentStyle={{ fontSize: 12, borderRadius: 6 }}
+                                    />
+                                    <Bar dataKey="mortalita" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                                      {mortalitaChartData.map((entry, idx) => (
+                                        <Cell
+                                          key={idx}
+                                          fill={
+                                            entry.giorno === selectedDate.getDate() &&
+                                            selectedDate.getMonth() === selectedDate.getMonth()
+                                              ? '#ea580c'
+                                              : '#fb923c'
+                                          }
+                                        />
+                                      ))}
+                                    </Bar>
+                                  </BarChart>
+                                </ResponsiveContainer>
+                                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                                  <span>
+                                    Totale mese:{' '}
+                                    <strong>{formatNumberWithCommas(mortalitaChartData.reduce((s, d) => s + d.mortalita, 0))}</strong>{' '}
+                                    animali
+                                  </span>
+                                  <span>
+                                    Picco: giorno <strong>{mortalitaChartData.find(d => d.mortalita === mortalitaMax)?.label}</strong>{' '}
+                                    ({formatNumberWithCommas(mortalitaMax)})
+                                  </span>
+                                </div>
+                              </>
+                            )}
                           </CardContent>
                         </Card>
                       </div>
