@@ -1117,6 +1117,13 @@ export default function DiarioDiBordo() {
                             <CardTitle className="text-sm sm:text-base">Statistiche per Taglia</CardTitle>
                           </CardHeader>
                           <CardContent className="p-3 sm:p-4 pt-0 sm:pt-0">
+                             {/* Legenda */}
+                             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mb-2 pb-2 border-b">
+                               <span><span className="text-green-600 font-semibold">+</span> Entrate</span>
+                               <span><span className="text-red-600 font-semibold">−</span> Vendite</span>
+                               <span><span className="text-blue-500 font-semibold">⇄</span> Trasferimenti</span>
+                               <span><span className="text-indigo-600">🔵</span> In vagliatura</span>
+                             </div>
                             {sizeStats && sizeStats.length > 0 ? (
                               <div className="space-y-1.5 sm:space-y-2">
                                 {sizeStats.map((taglia: any, idx: number) => (
@@ -1125,9 +1132,10 @@ export default function DiarioDiBordo() {
                                       {taglia.taglia === 'Non specificata' ? 'In attesa' : taglia.taglia}:
                                     </span>
                                     <span className="flex flex-nowrap whitespace-nowrap gap-1">
-                                      {taglia.entrate ? (<span className="text-green-600">+{formatNumberWithCommas(taglia.entrate)}</span>) : null}
-                                      {taglia.uscite ? (<span className="text-red-600">-{formatNumberWithCommas(taglia.uscite)}</span>) : null}
-                                      {Number(taglia.mortalita_origine) > 0 ? (<span className="text-orange-500">💀{formatNumberWithCommas(taglia.mortalita_origine)}</span>) : null}
+                                      {Number(taglia.entrate) > 0 ? (<span className="text-green-600">+{formatNumberWithCommas(taglia.entrate)}</span>) : null}
+                                      {Number(taglia.uscite) > 0 ? (<span className="text-red-600">−{formatNumberWithCommas(taglia.uscite)}</span>) : null}
+                                       {Number(taglia.trasferimenti) > 0 ? (<span className="text-blue-500">⇄{formatNumberWithCommas(taglia.trasferimenti)}</span>) : null}
+                                      {Number(taglia.vagliati) > 0 ? (<span className="text-indigo-600">🔵{formatNumberWithCommas(taglia.vagliati)}</span>) : null}
                                     </span>
                                   </div>
                                 ))}
@@ -1276,10 +1284,16 @@ export default function DiarioDiBordo() {
                               <span className="bg-red-100 text-red-800 px-2 py-1 rounded-md mr-2">Uscite</span>
                               <span className="font-medium">{taglia.uscite ? formatNumberWithCommas(taglia.uscite) : '0'}</span>
                             </div>
-                            {Number(taglia.mortalita_origine) > 0 && (
+                            {Number(taglia.trasferimenti) > 0 && (
+                              <div className="flex items-center">
+                                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md mr-2">⇄ Trasferimenti</span>
+                                <span className="font-medium text-blue-700">{formatNumberWithCommas(taglia.trasferimenti)}</span>
+                              </div>
+                            )}
+                            {Number(taglia.vagliati) > 0 && (
                               <div className="flex items-center col-span-2">
-                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-md mr-2">💀 Vagliati</span>
-                                <span className="font-medium text-orange-700">{formatNumberWithCommas(taglia.mortalita_origine)}</span>
+                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-md mr-2">🔵 Inviati in vagliatura</span>
+                                <span className="font-medium text-indigo-700">{formatNumberWithCommas(taglia.vagliati)}</span>
                               </div>
                             )}
                           </div>

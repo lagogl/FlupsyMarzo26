@@ -133,22 +133,34 @@ class DiarioService {
    * Ottieni statistiche per taglia
    */
   async getSizeStats(date: string) {
-    const stats = await db.execute(sql`
+    // Use pool directly to support LIKE '%' in drizzle sql templates
+    const stats = await pool.query(`
       SELECT 
         COALESCE(s.code, 'Non specificata') AS taglia,
-        SUM(CASE WHEN o.type IN ('prima-attivazione', 'prima-attivazione-da-vagliatura') 
-            THEN o.animal_count ELSE 0 END) AS entrate,
-        SUM(CASE WHEN o.type IN ('vendita', 'cessazione') THEN o.animal_count ELSE 0 END) AS uscite,
-        -- Animali usciti dalle ceste origine per vagliatura (taglia prima della vagliatura)
-        SUM(CASE WHEN o.type = 'chiusura-ciclo-vagliatura' THEN o.animal_count ELSE 0 END) AS mortalita_origine,
+        -- Entrate: prima-attivazioni NON da vagliatura (coerente con getDailyTotals)
+        COALESCE(SUM(CASE
+            WHEN o.type IN ('prima-attivazione', 'prima-attivazione-da-vagliatura')
+             AND NOT (o.type = 'prima-attivazione' AND o.notes LIKE 'Da vagliatura%')
+            THEN o.animal_count ELSE 0 END), 0) AS entrate,
+        -- Uscite: solo vendite/cessazioni
+        COALESCE(SUM(CASE WHEN o.type IN ('vendita', 'cessazione')
+            THEN o.animal_count ELSE 0 END), 0) AS uscite,
+        -- Trasferimenti in uscita
+        COALESCE(SUM(CASE WHEN o.type = 'trasferimento'
+            THEN o.animal_count ELSE 0 END), 0) AS trasferimenti,
+        -- Animali inviati in vagliatura da questa taglia (grezzo, da ceste-origine)
+        -- Nota: la mortalità NETTA non si può calcolare per taglia perché gli animali
+        -- cambiano taglia durante il vaglio; la mortalità netta globale è nel Bilancio
+        COALESCE(SUM(CASE WHEN o.type = 'chiusura-ciclo-vagliatura'
+            THEN o.animal_count ELSE 0 END), 0) AS vagliati,
         COUNT(o.id) AS num_operazioni
       FROM operations o
       LEFT JOIN sizes s ON o.size_id = s.id
-      WHERE o.date::text = ${date}
+      WHERE o.date::text = $1
         AND o.cancelled_at IS NULL
       GROUP BY s.code
       ORDER BY s.code
-    `);
+    `, [date]);
     
     return stats.rows;
   }
