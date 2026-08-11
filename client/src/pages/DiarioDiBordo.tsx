@@ -290,6 +290,7 @@ export default function DiarioDiBordo() {
         mese: string;
         mortalita_netta: number;
         entrate_nuovi_lotti: number;
+        num_lotti: number;
       }>>;
     },
     staleTime: 5 * 60 * 1000,
@@ -1404,10 +1405,14 @@ export default function DiarioDiBordo() {
                                         domain={[0, 'auto']}
                                       />
                                       <Tooltip
-                                        formatter={(value: number, name: string) => {
+                                        formatter={(value: number, name: string, props: any) => {
                                           if (name === 'percentuale') return [`${value}%`, '% mortalità'];
                                           if (name === 'mortalita_netta') return [formatNumberWithCommas(value), 'Morti netti'];
-                                          return [formatNumberWithCommas(value), 'Nuovi arrivi'];
+                                          const nlotti = props?.payload?.num_lotti;
+                                          return [
+                                            `${formatNumberWithCommas(value)}${nlotti ? ` (${nlotti} lotti)` : ''}`,
+                                            'Nuovi arrivi da lotti',
+                                          ];
                                         }}
                                         labelFormatter={monthLabelFull}
                                         contentStyle={{ fontSize: 12, borderRadius: 6 }}

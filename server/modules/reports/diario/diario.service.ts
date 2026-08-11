@@ -359,33 +359,49 @@ class DiarioService {
   }
 
   /**
-   * Riepilogo mensile: mortalità netta + entrate da nuovi lotti, per ogni mese
+   * Riepilogo mensile: mortalità netta (da operations/vagliature) + arrivi reali (da lots)
+   * Gli arrivi vengono dalla tabella lots.animal_count raggruppati per arrival_date,
+   * non dalle prima-attivazione (che includono suddivisioni interne e trasferimenti).
    */
   async getMonthlySummary() {
     const result = await pool.query(`
+      WITH mortalita AS (
+        SELECT
+          DATE_TRUNC('month', date) AS mese,
+          COALESCE(SUM(CASE WHEN type = 'chiusura-ciclo-vagliatura' THEN animal_count ELSE 0 END), 0)
+          - COALESCE(SUM(CASE WHEN type = 'prima-attivazione' AND notes LIKE 'Da vagliatura%' THEN animal_count ELSE 0 END), 0)
+          AS mortalita_netta
+        FROM operations
+        WHERE cancelled_at IS NULL
+          AND date IS NOT NULL
+          AND date >= '2025-01-01'
+        GROUP BY DATE_TRUNC('month', date)
+      ),
+      arrivi AS (
+        SELECT
+          DATE_TRUNC('month', arrival_date) AS mese,
+          COALESCE(SUM(animal_count), 0) AS entrate_nuovi_lotti,
+          COUNT(*) AS num_lotti
+        FROM lots
+        WHERE arrival_date IS NOT NULL
+          AND arrival_date >= '2025-01-01'
+        GROUP BY DATE_TRUNC('month', arrival_date)
+      )
       SELECT
-        TO_CHAR(DATE_TRUNC('month', date), 'YYYY-MM') AS mese,
-        COALESCE(SUM(CASE WHEN type = 'chiusura-ciclo-vagliatura' THEN animal_count ELSE 0 END), 0)
-        - COALESCE(SUM(CASE WHEN type = 'prima-attivazione' AND notes LIKE 'Da vagliatura%' THEN animal_count ELSE 0 END), 0)
-        AS mortalita_netta,
-        COALESCE(SUM(CASE
-          WHEN type = 'prima-attivazione'
-            AND notes NOT LIKE 'Da vagliatura%'
-            AND notes NOT LIKE 'Trasferimento%'
-          THEN animal_count ELSE 0 END), 0)
-        AS entrate_nuovi_lotti
-      FROM operations
-      WHERE cancelled_at IS NULL
-        AND date IS NOT NULL
-        AND date >= '2025-01-01'
-      GROUP BY DATE_TRUNC('month', date)
-      ORDER BY DATE_TRUNC('month', date)
+        TO_CHAR(COALESCE(m.mese, a.mese), 'YYYY-MM') AS mese,
+        COALESCE(m.mortalita_netta, 0)    AS mortalita_netta,
+        COALESCE(a.entrate_nuovi_lotti, 0) AS entrate_nuovi_lotti,
+        COALESCE(a.num_lotti, 0)           AS num_lotti
+      FROM mortalita m
+      FULL OUTER JOIN arrivi a ON m.mese = a.mese
+      ORDER BY COALESCE(m.mese, a.mese)
     `);
 
     return result.rows.map(row => ({
       mese: row.mese as string,
       mortalita_netta: Number(row.mortalita_netta),
       entrate_nuovi_lotti: Number(row.entrate_nuovi_lotti),
+      num_lotti: Number(row.num_lotti),
     }));
   }
 }
