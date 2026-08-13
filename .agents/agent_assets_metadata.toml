@@ -72,3 +72,10 @@ id = "NHGjsOivTvDxE0kDrJ-rk"
 uri = "file://exports/Bins_CaPisani_6-10_ciclo_penultimo-ultimo.xlsx"
 type = "table"
 title = "Bins Ca Pisani 6-10 — Genealogia fino al lotto"
+
+[[outputs]]
+id = "gTFqcD4IECKZXP7Bkozl1"
+uri = "file://attached_assets/reports/analisi_vagliatura_253.pdf"
+type = "pdf"
+title = "Analisi Vagliatura n.253 — 13/08/2026"
+description = "Report per il socio: bilancio IN/OUT, deficit per taglia e cesta, cause identificate e raccomandazione operativa."
