@@ -20,3 +20,4 @@
 - [Arrivi Schiuditoio Reale automatico](hatchery-arrivals-reale.md) — il Reale si calcola sempre live da lots per mese; snapshot manuali solo fallback (diventano obsoleti).
 - [Session auth & requireAuth](session-auth.md) — pg-backed express-session; protect sensitive routers with authModule.requireAuth; most /api/* still open and /api/register is public.
 - [NEON vs DATABASE_URL routing](neon-database-routing.md) — app deve usare NEON_DATABASE_URL (dati reali); DATABASE_URL è il Replit postgres fermo a giugno 2026.
+- [Assistente AI tool SQL](ai-chat-sql-tool.md) — read-only imposto dal DB (txn READ ONLY + timeout + LIMIT esterno), mai solo regex; size_id origini spesso NULL → fasce animals_per_kg.

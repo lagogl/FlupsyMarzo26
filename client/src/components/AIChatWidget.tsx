@@ -95,6 +95,16 @@ export function AIChatWidget() {
           let json: any = null;
           try { json = JSON.parse(payload); } catch (_) { continue; /* incomplete/malformed frame */ }
           if (json.error) throw new Error(json.error);
+          if (json.status && !accumulated) {
+            setMessages(prev => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (updated[lastIdx]?.role === 'assistant') {
+                updated[lastIdx] = { role: 'assistant', content: `🔎 ${json.status}`, pending: true };
+              }
+              return updated;
+            });
+          }
           if (json.delta) {
             accumulated += json.delta;
             setMessages(prev => {

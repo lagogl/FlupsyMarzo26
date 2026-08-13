@@ -173,6 +173,111 @@ ${(highMortality.rows as any[]).length === 0 ? 'Nessuna cesta con mortalità cri
   }
 }
 
+// ─── Read-only SQL tool ──────────────────────────────────────────────────────
+
+const SCHEMA_DOC = `
+=== SCHEMA DATABASE (tabelle principali, PostgreSQL) ===
+flupsys: id, name, location, active, max_positions, production_center
+baskets: id, physical_number (numero cesta visibile all'operatore, NON univoco tra flupsy!), flupsy_id, state ('active'/'available'), current_cycle_id, row, position
+cycles: id, basket_id, lot_id, start_date, end_date (NULL = ciclo aperto), state ('active'/'closed'), cohort_id
+operations: id, date, type ('prima-attivazione','misura','peso','vagliatura','chiusura-ciclo-vagliatura','vendita','trasferimento','pulizia',...), basket_id, cycle_id, size_id, lot_id, animal_count, total_weight (grammi), animals_per_kg, average_weight (mg), dead_count, mortality_rate, notes, cancelled_at (escludere le annullate: cancelled_at IS NULL)
+lots: id, arrival_date, supplier, supplier_lot_number, animal_count (conteggio iniziale arrivo), size_id, active, total_mortality
+sizes: id, code ('TP-3500', 'TP-4500',...), size_mm, min_animals_per_kg, max_animals_per_kg
+selections (= vagliature): id, selection_number (numero vagliatura mostrato all'utente, DIVERSO da id!), date, purpose, status, notes, is_cross_flupsy
+selection_source_baskets: selection_id, basket_id, cycle_id, animal_count, total_weight, animals_per_kg, size_id, lot_id (ceste ORIGINE della vagliatura)
+selection_destination_baskets: selection_id, basket_id, cycle_id, destination_type ('placed'/'sold'), animal_count, live_animals, total_weight, animals_per_kg, size_id, dead_count, mortality_rate, sample_weight, sample_count (ceste DESTINAZIONE)
+basket_lot_composition: basket_id, cycle_id, lot_id, animal_count, percentage (composizione lotti misti)
+lot_mortality_records: lot_id, calculation_date, initial_count, current_count, sold_count, mortality_count, mortality_percentage
+
+NOTE IMPORTANTI:
+- Per riferirti a una vagliatura usa selections.selection_number (es. "vagliatura n.253"), mai l'id interno.
+- Le ceste si identificano con physical_number + nome flupsy (join baskets->flupsys).
+- I conteggi delle ceste origine di una vagliatura sono spesso ereditati da operazioni precedenti (peso × densità della data di origine): verifica sempre la data dell'ultima misura/pesata reale.
+- Escludi sempre le operazioni annullate (cancelled_at IS NULL).
+- ATTENZIONE: in selection_source_baskets il size_id è spesso NULL. Per la taglia delle ceste origine usa animals_per_kg confrontato con sizes (min/max_animals_per_kg) oppure l'ultima operazione con size_id del ciclo. Non concludere mai "nessun animale in ingresso per questa taglia" solo perché size_id è NULL: raggruppa origine e destinazione per fascia di animals_per_kg.
+`.trim();
+
+function sanitizeReadOnlySql(input: string): string {
+  const cleaned = input
+    .replace(/--[^\n]*/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .trim()
+    .replace(/;+\s*$/, '');
+  if (cleaned.includes(';')) {
+    throw new Error('Una sola istruzione SQL per query.');
+  }
+  if (!/^(select|with)\b/i.test(cleaned)) {
+    throw new Error('Sono consentite solo query SELECT (o WITH ... SELECT).');
+  }
+  const forbidden = /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|copy|vacuum|reindex|call|do|execute|set|listen|notify|pg_sleep|pg_terminate|pg_cancel)\b/i;
+  const match = cleaned.match(forbidden);
+  if (match) {
+    throw new Error(`Parola chiave non consentita: ${match[0]}`);
+  }
+  return cleaned;
+}
+
+// Pool dedicato per le query dell'assistente: transazione READ ONLY imposta dal DB,
+// timeout breve, LIMIT esterno sempre applicato (non aggirabile da LIMIT interni).
+let aiQueryPool: import('pg').Pool | null = null;
+async function getAiQueryPool() {
+  if (!aiQueryPool) {
+    const { Pool } = await import('pg');
+    aiQueryPool = new Pool({
+      connectionString: process.env.NEON_DATABASE_URL || process.env.DATABASE_URL,
+      max: 2,
+      idleTimeoutMillis: 30000,
+    });
+  }
+  return aiQueryPool;
+}
+
+async function runReadOnlyQuery(query: string): Promise<string> {
+  const cleaned = sanitizeReadOnlySql(query);
+  // Wrapper sempre applicato: il LIMIT esterno vince su qualsiasi LIMIT interno
+  const limited = `SELECT * FROM (${cleaned}) __q LIMIT 200`;
+
+  const pool = await getAiQueryPool();
+  const client = await pool.connect();
+  let rows: any[];
+  try {
+    await client.query('BEGIN TRANSACTION READ ONLY');
+    await client.query(`SET LOCAL statement_timeout = '8s'`);
+    const result = await client.query(limited);
+    rows = result.rows as any[];
+  } finally {
+    try { await client.query('ROLLBACK'); } catch (_) { /* noop */ }
+    client.release();
+  }
+  if (rows.length === 0) return 'Nessuna riga trovata.';
+
+  let out = JSON.stringify(rows.slice(0, 200), (_k, v) =>
+    v instanceof Date ? v.toISOString().split('T')[0] : v
+  );
+  const MAX_CHARS = 12000;
+  if (out.length > MAX_CHARS) {
+    out = out.slice(0, MAX_CHARS) + `\n... [risultato troncato: ${rows.length} righe totali, restringi la query]`;
+  }
+  return out;
+}
+
+const SQL_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'esegui_query_sql',
+    description:
+      'Esegue una query SQL di SOLA LETTURA (SELECT) sul database PostgreSQL dell\'impianto per analisi approfondite: vagliature, bilanci IN/OUT, mortalità, storici cesta, lotti, taglie. Usa lo schema fornito nel prompt. Massimo 200 righe per query: usa aggregazioni e LIMIT.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Query SQL SELECT (una sola istruzione, PostgreSQL)' },
+        scopo: { type: 'string', description: 'Breve descrizione in italiano di cosa stai cercando (mostrata all\'utente)' },
+      },
+      required: ['query', 'scopo'],
+    },
+  },
+};
+
 // ─── POST /api/ai-chat/message ───────────────────────────────────────────────
 
 router.post('/message', async (req: Request, res: Response) => {
@@ -203,6 +308,20 @@ Per le note di operazione, genera testo breve e professionale in italiano.
 Non inventare dati non presenti nel contesto — se non hai l'informazione, dillo chiaramente.
 Usa i numeri delle ceste (es. "Cesta #3"), i nomi dei flupsy e i codici taglia (TP-1900, TP-2500...) esattamente come appaiono nei dati.
 
+HAI ACCESSO AL DATABASE tramite lo strumento "esegui_query_sql" (sola lettura).
+Usalo ogni volta che la domanda richiede dati non presenti nello snapshot: analisi di vagliature (bilancio animali/pesi IN vs OUT, deficit per taglia), storici di una cesta, andamenti di mortalità, confronti tra lotti, verifiche di conteggi.
+Metodo OBBLIGATORIO per l'analisi di una vagliatura N:
+1. Trova la selection con selection_number = N (prendi il suo id).
+2. BILANCIO TOTALE (il dato autorevole): deficit = SUM(selection_source_baskets.animal_count) − SUM(selection_destination_baskets.animal_count) per quella selection_id. Fai lo stesso con total_weight. Se le note della selection riportano una discrepanza, il tuo bilancio deve coincidere.
+3. Elenca le ceste origine (animal_count, total_weight, animals_per_kg) e le ceste destinazione (con size e destination_type).
+4. Per il confronto per taglia NON usare size_id delle origini (spesso NULL): dividi origini e destinazioni in fasce di animals_per_kg (es. >15000 = taglie piccole, <15000 = taglie grandi) e confronta i subtotali IN vs OUT per fascia.
+5. Verifica la provenienza dei conteggi origine (ultime operazioni misura/peso/prima-attivazione per cesta+ciclo): conteggi vecchi = stime ereditate.
+6. Considera la crescita: i pesi origine rilevati giorni prima sottostimano la biomassa attesa in uscita.
+Non dichiarare mai "nessun deficit" senza aver eseguito il punto 2.
+Esegui più query in sequenza se serve; poi presenta un'analisi strutturata con numeri precisi, cause probabili e raccomandazioni.
+
+${SCHEMA_DOC}
+
 === SNAPSHOT DATI IMPIANTO ===
 ${contextSnapshot}`;
 
@@ -222,21 +341,81 @@ ${contextSnapshot}`;
 
     const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 
-    const stream = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages,
-      ],
-      temperature: 0.4,
-      max_tokens: 1200,
-      stream: true,
-    }, { signal: abortController.signal });
+    const convo: any[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ];
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content;
-      if (delta) {
-        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+    const MAX_TOOL_ROUNDS = 8;
+    const MAX_TOTAL_TOOL_CALLS = 14;
+    let rounds = 0;
+    let totalToolCalls = 0;
+
+    while (true) {
+      const isLastRound = rounds >= MAX_TOOL_ROUNDS;
+
+      const stream = await client.chat.completions.create({
+        model,
+        messages: convo,
+        ...(isLastRound ? {} : { tools: [SQL_TOOL] }),
+        temperature: 0.4,
+        max_tokens: 2000,
+        stream: true,
+      }, { signal: abortController.signal });
+
+      let content = '';
+      const toolCalls: Array<{ id: string; name: string; args: string }> = [];
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+        if (!delta) continue;
+        if (delta.content) {
+          content += delta.content;
+          res.write(`data: ${JSON.stringify({ delta: delta.content })}\n\n`);
+        }
+        for (const tc of delta.tool_calls ?? []) {
+          if (tc.index != null && !toolCalls[tc.index]) {
+            toolCalls[tc.index] = { id: tc.id || '', name: '', args: '' };
+          }
+          const slot = toolCalls[tc.index ?? 0];
+          if (tc.id) slot.id = tc.id;
+          if (tc.function?.name) slot.name += tc.function.name;
+          if (tc.function?.arguments) slot.args += tc.function.arguments;
+        }
+      }
+
+      if (toolCalls.length === 0) break; // final answer complete
+
+      rounds++;
+      convo.push({
+        role: 'assistant',
+        content: content || null,
+        tool_calls: toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: tc.args },
+        })),
+      });
+
+      for (const tc of toolCalls) {
+        let toolResult: string;
+        let scopo = '';
+        try {
+          if (totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {
+            throw new Error('Limite massimo di query raggiunto per questa risposta: concludi l\'analisi con i dati già raccolti.');
+          }
+          totalToolCalls++;
+          const parsed = JSON.parse(tc.args || '{}');
+          scopo = parsed.scopo || '';
+          if (tc.name !== 'esegui_query_sql') {
+            throw new Error(`Strumento sconosciuto: ${tc.name}`);
+          }
+          res.write(`data: ${JSON.stringify({ status: scopo || 'Interrogo il database…' })}\n\n`);
+          toolResult = await runReadOnlyQuery(parsed.query || '');
+        } catch (toolErr: any) {
+          toolResult = `ERRORE QUERY: ${toolErr.message}`;
+        }
+        convo.push({ role: 'tool', tool_call_id: tc.id, content: toolResult });
       }
     }
 
