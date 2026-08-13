@@ -156,7 +156,7 @@ export default function AdvancedSales() {
   // Query per vendite avanzate esistenti
   const { data: salesData, isLoading: loadingSales } = useQuery({
     queryKey: ['/api/advanced-sales'],
-    queryFn: () => apiRequest('/api/advanced-sales')
+    queryFn: () => apiRequest('/api/advanced-sales?pageSize=10000')
   });
 
   // Mutation per creare vendita
