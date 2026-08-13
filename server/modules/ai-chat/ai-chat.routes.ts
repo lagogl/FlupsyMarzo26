@@ -340,6 +340,11 @@ ${contextSnapshot}`;
     const client = new OpenAI({ apiKey, timeout: 60000 });
 
     const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+    // I modelli di ragionamento (o-series, gpt-5*) non accettano temperature custom né max_tokens
+    const isReasoningModel = /^(o\d|gpt-5)/i.test(model);
+    const modelParams = isReasoningModel
+      ? { max_completion_tokens: 6000 }
+      : { temperature: 0.4, max_tokens: 2000 };
 
     const convo: any[] = [
       { role: 'system', content: systemPrompt },
@@ -358,8 +363,7 @@ ${contextSnapshot}`;
         model,
         messages: convo,
         ...(isLastRound ? {} : { tools: [SQL_TOOL] }),
-        temperature: 0.4,
-        max_tokens: 2000,
+        ...modelParams,
         stream: true,
       }, { signal: abortController.signal });
 

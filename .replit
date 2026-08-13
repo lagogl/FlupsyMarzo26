@@ -98,6 +98,7 @@ EXTERNAL_NOTIFY_API_KEY = "flupsy-notify-2026-secure-key"
 CAPISANI_USERNAME = "admin"
 CAPISANI_PASSWORD = "admin"
 CAPISANI_BASE_URL = "https://kappa.sinplant.it"
+OPENAI_MODEL = "gpt-5-mini"
 
 [postMerge]
 path = "scripts/post-merge.sh"
