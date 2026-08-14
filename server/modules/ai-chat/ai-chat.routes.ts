@@ -397,6 +397,99 @@ async function streamAssistantWithSqlTool(opts: {
   }
 }
 
+// ─── Anthropic (Claude) streaming tool loop ──────────────────────────────────
+
+async function streamClaudeWithSqlTool(opts: {
+  req: Request;
+  res: Response;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  model: string;
+  systemPrompt: string;
+}) {
+  const { req, res, messages, model, systemPrompt } = opts;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const abortController = new AbortController();
+  req.on('close', () => abortController.abort());
+
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({
+      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+      timeout: 120000,
+    });
+
+    const claudeTool = {
+      name: 'esegui_query_sql',
+      description: SQL_TOOL.function.description,
+      input_schema: SQL_TOOL.function.parameters as any,
+    };
+
+    const convo: any[] = messages.map(m => ({ role: m.role, content: m.content }));
+
+    const MAX_TOOL_ROUNDS = 8;
+    const MAX_TOTAL_TOOL_CALLS = 14;
+    let rounds = 0;
+    let totalToolCalls = 0;
+
+    while (true) {
+      const isLastRound = rounds >= MAX_TOOL_ROUNDS;
+
+      const stream = client.messages.stream({
+        model,
+        max_tokens: 8000,
+        system: systemPrompt,
+        messages: convo,
+        ...(isLastRound ? {} : { tools: [claudeTool] }),
+      }, { signal: abortController.signal });
+
+      stream.on('text', (delta: string) => {
+        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+      });
+
+      const finalMessage = await stream.finalMessage();
+      const toolUses = finalMessage.content.filter((b: any) => b.type === 'tool_use');
+
+      if (toolUses.length === 0) break; // risposta finale completa
+
+      rounds++;
+      convo.push({ role: 'assistant', content: finalMessage.content });
+
+      const toolResults: any[] = [];
+      for (const tu of toolUses as any[]) {
+        let toolResult: string;
+        try {
+          if (totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {
+            throw new Error('Limite massimo di query raggiunto per questa risposta: concludi l\'analisi con i dati già raccolti.');
+          }
+          totalToolCalls++;
+          const scopo = tu.input?.scopo || '';
+          res.write(`data: ${JSON.stringify({ status: scopo || 'Interrogo il database…' })}\n\n`);
+          toolResult = await runReadOnlyQuery(tu.input?.query || '');
+        } catch (toolErr: any) {
+          toolResult = `ERRORE QUERY: ${toolErr.message}`;
+        }
+        toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: toolResult });
+      }
+      convo.push({ role: 'user', content: toolResults });
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+  } catch (err: any) {
+    if (abortController.signal.aborted) return;
+    console.error('[AI Chat] Anthropic error:', err.message);
+    res.write(`data: ${JSON.stringify({ error: 'Errore AI temporaneo, riprova tra poco.' })}\n\n`);
+    res.end();
+  }
+}
+
 // ─── POST /api/ai-chat/message ───────────────────────────────────────────────
 
 router.post('/message', async (req: Request, res: Response) => {
@@ -457,7 +550,10 @@ ${contextSnapshot}`;
 // Interfaccia "Analisi AI Database": password dedicata + scelta modello per messaggio.
 
 const ANALYSIS_PASSWORD = process.env.ANALYSIS_UI_PASSWORD || 'Domani4321-!';
-const ANALYSIS_MODELS = ['gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'];
+const ANALYSIS_MODELS = [
+  'gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini',
+  'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5',
+];
 
 // Anti brute-force: max 5 tentativi falliti ogni 10 minuti per IP
 const failedUnlocks = new Map<string, { count: number; firstAt: number }>();
@@ -508,8 +604,12 @@ router.post('/analysis', async (req: Request, res: Response) => {
 
   // Il modello viene scelto dall'utente a ogni messaggio: whitelist server-side
   const chosenModel = ANALYSIS_MODELS.includes(model || '') ? model! : 'gpt-5-mini';
+  const isClaude = chosenModel.startsWith('claude');
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (isClaude && !process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'Modelli Claude non configurati' });
+  }
+  if (!isClaude && !process.env.OPENAI_API_KEY) {
     return res.status(503).json({ error: 'AI non configurata' });
   }
 
@@ -537,7 +637,11 @@ Non dichiarare mai "nessun deficit" senza il punto 2.
 
 ${SCHEMA_DOC}`;
 
-  await streamAssistantWithSqlTool({ req, res, messages, model: chosenModel, systemPrompt });
+  if (isClaude) {
+    await streamClaudeWithSqlTool({ req, res, messages, model: chosenModel, systemPrompt });
+  } else {
+    await streamAssistantWithSqlTool({ req, res, messages, model: chosenModel, systemPrompt });
+  }
 });
 
 export const aiChatRoutes = router;

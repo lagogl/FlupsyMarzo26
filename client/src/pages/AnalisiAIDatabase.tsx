@@ -17,11 +17,14 @@ interface Message {
 }
 
 const MODEL_LABELS: Record<string, string> = {
-  'gpt-5': 'GPT-5 (ragionamento, massima profondità)',
-  'gpt-5-mini': 'GPT-5 mini (ragionamento, veloce)',
-  'o4-mini': 'o4-mini (ragionamento)',
-  'gpt-4.1': 'GPT-4.1 (standard, potente)',
-  'gpt-4.1-mini': 'GPT-4.1 mini (standard, economico)',
+  'gpt-5': 'GPT-5 (OpenAI — ragionamento, massima profondità)',
+  'gpt-5-mini': 'GPT-5 mini (OpenAI — ragionamento, veloce)',
+  'o4-mini': 'o4-mini (OpenAI — ragionamento)',
+  'gpt-4.1': 'GPT-4.1 (OpenAI — standard, potente)',
+  'gpt-4.1-mini': 'GPT-4.1 mini (OpenAI — standard, economico)',
+  'claude-opus-4-1': 'Claude Opus 4.1 (Anthropic — massima qualità)',
+  'claude-sonnet-4-5': 'Claude Sonnet 4.5 (Anthropic — equilibrato)',
+  'claude-haiku-4-5': 'Claude Haiku 4.5 (Anthropic — veloce)',
 };
 
 const QUICK_PROMPTS = [
