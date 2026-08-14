@@ -278,52 +278,17 @@ const SQL_TOOL = {
   },
 };
 
-// ─── POST /api/ai-chat/message ───────────────────────────────────────────────
+// ─── Shared streaming tool loop ──────────────────────────────────────────────
 
-router.post('/message', async (req: Request, res: Response) => {
-  const { messages } = req.body as {
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-  };
-
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: 'messages array required' });
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return res.status(503).json({ error: 'AI non configurata' });
-  }
-
-  let contextSnapshot = '';
-  try {
-    contextSnapshot = await buildOperatorContext();
-  } catch (_) {
-    contextSnapshot = `DATA: ${new Date().toISOString().split('T')[0]}`;
-  }
-
-  const systemPrompt = `Sei l'assistente AI dell'impianto FLUPSY di ostricoltura. Rispondi SEMPRE in italiano.
-Sei diretto, pratico e conosci il dominio: ceste, vagliature, taglia, mortalità, SGR, lotti, trasferimenti.
-Quando l'operatore ti chiede cosa fare, dai suggerimenti concreti e azionabili.
-Per le note di operazione, genera testo breve e professionale in italiano.
-Non inventare dati non presenti nel contesto — se non hai l'informazione, dillo chiaramente.
-Usa i numeri delle ceste (es. "Cesta #3"), i nomi dei flupsy e i codici taglia (TP-1900, TP-2500...) esattamente come appaiono nei dati.
-
-HAI ACCESSO AL DATABASE tramite lo strumento "esegui_query_sql" (sola lettura).
-Usalo ogni volta che la domanda richiede dati non presenti nello snapshot: analisi di vagliature (bilancio animali/pesi IN vs OUT, deficit per taglia), storici di una cesta, andamenti di mortalità, confronti tra lotti, verifiche di conteggi.
-Metodo OBBLIGATORIO per l'analisi di una vagliatura N:
-1. Trova la selection con selection_number = N (prendi il suo id).
-2. BILANCIO TOTALE (il dato autorevole): deficit = SUM(selection_source_baskets.animal_count) − SUM(selection_destination_baskets.animal_count) per quella selection_id. Fai lo stesso con total_weight. Se le note della selection riportano una discrepanza, il tuo bilancio deve coincidere.
-3. Elenca le ceste origine (animal_count, total_weight, animals_per_kg) e le ceste destinazione (con size e destination_type).
-4. Per il confronto per taglia NON usare size_id delle origini (spesso NULL): dividi origini e destinazioni in fasce di animals_per_kg (es. >15000 = taglie piccole, <15000 = taglie grandi) e confronta i subtotali IN vs OUT per fascia.
-5. Verifica la provenienza dei conteggi origine (ultime operazioni misura/peso/prima-attivazione per cesta+ciclo): conteggi vecchi = stime ereditate.
-6. Considera la crescita: i pesi origine rilevati giorni prima sottostimano la biomassa attesa in uscita.
-Non dichiarare mai "nessun deficit" senza aver eseguito il punto 2.
-Esegui più query in sequenza se serve; poi presenta un'analisi strutturata con numeri precisi, cause probabili e raccomandazioni.
-
-${SCHEMA_DOC}
-
-=== SNAPSHOT DATI IMPIANTO ===
-${contextSnapshot}`;
+async function streamAssistantWithSqlTool(opts: {
+  req: Request;
+  res: Response;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  model: string;
+  systemPrompt: string;
+}) {
+  const { req, res, messages, model, systemPrompt } = opts;
+  const apiKey = process.env.OPENAI_API_KEY!;
 
   // Streaming SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -331,20 +296,18 @@ ${contextSnapshot}`;
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Abort upstream stream if the client disconnects
   const abortController = new AbortController();
   req.on('close', () => abortController.abort());
 
   try {
     const OpenAI = (await import('openai')).default;
-    const client = new OpenAI({ apiKey, timeout: 60000 });
+    const client = new OpenAI({ apiKey, timeout: 120000 });
 
-    const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
     // I modelli di ragionamento (o-series, gpt-5*) non accettano temperature custom né max_tokens
     const isReasoningModel = /^(o\d|gpt-5)/i.test(model);
     const modelParams = isReasoningModel
-      ? { max_completion_tokens: 6000 }
-      : { temperature: 0.4, max_tokens: 2000 };
+      ? { max_completion_tokens: 8000 }
+      : { temperature: 0.4, max_tokens: 3000 };
 
     const convo: any[] = [
       { role: 'system', content: systemPrompt },
@@ -427,14 +390,154 @@ ${contextSnapshot}`;
     res.end();
 
   } catch (err: any) {
-    if (abortController.signal.aborted) {
-      // Client went away — nothing to write
-      return;
-    }
+    if (abortController.signal.aborted) return;
     console.error('[AI Chat] OpenAI error:', err.message);
     res.write(`data: ${JSON.stringify({ error: 'Errore AI temporaneo, riprova tra poco.' })}\n\n`);
     res.end();
   }
+}
+
+// ─── POST /api/ai-chat/message ───────────────────────────────────────────────
+
+router.post('/message', async (req: Request, res: Response) => {
+  const { messages } = req.body as {
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  };
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages array required' });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'AI non configurata' });
+  }
+
+  let contextSnapshot = '';
+  try {
+    contextSnapshot = await buildOperatorContext();
+  } catch (_) {
+    contextSnapshot = `DATA: ${new Date().toISOString().split('T')[0]}`;
+  }
+
+  const systemPrompt = `Sei l'assistente AI dell'impianto FLUPSY di ostricoltura. Rispondi SEMPRE in italiano.
+Sei diretto, pratico e conosci il dominio: ceste, vagliature, taglia, mortalità, SGR, lotti, trasferimenti.
+Quando l'operatore ti chiede cosa fare, dai suggerimenti concreti e azionabili.
+Per le note di operazione, genera testo breve e professionale in italiano.
+Non inventare dati non presenti nel contesto — se non hai l'informazione, dillo chiaramente.
+Usa i numeri delle ceste (es. "Cesta #3"), i nomi dei flupsy e i codici taglia (TP-1900, TP-2500...) esattamente come appaiono nei dati.
+
+HAI ACCESSO AL DATABASE tramite lo strumento "esegui_query_sql" (sola lettura).
+Usalo ogni volta che la domanda richiede dati non presenti nello snapshot: analisi di vagliature (bilancio animali/pesi IN vs OUT, deficit per taglia), storici di una cesta, andamenti di mortalità, confronti tra lotti, verifiche di conteggi.
+Metodo OBBLIGATORIO per l'analisi di una vagliatura N:
+1. Trova la selection con selection_number = N (prendi il suo id).
+2. BILANCIO TOTALE (il dato autorevole): deficit = SUM(selection_source_baskets.animal_count) − SUM(selection_destination_baskets.animal_count) per quella selection_id. Fai lo stesso con total_weight. Se le note della selection riportano una discrepanza, il tuo bilancio deve coincidere.
+3. Elenca le ceste origine (animal_count, total_weight, animals_per_kg) e le ceste destinazione (con size e destination_type).
+4. Per il confronto per taglia NON usare size_id delle origini (spesso NULL): dividi origini e destinazioni in fasce di animals_per_kg (es. >15000 = taglie piccole, <15000 = taglie grandi) e confronta i subtotali IN vs OUT per fascia.
+5. Verifica la provenienza dei conteggi origine (ultime operazioni misura/peso/prima-attivazione per cesta+ciclo): conteggi vecchi = stime ereditate.
+6. Considera la crescita: i pesi origine rilevati giorni prima sottostimano la biomassa attesa in uscita.
+Non dichiarare mai "nessun deficit" senza aver eseguito il punto 2.
+Esegui più query in sequenza se serve; poi presenta un'analisi strutturata con numeri precisi, cause probabili e raccomandazioni.
+
+${SCHEMA_DOC}
+
+=== SNAPSHOT DATI IMPIANTO ===
+${contextSnapshot}`;
+
+  await streamAssistantWithSqlTool({
+    req,
+    res,
+    messages,
+    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    systemPrompt,
+  });
+});
+
+// ─── POST /api/ai-chat/analysis ──────────────────────────────────────────────
+// Interfaccia "Analisi AI Database": password dedicata + scelta modello per messaggio.
+
+const ANALYSIS_PASSWORD = process.env.ANALYSIS_UI_PASSWORD || 'Domani4321-!';
+const ANALYSIS_MODELS = ['gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'];
+
+// Anti brute-force: max 5 tentativi falliti ogni 10 minuti per IP
+const failedUnlocks = new Map<string, { count: number; firstAt: number }>();
+function unlockThrottled(ip: string): boolean {
+  const now = Date.now();
+  const rec = failedUnlocks.get(ip);
+  if (!rec || now - rec.firstAt > 10 * 60 * 1000) return false;
+  return rec.count >= 5;
+}
+function recordFailedUnlock(ip: string) {
+  const now = Date.now();
+  const rec = failedUnlocks.get(ip);
+  if (!rec || now - rec.firstAt > 10 * 60 * 1000) {
+    failedUnlocks.set(ip, { count: 1, firstAt: now });
+  } else {
+    rec.count++;
+  }
+}
+
+router.post('/analysis/unlock', (req: Request, res: Response) => {
+  const ip = req.ip || 'unknown';
+  if (unlockThrottled(ip)) {
+    return res.status(429).json({ success: false, error: 'Troppi tentativi: riprova tra 10 minuti' });
+  }
+  const { password } = req.body as { password?: string };
+  if (password !== ANALYSIS_PASSWORD) {
+    recordFailedUnlock(ip);
+    return res.status(403).json({ success: false, error: 'Password errata' });
+  }
+  failedUnlocks.delete(ip);
+  res.json({ success: true, models: ANALYSIS_MODELS });
+});
+
+router.post('/analysis', async (req: Request, res: Response) => {
+  const { messages, model } = req.body as {
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    model?: string;
+  };
+
+  const password = req.headers['x-analysis-password'];
+  if (password !== ANALYSIS_PASSWORD) {
+    return res.status(403).json({ error: 'Password errata o mancante' });
+  }
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages array required' });
+  }
+
+  // Il modello viene scelto dall'utente a ogni messaggio: whitelist server-side
+  const chosenModel = ANALYSIS_MODELS.includes(model || '') ? model! : 'gpt-5-mini';
+
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'AI non configurata' });
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const systemPrompt = `Sei l'analista dati senior dell'impianto FLUPSY di ostricoltura (vongole/ostriche giovanili). Rispondi SEMPRE in italiano.
+DATA CORRENTE: ${today}
+
+Il tuo unico compito è l'ANALISI APPROFONDITA del database tramite lo strumento "esegui_query_sql" (SOLA LETTURA — il database rifiuta qualsiasi scrittura a livello di transazione).
+Lavora come un analista: formula ipotesi, verificale con query mirate, incrocia i dati, quantifica sempre.
+
+Metodo di lavoro:
+- Prima di rispondere, raccogli i dati con le query necessarie (anche molte, in sequenza). Non inventare mai numeri.
+- Presenta risultati strutturati: tabelle, bilanci, percentuali, confronti attesi-vs-reali.
+- Se un dato è una stima ereditata (conteggio derivato da pesi/densità vecchi), dillo esplicitamente.
+- Concludi sempre con interpretazione, cause probabili e raccomandazioni operative.
+
+Metodo OBBLIGATORIO per l'analisi di una vagliatura N:
+1. Trova la selection con selection_number = N (prendi il suo id).
+2. BILANCIO TOTALE (dato autorevole): deficit = SUM(selection_source_baskets.animal_count) − SUM(selection_destination_baskets.animal_count); idem con total_weight.
+3. Elenca ceste origine e destinazione con conteggi, pesi e animals_per_kg.
+4. Per il confronto per taglia NON usare size_id delle origini (spesso NULL): raggruppa per fasce di animals_per_kg.
+5. Verifica la provenienza dei conteggi origine (ultime misure/pesate reali per cesta+ciclo): conteggi vecchi = stime ereditate.
+6. Considera la crescita (SGR mensili nella tabella sgr, % giornaliera): pesi rilevati giorni prima sottostimano la biomassa attesa.
+Non dichiarare mai "nessun deficit" senza il punto 2.
+
+${SCHEMA_DOC}`;
+
+  await streamAssistantWithSqlTool({ req, res, messages, model: chosenModel, systemPrompt });
 });
 
 export const aiChatRoutes = router;

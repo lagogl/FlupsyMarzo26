@@ -210,6 +210,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <ClipboardList className="h-5 w-5 mr-2 text-purple-600" />, label: "Attività Consigliate", path: "/attivita-consigliate", gianluigiOnly: true },
         { icon: <FileSpreadsheet className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiReportGenerator, path: "/ai-report-generator", gianluigiOnly: true },
         { icon: <Sparkles className="h-5 w-5 mr-2 text-purple-600" />, label: "AI Enhanced (BETA)", path: "/ai-enhanced", gianluigiOnly: true },
+        { icon: <Database className="h-5 w-5 mr-2 text-purple-600" />, label: "Analisi AI Database (BETA)", path: "/analisi-ai-database" },
         { icon: <BarChart3 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.aiGrowthVariability, path: "/growth-variability-analysis", gianluigiOnly: true },
         { icon: <BarChart className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.statistics, path: "/statistics", gianluigiOnly: true },
         { icon: <BarChart2 className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.lotsAnalytics, path: "/lots-analytics" },
