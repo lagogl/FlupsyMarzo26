@@ -17,6 +17,9 @@ import {
   operations,
   baskets,
   sizes,
+  flupsys,
+  basketLotComposition,
+  lots,
   externalCustomersSync,
   externalSalesSync,
   clienti,
@@ -149,10 +152,320 @@ export async function getAvailableSaleOperations(req: Request, res: Response) {
   }
 }
 
+type SaleBasketRow = {
+  basketId: number;
+  basketPhysicalNumber: number;
+  flupsyId: number;
+  flupsyName: string | null;
+  row: string;
+  position: number;
+  cycleId: number;
+  cycleStartDate: string;
+  cycleLotId: number | null;
+  operationId: number;
+  date: string;
+  animalCount: number;
+  totalWeight: number;
+  animalsPerKg: number;
+  sizeId: number;
+  sizeCode: string;
+  sizeName: string;
+  compositions: Array<{
+    lotId: number;
+    animalCount: number;
+    percentage: number;
+    lotSupplier: string | null;
+    lotSupplierLotNumber: string | null;
+  }>;
+};
+
+/**
+ * Legge le ceste attive con la misura più recente ancora valida.
+ * Il riferimento all'operazione viene poi congelato in sale_operations_ref:
+ * questo permette a PDF, DDT e annullamento di usare lo stesso tracciato
+ * delle vendite provenienti dalla mappa.
+ */
+async function getManualSaleBasketRows(executor: any, basketIds?: number[]): Promise<SaleBasketRow[]> {
+  const basketFilter = basketIds?.length
+    ? sql`AND b.id IN (${sql.join(basketIds.map(id => sql`${id}`), sql`, `)})`
+    : sql``;
+
+  const result = await executor.execute(sql`
+    SELECT
+      b.id AS basket_id,
+      b.physical_number,
+      b.flupsy_id,
+      f.name AS flupsy_name,
+      b.row,
+      b.position,
+      c.id AS cycle_id,
+      c.start_date AS cycle_start_date,
+      c.lot_id AS cycle_lot_id,
+      op.id AS operation_id,
+      op.date,
+      op.animal_count,
+      op.total_weight,
+      op.animals_per_kg,
+      s.id AS size_id,
+      s.code AS size_code,
+      s.name AS size_name
+    FROM baskets b
+    JOIN cycles c ON c.id = b.current_cycle_id AND c.state = 'active'
+    JOIN flupsys f ON f.id = b.flupsy_id
+    JOIN LATERAL (
+      SELECT o.*
+      FROM operations o
+      WHERE o.basket_id = b.id
+        AND o.cycle_id = c.id
+        AND o.cancelled_at IS NULL
+        AND o.animal_count IS NOT NULL
+        AND o.total_weight IS NOT NULL
+        AND o.animals_per_kg IS NOT NULL
+        AND o.type <> 'vendita'
+      ORDER BY o.date DESC, o.id DESC
+      LIMIT 1
+    ) op ON TRUE
+    JOIN sizes s ON s.id = op.size_id
+    WHERE b.state = 'active'
+      AND b.current_cycle_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sale_operations_ref existing_ref
+        WHERE existing_ref.operation_id = op.id
+      )
+      ${basketFilter}
+    ORDER BY f.name, b.physical_number
+  `);
+
+  const rows = ((result as any).rows ?? result) as any[];
+  if (rows.length === 0) return [];
+
+  const ids = rows.map(row => Number(row.basket_id));
+  const compositionRows = await executor
+    .select({
+      basketId: basketLotComposition.basketId,
+      cycleId: basketLotComposition.cycleId,
+      lotId: basketLotComposition.lotId,
+      animalCount: basketLotComposition.animalCount,
+      percentage: basketLotComposition.percentage,
+      lotSupplier: lots.supplier,
+      lotSupplierLotNumber: lots.supplierLotNumber
+    })
+    .from(basketLotComposition)
+    .leftJoin(lots, eq(basketLotComposition.lotId, lots.id))
+    .where(inArray(basketLotComposition.basketId, ids));
+
+  const compositionsByBasket = new Map<number, SaleBasketRow['compositions']>();
+  for (const composition of compositionRows) {
+    const list = compositionsByBasket.get(composition.basketId) || [];
+    list.push({
+      lotId: composition.lotId,
+      animalCount: composition.animalCount,
+      percentage: composition.percentage,
+      lotSupplier: composition.lotSupplier,
+      lotSupplierLotNumber: composition.lotSupplierLotNumber
+    });
+    compositionsByBasket.set(composition.basketId, list);
+  }
+
+  return rows.map(row => ({
+    basketId: Number(row.basket_id),
+    basketPhysicalNumber: Number(row.physical_number),
+    flupsyId: Number(row.flupsy_id),
+    flupsyName: row.flupsy_name ?? null,
+    row: row.row,
+    position: Number(row.position),
+    cycleId: Number(row.cycle_id),
+    cycleStartDate: row.cycle_start_date,
+    cycleLotId: row.cycle_lot_id ? Number(row.cycle_lot_id) : null,
+    operationId: Number(row.operation_id),
+    date: row.date,
+    animalCount: Number(row.animal_count),
+    totalWeight: Number(row.total_weight),
+    animalsPerKg: Number(row.animals_per_kg),
+    sizeId: Number(row.size_id),
+    sizeCode: row.size_code,
+    sizeName: row.size_name,
+    compositions: compositionsByBasket.get(Number(row.basket_id)) || []
+  }));
+}
+
+/**
+ * Elenco aggiornato delle ceste che possono essere prenotate per una vendita
+ * manuale. Le ceste già referenziate da una vendita non vengono mostrate.
+ */
+export async function getAvailableSaleBaskets(req: Request, res: Response) {
+  try {
+    const basketsForSale = await getManualSaleBasketRows(db);
+    res.json({ success: true, baskets: basketsForSale });
+  } catch (error) {
+    console.error("Errore nel recupero ceste vendibili:", error);
+    res.status(500).json({
+      success: false,
+      error: "Errore nel recupero delle ceste vendibili"
+    });
+  }
+}
+
+async function createManualAdvancedSale(req: Request, res: Response) {
+  const {
+    basketIds,
+    companyId,
+    customerData,
+    saleDate,
+    notes
+  } = req.body as {
+    basketIds?: number[];
+    companyId?: number | null;
+    customerData?: any;
+    saleDate?: string;
+    notes?: string;
+  };
+
+  if (!Array.isArray(basketIds) || basketIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "È necessario selezionare almeno una cesta"
+    });
+  }
+  const normalizedBasketIds = [...new Set(basketIds.map(Number))].filter(id => Number.isInteger(id) && id > 0);
+  if (normalizedBasketIds.length !== basketIds.length) {
+    return res.status(400).json({ success: false, error: "Elenco ceste non valido" });
+  }
+  if (!saleDate) {
+    return res.status(400).json({ success: false, error: "Data vendita obbligatoria" });
+  }
+  if (!customerData?.id && !customerData?.name) {
+    return res.status(400).json({ success: false, error: "È necessario specificare il cliente" });
+  }
+  if (!companyId) {
+    return res.status(400).json({ success: false, error: "Seleziona l'azienda per questa vendita" });
+  }
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Il lock sulla cesta impedisce che due operatori la prenotino nello stesso momento.
+      await tx.execute(sql`
+        SELECT id
+        FROM ${baskets}
+        WHERE id IN (${sql.join(normalizedBasketIds.map(id => sql`${id}`), sql`, `)})
+        FOR UPDATE
+      `);
+
+      const selectedBaskets = await getManualSaleBasketRows(tx, normalizedBasketIds);
+      if (selectedBaskets.length !== normalizedBasketIds.length) {
+        const found = new Set(selectedBaskets.map(item => item.basketId));
+        const missing = normalizedBasketIds.filter(id => !found.has(id));
+        throw new Error(`Le ceste ${missing.join(', ')} non sono più disponibili o non hanno una misura valida`);
+      }
+
+      await tx.execute(sql`
+        SELECT id
+        FROM operations
+        WHERE id IN (${sql.join(selectedBaskets.map(item => sql`${item.operationId}`), sql`, `)})
+        FOR UPDATE
+      `);
+
+      const lockedLast = await tx.execute(sql`
+        SELECT sale_number
+        FROM ${advancedSales}
+        ORDER BY id DESC
+        LIMIT 1
+        FOR UPDATE
+      `);
+      const lockedRows: any[] = (lockedLast as any).rows ?? lockedLast;
+      let nextNumber = 1;
+      if (lockedRows.length > 0 && lockedRows[0].sale_number) {
+        const match = String(lockedRows[0].sale_number).match(/VAV-(\d+)/);
+        if (match) nextNumber = parseInt(match[1], 10) + 1;
+      }
+
+      const [newSale] = await tx.insert(advancedSales).values({
+        saleNumber: `VAV-${nextNumber.toString().padStart(6, '0')}`,
+        sourceType: 'manual',
+        sourceTotalAnimals: selectedBaskets.reduce((sum, item) => sum + item.animalCount, 0),
+        companyId: companyId || null,
+        customerId: customerData?.id || null,
+        customerName: customerData?.name || null,
+        customerDetails: customerData ? JSON.stringify(customerData) : null,
+        saleDate,
+        status: 'draft',
+        notes: notes || null
+      }).returning();
+
+      for (const item of selectedBaskets) {
+        await tx.insert(saleOperationsRef).values({
+          advancedSaleId: newSale.id,
+          operationId: item.operationId,
+          basketId: item.basketId,
+          originalAnimals: item.animalCount,
+          originalWeight: item.totalWeight,
+          originalAnimalsPerKg: item.animalsPerKg,
+          includedInSale: true
+        });
+      }
+
+      await tx.update(advancedSales)
+        .set({
+          totalAnimals: selectedBaskets.reduce((sum, item) => sum + item.animalCount, 0),
+          totalWeight: selectedBaskets.reduce((sum, item) => sum + item.totalWeight / 1000, 0),
+          updatedAt: new Date()
+        })
+        .where(eq(advancedSales.id, newSale.id));
+
+      return { newSale, selectedBaskets };
+    });
+
+    if ((req as any).app?.locals?.createAdvancedSaleNotification) {
+      (req as any).app.locals.createAdvancedSaleNotification(result.newSale.id)
+        .catch((error: any) => console.error('Errore creazione notifica vendita manuale:', error));
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Vendita manuale creata con successo",
+      sale: result.newSale,
+      operations: result.selectedBaskets.map(item => ({
+        operationId: item.operationId,
+        basketId: item.basketId,
+        basketPhysicalNumber: item.basketPhysicalNumber,
+        date: item.date,
+        animalCount: item.animalCount,
+        totalWeight: item.totalWeight,
+        animalsPerKg: item.animalsPerKg,
+        sizeId: item.sizeId,
+        sizeCode: item.sizeCode,
+        sizeName: item.sizeName,
+        cycleId: item.cycleId,
+        flupsyId: item.flupsyId,
+        flupsyName: item.flupsyName,
+        row: item.row,
+        position: item.position,
+        compositions: item.compositions
+      })),
+      totals: {
+        totalAnimals: result.selectedBaskets.reduce((sum, item) => sum + item.animalCount, 0),
+        totalWeight: result.selectedBaskets.reduce((sum, item) => sum + item.totalWeight / 1000, 0)
+      }
+    });
+  } catch (error: any) {
+    console.error("Errore nella creazione vendita manuale:", error);
+    const isBusinessError = /disponibili|misura valida|prenotino/.test(error?.message || '');
+    res.status(isBusinessError ? 400 : 500).json({
+      success: false,
+      error: error?.message || "Errore nella creazione della vendita manuale"
+    });
+  }
+}
+
 /**
  * Crea una nuova vendita avanzata
  */
 export async function createAdvancedSale(req: Request, res: Response) {
+  if (req.body?.sourceType === 'manual') {
+    return createManualAdvancedSale(req, res);
+  }
+
   try {
     const {
       operationIds,
@@ -689,7 +1002,11 @@ async function calculateSizeCode(animalsPerKg: number): Promise<string> {
 export async function configureBags(req: Request, res: Response) {
   try {
     const { saleId } = req.params;
-    const { bags } = req.body;
+    const {
+      bags,
+      confirmDifference = false,
+      differenceReason
+    } = req.body;
 
     if (!bags || !Array.isArray(bags) || bags.length === 0) {
       return res.status(400).json({
@@ -711,7 +1028,85 @@ export async function configureBags(req: Request, res: Response) {
       });
     }
 
+    if (sale[0].status !== 'draft') {
+      return res.status(409).json({
+        success: false,
+        error: "I sacchi possono essere modificati solo mentre la vendita è in bozza"
+      });
+    }
+
+    const allowedSources = await db.select({
+      operationId: saleOperationsRef.operationId,
+      basketId: saleOperationsRef.basketId
+    })
+    .from(saleOperationsRef)
+    .where(eq(saleOperationsRef.advancedSaleId, parseInt(saleId)));
+    const allowedSourceKeys = new Set(
+      allowedSources.map(source => `${source.operationId}:${source.basketId}`)
+    );
+
+    for (const [index, bag] of bags.entries()) {
+      const bagAnimalCount = Number(bag.animalCount);
+      const allocations = Array.isArray(bag.allocations) ? bag.allocations : [];
+      const allocatedTotal = allocations.reduce(
+        (sum: number, allocation: any) => sum + Number(allocation.allocatedAnimals || 0),
+        0
+      );
+      if (!Number.isInteger(bagAnimalCount) || bagAnimalCount <= 0) {
+        return res.status(400).json({ success: false, error: `Il sacco ${index + 1} ha un numero animali non valido` });
+      }
+      if (allocations.length === 0 || allocatedTotal !== bagAnimalCount) {
+        return res.status(400).json({
+          success: false,
+          error: `Le allocazioni del sacco ${index + 1} non corrispondono al totale animali`
+        });
+      }
+      for (const allocation of allocations) {
+        const sourceKey = `${Number(allocation.sourceOperationId)}:${Number(allocation.sourceBasketId)}`;
+        if (
+          !allowedSourceKeys.has(sourceKey) ||
+          !Number.isInteger(Number(allocation.allocatedAnimals)) ||
+          Number(allocation.allocatedAnimals) <= 0
+        ) {
+          return res.status(400).json({
+            success: false,
+            error: `Il sacco ${index + 1} contiene un'allocazione non valida o estranea alla vendita`
+          });
+        }
+      }
+    }
+
+    const totalAnimals = bags.reduce((sum: number, bag: any) => sum + Number(bag.animalCount || 0), 0);
+    const sourceTotalAnimals = sale[0].sourceType === 'manual'
+      ? Number(sale[0].sourceTotalAnimals || 0)
+      : null;
+    const inventoryDifference = sourceTotalAnimals === null
+      ? null
+      : totalAnimals - sourceTotalAnimals;
+
+    if (inventoryDifference !== null && inventoryDifference !== 0) {
+      if (!confirmDifference || typeof differenceReason !== 'string' || differenceReason.trim().length < 3) {
+        return res.status(400).json({
+          success: false,
+          error: "Per completare una vendita con scostamento serve una motivazione e una conferma esplicita",
+          difference: inventoryDifference,
+          differenceType: inventoryDifference < 0 ? 'loss' : 'surplus'
+        });
+      }
+    }
+
     await db.transaction(async (tx) => {
+      const lockedSale = await tx.execute(sql`
+        SELECT status
+        FROM ${advancedSales}
+        WHERE id = ${parseInt(saleId)}
+        FOR UPDATE
+      `);
+      const lockedRows: any[] = (lockedSale as any).rows ?? lockedSale;
+      if (lockedRows[0]?.status !== 'draft') {
+        throw new Error("I sacchi possono essere modificati solo mentre la vendita è in bozza");
+      }
+
       // Elimina sacchi esistenti
       await tx.delete(bagAllocations)
         .where(sql`${bagAllocations.saleBagId} IN (
@@ -774,13 +1169,19 @@ export async function configureBags(req: Request, res: Response) {
       // Aggiorna totali vendita (converti grammi → kg)
       const totalBags = bags.length;
       const totalWeight = bags.reduce((sum, bag) => sum + ((bag.originalWeight - (bag.weightLoss || 0)) / 1000), 0);
-      const totalAnimals = bags.reduce((sum, bag) => sum + bag.animalCount, 0);
+      const savedTotalAnimals = bags.reduce((sum: number, bag: any) => sum + Number(bag.animalCount || 0), 0);
 
       await tx.update(advancedSales)
         .set({
           totalBags,
           totalWeight,
-          totalAnimals,
+          totalAnimals: savedTotalAnimals,
+          ...(inventoryDifference === null ? {} : {
+            inventoryDifference,
+            inventoryDifferenceType: inventoryDifference === 0 ? null : (inventoryDifference < 0 ? 'loss' : 'surplus'),
+            inventoryDifferenceReason: inventoryDifference === 0 ? null : differenceReason.trim(),
+            differenceConfirmed: inventoryDifference === 0 ? false : true
+          }),
           updatedAt: new Date()
         })
         .where(eq(advancedSales.id, parseInt(saleId)));
@@ -857,11 +1258,15 @@ export async function getAdvancedSale(req: Request, res: Response) {
       originalAnimalsPerKg: saleOperationsRef.originalAnimalsPerKg,
       includedInSale: saleOperationsRef.includedInSale,
       basketPhysicalNumber: baskets.physicalNumber,
-      date: operations.date
+      date: operations.date,
+      sizeId: operations.sizeId,
+      sizeCode: sizes.code,
+      sizeName: sizes.name
     })
     .from(saleOperationsRef)
     .leftJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
     .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
+    .leftJoin(sizes, eq(operations.sizeId, sizes.id))
     .where(eq(saleOperationsRef.advancedSaleId, parseInt(id)));
 
     res.json({
@@ -1152,6 +1557,7 @@ export async function updateSaleStatus(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const saleId = parseInt(id);
 
     if (!status || !['draft', 'confirmed', 'completed'].includes(status)) {
       return res.status(400).json({
@@ -1160,13 +1566,189 @@ export async function updateSaleStatus(req: Request, res: Response) {
       });
     }
 
-    const [updatedSale] = await db.update(advancedSales)
-      .set({
-        status,
-        updatedAt: new Date()
-      })
-      .where(eq(advancedSales.id, parseInt(id)))
-      .returning();
+    const updatedSale = await db.transaction(async (tx) => {
+      const lockedSaleResult = await tx.execute(sql`
+        SELECT *
+        FROM ${advancedSales}
+        WHERE id = ${saleId}
+        FOR UPDATE
+      `);
+      const lockedSaleRows: any[] = (lockedSaleResult as any).rows ?? lockedSaleResult;
+      const currentSale = lockedSaleRows[0];
+      if (!currentSale) return null;
+
+      const allowedTransitions: Record<string, string[]> = {
+        draft: ['confirmed'],
+        confirmed: ['completed'],
+        completed: []
+      };
+      if (
+        status !== currentSale.status &&
+        !(allowedTransitions[currentSale.status] || []).includes(status)
+      ) {
+        throw new Error(`Transizione di stato non consentita: ${currentSale.status} → ${status}`);
+      }
+
+      if (currentSale.source_type === 'manual' && currentSale.status === 'draft' && status !== 'draft') {
+        const bagTotals = await tx.select({
+          count: sql<number>`count(*)`,
+          totalAnimals: sql<number>`coalesce(sum(${saleBags.animalCount}), 0)`
+        })
+        .from(saleBags)
+        .where(eq(saleBags.advancedSaleId, saleId));
+
+        const bagCount = Number(bagTotals[0]?.count || 0);
+        const soldAnimals = Number(bagTotals[0]?.totalAnimals || 0);
+        const sourceAnimals = Number(currentSale.source_total_animals || 0);
+        const difference = soldAnimals - sourceAnimals;
+
+        if (bagCount === 0) {
+          throw new Error("Configura almeno un sacco prima di confermare la vendita");
+        }
+        if (difference !== 0 && (
+          currentSale.difference_confirmed !== true ||
+          Number(currentSale.inventory_difference) !== difference ||
+          !currentSale.inventory_difference_reason
+        )) {
+          throw new Error("Lo scostamento della vendita deve essere confermato e motivato prima della chiusura");
+        }
+
+        const sources = await tx.select({
+          operationId: saleOperationsRef.operationId,
+          basketId: saleOperationsRef.basketId,
+          originalAnimals: saleOperationsRef.originalAnimals,
+          cycleId: operations.cycleId,
+          lotId: cycles.lotId,
+          basketState: baskets.state,
+          currentCycleId: baskets.currentCycleId
+        })
+        .from(saleOperationsRef)
+        .innerJoin(operations, eq(saleOperationsRef.operationId, operations.id))
+        .innerJoin(cycles, eq(operations.cycleId, cycles.id))
+        .innerJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+        .where(eq(saleOperationsRef.advancedSaleId, saleId));
+
+        await tx.execute(sql`
+          SELECT id
+          FROM ${baskets}
+          WHERE id IN (${sql.join(sources.map(source => sql`${source.basketId}`), sql`, `)})
+          FOR UPDATE
+        `);
+
+        const allocationResult = await tx.execute(sql`
+          SELECT ba.source_basket_id, COALESCE(SUM(ba.allocated_animals), 0) AS sold_animals
+          FROM bag_allocations ba
+          JOIN sale_bags sb ON sb.id = ba.sale_bag_id
+          WHERE sb.advanced_sale_id = ${saleId}
+          GROUP BY ba.source_basket_id
+        `);
+        const allocationRows: any[] = (allocationResult as any).rows ?? allocationResult;
+        const soldByBasket = new Map<number, number>(
+          allocationRows.map(row => [Number(row.source_basket_id), Number(row.sold_animals)])
+        );
+
+        for (const source of sources) {
+          if (source.basketState !== 'active' || source.currentCycleId !== source.cycleId) {
+            throw new Error(`La cesta ${source.basketId} non è più nello stesso ciclo attivo`);
+          }
+
+          const compositions = await tx.select({
+            lotId: basketLotComposition.lotId,
+            animalCount: basketLotComposition.animalCount
+          })
+          .from(basketLotComposition)
+          .where(and(
+            eq(basketLotComposition.basketId, source.basketId),
+            eq(basketLotComposition.cycleId, source.cycleId)
+          ));
+
+          const lotShares = compositions.length > 0
+            ? compositions.map(item => ({ lotId: item.lotId, weight: item.animalCount }))
+            : source.lotId
+              ? [{ lotId: source.lotId, weight: Number(source.originalAnimals || 0) }]
+              : [];
+
+          if (lotShares.length === 0) {
+            throw new Error(`La cesta ${source.basketId} non ha un lotto tracciabile`);
+          }
+
+          const sourceCount = Number(source.originalAnimals || 0);
+          const basketSold = soldByBasket.get(source.basketId) || 0;
+          const basketLoss = Math.max(0, sourceCount - basketSold);
+          const weightTotal = lotShares.reduce((sum, item) => sum + item.weight, 0);
+
+          const allocate = (total: number) => {
+            let assigned = 0;
+            return lotShares.map((item, index) => {
+              const quantity = index === lotShares.length - 1
+                ? total - assigned
+                : Math.floor(total * (item.weight / weightTotal));
+              assigned += quantity;
+              return { lotId: item.lotId, quantity };
+            });
+          };
+
+          for (const item of allocate(basketSold)) {
+            if (item.quantity <= 0) continue;
+            await tx.insert(lotLedger).values({
+              date: currentSale.sale_date,
+              lotId: item.lotId,
+              type: 'sale',
+              quantity: String(item.quantity),
+              sourceCycleId: source.cycleId,
+              operationId: source.operationId,
+              basketId: source.basketId,
+              allocationMethod: 'proportional',
+              allocationBasis: {
+                advancedSaleId: saleId,
+                sourceAnimals: sourceCount,
+                soldAnimals: basketSold,
+                estimated: lotShares.length > 1 || difference !== 0
+              },
+              idempotencyKey: `advanced-sale:${saleId}:sale:${source.basketId}:${item.lotId}`,
+              notes: difference > 0
+                ? `Vendita manuale con eccedenza inventariale: ${currentSale.inventory_difference_reason}`
+                : `Vendita manuale ${currentSale.sale_number}`
+            }).onConflictDoNothing();
+          }
+
+          for (const item of allocate(basketLoss)) {
+            if (item.quantity <= 0) continue;
+            await tx.insert(lotLedger).values({
+              date: currentSale.sale_date,
+              lotId: item.lotId,
+              type: 'mortality',
+              quantity: String(item.quantity),
+              sourceCycleId: source.cycleId,
+              operationId: source.operationId,
+              basketId: source.basketId,
+              allocationMethod: 'proportional',
+              allocationBasis: {
+                advancedSaleId: saleId,
+                sourceAnimals: sourceCount,
+                soldAnimals: basketSold,
+                estimated: true
+              },
+              idempotencyKey: `advanced-sale:${saleId}:loss:${source.basketId}:${item.lotId}`,
+              notes: `Perdita presunta da chiusura vendita: ${currentSale.inventory_difference_reason}`
+            }).onConflictDoNothing();
+          }
+
+          await tx.update(cycles)
+            .set({ state: 'closed', endDate: currentSale.sale_date })
+            .where(eq(cycles.id, source.cycleId));
+          await tx.update(baskets)
+            .set({ state: 'available', currentCycleId: null, cycleCode: null })
+            .where(eq(baskets.id, source.basketId));
+        }
+      }
+
+      const [savedSale] = await tx.update(advancedSales)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(advancedSales.id, saleId))
+        .returning();
+      return savedSale;
+    });
 
     if (!updatedSale) {
       return res.status(404).json({
@@ -1175,17 +1757,19 @@ export async function updateSaleStatus(req: Request, res: Response) {
       });
     }
 
+    await invalidateAllCaches();
+
     res.json({
       success: true,
       message: "Stato vendita aggiornato con successo",
       sale: updatedSale
     });
-
-  } catch (error) {
+  } catch (error: any) {
     console.error("Errore nell'aggiornamento stato vendita:", error);
-    res.status(500).json({
+    const isBusinessError = /Configura|scostamento|cesta|lotto|Transizione/.test(error?.message || '');
+    res.status(isBusinessError ? 400 : 500).json({
       success: false,
-      error: "Errore nell'aggiornamento dello stato"
+      error: error?.message || "Errore nell'aggiornamento dello stato"
     });
   }
 }
@@ -1360,6 +1944,13 @@ export async function generateDDT(req: Request, res: Response) {
     }
 
     const saleData = sale[0];
+
+    if (saleData.status !== 'draft') {
+      return res.status(409).json({
+        success: false,
+        error: "Solo le vendite in bozza possono essere eliminate. Le vendite confermate richiedono uno storno esplicito."
+      });
+    }
 
     // Validazioni
     if (saleData.status !== 'confirmed') {

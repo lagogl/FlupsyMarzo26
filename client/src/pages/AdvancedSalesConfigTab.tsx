@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Trash2, Copy, AlertCircle, FileText } from "lucide-react";
+import { Plus, Trash2, Copy, AlertCircle, FileText, Package } from "lucide-react";
 
 interface BasketSupply {
   basketId: number;
@@ -44,7 +44,7 @@ interface Props {
   bagConfigs: BagConfiguration[];
   remainingByBasket: Record<number, number>;
   allocatedByBasket: Record<number, number>;
-  onAddBag: (basketId: number, animalCount: number, netWeightKg: number, identifier?: string, section?: string) => void;
+  onAddBag: (basketId: number | null, animalCount: number, netWeightKg: number, identifier?: string, section?: string) => void;
   onRemoveBag: (index: number) => void;
   onCloneBag: (index: number) => void;
   onUpdateBag: (index: number, updates: Partial<BagConfiguration>) => void;
@@ -52,6 +52,8 @@ interface Props {
   onGeneratePDF: () => void;
   isSaving: boolean;
   currentSaleId: number | null;
+  isAggregated?: boolean;
+  onRequestAutomaticGeneration?: () => void;
 }
 
 export default function AdvancedSalesConfigTab({
@@ -66,7 +68,9 @@ export default function AdvancedSalesConfigTab({
   onSave,
   onGeneratePDF,
   isSaving,
-  currentSaleId
+  currentSaleId,
+  isAggregated = false,
+  onRequestAutomaticGeneration
 }: Props) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedBasketId, setSelectedBasketId] = useState<number | null>(null);
@@ -74,13 +78,16 @@ export default function AdvancedSalesConfigTab({
   const [newBagWeightKg, setNewBagWeightKg] = useState("");
 
   const basketsArray = Object.values(baseSupplyByBasket);
-  const hasValidationErrors = Object.values(remainingByBasket).some(r => r < 0);
+  const hasValidationErrors = !isAggregated && Object.values(remainingByBasket).some(r => r < 0);
+  const totalAvailable = basketsArray.reduce((sum, supply) => sum + supply.totalAnimals, 0);
+  const totalAllocated = bagConfigs.reduce((sum, bag) => sum + bag.animalCount, 0);
+  const difference = totalAllocated - totalAvailable;
 
   const handleAddBagSubmit = () => {
-    if (!selectedBasketId || !newBagAnimals || !newBagWeightKg) return;
+    if ((!isAggregated && !selectedBasketId) || !newBagAnimals || !newBagWeightKg) return;
     
     onAddBag(
-      selectedBasketId,
+      isAggregated ? null : selectedBasketId,
       parseInt(newBagAnimals),
       parseFloat(newBagWeightKg)
     );
@@ -107,6 +114,17 @@ export default function AdvancedSalesConfigTab({
               Inserisci i dettagli per ogni sacco
             </p>
           </div>
+          <div className="flex gap-2">
+          {isAggregated && onRequestAutomaticGeneration && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={onRequestAutomaticGeneration}
+            >
+              <Package className="h-4 w-4" />
+              Un sacco per cesta
+            </Button>
+          )}
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild>
               <Button className="gap-2" data-testid="button-add-bag">
@@ -119,7 +137,7 @@ export default function AdvancedSalesConfigTab({
                 <DialogTitle>Aggiungi Nuovo Sacco</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <div>
+                {!isAggregated && <div>
                   <Label>Cestello Sorgente</Label>
                   <Select
                     value={selectedBasketId?.toString()}
@@ -141,7 +159,15 @@ export default function AdvancedSalesConfigTab({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </div>}
+                {isAggregated && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Il sacco attingerà automaticamente dal totale aggregato delle ceste selezionate.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div>
                   <Label>Animali Calcolati</Label>
                   <Input
@@ -167,7 +193,7 @@ export default function AdvancedSalesConfigTab({
               <DialogFooter>
                 <Button 
                   onClick={handleAddBagSubmit}
-                  disabled={!selectedBasketId || !newBagAnimals || !newBagWeightKg}
+                  disabled={(!isAggregated && !selectedBasketId) || !newBagAnimals || !newBagWeightKg}
                   data-testid="button-submit-bag"
                 >
                   Aggiungi
@@ -175,6 +201,7 @@ export default function AdvancedSalesConfigTab({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -189,12 +216,25 @@ export default function AdvancedSalesConfigTab({
           </Alert>
         )}
 
+        {isAggregated && (
+          <Alert variant={difference === 0 ? "default" : "destructive"}>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Origine: <strong>{totalAvailable.toLocaleString("it-IT")}</strong> animali ·
+              Sacchi: <strong>{totalAllocated.toLocaleString("it-IT")}</strong> ·
+              Scostamento: <strong>{difference > 0 ? "+" : ""}{difference.toLocaleString("it-IT")}</strong>
+              {difference < 0 && " (perdita/mortalità presunta da motivare)"}
+              {difference > 0 && " (eccedenza inventariale da motivare)"}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Cestelli Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {basketsArray.map((supply) => {
             const allocated = allocatedByBasket[supply.basketId] || 0;
             const remaining = remainingByBasket[supply.basketId] || 0;
-            const isOverAllocated = remaining < 0;
+            const isOverAllocated = !isAggregated && remaining < 0;
             
             return (
               <Card key={supply.basketId} className={isOverAllocated ? "border-red-500" : ""}>
@@ -215,7 +255,7 @@ export default function AdvancedSalesConfigTab({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Rimanenti:</span>
-                    <span className={`font-medium ${isOverAllocated ? 'text-red-500' : 'text-green-600'}`}>
+                      <span className={`font-medium ${remaining < 0 ? 'text-amber-600' : 'text-green-600'}`}>
                       {remaining.toLocaleString()}
                     </span>
                   </div>
@@ -244,9 +284,6 @@ export default function AdvancedSalesConfigTab({
                 {bagConfigs.map((bag, index) => {
                   const netWeightKg = (bag.originalWeight - bag.weightLoss) / 1000;
                   const animalsPerKg = calculateAnimalsPerKg(bag);
-                  const basketId = bag.allocations[0].sourceBasketId;
-                  const supply = baseSupplyByBasket[basketId];
-                  
                   return (
                     <TableRow key={index} data-testid={`bag-row-${index}`}>
                       <TableCell className="font-medium">{index + 1}</TableCell>
@@ -283,13 +320,7 @@ export default function AdvancedSalesConfigTab({
                           value={bag.animalCount}
                           onChange={(e) => {
                             const newCount = parseInt(e.target.value) || 0;
-                            onUpdateBag(index, { 
-                              animalCount: newCount,
-                              allocations: [{
-                                ...bag.allocations[0],
-                                allocatedAnimals: newCount
-                              }]
-                            });
+                            onUpdateBag(index, { animalCount: newCount });
                           }}
                           className="w-28"
                           data-testid={`input-animals-${index}`}

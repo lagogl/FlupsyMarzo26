@@ -14,7 +14,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2, Trash2, Users } from "lucide-react";
+import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2, Trash2, Users, Waves } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
@@ -76,11 +76,26 @@ interface BasketSupply {
   totalAnimals: number;
   totalWeightKg: number;
   animalsPerKg: number;
+  flupsyId?: number;
+  flupsyName?: string | null;
+  row?: string;
+  position?: number;
+  cycleId?: number;
+  date?: string;
+  compositions?: Array<{
+    lotId: number;
+    animalCount: number;
+    percentage: number;
+    lotSupplier?: string | null;
+    lotSupplierLotNumber?: string | null;
+  }>;
 }
 
 export default function AdvancedSales() {
   const [activeTab, setActiveTab] = useState("operations");
+  const [sourceMode, setSourceMode] = useState<"operations" | "baskets">("operations");
   const [selectedOperations, setSelectedOperations] = useState<number[]>([]);
+  const [selectedBaskets, setSelectedBaskets] = useState<number[]>([]);
   const [multiCustomerMode, setMultiCustomerMode] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [manualCustomer, setManualCustomer] = useState({ name: "", details: "" });
@@ -96,6 +111,9 @@ export default function AdvancedSales() {
   const [openCustomerCombobox, setOpenCustomerCombobox] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<{ id: number; saleNumber: string } | null>(null);
+  const [differenceDialogOpen, setDifferenceDialogOpen] = useState(false);
+  const [differenceReason, setDifferenceReason] = useState("");
+  const [automaticDialogOpen, setAutomaticDialogOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -141,6 +159,28 @@ export default function AdvancedSales() {
     queryFn: () => apiRequest(`/api/advanced-sales/operations?processed=${showHistorical ? 'all' : 'false'}`)
   });
 
+  const { data: availableBaskets, isLoading: loadingBaskets } = useQuery({
+    queryKey: ['/api/advanced-sales/baskets'],
+    queryFn: async () => {
+      const response = await apiRequest('/api/advanced-sales/baskets');
+      return {
+        ...response,
+        baskets: (response.baskets || []).map((basket: any) => ({
+          ...basket,
+          totalAnimals: basket.animalCount,
+          totalWeightKg: basket.totalWeight / 1000
+        }))
+      };
+    }
+  });
+  const selectedBasketRows = (availableBaskets?.baskets || []).filter(
+    (basket: BasketSupply) => selectedBaskets.includes(basket.basketId)
+  );
+  const selectedBasketAnimals = selectedBasketRows.reduce(
+    (sum: number, basket: BasketSupply) => sum + basket.totalAnimals,
+    0
+  );
+
   // Query per clienti
   const { data: customers, isLoading: loadingCustomers } = useQuery({
     queryKey: ['/api/advanced-sales/customers'],
@@ -168,12 +208,13 @@ export default function AdvancedSales() {
       setActiveTab("config");
       // Svuota le operazioni selezionate e aggiorna la lista disponibili
       setSelectedOperations([]);
+      setSelectedBaskets([]);
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/operations'] });
       
       // Cattura disponibilità cestelli
       const supply: Record<number, BasketSupply> = {};
-      response.operations.forEach((op: SaleOperation) => {
+      response.operations.forEach((op: any) => {
         supply[op.basketId] = {
           basketId: op.basketId,
           basketPhysicalNumber: op.basketPhysicalNumber,
@@ -182,7 +223,14 @@ export default function AdvancedSales() {
           sizeName: op.sizeName,
           totalAnimals: op.animalCount,
           totalWeightKg: op.totalWeight / 1000,
-          animalsPerKg: op.animalsPerKg
+          animalsPerKg: op.animalsPerKg,
+          flupsyId: op.flupsyId,
+          flupsyName: op.flupsyName,
+          row: op.row,
+          position: op.position,
+          cycleId: op.cycleId,
+          date: op.date,
+          compositions: op.compositions || []
         };
       });
       setBaseSupplyByBasket(supply);
@@ -201,8 +249,22 @@ export default function AdvancedSales() {
 
   // Mutation per configurare sacchi
   const configureBagsMutation = useMutation({
-    mutationFn: ({ saleId, bags }: { saleId: number; bags: BagConfiguration[] }) => 
-      apiRequest(`/api/advanced-sales/${saleId}/bags`, 'POST', { bags }),
+    mutationFn: ({
+      saleId,
+      bags,
+      confirmDifference,
+      differenceReason
+    }: {
+      saleId: number;
+      bags: BagConfiguration[];
+      confirmDifference?: boolean;
+      differenceReason?: string;
+    }) =>
+      apiRequest(`/api/advanced-sales/${saleId}/bags`, 'POST', {
+        bags,
+        confirmDifference,
+        differenceReason
+      }),
     onSuccess: () => {
       toast({ variant: "success", title: "Successo", description: "Configurazione sacchi completata" });
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
@@ -258,6 +320,7 @@ export default function AdvancedSales() {
     if (currentSaleId && activeTab === "config") {
       apiRequest(`/api/advanced-sales/${currentSaleId}`)
         .then((response: any) => {
+          setSourceMode(response.sale?.sourceType === "manual" ? "baskets" : "operations");
           // Carica sacchi esistenti
           if (response.bags && response.bags.length > 0) {
             const loadedBags: BagConfiguration[] = response.bags.map((bag: any) => ({
@@ -290,11 +353,18 @@ export default function AdvancedSales() {
                 basketId: op.basketId,
                 basketPhysicalNumber: op.basketPhysicalNumber,
                 operationId: op.operationId,
-                sizeCode: "", // Non disponibile in questo endpoint
-                sizeName: "",
+                sizeCode: op.sizeCode || "",
+                sizeName: op.sizeName || "",
                 totalAnimals: op.originalAnimals,
                 totalWeightKg: op.originalWeight / 1000,
-                animalsPerKg: op.originalAnimalsPerKg
+                animalsPerKg: op.originalAnimalsPerKg,
+                flupsyId: op.flupsyId,
+                flupsyName: op.flupsyName,
+                row: op.row,
+                position: op.position,
+                cycleId: op.cycleId,
+                date: op.date,
+                compositions: op.compositions || []
               };
             });
             setBaseSupplyByBasket(supply);
@@ -319,11 +389,23 @@ export default function AdvancedSales() {
     }
   };
 
+  const handleBasketSelect = (basketId: number, checked: boolean) => {
+    setSelectedBaskets(prev => checked
+      ? [...prev, basketId]
+      : prev.filter(id => id !== basketId));
+  };
+
+  const selectedSourceCount = sourceMode === "operations"
+    ? selectedOperations.length
+    : selectedBaskets.length;
+
   const handleCreateSale = () => {
-    if (selectedOperations.length === 0) {
+    if (selectedSourceCount === 0) {
       toast({
         title: "Errore",
-        description: "Seleziona almeno un'operazione di vendita",
+        description: sourceMode === "operations"
+          ? "Seleziona almeno un'operazione di vendita"
+          : "Seleziona almeno una cesta attiva",
         variant: "destructive"
       });
       return;
@@ -372,7 +454,10 @@ export default function AdvancedSales() {
       : selectedCustomer;
 
     createSaleMutation.mutate({
-      operationIds: selectedOperations,
+      sourceType: sourceMode === "baskets" ? "manual" : "operation",
+      ...(sourceMode === "baskets"
+        ? { basketIds: selectedBaskets }
+        : { operationIds: selectedOperations }),
       companyId: selectedCompanyId,
       customerData,
       saleDate,
@@ -380,13 +465,81 @@ export default function AdvancedSales() {
     });
   };
 
+  const buildAggregateAllocations = (
+    animalCount: number,
+    originalWeightGrams: number,
+    capacityByBasket: Record<number, number>
+  ) => {
+    let remainingAnimals = animalCount;
+    const allocations: BagConfiguration["allocations"] = [];
+    const supplies = Object.values(baseSupplyByBasket)
+      .filter(supply => (capacityByBasket[supply.basketId] || 0) > 0)
+      .sort((a, b) => a.basketPhysicalNumber - b.basketPhysicalNumber);
+
+    for (const supply of supplies) {
+      if (remainingAnimals <= 0) break;
+      const allocatedAnimals = Math.min(
+        remainingAnimals,
+        capacityByBasket[supply.basketId] || 0
+      );
+      if (allocatedAnimals <= 0) continue;
+      allocations.push({
+        sourceOperationId: supply.operationId,
+        sourceBasketId: supply.basketId,
+        allocatedAnimals,
+        allocatedWeight: animalCount > 0
+          ? originalWeightGrams * (allocatedAnimals / animalCount)
+          : 0,
+        sourceAnimalsPerKg: supply.animalsPerKg,
+        sourceSizeCode: supply.sizeCode
+      });
+      remainingAnimals -= allocatedAnimals;
+    }
+
+    // Un'eccedenza confermata viene attribuita proporzionalmente alle ceste
+    // perché non è fisicamente distinguibile nel pool aggregato.
+    if (remainingAnimals > 0 && sourceMode === "baskets") {
+      const allSupplies = Object.values(baseSupplyByBasket);
+      const sourceTotal = allSupplies.reduce((sum, supply) => sum + supply.totalAnimals, 0);
+      let assignedExtra = 0;
+      allSupplies.forEach((supply, index) => {
+        const extra = index === allSupplies.length - 1
+          ? remainingAnimals - assignedExtra
+          : Math.floor(remainingAnimals * (supply.totalAnimals / sourceTotal));
+        assignedExtra += extra;
+        if (extra <= 0) return;
+        const existing = allocations.find(item => item.sourceBasketId === supply.basketId);
+        if (existing) {
+          existing.allocatedAnimals += extra;
+        } else {
+          allocations.push({
+            sourceOperationId: supply.operationId,
+            sourceBasketId: supply.basketId,
+            allocatedAnimals: extra,
+            allocatedWeight: 0,
+            sourceAnimalsPerKg: supply.animalsPerKg,
+            sourceSizeCode: supply.sizeCode
+          });
+        }
+      });
+      remainingAnimals = 0;
+    }
+
+    for (const allocation of allocations) {
+      allocation.allocatedWeight = animalCount > 0
+        ? originalWeightGrams * (allocation.allocatedAnimals / animalCount)
+        : 0;
+    }
+    return remainingAnimals === 0 ? allocations : null;
+  };
+
   // Aggiunge un nuovo sacco
-  const addBag = (basketId: number, animalCount: number, netWeightKg: number, identifier?: string, section?: string) => {
-    const supply = baseSupplyByBasket[basketId];
-    if (!supply) return;
+  const addBag = (basketId: number | null, animalCount: number, netWeightKg: number, identifier?: string, section?: string) => {
+    const supply = basketId ? baseSupplyByBasket[basketId] : Object.values(baseSupplyByBasket)[0];
+    if (!supply || animalCount <= 0 || netWeightKg <= 0) return;
 
     // Validazione globale: verifica che ci siano abbastanza animali disponibili nel totale dei cestelli selezionati
-    if (animalCount > totalGlobalRemaining) {
+    if (sourceMode === "operations" && animalCount > totalGlobalRemaining) {
       toast({
         title: "Errore",
         description: `Solo ${totalGlobalRemaining.toLocaleString()} animali disponibili in totale dai cestelli selezionati`,
@@ -396,6 +549,33 @@ export default function AdvancedSales() {
     }
 
     const originalWeightGrams = netWeightKg * 1000;
+    const allocations = sourceMode === "baskets"
+      ? buildAggregateAllocations(animalCount, originalWeightGrams, remainingByBasket)
+      : [{
+          sourceOperationId: supply.operationId,
+          sourceBasketId: supply.basketId,
+          allocatedAnimals: animalCount,
+          allocatedWeight: originalWeightGrams,
+          sourceAnimalsPerKg: supply.animalsPerKg,
+          sourceSizeCode: supply.sizeCode
+        }];
+
+    if (!allocations) {
+      toast({
+        title: "Errore",
+        description: "Impossibile allocare il sacco sul totale delle ceste selezionate",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const allocatedSourceWeightKg = allocations.reduce(
+      (sum, allocation) => sum + allocation.allocatedAnimals / allocation.sourceAnimalsPerKg,
+      0
+    );
+    const weightedAnimalsPerKg = allocatedSourceWeightKg > 0
+      ? animalCount / allocatedSourceWeightKg
+      : supply.animalsPerKg;
     
     const newBag: BagConfiguration = {
       sizeCode: supply.sizeCode,
@@ -403,16 +583,9 @@ export default function AdvancedSales() {
       originalWeight: originalWeightGrams,
       weightLoss: 0,
       wastePercentage: 0,
-      originalAnimalsPerKg: supply.animalsPerKg,
+      originalAnimalsPerKg: weightedAnimalsPerKg,
       notes: [identifier, section].filter(Boolean).join(' - ') || undefined,
-      allocations: [{
-        sourceOperationId: supply.operationId,
-        sourceBasketId: basketId,
-        allocatedAnimals: animalCount,
-        allocatedWeight: originalWeightGrams,
-        sourceAnimalsPerKg: supply.animalsPerKg,
-        sourceSizeCode: supply.sizeCode
-      }]
+      allocations
     };
 
     setBagConfigs([...bagConfigs, newBag]);
@@ -431,7 +604,7 @@ export default function AdvancedSales() {
     const bag = bagConfigs[bagIndex];
     
     // Validazione globale: verifica che ci siano abbastanza animali disponibili nel totale
-    if (bag.animalCount > totalGlobalRemaining) {
+    if (sourceMode === "operations" && bag.animalCount > totalGlobalRemaining) {
       toast({
         title: "Errore",
         description: `Solo ${totalGlobalRemaining.toLocaleString()} animali disponibili in totale per clonare questo sacco`,
@@ -440,7 +613,10 @@ export default function AdvancedSales() {
       return;
     }
 
-    setBagConfigs([...bagConfigs, { ...bag }]);
+    setBagConfigs([...bagConfigs, {
+      ...bag,
+      allocations: bag.allocations.map(allocation => ({ ...allocation }))
+    }]);
     toast({ variant: "success", title: "Successo", description: "Sacco clonato" });
   };
 
@@ -449,9 +625,31 @@ export default function AdvancedSales() {
     const newConfigs = [...bagConfigs];
     newConfigs[bagIndex] = { ...newConfigs[bagIndex], ...updates };
     
-    // Se cambiano gli animali, aggiorna anche l'allocazione
+    // Nella modalità aggregata il sacco può attingere da più ceste.
     if (updates.animalCount !== undefined) {
-      newConfigs[bagIndex].allocations[0].allocatedAnimals = updates.animalCount;
+      if (sourceMode === "baskets") {
+        const capacityIncludingCurrent: Record<number, number> = { ...remainingByBasket };
+        for (const allocation of bagConfigs[bagIndex].allocations) {
+          capacityIncludingCurrent[allocation.sourceBasketId] =
+            (capacityIncludingCurrent[allocation.sourceBasketId] || 0) + allocation.allocatedAnimals;
+        }
+        const allocations = buildAggregateAllocations(
+          updates.animalCount,
+          newConfigs[bagIndex].originalWeight,
+          capacityIncludingCurrent
+        );
+        if (!allocations) {
+          toast({
+            title: "Disponibilità insufficiente",
+            description: "Il nuovo totale del sacco supera il pool delle ceste selezionate",
+            variant: "destructive"
+          });
+          return;
+        }
+        newConfigs[bagIndex].allocations = allocations;
+      } else {
+        newConfigs[bagIndex].allocations[0].allocatedAnimals = updates.animalCount;
+      }
     }
     
     setBagConfigs(newConfigs);
@@ -487,9 +685,57 @@ export default function AdvancedSales() {
   const saveBagConfiguration = () => {
     if (!currentSaleId || bagConfigs.length === 0) return;
 
+    const difference = totalGlobalAllocated - totalGlobalAvailable;
+    if (sourceMode === "baskets" && difference !== 0) {
+      setDifferenceDialogOpen(true);
+      return;
+    }
+
     configureBagsMutation.mutate({
       saleId: currentSaleId,
       bags: bagConfigs
+    });
+  };
+
+  const confirmBagConfigurationDifference = () => {
+    if (!currentSaleId || differenceReason.trim().length < 3) return;
+    configureBagsMutation.mutate({
+      saleId: currentSaleId,
+      bags: bagConfigs,
+      confirmDifference: true,
+      differenceReason: differenceReason.trim()
+    }, {
+      onSuccess: () => {
+        setDifferenceDialogOpen(false);
+        setDifferenceReason("");
+      }
+    });
+  };
+
+  const generateAutomaticBags = () => {
+    const automaticBags = Object.values(baseSupplyByBasket).map((supply): BagConfiguration => ({
+      sizeCode: supply.sizeCode,
+      animalCount: supply.totalAnimals,
+      originalWeight: supply.totalWeightKg * 1000,
+      weightLoss: 0,
+      wastePercentage: 0,
+      originalAnimalsPerKg: supply.animalsPerKg,
+      notes: `Cesta ${supply.basketPhysicalNumber}${supply.flupsyName ? ` - ${supply.flupsyName}` : ''}`,
+      allocations: [{
+        sourceOperationId: supply.operationId,
+        sourceBasketId: supply.basketId,
+        allocatedAnimals: supply.totalAnimals,
+        allocatedWeight: supply.totalWeightKg * 1000,
+        sourceAnimalsPerKg: supply.animalsPerKg,
+        sourceSizeCode: supply.sizeCode
+      }]
+    }));
+    setBagConfigs(automaticBags);
+    setAutomaticDialogOpen(false);
+    toast({
+      variant: "success",
+      title: "Sacchi generati",
+      description: `Creato un sacco completo per ciascuna delle ${automaticBags.length} ceste`
     });
   };
 
@@ -712,6 +958,115 @@ export default function AdvancedSales() {
         </TabsContent>
 
         <TabsContent value="new" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Origine della vendita</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              <Button
+                type="button"
+                variant={sourceMode === "operations" ? "default" : "outline"}
+                className="h-auto justify-start gap-3 py-4"
+                onClick={() => {
+                  setSourceMode("operations");
+                  setSelectedBaskets([]);
+                }}
+              >
+                <Package className="h-5 w-5" />
+                <span className="text-left">
+                  <span className="block font-semibold">Da Vagliatura con Mappa</span>
+                  <span className="block text-xs opacity-80">Usa le operazioni di vendita già generate</span>
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant={sourceMode === "baskets" ? "default" : "outline"}
+                className="h-auto justify-start gap-3 py-4"
+                onClick={() => {
+                  setSourceMode("baskets");
+                  setSelectedOperations([]);
+                  setMultiCustomerMode(false);
+                }}
+              >
+                <Waves className="h-5 w-5" />
+                <span className="text-left">
+                  <span className="block font-semibold">Ceste selezionate manualmente</span>
+                  <span className="block text-xs opacity-80">Vende tutto il contenuto delle ceste scelte</span>
+                </span>
+              </Button>
+            </CardContent>
+          </Card>
+
+          {sourceMode === "baskets" && (
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Ceste attive vendibili</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {selectedBaskets.length} ceste selezionate · {selectedBasketAnimals.toLocaleString("it-IT")} animali totali
+                    </p>
+                  </div>
+                  <Badge variant="secondary">Vendita dell’intera cesta</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingBaskets ? (
+                  <div>Caricamento ceste...</div>
+                ) : availableBaskets?.baskets?.length ? (
+                  <div className="max-h-[420px] overflow-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12"></TableHead>
+                          <TableHead>FLUPSY</TableHead>
+                          <TableHead>Cesta</TableHead>
+                          <TableHead>Posizione</TableHead>
+                          <TableHead>Ultima misura</TableHead>
+                          <TableHead>Taglia</TableHead>
+                          <TableHead className="text-right">Animali</TableHead>
+                          <TableHead>Lotti</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {availableBaskets.baskets.map((basket: BasketSupply) => (
+                          <TableRow key={basket.basketId}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedBaskets.includes(basket.basketId)}
+                                onCheckedChange={(checked) => handleBasketSelect(basket.basketId, checked === true)}
+                              />
+                            </TableCell>
+                            <TableCell>{basket.flupsyName || `#${basket.flupsyId}`}</TableCell>
+                            <TableCell className="font-medium">
+                              #{basket.basketPhysicalNumber}
+                              <span className="ml-1 text-xs text-muted-foreground">ID {basket.basketId}</span>
+                            </TableCell>
+                            <TableCell>{basket.row} · {basket.position}</TableCell>
+                            <TableCell>{basket.date ? format(new Date(basket.date), "dd/MM/yyyy") : "—"}</TableCell>
+                            <TableCell><Badge variant="outline">{basket.sizeCode}</Badge></TableCell>
+                            <TableCell className="text-right font-medium">{basket.totalAnimals.toLocaleString("it-IT")}</TableCell>
+                            <TableCell className="max-w-64 text-xs">
+                              {basket.compositions?.length
+                                ? basket.compositions.map(item =>
+                                    item.lotSupplierLotNumber || `Lotto ${item.lotId}`
+                                  ).join(", ")
+                                : "Lotto del ciclo"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed p-8 text-center text-muted-foreground">
+                    Nessuna cesta attiva con misura valida è disponibile.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Barra modalità — sempre visibile in cima */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 py-3">
@@ -725,6 +1080,7 @@ export default function AdvancedSales() {
                   id="multi-mode-toggle"
                   checked={multiCustomerMode}
                   onCheckedChange={setMultiCustomerMode}
+                  disabled={sourceMode === "baskets"}
                   data-testid="switch-multi-customer-mode"
                 />
               </div>
@@ -732,7 +1088,7 @@ export default function AdvancedSales() {
           </Card>
 
           {/* Multi-cliente: form reso FUORI dalla card per permettere lo sticky */}
-          {multiCustomerMode ? (
+          {multiCustomerMode && sourceMode === "operations" ? (
             <MultiCustomerSaleForm
               selectedOperations={(availableOperations?.operations || []).filter(
                 (op: SaleOperation) => selectedOperations.includes(op.operationId)
@@ -751,9 +1107,11 @@ export default function AdvancedSales() {
             <CardContent className="space-y-4 pt-4">
               <>
               <div className="space-y-2">
-                <Label>Operazioni Selezionate</Label>
+                <Label>{sourceMode === "operations" ? "Operazioni Selezionate" : "Ceste Selezionate"}</Label>
                 <div className="text-sm text-muted-foreground">
-                  {selectedOperations.length} operazioni selezionate
+                  {sourceMode === "operations"
+                    ? `${selectedOperations.length} operazioni selezionate`
+                    : `${selectedBaskets.length} ceste · ${selectedBasketAnimals.toLocaleString("it-IT")} animali`}
                 </div>
               </div>
 
@@ -878,7 +1236,7 @@ export default function AdvancedSales() {
 
               <Button 
                 onClick={handleCreateSale}
-                disabled={selectedOperations.length === 0 || createSaleMutation.isPending}
+                disabled={selectedSourceCount === 0 || createSaleMutation.isPending}
                 className="w-full"
               >
                 {createSaleMutation.isPending ? "Creazione..." : "Crea Vendita"}
@@ -903,6 +1261,8 @@ export default function AdvancedSales() {
             onGeneratePDF={() => currentSaleId && handleGeneratePDF(currentSaleId)}
             isSaving={configureBagsMutation.isPending}
             currentSaleId={currentSaleId}
+            isAggregated={sourceMode === "baskets"}
+            onRequestAutomaticGeneration={() => setAutomaticDialogOpen(true)}
           />
         </TabsContent>
 
@@ -1168,6 +1528,69 @@ export default function AdvancedSales() {
               ) : (
                 <><Trash2 className="h-4 w-4 mr-1" />Elimina definitivamente</>
               )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={automaticDialogOpen} onOpenChange={setAutomaticDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generare un sacco completo per ogni cesta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              La configurazione corrente verrà sostituita con {Object.keys(baseSupplyByBasket).length} sacchi,
+              ciascuno contenente tutti gli animali e il peso della relativa cesta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={generateAutomaticBags}>
+              Conferma generazione
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={differenceDialogOpen} onOpenChange={setDifferenceDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {totalGlobalAllocated < totalGlobalAvailable
+                ? "Confermare la perdita inventariale?"
+                : "Confermare l’eccedenza inventariale?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>
+                  Origine: <strong>{totalGlobalAvailable.toLocaleString("it-IT")}</strong> animali.
+                  Sacchi: <strong>{totalGlobalAllocated.toLocaleString("it-IT")}</strong>.
+                  Scostamento: <strong>{totalGlobalAllocated - totalGlobalAvailable > 0 ? "+" : ""}
+                    {(totalGlobalAllocated - totalGlobalAvailable).toLocaleString("it-IT")}</strong>
+                    {" "}({totalGlobalAvailable > 0
+                      ? (((totalGlobalAllocated - totalGlobalAvailable) / totalGlobalAvailable) * 100).toLocaleString("it-IT", { maximumFractionDigits: 2 })
+                      : "0"}%).
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="difference-reason">Motivazione obbligatoria</Label>
+                  <Textarea
+                    id="difference-reason"
+                    value={differenceReason}
+                    onChange={(event) => setDifferenceReason(event.target.value)}
+                    placeholder={totalGlobalAllocated < totalGlobalAvailable
+                      ? "Es. perdita rilevata durante la preparazione"
+                      : "Es. conteggio fisico superiore alla stima registrata"}
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Correggi i sacchi</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBagConfigurationDifference}
+              disabled={differenceReason.trim().length < 3 || configureBagsMutation.isPending}
+            >
+              Conferma e registra
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

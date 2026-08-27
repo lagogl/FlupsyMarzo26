@@ -1281,6 +1281,12 @@ export type InsertExternalDeliveryDetailSync = z.infer<typeof insertExternalDeli
 export const advancedSales = pgTable("advanced_sales", {
   id: serial("id").primaryKey(),
   saleNumber: text("sale_number").notNull().unique(), // Numero vendita progressivo
+  sourceType: text("source_type").notNull().default("operation"), // operation = vagliatura, manual = ceste selezionate
+  sourceTotalAnimals: integer("source_total_animals"), // Fotografia della disponibilità al momento della vendita
+  inventoryDifference: integer("inventory_difference"), // Sacchi - origine: negativo=perdita, positivo=eccedenza
+  inventoryDifferenceType: text("inventory_difference_type"), // loss | surplus
+  inventoryDifferenceReason: text("inventory_difference_reason"),
+  differenceConfirmed: boolean("difference_confirmed").notNull().default(false),
   customerId: integer("customer_id"), // Riferimento cliente (opzionale)
   customerName: text("customer_name"), // Nome cliente per vendite senza anagrafica
   customerDetails: jsonb("customer_details"), // Dati aziendali cliente

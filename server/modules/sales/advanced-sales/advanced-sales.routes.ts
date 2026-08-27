@@ -5,6 +5,8 @@ const router = Router();
 
 // Operazioni vendita disponibili
 router.get('/operations', AdvancedSalesController.getAvailableSaleOperations);
+// Ceste attive vendibili selezionabili manualmente
+router.get('/baskets', AdvancedSalesController.getAvailableSaleBaskets);
 
 // Ordini disponibili per vendite
 router.get('/orders', AdvancedSalesController.getAvailableOrders);
