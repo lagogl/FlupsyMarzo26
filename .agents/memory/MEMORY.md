@@ -21,3 +21,4 @@
 - [Session auth & requireAuth](session-auth.md) — pg-backed express-session; protect sensitive routers with authModule.requireAuth; most /api/* still open and /api/register is public.
 - [NEON vs DATABASE_URL routing](neon-database-routing.md) — app deve usare NEON_DATABASE_URL (dati reali); DATABASE_URL è il Replit postgres fermo a giugno 2026.
 - [Assistente AI tool SQL](ai-chat-sql-tool.md) — read-only imposto dal DB (txn READ ONLY + timeout + LIMIT esterno), mai solo regex; size_id origini spesso NULL → fasce animals_per_kg.
+- [Storno vendite e DDT](sales-reversal-ddt-boundary.md) — una vendita manuale è stornabile solo prima di generare il DDT; la generazione può già contabilizzare consegne esterne.

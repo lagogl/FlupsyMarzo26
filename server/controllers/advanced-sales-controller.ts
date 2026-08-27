@@ -42,6 +42,13 @@ import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
 import { dbEsterno, queryEsterno, isDbEsternoAvailable } from "../db-esterno";
 import { consegneCondivise, ordiniCondivisi } from "../schema-esterno";
+import {
+  allocateIntegerByWeight,
+  buildCycleCode,
+  getRestoreBlockReason,
+  validateBasketAllocationLimits,
+  validateManualSaleBags
+} from "../services/manual-sale-accounting";
 
 /**
  * Ottiene il prossimo numero DDT disponibile leggendo SEMPRE l'ultimo DDT da
@@ -1037,43 +1044,17 @@ export async function configureBags(req: Request, res: Response) {
 
     const allowedSources = await db.select({
       operationId: saleOperationsRef.operationId,
-      basketId: saleOperationsRef.basketId
+      basketId: saleOperationsRef.basketId,
+      originalAnimals: saleOperationsRef.originalAnimals
     })
     .from(saleOperationsRef)
     .where(eq(saleOperationsRef.advancedSaleId, parseInt(saleId)));
-    const allowedSourceKeys = new Set(
-      allowedSources.map(source => `${source.operationId}:${source.basketId}`)
-    );
-
-    for (const [index, bag] of bags.entries()) {
-      const bagAnimalCount = Number(bag.animalCount);
-      const allocations = Array.isArray(bag.allocations) ? bag.allocations : [];
-      const allocatedTotal = allocations.reduce(
-        (sum: number, allocation: any) => sum + Number(allocation.allocatedAnimals || 0),
-        0
-      );
-      if (!Number.isInteger(bagAnimalCount) || bagAnimalCount <= 0) {
-        return res.status(400).json({ success: false, error: `Il sacco ${index + 1} ha un numero animali non valido` });
-      }
-      if (allocations.length === 0 || allocatedTotal !== bagAnimalCount) {
-        return res.status(400).json({
-          success: false,
-          error: `Le allocazioni del sacco ${index + 1} non corrispondono al totale animali`
-        });
-      }
-      for (const allocation of allocations) {
-        const sourceKey = `${Number(allocation.sourceOperationId)}:${Number(allocation.sourceBasketId)}`;
-        if (
-          !allowedSourceKeys.has(sourceKey) ||
-          !Number.isInteger(Number(allocation.allocatedAnimals)) ||
-          Number(allocation.allocatedAnimals) <= 0
-        ) {
-          return res.status(400).json({
-            success: false,
-            error: `Il sacco ${index + 1} contiene un'allocazione non valida o estranea alla vendita`
-          });
-        }
-      }
+    const bagValidationError = validateManualSaleBags(bags, allowedSources);
+    if (bagValidationError) {
+      return res.status(400).json({
+        success: false,
+        error: bagValidationError
+      });
     }
 
     const totalAnimals = bags.reduce((sum: number, bag: any) => sum + Number(bag.animalCount || 0), 0);
@@ -1083,6 +1064,10 @@ export async function configureBags(req: Request, res: Response) {
     const inventoryDifference = sourceTotalAnimals === null
       ? null
       : totalAnimals - sourceTotalAnimals;
+    const basketLimitError = validateBasketAllocationLimits(bags, allowedSources, inventoryDifference || 0);
+    if (basketLimitError) {
+      return res.status(400).json({ success: false, error: basketLimitError });
+    }
 
     if (inventoryDifference !== null && inventoryDifference !== 0) {
       if (!confirmDifference || typeof differenceReason !== 'string' || differenceReason.trim().length < 3) {
@@ -1675,20 +1660,7 @@ export async function updateSaleStatus(req: Request, res: Response) {
           const sourceCount = Number(source.originalAnimals || 0);
           const basketSold = soldByBasket.get(source.basketId) || 0;
           const basketLoss = Math.max(0, sourceCount - basketSold);
-          const weightTotal = lotShares.reduce((sum, item) => sum + item.weight, 0);
-
-          const allocate = (total: number) => {
-            let assigned = 0;
-            return lotShares.map((item, index) => {
-              const quantity = index === lotShares.length - 1
-                ? total - assigned
-                : Math.floor(total * (item.weight / weightTotal));
-              assigned += quantity;
-              return { lotId: item.lotId, quantity };
-            });
-          };
-
-          for (const item of allocate(basketSold)) {
+          for (const item of allocateIntegerByWeight(basketSold, lotShares)) {
             if (item.quantity <= 0) continue;
             await tx.insert(lotLedger).values({
               date: currentSale.sale_date,
@@ -1712,7 +1684,7 @@ export async function updateSaleStatus(req: Request, res: Response) {
             }).onConflictDoNothing();
           }
 
-          for (const item of allocate(basketLoss)) {
+          for (const item of allocateIntegerByWeight(basketLoss, lotShares)) {
             if (item.quantity <= 0) continue;
             await tx.insert(lotLedger).values({
               date: currentSale.sale_date,
@@ -1945,13 +1917,6 @@ export async function generateDDT(req: Request, res: Response) {
 
     const saleData = sale[0];
 
-    if (saleData.status !== 'draft') {
-      return res.status(409).json({
-        success: false,
-        error: "Solo le vendite in bozza possono essere eliminate. Le vendite confermate richiedono uno storno esplicito."
-      });
-    }
-
     // Validazioni
     if (saleData.status !== 'confirmed') {
       return res.status(400).json({
@@ -1966,25 +1931,39 @@ export async function generateDDT(req: Request, res: Response) {
         error: "DDT già inviato per questa vendita"
       });
     }
-
-    if (!saleData.customerId) {
-      return res.status(400).json({
-        success: false,
-        error: "Cliente non specificato per la vendita"
-      });
+    // Cliente anagrafico oppure snapshot inserito manualmente nella vendita.
+    let cliente: any;
+    if (saleData.customerId) {
+      const clienteResult = await db.select().from(clienti).where(eq(clienti.id, saleData.customerId)).limit(1);
+      if (clienteResult.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "Cliente non trovato"
+        });
+      }
+      cliente = clienteResult[0];
+    } else {
+      const snapshot = typeof saleData.customerDetails === 'string'
+        ? JSON.parse(saleData.customerDetails)
+        : saleData.customerDetails;
+      if (!saleData.customerName && !snapshot?.name) {
+        return res.status(400).json({
+          success: false,
+          error: "Cliente non specificato per la vendita"
+        });
+      }
+      cliente = {
+        id: null,
+        denominazione: saleData.customerName || snapshot.name,
+        indirizzo: snapshot?.address || snapshot?.indirizzo || snapshot?.details || '',
+        comune: snapshot?.city || snapshot?.comune || '',
+        cap: snapshot?.cap || '',
+        provincia: snapshot?.province || snapshot?.provincia || '',
+        piva: snapshot?.vatNumber || snapshot?.piva || '',
+        codiceFiscale: snapshot?.taxCode || snapshot?.codiceFiscale || '',
+        paese: snapshot?.country || snapshot?.paese || 'Italia'
+      };
     }
-
-    // Recupera cliente
-    const clienteResult = await db.select().from(clienti).where(eq(clienti.id, saleData.customerId)).limit(1);
-    
-    if (clienteResult.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "Cliente non trovato"
-      });
-    }
-
-    const cliente = clienteResult[0];
 
     // Recupera sacchi e allocazioni
     const bags = await db.select({
@@ -2019,6 +1998,21 @@ export async function generateDDT(req: Request, res: Response) {
       });
     }
 
+    const [claimedSale] = await db.update(advancedSales)
+      .set({ ddtStatus: 'generazione', updatedAt: new Date() })
+      .where(and(
+        eq(advancedSales.id, parseInt(id)),
+        eq(advancedSales.status, 'confirmed'),
+        eq(advancedSales.ddtStatus, 'nessuno')
+      ))
+      .returning();
+    if (!claimedSale) {
+      return res.status(409).json({
+        success: false,
+        error: "Il DDT è già presente, in generazione o la vendita non è più confermata"
+      });
+    }
+
     // Ottieni il prossimo numero DDT disponibile da FIC per questa azienda
     const numeroDDT = await getNextAvailableDDTNumber(companyId);
     let fiscalData: any = null;
@@ -2039,7 +2033,7 @@ export async function generateDDT(req: Request, res: Response) {
     const [ddtCreato] = await db.insert(ddt).values({
       numero: numeroDDT,
       data: saleData.saleDate,
-      clienteId: cliente.id,
+      clienteId: cliente.id || null,
       // Snapshot immutabile cliente
       clienteNome: cliente.denominazione,
       clienteIndirizzo: cliente.indirizzo !== 'N/A' ? cliente.indirizzo : '',
@@ -2166,6 +2160,13 @@ export async function generateDDT(req: Request, res: Response) {
 
   } catch (error) {
     console.error("Errore nella generazione DDT:", error);
+    const saleId = parseInt(req.params.id);
+    if (Number.isInteger(saleId)) {
+      await db.update(advancedSales)
+        .set({ ddtStatus: 'nessuno', updatedAt: new Date() })
+        .where(and(eq(advancedSales.id, saleId), eq(advancedSales.ddtStatus, 'generazione')))
+        .catch(() => {});
+    }
     res.status(500).json({
       success: false,
       error: "Errore nella generazione del DDT"
@@ -2837,6 +2838,17 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       });
     }
 
+    const [claimedDdt] = await db.update(ddt)
+      .set({ ddtStato: 'invio', updatedAt: new Date() })
+      .where(and(eq(ddt.id, parseInt(ddtId)), eq(ddt.ddtStato, 'locale')))
+      .returning();
+    if (!claimedDdt) {
+      return res.status(409).json({
+        success: false,
+        error: "Il DDT è già in invio, già inviato o non è più disponibile"
+      });
+    }
+
     console.log(`📤 Invio DDT a Fatture in Cloud - Company ID: ${companyId} (${companyId === 1017299 ? 'Ecotapes' : companyId === 13263 ? 'Delta Futuro' : 'Altro'})`);
 
     // Recupera righe DDT
@@ -2870,28 +2882,24 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       }
     };
     
-    // ── CANALE FCLOUD: indipendente da FIC ───────────────────────────────────
-    // Parte subito, senza aspettare l'esito FIC.
-    // Quando FIC verrà disattivato, questo blocco continuerà a funzionare da solo.
-    sendDDTToFCloud(parseInt(ddtId))
-      .then(async (fcloudResult) => {
-        if (fcloudResult.success && fcloudResult.fcloudDdtId) {
-          await db.update(ddt).set({
-            fcloudDdtId: fcloudResult.fcloudDdtId,
-            fcloudDdtNumero: fcloudResult.fcloudNumero,
-            fcloudStato: 'inviato',
-            updatedAt: new Date()
-          }).where(eq(ddt.id, parseInt(ddtId)));
-          console.log(`✅ FCloud: DDT ${ddtId} sincronizzato → ID ${fcloudResult.fcloudDdtId}, N. ${fcloudResult.fcloudNumero}`);
-        } else {
-          console.warn(`⚠️ FCloud: DDT ${ddtId} non sincronizzato — ${fcloudResult.error}`);
-          await db.update(ddt).set({ fcloudStato: 'errore', updatedAt: new Date() }).where(eq(ddt.id, parseInt(ddtId)));
-        }
-      })
-      .catch(async (err) => {
-        console.error(`❌ FCloud: errore invio DDT ${ddtId}:`, err.message);
-        await db.update(ddt).set({ fcloudStato: 'errore', updatedAt: new Date() }).where(eq(ddt.id, parseInt(ddtId))).catch(() => {});
-      });
+    // ── CANALE FCLOUD: l'esito viene persistito prima di procedere con FIC.
+    // Se FCloud accetta e FIC fallisce, il DDT resta in stato non reversibile
+    // per evitare duplicazioni o ripristini inventariali incoerenti.
+    const fcloudResult = await sendDDTToFCloud(parseInt(ddtId));
+    if (fcloudResult.success && fcloudResult.fcloudDdtId) {
+      await db.update(ddt).set({
+        fcloudDdtId: fcloudResult.fcloudDdtId,
+        fcloudDdtNumero: fcloudResult.fcloudNumero,
+        fcloudStato: 'inviato',
+        updatedAt: new Date()
+      }).where(eq(ddt.id, parseInt(ddtId)));
+      console.log(`✅ FCloud: DDT ${ddtId} sincronizzato → ID ${fcloudResult.fcloudDdtId}, N. ${fcloudResult.fcloudNumero}`);
+    } else {
+      await db.update(ddt)
+        .set({ fcloudStato: 'errore', updatedAt: new Date() })
+        .where(eq(ddt.id, parseInt(ddtId)));
+      console.warn(`⚠️ FCloud: DDT ${ddtId} non sincronizzato — ${fcloudResult.error}`);
+    }
     // ── FINE CANALE FCLOUD ───────────────────────────────────────────────────
 
     // ── CANALE FIC (Fatture in Cloud): indipendente da FCloud ────────────────
@@ -2952,6 +2960,17 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     
   } catch (error: any) {
     console.error("Errore nell'invio DDT a Fatture in Cloud:", error);
+    const failedDdtId = parseInt(req.params.ddtId);
+    if (Number.isInteger(failedDdtId)) {
+      await db.update(ddt)
+        .set({ ddtStato: 'locale', updatedAt: new Date() })
+        .where(and(
+          eq(ddt.id, failedDdtId),
+          eq(ddt.ddtStato, 'invio'),
+          sql`${ddt.fcloudStato} IS DISTINCT FROM 'inviato'`
+        ))
+        .catch(() => {});
+    }
     res.status(500).json({
       success: false,
       error: error.message || "Errore nell'invio del DDT a Fatture in Cloud"
@@ -2966,6 +2985,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
 export async function deleteSale(req: Request, res: Response) {
   try {
     const { id } = req.params;
+    const { reason } = req.body || {};
 
     if (!id) {
       return res.status(400).json({
@@ -2996,16 +3016,189 @@ export async function deleteSale(req: Request, res: Response) {
 
     const saleData = sale[0];
 
-    // Se esiste un DDT, verifica che NON sia stato inviato a FIC
+    // La generazione del DDT può già avere registrato una consegna esterna.
+    // Senza un collegamento compensabile alla consegna, lo storno non è sicuro.
     if (saleData.ddtId) {
-      const ddtResult = await db.select().from(ddt).where(eq(ddt.id, saleData.ddtId)).limit(1);
+      return res.status(409).json({
+        success: false,
+        error: "Impossibile stornare: è già stato generato un DDT e potrebbe esistere una consegna contabilizzata"
+      });
+    }
 
-      if (ddtResult.length > 0 && ddtResult[0].ddtStato === 'inviato') {
-        return res.status(400).json({
+    if (saleData.status !== 'draft') {
+      if (saleData.sourceType !== 'manual') {
+        return res.status(409).json({
           success: false,
-          error: "Impossibile stornare: il DDT è già stato inviato a Fatture in Cloud"
+          error: "Le vendite confermate provenienti dalla vagliatura devono essere annullate dalla relativa operazione di vendita"
         });
       }
+      if (typeof reason !== 'string' || reason.trim().length < 3) {
+        return res.status(400).json({
+          success: false,
+          error: "Per stornare una vendita confermata è obbligatoria una motivazione"
+        });
+      }
+
+      await db.transaction(async (tx) => {
+        const lockedSaleResult = await tx.execute(sql`
+          SELECT status, source_type, ddt_id, ddt_status
+          FROM ${advancedSales}
+          WHERE id = ${saleId}
+          FOR UPDATE
+        `);
+        const lockedSaleRows: any[] = (lockedSaleResult as any).rows ?? lockedSaleResult;
+        const lockedSale = lockedSaleRows[0];
+        if (!lockedSale || lockedSale.status === 'cancelled') {
+          throw new Error("La vendita risulta già stornata o non disponibile");
+        }
+        if (lockedSale.ddt_status === 'generazione') {
+          throw new Error("Il DDT è in generazione e la vendita non può essere stornata");
+        }
+        if (lockedSale.ddt_id) {
+          const lockedDdtResult = await tx.execute(sql`
+            SELECT ddt_stato
+            FROM ${ddt}
+            WHERE id = ${Number(lockedSale.ddt_id)}
+            FOR UPDATE
+          `);
+          const lockedDdtRows: any[] = (lockedDdtResult as any).rows ?? lockedDdtResult;
+          if (lockedDdtRows[0] && ['invio', 'inviato'].includes(lockedDdtRows[0].ddt_stato)) {
+            throw new Error("Il DDT è in invio o è già stato inviato e la vendita non può essere stornata");
+          }
+        }
+
+        const sources = await tx.select({
+          operationId: saleOperationsRef.operationId,
+          basketId: saleOperationsRef.basketId,
+          cycleId: operations.cycleId,
+          cycleState: cycles.state,
+          cycleStartDate: cycles.startDate,
+          basketState: baskets.state,
+          currentCycleId: baskets.currentCycleId,
+          physicalNumber: baskets.physicalNumber,
+          flupsyId: baskets.flupsyId
+        })
+        .from(saleOperationsRef)
+        .innerJoin(operations, eq(saleOperationsRef.operationId, operations.id))
+        .innerJoin(cycles, eq(operations.cycleId, cycles.id))
+        .innerJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+        .where(eq(saleOperationsRef.advancedSaleId, saleId));
+
+        if (sources.length === 0) {
+          throw new Error("La vendita non contiene ceste ripristinabili");
+        }
+
+        await tx.execute(sql`
+          SELECT id
+          FROM ${baskets}
+          WHERE id IN (${sql.join(sources.map(source => sql`${source.basketId}`), sql`, `)})
+          FOR UPDATE
+        `);
+        await tx.execute(sql`
+          SELECT id
+          FROM ${cycles}
+          WHERE id IN (${sql.join(sources.map(source => sql`${source.cycleId}`), sql`, `)})
+          FOR UPDATE
+        `);
+
+        const lockedSources = await tx.select({
+          operationId: saleOperationsRef.operationId,
+          basketId: saleOperationsRef.basketId,
+          cycleId: operations.cycleId,
+          cycleState: cycles.state,
+          cycleStartDate: cycles.startDate,
+          basketState: baskets.state,
+          currentCycleId: baskets.currentCycleId,
+          physicalNumber: baskets.physicalNumber,
+          flupsyId: baskets.flupsyId
+        })
+        .from(saleOperationsRef)
+        .innerJoin(operations, eq(saleOperationsRef.operationId, operations.id))
+        .innerJoin(cycles, eq(operations.cycleId, cycles.id))
+        .innerJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+        .where(eq(saleOperationsRef.advancedSaleId, saleId));
+
+        for (const source of lockedSources) {
+          const blockReason = getRestoreBlockReason(source);
+          if (blockReason) throw new Error(blockReason);
+        }
+
+        const ledgerResult = await tx.execute(sql`
+          SELECT *
+          FROM ${lotLedger}
+          WHERE idempotency_key LIKE ${`advanced-sale:${saleId}:%`}
+            AND idempotency_key NOT LIKE ${`advanced-sale:${saleId}:reversal:%`}
+          FOR UPDATE
+        `);
+        const ledgerRows: any[] = (ledgerResult as any).rows ?? ledgerResult;
+        if (ledgerRows.length === 0) {
+          throw new Error("Non sono stati trovati i movimenti contabili originali da compensare");
+        }
+        for (const movement of ledgerRows) {
+          await tx.insert(lotLedger).values({
+            date: new Date().toISOString().slice(0, 10),
+            lotId: Number(movement.lot_id),
+            type: movement.type,
+            quantity: String(-Number(movement.quantity)),
+            sourceCycleId: movement.source_cycle_id ? Number(movement.source_cycle_id) : null,
+            destCycleId: movement.dest_cycle_id ? Number(movement.dest_cycle_id) : null,
+            operationId: movement.operation_id ? Number(movement.operation_id) : null,
+            basketId: movement.basket_id ? Number(movement.basket_id) : null,
+            allocationMethod: movement.allocation_method || 'proportional',
+            allocationBasis: {
+              reversalOfLedgerId: Number(movement.id),
+              advancedSaleId: saleId,
+              reason: reason.trim()
+            },
+            idempotencyKey: `advanced-sale:${saleId}:reversal:${movement.id}`,
+            notes: `Storno vendita ${saleData.saleNumber}: ${reason.trim()}`
+          }).onConflictDoNothing();
+        }
+
+        for (const source of lockedSources) {
+          const cycleCode = buildCycleCode(
+            source.physicalNumber,
+            source.flupsyId,
+            source.cycleStartDate
+          );
+          await tx.update(cycles)
+            .set({ state: 'active', endDate: null })
+            .where(eq(cycles.id, source.cycleId));
+          await tx.update(baskets)
+            .set({
+              state: 'active',
+              currentCycleId: source.cycleId,
+              cycleCode
+            })
+            .where(eq(baskets.id, source.basketId));
+        }
+
+        if (saleData.ddtId) {
+          await tx.delete(ddtRighe).where(eq(ddtRighe.ddtId, saleData.ddtId));
+          await tx.delete(ddt).where(eq(ddt.id, saleData.ddtId));
+        }
+
+        await tx.update(advancedSales)
+          .set({
+            status: 'cancelled',
+            ddtId: null,
+            ddtStatus: 'nessuno',
+            notes: [saleData.notes, `STORNO: ${reason.trim()}`].filter(Boolean).join('\n'),
+            updatedAt: new Date()
+          })
+          .where(eq(advancedSales.id, saleId));
+      });
+
+      await invalidateAllCaches();
+      return res.json({
+        success: true,
+        message: `Vendita ${saleData.saleNumber} stornata e ceste ripristinate`,
+        reversedSale: {
+          id: saleData.id,
+          saleNumber: saleData.saleNumber,
+          status: 'cancelled'
+        }
+      });
     }
 
     // Esegui eliminazione in cascata in una transaction
@@ -3055,7 +3248,8 @@ export async function deleteSale(req: Request, res: Response) {
 
   } catch (error: any) {
     console.error("Errore nello storno della vendita:", error);
-    res.status(500).json({
+    const isBusinessError = /già|cesta|ciclo|movimenti contabili|ripristinabil/.test(error?.message || '');
+    res.status(isBusinessError ? 409 : 500).json({
       success: false,
       error: error.message || "Errore nello storno della vendita"
     });

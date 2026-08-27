@@ -110,7 +110,13 @@ export default function AdvancedSales() {
   const [baseSupplyByBasket, setBaseSupplyByBasket] = useState<Record<number, BasketSupply>>({});
   const [openCustomerCombobox, setOpenCustomerCombobox] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
-  const [saleToDelete, setSaleToDelete] = useState<{ id: number; saleNumber: string } | null>(null);
+  const [saleToDelete, setSaleToDelete] = useState<{
+    id: number;
+    saleNumber: string;
+    status: string;
+    sourceType?: string;
+  } | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
   const [differenceDialogOpen, setDifferenceDialogOpen] = useState(false);
   const [differenceReason, setDifferenceReason] = useState("");
   const [automaticDialogOpen, setAutomaticDialogOpen] = useState(false);
@@ -297,13 +303,19 @@ export default function AdvancedSales() {
 
   // Mutation per eliminare vendita in Bozza
   const deleteSaleMutation = useMutation({
-    mutationFn: (saleId: number) =>
-      apiRequest(`/api/advanced-sales/${saleId}`, 'DELETE'),
-    onSuccess: () => {
-      toast({ variant: "success", title: "Bozza eliminata", description: "La vendita è stata eliminata. Le operazioni associate sono di nuovo disponibili." });
+    mutationFn: ({ saleId, reason }: { saleId: number; reason?: string }) =>
+      apiRequest(`/api/advanced-sales/${saleId}`, 'DELETE', reason ? { reason } : undefined),
+    onSuccess: (response: any) => {
+      toast({
+        variant: "success",
+        title: response.reversedSale ? "Vendita stornata" : "Bozza eliminata",
+        description: response.message || "Operazione completata"
+      });
       setSaleToDelete(null);
+      setReversalReason("");
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/operations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/baskets'] });
     },
     onError: (error: any) => {
       toast({
@@ -312,6 +324,7 @@ export default function AdvancedSales() {
         variant: "destructive"
       });
       setSaleToDelete(null);
+      setReversalReason("");
     }
   });
 
@@ -1469,13 +1482,41 @@ export default function AdvancedSales() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setSaleToDelete({ id: sale.id, saleNumber: sale.saleNumber })}
+                                    onClick={() => setSaleToDelete({
+                                      id: sale.id,
+                                      saleNumber: sale.saleNumber,
+                                      status: sale.status,
+                                      sourceType: sale.sourceType
+                                    })}
                                   className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 px-2"
                                   title="Elimina bozza"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </>
+                            )}
+
+                            {sale.sourceType === 'manual' &&
+                              (sale.status === 'confirmed' || sale.status === 'completed') &&
+                              !sale.ddtId && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setReversalReason("");
+                                  setSaleToDelete({
+                                    id: sale.id,
+                                    saleNumber: sale.saleNumber,
+                                    status: sale.status,
+                                    sourceType: sale.sourceType
+                                  });
+                                }}
+                                className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                                title="Storna la vendita e ripristina le ceste"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Storna
+                              </Button>
                             )}
                           </div>
                         </TableCell>
@@ -1492,41 +1533,88 @@ export default function AdvancedSales() {
       <AlertDialog open={!!saleToDelete} onOpenChange={(open) => { if (!open) setSaleToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminare la bozza {saleToDelete?.saleNumber}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {saleToDelete?.status === 'draft'
+                ? `Eliminare la bozza ${saleToDelete?.saleNumber}?`
+                : `Stornare la vendita ${saleToDelete?.saleNumber}?`}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-sm">
-                <p>Stai per eliminare questa vendita in stato <strong>Bozza</strong>. L'operazione è irreversibile.</p>
-                <div className="rounded-md bg-green-50 border border-green-200 p-3 space-y-1">
-                  <p className="font-semibold text-green-800">✅ Cosa viene eliminato:</p>
-                  <ul className="list-disc list-inside text-green-700 space-y-0.5">
-                    <li>Il record della vendita avanzata ({saleToDelete?.saleNumber})</li>
-                    <li>La configurazione dei sacchi e le allocazioni</li>
-                    <li>Il DDT bozza collegato (se presente)</li>
-                  </ul>
-                </div>
-                <div className="rounded-md bg-blue-50 border border-blue-200 p-3 space-y-1">
-                  <p className="font-semibold text-blue-800">🔒 Cosa rimane intatto:</p>
-                  <ul className="list-disc list-inside text-blue-700 space-y-0.5">
-                    <li>La vagliatura sorgente e tutte le operazioni sui cestelli</li>
-                    <li>Lo stato dei cestelli (invariato)</li>
-                    <li>Tutti gli altri dati del sistema</li>
-                  </ul>
-                </div>
-                <p className="text-muted-foreground">Dopo l'eliminazione la situazione tornerà esattamente com'era prima della creazione di questa vendita avanzata.</p>
+                {saleToDelete?.status === 'draft' ? (
+                  <p>Stai per eliminare questa vendita in stato <strong>Bozza</strong>. L'operazione è irreversibile.</p>
+                ) : (
+                  <>
+                    <p>
+                      Verranno creati movimenti compensativi e le ceste saranno riaperte
+                      soltanto se non sono già state riutilizzate.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="reversal-reason">Motivazione obbligatoria</Label>
+                      <Textarea
+                        id="reversal-reason"
+                        value={reversalReason}
+                        onChange={(event) => setReversalReason(event.target.value)}
+                        placeholder="Es. cliente non ha ritirato la merce"
+                      />
+                    </div>
+                  </>
+                )}
+                {saleToDelete?.status === 'draft' ? (
+                  <>
+                    <div className="rounded-md bg-green-50 border border-green-200 p-3 space-y-1">
+                      <p className="font-semibold text-green-800">Cosa viene eliminato:</p>
+                      <ul className="list-disc list-inside text-green-700 space-y-0.5">
+                        <li>Il record della vendita avanzata ({saleToDelete?.saleNumber})</li>
+                        <li>La configurazione dei sacchi e le allocazioni</li>
+                        <li>Il DDT bozza collegato (se presente)</li>
+                      </ul>
+                    </div>
+                    <div className="rounded-md bg-blue-50 border border-blue-200 p-3 space-y-1">
+                      <p className="font-semibold text-blue-800">Cosa rimane intatto:</p>
+                      <ul className="list-disc list-inside text-blue-700 space-y-0.5">
+                        <li>La vagliatura sorgente e tutte le operazioni sui cestelli</li>
+                        <li>Lo stato dei cestelli (invariato)</li>
+                        <li>Tutti gli altri dati del sistema</li>
+                      </ul>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3 space-y-1">
+                    <p className="font-semibold text-amber-800">Effetti dello storno:</p>
+                    <ul className="list-disc list-inside text-amber-700 space-y-0.5">
+                      <li>Ripristino dei cicli e delle ceste originali</li>
+                      <li>Movimenti contabili compensativi, senza cancellare la storia</li>
+                      <li>Eliminazione dell'eventuale DDT locale non ancora inviato</li>
+                    </ul>
+                  </div>
+                )}
+                <p className="text-muted-foreground">
+                  {saleToDelete?.status === 'draft'
+                    ? "Dopo l'eliminazione la situazione tornerà esattamente com'era prima della creazione di questa vendita avanzata."
+                    : "Lo storno rimarrà visibile nello storico della vendita e nel libro mastro."}
+                </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => saleToDelete && deleteSaleMutation.mutate(saleToDelete.id)}
-              disabled={deleteSaleMutation.isPending}
+              onClick={() => saleToDelete && deleteSaleMutation.mutate({
+                saleId: saleToDelete.id,
+                reason: saleToDelete.status === 'draft' ? undefined : reversalReason.trim()
+              })}
+              disabled={
+                deleteSaleMutation.isPending ||
+                (saleToDelete?.status !== 'draft' && reversalReason.trim().length < 3)
+              }
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               {deleteSaleMutation.isPending ? (
                 <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminazione...</>
               ) : (
-                <><Trash2 className="h-4 w-4 mr-1" />Elimina definitivamente</>
+                <><Trash2 className="h-4 w-4 mr-1" />
+                  {saleToDelete?.status === 'draft' ? "Elimina definitivamente" : "Conferma storno"}
+                </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

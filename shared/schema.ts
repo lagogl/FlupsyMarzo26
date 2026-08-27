@@ -1291,14 +1291,14 @@ export const advancedSales = pgTable("advanced_sales", {
   customerName: text("customer_name"), // Nome cliente per vendite senza anagrafica
   customerDetails: jsonb("customer_details"), // Dati aziendali cliente
   saleDate: date("sale_date").notNull(), // Data vendita
-  status: text("status").notNull().default("draft"), // draft, confirmed, completed
+  status: text("status").notNull().default("draft"), // draft, confirmed, completed, cancelled
   totalWeight: real("total_weight"), // Peso totale vendita
   totalAnimals: integer("total_animals"), // Animali totali vendita
   totalBags: integer("total_bags"), // Numero sacchi totali
   notes: text("notes"), // Note vendita
   pdfPath: text("pdf_path"), // Percorso file PDF generato
   ddtId: integer("ddt_id"), // Riferimento DDT creato
-  ddtStatus: text("ddt_status", { enum: ["nessuno", "locale", "inviato"] }).notNull().default("nessuno"), // Stato DDT
+  ddtStatus: text("ddt_status", { enum: ["nessuno", "generazione", "locale", "inviato"] }).notNull().default("nessuno"), // Stato DDT
   companyId: integer("company_id"), // ID Azienda Fatture in Cloud per questa vendita
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
@@ -1444,7 +1444,7 @@ export const ddt = pgTable("ddt", {
   id: serial("id").primaryKey(),
   numero: integer("numero").notNull(),
   data: date("data").notNull(),
-  clienteId: integer("cliente_id").notNull(),
+  clienteId: integer("cliente_id"),
   // Snapshot immutabile dati cliente al momento della creazione DDT
   clienteNome: text("cliente_nome"),
   clienteIndirizzo: text("cliente_indirizzo"),
@@ -1470,7 +1470,7 @@ export const ddt = pgTable("ddt", {
   totaleColli: integer("totale_colli").notNull().default(0),
   pesoTotale: decimal("peso_totale", { precision: 10, scale: 2 }).notNull().default("0"),
   note: text("note"),
-  ddtStato: text("ddt_stato", { enum: ["nessuno", "locale", "inviato"] }).notNull().default("nessuno"),
+  ddtStato: text("ddt_stato", { enum: ["nessuno", "locale", "invio", "inviato"] }).notNull().default("nessuno"),
   fattureInCloudId: integer("fatture_in_cloud_id"),
   fattureInCloudNumero: text("fatture_in_cloud_numero"), // Numero DDT in FIC
   fcloudDdtId: text("fcloud_ddt_id"),     // ID DDT nell'app esterna FCloud
