@@ -219,17 +219,27 @@ function sanitizeReadOnlySql(input: string): string {
 
 // Pool dedicato per le query dell'assistente: transazione READ ONLY imposta dal DB,
 // timeout breve, LIMIT esterno sempre applicato (non aggirabile da LIMIT interni).
+// Il pool usa il ruolo Postgres dedicato `ai_readonly` (solo SELECT sulle tabelle
+// dati, niente users/sessioni/config; default_transaction_read_only=on a livello
+// ruolo). La password NON è salvata da nessuna parte: al primo utilizzo viene
+// ruotata a un valore casuale effimero tramite la connessione owner esistente e
+// tenuta solo in memoria. Se qualcosa fallisce, il tool SQL fallisce chiuso:
+// NESSUN fallback sulla connessione principale.
 let aiQueryPool: import('pg').Pool | null = null;
-async function getAiQueryPool() {
-  if (!aiQueryPool) {
-    const { Pool } = await import('pg');
-    aiQueryPool = new Pool({
-      connectionString: process.env.NEON_DATABASE_URL || process.env.DATABASE_URL,
-      max: 2,
-      idleTimeoutMillis: 30000,
-    });
+
+let aiQueryPoolPromise: Promise<import('pg').Pool> | null = null;
+async function getAiQueryPool(): Promise<import('pg').Pool> {
+  if (aiQueryPool) return aiQueryPool;
+  if (!aiQueryPoolPromise) {
+    aiQueryPoolPromise = createAiReadonlyPool()
+      .then(pool => { aiQueryPool = pool; return pool; })
+      .catch(err => {
+        aiQueryPoolPromise = null; // riprova al prossimo tentativo
+        console.error('[AI Chat] Pool read-only non disponibile (fail closed):', err.message);
+        throw new Error('Connessione database in sola lettura non disponibile: query non eseguita.');
+      });
   }
-  return aiQueryPool;
+  return aiQueryPoolPromise;
 }
 
 async function runReadOnlyQuery(query: string): Promise<string> {
@@ -238,7 +248,23 @@ async function runReadOnlyQuery(query: string): Promise<string> {
   const limited = `SELECT * FROM (${cleaned}) __q LIMIT 200`;
 
   const pool = await getAiQueryPool();
-  const client = await pool.connect();
+  let client: import('pg').PoolClient;
+  try {
+    client = await pool.connect();
+  } catch (connErr: any) {
+    // Un'altra istanza del server (es. deployment) può aver ruotato la password
+    // effimera di ai_readonly: ricrea il pool (nuova rotazione) e riprova una volta.
+    if (/password authentication|no pg_hba|authentication failed/i.test(connErr.message || '')) {
+      console.warn('[AI Chat] Password ai_readonly ruotata altrove: ricreo il pool');
+      await pool.end().catch(() => {});
+      aiQueryPool = null;
+      aiQueryPoolPromise = null;
+      const freshPool = await getAiQueryPool();
+      client = await freshPool.connect();
+    } else {
+      throw connErr;
+    }
+  }
   let rows: any[];
   try {
     await client.query('BEGIN TRANSACTION READ ONLY');
@@ -506,36 +532,29 @@ router.post('/message', async (req: Request, res: Response) => {
     return res.status(503).json({ error: 'AI non configurata' });
   }
 
-  let contextSnapshot = '';
-  try {
-    contextSnapshot = await buildOperatorContext();
-  } catch (_) {
-    contextSnapshot = `DATA: ${new Date().toISOString().split('T')[0]}`;
-  }
+  const today = new Date().toISOString().split('T')[0];
+  const systemPrompt = `Sei l'analista dati senior dell'impianto FLUPSY di ostricoltura (vongole/ostriche giovanili). Rispondi SEMPRE in italiano.
+DATA CORRENTE: ${today}
 
-  const systemPrompt = `Sei l'assistente AI dell'impianto FLUPSY di ostricoltura. Rispondi SEMPRE in italiano.
-Sei diretto, pratico e conosci il dominio: ceste, vagliature, taglia, mortalità, SGR, lotti, trasferimenti.
-Quando l'operatore ti chiede cosa fare, dai suggerimenti concreti e azionabili.
-Per le note di operazione, genera testo breve e professionale in italiano.
-Non inventare dati non presenti nel contesto — se non hai l'informazione, dillo chiaramente.
-Usa i numeri delle ceste (es. "Cesta #3"), i nomi dei flupsy e i codici taglia (TP-1900, TP-2500...) esattamente come appaiono nei dati.
+Il tuo unico compito è l'ANALISI APPROFONDITA del database tramite lo strumento "esegui_query_sql" (SOLA LETTURA — il database rifiuta qualsiasi scrittura a livello di transazione).
+Lavora come un analista: formula ipotesi, verificale con query mirate, incrocia i dati, quantifica sempre.
 
-HAI ACCESSO AL DATABASE tramite lo strumento "esegui_query_sql" (sola lettura).
-Usalo ogni volta che la domanda richiede dati non presenti nello snapshot: analisi di vagliature (bilancio animali/pesi IN vs OUT, deficit per taglia), storici di una cesta, andamenti di mortalità, confronti tra lotti, verifiche di conteggi.
+Metodo di lavoro:
+- Prima di rispondere, raccogli i dati con le query necessarie (anche molte, in sequenza). Non inventare mai numeri.
+- Presenta risultati strutturati: tabelle, bilanci, percentuali, confronti attesi-vs-reali.
+- Se un dato è una stima ereditata (conteggio derivato da pesi/densità vecchi), dillo esplicitamente.
+- Concludi sempre con interpretazione, cause probabili e raccomandazioni operative.
+
 Metodo OBBLIGATORIO per l'analisi di una vagliatura N:
 1. Trova la selection con selection_number = N (prendi il suo id).
-2. BILANCIO TOTALE (il dato autorevole): deficit = SUM(selection_source_baskets.animal_count) − SUM(selection_destination_baskets.animal_count) per quella selection_id. Fai lo stesso con total_weight. Se le note della selection riportano una discrepanza, il tuo bilancio deve coincidere.
-3. Elenca le ceste origine (animal_count, total_weight, animals_per_kg) e le ceste destinazione (con size e destination_type).
-4. Per il confronto per taglia NON usare size_id delle origini (spesso NULL): dividi origini e destinazioni in fasce di animals_per_kg (es. >15000 = taglie piccole, <15000 = taglie grandi) e confronta i subtotali IN vs OUT per fascia.
-5. Verifica la provenienza dei conteggi origine (ultime operazioni misura/peso/prima-attivazione per cesta+ciclo): conteggi vecchi = stime ereditate.
-6. Considera la crescita: i pesi origine rilevati giorni prima sottostimano la biomassa attesa in uscita.
-Non dichiarare mai "nessun deficit" senza aver eseguito il punto 2.
-Esegui più query in sequenza se serve; poi presenta un'analisi strutturata con numeri precisi, cause probabili e raccomandazioni.
+2. BILANCIO TOTALE (dato autorevole): deficit = SUM(selection_source_baskets.animal_count) − SUM(selection_destination_baskets.animal_count); idem con total_weight.
+3. Elenca ceste origine e destinazione con conteggi, pesi e animals_per_kg.
+4. Per il confronto per taglia NON usare size_id delle origini (spesso NULL): raggruppa per fasce di animals_per_kg.
+5. Verifica la provenienza dei conteggi origine (ultime misure/pesate reali per cesta+ciclo): conteggi vecchi = stime ereditate.
+6. Considera la crescita (SGR mensili nella tabella sgr, % giornaliera): pesi rilevati giorni prima sottostimano la biomassa attesa.
+Non dichiarare mai "nessun deficit" senza il punto 2.
 
-${SCHEMA_DOC}
-
-=== SNAPSHOT DATI IMPIANTO ===
-${contextSnapshot}`;
+${SCHEMA_DOC}`;
 
   await streamAssistantWithSqlTool({
     req,
@@ -549,7 +568,9 @@ ${contextSnapshot}`;
 // ─── POST /api/ai-chat/analysis ──────────────────────────────────────────────
 // Interfaccia "Analisi AI Database": password dedicata + scelta modello per messaggio.
 
-const ANALYSIS_PASSWORD = process.env.ANALYSIS_UI_PASSWORD || 'Domani4321-!';
+// Nessun fallback hardcoded: se la env var manca, lo sblocco fallisce chiuso.
+// (Task #24 sostituirà questo schema con un permesso temporaneo lato server.)
+const ANALYSIS_PASSWORD = process.env.ANALYSIS_UI_PASSWORD || null;
 const ANALYSIS_MODELS = [
   'gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini',
   'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5',
@@ -579,7 +600,7 @@ router.post('/analysis/unlock', (req: Request, res: Response) => {
     return res.status(429).json({ success: false, error: 'Troppi tentativi: riprova tra 10 minuti' });
   }
   const { password } = req.body as { password?: string };
-  if (password !== ANALYSIS_PASSWORD) {
+  if (!ANALYSIS_PASSWORD || typeof password !== 'string' || password !== ANALYSIS_PASSWORD) {
     recordFailedUnlock(ip);
     return res.status(403).json({ success: false, error: 'Password errata' });
   }
@@ -594,7 +615,7 @@ router.post('/analysis', async (req: Request, res: Response) => {
   };
 
   const password = req.headers['x-analysis-password'];
-  if (password !== ANALYSIS_PASSWORD) {
+  if (!ANALYSIS_PASSWORD || typeof password !== 'string' || password !== ANALYSIS_PASSWORD) {
     return res.status(403).json({ error: 'Password errata o mancante' });
   }
 
@@ -645,3 +666,148 @@ ${SCHEMA_DOC}`;
 });
 
 export const aiChatRoutes = router;
+
+// Warm-up non bloccante all'avvio: provisiona e VERIFICA subito la barriera
+// read-only invece di aspettare la prima query (eventuale errore resta loggato
+// e il tool rimane disabilitato — fail closed).
+setTimeout(() => {
+  getAiQueryPool().catch(() => { /* già loggato in getAiQueryPool */ });
+}, 3000);
+
+// Tabelle sensibili: MAI leggibili dal ruolo AI (credenziali, sessioni, config).
+// Lista esplicita + individuazione automatica dal catalogo per pattern di nome
+// tabella e di colonna (password/token/secret/…): copre anche tabelle future.
+const AI_SENSITIVE_TABLES = [
+  'users',
+  'external_users',
+  'operators',
+  'user_sessions',
+  'user_menu_preferences',
+  'email_config',
+  'fatture_in_cloud_config',
+  'imm_config',
+  'notification_settings',
+];
+const AI_SENSITIVE_TABLE_NAME_PATTERN =
+  '^(users|.*_users|operators)$|session|_config$|^config|credential|auth_';
+const AI_SENSITIVE_COLUMN_PATTERN =
+  'password|passwd|pwd_|_hash|token|secret|api_key|apikey|credential|private_key';
+
+// Query catalogo: tutte le tabelle/viste di public considerate sensibili
+const AI_SENSITIVE_CATALOG_SQL = `
+  SELECT DISTINCT c.relname AS name
+  FROM pg_class c
+  WHERE c.relnamespace = 'public'::regnamespace
+    AND c.relkind IN ('r','p','v','m')
+    AND (
+      c.relname = ANY($1)
+      OR c.relname ~* $2
+      OR EXISTS (
+        SELECT 1 FROM pg_attribute a
+        WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+          AND a.attname ~* $3
+      )
+    )`;
+const AI_SENSITIVE_CATALOG_PARAMS = [
+  AI_SENSITIVE_TABLES,
+  AI_SENSITIVE_TABLE_NAME_PATTERN,
+  AI_SENSITIVE_COLUMN_PATTERN,
+];
+
+async function createAiReadonlyPool(): Promise<import('pg').Pool> {
+  const ownerUrl = process.env.NEON_DATABASE_URL;
+  if (!ownerUrl) {
+    throw new Error('NEON_DATABASE_URL non configurata: tool SQL disabilitato.');
+  }
+  const { Pool } = await import('pg');
+  const crypto = await import('node:crypto');
+  // Solo [A-Za-z0-9!] con prefisso misto: sicura come literal SQL e conforme
+  // alla policy password di Neon (maiuscole + carattere speciale + lunghezza)
+  const password = 'Aa1!' + crypto.randomBytes(24).toString('hex');
+
+  // Provisioning idempotente del ruolo via connessione owner: creazione se assente,
+  // rotazione password effimera, least-privilege, revoca tabelle sensibili.
+  const ownerPool = new Pool({ connectionString: ownerUrl, max: 1 });
+  try {
+    const exists = await ownerPool.query(`SELECT 1 FROM pg_roles WHERE rolname = 'ai_readonly'`);
+    if (exists.rowCount === 0) {
+      // Attributi di default: NOSUPERUSER NOCREATEDB NOCREATEROLE (non specificati:
+      // su Neon alterare l'attributo SUPERUSER richiede superuser e fallisce)
+      await ownerPool.query(`CREATE ROLE ai_readonly WITH LOGIN PASSWORD '${password}'`);
+    } else {
+      await ownerPool.query(`ALTER ROLE ai_readonly WITH LOGIN PASSWORD '${password}'`);
+    }
+    await ownerPool.query(`ALTER ROLE ai_readonly SET default_transaction_read_only = on`);
+    await ownerPool.query(`ALTER ROLE ai_readonly SET statement_timeout = '10s'`);
+    await ownerPool.query(`GRANT USAGE ON SCHEMA public TO ai_readonly`);
+    await ownerPool.query(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO ai_readonly`);
+    // Le tabelle future create dall'owner corrente saranno leggibili (SELECT):
+    // le nuove tabelle sensibili vanno aggiunte ad AI_SENSITIVE_TABLES.
+    await ownerPool.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ai_readonly`);
+    // Revoca esplicita di tutte le tabelle sensibili (lista + pattern da catalogo)
+    const sensExisting = await ownerPool.query(AI_SENSITIVE_CATALOG_SQL, AI_SENSITIVE_CATALOG_PARAMS);
+    for (const row of sensExisting.rows) {
+      // Identificatore escapato correttamente (le doppie virgolette raddoppiate):
+      // mai interpolare identificatori dal catalogo senza quoting.
+      const ident = '"' + String(row.name).replace(/"/g, '""') + '"';
+      await ownerPool.query(`REVOKE ALL ON TABLE public.${ident} FROM ai_readonly`);
+    }
+  } finally {
+    await ownerPool.end().catch(() => {});
+  }
+
+  const url = new URL(ownerUrl);
+  url.username = 'ai_readonly';
+  url.password = password;
+
+  const pool = new Pool({
+    connectionString: url.toString(),
+    max: 2,
+    idleTimeoutMillis: 30000,
+  });
+
+  // Verifica EFFETTIVA della barriera prima di considerare il pool pronto:
+  // niente permessi di scrittura su nessuna tabella, niente SELECT sulle sensibili.
+  try {
+    const who = await pool.query('SELECT current_user');
+    if (who.rows[0]?.current_user !== 'ai_readonly') {
+      throw new Error('utente connesso diverso da ai_readonly');
+    }
+    const writable = await pool.query(`
+      SELECT c.relname
+      FROM pg_class c
+      WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r','p','v','m')
+        AND (has_table_privilege(current_user, c.oid, 'INSERT')
+          OR has_table_privilege(current_user, c.oid, 'UPDATE')
+          OR has_table_privilege(current_user, c.oid, 'DELETE')
+          OR has_table_privilege(current_user, c.oid, 'TRUNCATE'))
+      LIMIT 5`);
+    if (writable.rows.length > 0) {
+      throw new Error(`il ruolo ha permessi di scrittura su: ${writable.rows.map((r: any) => r.relname).join(', ')}`);
+    }
+    // NESSUNA tabella sensibile (lista o pattern) deve risultare leggibile
+    const sensReadable = await pool.query(
+      `SELECT name FROM (${AI_SENSITIVE_CATALOG_SQL}) s
+       WHERE has_table_privilege(current_user, ('public.' || quote_ident(s.name))::regclass, 'SELECT')
+       LIMIT 10`,
+      AI_SENSITIVE_CATALOG_PARAMS,
+    );
+    if (sensReadable.rows.length > 0) {
+      throw new Error(`il ruolo può leggere tabelle sensibili: ${sensReadable.rows.map((r: any) => r.name).join(', ')}`);
+    }
+    // Prova concreta: una scrittura deve essere rifiutata dal database
+    let writeRejected = false;
+    try {
+      await pool.query(`CREATE TEMPORARY TABLE __ai_readonly_probe (x int)`);
+    } catch (_) {
+      writeRejected = true;
+    }
+    if (!writeRejected) {
+      throw new Error('il database non ha rifiutato una scrittura di prova');
+    }
+  } catch (verifyErr: any) {
+    await pool.end().catch(() => {});
+    throw new Error(`Verifica ruolo read-only fallita (${verifyErr.message}): tool SQL disabilitato.`);
+  }
+  return pool;
+}
