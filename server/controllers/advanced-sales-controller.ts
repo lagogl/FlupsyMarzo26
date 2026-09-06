@@ -6,6 +6,7 @@ import { Request, Response } from "express";
 import { db } from "../db";
 import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzle-orm";
 import { pdfGenerator } from "../services/pdf-generator";
+import { generateAdvancedSaleDocument as buildAdvancedSaleDocument, type AdvancedSaleDocumentKind } from "../services/advanced-sale-documents";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -1266,6 +1267,84 @@ export async function getAdvancedSale(req: Request, res: Response) {
       success: false,
       error: "Errore nel recupero della vendita avanzata"
     });
+  }
+}
+
+/**
+ * Produce one member of the operational document suite from the same frozen sale,
+ * bags and allocation records used by the legacy PDF endpoints.
+ */
+export async function generateAdvancedSaleDocument(req: Request, res: Response) {
+  const kind = req.params.kind as AdvancedSaleDocumentKind;
+  const allowedKinds: AdvancedSaleDocumentKind[] = ['delivery-report', 'sale-conditions', 'bivalve-transfer', 'ddt'];
+  if (!allowedKinds.includes(kind)) {
+    return res.status(400).json({ success: false, error: 'Tipo documento non valido' });
+  }
+
+  try {
+    const saleId = Number(req.params.id);
+    const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
+    if (!sale) return res.status(404).json({ success: false, error: 'Vendita non trovata' });
+
+    const bags = await db.select().from(saleBags)
+      .where(eq(saleBags.advancedSaleId, saleId)).orderBy(saleBags.bagNumber);
+    const allocationRows = await db.select({
+      saleBagId: bagAllocations.saleBagId,
+      basketPhysicalNumber: baskets.physicalNumber
+    }).from(bagAllocations)
+      .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
+      .innerJoin(saleBags, eq(bagAllocations.saleBagId, saleBags.id))
+      .where(eq(saleBags.advancedSaleId, saleId));
+    const bagsWithOrigins = bags.map(bag => ({
+      ...bag,
+      basketNumbers: [...new Set(
+        allocationRows
+          .filter(row => row.saleBagId === bag.id)
+          .map(row => row.basketPhysicalNumber)
+          .filter((value): value is number => value !== null)
+      )]
+    }));
+    const operationRows = await db.select({
+      operationId: saleOperationsRef.operationId,
+      basketId: saleOperationsRef.basketId,
+      basketPhysicalNumber: baskets.physicalNumber,
+      originalAnimals: saleOperationsRef.originalAnimals,
+      originalWeight: saleOperationsRef.originalWeight,
+      originalAnimalsPerKg: saleOperationsRef.originalAnimalsPerKg,
+      date: operations.date
+    }).from(saleOperationsRef)
+      .leftJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+      .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
+      .where(eq(saleOperationsRef.advancedSaleId, saleId));
+
+    const [customer] = sale.customerId
+      ? await db.select().from(clienti).where(eq(clienti.id, sale.customerId)).limit(1)
+      : [];
+    const [existingDdt] = sale.ddtId
+      ? await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
+      : [];
+    const generatedPdf = await buildAdvancedSaleDocument(kind, {
+      sale,
+      bags: bagsWithOrigins,
+      operations: operationRows,
+      customer,
+      ddt: existingDdt
+    });
+    // Puppeteer può restituire Uint8Array: Express lo serializzerebbe come JSON.
+    const pdf = Buffer.isBuffer(generatedPdf) ? generatedPdf : Buffer.from(generatedPdf);
+    const labels: Record<AdvancedSaleDocumentKind, string> = {
+      'delivery-report': 'Rapporto-consegna',
+      'sale-conditions': 'Dichiarazione-vendita-condizioni',
+      'bivalve-transfer': 'Registro-trasferimento-molluschi',
+      ddt: 'DDT'
+    };
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${labels[kind]}-${sale.saleNumber}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
+  } catch (error) {
+    console.error('Errore nella generazione del documento vendita:', error);
+    res.status(500).json({ success: false, error: 'Errore nella generazione del documento' });
   }
 }
 

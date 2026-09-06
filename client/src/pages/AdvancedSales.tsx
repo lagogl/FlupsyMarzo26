@@ -764,6 +764,13 @@ export default function AdvancedSales() {
     window.open(`/api/advanced-sales/${saleId}/download-pdf`, '_blank');
   };
 
+  const handleDownloadSaleDocument = (
+    saleId: number,
+    kind: "delivery-report" | "sale-conditions" | "bivalve-transfer" | "ddt"
+  ) => {
+    window.open(`/api/advanced-sales/${saleId}/documents/${kind}.pdf`, '_blank', 'noopener,noreferrer');
+  };
+
   const handleUpdateStatus = (saleId: number, status: string) => {
     updateStatusMutation.mutate({ saleId, status });
   };
@@ -1371,6 +1378,27 @@ export default function AdvancedSales() {
                                 <Download className="h-4 w-4 mr-1" />
                                 Download
                               </Button>
+                            )}
+
+                            {sale.totalBags > 0 && (
+                              <div className="flex flex-wrap gap-1 border-l border-slate-200 pl-2">
+                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "delivery-report")} title="Scarica Rapporto di consegna">
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Consegna
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "sale-conditions")} title="Scarica dichiarazione di vendita e condizioni contrattuali">
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Condizioni
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "bivalve-transfer")} title="Scarica documento di registrazione trasferimento molluschi">
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Trasferimento
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "ddt")} title="Scarica DDT interno">
+                                  <Download className="h-4 w-4 mr-1" />
+                                  DDT
+                                </Button>
+                              </div>
                             )}
 
                             {sale.status === 'confirmed' && sale.totalBags > 0 && (
