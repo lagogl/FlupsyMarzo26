@@ -17,9 +17,56 @@ const formatDate = (value: unknown) => {
   const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : 'Data non disponibile';
 };
-const number = (value: unknown, decimals = 0) => Number(value || 0).toLocaleString('it-IT', {
+const nonNegative = (value: unknown) => Math.max(0, Number(value) || 0);
+const number = (value: unknown, decimals = 0) => nonNegative(value).toLocaleString('it-IT', {
   minimumFractionDigits: decimals, maximumFractionDigits: decimals
 });
+const publicOrigin = (value: unknown) => {
+  const text = String(value || '').trim();
+  return /\bROEM\b/i.test(text) ? 'Ecotapes Zeeland 2' : text;
+};
+
+function growthPoints(history: any[]) {
+  const byDate = new Map<string, number[]>();
+  for (const item of history) {
+    const animalsPerKg = Number(item.animalsPerKg);
+    const date = String(item.date || '').slice(0, 10);
+    if (!date || !Number.isFinite(animalsPerKg) || animalsPerKg <= 0) continue;
+    const averageWeightMg = 1_000_000 / animalsPerKg;
+    if (!Number.isFinite(averageWeightMg) || averageWeightMg <= 0) continue;
+    byDate.set(date, [...(byDate.get(date) || []), averageWeightMg]);
+  }
+  return [...byDate.entries()]
+    .map(([date, values]) => ({
+      date,
+      weight: values.reduce((sum, value) => sum + value, 0) / values.length
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function lineChart(points: Array<{ date: string; value: number }>, options: {
+  title: string; unit: string; description: string;
+}) {
+  if (points.length < 2) return '';
+  const width = 760, height = 250, left = 58, right = 18, top = 22, bottom = 42;
+  const plotWidth = width - left - right, plotHeight = height - top - bottom;
+  const values = points.map(point => nonNegative(point.value));
+  const max = Math.max(...values, 1);
+  const x = (index: number) => left + (index / Math.max(points.length - 1, 1)) * plotWidth;
+  const y = (value: number) => top + plotHeight - (nonNegative(value) / max) * plotHeight;
+  const path = points.map((point, index) => `${index ? 'L' : 'M'} ${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`).join(' ');
+  const labelIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
+  return `<div class="chart"><h3>${esc(options.title)}</h3><p>${esc(options.description)}</p>
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(options.title)}">
+      <line x1="${left}" y1="${top + plotHeight}" x2="${width - right}" y2="${top + plotHeight}" class="axis"/>
+      <line x1="${left}" y1="${top}" x2="${left}" y2="${top + plotHeight}" class="axis"/>
+      <text x="${left - 8}" y="${top + 5}" text-anchor="end" class="scale">${esc(number(max, max < 10 ? 1 : 0))}</text>
+      <text x="${left - 8}" y="${top + plotHeight + 4}" text-anchor="end" class="scale">0</text>
+      <path d="${path}" class="growth-line"/>
+      ${points.map((point, index) => `<circle cx="${x(index).toFixed(1)}" cy="${y(point.value).toFixed(1)}" r="4" class="growth-dot"><title>${formatDate(point.date)}: ${number(point.value, 1)} ${esc(options.unit)}</title></circle>`).join('')}
+      ${labelIndexes.map(index => `<text x="${x(index).toFixed(1)}" y="${height - 13}" text-anchor="${index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'}" class="scale">${formatDate(points[index].date)}</text>`).join('')}
+    </svg><strong class="chart-latest">Ultimo valore: ${number(points[points.length - 1].value, 1)} ${esc(options.unit)}</strong></div>`;
+}
 
 function milestoneLabel(type: string) {
   if (type.includes('prima-attivazione') || type === 'attivazione') return ['Ingresso nel ciclo di crescita', 'Il lotto è stato preso in carico e avviato al preingrasso.'];
@@ -31,19 +78,20 @@ function milestoneLabel(type: string) {
 
 function renderPage(data: any) {
   const { sale, bags, lotRows, history, company, logo } = data;
-  const grossWeight = bags.reduce((sum: number, bag: any) => sum + Number(bag.originalWeight || bag.totalWeight || 0), 0);
-  const netWeight = bags.reduce((sum: number, bag: any) => sum + Number(bag.totalWeight || 0), 0);
-  const animals = bags.reduce((sum: number, bag: any) => sum + Number(bag.animalCount || 0), 0);
+  const grossWeight = bags.reduce((sum: number, bag: any) => sum + nonNegative(bag.originalWeight || bag.totalWeight), 0);
+  const netWeight = bags.reduce((sum: number, bag: any) => sum + nonNegative(bag.totalWeight), 0);
+  const animals = bags.reduce((sum: number, bag: any) => sum + nonNegative(bag.animalCount), 0);
   const sizesList = [...new Set(bags.map((bag: any) => bag.sizeCode).filter(Boolean))].join(' · ');
   const timeline = [
     ...lotRows.map((lot: any) => ({
       date: lot.arrivalDate,
       title: 'Origine e presa in carico',
-      text: `Lotto di seme vivo proveniente da ${lot.origin || lot.supplier || 'filiera controllata'}, registrato all’ingresso.`
+      text: `Lotto di seme vivo proveniente da ${publicOrigin(lot.origin || lot.supplier) || 'filiera controllata'}, registrato all’ingresso.`
     })),
     ...history.map((item: any) => {
       const [title, text] = milestoneLabel(item.type || '');
-      const detail = item.sizeCode ? ` Taglia rilevata: ${item.sizeCode}${item.animalsPerKg ? `, circa ${number(item.animalsPerKg)} animali/kg` : ''}.` : '';
+      const validAnimalsPerKg = Number(item.animalsPerKg) > 0 ? Number(item.animalsPerKg) : 0;
+      const detail = item.sizeCode ? ` Taglia rilevata: ${item.sizeCode}${validAnimalsPerKg ? `, circa ${number(validAnimalsPerKg)} animali/kg` : ''}.` : '';
       return { date: item.date, title, text: `${text}${detail}` };
     }),
     {
@@ -56,7 +104,28 @@ function renderPage(data: any) {
   const uniqueTimeline = timeline.filter((item, index, all) =>
     index === all.findIndex(candidate => candidate.date === item.date && candidate.title === item.title)
   );
-  const origins = lotRows.map((lot: any) => lot.origin || lot.supplier).filter(Boolean);
+  const origins = lotRows.map((lot: any) => publicOrigin(lot.origin || lot.supplier)).filter(Boolean);
+  const measuredGrowth = growthPoints(history);
+  let bestWeight = 0;
+  const bestGrowth = measuredGrowth.map(point => {
+    bestWeight = Math.max(bestWeight, point.weight);
+    return { date: point.date, weight: bestWeight };
+  });
+  const baseline = bestGrowth[0]?.weight || 0;
+  const growthPercent = bestGrowth.map(point => ({
+    date: point.date,
+    value: baseline > 0 ? Math.max(0, ((point.weight - baseline) / baseline) * 100) : 0
+  }));
+  const growthCharts = [
+    lineChart(measuredGrowth.map(point => ({ date: point.date, value: point.weight })), {
+      title: 'Peso medio indicativo', unit: 'mg/animale',
+      description: 'Valori medi ricavati dalle misure positive registrate durante il percorso.'
+    }),
+    lineChart(growthPercent, {
+      title: 'Miglior accrescimento raggiunto', unit: '%',
+      description: 'Progressione del miglior peso medio osservato rispetto alla prima misura disponibile.'
+    })
+  ].filter(Boolean).join('');
 
   return `<!doctype html><html lang="it"><head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -72,8 +141,9 @@ function renderPage(data: any) {
       .eyebrow{color:var(--teal);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}.metric{background:#f1f7f6;padding:14px;border-radius:12px}.metric strong{display:block;font-size:21px}.metric span{font-size:12px;color:var(--muted)}
       h2{margin:4px 0 16px;font-size:24px}.species{font-style:italic}.details{display:grid;grid-template-columns:1fr 1fr;gap:12px}.detail{border-left:3px solid var(--teal);padding:4px 12px}.detail small{display:block;color:var(--muted)}
       .timeline{position:relative;margin:8px 0 0 9px;padding-left:27px;border-left:2px solid #b9d8d5}.event{position:relative;padding:0 0 25px}.event:last-child{padding-bottom:0}.event:before{content:"";position:absolute;left:-34px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--teal);border:4px solid var(--mint)}.event time{font-size:12px;color:var(--teal);font-weight:700}.event h3{margin:3px 0;font-size:17px}.event p{margin:0;color:var(--muted)}
+      .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.chart{border:1px solid var(--line);border-radius:14px;padding:16px;overflow:hidden}.chart h3{margin:0 0 3px;font-size:18px}.chart p{color:var(--muted);font-size:13px;margin:0 0 8px}.chart svg{display:block;width:100%;height:auto}.axis{stroke:#c9d8da;stroke-width:1}.growth-line{fill:none;stroke:var(--teal);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.growth-dot{fill:white;stroke:var(--teal);stroke-width:3}.scale{fill:var(--muted);font-size:11px}.chart-latest{display:block;color:var(--teal);font-size:13px;margin-top:4px}
       .note{background:#eaf5f3;border-radius:14px;padding:18px;color:#335966}.footer{text-align:center;color:#71828a;font-size:12px;padding:8px 20px 35px}
-      @media(max-width:680px){.summary{grid-template-columns:1fr 1fr}.details{grid-template-columns:1fr}.brand{align-items:flex-start}.verified{font-size:11px}.card{padding:18px}}
+      @media(max-width:680px){.summary{grid-template-columns:1fr 1fr}.details,.charts{grid-template-columns:1fr}.brand{align-items:flex-start}.verified{font-size:11px}.card{padding:18px}}
     </style></head><body>
     <header class="hero"><div class="wrap"><div class="brand">${logo ? `<img class="logo" src="${logo}" alt="${esc(company.ragioneSociale)}">` : `<strong>${esc(company.ragioneSociale)}</strong>`}<span class="verified">✓ Tracciabilità verificata</span></div>
     <h1>Il percorso del seme vivo consegnato</h1><p>Una sintesi trasparente delle principali fasi di crescita, controllo e preparazione alla reimmersione.</p></div></header>
@@ -82,6 +152,7 @@ function renderPage(data: any) {
     <div class="detail"><small>Data di consegna</small><strong>${formatDate(sale.saleDate)}</strong></div><div class="detail"><small>Origine dichiarata</small><strong>${esc([...new Set(origins)].join(' · ') || 'Filiera controllata')}</strong></div></div>
     <div class="summary"><div class="metric"><strong>${bags.length}</strong><span>Colli</span></div><div class="metric"><strong>${number(netWeight,2)} kg</strong><span>Peso netto</span></div>
     <div class="metric"><strong>${esc(sizesList || '—')}</strong><span>Taglia alla consegna</span></div><div class="metric"><strong>${number(animals)}</strong><span>Esemplari stimati</span></div></div></section>
+    ${growthCharts ? `<section class="card"><span class="eyebrow">Accrescimento documentato</span><h2>La crescita nel tempo</h2><div class="charts">${growthCharts}</div></section>` : ''}
     <section class="card"><span class="eyebrow">Percorso documentato</span><h2>Dall’ingresso alla consegna</h2><div class="timeline">${uniqueTimeline.map(item =>
       `<article class="event"><time>${formatDate(item.date)}</time><h3>${esc(item.title)}</h3><p>${esc(item.text)}</p></article>`
     ).join('')}</div></section>
