@@ -7,6 +7,7 @@ import { db } from "../db";
 import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzle-orm";
 import { pdfGenerator } from "../services/pdf-generator";
 import { generateAdvancedSaleDocument as buildAdvancedSaleDocument, type AdvancedSaleDocumentKind } from "../services/advanced-sale-documents";
+import { createPublicTraceabilityToken } from "../services/public-traceability-token";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -1323,12 +1324,19 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     const [existingDdt] = sale.ddtId
       ? await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
       : [];
+    const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const protocol = forwardedProto || req.protocol;
+    const host = req.get('host');
+    const traceabilityUrl = host
+      ? `${protocol}://${host}/tracciabilita/${createPublicTraceabilityToken(sale.id)}`
+      : undefined;
     const generatedPdf = await buildAdvancedSaleDocument(kind, {
       sale,
       bags: bagsWithOrigins,
       operations: operationRows,
       customer,
-      ddt: existingDdt
+      ddt: existingDdt,
+      traceabilityUrl
     });
     // Puppeteer può restituire Uint8Array: Express lo serializzerebbe come JSON.
     const pdf = Buffer.isBuffer(generatedPdf) ? generatedPdf : Buffer.from(generatedPdf);

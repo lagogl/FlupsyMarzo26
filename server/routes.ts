@@ -150,6 +150,10 @@ import {
 } from "./services/basket-lot-composition.service";
 
 export async function registerRoutes(app: Express, existingServer?: Server): Promise<Server> {
+  // Pagina cliente pubblica, in sola lettura e protetta da token cifrato.
+  const traceabilityModule = await import('./modules/public-traceability/public-traceability.routes');
+  app.use('/tracciabilita', traceabilityModule.publicTraceabilityRoutes);
+
   // 🎯 MODULI ORGANIZZATI - Registrazione route modularizzate
   app.use('/api/flupsys', flupsyRoutes);
   console.log('✅ Modulo FLUPSYS registrato su /api/flupsys');
