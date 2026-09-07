@@ -281,6 +281,12 @@ export default function AdvancedSales() {
     queryKey: ['/api/advanced-sales'],
     queryFn: () => apiRequest('/api/advanced-sales?pageSize=10000')
   });
+  const [saleDetailsId, setSaleDetailsId] = useState<number | null>(null);
+  const { data: saleDetailsData, isLoading: loadingSaleDetails } = useQuery({
+    queryKey: ['/api/advanced-sales/detail', saleDetailsId],
+    queryFn: () => apiRequest(`/api/advanced-sales/${saleDetailsId}`),
+    enabled: saleDetailsId !== null
+  });
 
   // Mutation per creare vendita
   const createSaleMutation = useMutation({
@@ -554,6 +560,21 @@ export default function AdvancedSales() {
       notes
     });
   };
+
+  const formatSaleDate = (value: unknown) => {
+    if (!value) return "—";
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? "—" : format(date, "dd/MM/yyyy");
+  };
+
+  const formatSaleNumber = (value: unknown) =>
+    Number(value || 0).toLocaleString("it-IT");
+
+  const formatSaleWeight = (value: unknown) =>
+    Number(value || 0).toLocaleString("it-IT", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
 
   const buildAggregateAllocations = (
     animalCount: number,
