@@ -6,72 +6,84 @@ id = "YkMo4aExHXSPEb1QxCXMc"
 uri = "file://riepilogo_modifiche_19marzo2026.pdf"
 type = "pdf"
 title = "Riepilogo Modifiche — 19 Marzo 2026 (verificato da git)"
+logical_id = "04dc8db5-5269-4d13-9bae-2ca6ff7973ae"
 
 [[outputs]]
 id = "V1sA1O4mRfkUbIORj6DdB"
 uri = "file://riepilogo_operatori_19marzo2026.pdf"
 type = "pdf"
 title = "Novita per gli Operatori — 19 Marzo 2026"
+logical_id = "070307a6-a3a3-444d-9cb2-77c05308d0dd"
 
 [[outputs]]
 id = "c7jowfKEC3-No0g8SY6vG"
 uri = "file://exports/FLUPSY_Guida_IMM_Operatori.pdf"
 type = "pdf"
 title = "Guida Operatori — IMM (PDF, 7 pagine)"
+logical_id = "cec3df69-3e76-49bc-8428-d44ff15ff6bd"
 
 [[outputs]]
 id = "Aj-AdbJ6VqTM6-ypAGRvi"
 uri = "file://exports/FLUPSY_Manuale_IT.pdf"
 type = "pdf"
 title = "Manuale FLUPSY completo — Italiano (PDF, 58 pagine)"
+logical_id = "896a3793-929e-4998-b429-0162df3170a7"
 
 [[outputs]]
 id = "_y8cV4wZ9kaU52bDu1LKm"
 uri = "file://exports/FLUPSY_Manual_EN.pdf"
 type = "pdf"
 title = "FLUPSY Manual — English (PDF, 55 pages)"
+logical_id = "2b929100-8895-493c-849b-aa3e037689f8"
 
 [[outputs]]
 id = "qw05YyLlZwQOtx-qwbxaB"
 uri = "file://docs/API-Operazione-Peso-Esterna.md"
 type = "text"
 title = "API esterna – Operazione Peso (documento tecnico)"
+logical_id = "e6aaebfa-fc8e-4a39-b4b5-f86a630b732f"
 
 [[outputs]]
 id = "IYvqkQli8FEXzB5FknNOb"
 uri = "file://docs/Integrazione-Seneye.md"
 type = "text"
 title = "Integrazione Seneye (documento tecnico)"
+logical_id = "40c70a6e-92c1-4244-a6f7-8bb8b3884f60"
 
 [[outputs]]
 id = "P3jAdym20f74TRSJRqGuZ"
 uri = "file://exports/confronto_conteggi_vagliature_vendite.xlsx"
 type = "table"
 title = "Confronto conteggi — Registrato vs Corretto"
+logical_id = "26fb98d6-ed9d-4811-b5cd-9ca194fbe718"
 
 [[outputs]]
 id = "DKnt4k1TfkyRQS0AQl-Rx"
 uri = "file://exports/Piano_Sopravvivenza_FLUPSY.pdf"
 type = "pdf"
 title = "Piano Sopravvivenza FLUPSY (PDF da condividere)"
+logical_id = "33fdeb02-f961-40dc-894d-e44c18894b28"
 
 [[outputs]]
 id = "Yay-wm-gdixIWtXGk9PYZ"
 uri = "file://docs/Guida-Mappa-Termica.md"
 type = "text"
 title = "Guida alla Mappa Termica FLUPSY (per operatori)"
+logical_id = "18dfb334-f2c6-4f9c-b2cd-4e8527fd8006"
 
 [[outputs]]
 id = "b6t5KhEOBH17CbRrZ3J5O"
 uri = "file://docs/Guida-Mappa-Termica.pdf"
 type = "pdf"
 title = "Guida alla Mappa Termica (PDF, senza parte AI)"
+logical_id = "370ea02c-e75c-4301-bd99-1ba4d2abee13"
 
 [[outputs]]
 id = "NHGjsOivTvDxE0kDrJ-rk"
 uri = "file://exports/Bins_CaPisani_6-10_ciclo_penultimo-ultimo.xlsx"
 type = "table"
 title = "Bins Ca Pisani 6-10 — Genealogia fino al lotto"
+logical_id = "80310706-7e15-4f3c-bbfc-9550d3de615b"
 
 [[outputs]]
 id = "gTFqcD4IECKZXP7Bkozl1"
@@ -79,3 +91,18 @@ uri = "file://attached_assets/reports/analisi_vagliatura_253.pdf"
 type = "pdf"
 title = "Analisi Vagliatura n.253 — rev. 2 (corretta per la crescita)"
 description = "Report aggiornato: perdita reale di biomassa (~33 kg alle densità attuali), confronto taglie IN vs OUT, anomalia di campionatura e raccomandazioni operative."
+logical_id = "ea21ac01-e56d-4b51-a893-3e39ead436ca"
+
+[[outputs]]
+id = "4DBE8K7q3pK0UllcaAjZW"
+uri = "file://exports/Guida_Gestione_Vendite_Avanzate.pdf"
+type = "pdf"
+title = "Guida Gestione Vendite Avanzate"
+description = "Guida colorata A4 in 5 pagine per gli operatori: creazione vendita, selezione ceste, sacchi, documenti, storno e controlli finali."
+logical_id = "184eb7ac-da65-4bb5-bab3-6cf652795bab"
+content_hash = "sha256:3e8e256a6e04753b657d05ae54abd9be7d3bb174d4d9876c223eb9de72d1c8e1"
+size = 316566
+mtime_ms = 1788795269334
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:2865e74a-6bcf-4df0-8524-8edc0c7c2777/184eb7ac-da65-4bb5-bab3-6cf652795bab/140773bd-1969-4a86-9410-5fbb41c93077"
+storage_version_token = "1788795277806960"
+content_type = "application/pdf"

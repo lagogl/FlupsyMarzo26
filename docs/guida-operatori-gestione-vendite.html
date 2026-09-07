@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Guida operatori – Gestione Vendite Avanzate</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #173044; background: #eef5f7; }
+  .page { width: 210mm; height: 297mm; padding: 16mm 17mm 14mm; background: white; page-break-after: always; position: relative; overflow: hidden; }
+  .page:last-child { page-break-after: auto; }
+  .topline { height: 5px; background: linear-gradient(90deg,#083d56,#00a6a6,#69c36d); position: absolute; top: 0; left: 0; right: 0; }
+  .footer { position: absolute; bottom: 8mm; left: 17mm; right: 17mm; display:flex; justify-content:space-between; color:#6b7f8c; font-size:9px; border-top:1px solid #dce7eb; padding-top:4mm; }
+  .brand { display:flex; align-items:center; justify-content:space-between; margin-bottom:10mm; }
+  .logos { display:flex; align-items:center; gap:12px; }
+  .logos img { max-height:16mm; max-width:38mm; object-fit:contain; }
+  .eyebrow { text-transform:uppercase; letter-spacing:1.5px; font-weight:700; color:#008b8b; font-size:11px; }
+  h1 { font-size:32px; line-height:1.08; color:#083d56; margin:5mm 0; }
+  h2 { font-size:23px; color:#083d56; margin:0 0 7mm; }
+  h3 { font-size:16px; color:#086b78; margin:0 0 3mm; }
+  p { font-size:12.5px; line-height:1.55; margin:0 0 4mm; }
+  .hero { background:linear-gradient(135deg,#083d56,#087d86); color:white; border-radius:16px; padding:13mm 11mm; margin-top:11mm; }
+  .hero h1 { color:white; margin-top:0; max-width:145mm; }
+  .hero p { font-size:16px; max-width:145mm; color:#ddf8f4; }
+  .pill { display:inline-block; padding:2.5mm 4mm; border-radius:999px; background:#dff7f4; color:#08746f; font-size:11px; font-weight:700; margin:1.5mm 1.5mm 0 0; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6mm; }
+  .card { border:1px solid #d8e6ea; border-radius:12px; padding:6mm; background:#fff; }
+  .card.teal { background:#e9f8f7; border-color:#a9dedb; }
+  .card.orange { background:#fff5e8; border-color:#f7cc90; }
+  .card.blue { background:#eaf4fb; border-color:#afd4e8; }
+  .card.green { background:#eef8e9; border-color:#badca9; }
+  .number { width:9mm; height:9mm; border-radius:50%; background:#00a6a6; color:white; display:inline-flex; align-items:center; justify-content:center; font-weight:700; margin-right:3mm; vertical-align:middle; }
+  .step { display:flex; gap:4mm; margin-bottom:5mm; align-items:flex-start; }
+  .step .number { flex:0 0 9mm; }
+  .step strong { color:#083d56; display:block; margin-bottom:1mm; }
+  .step p { margin:0; }
+  .alert { padding:5mm 6mm; border-radius:10px; margin:5mm 0; font-size:12px; line-height:1.45; }
+  .alert.warn { background:#fff2d9; border-left:5px solid #f0a128; color:#6f4300; }
+  .alert.danger { background:#feecec; border-left:5px solid #d64545; color:#7b2020; }
+  .alert.ok { background:#e8f7ec; border-left:5px solid #37a65a; color:#185b2d; }
+  ul { padding-left:6mm; margin:2mm 0 0; }
+  li { font-size:12px; line-height:1.5; margin-bottom:2mm; }
+  .docrow { display:flex; align-items:center; gap:4mm; padding:3.5mm 0; border-bottom:1px solid #e2ebee; font-size:12px; }
+  .docicon { width:9mm; height:9mm; border-radius:8px; background:#e5f6f5; color:#008b8b; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+  .checklist { list-style:none; padding:0; }
+  .checklist li { position:relative; padding-left:9mm; margin-bottom:4mm; }
+  .checklist li:before { content:"✓"; position:absolute; left:0; top:-1mm; width:6mm; height:6mm; border-radius:50%; background:#39a85a; color:white; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+  .bigcall { margin-top:11mm; text-align:center; padding:8mm; background:#083d56; color:white; border-radius:14px; }
+  .bigcall strong { display:block; font-size:20px; margin-bottom:2mm; }
+  .small { font-size:10px; color:#6b7f8c; }
+</style>
+</head>
+<body>
+  <section class="page">
+    <div class="topline"></div>
+    <div class="brand">
+      <div class="logos">
+        <img src="../attached_assets/logos/delta-futuro.png" alt="Delta Futuro">
+        <img src="../attached_assets/logos/ecotapes.png" alt="Ecotapes">
+      </div>
+      <div class="eyebrow">Guida rapida operatori</div>
+    </div>
+    <div class="hero">
+      <div class="eyebrow" style="color:#8ef1df">Modulo operativo</div>
+      <h1>Gestione Vendite Avanzate</h1>
+      <p>Come selezionare le ceste, preparare i sacchi, confermare la vendita e generare correttamente i documenti.</p>
+    </div>
+    <div style="margin-top:10mm">
+      <span class="pill">Selezione multi-cesta</span>
+      <span class="pill">Tracciabilità</span>
+      <span class="pill">Sacchi e allocazioni</span>
+      <span class="pill">DDT e DDR</span>
+      <span class="pill">Fatture in Cloud</span>
+    </div>
+    <div class="grid2" style="margin-top:12mm">
+      <div class="card teal">
+        <h3>Da Vagliatura con Mappa</h3>
+        <p>Per vendite già predisposte tramite operazioni di vagliatura.</p>
+      </div>
+      <div class="card blue">
+        <h3>Ceste selezionate manualmente</h3>
+        <p>Per vendere l’intero contenuto di una o più ceste attive.</p>
+      </div>
+    </div>
+    <div class="bigcall">
+      <strong>Prima regola: controllare prima di confermare</strong>
+      Cliente, azienda, ceste, sacchi, animali e peso devono essere corretti.
+    </div>
+    <div class="footer"><span>FLUPSY Ecotapes / Delta Futuro</span><span>1 · Introduzione</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"></div>
+    <div class="eyebrow">Fase 1</div>
+    <h2>Creare una nuova vendita</h2>
+    <div class="step"><span class="number">1</span><p><strong>Apri il modulo</strong>Vai in <b>Vendite → Gestione Vendite Avanzate → Nuova Vendita</b>.</p></div>
+    <div class="step"><span class="number">2</span><p><strong>Scegli l’origine</strong>Seleziona “Da Vagliatura con Mappa” oppure “Ceste selezionate manualmente”.</p></div>
+    <div class="step"><span class="number">3</span><p><strong>Seleziona le ceste</strong>Nella modalità manuale usa <b>Filtra per FLUPSY</b>. Le ceste sono ordinate per numero; spunta quelle da vendere.</p></div>
+    <div class="step"><span class="number">4</span><p><strong>Indica il cliente</strong>Sceglilo dall’anagrafica. Se non è presente, abilita l’inserimento manuale e compila i dati richiesti.</p></div>
+    <div class="step"><span class="number">5</span><p><strong>Scegli l’azienda</strong>Controlla che l’emittente sia Delta Futuro oppure Ecotapes e verifica la data.</p></div>
+    <div class="step"><span class="number">6</span><p><strong>Crea la vendita</strong>Aggiungi eventuali note e premi <b>Crea Vendita</b>.</p></div>
+    <div class="alert ok"><b>Selezione più semplice:</b> puoi cambiare filtro FLUPSY senza perdere le ceste già spuntate.</div>
+    <div class="card orange" style="margin-top:7mm">
+      <h3>Controllo immediato</h3>
+      <ul>
+        <li>Il numero delle ceste selezionate è corretto?</li>
+        <li>Il totale animali mostrato è plausibile?</li>
+        <li>Cliente e azienda emittente sono quelli giusti?</li>
+      </ul>
+    </div>
+    <div class="footer"><span>Guida Gestione Vendite Avanzate</span><span>2 · Nuova vendita</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"></div>
+    <div class="eyebrow">Fase 2</div>
+    <h2>Preparare sacchi e quantità</h2>
+    <div class="grid2">
+      <div class="card teal"><h3>Configura i sacchi</h3><p>Indica numero, contenuto e quantità di ogni sacco previsto per la consegna.</p></div>
+      <div class="card blue"><h3>Distribuisci le origini</h3><p>Assegna ai sacchi gli animali provenienti dalle ceste selezionate.</p></div>
+      <div class="card green"><h3>Controlla i totali</h3><p>Verifica animali, peso complessivo e quantità residue.</p></div>
+      <div class="card orange"><h3>Spiega le differenze</h3><p>Eventuali perdite o eccedenze devono essere controllate e motivate.</p></div>
+    </div>
+    <div style="margin-top:10mm">
+      <h3>Prima della conferma</h3>
+      <ul class="checklist">
+        <li>Cliente e azienda emittente verificati</li>
+        <li>Data della vendita corretta</li>
+        <li>Ceste selezionate corrette</li>
+        <li>Numero di sacchi corretto</li>
+        <li>Animali e peso totale controllati</li>
+        <li>Eventuali differenze dichiarate e motivate</li>
+      </ul>
+    </div>
+    <div class="alert danger"><b>Attenzione:</b> non confermare se quantità, peso o sacchi non coincidono. Leggi il messaggio del sistema e correggi prima i dati.</div>
+    <div class="alert ok"><b>Dopo la conferma</b> il sistema registra la vendita, aggiorna le ceste e conserva la provenienza degli animali per la tracciabilità.</div>
+    <div class="footer"><span>Guida Gestione Vendite Avanzate</span><span>3 · Sacchi e conferma</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"></div>
+    <div class="eyebrow">Fase 3</div>
+    <h2>Generare i documenti</h2>
+    <p>Dalla scheda <b>Vendite</b> puoi aprire i singoli documenti oppure generare il fascicolo completo con <b>Stampa documenti</b>.</p>
+    <div class="docrow"><span class="docicon">1</span><b>Rapporto di consegna</b><span class="small">Contiene il QR pubblico di tracciabilità</span></div>
+    <div class="docrow"><span class="docicon">2</span><b>Dichiarazione di vendita e condizioni</b></div>
+    <div class="docrow"><span class="docicon">3</span><b>DDR</b><span class="small">Solo per Delta Futuro</span></div>
+    <div class="docrow"><span class="docicon">4</span><b>DDT</b></div>
+    <div class="grid2" style="margin-top:9mm">
+      <div class="card teal">
+        <h3>Delta Futuro · 4 documenti</h3>
+        <p>Rapporto, dichiarazione, DDR e DDT. Il progressivo DDR annuale viene assegnato automaticamente.</p>
+      </div>
+      <div class="card orange">
+        <h3>Ecotapes · 3 documenti</h3>
+        <p>Rapporto, dichiarazione e DDT. Non viene generato il DDR interno perché si usa quello prestampato.</p>
+      </div>
+    </div>
+    <div class="alert warn"><b>Stampa documenti invia una vera email.</b> Il sistema genera il fascicolo, invia il riepilogo ai responsabili con i PDF allegati e prepara i dati per Fatture in Cloud.</div>
+    <div class="alert ok"><b>Documenti singoli:</b> aprire o stampare un singolo documento dal menu non invia l’email automatica.</div>
+    <div class="card blue" style="margin-top:7mm">
+      <h3>Numerazioni</h3>
+      <p><b>DDT:</b> il numero viene calcolato automaticamente dalla numerazione presente in Fatture in Cloud per azienda e anno.</p>
+      <p><b>DDR:</b> il progressivo Delta Futuro è annuale e viene incrementato automaticamente.</p>
+    </div>
+    <div class="footer"><span>Guida Gestione Vendite Avanzate</span><span>4 · Documenti</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"></div>
+    <div class="eyebrow">Da ricordare</div>
+    <h2>Storno, ristampe e controlli finali</h2>
+    <div class="card orange">
+      <h3>Storno di una vendita</h3>
+      <p>Una vendita confermata può essere stornata indicando obbligatoriamente il motivo. Il sistema ripristina quantità e stato delle ceste, mantenendo la registrazione storica.</p>
+    </div>
+    <div class="alert danger"><b>Lo storno è vietato dopo l’emissione del DDT.</b> In questo caso rivolgersi al responsabile amministrativo.</div>
+    <div style="margin-top:9mm">
+      <h3>Regole operative</h3>
+      <ul class="checklist">
+        <li>Non creare una nuova vendita per ristampare un documento.</li>
+        <li>Usa sempre la vendita esistente per le ristampe.</li>
+        <li>Non modificare manualmente numeri DDT o DDR già assegnati.</li>
+        <li>Non usare “Stampa documenti” per fare una prova: parte l’email reale.</li>
+        <li>Se l’email fallisce, leggere l’errore e non considerare completato il fascicolo.</li>
+        <li>Se compare un errore, non premere conferma ripetutamente.</li>
+      </ul>
+    </div>
+    <div class="bigcall">
+      <strong>Sequenza corretta</strong>
+      Seleziona → controlla → configura i sacchi → conferma → genera i documenti
+    </div>
+    <p style="text-align:center;margin-top:10mm;color:#607784">In caso di dubbio, fermarsi prima della conferma e chiedere al responsabile.</p>
+    <div class="footer"><span>FLUPSY Ecotapes / Delta Futuro</span><span>5 · Controllo rapido</span></div>
+  </section>
+</body>
+</html>
