@@ -7,7 +7,7 @@ channel = "stable-24_05"
 packages = ["curl", "hdf5", "libjpeg", "netcdf", "zlib"]
 
 [deployment]
-deploymentTarget = "vm"
+deploymentTarget = "cloudrun"
 run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
 
