@@ -143,6 +143,7 @@ export default function AdvancedSales() {
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [reconciliationConfirmOpen, setReconciliationConfirmOpen] = useState(false);
   const [selectedReconciliationSaleIds, setSelectedReconciliationSaleIds] = useState<number[]>([]);
+  const [guidedReconciliationSale, setGuidedReconciliationSale] = useState<any | null>(null);
   const ddrYear = new Date().getFullYear();
 
   const { toast } = useToast();
@@ -1966,21 +1967,33 @@ export default function AdvancedSales() {
                               : "—"}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={sale.status === "automatic" ? "default" : "secondary"}
-                              className={
-                                sale.status === "automatic"
-                                  ? "bg-green-600"
-                                  : sale.status === "partial"
-                                    ? "bg-amber-100 text-amber-800"
-                                    : "bg-red-100 text-red-800"
-                              }
-                              title={sale.reason}
-                            >
-                              {sale.status === "automatic"
-                                ? "Associabile"
-                                : sale.status === "partial" ? "Parziale" : "Manuale"}
-                            </Badge>
+                            <div className="flex flex-col items-start gap-1.5">
+                              <Badge
+                                variant={sale.status === "automatic" ? "default" : "secondary"}
+                                className={
+                                  sale.status === "automatic"
+                                    ? "bg-green-600"
+                                    : sale.status === "partial"
+                                      ? "bg-amber-100 text-amber-800"
+                                      : "bg-red-100 text-red-800"
+                                }
+                                title={sale.reason}
+                              >
+                                {sale.status === "automatic"
+                                  ? "Associabile"
+                                  : sale.status === "partial" ? "Parziale" : "Manuale"}
+                              </Badge>
+                              {!selectable && (
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="h-auto p-0 text-xs"
+                                  onClick={() => setGuidedReconciliationSale(sale)}
+                                >
+                                  Come risolvere
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -2003,6 +2016,110 @@ export default function AdvancedSales() {
               onClick={() => setReconciliationConfirmOpen(true)}
             >
               Applica {selectedReconciliationSaleIds.length || ""} associazioni
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={guidedReconciliationSale !== null}
+        onOpenChange={(open) => !open && setGuidedReconciliationSale(null)}
+      >
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Come riconciliare {guidedReconciliationSale?.saleNumber}
+            </DialogTitle>
+            <DialogDescription>
+              Controlla cosa manca, correggi o crea l’ordine in Fatture in Cloud e poi sincronizza nuovamente gli ordini.
+            </DialogDescription>
+          </DialogHeader>
+
+          {guidedReconciliationSale && (
+            <div className="space-y-4">
+              <div className="grid gap-3 rounded-lg border bg-slate-50 p-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Cliente</p>
+                  <p className="font-medium">{guidedReconciliationSale.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Animali vendita</p>
+                  <p className="font-medium">{formatSaleNumber(guidedReconciliationSale.totalAnimals)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Ancora da associare</p>
+                  <p className="font-medium text-red-700">{formatSaleNumber(guidedReconciliationSale.missingAnimals)}</p>
+                </div>
+              </div>
+
+              {(guidedReconciliationSale.allocations || []).length > 0 && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <p className="font-semibold text-green-900">Quota già individuata</p>
+                  <div className="mt-2 space-y-1 text-sm text-green-900">
+                    {guidedReconciliationSale.allocations.map((item: any) => (
+                      <p key={`${item.orderId}-${item.sizeCode}`}>
+                        Ordine n. {item.orderNumber || item.orderId} · {item.sizeCode} · {formatSaleNumber(item.quantity)} animali
+                      </p>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-green-800">
+                    Questa quota non viene registrata da sola: la vendita diventerà selezionabile quando sarà disponibile anche il residuo mancante.
+                  </p>
+                </div>
+              )}
+
+              {(guidedReconciliationSale.componentIssues || []).map((issue: any) => (
+                <div key={issue.sizeCode} className="rounded-lg border border-amber-200 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">Taglia {issue.sizeCode}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Richiesti {formatSaleNumber(issue.requiredAnimals)} · disponibili {formatSaleNumber(issue.proposedAnimals)}
+                      </p>
+                    </div>
+                    <Badge className="bg-red-100 text-red-800">
+                      Mancano {formatSaleNumber(issue.missingAnimals)}
+                    </Badge>
+                  </div>
+
+                  {issue.matchingOrders?.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-sm font-medium">Ordini della stessa taglia trovati:</p>
+                      {issue.matchingOrders.map((order: any) => (
+                        <div key={order.orderId} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
+                          <span>Ordine n. {order.orderNumber || order.orderId} del {formatSaleDate(order.orderDate)}</span>
+                          <span className={order.usable ? "text-green-700" : "text-red-700"}>
+                            {order.usable
+                              ? `Residuo ${formatSaleNumber(order.residual)}`
+                              : order.issue}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">
+                      Non esiste alcun ordine di questa taglia per il cliente. Creane uno in Fatture in Cloud.
+                    </p>
+                  )}
+                </div>
+              ))}
+
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                <p className="font-semibold">Passaggi da eseguire</p>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>Crea o correggi in FIC un ordine dello stesso cliente e della taglia indicata.</li>
+                  <li>Assicurati che il residuo copra almeno la quantità mancante.</li>
+                  <li>Sincronizza gli ordini nella pagina Ordini condivisi.</li>
+                  <li>Torna qui e riapri l’anteprima: la vendita diventerà “Associabile”.</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGuidedReconciliationSale(null)}>Chiudi</Button>
+            <Button onClick={() => window.location.assign('/ordini-condivisi')}>
+              Vai a Ordini condivisi
             </Button>
           </DialogFooter>
         </DialogContent>

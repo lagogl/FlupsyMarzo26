@@ -2466,6 +2466,7 @@ async function buildHistoricalOrderReconciliationPreview() {
     if (!context) continue;
     const allocations: OrderAllocation[] = [];
     const reasons = new Set<string>();
+    const componentIssues: any[] = [];
     let missingAnimals = 0;
 
     for (const component of context.components) {
@@ -2502,7 +2503,29 @@ async function buildHistoricalOrderReconciliationPreview() {
           residualAfter: residualBefore - quantity
         });
       }
-      if (remaining > 0) missingAnimals += remaining;
+      if (remaining > 0) {
+        missingAnimals += remaining;
+        const matchingOrders = customerAndSizeOrders.map(order => ({
+          orderId: Number(order.id),
+          orderNumber: order.numero === null ? null : Number(order.numero),
+          orderDate: toDateKey(order.data),
+          residual: virtualResidual.get(Number(order.id)) || 0,
+          usable: toDateKey(order.data) <= toDateKey(sale.saleDate) &&
+            (virtualResidual.get(Number(order.id)) || 0) > 0,
+          issue: toDateKey(order.data) > toDateKey(sale.saleDate)
+            ? "Ordine successivo alla vendita"
+            : (virtualResidual.get(Number(order.id)) || 0) <= 0
+              ? "Ordine senza residuo"
+              : null
+        }));
+        componentIssues.push({
+          sizeCode: component.sizeCode,
+          requiredAnimals: component.animalCount,
+          proposedAnimals: component.animalCount - remaining,
+          missingAnimals: remaining,
+          matchingOrders
+        });
+      }
     }
 
     const proposedAnimals = allocations.reduce((sum, item) => sum + item.quantity, 0);
@@ -2523,6 +2546,7 @@ async function buildHistoricalOrderReconciliationPreview() {
       proposedAnimals,
       missingAnimals,
       allocations,
+      componentIssues,
       reason: Array.from(reasons).join("; ") || "Cliente, taglia, periodo e residuo compatibili"
     });
   }
