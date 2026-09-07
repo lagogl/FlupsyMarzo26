@@ -1298,12 +1298,24 @@ export const advancedSales = pgTable("advanced_sales", {
   notes: text("notes"), // Note vendita
   pdfPath: text("pdf_path"), // Percorso file PDF generato
   generatedDocuments: jsonb("generated_documents").$type<Record<string, string>>().notNull().default({}), // Timestamp ultima generazione per la suite documentale A4
+  ddrNumber: integer("ddr_number"),
+  ddrYear: integer("ddr_year"),
   ddtId: integer("ddt_id"), // Riferimento DDT creato
   ddtStatus: text("ddt_status", { enum: ["nessuno", "generazione", "locale", "inviato"] }).notNull().default("nessuno"), // Stato DDT
   companyId: integer("company_id"), // ID Azienda Fatture in Cloud per questa vendita
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
 });
+
+export const ddrNumberSequences = pgTable("ddr_number_sequences", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull(),
+  year: integer("year").notNull(),
+  nextNumber: integer("next_number").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, table => ({
+  companyYearUnique: unique("ddr_number_sequences_company_year_unique").on(table.companyId, table.year)
+}));
 
 // Sacchi per vendita
 export const saleBags = pgTable("sale_bags", {

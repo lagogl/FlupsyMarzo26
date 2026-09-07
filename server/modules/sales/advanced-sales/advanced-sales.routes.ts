@@ -13,6 +13,8 @@ router.get('/orders', AdvancedSalesController.getAvailableOrders);
 
 // Clienti per vendite
 router.get('/customers', AdvancedSalesController.getCustomers);
+router.get('/ddr-sequence', AdvancedSalesController.getDdrSequence);
+router.put('/ddr-sequence', AdvancedSalesController.updateDdrSequence);
 
 // CRUD vendite avanzate
 router.get('/', AdvancedSalesController.getAdvancedSales);

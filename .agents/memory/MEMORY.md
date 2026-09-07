@@ -23,3 +23,4 @@
 - [Assistente AI tool SQL](ai-chat-sql-tool.md) — read-only imposto dal DB (txn READ ONLY + timeout + LIMIT esterno), mai solo regex; size_id origini spesso NULL → fasce animals_per_kg.
 - [Storno vendite e DDT](sales-reversal-ddt-boundary.md) — niente storno dopo il DDT; ristampe da snapshot immutabile e generazione documenti fail-closed su azienda ignota.
 - [Tracciabilità pubblica vendite](public-sale-traceability.md) — QR con token cifrato, pagina read-only/noindex e timeline filtrata; mai esporre ID, cliente o dati operativi grezzi.
+- [Numerazione annuale DDR](annual-ddr-numbering.md) — progressivo separato per azienda/anno, assegnato una sola volta; ristampe immutabili e ripartenza automatica annuale.

@@ -53,6 +53,39 @@ import {
   validateManualSaleBags
 } from "../services/manual-sale-accounting";
 
+let documentSchemaReady: Promise<void> | null = null;
+function ensureAdvancedSaleDocumentSchema() {
+  if (!documentSchemaReady) {
+    documentSchemaReady = (async () => {
+      await db.execute(sql.raw(`
+        ALTER TABLE advanced_sales
+          ADD COLUMN IF NOT EXISTS generated_documents jsonb NOT NULL DEFAULT '{}'::jsonb,
+          ADD COLUMN IF NOT EXISTS ddr_number integer,
+          ADD COLUMN IF NOT EXISTS ddr_year integer
+      `));
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS ddr_number_sequences (
+          id serial PRIMARY KEY,
+          company_id integer NOT NULL,
+          year integer NOT NULL,
+          next_number integer NOT NULL DEFAULT 1 CHECK (next_number > 0),
+          updated_at timestamp NOT NULL DEFAULT now(),
+          CONSTRAINT ddr_number_sequences_company_year_unique UNIQUE (company_id, year)
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS advanced_sales_ddr_number_unique
+          ON advanced_sales (company_id, ddr_year, ddr_number)
+          WHERE ddr_number IS NOT NULL
+      `));
+    })().catch(error => {
+      documentSchemaReady = null;
+      throw error;
+    });
+  }
+  return documentSchemaReady;
+}
+
 /**
  * Ottiene il prossimo numero DDT disponibile leggendo SEMPRE l'ultimo DDT da
  * Fatture in Cloud (FIC) per l'azienda emittente specificata.
@@ -1272,6 +1305,101 @@ export async function getAdvancedSale(req: Request, res: Response) {
   }
 }
 
+async function ensureDdrNumber(saleId: number) {
+  await ensureAdvancedSaleDocumentSchema();
+  return db.transaction(async tx => {
+    const lockedResult = await tx.execute(sql`
+      SELECT id, company_id, sale_date, ddr_number, ddr_year
+      FROM advanced_sales WHERE id = ${saleId} FOR UPDATE
+    `);
+    const locked: any = (lockedResult as any).rows?.[0];
+    if (!locked) throw new Error('Vendita non trovata');
+    if (locked.ddr_number && locked.ddr_year) {
+      return { number: Number(locked.ddr_number), year: Number(locked.ddr_year) };
+    }
+    if (!locked.company_id) throw new Error('Azienda emittente non associata alla vendita');
+    const year = Number(String(locked.sale_date).slice(0, 4));
+    await tx.execute(sql`
+      INSERT INTO ddr_number_sequences (company_id, year, next_number)
+      VALUES (
+        ${Number(locked.company_id)},
+        ${year},
+        COALESCE((SELECT MAX(ddr_number) + 1 FROM advanced_sales
+          WHERE company_id = ${Number(locked.company_id)} AND ddr_year = ${year}), 1)
+      )
+      ON CONFLICT (company_id, year) DO NOTHING
+    `);
+    const sequenceResult = await tx.execute(sql`
+      SELECT next_number FROM ddr_number_sequences
+      WHERE company_id = ${Number(locked.company_id)} AND year = ${year}
+      FOR UPDATE
+    `);
+    const nextNumber = Number((sequenceResult as any).rows?.[0]?.next_number);
+    if (!Number.isInteger(nextNumber) || nextNumber < 1) throw new Error('Progressivo DDR non valido');
+    await tx.execute(sql`
+      UPDATE advanced_sales SET ddr_number = ${nextNumber}, ddr_year = ${year}, updated_at = NOW()
+      WHERE id = ${saleId}
+    `);
+    await tx.execute(sql`
+      UPDATE ddr_number_sequences SET next_number = ${nextNumber + 1}, updated_at = NOW()
+      WHERE company_id = ${Number(locked.company_id)} AND year = ${year}
+    `);
+    return { number: nextNumber, year };
+  });
+}
+
+export async function getDdrSequence(req: Request, res: Response) {
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const companyId = Number(req.query.companyId);
+    const year = Number(req.query.year || new Date().getFullYear());
+    if (!Number.isInteger(companyId) || !Number.isInteger(year)) {
+      return res.status(400).json({ success: false, error: 'Azienda o anno non valido' });
+    }
+    const result = await db.execute(sql`
+      SELECT COALESCE(
+        (SELECT next_number FROM ddr_number_sequences WHERE company_id = ${companyId} AND year = ${year}),
+        (SELECT MAX(ddr_number) + 1 FROM advanced_sales WHERE company_id = ${companyId} AND ddr_year = ${year}),
+        1
+      ) AS next_number
+    `);
+    res.json({ success: true, companyId, year, nextNumber: Number((result as any).rows?.[0]?.next_number || 1) });
+  } catch (error) {
+    console.error('Errore lettura progressivo DDR:', error);
+    res.status(500).json({ success: false, error: 'Impossibile leggere il progressivo DDR' });
+  }
+}
+
+export async function updateDdrSequence(req: Request, res: Response) {
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const companyId = Number(req.body.companyId);
+    const year = Number(req.body.year);
+    const nextNumber = Number(req.body.nextNumber);
+    if (![companyId, year, nextNumber].every(Number.isInteger) || nextNumber < 1) {
+      return res.status(400).json({ success: false, error: 'Dati numerazione DDR non validi' });
+    }
+    const maxResult = await db.execute(sql`
+      SELECT COALESCE(MAX(ddr_number), 0) AS max_number
+      FROM advanced_sales WHERE company_id = ${companyId} AND ddr_year = ${year}
+    `);
+    const minimum = Number((maxResult as any).rows?.[0]?.max_number || 0) + 1;
+    if (nextNumber < minimum) {
+      return res.status(409).json({ success: false, error: `Il prossimo numero non può essere inferiore a ${minimum}` });
+    }
+    await db.execute(sql`
+      INSERT INTO ddr_number_sequences (company_id, year, next_number, updated_at)
+      VALUES (${companyId}, ${year}, ${nextNumber}, NOW())
+      ON CONFLICT (company_id, year)
+      DO UPDATE SET next_number = EXCLUDED.next_number, updated_at = NOW()
+    `);
+    res.json({ success: true, companyId, year, nextNumber });
+  } catch (error) {
+    console.error('Errore aggiornamento progressivo DDR:', error);
+    res.status(500).json({ success: false, error: 'Impossibile aggiornare il progressivo DDR' });
+  }
+}
+
 /**
  * Produce one member of the operational document suite from the same frozen sale,
  * bags and allocation records used by the legacy PDF endpoints.
@@ -1284,9 +1412,15 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
   }
 
   try {
+    await ensureAdvancedSaleDocumentSchema();
     const saleId = Number(req.params.id);
     const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
     if (!sale) return res.status(404).json({ success: false, error: 'Vendita non trovata' });
+    if (kind === 'all' || kind === 'bivalve-transfer') {
+      const assigned = await ensureDdrNumber(saleId);
+      sale.ddrNumber = assigned.number;
+      sale.ddrYear = assigned.year;
+    }
 
     const bags = await db.select().from(saleBags)
       .where(eq(saleBags.advancedSaleId, saleId)).orderBy(saleBags.bagNumber);
@@ -1400,6 +1534,7 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
  */
 export async function getAdvancedSales(req: Request, res: Response) {
   try {
+    await ensureAdvancedSaleDocumentSchema();
     const { status, dateFrom, dateTo, page = 1, pageSize = 20 } = req.query;
 
     let filters = [];

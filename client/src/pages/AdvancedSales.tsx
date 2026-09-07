@@ -14,6 +14,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, ChevronDown, Calculator, Truck, ExternalLink, Loader2, Trash2, Users, Waves } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
@@ -121,6 +122,10 @@ export default function AdvancedSales() {
   const [differenceReason, setDifferenceReason] = useState("");
   const [automaticDialogOpen, setAutomaticDialogOpen] = useState(false);
   const [generatedDocumentOverrides, setGeneratedDocumentOverrides] = useState<Record<number, Record<string, string>>>({});
+  const [ddrDialogOpen, setDdrDialogOpen] = useState(false);
+  const [ddrCompanyId, setDdrCompanyId] = useState("");
+  const [ddrNextNumber, setDdrNextNumber] = useState("1");
+  const ddrYear = new Date().getFullYear();
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -198,6 +203,33 @@ export default function AdvancedSales() {
   const { data: companies } = useQuery({
     queryKey: ['/api/fatture-in-cloud/companies/local'],
     queryFn: () => apiRequest('/api/fatture-in-cloud/companies/local')
+  });
+
+  useEffect(() => {
+    if (!ddrDialogOpen || !ddrCompanyId) return;
+    apiRequest(`/api/advanced-sales/ddr-sequence?companyId=${ddrCompanyId}&year=${ddrYear}`)
+      .then(data => setDdrNextNumber(String(data.nextNumber || 1)))
+      .catch(() => setDdrNextNumber("1"));
+  }, [ddrDialogOpen, ddrCompanyId, ddrYear]);
+
+  const saveDdrSequenceMutation = useMutation({
+    mutationFn: () => apiRequest('/api/advanced-sales/ddr-sequence', {
+      method: 'PUT',
+      body: JSON.stringify({
+        companyId: Number(ddrCompanyId),
+        year: ddrYear,
+        nextNumber: Number(ddrNextNumber)
+      })
+    }),
+    onSuccess: () => {
+      setDdrDialogOpen(false);
+      toast({ title: "Numerazione DDR aggiornata", description: `Il prossimo DDR sarà il n. ${ddrNextNumber}/${ddrYear}` });
+    },
+    onError: (error: any) => toast({
+      title: "Impossibile aggiornare la numerazione",
+      description: error.message,
+      variant: "destructive"
+    })
   });
 
   // Query per vendite avanzate esistenti
@@ -1306,8 +1338,61 @@ export default function AdvancedSales() {
 
         <TabsContent value="sales" className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Vendite Avanzate</CardTitle>
+              <Dialog open={ddrDialogOpen} onOpenChange={setDdrDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Numerazione DDR
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Numerazione DDR {ddrYear}</DialogTitle>
+                    <DialogDescription>
+                      Imposta una volta il prossimo numero. Dopo ogni emissione il sistema lo incrementa automaticamente; il 1° gennaio riparte da 1.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                      <Label>Azienda emittente</Label>
+                      <Select value={ddrCompanyId} onValueChange={setDdrCompanyId}>
+                        <SelectTrigger><SelectValue placeholder="Seleziona azienda" /></SelectTrigger>
+                        <SelectContent>
+                          {companies?.companies?.map((company: any) => (
+                            <SelectItem key={company.companyId} value={String(company.companyId)}>
+                              {company.ragioneSociale}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Prossimo numero DDR</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={ddrNextNumber}
+                        onChange={event => setDdrNextNumber(event.target.value)}
+                        disabled={!ddrCompanyId}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Il numero sarà stampato come DDR n. {ddrNextNumber || "—"}/{ddrYear}.
+                      </p>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      onClick={() => saveDdrSequenceMutation.mutate()}
+                      disabled={!ddrCompanyId || Number(ddrNextNumber) < 1 || saveDdrSequenceMutation.isPending}
+                    >
+                      {saveDdrSequenceMutation.isPending ? "Salvataggio..." : "Salva progressivo"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
               {loadingSales ? (

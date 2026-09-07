@@ -244,7 +244,10 @@ export async function generateAdvancedSaleDocument(
       <div><div class="signature">L'acquirente per integrale accettazione</div><div class="signature-note">Nome leggibile e firma</div></div></div>`;
   } else if (kind === 'bivalve-transfer') {
     title = 'Documento di registrazione per il trasferimento di molluschi bivalvi vivi';
-    subtitle = 'Novellame destinato alla reimmersione · documento di accompagnamento del lotto';
+    const ddrReference = data.sale.ddrNumber && data.sale.ddrYear
+      ? `DDR n. ${data.sale.ddrNumber}/${data.sale.ddrYear}`
+      : `DDR · Rif. ${reference}`;
+    subtitle = `${ddrReference} · novellame destinato alla reimmersione`;
     const origin = data.operations.map(operation =>
       `Cesta ${operation.basketPhysicalNumber || operation.basketId}${operation.date ? ` (${displayDate(operation.date)})` : ''}`
     ).join(', ') || '________________';
