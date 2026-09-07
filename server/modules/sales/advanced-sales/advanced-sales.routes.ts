@@ -20,8 +20,8 @@ router.get('/orders', AdvancedSalesController.getAvailableOrders);
 router.get('/customers', AdvancedSalesController.getCustomers);
 router.get('/ddr-sequence', AdvancedSalesController.getDdrSequence);
 router.put('/ddr-sequence', AdvancedSalesController.updateDdrSequence);
-router.get('/order-reconciliation/preview', requireAuth, requireOperator, AdvancedSalesController.getOrderReconciliationPreview);
-router.post('/order-reconciliation/apply', requireAuth, requireOperator, AdvancedSalesController.applyOrderReconciliation);
+router.get('/order-reconciliation/preview', AdvancedSalesController.getOrderReconciliationPreview);
+router.post('/order-reconciliation/apply', AdvancedSalesController.applyOrderReconciliation);
 
 // CRUD vendite avanzate
 router.get('/', AdvancedSalesController.getAdvancedSales);

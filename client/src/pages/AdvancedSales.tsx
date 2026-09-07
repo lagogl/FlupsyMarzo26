@@ -287,6 +287,8 @@ export default function AdvancedSales() {
   const {
     data: reconciliationData,
     isLoading: loadingReconciliation,
+    isError: reconciliationError,
+    error: reconciliationErrorDetails,
     refetch: refetchReconciliation
   } = useQuery({
     queryKey: ['/api/advanced-sales/order-reconciliation/preview'],
@@ -1870,6 +1872,16 @@ export default function AdvancedSales() {
           {loadingReconciliation ? (
             <div className="flex justify-center py-14">
               <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+            </div>
+          ) : reconciliationError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-red-900">
+              <p className="font-semibold">Impossibile caricare la riconciliazione</p>
+              <p className="mt-1 text-sm">
+                {(reconciliationErrorDetails as Error)?.message || "Errore durante il caricamento delle vendite"}
+              </p>
+              <Button variant="outline" size="sm" className="mt-4" onClick={() => refetchReconciliation()}>
+                Riprova
+              </Button>
             </div>
           ) : (
             <div className="space-y-4 overflow-hidden">
