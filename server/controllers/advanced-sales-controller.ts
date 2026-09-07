@@ -60,6 +60,11 @@ import {
   validateBasketAllocationLimits,
   validateManualSaleBags
 } from "../services/manual-sale-accounting";
+import {
+  ensureDdrNumber as allocateDdrNumber,
+  validateNextDdrNumber,
+  type DdrNumberingStore
+} from "../services/ddr-numbering";
 
 let documentSchemaReady: Promise<void> | null = null;
 function ensureAdvancedSaleDocumentSchema() {
@@ -1319,45 +1324,54 @@ export async function getAdvancedSale(req: Request, res: Response) {
 
 async function ensureDdrNumber(saleId: number) {
   await ensureAdvancedSaleDocumentSchema();
-  return db.transaction(async tx => {
-    const lockedResult = await tx.execute(sql`
-      SELECT id, company_id, sale_date, ddr_number, ddr_year
-      FROM advanced_sales WHERE id = ${saleId} FOR UPDATE
-    `);
-    const locked: any = (lockedResult as any).rows?.[0];
-    if (!locked) throw new Error('Vendita non trovata');
-    if (locked.ddr_number && locked.ddr_year) {
-      return { number: Number(locked.ddr_number), year: Number(locked.ddr_year) };
-    }
-    if (!locked.company_id) throw new Error('Azienda emittente non associata alla vendita');
-    const year = Number(String(locked.sale_date).slice(0, 4));
-    await tx.execute(sql`
-      INSERT INTO ddr_number_sequences (company_id, year, next_number)
-      VALUES (
-        ${Number(locked.company_id)},
-        ${year},
-        COALESCE((SELECT MAX(ddr_number) + 1 FROM advanced_sales
-          WHERE company_id = ${Number(locked.company_id)} AND ddr_year = ${year}), 1)
-      )
-      ON CONFLICT (company_id, year) DO NOTHING
-    `);
-    const sequenceResult = await tx.execute(sql`
-      SELECT next_number FROM ddr_number_sequences
-      WHERE company_id = ${Number(locked.company_id)} AND year = ${year}
-      FOR UPDATE
-    `);
-    const nextNumber = Number((sequenceResult as any).rows?.[0]?.next_number);
-    if (!Number.isInteger(nextNumber) || nextNumber < 1) throw new Error('Progressivo DDR non valido');
-    await tx.execute(sql`
-      UPDATE advanced_sales SET ddr_number = ${nextNumber}, ddr_year = ${year}, updated_at = NOW()
-      WHERE id = ${saleId}
-    `);
-    await tx.execute(sql`
-      UPDATE ddr_number_sequences SET next_number = ${nextNumber + 1}, updated_at = NOW()
-      WHERE company_id = ${Number(locked.company_id)} AND year = ${year}
-    `);
-    return { number: nextNumber, year };
-  });
+  const store: DdrNumberingStore = {
+    transaction: work => db.transaction(async tx => work({
+      lockSale: async id => {
+        const result = await tx.execute(sql`
+          SELECT id, company_id, sale_date, ddr_number, ddr_year
+          FROM advanced_sales WHERE id = ${id} FOR UPDATE
+        `);
+        const row: any = (result as any).rows?.[0];
+        return row ? {
+          id: Number(row.id),
+          companyId: row.company_id == null ? null : Number(row.company_id),
+          saleDate: row.sale_date,
+          ddrNumber: row.ddr_number == null ? null : Number(row.ddr_number),
+          ddrYear: row.ddr_year == null ? null : Number(row.ddr_year)
+        } : null;
+      },
+      ensureSequence: async (companyId, year) => {
+        await tx.execute(sql`
+          INSERT INTO ddr_number_sequences (company_id, year, next_number)
+          VALUES (${companyId}, ${year}, COALESCE((
+            SELECT MAX(ddr_number) + 1 FROM advanced_sales
+            WHERE company_id = ${companyId} AND ddr_year = ${year}
+          ), 1))
+          ON CONFLICT (company_id, year) DO NOTHING
+        `);
+      },
+      lockNextNumber: async (companyId, year) => {
+        const result = await tx.execute(sql`
+          SELECT next_number FROM ddr_number_sequences
+          WHERE company_id = ${companyId} AND year = ${year} FOR UPDATE
+        `);
+        return Number((result as any).rows?.[0]?.next_number);
+      },
+      assignSale: async (id, number, year) => {
+        await tx.execute(sql`
+          UPDATE advanced_sales SET ddr_number = ${number}, ddr_year = ${year}, updated_at = NOW()
+          WHERE id = ${id}
+        `);
+      },
+      advanceSequence: async (companyId, year, nextNumber) => {
+        await tx.execute(sql`
+          UPDATE ddr_number_sequences SET next_number = ${nextNumber}, updated_at = NOW()
+          WHERE company_id = ${companyId} AND year = ${year}
+        `);
+      }
+    }))
+  };
+  return allocateDdrNumber(store, saleId);
 }
 
 export async function getDdrSequence(req: Request, res: Response) {
@@ -1395,9 +1409,11 @@ export async function updateDdrSequence(req: Request, res: Response) {
       SELECT COALESCE(MAX(ddr_number), 0) AS max_number
       FROM advanced_sales WHERE company_id = ${companyId} AND ddr_year = ${year}
     `);
-    const minimum = Number((maxResult as any).rows?.[0]?.max_number || 0) + 1;
-    if (nextNumber < minimum) {
-      return res.status(409).json({ success: false, error: `Il prossimo numero non può essere inferiore a ${minimum}` });
+    const highestAssigned = Number((maxResult as any).rows?.[0]?.max_number || 0);
+    try {
+      validateNextDdrNumber(nextNumber, highestAssigned);
+    } catch (error) {
+      return res.status(409).json({ success: false, error: (error as Error).message });
     }
     await db.execute(sql`
       INSERT INTO ddr_number_sequences (company_id, year, next_number, updated_at)
