@@ -106,4 +106,12 @@ test('ricostruisce il codice ciclo e blocca ceste già riutilizzate', () => {
     cycleState: 'closed',
     cycleId: 88
   }) || '', /riutilizzata/);
+  assert.match(getRestoreBlockReason({
+    physicalNumber: 12,
+    basketState: 'available',
+    currentCycleId: null,
+    cycleState: 'closed',
+    cycleId: 88,
+    hasLaterCycle: true
+  }) || '', /ciclo successivo/);
 });

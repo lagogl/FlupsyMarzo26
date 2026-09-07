@@ -2458,16 +2458,13 @@ export async function generateDDT(req: Request, res: Response) {
 
   } catch (error) {
     console.error("Errore nella generazione DDT:", error);
-    const saleId = parseInt(req.params.id);
-    if (Number.isInteger(saleId)) {
-      await db.update(advancedSales)
-        .set({ ddtStatus: 'nessuno', updatedAt: new Date() })
-        .where(and(eq(advancedSales.id, saleId), eq(advancedSales.ddtStatus, 'generazione')))
-        .catch(() => {});
-    }
+    // Non riportare automaticamente lo stato a "nessuno": dopo il claim non
+    // possiamo escludere che un DDT o una consegna siano già stati creati.
+    // Lo stato "generazione" è quindi un marker fail-safe non reversibile che
+    // richiede una verifica/risoluzione esplicita prima di un nuovo tentativo.
     res.status(500).json({
       success: false,
-      error: "Errore nella generazione del DDT"
+      error: "Errore nella generazione del DDT. La vendita resta bloccata per verifica manuale"
     });
   }
 }
@@ -3277,8 +3274,9 @@ export async function sendDDTToFIC(req: Request, res: Response) {
 }
 
 /**
- * Storna (elimina) completamente una vendita avanzata
- * SOLO se il DDT non è stato inviato a Fatture in Cloud
+ * Elimina una bozza oppure storna una vendita manuale confermata.
+ * Dopo qualsiasi generazione DDT lo storno è bloccato: la generazione può
+ * avere già contabilizzato una consegna nel sistema esterno.
  */
 export async function deleteSale(req: Request, res: Response) {
   try {
@@ -3314,55 +3312,34 @@ export async function deleteSale(req: Request, res: Response) {
 
     const saleData = sale[0];
 
-    // La generazione del DDT può già avere registrato una consegna esterna.
-    // Senza un collegamento compensabile alla consegna, lo storno non è sicuro.
-    if (saleData.ddtId) {
-      return res.status(409).json({
-        success: false,
-        error: "Impossibile stornare: è già stato generato un DDT e potrebbe esistere una consegna contabilizzata"
-      });
-    }
-
     if (saleData.status !== 'draft') {
-      if (saleData.sourceType !== 'manual') {
-        return res.status(409).json({
-          success: false,
-          error: "Le vendite confermate provenienti dalla vagliatura devono essere annullate dalla relativa operazione di vendita"
-        });
-      }
-      if (typeof reason !== 'string' || reason.trim().length < 3) {
-        return res.status(400).json({
-          success: false,
-          error: "Per stornare una vendita confermata è obbligatoria una motivazione"
-        });
-      }
-
-      await db.transaction(async (tx) => {
+      const reversalResult = await db.transaction(async (tx) => {
         const lockedSaleResult = await tx.execute(sql`
-          SELECT status, source_type, ddt_id, ddt_status
+          SELECT status, source_type, ddt_id, ddt_status, cancelled_at, cancellation_reason
           FROM ${advancedSales}
           WHERE id = ${saleId}
           FOR UPDATE
         `);
         const lockedSaleRows: any[] = (lockedSaleResult as any).rows ?? lockedSaleResult;
         const lockedSale = lockedSaleRows[0];
-        if (!lockedSale || lockedSale.status === 'cancelled') {
-          throw new Error("La vendita risulta già stornata o non disponibile");
+        if (!lockedSale) {
+          throw new Error("La vendita non è più disponibile");
         }
-        if (lockedSale.ddt_status === 'generazione') {
-          throw new Error("Il DDT è in generazione e la vendita non può essere stornata");
+        if (lockedSale.status === 'cancelled') {
+          return {
+            alreadyReversed: true,
+            cancelledAt: lockedSale.cancelled_at,
+            cancellationReason: lockedSale.cancellation_reason
+          };
         }
-        if (lockedSale.ddt_id) {
-          const lockedDdtResult = await tx.execute(sql`
-            SELECT ddt_stato
-            FROM ${ddt}
-            WHERE id = ${Number(lockedSale.ddt_id)}
-            FOR UPDATE
-          `);
-          const lockedDdtRows: any[] = (lockedDdtResult as any).rows ?? lockedDdtResult;
-          if (lockedDdtRows[0] && ['invio', 'inviato'].includes(lockedDdtRows[0].ddt_stato)) {
-            throw new Error("Il DDT è in invio o è già stato inviato e la vendita non può essere stornata");
-          }
+        if (lockedSale.source_type !== 'manual') {
+          throw new Error("Solo le vendite manuali possono essere stornate da questo flusso");
+        }
+        if (typeof reason !== 'string' || reason.trim().length < 3) {
+          throw new Error("Per stornare una vendita confermata è obbligatoria una motivazione");
+        }
+        if (lockedSale.ddt_id || lockedSale.ddt_status !== 'nessuno') {
+          throw new Error("Impossibile stornare: è già stato generato un DDT e potrebbe esistere una consegna contabilizzata");
         }
 
         const sources = await tx.select({
@@ -3417,7 +3394,18 @@ export async function deleteSale(req: Request, res: Response) {
         .where(eq(saleOperationsRef.advancedSaleId, saleId));
 
         for (const source of lockedSources) {
-          const blockReason = getRestoreBlockReason(source);
+          const laterCycleResult = await tx.execute(sql`
+            SELECT id
+            FROM ${cycles}
+            WHERE basket_id = ${source.basketId}
+              AND id > ${source.cycleId}
+            LIMIT 1
+          `);
+          const laterCycleRows: any[] = (laterCycleResult as any).rows ?? laterCycleResult;
+          const blockReason = getRestoreBlockReason({
+            ...source,
+            hasLaterCycle: laterCycleRows.length > 0
+          });
           if (blockReason) throw new Error(blockReason);
         }
 
@@ -3471,30 +3459,36 @@ export async function deleteSale(req: Request, res: Response) {
             .where(eq(baskets.id, source.basketId));
         }
 
-        if (saleData.ddtId) {
-          await tx.delete(ddtRighe).where(eq(ddtRighe.ddtId, saleData.ddtId));
-          await tx.delete(ddt).where(eq(ddt.id, saleData.ddtId));
-        }
-
+        const cancelledAt = new Date();
         await tx.update(advancedSales)
           .set({
             status: 'cancelled',
-            ddtId: null,
-            ddtStatus: 'nessuno',
+            cancelledAt,
+            cancellationReason: reason.trim(),
             notes: [saleData.notes, `STORNO: ${reason.trim()}`].filter(Boolean).join('\n'),
-            updatedAt: new Date()
+            updatedAt: cancelledAt
           })
           .where(eq(advancedSales.id, saleId));
+        return {
+          alreadyReversed: false,
+          cancelledAt,
+          cancellationReason: reason.trim()
+        };
       });
 
       await invalidateAllCaches();
       return res.json({
         success: true,
-        message: `Vendita ${saleData.saleNumber} stornata e ceste ripristinate`,
+        message: reversalResult.alreadyReversed
+          ? `Vendita ${saleData.saleNumber} già stornata`
+          : `Vendita ${saleData.saleNumber} stornata e ceste ripristinate`,
         reversedSale: {
           id: saleData.id,
           saleNumber: saleData.saleNumber,
-          status: 'cancelled'
+          status: 'cancelled',
+          alreadyReversed: reversalResult.alreadyReversed,
+          cancelledAt: reversalResult.cancelledAt,
+          cancellationReason: reversalResult.cancellationReason
         }
       });
     }
@@ -3546,8 +3540,10 @@ export async function deleteSale(req: Request, res: Response) {
 
   } catch (error: any) {
     console.error("Errore nello storno della vendita:", error);
-    const isBusinessError = /già|cesta|ciclo|movimenti contabili|ripristinabil/.test(error?.message || '');
-    res.status(isBusinessError ? 409 : 500).json({
+    const message = error?.message || '';
+    const isValidationError = /motivazione/.test(message);
+    const isBusinessError = /già|DDT|Solo le vendite manuali|cesta|ciclo|movimenti contabili|ripristinabil|non è più disponibile/.test(message);
+    res.status(isValidationError ? 400 : isBusinessError ? 409 : 500).json({
       success: false,
       error: error.message || "Errore nello storno della vendita"
     });

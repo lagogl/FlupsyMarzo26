@@ -1303,6 +1303,8 @@ export const advancedSales = pgTable("advanced_sales", {
   ddtId: integer("ddt_id"), // Riferimento DDT creato
   ddtStatus: text("ddt_status", { enum: ["nessuno", "generazione", "locale", "inviato"] }).notNull().default("nessuno"), // Stato DDT
   companyId: integer("company_id"), // ID Azienda Fatture in Cloud per questa vendita
+  cancelledAt: timestamp("cancelled_at"), // Data/ora dello storno (la vendita resta nello storico)
+  cancellationReason: text("cancellation_reason"), // Motivazione auditabile dello storno
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
 });

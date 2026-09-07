@@ -1625,7 +1625,8 @@ export default function AdvancedSales() {
 
                             {sale.sourceType === 'manual' &&
                               (sale.status === 'confirmed' || sale.status === 'completed') &&
-                              !sale.ddtId && (
+                              !sale.ddtId &&
+                              sale.ddtStatus === 'nessuno' && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1711,7 +1712,7 @@ export default function AdvancedSales() {
                     <ul className="list-disc list-inside text-amber-700 space-y-0.5">
                       <li>Ripristino dei cicli e delle ceste originali</li>
                       <li>Movimenti contabili compensativi, senza cancellare la storia</li>
-                      <li>Eliminazione dell'eventuale DDT locale non ancora inviato</li>
+                      <li>Registrazione della data e della motivazione dello storno</li>
                     </ul>
                   </div>
                 )}

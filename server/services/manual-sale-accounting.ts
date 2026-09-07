@@ -111,9 +111,13 @@ export function getRestoreBlockReason(source: {
   currentCycleId: number | null;
   cycleState: string;
   cycleId: number;
+  hasLaterCycle?: boolean;
 }): string | null {
   if (source.basketState !== 'available' || source.currentCycleId !== null) {
     return `La cesta ${source.physicalNumber} è già stata riutilizzata e non può essere ripristinata`;
+  }
+  if (source.hasLaterCycle) {
+    return `La cesta ${source.physicalNumber} è già stata riutilizzata in un ciclo successivo e non può essere ripristinata`;
   }
   if (source.cycleState !== 'closed') {
     return `Il ciclo ${source.cycleId} non è chiuso e non può essere ripristinato in sicurezza`;
