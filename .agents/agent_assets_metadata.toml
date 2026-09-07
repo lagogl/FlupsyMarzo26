@@ -106,3 +106,17 @@ mtime_ms = 1788795269334
 storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:2865e74a-6bcf-4df0-8524-8edc0c7c2777/184eb7ac-da65-4bb5-bab3-6cf652795bab/140773bd-1969-4a86-9410-5fbb41c93077"
 storage_version_token = "1788795277806960"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "wbTD9fBQFePCUpxz97mjg"
+uri = "file://exports/Report_Riconciliazione_Vendite_Ordini_2026-09-07.xlsx"
+type = "table"
+title = "Report riconciliazione vendite e ordini"
+description = "Analisi completa delle 68 vendite non associate, con proposte simulate, casi manuali, riepilogo per cliente e 11 associazioni già certe. Nessun dato è stato modificato."
+logical_id = "10275451-b43e-480d-8870-b4307cbf6db0"
+content_hash = "sha256:18f8af3807fedbe43d58afe3c9bbf17a5b5de7ec1df4b01d9efe0bbc77da801f"
+size = 27017
+mtime_ms = 1788798470813
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:2865e74a-6bcf-4df0-8524-8edc0c7c2777/10275451-b43e-480d-8870-b4307cbf6db0/b5b80918-4448-4a30-9a4b-45aa16d40ee4"
+storage_version_token = "1788798507501147"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
