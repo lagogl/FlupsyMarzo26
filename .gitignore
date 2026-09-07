@@ -4,6 +4,8 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+# I dump possono contenere credenziali e dati personali: non versionarli.
+database_backups/*.sql
 # WhatsApp Web session (whatsapp-web.js LocalAuth)
 .wa-session/
 .wwebjs_auth/
