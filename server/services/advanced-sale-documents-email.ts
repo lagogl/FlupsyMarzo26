@@ -41,19 +41,32 @@ export async function sendAdvancedSaleDocumentsReadyEmail(params: {
     to: RECIPIENTS,
     subject: `Documenti vendita ${sale.saleNumber} pronti per Fatture in Cloud`,
     html: `
-      <p>Buongiorno,</p>
-      <p>i documenti della vendita <strong>${esc(sale.saleNumber)}</strong> sono stati generati e sono pronti per la successiva esportazione dei dati a Fatture in Cloud.</p>
-      <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">
-        <tr><td style="padding:5px 14px 5px 0"><strong>Azienda</strong></td><td>${esc(companyName)}</td></tr>
-        <tr><td style="padding:5px 14px 5px 0"><strong>Cliente</strong></td><td>${esc(customerName)}</td></tr>
-        <tr><td style="padding:5px 14px 5px 0"><strong>Data vendita</strong></td><td>${saleDate}</td></tr>
-        <tr><td style="padding:5px 14px 5px 0"><strong>Numero sacchi</strong></td><td>${number(sale.totalBags)}</td></tr>
-        <tr><td style="padding:5px 14px 5px 0"><strong>Animali</strong></td><td>${number(sale.totalAnimals)}</td></tr>
-        <tr><td style="padding:5px 14px 5px 0"><strong>Peso totale</strong></td><td>${number(sale.totalWeight, 2)} kg</td></tr>
-        <tr><td style="padding:5px 14px 5px 0"><strong>Progressivo DDR</strong></td><td>${esc(ddr)}</td></tr>
-      </table>
-      <p>I documenti sono allegati alla presente email.</p>
-      <p>Messaggio generato automaticamente dal sistema di gestione vendite.</p>
+      <div style="max-width:640px;font-family:Arial,sans-serif;color:#1f2937">
+        <div style="background:#166534;color:#ffffff;padding:20px 24px;border-radius:8px 8px 0 0">
+          <div style="font-size:13px;font-weight:bold;letter-spacing:.6px;text-transform:uppercase">Nuova vendita registrata</div>
+          <div style="font-size:24px;font-weight:bold;margin-top:6px">Vendita ${esc(sale.saleNumber)}</div>
+        </div>
+        <div style="border:1px solid #d1d5db;border-top:0;padding:22px 24px;border-radius:0 0 8px 8px">
+          <p style="margin:0 0 16px">Buongiorno,</p>
+          <div style="background:#dcfce7;border-left:5px solid #16a34a;color:#14532d;padding:14px 16px;margin-bottom:20px">
+            <strong style="font-size:16px">Vendita completata con successo</strong><br>
+            <span style="font-size:14px">I documenti sono stati generati e sono pronti per la successiva esportazione a Fatture in Cloud.</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Azienda</strong></td><td style="padding:9px 12px">${esc(companyName)}</td></tr>
+            <tr><td style="padding:9px 12px"><strong>Cliente</strong></td><td style="padding:9px 12px">${esc(customerName)}</td></tr>
+            <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Data vendita</strong></td><td style="padding:9px 12px">${saleDate}</td></tr>
+            <tr><td style="padding:9px 12px"><strong>Numero sacchi</strong></td><td style="padding:9px 12px">${number(sale.totalBags)}</td></tr>
+            <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Animali</strong></td><td style="padding:9px 12px">${number(sale.totalAnimals)}</td></tr>
+            <tr><td style="padding:9px 12px"><strong>Peso totale</strong></td><td style="padding:9px 12px">${number(sale.totalWeight, 2)} kg</td></tr>
+            <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Progressivo DDR</strong></td><td style="padding:9px 12px">${esc(ddr)}</td></tr>
+          </table>
+          <p style="margin:20px 0 0;padding:12px 14px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:6px">
+            <strong>Documenti allegati:</strong> il fascicolo della vendita è disponibile nei PDF inclusi in questa email.
+          </p>
+          <p style="margin:20px 0 0;color:#6b7280;font-size:12px">Messaggio generato automaticamente dal sistema di gestione vendite.</p>
+        </div>
+      </div>
     `,
     attachments: attachments.map(attachment => ({
       ...attachment,
