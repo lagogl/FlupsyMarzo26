@@ -25,3 +25,4 @@
 - [Tracciabilità pubblica vendite](public-sale-traceability.md) — QR con token cifrato, pagina read-only/noindex e timeline filtrata; mai esporre ID, cliente o dati operativi grezzi.
 - [Numerazione annuale DDR](annual-ddr-numbering.md) — progressivo separato per azienda/anno, assegnato una sola volta; ristampe immutabili e ripartenza automatica annuale.
 - [Indirizzi clienti FIC](fic-client-address-details.md) — l'elenco clienti può omettere la via presente in FIC; recuperare il dettaglio prima di salvare campi mancanti.
+- [Email fascicolo vendite](advanced-sale-documents-email.md) — la stampa del fascicolo invia prima i PDF e il riepilogo ai destinatari operativi; Delta ha 4 allegati, Ecotapes 3 senza DDR.

@@ -43,6 +43,7 @@ import { getConfigValue } from "./fatture-in-cloud-controller";
 import { OperationsCache } from "../operations-cache-service.js";
 import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
+import { sendAdvancedSaleDocumentsReadyEmail } from "../services/advanced-sale-documents-email";
 import { dbEsterno, queryEsterno, isDbEsternoAvailable } from "../db-esterno";
 import { consegneCondivise, ordiniCondivisi } from "../schema-esterno";
 import {
@@ -1420,10 +1421,17 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     const saleId = Number(req.params.id);
     const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
     if (!sale) return res.status(404).json({ success: false, error: 'Vendita non trovata' });
-    if (kind === 'all' || kind === 'bivalve-transfer') {
+    const isDeltaFuturo = ['13263', '1052922'].includes(String(sale.companyId));
+    if ((kind === 'all' || kind === 'bivalve-transfer') && isDeltaFuturo) {
       const assigned = await ensureDdrNumber(saleId);
       sale.ddrNumber = assigned.number;
       sale.ddrYear = assigned.year;
+    }
+    if (kind === 'bivalve-transfer' && !isDeltaFuturo) {
+      return res.status(400).json({
+        success: false,
+        error: 'Per Ecotapes il DDR è un modulo prestampato esterno e non viene generato dal sistema'
+      });
     }
 
     const bags = await db.select().from(saleBags)
@@ -1480,23 +1488,47 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     let pdf: Buffer;
     if (kind === 'all') {
       const merged = await PDFDocument.create();
-      for (const documentKind of allowedKinds) {
+      const bundleKinds = isDeltaFuturo
+        ? allowedKinds
+        : allowedKinds.filter(documentKind => documentKind !== 'bivalve-transfer');
+      const emailAttachments: Array<{ filename: string; content: Buffer }> = [];
+      const attachmentLabels: Record<AdvancedSaleDocumentKind, string> = {
+        'delivery-report': 'Rapporto-consegna',
+        'sale-conditions': 'Dichiarazione-vendita-condizioni',
+        'bivalve-transfer': 'Registro-trasferimento-molluschi',
+        ddt: 'DDT'
+      };
+      for (const documentKind of bundleKinds) {
         const generated = await buildAdvancedSaleDocument(documentKind, documentData);
-        const source = await PDFDocument.load(
-          Buffer.isBuffer(generated) ? generated : Buffer.from(generated)
-        );
+        const documentBuffer = Buffer.isBuffer(generated) ? generated : Buffer.from(generated);
+        emailAttachments.push({
+          filename: `${attachmentLabels[documentKind]}-${sale.saleNumber}.pdf`,
+          content: documentBuffer
+        });
+        const source = await PDFDocument.load(documentBuffer);
         const pages = await merged.copyPages(source, source.getPageIndices());
         pages.forEach(page => merged.addPage(page));
       }
       pdf = Buffer.from(await merged.save());
+      const [companyConfig] = sale.companyId
+        ? await db.select().from(fattureInCloudConfig)
+            .where(eq(fattureInCloudConfig.companyId, sale.companyId)).limit(1)
+        : [];
+      await sendAdvancedSaleDocumentsReadyEmail({
+        sale,
+        customer,
+        companyName: existingDdt?.mittenteRagioneSociale
+          || companyConfig?.ragioneSociale
+          || (isDeltaFuturo ? 'Delta Futuro Soc. Agr. Srl' : 'Ecotapes'),
+        attachments: emailAttachments
+      });
       await db.execute(sql`
         UPDATE ${advancedSales}
         SET generated_documents = COALESCE(generated_documents, '{}'::jsonb) || jsonb_build_object(
           'delivery-report', NOW()::text,
           'sale-conditions', NOW()::text,
-          'bivalve-transfer', NOW()::text,
           'ddt', NOW()::text
-        ),
+        ) ${isDeltaFuturo ? sql`|| jsonb_build_object('bivalve-transfer', NOW()::text)` : sql``},
         updated_at = NOW()
         WHERE id = ${saleId}
       `);

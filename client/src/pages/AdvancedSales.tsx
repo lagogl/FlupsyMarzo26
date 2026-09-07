@@ -811,7 +811,9 @@ export default function AdvancedSales() {
     }, 1500);
   };
 
-  const handleDownloadAllSaleDocuments = (saleId: number) => {
+  const handleDownloadAllSaleDocuments = (sale: any) => {
+    const saleId = sale.id;
+    const isDeltaFuturo = ["13263", "1052922"].includes(String(sale.companyId));
     window.open(`/api/advanced-sales/${saleId}/documents/all.pdf`, '_blank', 'noopener,noreferrer');
     const generatedAt = new Date().toISOString();
     setGeneratedDocumentOverrides(current => ({
@@ -820,8 +822,8 @@ export default function AdvancedSales() {
         ...(current[saleId] || {}),
         "delivery-report": generatedAt,
         "sale-conditions": generatedAt,
-        "bivalve-transfer": generatedAt,
-        ddt: generatedAt
+        ddt: generatedAt,
+        ...(isDeltaFuturo ? { "bivalve-transfer": generatedAt } : {})
       }
     }));
     window.setTimeout(() => {
@@ -1461,16 +1463,19 @@ export default function AdvancedSales() {
                                   variant="outline"
                                   size="sm"
                                   className="rounded-r-none border-teal-600 bg-teal-600 text-white hover:bg-teal-700 hover:text-white"
-                                  onClick={() => handleDownloadAllSaleDocuments(sale.id)}
-                                  title="Genera e apri i quattro documenti in un unico PDF"
+                                  onClick={() => handleDownloadAllSaleDocuments(sale)}
+                                  title="Genera i documenti, invia l'email e apre il fascicolo PDF"
                                   data-testid={`button-all-sale-documents-${sale.id}`}
                                 >
                                   <FileText className="h-4 w-4 mr-1" />
                                   Stampa documenti
                                   <span className="ml-2 text-xs">
                                     {Object.keys({ ...(sale.generatedDocuments || {}), ...(generatedDocumentOverrides[sale.id] || {}) }).filter(kind =>
-                                      ["delivery-report", "sale-conditions", "bivalve-transfer", "ddt"].includes(kind)
-                                    ).length}/4
+                                      (["13263", "1052922"].includes(String(sale.companyId))
+                                        ? ["delivery-report", "sale-conditions", "bivalve-transfer", "ddt"]
+                                        : ["delivery-report", "sale-conditions", "ddt"]
+                                      ).includes(kind)
+                                    ).length}/{["13263", "1052922"].includes(String(sale.companyId)) ? 4 : 3}
                                   </span>
                                 </Button>
                                 <Popover>
@@ -1495,7 +1500,9 @@ export default function AdvancedSales() {
                                     ["sale-conditions", "Dichiarazione di vendita e condizioni"],
                                     ["bivalve-transfer", "Registrazione trasferimento molluschi"],
                                     ["ddt", "Documento di trasporto (DDT)"]
-                                  ] as const).map(([kind, label]) => {
+                                  ] as const)
+                                    .filter(([kind]) => kind !== "bivalve-transfer" || ["13263", "1052922"].includes(String(sale.companyId)))
+                                    .map(([kind, label]) => {
                                     const generated = Boolean(
                                       generatedDocumentOverrides[sale.id]?.[kind] || sale.generatedDocuments?.[kind]
                                     );
