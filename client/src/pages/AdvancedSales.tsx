@@ -14,7 +14,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, Calculator, Truck, FileSpreadsheet, ExternalLink, Loader2, Trash2, Users, Waves } from "lucide-react";
+import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, ChevronDown, Calculator, Truck, ExternalLink, Loader2, Trash2, Users, Waves } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
@@ -779,6 +779,24 @@ export default function AdvancedSales() {
     }, 1500);
   };
 
+  const handleDownloadAllSaleDocuments = (saleId: number) => {
+    window.open(`/api/advanced-sales/${saleId}/documents/all.pdf`, '_blank', 'noopener,noreferrer');
+    const generatedAt = new Date().toISOString();
+    setGeneratedDocumentOverrides(current => ({
+      ...current,
+      [saleId]: {
+        ...(current[saleId] || {}),
+        "delivery-report": generatedAt,
+        "sale-conditions": generatedAt,
+        "bivalve-transfer": generatedAt,
+        ddt: generatedAt
+      }
+    }));
+    window.setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+    }, 3000);
+  };
+
   const handleUpdateStatus = (saleId: number, status: string) => {
     updateStatusMutation.mutate({ saleId, status });
   };
@@ -862,10 +880,6 @@ export default function AdvancedSales() {
 
   const handleOpenInFCloud = (ddtId: number) => {
     openInFCloudMutation.mutate(ddtId);
-  };
-
-  const handleOpenReport = (saleId: number) => {
-    window.open(`/api/advanced-sales/${saleId}/report.pdf`, '_blank');
   };
 
   return (
@@ -1344,34 +1358,6 @@ export default function AdvancedSales() {
                               Dettagli
                             </Button>
                             
-                            {sale.totalBags > 0 && (
-                              <>
-                                <Button 
-                                  variant="default" 
-                                  size="sm"
-                                  onClick={() => handleGeneratePDF(sale.id)}
-                                  className="bg-blue-600 hover:bg-blue-700"
-                                  title="Genera PDF configurazione sacchi"
-                                  data-testid={`button-generate-pdf-${sale.id}`}
-                                >
-                                  <FileText className="h-4 w-4 mr-1" />
-                                  PDF
-                                </Button>
-
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => handleOpenReport(sale.id)}
-                                  className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                                  title="Visualizza report vendita completo"
-                                  data-testid={`button-report-pdf-${sale.id}`}
-                                >
-                                  <FileSpreadsheet className="h-4 w-4 mr-1" />
-                                  Report
-                                </Button>
-                              </>
-                            )}
-
                             {sale.pdfPath && (
                               <Button 
                                 variant="secondary" 
@@ -1385,24 +1371,36 @@ export default function AdvancedSales() {
                             )}
 
                             {sale.totalBags > 0 && (
-                              <Popover>
-                                <PopoverTrigger asChild>
+                              <div className="inline-flex">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-r-none border-teal-600 bg-teal-600 text-white hover:bg-teal-700 hover:text-white"
+                                  onClick={() => handleDownloadAllSaleDocuments(sale.id)}
+                                  title="Genera e apri i quattro documenti in un unico PDF"
+                                  data-testid={`button-all-sale-documents-${sale.id}`}
+                                >
+                                  <FileText className="h-4 w-4 mr-1" />
+                                  Stampa documenti
+                                  <span className="ml-2 text-xs">
+                                    {Object.keys({ ...(sale.generatedDocuments || {}), ...(generatedDocumentOverrides[sale.id] || {}) }).filter(kind =>
+                                      ["delivery-report", "sale-conditions", "bivalve-transfer", "ddt"].includes(kind)
+                                    ).length}/4
+                                  </span>
+                                </Button>
+                                <Popover>
+                                  <PopoverTrigger asChild>
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="border-teal-600 text-teal-700 hover:bg-teal-50"
+                                    className="rounded-l-none border-l-0 border-teal-600 px-2 text-teal-700 hover:bg-teal-50"
+                                    title="Apri i documenti singolarmente"
                                     data-testid={`button-sale-documents-${sale.id}`}
                                   >
-                                    <FileText className="h-4 w-4 mr-1" />
-                                    Documenti
-                                    <span className="ml-2 text-xs">
-                                      {Object.keys({ ...(sale.generatedDocuments || {}), ...(generatedDocumentOverrides[sale.id] || {}) }).filter(kind =>
-                                        ["delivery-report", "sale-conditions", "bivalve-transfer", "ddt"].includes(kind)
-                                      ).length}/4
-                                    </span>
+                                    <ChevronDown className="h-4 w-4" />
                                   </Button>
-                                </PopoverTrigger>
-                                <PopoverContent align="end" className="w-80 p-2">
+                                  </PopoverTrigger>
+                                  <PopoverContent align="end" className="w-80 p-2">
                                   <div className="px-2 py-1.5">
                                     <p className="font-semibold">Documenti della vendita</p>
                                     <p className="text-xs text-muted-foreground">Verde: generato almeno una volta</p>
@@ -1429,8 +1427,9 @@ export default function AdvancedSales() {
                                       </Button>
                                     );
                                   })}
-                                </PopoverContent>
-                              </Popover>
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
                             )}
 
                             {sale.status === 'confirmed' && sale.totalBags > 0 && (

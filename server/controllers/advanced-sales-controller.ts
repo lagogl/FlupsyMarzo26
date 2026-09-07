@@ -7,6 +7,7 @@ import { db } from "../db";
 import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzle-orm";
 import { pdfGenerator } from "../services/pdf-generator";
 import { generateAdvancedSaleDocument as buildAdvancedSaleDocument, type AdvancedSaleDocumentKind } from "../services/advanced-sale-documents";
+import { PDFDocument } from "pdf-lib";
 import { createPublicTraceabilityToken } from "../services/public-traceability-token";
 import path from "path";
 import fs from "fs";
@@ -1276,9 +1277,9 @@ export async function getAdvancedSale(req: Request, res: Response) {
  * bags and allocation records used by the legacy PDF endpoints.
  */
 export async function generateAdvancedSaleDocument(req: Request, res: Response) {
-  const kind = req.params.kind as AdvancedSaleDocumentKind;
+  const kind = req.params.kind as AdvancedSaleDocumentKind | 'all';
   const allowedKinds: AdvancedSaleDocumentKind[] = ['delivery-report', 'sale-conditions', 'bivalve-transfer', 'ddt'];
-  if (!allowedKinds.includes(kind)) {
+  if (kind !== 'all' && !allowedKinds.includes(kind)) {
     return res.status(400).json({ success: false, error: 'Tipo documento non valido' });
   }
 
@@ -1330,27 +1331,53 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     const traceabilityUrl = host
       ? `${protocol}://${host}/tracciabilita/${createPublicTraceabilityToken(sale.id)}`
       : undefined;
-    const generatedPdf = await buildAdvancedSaleDocument(kind, {
+    const documentData = {
       sale,
       bags: bagsWithOrigins,
       operations: operationRows,
       customer,
       ddt: existingDdt,
       traceabilityUrl
-    });
-    // Puppeteer può restituire Uint8Array: Express lo serializzerebbe come JSON.
-    const pdf = Buffer.isBuffer(generatedPdf) ? generatedPdf : Buffer.from(generatedPdf);
-    await db.execute(sql`
-      UPDATE ${advancedSales}
-      SET generated_documents = jsonb_set(
-        COALESCE(generated_documents, '{}'::jsonb),
-        ARRAY[${kind}]::text[],
-        to_jsonb(NOW()::text),
-        true
-      ),
-      updated_at = NOW()
-      WHERE id = ${saleId}
-    `);
+    };
+    let pdf: Buffer;
+    if (kind === 'all') {
+      const merged = await PDFDocument.create();
+      for (const documentKind of allowedKinds) {
+        const generated = await buildAdvancedSaleDocument(documentKind, documentData);
+        const source = await PDFDocument.load(
+          Buffer.isBuffer(generated) ? generated : Buffer.from(generated)
+        );
+        const pages = await merged.copyPages(source, source.getPageIndices());
+        pages.forEach(page => merged.addPage(page));
+      }
+      pdf = Buffer.from(await merged.save());
+      await db.execute(sql`
+        UPDATE ${advancedSales}
+        SET generated_documents = COALESCE(generated_documents, '{}'::jsonb) || jsonb_build_object(
+          'delivery-report', NOW()::text,
+          'sale-conditions', NOW()::text,
+          'bivalve-transfer', NOW()::text,
+          'ddt', NOW()::text
+        ),
+        updated_at = NOW()
+        WHERE id = ${saleId}
+      `);
+    } else {
+      const generated = await buildAdvancedSaleDocument(kind, documentData);
+      // Puppeteer può restituire Uint8Array: Express lo serializzerebbe come JSON.
+      pdf = Buffer.isBuffer(generated) ? generated : Buffer.from(generated);
+      await db.execute(sql`
+        UPDATE ${advancedSales}
+        SET generated_documents = jsonb_set(
+          COALESCE(generated_documents, '{}'::jsonb),
+          ARRAY[${kind}]::text[],
+          to_jsonb(NOW()::text),
+          true
+        ),
+        updated_at = NOW()
+        WHERE id = ${saleId}
+      `);
+    }
     const labels: Record<AdvancedSaleDocumentKind, string> = {
       'delivery-report': 'Rapporto-consegna',
       'sale-conditions': 'Dichiarazione-vendita-condizioni',
@@ -1358,7 +1385,8 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       ddt: 'DDT'
     };
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${labels[kind]}-${sale.saleNumber}.pdf"`);
+    const filename = kind === 'all' ? `Documenti-vendita-${sale.saleNumber}` : `${labels[kind]}-${sale.saleNumber}`;
+    res.setHeader('Content-Disposition', `inline; filename="${filename}.pdf"`);
     res.setHeader('Content-Length', pdf.length);
     res.send(pdf);
   } catch (error) {
