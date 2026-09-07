@@ -97,6 +97,7 @@ export default function AdvancedSales() {
   const [sourceMode, setSourceMode] = useState<"operations" | "baskets">("operations");
   const [selectedOperations, setSelectedOperations] = useState<number[]>([]);
   const [selectedBaskets, setSelectedBaskets] = useState<number[]>([]);
+  const [basketFlupsyFilter, setBasketFlupsyFilter] = useState("all");
   const [multiCustomerMode, setMultiCustomerMode] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [manualCustomer, setManualCustomer] = useState({ name: "", details: "" });
@@ -192,6 +193,35 @@ export default function AdvancedSales() {
     (sum: number, basket: BasketSupply) => sum + basket.totalAnimals,
     0
   );
+  const basketFlupsys = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const basket of (availableBaskets?.baskets || []) as BasketSupply[]) {
+      const key = String(basket.flupsyId ?? basket.flupsyName ?? "unknown");
+      if (!byId.has(key)) {
+        byId.set(key, basket.flupsyName || `FLUPSY #${basket.flupsyId ?? "—"}`);
+      }
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "it", { numeric: true }));
+  }, [availableBaskets?.baskets]);
+  const visibleBaskets = useMemo(() => {
+    return ([...(availableBaskets?.baskets || [])] as BasketSupply[])
+      .filter((basket) => {
+        if (basketFlupsyFilter === "all") return true;
+        return String(basket.flupsyId ?? basket.flupsyName ?? "unknown") === basketFlupsyFilter;
+      })
+      .sort((a, b) => {
+        const flupsyComparison = (a.flupsyName || "").localeCompare(
+          b.flupsyName || "",
+          "it",
+          { numeric: true }
+        );
+        if (flupsyComparison !== 0) return flupsyComparison;
+        const basketComparison = Number(a.basketPhysicalNumber) - Number(b.basketPhysicalNumber);
+        if (basketComparison !== 0) return basketComparison;
+        return Number(a.position || 0) - Number(b.position || 0);
+      });
+  }, [availableBaskets?.baskets, basketFlupsyFilter]);
 
   // Query per clienti
   const { data: customers, isLoading: loadingCustomers } = useQuery({
@@ -1086,49 +1116,72 @@ export default function AdvancedSales() {
                 {loadingBaskets ? (
                   <div>Caricamento ceste...</div>
                 ) : availableBaskets?.baskets?.length ? (
-                  <div className="max-h-[420px] overflow-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12"></TableHead>
-                          <TableHead>FLUPSY</TableHead>
-                          <TableHead>Cesta</TableHead>
-                          <TableHead>Posizione</TableHead>
-                          <TableHead>Ultima misura</TableHead>
-                          <TableHead>Taglia</TableHead>
-                          <TableHead className="text-right">Animali</TableHead>
-                          <TableHead>Lotti</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {availableBaskets.baskets.map((basket: BasketSupply) => (
-                          <TableRow key={basket.basketId}>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedBaskets.includes(basket.basketId)}
-                                onCheckedChange={(checked) => handleBasketSelect(basket.basketId, checked === true)}
-                              />
-                            </TableCell>
-                            <TableCell>{basket.flupsyName || `#${basket.flupsyId}`}</TableCell>
-                            <TableCell className="font-medium">
-                              #{basket.basketPhysicalNumber}
-                              <span className="ml-1 text-xs text-muted-foreground">ID {basket.basketId}</span>
-                            </TableCell>
-                            <TableCell>{basket.row} · {basket.position}</TableCell>
-                            <TableCell>{basket.date ? format(new Date(basket.date), "dd/MM/yyyy") : "—"}</TableCell>
-                            <TableCell><Badge variant="outline">{basket.sizeCode}</Badge></TableCell>
-                            <TableCell className="text-right font-medium">{basket.totalAnimals.toLocaleString("it-IT")}</TableCell>
-                            <TableCell className="max-w-64 text-xs">
-                              {basket.compositions?.length
-                                ? basket.compositions.map(item =>
-                                    item.lotSupplierLotNumber || `Lotto ${item.lotId}`
-                                  ).join(", ")
-                                : "Lotto del ciclo"}
-                            </TableCell>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="w-full sm:w-72">
+                        <Label htmlFor="basket-flupsy-filter">Filtra per FLUPSY</Label>
+                        <Select value={basketFlupsyFilter} onValueChange={setBasketFlupsyFilter}>
+                          <SelectTrigger id="basket-flupsy-filter" className="mt-1">
+                            <SelectValue placeholder="Tutti i FLUPSY" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Tutti i FLUPSY</SelectItem>
+                            {basketFlupsys.map((flupsy) => (
+                              <SelectItem key={flupsy.id} value={flupsy.id}>
+                                {flupsy.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="pb-2 text-sm text-muted-foreground">
+                        {visibleBaskets.length} ceste trovate · ordinate per numero cesta
+                      </p>
+                    </div>
+                    <div className="max-h-[420px] overflow-auto rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12"></TableHead>
+                            <TableHead>FLUPSY</TableHead>
+                            <TableHead>Cesta ↑</TableHead>
+                            <TableHead>Posizione</TableHead>
+                            <TableHead>Ultima misura</TableHead>
+                            <TableHead>Taglia</TableHead>
+                            <TableHead className="text-right">Animali</TableHead>
+                            <TableHead>Lotti</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {visibleBaskets.map((basket: BasketSupply) => (
+                            <TableRow key={basket.basketId}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedBaskets.includes(basket.basketId)}
+                                  onCheckedChange={(checked) => handleBasketSelect(basket.basketId, checked === true)}
+                                />
+                              </TableCell>
+                              <TableCell>{basket.flupsyName || `#${basket.flupsyId}`}</TableCell>
+                              <TableCell className="font-medium">
+                                #{basket.basketPhysicalNumber}
+                                <span className="ml-1 text-xs text-muted-foreground">ID {basket.basketId}</span>
+                              </TableCell>
+                              <TableCell>{basket.row} · {basket.position}</TableCell>
+                              <TableCell>{basket.date ? format(new Date(basket.date), "dd/MM/yyyy") : "—"}</TableCell>
+                              <TableCell><Badge variant="outline">{basket.sizeCode}</Badge></TableCell>
+                              <TableCell className="text-right font-medium">{basket.totalAnimals.toLocaleString("it-IT")}</TableCell>
+                              <TableCell className="max-w-64 text-xs">
+                                {basket.compositions?.length
+                                  ? basket.compositions.map(item =>
+                                      item.lotSupplierLotNumber || `Lotto ${item.lotId}`
+                                    ).join(", ")
+                                  : "Lotto del ciclo"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-md border border-dashed p-8 text-center text-muted-foreground">
