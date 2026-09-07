@@ -14,6 +14,7 @@ import {
 } from "../services/advanced-sale-documents";
 import { PDFDocument } from "pdf-lib";
 import { createPublicTraceabilityToken } from "../services/public-traceability-token";
+import crypto from "crypto";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -42,6 +43,7 @@ import {
   insertSaleOperationsRefSchema,
   cycles,
   lotLedger
+  , publicTraceabilityLinks
 } from "../../shared/schema";
 import { format } from "date-fns";
 import { getConfigValue } from "./fatture-in-cloud-controller";
@@ -1476,11 +1478,34 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     const [existingDdt] = sale.ddtId
       ? await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
       : [];
+    const includesTraceabilityQr = kind === 'all' || kind === 'delivery-report';
+    const tokenId = includesTraceabilityQr ? crypto.randomBytes(16).toString('hex') : null;
+    if (tokenId) {
+      await db.transaction(async tx => {
+        const [createdLink] = await tx.insert(publicTraceabilityLinks).values({
+          tokenId,
+          advancedSaleId: saleId,
+          createdBy: req.session!.user!.id
+        }).returning({ id: publicTraceabilityLinks.id });
+        await tx.execute(sql`
+          INSERT INTO audit_logs (
+            action, entity_type, entity_id, user_id, user_source,
+            new_values, metadata, ip_address, user_agent
+          ) VALUES (
+            'public_traceability_link_issued', 'public_traceability_link', ${createdLink.id},
+            ${req.session!.user!.id}, ${req.session!.user!.username},
+            ${JSON.stringify({ advancedSaleId: saleId })}::jsonb,
+            ${JSON.stringify({ documentKind: kind })}::jsonb,
+            ${req.ip || null}, ${req.get('user-agent') || null}
+          )
+        `);
+      });
+    }
     const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0]?.trim();
     const protocol = forwardedProto || req.protocol;
     const host = req.get('host');
-    const traceabilityUrl = host
-      ? `${protocol}://${host}/tracciabilita/${createPublicTraceabilityToken(sale.id)}`
+    const traceabilityUrl = host && tokenId
+      ? `${protocol}://${host}/tracciabilita/${createPublicTraceabilityToken(sale.id, tokenId)}`
       : undefined;
     const documentData = {
       sale,
@@ -1564,6 +1589,88 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
   } catch (error) {
     console.error('Errore nella generazione del documento vendita:', error);
     res.status(500).json({ success: false, error: 'Errore nella generazione del documento' });
+  }
+}
+
+export async function getPublicTraceabilityLinks(req: Request, res: Response) {
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const saleId = Number(req.params.id);
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      return res.status(400).json({ success: false, error: 'ID vendita non valido' });
+    }
+    const [sale] = await db.select({ id: advancedSales.id }).from(advancedSales)
+      .where(eq(advancedSales.id, saleId)).limit(1);
+    if (!sale) return res.status(404).json({ success: false, error: 'Vendita non trovata' });
+    const result = await db.execute(sql`
+      SELECT ptl.id,
+        ptl.created_at AS "createdAt",
+        creator.username AS "createdByUsername",
+        ptl.revoked_at AS "revokedAt",
+        revoker.username AS "revokedByUsername",
+        ptl.revocation_reason AS "revocationReason"
+      FROM public_traceability_links ptl
+      LEFT JOIN users creator ON creator.id = ptl.created_by
+      LEFT JOIN users revoker ON revoker.id = ptl.revoked_by
+      WHERE ptl.advanced_sale_id = ${saleId}
+      ORDER BY ptl.created_at DESC
+    `);
+    res.json({ success: true, links: result.rows });
+  } catch (error) {
+    console.error('Errore lettura QR di tracciabilità:', error);
+    res.status(500).json({ success: false, error: 'Impossibile leggere i QR di tracciabilità' });
+  }
+}
+
+export async function revokePublicTraceabilityLink(req: Request, res: Response) {
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const saleId = Number(req.params.id);
+    const linkId = Number(req.params.linkId);
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (![saleId, linkId].every(value => Number.isInteger(value) && value > 0)) {
+      return res.status(400).json({ success: false, error: 'Identificativo non valido' });
+    }
+    if (reason.length < 3) {
+      return res.status(400).json({ success: false, error: 'Indica una motivazione di almeno 3 caratteri' });
+    }
+    const revoked = await db.transaction(async tx => {
+      const [updated] = await tx.update(publicTraceabilityLinks).set({
+        revokedAt: new Date(),
+        revokedBy: req.session!.user!.id,
+        revocationReason: reason
+      }).where(and(
+        eq(publicTraceabilityLinks.id, linkId),
+        eq(publicTraceabilityLinks.advancedSaleId, saleId),
+        isNull(publicTraceabilityLinks.revokedAt)
+      )).returning({ id: publicTraceabilityLinks.id, revokedAt: publicTraceabilityLinks.revokedAt });
+      if (!updated) return null;
+      await tx.execute(sql`
+        INSERT INTO audit_logs (
+          action, entity_type, entity_id, user_id, user_source,
+          old_values, new_values, metadata, ip_address, user_agent
+        ) VALUES (
+          'public_traceability_link_revoked', 'public_traceability_link', ${updated.id},
+          ${req.session!.user!.id}, ${req.session!.user!.username},
+          ${JSON.stringify({ revoked: false })}::jsonb,
+          ${JSON.stringify({ revoked: true, reason })}::jsonb,
+          ${JSON.stringify({ advancedSaleId: saleId })}::jsonb,
+          ${req.ip || null}, ${req.get('user-agent') || null}
+        )
+      `);
+      return updated;
+    });
+    if (revoked) return res.json({ success: true, link: revoked });
+    const [existing] = await db.select({ revokedAt: publicTraceabilityLinks.revokedAt })
+      .from(publicTraceabilityLinks).where(and(
+        eq(publicTraceabilityLinks.id, linkId),
+        eq(publicTraceabilityLinks.advancedSaleId, saleId)
+      )).limit(1);
+    if (!existing) return res.status(404).json({ success: false, error: 'QR non trovato' });
+    return res.status(409).json({ success: false, error: 'QR già revocato', revokedAt: existing.revokedAt });
+  } catch (error) {
+    console.error('Errore revoca QR di tracciabilità:', error);
+    res.status(500).json({ success: false, error: 'Impossibile revocare il QR' });
   }
 }
 

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, ChevronDown, Calculator, Truck, ExternalLink, Loader2, Trash2, Users, Waves } from "lucide-react";
+import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, ChevronDown, Calculator, Truck, ExternalLink, Loader2, Trash2, Users, Waves, Link2Off } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
@@ -92,6 +92,15 @@ interface BasketSupply {
   }>;
 }
 
+interface TraceabilityLink {
+  id: number;
+  createdAt: string;
+  createdByUsername: string | null;
+  revokedAt: string | null;
+  revokedByUsername: string | null;
+  revocationReason: string | null;
+}
+
 export default function AdvancedSales() {
   const [activeTab, setActiveTab] = useState("operations");
   const [sourceMode, setSourceMode] = useState<"operations" | "baskets">("operations");
@@ -118,6 +127,11 @@ export default function AdvancedSales() {
     status: string;
     sourceType?: string;
   } | null>(null);
+  const [traceabilitySale, setTraceabilitySale] = useState<{ id: number; saleNumber: string } | null>(null);
+  const [traceabilityLinks, setTraceabilityLinks] = useState<TraceabilityLink[]>([]);
+  const [traceabilityLoading, setTraceabilityLoading] = useState(false);
+  const [revokingLinkId, setRevokingLinkId] = useState<number | null>(null);
+  const [revocationReason, setRevocationReason] = useState("");
   const [reversalReason, setReversalReason] = useState("");
   const [differenceDialogOpen, setDifferenceDialogOpen] = useState(false);
   const [differenceReason, setDifferenceReason] = useState("");
@@ -861,6 +875,51 @@ export default function AdvancedSales() {
     }, 3000);
   };
 
+  const openTraceabilityManagement = async (sale: any) => {
+    setTraceabilitySale({ id: sale.id, saleNumber: sale.saleNumber });
+    setTraceabilityLoading(true);
+    setRevocationReason("");
+    try {
+      const response = await apiRequest(`/api/advanced-sales/${sale.id}/traceability-links`);
+      setTraceabilityLinks(response.links || []);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Impossibile leggere i QR",
+        description: error.message || "Riprova tra poco"
+      });
+    } finally {
+      setTraceabilityLoading(false);
+    }
+  };
+
+  const revokeTraceabilityLink = async (linkId: number) => {
+    if (!traceabilitySale || revocationReason.trim().length < 3) return;
+    setRevokingLinkId(linkId);
+    try {
+      await apiRequest(
+        `/api/advanced-sales/${traceabilitySale.id}/traceability-links/${linkId}/revoke`,
+        "POST",
+        { reason: revocationReason.trim() }
+      );
+      setTraceabilityLinks(current => current.map(link =>
+        link.id === linkId
+          ? { ...link, revokedAt: new Date().toISOString(), revocationReason: revocationReason.trim() }
+          : link
+      ));
+      setRevocationReason("");
+      toast({ title: "QR disattivato", description: "La vendita e gli altri documenti non sono stati modificati." });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Revoca non riuscita",
+        description: error.message || "Riprova tra poco"
+      });
+    } finally {
+      setRevokingLinkId(null);
+    }
+  };
+
   const handleUpdateStatus = (saleId: number, status: string) => {
     updateStatusMutation.mutate({ saleId, status });
   };
@@ -1572,6 +1631,16 @@ export default function AdvancedSales() {
                                       </Button>
                                     );
                                   })}
+                                  <div className="mt-1 border-t pt-1">
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start text-amber-700"
+                                      onClick={() => openTraceabilityManagement(sale)}
+                                    >
+                                      <Link2Off className="mr-3 h-4 w-4" />
+                                      Gestisci QR pubblici
+                                    </Button>
+                                  </div>
                                   </PopoverContent>
                                 </Popover>
                               </div>
@@ -1801,6 +1870,67 @@ export default function AdvancedSales() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!traceabilitySale} onOpenChange={(open) => { if (!open) setTraceabilitySale(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>QR pubblici · {traceabilitySale?.saleNumber}</DialogTitle>
+            <DialogDescription>
+              Disattiva un singolo collegamento senza annullare la vendita, il DDT o gli altri QR.
+            </DialogDescription>
+          </DialogHeader>
+          {traceabilityLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : traceabilityLinks.length === 0 ? (
+            <p className="py-5 text-sm text-muted-foreground">Non risultano QR revocabili emessi per questa vendita.</p>
+          ) : (
+            <div className="max-h-80 space-y-3 overflow-y-auto">
+              {traceabilityLinks.map((link, index) => (
+                <div key={link.id} className="rounded-md border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">QR #{traceabilityLinks.length - index}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Emesso il {new Date(link.createdAt).toLocaleString("it-IT")}
+                        {link.createdByUsername ? ` da ${link.createdByUsername}` : ""}
+                      </p>
+                    </div>
+                    <Badge variant={link.revokedAt ? "secondary" : "default"}>
+                      {link.revokedAt ? "Disattivato" : "Attivo"}
+                    </Badge>
+                  </div>
+                  {link.revokedAt ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Revocato il {new Date(link.revokedAt).toLocaleString("it-IT")}
+                      {link.revokedByUsername ? ` da ${link.revokedByUsername}` : ""}
+                      {link.revocationReason ? ` · ${link.revocationReason}` : ""}
+                    </p>
+                  ) : (
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        value={revocationReason}
+                        onChange={event => setRevocationReason(event.target.value)}
+                        placeholder="Motivo della revoca"
+                        maxLength={250}
+                      />
+                      <Button
+                        variant="destructive"
+                        disabled={revocationReason.trim().length < 3 || revokingLinkId !== null}
+                        onClick={() => revokeTraceabilityLink(link.id)}
+                      >
+                        {revokingLinkId === link.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disattiva"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTraceabilitySale(null)}>Chiudi</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={automaticDialogOpen} onOpenChange={setAutomaticDialogOpen}>
         <AlertDialogContent>

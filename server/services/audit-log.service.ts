@@ -17,6 +17,8 @@ export type AuditAction =
   | 'selection_completed'
   | 'screening_completed'
   | 'ddt_generated'
+  | 'public_traceability_link_issued'
+  | 'public_traceability_link_revoked'
   | 'user_login'
   | 'user_logout'
   | 'emergency_delete';
@@ -28,6 +30,7 @@ export type EntityType =
   | 'selection'
   | 'screening'
   | 'ddt'
+  | 'public_traceability_link'
   | 'user';
 
 export interface AuditLogEntry {

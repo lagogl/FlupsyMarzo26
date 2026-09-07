@@ -2,12 +2,15 @@ import { Router } from 'express';
 import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '../../db';
 import {
-  advancedSales, ddt, fattureInCloudConfig, saleBags
+  advancedSales, ddt, fattureInCloudConfig, publicTraceabilityLinks, saleBags
 } from '../../../shared/schema';
 import { getCompanyLogoBase64 } from '../../services/logo-service';
 import { readPublicTraceabilityToken } from '../../services/public-traceability-token';
 
 export const publicTraceabilityRoutes = Router();
+
+const unavailablePage = `<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>Tracciabilità non disponibile</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f7f7;color:#183044;font-family:Arial,sans-serif}.card{max-width:430px;margin:24px;padding:32px;border:1px solid #cfdddf;border-radius:18px;background:white;text-align:center;box-shadow:0 14px 40px #173a4d14}h1{font-size:24px;margin:0 0 10px}p{color:#607480;margin:0}</style></head><body><main class="card"><h1>Tracciabilità non disponibile</h1><p>Questo collegamento non consente di consultare informazioni.</p></main></body></html>`;
+const unavailable = (res: any) => res.status(404).type('html').send(unavailablePage);
 
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -166,14 +169,20 @@ function renderPage(data: any) {
 publicTraceabilityRoutes.get('/:token', async (req, res) => {
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-  const saleId = readPublicTraceabilityToken(req.params.token);
-  if (!saleId) return res.status(404).send('Collegamento di tracciabilità non valido.');
+  const tokenData = readPublicTraceabilityToken(req.params.token);
+  if (!tokenData) return unavailable(res);
+  if (tokenData.tokenId) {
+    const [link] = await db.select().from(publicTraceabilityLinks)
+      .where(eq(publicTraceabilityLinks.tokenId, tokenData.tokenId)).limit(1);
+    if (!link || link.advancedSaleId !== tokenData.saleId || link.revokedAt) return unavailable(res);
+  }
+  const saleId = tokenData.saleId;
 
   const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
-  if (!sale || sale.status === 'cancelled') return res.status(404).send('Tracciabilità non disponibile.');
+  if (!sale || sale.status === 'cancelled') return unavailable(res);
 
   const bags = await db.select().from(saleBags).where(eq(saleBags.advancedSaleId, saleId)).orderBy(asc(saleBags.bagNumber));
-  if (!bags.length) return res.status(404).send('Tracciabilità non disponibile.');
+  if (!bags.length) return unavailable(res);
 
   const lotRows = await db.execute(sql`
     SELECT DISTINCT l.id, l.arrival_date AS "arrivalDate", l.supplier, l.supplier_lot_number AS "supplierLotNumber",
@@ -217,7 +226,7 @@ publicTraceabilityRoutes.get('/:token', async (req, res) => {
   const company = existingDdt?.mittenteRagioneSociale ? {
     ragioneSociale: existingDdt.mittenteRagioneSociale
   } : currentCompany;
-  if (!company?.ragioneSociale) return res.status(404).send('Tracciabilità non disponibile.');
+  if (!company?.ragioneSociale) return unavailable(res);
 
   res.type('html').send(renderPage({
     sale, bags, lotRows: resolvedLots, history, company,

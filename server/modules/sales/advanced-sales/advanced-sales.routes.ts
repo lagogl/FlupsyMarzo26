@@ -1,7 +1,12 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import * as AdvancedSalesController from '../../../controllers/advanced-sales-controller';
+import { requireAuth } from '../../system/auth';
 
 const router = Router();
+const requireOperator = (req: Request, res: Response, next: NextFunction) => {
+  if (req.session?.user?.role === 'admin' || req.session?.user?.role === 'user') return next();
+  return res.status(403).json({ success: false, error: 'Operazione riservata agli operatori autorizzati' });
+};
 
 // Operazioni vendita disponibili
 router.get('/operations', AdvancedSalesController.getAvailableSaleOperations);
@@ -35,7 +40,9 @@ router.get('/:id/download-pdf', AdvancedSalesController.downloadSalePDF);
 router.post('/:id/generate-ddt', AdvancedSalesController.generateDDT);
 router.get('/:id/report.pdf', AdvancedSalesController.generatePDFReport);
 // Suite documentale operativa A4; le rotte PDF storiche restano disponibili.
-router.get('/:id/documents/:kind.pdf', AdvancedSalesController.generateAdvancedSaleDocument);
+router.get('/:id/documents/:kind.pdf', requireAuth, requireOperator, AdvancedSalesController.generateAdvancedSaleDocument);
+router.get('/:id/traceability-links', requireAuth, requireOperator, AdvancedSalesController.getPublicTraceabilityLinks);
+router.post('/:id/traceability-links/:linkId/revoke', requireAuth, requireOperator, AdvancedSalesController.revokePublicTraceabilityLink);
 
 // Annullamento vendita (ripristino cesta e ciclo)
 router.get('/operations/:operationId/details', AdvancedSalesController.getSaleOperationDetails);

@@ -1309,6 +1309,25 @@ export const advancedSales = pgTable("advanced_sales", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Singole emissioni dei QR di tracciabilità pubblica, revocabili senza modificare la vendita.
+export const publicTraceabilityLinks = pgTable("public_traceability_links", {
+  id: serial("id").primaryKey(),
+  tokenId: text("token_id").notNull().unique(),
+  advancedSaleId: integer("advanced_sale_id").notNull().references(() => advancedSales.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  revokedAt: timestamp("revoked_at"),
+  revokedBy: integer("revoked_by").references(() => users.id, { onDelete: "set null" }),
+  revocationReason: text("revocation_reason"),
+}, table => ({
+  saleIdx: index("public_traceability_links_sale_id_idx").on(table.advancedSaleId),
+}));
+
+export const insertPublicTraceabilityLinkSchema = createInsertSchema(publicTraceabilityLinks)
+  .omit({ id: true, createdAt: true, revokedAt: true, revokedBy: true, revocationReason: true });
+export type PublicTraceabilityLink = typeof publicTraceabilityLinks.$inferSelect;
+export type InsertPublicTraceabilityLink = z.infer<typeof insertPublicTraceabilityLinkSchema>;
+
 export const ddrNumberSequences = pgTable("ddr_number_sequences", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull(),
