@@ -1569,10 +1569,7 @@ export default function AdvancedSales() {
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => {
-                                setCurrentSaleId(sale.id);
-                                setActiveTab("config");
-                              }}
+                               onClick={() => setSaleDetailsId(sale.id)}
                             >
                               <Eye className="h-4 w-4 mr-1" />
                               Dettagli
@@ -1800,6 +1797,204 @@ export default function AdvancedSales() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={saleDetailsId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSaleDetailsId(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Dettagli vendita {saleDetailsData?.sale?.saleNumber || ""}
+            </DialogTitle>
+            <DialogDescription>
+              Riepilogo storico della vendita e delle ceste o operazioni utilizzate.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingSaleDetails ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+            </div>
+          ) : !saleDetailsData?.sale ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Dettagli della vendita non disponibili.
+            </p>
+          ) : (
+            <div className="space-y-6">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border bg-slate-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cliente</p>
+                  <p className="mt-1 font-semibold">{saleDetailsData.sale.customerName || "—"}</p>
+                </div>
+                <div className="rounded-lg border bg-slate-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Data e stato</p>
+                  <p className="mt-1 font-semibold">{formatSaleDate(saleDetailsData.sale.saleDate)}</p>
+                  <Badge variant="secondary" className="mt-2">
+                    {saleDetailsData.sale.status === "completed"
+                      ? "Completata"
+                      : saleDetailsData.sale.status === "confirmed"
+                        ? "Confermata"
+                        : saleDetailsData.sale.status === "cancelled"
+                          ? "Stornata"
+                          : "Bozza"}
+                  </Badge>
+                </div>
+                <div className="rounded-lg border bg-slate-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Animali</p>
+                  <p className="mt-1 text-xl font-semibold">
+                    {formatSaleNumber(saleDetailsData.sale.totalAnimals)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-slate-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Peso e sacchi</p>
+                  <p className="mt-1 text-xl font-semibold">
+                    {formatSaleWeight(Number(saleDetailsData.sale.totalWeight || 0) / 1000)} kg
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatSaleNumber(saleDetailsData.sale.totalBags)} sacchi
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">Origine della vendita</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Ceste e operazioni registrate al momento della vendita.
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {saleDetailsData.sale.sourceType === "manual" ? "Selezione ceste" : "Operazioni"}
+                  </Badge>
+                </div>
+
+                {(saleDetailsData.operations || []).length > 0 ? (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Operazione</TableHead>
+                          <TableHead>Cesta</TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Taglia</TableHead>
+                          <TableHead className="text-right">Animali</TableHead>
+                          <TableHead className="text-right">Peso (kg)</TableHead>
+                          <TableHead className="text-right">Animali/kg</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {saleDetailsData.operations.map((operation: any) => (
+                          <TableRow key={`${operation.operationId}-${operation.basketId}`}>
+                            <TableCell>#{operation.operationId}</TableCell>
+                            <TableCell>
+                              {operation.basketPhysicalNumber
+                                ? `Cesta #${operation.basketPhysicalNumber}`
+                                : `ID ${operation.basketId}`}
+                            </TableCell>
+                            <TableCell>{formatSaleDate(operation.date)}</TableCell>
+                            <TableCell>{operation.sizeCode || operation.sizeName || "—"}</TableCell>
+                            <TableCell className="text-right">
+                              {formatSaleNumber(operation.originalAnimals)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatSaleWeight(Number(operation.originalWeight || 0) / 1000)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatSaleNumber(operation.originalAnimalsPerKg)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+                    Non risultano ceste o operazioni di origine collegate a questa vendita storica.
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="font-semibold">Sacchi configurati</h3>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Dettaglio dei sacchi e delle quantità finali, quando disponibile.
+                </p>
+                {(saleDetailsData.bags || []).length > 0 ? (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Sacco</TableHead>
+                          <TableHead>Taglia</TableHead>
+                          <TableHead className="text-right">Animali</TableHead>
+                          <TableHead className="text-right">Peso (kg)</TableHead>
+                          <TableHead className="text-right">Animali/kg</TableHead>
+                          <TableHead>Origine</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {saleDetailsData.bags.map((bag: any) => (
+                          <TableRow key={bag.id}>
+                            <TableCell>#{bag.bagNumber}</TableCell>
+                            <TableCell>{bag.sizeCode || "—"}</TableCell>
+                            <TableCell className="text-right">{formatSaleNumber(bag.animalCount)}</TableCell>
+                            <TableCell className="text-right">{formatSaleWeight(bag.totalWeight)}</TableCell>
+                            <TableCell className="text-right">{formatSaleNumber(bag.animalsPerKg)}</TableCell>
+                            <TableCell>
+                              {(bag.allocations || []).length > 0
+                                ? bag.allocations
+                                    .map((allocation: any) =>
+                                      allocation.basketPhysicalNumber
+                                        ? `Cesta #${allocation.basketPhysicalNumber}`
+                                        : `ID ${allocation.sourceBasketId}`
+                                    )
+                                    .join(", ")
+                                : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    Questa vendita storica non contiene sacchi configurati. I dati originali disponibili
+                    sono riportati nella sezione “Origine della vendita”.
+                  </div>
+                )}
+              </div>
+
+              {saleDetailsData.sale.notes && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Note</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">{saleDetailsData.sale.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            {saleDetailsData?.sale?.status === "draft" && (
+              <Button
+                onClick={() => {
+                  setCurrentSaleId(saleDetailsData.sale.id);
+                  setSaleDetailsId(null);
+                  setActiveTab("config");
+                }}
+              >
+                Apri configurazione
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setSaleDetailsId(null)}>
+              Chiudi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!saleToDelete} onOpenChange={(open) => { if (!open) setSaleToDelete(null); }}>
         <AlertDialogContent>
