@@ -1340,6 +1340,17 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     });
     // Puppeteer può restituire Uint8Array: Express lo serializzerebbe come JSON.
     const pdf = Buffer.isBuffer(generatedPdf) ? generatedPdf : Buffer.from(generatedPdf);
+    await db.execute(sql`
+      UPDATE ${advancedSales}
+      SET generated_documents = jsonb_set(
+        COALESCE(generated_documents, '{}'::jsonb),
+        ARRAY[${kind}]::text[],
+        to_jsonb(NOW()::text),
+        true
+      ),
+      updated_at = NOW()
+      WHERE id = ${saleId}
+    `);
     const labels: Record<AdvancedSaleDocumentKind, string> = {
       'delivery-report': 'Rapporto-consegna',
       'sale-conditions': 'Dichiarazione-vendita-condizioni',

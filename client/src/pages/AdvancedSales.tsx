@@ -120,6 +120,7 @@ export default function AdvancedSales() {
   const [differenceDialogOpen, setDifferenceDialogOpen] = useState(false);
   const [differenceReason, setDifferenceReason] = useState("");
   const [automaticDialogOpen, setAutomaticDialogOpen] = useState(false);
+  const [generatedDocumentOverrides, setGeneratedDocumentOverrides] = useState<Record<number, Record<string, string>>>({});
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -769,6 +770,13 @@ export default function AdvancedSales() {
     kind: "delivery-report" | "sale-conditions" | "bivalve-transfer" | "ddt"
   ) => {
     window.open(`/api/advanced-sales/${saleId}/documents/${kind}.pdf`, '_blank', 'noopener,noreferrer');
+    setGeneratedDocumentOverrides(current => ({
+      ...current,
+      [saleId]: { ...(current[saleId] || {}), [kind]: new Date().toISOString() }
+    }));
+    window.setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+    }, 1500);
   };
 
   const handleUpdateStatus = (saleId: number, status: string) => {
@@ -854,10 +862,6 @@ export default function AdvancedSales() {
 
   const handleOpenInFCloud = (ddtId: number) => {
     openInFCloudMutation.mutate(ddtId);
-  };
-
-  const handleDownloadDDTPDF = (ddtId: number) => {
-    window.open(`/api/ddt/${ddtId}/pdf`, '_blank');
   };
 
   const handleOpenReport = (saleId: number) => {
@@ -1381,24 +1385,52 @@ export default function AdvancedSales() {
                             )}
 
                             {sale.totalBags > 0 && (
-                              <div className="flex flex-wrap gap-1 border-l border-slate-200 pl-2">
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "delivery-report")} title="Scarica Rapporto di consegna">
-                                  <Download className="h-4 w-4 mr-1" />
-                                  Consegna
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "sale-conditions")} title="Scarica dichiarazione di vendita e condizioni contrattuali">
-                                  <Download className="h-4 w-4 mr-1" />
-                                  Condizioni
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "bivalve-transfer")} title="Scarica documento di registrazione trasferimento molluschi">
-                                  <Download className="h-4 w-4 mr-1" />
-                                  Trasferimento
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadSaleDocument(sale.id, "ddt")} title="Scarica DDT interno">
-                                  <Download className="h-4 w-4 mr-1" />
-                                  DDT
-                                </Button>
-                              </div>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-teal-600 text-teal-700 hover:bg-teal-50"
+                                    data-testid={`button-sale-documents-${sale.id}`}
+                                  >
+                                    <FileText className="h-4 w-4 mr-1" />
+                                    Documenti
+                                    <span className="ml-2 text-xs">
+                                      {Object.keys({ ...(sale.generatedDocuments || {}), ...(generatedDocumentOverrides[sale.id] || {}) }).filter(kind =>
+                                        ["delivery-report", "sale-conditions", "bivalve-transfer", "ddt"].includes(kind)
+                                      ).length}/4
+                                    </span>
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent align="end" className="w-80 p-2">
+                                  <div className="px-2 py-1.5">
+                                    <p className="font-semibold">Documenti della vendita</p>
+                                    <p className="text-xs text-muted-foreground">Verde: generato almeno una volta</p>
+                                  </div>
+                                  {([
+                                    ["delivery-report", "Rapporto di consegna"],
+                                    ["sale-conditions", "Dichiarazione di vendita e condizioni"],
+                                    ["bivalve-transfer", "Registrazione trasferimento molluschi"],
+                                    ["ddt", "Documento di trasporto (DDT)"]
+                                  ] as const).map(([kind, label]) => {
+                                    const generated = Boolean(
+                                      generatedDocumentOverrides[sale.id]?.[kind] || sale.generatedDocuments?.[kind]
+                                    );
+                                    return (
+                                      <Button
+                                        key={kind}
+                                        variant="ghost"
+                                        className="w-full justify-start h-auto py-2.5"
+                                        onClick={() => handleDownloadSaleDocument(sale.id, kind)}
+                                        title={generated ? "Già generato: apri nuovamente" : "Genera documento"}
+                                      >
+                                        <span className={`mr-3 h-2.5 w-2.5 shrink-0 rounded-full ${generated ? "bg-emerald-500 ring-4 ring-emerald-100" : "bg-slate-300"}`} />
+                                        <span className="text-left leading-tight">{label}</span>
+                                      </Button>
+                                    );
+                                  })}
+                                </PopoverContent>
+                              </Popover>
                             )}
 
                             {sale.status === 'confirmed' && sale.totalBags > 0 && (
@@ -1420,18 +1452,6 @@ export default function AdvancedSales() {
 
                                 {sale.ddtStatus === 'locale' && sale.ddtId && (
                                   <>
-                                    <Button 
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleDownloadDDTPDF(sale.ddtId!)}
-                                      className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                                      title="Scarica PDF DDT"
-                                      data-testid={`button-download-ddt-pdf-${sale.id}`}
-                                    >
-                                      <FileText className="h-4 w-4 mr-1" />
-                                      PDF DDT
-                                    </Button>
-                                    
                                     <Button 
                                       variant="default"
                                       size="sm"
@@ -1466,18 +1486,6 @@ export default function AdvancedSales() {
                                     <Badge variant="default" className="bg-green-600">
                                       DDT Inviato
                                     </Badge>
-                                    <Button 
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleDownloadDDTPDF(sale.ddtId!)}
-                                      className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                                      title="Scarica PDF DDT"
-                                      data-testid={`button-download-ddt-pdf-${sale.id}`}
-                                    >
-                                      <FileText className="h-4 w-4 mr-1" />
-                                      PDF DDT
-                                    </Button>
-
                                     <Button
                                       variant="outline"
                                       size="sm"

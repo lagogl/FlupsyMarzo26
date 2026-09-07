@@ -1297,6 +1297,7 @@ export const advancedSales = pgTable("advanced_sales", {
   totalBags: integer("total_bags"), // Numero sacchi totali
   notes: text("notes"), // Note vendita
   pdfPath: text("pdf_path"), // Percorso file PDF generato
+  generatedDocuments: jsonb("generated_documents").$type<Record<string, string>>().notNull().default({}), // Timestamp ultima generazione per la suite documentale A4
   ddtId: integer("ddt_id"), // Riferimento DDT creato
   ddtStatus: text("ddt_status", { enum: ["nessuno", "generazione", "locale", "inviato"] }).notNull().default("nessuno"), // Stato DDT
   companyId: integer("company_id"), // ID Azienda Fatture in Cloud per questa vendita
