@@ -44,6 +44,27 @@ function parseDetails(value: any): any {
   try { return JSON.parse(value); } catch { return { details: value }; }
 }
 
+export function normalizeSaleCustomerSnapshot(
+  customerDetails: unknown,
+  customerName?: unknown
+) {
+  const snapshot = parseDetails(customerDetails);
+  return {
+    name: snapshot.businessName || snapshot.denominazione || snapshot.name || customerName || '',
+    address: snapshot.address || snapshot.indirizzo || snapshot.details || '',
+    city: snapshot.city || snapshot.comune || '',
+    postalCode: snapshot.postalCode || snapshot.cap || '',
+    province: snapshot.province || snapshot.provincia || '',
+    country: snapshot.country || snapshot.paese || 'Italia',
+    vatNumber: snapshot.vatNumber || snapshot.piva || '',
+    taxCode: snapshot.taxCode || snapshot.codiceFiscale || '',
+    phone: snapshot.phone || snapshot.telefono || '',
+    email: snapshot.email || '',
+    farmCode: snapshot.farmCode || snapshot.codiceAllevamento || '',
+    productionZone: snapshot.productionZone || snapshot.zonaProduzione || ''
+  };
+}
+
 function buildBuyer(data: AdvancedSaleDocumentData) {
   if (data.ddt) {
     return {
@@ -61,21 +82,21 @@ function buildBuyer(data: AdvancedSaleDocumentData) {
       productionZone: ''
     };
   }
-  const snapshot = parseDetails(data.sale.customerDetails);
+  const snapshot = normalizeSaleCustomerSnapshot(data.sale.customerDetails, data.sale.customerName);
   const customer = data.customer || {};
   return {
-    name: snapshot.businessName || snapshot.name || customer.denominazione || data.sale.customerName,
-    address: snapshot.address || customer.indirizzo || snapshot.details,
+    name: snapshot.name || customer.denominazione,
+    address: snapshot.address || customer.indirizzo,
     city: snapshot.city || customer.comune,
-    postalCode: snapshot.postalCode || snapshot.cap || customer.cap,
-    province: snapshot.province || snapshot.provincia || customer.provincia,
+    postalCode: snapshot.postalCode || customer.cap,
+    province: snapshot.province || customer.provincia,
     country: snapshot.country || customer.paese || 'Italia',
-    vatNumber: snapshot.vatNumber || snapshot.piva || customer.piva,
-    taxCode: snapshot.taxCode || snapshot.codiceFiscale || customer.codiceFiscale,
+    vatNumber: snapshot.vatNumber || customer.piva,
+    taxCode: snapshot.taxCode || customer.codiceFiscale,
     phone: snapshot.phone || customer.telefono,
     email: snapshot.email || customer.email,
-    farmCode: snapshot.farmCode || snapshot.codiceAllevamento || customer.codiceAllevamento || '',
-    productionZone: snapshot.productionZone || snapshot.zonaProduzione || ''
+    farmCode: snapshot.farmCode || customer.codiceAllevamento || '',
+    productionZone: snapshot.productionZone
   };
 }
 

@@ -6,7 +6,11 @@ import { Request, Response } from "express";
 import { db } from "../db";
 import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzle-orm";
 import { pdfGenerator } from "../services/pdf-generator";
-import { generateAdvancedSaleDocument as buildAdvancedSaleDocument, type AdvancedSaleDocumentKind } from "../services/advanced-sale-documents";
+import {
+  generateAdvancedSaleDocument as buildAdvancedSaleDocument,
+  normalizeSaleCustomerSnapshot,
+  type AdvancedSaleDocumentKind
+} from "../services/advanced-sale-documents";
 import { PDFDocument } from "pdf-lib";
 import { createPublicTraceabilityToken } from "../services/public-traceability-token";
 import path from "path";
@@ -2240,10 +2244,8 @@ export async function generateDDT(req: Request, res: Response) {
       }
       cliente = clienteResult[0];
     } else {
-      const snapshot = typeof saleData.customerDetails === 'string'
-        ? JSON.parse(saleData.customerDetails)
-        : saleData.customerDetails;
-      if (!saleData.customerName && !snapshot?.name) {
+      const snapshot = normalizeSaleCustomerSnapshot(saleData.customerDetails, saleData.customerName);
+      if (!snapshot.name) {
         return res.status(400).json({
           success: false,
           error: "Cliente non specificato per la vendita"
@@ -2251,14 +2253,15 @@ export async function generateDDT(req: Request, res: Response) {
       }
       cliente = {
         id: null,
-        denominazione: saleData.customerName || snapshot.name,
-        indirizzo: snapshot?.address || snapshot?.indirizzo || snapshot?.details || '',
-        comune: snapshot?.city || snapshot?.comune || '',
-        cap: snapshot?.cap || '',
-        provincia: snapshot?.province || snapshot?.provincia || '',
-        piva: snapshot?.vatNumber || snapshot?.piva || '',
-        codiceFiscale: snapshot?.taxCode || snapshot?.codiceFiscale || '',
-        paese: snapshot?.country || snapshot?.paese || 'Italia'
+        denominazione: snapshot.name,
+        indirizzo: snapshot.address,
+        comune: snapshot.city,
+        cap: snapshot.postalCode,
+        provincia: snapshot.province,
+        piva: snapshot.vatNumber,
+        codiceFiscale: snapshot.taxCode,
+        codiceAllevamento: snapshot.farmCode,
+        paese: snapshot.country
       };
     }
 
