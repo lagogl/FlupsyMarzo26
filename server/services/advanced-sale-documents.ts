@@ -57,7 +57,7 @@ function buildBuyer(data: AdvancedSaleDocumentData) {
       taxCode: data.ddt.clienteCodiceFiscale,
       phone: '',
       email: '',
-      farmCode: '',
+      farmCode: data.ddt.clienteCodiceAllevamento || '',
       productionZone: ''
     };
   }
@@ -74,7 +74,7 @@ function buildBuyer(data: AdvancedSaleDocumentData) {
     taxCode: snapshot.taxCode || snapshot.codiceFiscale || customer.codiceFiscale,
     phone: snapshot.phone || customer.telefono,
     email: snapshot.email || customer.email,
-    farmCode: snapshot.farmCode || snapshot.codiceAllevamento || '',
+    farmCode: snapshot.farmCode || snapshot.codiceAllevamento || customer.codiceAllevamento || '',
     productionZone: snapshot.productionZone || snapshot.zonaProduzione || ''
   };
 }

@@ -439,7 +439,21 @@ router.post('/clients/sync', async (req: Request, res: Response) => {
     let clientiCreati = 0;
     
     for (let i = 0; i < allClienti.length; i++) {
-      const clienteFIC = allClienti[i];
+      let clienteFIC = allClienti[i];
+      // L'elenco FIC può omettere dati presenti nella scheda completa (in particolare la via).
+      // Recupera il dettaglio prima di aggiornare il cliente locale, altrimenti una sync
+      // successiva cancellerebbe nuovamente l'indirizzo completo.
+      if (clienteFIC.id && !String(clienteFIC.address_street || '').trim()) {
+        try {
+          const dettagliResponse = await withRetry(() =>
+            apiRequest('GET', `/entities/clients/${clienteFIC.id}`)
+          );
+          const dettagli = dettagliResponse.data.data;
+          if (dettagli) clienteFIC = { ...clienteFIC, ...dettagli };
+        } catch (error) {
+          console.warn(`⚠️ Impossibile recuperare il dettaglio indirizzo per ${clienteFIC.name || clienteFIC.id}`);
+        }
+      }
       // Cerca cliente esistente: prima per fattureInCloudId (più affidabile), poi P.IVA, poi denominazione
       let clienteEsistente = null;
       
@@ -507,6 +521,7 @@ router.post('/clients/sync', async (req: Request, res: Response) => {
         telefono: clienteFIC.phone || '',
         piva: clienteFIC.vat_number || '',
         codiceFiscale: clienteFIC.tax_code || clienteFIC.vat_number || '',
+        codiceAllevamento: clienteFIC.code || '',
         fattureInCloudId: clienteFIC.id
       };
       

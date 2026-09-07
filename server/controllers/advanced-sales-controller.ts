@@ -64,6 +64,10 @@ function ensureAdvancedSaleDocumentSchema() {
           ADD COLUMN IF NOT EXISTS ddr_year integer
       `));
       await db.execute(sql.raw(`
+        ALTER TABLE clienti ADD COLUMN IF NOT EXISTS codice_allevamento text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_allevamento text
+      `));
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS ddr_number_sequences (
           id serial PRIMARY KEY,
           company_id integer NOT NULL,
@@ -2303,6 +2307,7 @@ export async function generateDDT(req: Request, res: Response) {
       clienteProvincia: cliente.provincia !== 'N/A' ? cliente.provincia : '',
       clientePiva: cliente.piva !== 'N/A' ? cliente.piva : '',
       clienteCodiceFiscale: cliente.codiceFiscale !== 'N/A' ? cliente.codiceFiscale : '',
+      clienteCodiceAllevamento: cliente.codiceAllevamento || '',
       clientePaese: cliente.paese || 'Italia',
       // Snapshot immutabile mittente (azienda)
       companyId: companyId,
