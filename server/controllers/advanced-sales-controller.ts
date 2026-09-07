@@ -9,6 +9,7 @@ import { pdfGenerator } from "../services/pdf-generator";
 import {
   generateAdvancedSaleDocument as buildAdvancedSaleDocument,
   normalizeSaleCustomerSnapshot,
+  sendPdfBinaryResponse,
   type AdvancedSaleDocumentKind
 } from "../services/advanced-sale-documents";
 import { PDFDocument } from "pdf-lib";
@@ -1538,7 +1539,7 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       `);
     } else {
       const generated = await buildAdvancedSaleDocument(kind, documentData);
-      // Puppeteer può restituire Uint8Array: Express lo serializzerebbe come JSON.
+      // Puppeteer può restituire Uint8Array: viene normalizzato prima della risposta.
       pdf = Buffer.isBuffer(generated) ? generated : Buffer.from(generated);
       await db.execute(sql`
         UPDATE ${advancedSales}
@@ -1558,11 +1559,8 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       'bivalve-transfer': 'Registro-trasferimento-molluschi',
       ddt: 'DDT'
     };
-    res.setHeader('Content-Type', 'application/pdf');
     const filename = kind === 'all' ? `Documenti-vendita-${sale.saleNumber}` : `${labels[kind]}-${sale.saleNumber}`;
-    res.setHeader('Content-Disposition', `inline; filename="${filename}.pdf"`);
-    res.setHeader('Content-Length', pdf.length);
-    res.send(pdf);
+    sendPdfBinaryResponse(res, pdf, filename);
   } catch (error) {
     console.error('Errore nella generazione del documento vendita:', error);
     res.status(500).json({ success: false, error: 'Errore nella generazione del documento' });

@@ -114,7 +114,7 @@ function companyFromDdt(ddt: any) {
   };
 }
 
-function logoFromDdt(ddt: any, companyId: unknown): string {
+export function logoFromDdt(ddt: any): string {
   const storedPath = String(ddt?.mittenteLogoPath || '').trim();
   if (storedPath) {
     const absolutePath = path.isAbsolute(storedPath)
@@ -124,12 +124,17 @@ function logoFromDdt(ddt: any, companyId: unknown): string {
       path.resolve(process.cwd(), 'attached_assets'),
       path.resolve(process.cwd(), 'client/public')
     ];
-    if (allowedRoots.some(root => absolutePath.startsWith(`${root}${path.sep}`)) && fs.existsSync(absolutePath)) {
-      const mime = absolutePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-      return `data:${mime};base64,${fs.readFileSync(absolutePath).toString('base64')}`;
+    const extension = path.extname(absolutePath).toLowerCase();
+    if (['.png', '.jpg', '.jpeg'].includes(extension) && fs.existsSync(absolutePath)) {
+      const realPath = fs.realpathSync(absolutePath);
+      const isAllowed = allowedRoots.some(root => realPath.startsWith(`${fs.realpathSync(root)}${path.sep}`));
+      if (isAllowed && fs.statSync(realPath).isFile()) {
+        const mime = extension === '.png' ? 'image/png' : 'image/jpeg';
+        return `data:${mime};base64,${fs.readFileSync(realPath).toString('base64')}`;
+      }
     }
   }
-  return getCompanyLogoBase64(companyId);
+  return '';
 }
 
 function farmCodeForCompany(companyId: unknown): string {
@@ -201,10 +206,10 @@ function page(title: string, subtitle: string, company: any, logo: string, body:
   <footer><span>${PRODUCT_NAME} · <em>${SCIENTIFIC_NAME}</em></span><span>Rif. ${esc(reference)} · Generato ${format(new Date(), 'dd/MM/yyyy HH:mm')}</span></footer></body></html>`;
 }
 
-export async function generateAdvancedSaleDocument(
+export async function renderAdvancedSaleDocumentHtml(
   kind: AdvancedSaleDocumentKind,
   data: AdvancedSaleDocumentData
-): Promise<Buffer> {
+): Promise<string> {
   const fiscal = data.ddt ? null : await getCompanyFiscalData(data.sale.companyId);
   if (!data.ddt && (!fiscal || !hasCompanyLogo(data.sale.companyId))) {
     throw new Error(`Azienda emittente non configurata per la vendita ${data.sale.saleNumber}`);
@@ -214,7 +219,7 @@ export async function generateAdvancedSaleDocument(
     throw new Error(`Snapshot emittente incompleto per la vendita ${data.sale.saleNumber}`);
   }
   const logo = data.ddt
-    ? logoFromDdt(data.ddt, data.ddt.companyId || data.sale.companyId)
+    ? logoFromDdt(data.ddt)
     : getCompanyLogoBase64(data.sale.companyId);
   const buyer = buildBuyer(data);
   const companyFarmCode = farmCodeForCompany(data.sale.companyId);
@@ -304,10 +309,31 @@ export async function generateAdvancedSaleDocument(
       <div><div class="signature">Firma del cessionario per ricevuta</div></div></div>`;
   }
 
-  return pdfGenerator.generateFromHTML(page(title, subtitle, company, logo, body, reference), {
+  return page(title, subtitle, company, logo, body, reference);
+}
+
+export async function generateAdvancedSaleDocument(
+  kind: AdvancedSaleDocumentKind,
+  data: AdvancedSaleDocumentData
+): Promise<Buffer> {
+  const html = await renderAdvancedSaleDocumentHtml(kind, data);
+  return pdfGenerator.generateFromHTML(html, {
     format: 'A4',
     preferCSSPageSize: true,
     printBackground: true,
     margin: { top: '6mm', right: '6mm', bottom: '6mm', left: '6mm' }
   });
+}
+
+export function sendPdfBinaryResponse(
+  res: Pick<import('express').Response, 'setHeader' | 'send'>,
+  generated: Buffer | Uint8Array,
+  filename: string
+): Buffer {
+  const pdf = Buffer.isBuffer(generated) ? generated : Buffer.from(generated);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${filename}.pdf"`);
+  res.setHeader('Content-Length', pdf.length);
+  res.send(pdf);
+  return pdf;
 }
