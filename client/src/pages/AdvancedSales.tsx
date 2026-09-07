@@ -140,6 +140,9 @@ export default function AdvancedSales() {
   const [ddrDialogOpen, setDdrDialogOpen] = useState(false);
   const [ddrCompanyId, setDdrCompanyId] = useState("");
   const [ddrNextNumber, setDdrNextNumber] = useState("1");
+  const [reconciliationOpen, setReconciliationOpen] = useState(false);
+  const [reconciliationConfirmOpen, setReconciliationConfirmOpen] = useState(false);
+  const [selectedReconciliationSaleIds, setSelectedReconciliationSaleIds] = useState<number[]>([]);
   const ddrYear = new Date().getFullYear();
 
   const { toast } = useToast();
@@ -280,6 +283,15 @@ export default function AdvancedSales() {
   const { data: salesData, isLoading: loadingSales } = useQuery({
     queryKey: ['/api/advanced-sales'],
     queryFn: () => apiRequest('/api/advanced-sales?pageSize=10000')
+  });
+  const {
+    data: reconciliationData,
+    isLoading: loadingReconciliation,
+    refetch: refetchReconciliation
+  } = useQuery({
+    queryKey: ['/api/advanced-sales/order-reconciliation/preview'],
+    queryFn: () => apiRequest('/api/advanced-sales/order-reconciliation/preview'),
+    enabled: reconciliationOpen
   });
   const [saleDetailsId, setSaleDetailsId] = useState<number | null>(null);
   const { data: saleDetailsData, isLoading: loadingSaleDetails } = useQuery({
@@ -978,12 +990,15 @@ export default function AdvancedSales() {
         method: 'POST'
       });
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setSendingDDTId(null);
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
       toast({
-        title: "Successo",
-        description: "DDT inviato con successo a Fatture in Cloud",
+        title: data?.orderReconciliation?.status === "manual_review"
+          ? "DDT inviato, verifica ordini necessaria"
+          : "Successo",
+        description: data?.message || "DDT inviato con successo a Fatture in Cloud",
+        variant: data?.orderReconciliation?.status === "manual_review" ? "destructive" : undefined
       });
     },
     onError: (error: any) => {
@@ -999,6 +1014,31 @@ export default function AdvancedSales() {
   const handleSendDDTToFIC = (ddtId: number) => {
     sendDDTToFICMutation.mutate(ddtId);
   };
+
+  const applyReconciliationMutation = useMutation({
+    mutationFn: (saleIds: number[]) => apiRequest('/api/advanced-sales/order-reconciliation/apply', {
+      method: 'POST',
+      body: JSON.stringify({ saleIds })
+    }),
+    onSuccess: (data: any) => {
+      setReconciliationConfirmOpen(false);
+      setSelectedReconciliationSaleIds([]);
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/order-reconciliation/preview'] });
+      refetchReconciliation();
+      toast({
+        title: "Riconciliazione completata",
+        description: `${data.reconciled || 0} vendite associate agli ordini senza duplicazioni.`
+      });
+    },
+    onError: (error: any) => {
+      setReconciliationConfirmOpen(false);
+      toast({
+        title: "Riconciliazione non completata",
+        description: error.message || "Aggiornare l'anteprima e riprovare",
+        variant: "destructive"
+      });
+    }
+  });
 
   const openInFCloudMutation = useMutation({
     mutationFn: async (ddtId: number) => {
@@ -1475,7 +1515,19 @@ export default function AdvancedSales() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Vendite Avanzate</CardTitle>
-              <Dialog open={ddrDialogOpen} onOpenChange={setDdrDialogOpen}>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedReconciliationSaleIds([]);
+                    setReconciliationOpen(true);
+                  }}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Riconcilia ordini
+                </Button>
+                <Dialog open={ddrDialogOpen} onOpenChange={setDdrDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <FileText className="h-4 w-4 mr-2" />
@@ -1527,7 +1579,8 @@ export default function AdvancedSales() {
                     </Button>
                   </DialogFooter>
                 </DialogContent>
-              </Dialog>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               {loadingSales ? (
@@ -1797,6 +1850,175 @@ export default function AdvancedSales() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={reconciliationOpen}
+        onOpenChange={(open) => {
+          setReconciliationOpen(open);
+          if (!open) setSelectedReconciliationSaleIds([]);
+        }}
+      >
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Riconcilia vendite storiche con gli ordini</DialogTitle>
+            <DialogDescription>
+              Le quantità vengono registrate solo dopo la conferma. I casi parziali o senza ordine
+              restano esclusi e richiedono una valutazione manuale.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingReconciliation ? (
+            <div className="flex justify-center py-14">
+              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-4 overflow-hidden">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border bg-slate-50 p-3">
+                  <p className="text-xs text-muted-foreground">Da verificare</p>
+                  <p className="text-xl font-semibold">{reconciliationData?.summary?.total || 0}</p>
+                </div>
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                  <p className="text-xs text-green-700">Associabili</p>
+                  <p className="text-xl font-semibold text-green-800">{reconciliationData?.summary?.automatic || 0}</p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs text-amber-700">Parziali</p>
+                  <p className="text-xl font-semibold text-amber-800">{reconciliationData?.summary?.partial || 0}</p>
+                </div>
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-xs text-red-700">Senza ordine</p>
+                  <p className="text-xl font-semibold text-red-800">{reconciliationData?.summary?.manual || 0}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Selezionate {selectedReconciliationSaleIds.length} vendite
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedReconciliationSaleIds(
+                    (reconciliationData?.sales || [])
+                      .filter((sale: any) => sale.status === "automatic")
+                      .map((sale: any) => sale.saleId)
+                  )}
+                >
+                  Seleziona tutte le associazioni sicure
+                </Button>
+              </div>
+
+              <div className="max-h-[48vh] overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-white">
+                    <TableRow>
+                      <TableHead className="w-10"></TableHead>
+                      <TableHead>Vendita</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Taglia</TableHead>
+                      <TableHead className="text-right">Animali</TableHead>
+                      <TableHead>Ordini proposti</TableHead>
+                      <TableHead>Esito</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(reconciliationData?.sales || []).map((sale: any) => {
+                      const selectable = sale.status === "automatic";
+                      const selected = selectedReconciliationSaleIds.includes(sale.saleId);
+                      return (
+                        <TableRow key={sale.saleId}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selected}
+                              disabled={!selectable}
+                              onCheckedChange={(checked) => setSelectedReconciliationSaleIds(current =>
+                                checked
+                                  ? [...current, sale.saleId]
+                                  : current.filter(id => id !== sale.saleId)
+                              )}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium">{sale.saleNumber}</p>
+                            <p className="text-xs text-muted-foreground">{formatSaleDate(sale.saleDate)}</p>
+                          </TableCell>
+                          <TableCell className="max-w-56 whitespace-normal">{sale.customerName}</TableCell>
+                          <TableCell>{(sale.components || []).map((item: any) => item.sizeCode).join(", ")}</TableCell>
+                          <TableCell className="text-right">{formatSaleNumber(sale.totalAnimals)}</TableCell>
+                          <TableCell className="max-w-72 whitespace-normal text-sm">
+                            {(sale.allocations || []).length
+                              ? sale.allocations.map((item: any) =>
+                                  `n. ${item.orderNumber || item.orderId}: ${formatSaleNumber(item.quantity)}`
+                                ).join(" · ")
+                              : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={sale.status === "automatic" ? "default" : "secondary"}
+                              className={
+                                sale.status === "automatic"
+                                  ? "bg-green-600"
+                                  : sale.status === "partial"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-red-100 text-red-800"
+                              }
+                              title={sale.reason}
+                            >
+                              {sale.status === "automatic"
+                                ? "Associabile"
+                                : sale.status === "partial" ? "Parziale" : "Manuale"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                La conferma creerà consegne reali e aggiornerà i residui degli ordini selezionati.
+                L’operazione è protetta dai duplicati, ma deve essere eseguita solo dopo aver controllato le proposte.
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReconciliationOpen(false)}>Chiudi</Button>
+            <Button
+              disabled={selectedReconciliationSaleIds.length === 0 || applyReconciliationMutation.isPending}
+              onClick={() => setReconciliationConfirmOpen(true)}
+            >
+              Applica {selectedReconciliationSaleIds.length || ""} associazioni
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={reconciliationConfirmOpen} onOpenChange={setReconciliationConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confermare la riconciliazione?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Verranno create le consegne per {selectedReconciliationSaleIds.length} vendite e saranno
+              aggiornati i residui degli ordini. Prima dell’inserimento il server ricontrollerà
+              taglia e capienza; le vendite non più compatibili verranno bloccate.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => applyReconciliationMutation.mutate(selectedReconciliationSaleIds)}
+              disabled={applyReconciliationMutation.isPending}
+            >
+              {applyReconciliationMutation.isPending
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Applicazione...</>
+                : "Conferma e aggiorna gli ordini"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={saleDetailsId !== null}

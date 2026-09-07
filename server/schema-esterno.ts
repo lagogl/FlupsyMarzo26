@@ -72,6 +72,11 @@ export const consegneCondivise = pgTable("consegne_condivise", {
   dataConsegna: date("data_consegna").notNull(),
   quantitaConsegnata: integer("quantita_consegnata").notNull(),
   appOrigine: varchar("app_origine", { length: 50 }).notNull(), // "delta_futuro" | "app_esterna"
+  advancedSaleId: integer("advanced_sale_id"),
+  advancedSaleNumber: varchar("advanced_sale_number", { length: 30 }),
+  saleSizeCode: varchar("sale_size_code", { length: 50 }),
+  ddtId: integer("ddt_id"),
+  sourceReference: varchar("source_reference", { length: 160 }),
   note: text("note"),
   createdAt: timestamp("created_at").notNull().defaultNow()
 });

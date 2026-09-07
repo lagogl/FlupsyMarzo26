@@ -26,3 +26,4 @@
 - [Numerazione annuale DDR](annual-ddr-numbering.md) — progressivo separato per azienda/anno, assegnato una sola volta; ristampe immutabili e ripartenza automatica annuale.
 - [Indirizzi clienti FIC](fic-client-address-details.md) — l'elenco clienti può omettere la via presente in FIC; recuperare il dettaglio prima di salvare campi mancanti.
 - [Email fascicolo vendite](advanced-sale-documents-email.md) — la stampa del fascicolo invia prima i PDF e il riepilogo ai destinatari operativi; Delta ha 4 allegati, Ecotapes 3 senza DDR.
+- [Consegne ordini da vendite](sale-order-delivery-boundary.md) — genera/ristampa DDT non tocca ordini; solo successo “Invia a FIC” registra consegne, con riferimento idempotente vendita-ordine-taglia.

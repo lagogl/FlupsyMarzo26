@@ -51,8 +51,7 @@ import { OperationsCache } from "../operations-cache-service.js";
 import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
 import { sendAdvancedSaleDocumentsReadyEmail } from "../services/advanced-sale-documents-email";
-import { dbEsterno, queryEsterno, isDbEsternoAvailable } from "../db-esterno";
-import { consegneCondivise, ordiniCondivisi } from "../schema-esterno";
+import { poolEsterno, queryEsterno } from "../db-esterno";
 import {
   allocateIntegerByWeight,
   buildCycleCode,
@@ -2218,98 +2217,370 @@ export async function getAvailableOrders(req: Request, res: Response) {
   }
 }
 
-interface AutoConsegnaParams {
-  clientePiva: string;
-  clienteNome: string;
-  dataConsegna: string;
-  bagsPerSize: Record<string, any[]>;
+type SaleDeliveryComponent = { sizeCode: string; animalCount: number };
+type OrderAllocation = {
+  orderId: number;
+  orderNumber: number | null;
+  sizeCode: string;
+  quantity: number;
+  residualBefore: number;
+  residualAfter: number;
+};
+
+function normalizeCustomerIdentity(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\b(SOCIETA|COOPERATIVA|SOC|COOP|AGRICOLA|ARL|SCRL|SCARL)\b/g, "")
+    .replace(/[^A-Z0-9]/g, "");
 }
 
-async function autoRegistraConsegna(params: AutoConsegnaParams): Promise<{ registrate: number; dettagli: string[] } | null> {
-  if (!isDbEsternoAvailable() || !dbEsterno) {
-    console.log('⚠️ Auto-consegna: DB esterno non disponibile, skip');
-    return null;
+function toDateKey(value: unknown) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value || "").slice(0, 10);
+}
+
+function sameCustomerIdentity(
+  expectedVat: string,
+  expectedName: string,
+  actualVat: unknown,
+  actualName: unknown
+) {
+  const leftVat = String(expectedVat || "").replace(/\D/g, "");
+  const rightVat = String(actualVat || "").replace(/\D/g, "");
+  if (leftVat && rightVat && leftVat === rightVat) return true;
+  return Boolean(
+    normalizeCustomerIdentity(expectedName) &&
+    normalizeCustomerIdentity(expectedName) === normalizeCustomerIdentity(actualName)
+  );
+}
+
+async function getSaleDeliveryContext(saleId: number) {
+  const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
+  if (!sale) throw new Error("Vendita non trovata");
+
+  const [customer] = sale.customerId
+    ? await db.select().from(clienti).where(eq(clienti.id, sale.customerId)).limit(1)
+    : [];
+  const snapshot = normalizeSaleCustomerSnapshot(sale.customerDetails);
+  const customerName = customer?.denominazione || sale.customerName || snapshot.name || "";
+  const customerVat = customer?.piva || snapshot.vatNumber || "";
+  if (!customerName) throw new Error("Cliente della vendita non disponibile");
+
+  const bags = await db.select({
+    sizeCode: saleBags.sizeCode,
+    animalCount: saleBags.animalCount
+  }).from(saleBags).where(eq(saleBags.advancedSaleId, saleId));
+
+  let components: SaleDeliveryComponent[];
+  if (bags.length > 0) {
+    const grouped = new Map<string, number>();
+    for (const bag of bags) {
+      grouped.set(bag.sizeCode, (grouped.get(bag.sizeCode) || 0) + Number(bag.animalCount || 0));
+    }
+    components = Array.from(grouped, ([sizeCode, animalCount]) => ({ sizeCode, animalCount }));
+  } else {
+    const refs = await db.select({
+      sizeCode: sizes.code,
+      animalCount: saleOperationsRef.originalAnimals
+    })
+      .from(saleOperationsRef)
+      .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
+      .leftJoin(sizes, eq(operations.sizeId, sizes.id))
+      .where(eq(saleOperationsRef.advancedSaleId, saleId));
+    const grouped = new Map<string, number>();
+    for (const ref of refs) {
+      if (!ref.sizeCode) continue;
+      grouped.set(ref.sizeCode, (grouped.get(ref.sizeCode) || 0) + Number(ref.animalCount || 0));
+    }
+    components = Array.from(grouped, ([sizeCode, animalCount]) => ({ sizeCode, animalCount }));
   }
 
+  if (components.length === 0) throw new Error("La vendita non contiene quantità suddivise per taglia");
+  return { sale, customerName, customerVat, components };
+}
+
+async function registerSaleDeliveriesOnOrders(
+  saleId: number,
+  ddtId: number | null,
+  mode: "fic" | "historical"
+): Promise<{ alreadyRegistered: boolean; allocations: OrderAllocation[] }> {
+  if (!poolEsterno) throw new Error("Database ordini non disponibile");
+  const context = await getSaleDeliveryContext(saleId);
+  const client = await poolEsterno.connect();
   try {
-    const { clientePiva, clienteNome, dataConsegna, bagsPerSize } = params;
-
-    const ordiniAperti = await queryEsterno(
-      `SELECT o.id, o.quantita, o.taglia_richiesta, o.cliente_id,
-              COALESCE(c.denominazione, o.cliente_nome) as cliente_nome,
-              c.piva as cliente_piva,
-              COALESCE(SUM(cc.quantita_consegnata), 0)::INTEGER as gia_consegnata,
-              (COALESCE(o.quantita, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER as quantita_residua
-       FROM ordini o
-       LEFT JOIN clienti c ON c.id = o.cliente_id
-       LEFT JOIN consegne_condivise cc ON cc.ordine_id = o.id
-       WHERE o.stato IN ('Aperto', 'Parziale', 'In Lavorazione')
-         AND o.cancellato = false
-         AND (c.piva = $1 OR o.cliente_nome ILIKE $2)
-       GROUP BY o.id, o.quantita, o.taglia_richiesta, o.cliente_id, c.denominazione, o.cliente_nome, c.piva
-       HAVING (COALESCE(o.quantita, 0) - COALESCE(SUM(cc.quantita_consegnata), 0))::INTEGER > 0
-       ORDER BY o.data ASC`,
-      [clientePiva, `%${clienteNome}%`]
+    await client.query("BEGIN");
+    const existing = await client.query(
+      `SELECT id FROM consegne_condivise WHERE advanced_sale_id = $1 LIMIT 1`,
+      [saleId]
     );
-
-    if (ordiniAperti.length === 0) {
-      console.log(`ℹ️ Auto-consegna: Nessun ordine aperto trovato per ${clienteNome} (P.IVA: ${clientePiva})`);
-      return { registrate: 0, dettagli: ['Nessun ordine aperto trovato per questo cliente'] };
+    if (existing.rowCount) {
+      await client.query("COMMIT");
+      return { alreadyRegistered: true, allocations: [] };
     }
 
-    let totalAnimals = 0;
-    for (const [, sizeBags] of Object.entries(bagsPerSize)) {
-      const bagsMap = new Map<number, boolean>();
-      for (const item of sizeBags) {
-        if (!bagsMap.has(item.bag.id)) {
-          bagsMap.set(item.bag.id, true);
-          totalAnimals += item.bag.animalCount;
-        }
-      }
-    }
+    const allocations: OrderAllocation[] = [];
+    for (const component of context.components) {
+      let remaining = component.animalCount;
+      const ordersResult = await client.query(
+        `SELECT o.id, o.numero, o.quantita, c.piva AS customer_vat,
+                COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
+                COALESCE((SELECT SUM(cc.quantita_consegnata)
+                          FROM consegne_condivise cc WHERE cc.ordine_id = o.id), 0)::integer AS delivered
+         FROM ordini o
+         LEFT JOIN clienti c ON c.id = o.cliente_id
+         WHERE o.cancellato = false
+           AND o.stato IN ('Aperto', 'Parziale', 'In Lavorazione')
+           AND o.taglia_richiesta = $1
+           AND o.data <= $2
+         ORDER BY COALESCE(o.data_inizio_consegna, o.data), o.data, o.id
+         FOR UPDATE OF o`,
+        [component.sizeCode, context.sale.saleDate]
+      );
 
-    const dettagli: string[] = [];
-    let registrate = 0;
-    let animaliRimasti = totalAnimals;
-
-    for (const ordine of ordiniAperti) {
-      if (animaliRimasti <= 0) break;
-
-      const quantitaDaConsegnare = Math.min(animaliRimasti, ordine.quantita_residua);
-
-      await dbEsterno
-        .insert(consegneCondivise)
-        .values({
-          ordineId: ordine.id,
-          dataConsegna: new Date(dataConsegna).toISOString().split('T')[0],
-          quantitaConsegnata: quantitaDaConsegnare,
-          appOrigine: 'delta_futuro',
-          note: `Auto-registrata da DDT del ${dataConsegna}`
+      for (const order of ordersResult.rows.filter(order =>
+        sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name)
+      )) {
+        if (remaining <= 0) break;
+        const residualBefore = Math.max(0, Number(order.quantita || 0) - Number(order.delivered || 0));
+        if (residualBefore <= 0) continue;
+        const quantity = Math.min(remaining, residualBefore);
+        remaining -= quantity;
+        allocations.push({
+          orderId: Number(order.id),
+          orderNumber: order.numero === null ? null : Number(order.numero),
+          sizeCode: component.sizeCode,
+          quantity,
+          residualBefore,
+          residualAfter: residualBefore - quantity
         });
-
-      let nuovoStato = 'Aperto';
-      const nuovoResiduo = ordine.quantita_residua - quantitaDaConsegnare;
-      if (nuovoResiduo <= 0) {
-        nuovoStato = 'Completato';
-      } else if (nuovoResiduo < ordine.quantita) {
-        nuovoStato = 'Parziale';
       }
 
-      await dbEsterno
-        .update(ordiniCondivisi)
-        .set({ stato: nuovoStato, updatedAt: new Date() })
-        .where(eq(ordiniCondivisi.id, ordine.id));
-
-      animaliRimasti -= quantitaDaConsegnare;
-      registrate++;
-      dettagli.push(`Ordine #${ordine.id}: consegnati ${quantitaDaConsegnare.toLocaleString('it-IT')} animali (stato → ${nuovoStato})`);
-      console.log(`✅ Auto-consegna: Ordine #${ordine.id} → ${quantitaDaConsegnare} animali, stato: ${nuovoStato}`);
+      if (remaining > 0) {
+        const error: any = new Error(
+          `Ordini insufficienti per ${component.sizeCode}: mancano ${remaining.toLocaleString("it-IT")} animali`
+        );
+        error.code = "ORDER_RECONCILIATION_REQUIRED";
+        error.details = { sizeCode: component.sizeCode, missingAnimals: remaining };
+        throw error;
+      }
     }
 
-    return { registrate, dettagli };
+    for (const allocation of allocations) {
+      const sourceReference = `advanced-sale:${saleId}:order:${allocation.orderId}:size:${allocation.sizeCode}`;
+      await client.query(
+        `INSERT INTO consegne_condivise
+          (ordine_id, data_consegna, quantita_consegnata, app_origine, note,
+           advanced_sale_id, advanced_sale_number, sale_size_code, ddt_id, source_reference)
+         VALUES ($1, $2, $3, 'delta_futuro', $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (source_reference) WHERE source_reference IS NOT NULL DO NOTHING`,
+        [
+          allocation.orderId,
+          context.sale.saleDate,
+          allocation.quantity,
+          mode === "fic"
+            ? `Registrata dopo invio FIC della vendita ${context.sale.saleNumber}`
+            : `Riconciliazione storica della vendita ${context.sale.saleNumber}`,
+          saleId,
+          context.sale.saleNumber,
+          allocation.sizeCode,
+          ddtId,
+          sourceReference
+        ]
+      );
+    }
+
+    for (const orderId of new Set(allocations.map(item => item.orderId))) {
+      await client.query(
+        `UPDATE ordini o
+         SET stato = CASE
+           WHEN COALESCE((SELECT SUM(cc.quantita_consegnata) FROM consegne_condivise cc WHERE cc.ordine_id=o.id),0) >= o.quantita
+             THEN 'Completato'
+           WHEN COALESCE((SELECT SUM(cc.quantita_consegnata) FROM consegne_condivise cc WHERE cc.ordine_id=o.id),0) > 0
+             THEN 'Parziale'
+           ELSE 'Aperto'
+         END,
+         updated_at = NOW()
+         WHERE o.id = $1`,
+        [orderId]
+      );
+    }
+
+    await client.query("COMMIT");
+    return { alreadyRegistered: false, allocations };
   } catch (error) {
-    console.error('❌ Errore auto-registrazione consegna:', error);
-    return null;
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function buildHistoricalOrderReconciliationPreview() {
+  if (!poolEsterno) throw new Error("Database ordini non disponibile");
+  const sales = await db.select()
+    .from(advancedSales)
+    .where(and(
+      inArray(advancedSales.status, ["confirmed", "completed"]),
+      isNull(advancedSales.cancelledAt)
+    ))
+    .orderBy(advancedSales.saleDate, advancedSales.id);
+
+  const externalOrders = await queryEsterno(
+    `SELECT o.id, o.numero, o.data, o.data_inizio_consegna, o.data_fine_consegna,
+            o.quantita, o.taglia_richiesta, c.piva AS customer_vat,
+            COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
+            COALESCE(SUM(cc.quantita_consegnata), 0)::integer AS delivered,
+            (o.quantita - COALESCE(SUM(cc.quantita_consegnata), 0))::integer AS residual
+     FROM ordini o
+     LEFT JOIN clienti c ON c.id=o.cliente_id
+     LEFT JOIN consegne_condivise cc ON cc.ordine_id=o.id
+     WHERE o.cancellato=false
+     GROUP BY o.id, c.piva, c.denominazione
+     ORDER BY COALESCE(o.data_inizio_consegna,o.data),o.data,o.id`
+  );
+  const linkedRows = await queryEsterno(
+    `SELECT DISTINCT advanced_sale_id FROM consegne_condivise WHERE advanced_sale_id IS NOT NULL`
+  );
+  const linkedIds = new Set(linkedRows.map(row => Number(row.advanced_sale_id)));
+  const unlinkedSales = sales.filter(sale => !linkedIds.has(sale.id));
+  const contextsBySaleId = new Map<number, Awaited<ReturnType<typeof getSaleDeliveryContext>>>();
+  for (let offset = 0; offset < unlinkedSales.length; offset += 10) {
+    const chunk = unlinkedSales.slice(offset, offset + 10);
+    const contexts = await Promise.all(chunk.map(sale =>
+      getSaleDeliveryContext(sale.id).catch(() => null)
+    ));
+    contexts.forEach((context, index) => {
+      if (context) contextsBySaleId.set(chunk[index].id, context);
+    });
+  }
+  const virtualResidual = new Map<number, number>(
+    externalOrders.map(order => [Number(order.id), Math.max(0, Number(order.residual || 0))])
+  );
+
+  const proposals: any[] = [];
+  for (const sale of sales) {
+    if (linkedIds.has(sale.id)) continue;
+    const context = contextsBySaleId.get(sale.id);
+    if (!context) continue;
+    const allocations: OrderAllocation[] = [];
+    const reasons = new Set<string>();
+    let missingAnimals = 0;
+
+    for (const component of context.components) {
+      let remaining = component.animalCount;
+      const customerAndSizeOrders = externalOrders.filter(order =>
+        sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name) &&
+        order.taglia_richiesta === component.sizeCode
+      );
+      const eligibleOrders = customerAndSizeOrders.filter(order => {
+        const saleDate = toDateKey(sale.saleDate);
+        return toDateKey(order.data) <= saleDate &&
+          (virtualResidual.get(Number(order.id)) || 0) > 0;
+      });
+
+      if (customerAndSizeOrders.length === 0) {
+        reasons.add(`Nessun ordine ${component.sizeCode} per il cliente`);
+      } else if (eligibleOrders.length === 0) {
+        reasons.add(`Nessun residuo disponibile nel periodo per ${component.sizeCode}`);
+      }
+
+      for (const order of eligibleOrders) {
+        if (remaining <= 0) break;
+        const orderId = Number(order.id);
+        const residualBefore = virtualResidual.get(orderId) || 0;
+        const quantity = Math.min(remaining, residualBefore);
+        remaining -= quantity;
+        virtualResidual.set(orderId, residualBefore - quantity);
+        allocations.push({
+          orderId,
+          orderNumber: order.numero === null ? null : Number(order.numero),
+          sizeCode: component.sizeCode,
+          quantity,
+          residualBefore,
+          residualAfter: residualBefore - quantity
+        });
+      }
+      if (remaining > 0) missingAnimals += remaining;
+    }
+
+    const proposedAnimals = allocations.reduce((sum, item) => sum + item.quantity, 0);
+    const status = missingAnimals === 0
+      ? "automatic"
+      : proposedAnimals > 0 ? "partial" : "manual";
+    proposals.push({
+      saleId: sale.id,
+      saleNumber: sale.saleNumber,
+      saleDate: sale.saleDate,
+      customerName: context.customerName,
+      totalAnimals: Number(sale.totalAnimals || context.components.reduce((sum, item) => sum + item.animalCount, 0)),
+      totalBags: Number(sale.totalBags || 0),
+      ddtId: sale.ddtId,
+      ddtStatus: sale.ddtStatus,
+      components: context.components,
+      status,
+      proposedAnimals,
+      missingAnimals,
+      allocations,
+      reason: Array.from(reasons).join("; ") || "Cliente, taglia, periodo e residuo compatibili"
+    });
+  }
+
+  return {
+    summary: {
+      total: proposals.length,
+      automatic: proposals.filter(item => item.status === "automatic").length,
+      partial: proposals.filter(item => item.status === "partial").length,
+      manual: proposals.filter(item => item.status === "manual").length
+    },
+    sales: proposals
+  };
+}
+
+export async function getOrderReconciliationPreview(_req: Request, res: Response) {
+  try {
+    res.json({ success: true, ...(await buildHistoricalOrderReconciliationPreview()) });
+  } catch (error: any) {
+    console.error("Errore anteprima riconciliazione ordini:", error);
+    res.status(500).json({ success: false, error: error.message || "Impossibile preparare la riconciliazione" });
+  }
+}
+
+export async function applyOrderReconciliation(req: Request, res: Response) {
+  try {
+    const saleIds = Array.isArray(req.body?.saleIds)
+      ? Array.from(new Set(req.body.saleIds.map(Number).filter(Number.isInteger)))
+      : [];
+    if (saleIds.length === 0 || saleIds.length > 100) {
+      return res.status(400).json({ success: false, error: "Selezionare da 1 a 100 vendite" });
+    }
+
+    const preview = await buildHistoricalOrderReconciliationPreview();
+    const safeIds = new Set(preview.sales.filter(item => item.status === "automatic").map(item => item.saleId));
+    const invalidIds = saleIds.filter(id => !safeIds.has(id));
+    if (invalidIds.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: "Una o più vendite non sono più associabili automaticamente. Aggiornare l'anteprima.",
+        invalidSaleIds: invalidIds
+      });
+    }
+
+    const results = [];
+    for (const saleId of saleIds) {
+      const result = await registerSaleDeliveriesOnOrders(saleId, null, "historical");
+      results.push({ saleId, ...result });
+    }
+    res.json({
+      success: true,
+      reconciled: results.filter(item => !item.alreadyRegistered).length,
+      alreadyRegistered: results.filter(item => item.alreadyRegistered).length,
+      results
+    });
+  } catch (error: any) {
+    console.error("Errore applicazione riconciliazione ordini:", error);
+    res.status(500).json({ success: false, error: error.message || "Riconciliazione non riuscita" });
   }
 }
 
@@ -2564,20 +2835,11 @@ export async function generateDDT(req: Request, res: Response) {
       })
       .where(eq(advancedSales.id, parseInt(id)));
 
-    // Auto-registra consegna negli ordini condivisi
-    const consegnaResult = await autoRegistraConsegna({
-      clientePiva: cliente.piva || '',
-      clienteNome: cliente.denominazione || '',
-      dataConsegna: saleData.saleDate,
-      bagsPerSize
-    });
-
     res.json({
       success: true,
       ddt: ddtCreato,
       righe: righeCreate.length,
-      consegnaAutoRegistrata: consegnaResult,
-      message: `DDT #${numeroDDT} creato localmente.${consegnaResult?.registrate ? ` Consegna registrata per ${consegnaResult.registrate} ordini.` : ''}`
+      message: `DDT #${numeroDDT} creato localmente. Gli ordini saranno aggiornati solo dopo l'invio a Fatture in Cloud.`
     });
 
   } catch (error) {
@@ -3358,6 +3620,27 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       console.log(`✅ Vendita ${advancedSaleId} aggiornata con stato 'inviato'`);
     }
 
+    let orderReconciliation: {
+      status: "registered" | "already_registered" | "manual_review";
+      allocations?: OrderAllocation[];
+      error?: string;
+    } | null = null;
+    if (advancedSaleId) {
+      try {
+        const result = await registerSaleDeliveriesOnOrders(advancedSaleId, parseInt(ddtId), "fic");
+        orderReconciliation = {
+          status: result.alreadyRegistered ? "already_registered" : "registered",
+          allocations: result.allocations
+        };
+      } catch (reconciliationError: any) {
+        console.error("⚠️ DDT inviato a FIC, riconciliazione ordini da completare:", reconciliationError);
+        orderReconciliation = {
+          status: "manual_review",
+          error: reconciliationError.message || "Ordini compatibili non disponibili"
+        };
+      }
+    }
+
     // Invia email di conferma DDT con PDF allegato
     if (advancedSaleId) {
       try {
@@ -3374,7 +3657,12 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       ddtId: parseInt(ddtId),
       fattureInCloudId: ficResponse.data.data.id,
       numero: ficResponse.data.data.numeration || ddtData.numero,
-      message: 'DDT inviato con successo a Fatture in Cloud'
+      orderReconciliation,
+      message: orderReconciliation?.status === "registered"
+        ? "DDT inviato a Fatture in Cloud e ordini aggiornati"
+        : orderReconciliation?.status === "already_registered"
+          ? "DDT già contabilizzato: nessuna consegna duplicata"
+          : "DDT inviato a Fatture in Cloud; associazione ordini da completare nella riconciliazione"
     });
     
   } catch (error: any) {
