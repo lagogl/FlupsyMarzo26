@@ -153,7 +153,8 @@ function partyBlock(title: string, party: any, farmCode = '', extra = '') {
     .filter(Boolean).join(' ');
   return `<div class="party"><div class="box-title">${title}</div>
     <div class="party-name">${present(party.name || party.ragioneSociale)}</div>
-    <div>${present(party.address || party.indirizzo)}</div><div>${present(locality)}</div>
+    <div><strong>Indirizzo:</strong> ${present(party.address || party.indirizzo)}</div>
+    <div><strong>Località:</strong> ${present(locality)}</div>
     <div>P. IVA: ${present(party.vatNumber || party.partitaIva)}${party.taxCode || party.codiceFiscale ? ` · C.F.: ${present(party.taxCode || party.codiceFiscale)}` : ''}</div>
     <div>Codice allevamento: ${farmCode ? esc(farmCode) : '________________'}</div>${extra}</div>`;
 }
@@ -169,7 +170,7 @@ function page(title: string, subtitle: string, company: any, logo: string, body:
     .field{border:1px solid #aab7bd;padding:5px 6px;min-height:38px}.label{display:block;color:#60727c;font-size:6.6pt;font-weight:bold;text-transform:uppercase;letter-spacing:.035em}.value{display:block;margin-top:2px;font-weight:bold;font-size:8.4pt}.write-line{display:inline-block;min-width:105px;height:11px;border-bottom:1px solid #526771;vertical-align:bottom}
     table{width:100%;border-collapse:collapse;margin:7px 0}th{padding:4px 3px;background:#184f63;color:white;font-size:6.3pt;text-transform:uppercase;text-align:right}th.left,td.left{text-align:left}td{border:1px solid #a9b8be;padding:4px 3px;text-align:right;font-size:7.2pt}.total td{font-weight:bold;background:#eef4f4}
     .legal{border:1px solid #91a1a8;padding:7px 9px;margin-top:6px}.legal ol{margin:3px 0 0;padding-left:17px}.legal li{margin:4px 0}.legal strong{color:#174f62}.intro{margin:6px 0}.checks{letter-spacing:.02em;word-spacing:3px}
-    .signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:17px}.signature{padding-top:25px;border-bottom:1px solid #405b67;text-align:center}.signature-note{text-align:center;color:#60717a;font-size:6.8pt;margin-top:2px}
+    .signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:17px;break-inside:avoid}.signature{padding-top:55px;border-bottom:1px solid #405b67;text-align:center}.signature-note{text-align:center;color:#60717a;font-size:6.8pt;margin-top:2px}
     .traceability{border:1px solid #79aaa9;background:#eef8f6;border-radius:5px;padding:6px;display:flex;align-items:center;gap:8px;min-height:72px}.traceability img{width:62px;height:62px;background:white}.traceability strong{display:block;font-size:7.2pt;line-height:1.25;margin:2px 0}.traceability small{display:block;color:#597078;font-size:6.4pt}
     footer{display:flex;justify-content:space-between;border-top:1px solid #b6c1c5;color:#677982;font-size:6.4pt;margin-top:9px;padding-top:4px}.avoid{break-inside:avoid}
     @media print{header,.document-title,th,.box-title,.total td{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
