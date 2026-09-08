@@ -1021,7 +1021,12 @@ export default function AdvancedSales() {
   const applyReconciliationMutation = useMutation({
     mutationFn: (saleIds: number[]) => apiRequest('/api/advanced-sales/order-reconciliation/apply', {
       method: 'POST',
-      body: JSON.stringify({ saleIds })
+      body: JSON.stringify({
+        plans: saleIds.map(saleId => {
+          const plan = (reconciliationData?.sales || []).find((sale: any) => sale.saleId === saleId);
+          return { saleId, planFingerprint: plan?.planFingerprint };
+        })
+      })
     }),
     onSuccess: (data: any) => {
       setReconciliationConfirmOpen(false);
@@ -1931,7 +1936,7 @@ export default function AdvancedSales() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>Taglia</TableHead>
                       <TableHead className="text-right">Animali</TableHead>
-                      <TableHead>Ordini proposti</TableHead>
+                      <TableHead>Allocazioni proposte</TableHead>
                       <TableHead>Esito</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1959,12 +1964,35 @@ export default function AdvancedSales() {
                           <TableCell className="max-w-56 whitespace-normal">{sale.customerName}</TableCell>
                           <TableCell>{(sale.components || []).map((item: any) => item.sizeCode).join(", ")}</TableCell>
                           <TableCell className="text-right">{formatSaleNumber(sale.totalAnimals)}</TableCell>
-                          <TableCell className="max-w-72 whitespace-normal text-sm">
-                            {(sale.allocations || []).length
-                              ? sale.allocations.map((item: any) =>
-                                  `n. ${item.orderNumber || item.orderId}: ${formatSaleNumber(item.quantity)}`
-                                ).join(" · ")
-                              : "—"}
+                          <TableCell className="min-w-[310px] max-w-[420px] whitespace-normal text-sm">
+                            {(sale.allocations || []).length ? (
+                              <div className="space-y-2">
+                                {sale.allocations.map((item: any) => (
+                                  <div key={`${sale.saleId}-${item.orderId}-${item.sizeCode}`} className="rounded border bg-slate-50 p-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-1 font-medium">
+                                      <span>Ordine n. {item.orderNumber || item.orderId} · {item.sizeCode}</span>
+                                      <span>{formatSaleNumber(item.quantity)}</span>
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      Ordine del {formatSaleDate(item.orderDate)}
+                                      {item.deliveryStartDate && (
+                                        <> · consegna {formatSaleDate(item.deliveryStartDate)}
+                                          {item.deliveryEndDate ? `–${formatSaleDate(item.deliveryEndDate)}` : ""}
+                                        </>
+                                      )}
+                                    </div>
+                                    <div className="mt-1 text-xs">
+                                      Residuo: {formatSaleNumber(item.residualBefore)} → {formatSaleNumber(item.residualAfter)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : "—"}
+                            {sale.missingAnimals > 0 && (
+                              <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                                Non allocati: <strong>{formatSaleNumber(sale.missingAnimals)}</strong>. {sale.reason}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col items-start gap-1.5">
