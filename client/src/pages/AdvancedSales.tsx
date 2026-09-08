@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -144,6 +144,9 @@ export default function AdvancedSales() {
   const [reconciliationConfirmOpen, setReconciliationConfirmOpen] = useState(false);
   const [selectedReconciliationSaleIds, setSelectedReconciliationSaleIds] = useState<number[]>([]);
   const [guidedReconciliationSale, setGuidedReconciliationSale] = useState<any | null>(null);
+  const [manualConfirmOpen, setManualConfirmOpen] = useState(false);
+  const [manualAllocations, setManualAllocations] = useState<Record<string, string>>({});
+  const [manualIdempotencyKey, setManualIdempotencyKey] = useState("");
   const ddrYear = new Date().getFullYear();
 
   const { toast } = useToast();
@@ -301,6 +304,16 @@ export default function AdvancedSales() {
     queryKey: ['/api/advanced-sales/detail', saleDetailsId],
     queryFn: () => apiRequest(`/api/advanced-sales/${saleDetailsId}`),
     enabled: saleDetailsId !== null
+  });
+  const {
+    data: manualReconciliationData,
+    isLoading: loadingManualReconciliation,
+    isError: manualReconciliationError,
+    refetch: refetchManualReconciliation
+  } = useQuery({
+    queryKey: ['/api/advanced-sales/order-reconciliation/manual', guidedReconciliationSale?.saleId],
+    queryFn: () => apiRequest(`/api/advanced-sales/order-reconciliation/manual/${guidedReconciliationSale.saleId}`),
+    enabled: guidedReconciliationSale?.saleId != null
   });
 
   // Mutation per creare vendita
@@ -1045,6 +1058,92 @@ export default function AdvancedSales() {
         description: error.message || "Aggiornare l'anteprima e riprovare",
         variant: "destructive"
       });
+    }
+  });
+
+  const openManualReconciliation = (sale: any) => {
+    setGuidedReconciliationSale(sale);
+    setManualAllocations({});
+    setManualIdempotencyKey(crypto.randomUUID());
+  };
+
+  const closeManualReconciliation = () => {
+    setGuidedReconciliationSale(null);
+    setManualAllocations({});
+    setManualConfirmOpen(false);
+  };
+
+  const manualSale = manualReconciliationData?.sale;
+  const manualComponents = manualSale?.components || [];
+  const manualTotals = useMemo(() => manualComponents.map((component: any) => {
+    const assigned = (component.candidates || []).filter((candidate: any) => candidate.eligible).reduce(
+      (sum: number, candidate: any) => sum + (Number(manualAllocations[`${component.sizeCode}:${candidate.orderId}`]) || 0), 0
+    );
+    return {
+      sizeCode: component.sizeCode,
+      required: Number(component.requiredAnimals) || 0,
+      assigned,
+      residual: (Number(component.requiredAnimals) || 0) - assigned
+    };
+  }), [manualComponents, manualAllocations]);
+  const manualPlanValid = !!manualSale && manualComponents.length > 0 && manualComponents.every((component: any) => {
+    const total = manualTotals.find(item => item.sizeCode === component.sizeCode);
+    if (!total || total.assigned !== total.required) return false;
+    return (component.candidates || []).every((candidate: any) => {
+      const value = manualAllocations[`${component.sizeCode}:${candidate.orderId}`];
+      if (!value) return true;
+      const quantity = Number(value);
+      return Number.isInteger(quantity) && quantity > 0 && quantity <= Number(candidate.residual);
+    });
+  });
+
+  useEffect(() => {
+    if (!manualReconciliationData?.sale || !guidedReconciliationSale) return;
+    if (Object.keys(manualAllocations).length > 0) return;
+    const initial: Record<string, string> = {};
+    (guidedReconciliationSale.allocations || []).forEach((allocation: any) => {
+      if (Number(allocation.quantity) > 0) {
+        initial[`${allocation.sizeCode}:${allocation.orderId}`] = String(allocation.quantity);
+      }
+    });
+    if (Object.keys(initial).length > 0) setManualAllocations(initial);
+  }, [manualReconciliationData, guidedReconciliationSale, manualAllocations]);
+
+  const manualApplyMutation = useMutation({
+    mutationFn: () => apiRequest('/api/advanced-sales/order-reconciliation/manual/apply', {
+      method: 'POST',
+      body: JSON.stringify({
+        idempotencyKey: manualIdempotencyKey,
+        allocations: manualComponents.flatMap((component: any) =>
+          (component.candidates || []).filter((candidate: any) => candidate.eligible).flatMap((candidate: any) => {
+            const quantity = Number(manualAllocations[`${component.sizeCode}:${candidate.orderId}`]) || 0;
+            return quantity > 0
+              ? [{ saleId: manualSale.saleId, sizeCode: component.sizeCode, orderId: candidate.orderId, quantity }]
+              : [];
+          })
+        )
+      })
+    }),
+    onSuccess: (data: any) => {
+      setManualConfirmOpen(false);
+      closeManualReconciliation();
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/order-reconciliation/preview'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      toast({
+        title: data.alreadyApplied ? "Riconciliazione già applicata" : "Riconciliazione completata",
+        description: `${data.reconciledRows || 0} righe ordine aggiornate.`
+      });
+    },
+    onError: (error: any) => {
+      const conflict = error?.status === 409 || error?.response?.status === 409 || String(error?.message || "").includes("409");
+      toast({
+        title: conflict ? "Residui aggiornati" : "Riconciliazione non completata",
+        description: conflict
+          ? "Un ordine è cambiato nel frattempo. Aggiorna i residui e verifica nuovamente le quantità."
+          : error?.message || "Riprova tra poco",
+        variant: "destructive"
+      });
+      if (conflict) refetchManualReconciliation();
     }
   });
 
@@ -2016,7 +2115,7 @@ export default function AdvancedSales() {
                                   variant="link"
                                   size="sm"
                                   className="h-auto p-0 text-xs"
-                                  onClick={() => setGuidedReconciliationSale(sale)}
+                                   onClick={() => openManualReconciliation(sale)}
                                 >
                                   Come risolvere
                                 </Button>
@@ -2051,107 +2150,173 @@ export default function AdvancedSales() {
 
       <Dialog
         open={guidedReconciliationSale !== null}
-        onOpenChange={(open) => !open && setGuidedReconciliationSale(null)}
+        onOpenChange={(open) => !open && closeManualReconciliation()}
       >
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Come riconciliare {guidedReconciliationSale?.saleNumber}
+              Riconciliazione manuale · {manualSale?.saleNumber || guidedReconciliationSale?.saleNumber}
             </DialogTitle>
             <DialogDescription>
-              Controlla cosa manca, correggi o crea l’ordine in Fatture in Cloud e poi sincronizza nuovamente gli ordini.
+              Assegna la vendita agli ordini riga per riga. Le quantità proposte automaticamente sono modificabili.
             </DialogDescription>
           </DialogHeader>
 
-          {guidedReconciliationSale && (
+          {loadingManualReconciliation ? (
+            <div className="space-y-3 py-6">
+              <div className="h-16 animate-pulse rounded-md bg-slate-100" />
+              <div className="h-40 animate-pulse rounded-md bg-slate-100" />
+            </div>
+          ) : manualReconciliationError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+              <p className="font-semibold">Impossibile caricare i residui degli ordini.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => refetchManualReconciliation()}>
+                Aggiorna
+              </Button>
+            </div>
+          ) : manualSale && (
             <div className="space-y-4">
-              <div className="grid gap-3 rounded-lg border bg-slate-50 p-4 sm:grid-cols-3">
+              <div className="grid gap-3 rounded-lg border bg-slate-50 p-3 sm:grid-cols-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Cliente</p>
-                  <p className="font-medium">{guidedReconciliationSale.customerName}</p>
+                  <p className="font-medium">{manualSale.customerName}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Animali vendita</p>
-                  <p className="font-medium">{formatSaleNumber(guidedReconciliationSale.totalAnimals)}</p>
+                  <p className="text-xs text-muted-foreground">Vendita</p>
+                  <p className="font-medium">{manualSale.saleNumber} · {formatSaleDate(manualSale.saleDate)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Ancora da associare</p>
-                  <p className="font-medium text-red-700">{formatSaleNumber(guidedReconciliationSale.missingAnimals)}</p>
+                  <p className="text-xs text-muted-foreground">Taglie coperte</p>
+                  <p className="font-medium">{manualTotals.filter(item => item.residual === 0).length} / {manualTotals.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Stato piano</p>
+                  <Badge className={manualPlanValid ? "bg-green-600" : "bg-amber-100 text-amber-900"}>
+                    {manualPlanValid ? "Pronto" : "Da completare"}
+                  </Badge>
                 </div>
               </div>
 
-              {(guidedReconciliationSale.allocations || []).length > 0 && (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                  <p className="font-semibold text-green-900">Quota già individuata</p>
-                  <div className="mt-2 space-y-1 text-sm text-green-900">
-                    {guidedReconciliationSale.allocations.map((item: any) => (
-                      <p key={`${item.orderId}-${item.sizeCode}`}>
-                        Ordine n. {item.orderNumber || item.orderId} · {item.sizeCode} · {formatSaleNumber(item.quantity)} animali
-                      </p>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs text-green-800">
-                    Questa quota non viene registrata da sola: la vendita diventerà selezionabile quando sarà disponibile anche il residuo mancante.
-                  </p>
-                </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Taglia / ordine</TableHead>
+                      <TableHead>Ordine</TableHead>
+                      <TableHead className="text-right">Ordinati</TableHead>
+                      <TableHead className="text-right">Consegnati</TableHead>
+                      <TableHead className="text-right">Residuo</TableHead>
+                      <TableHead className="w-32 text-right">Assegna</TableHead>
+                      <TableHead>Esito</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {manualComponents.map((component: any) => {
+                      const total = manualTotals.find(item => item.sizeCode === component.sizeCode)!;
+                      return (
+                        <Fragment key={component.sizeCode}>
+                          <TableRow key={`${component.sizeCode}-summary`} className="bg-slate-50 font-semibold">
+                            <TableCell colSpan={2}>Taglia {component.sizeCode}</TableCell>
+                            <TableCell colSpan={3} className="text-right">
+                              Richiesto {formatSaleNumber(total.required)} · Assegnato {formatSaleNumber(total.assigned)} · Residuo {formatSaleNumber(total.residual)}
+                            </TableCell>
+                            <TableCell colSpan={2} className={total.residual === 0 ? "text-right text-green-700" : "text-right text-amber-700"}>
+                              {total.residual === 0 ? "Coperta" : "Da coprire"}
+                            </TableCell>
+                          </TableRow>
+                          {(component.candidates || []).map((candidate: any) => {
+                            const key = `${component.sizeCode}:${candidate.orderId}`;
+                            const disabled = !candidate.eligible;
+                            return (
+                              <TableRow key={key} className={disabled ? "bg-slate-50 text-muted-foreground" : undefined}>
+                                <TableCell className="pl-6 text-xs text-muted-foreground">{component.sizeCode}</TableCell>
+                                <TableCell className="whitespace-nowrap">
+                                  <p className="font-medium">n. {candidate.orderNumber || candidate.orderId}</p>
+                                  <p className="text-xs text-muted-foreground">{formatSaleDate(candidate.orderDate)}</p>
+                                </TableCell>
+                                <TableCell className="text-right">{formatSaleNumber(candidate.ordered)}</TableCell>
+                                <TableCell className="text-right">{formatSaleNumber(candidate.delivered)}</TableCell>
+                                <TableCell className="text-right font-medium">{formatSaleNumber(candidate.residual)}</TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    inputMode="numeric"
+                                    disabled={disabled}
+                                    value={manualAllocations[key] || ""}
+                                    onChange={(event) => setManualAllocations(current => ({ ...current, [key]: event.target.value }))}
+                                    className="h-8 text-right"
+                                    aria-label={`Quantità ${candidate.orderNumber || candidate.orderId}`}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  {disabled
+                                    ? <span className="text-red-700">{candidate.issue || "Ordine non compatibile"}</span>
+                                    : <span className="text-green-700">Eleggibile</span>}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          {!component.candidates?.length && (
+                            <TableRow key={`${component.sizeCode}-empty`}>
+                              <TableCell colSpan={7} className="py-3 text-sm text-muted-foreground">
+                                Nessun candidato per questa taglia.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {!manualComponents.some((component: any) => component.candidates?.length) && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  Non esistono candidati compatibili. Aggiorna gli ordini condivisi prima di riprovare.
+                </p>
               )}
-
-              {(guidedReconciliationSale.componentIssues || []).map((issue: any) => (
-                <div key={issue.sizeCode} className="rounded-lg border border-amber-200 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold">Taglia {issue.sizeCode}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Richiesti {formatSaleNumber(issue.requiredAnimals)} · disponibili {formatSaleNumber(issue.proposedAnimals)}
-                      </p>
-                    </div>
-                    <Badge className="bg-red-100 text-red-800">
-                      Mancano {formatSaleNumber(issue.missingAnimals)}
-                    </Badge>
-                  </div>
-
-                  {issue.matchingOrders?.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-sm font-medium">Ordini della stessa taglia trovati:</p>
-                      {issue.matchingOrders.map((order: any) => (
-                        <div key={order.orderId} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
-                          <span>Ordine n. {order.orderNumber || order.orderId} del {formatSaleDate(order.orderDate)}</span>
-                          <span className={order.usable ? "text-green-700" : "text-red-700"}>
-                            {order.usable
-                              ? `Residuo ${formatSaleNumber(order.residual)}`
-                              : order.issue}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">
-                      Non esiste alcun ordine di questa taglia per il cliente. Creane uno in Fatture in Cloud.
-                    </p>
-                  )}
-                </div>
-              ))}
-
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-                <p className="font-semibold">Passaggi da eseguire</p>
-                <ol className="mt-2 list-decimal space-y-1 pl-5">
-                  <li>Crea o correggi in FIC un ordine dello stesso cliente e della taglia indicata.</li>
-                  <li>Assicurati che il residuo copra almeno la quantità mancante.</li>
-                  <li>Sincronizza gli ordini nella pagina Ordini condivisi.</li>
-                  <li>Torna qui e riapri l’anteprima: la vendita diventerà “Associabile”.</li>
-                </ol>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Gli ordini incompatibili restano visibili per controllo. Inserisci solo quantità intere positive entro il residuo indicato.
+              </p>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setGuidedReconciliationSale(null)}>Chiudi</Button>
-            <Button onClick={() => window.location.assign('/ordini-condivisi')}>
-              Vai a Ordini condivisi
+            <Button variant="outline" onClick={closeManualReconciliation}>Chiudi</Button>
+            <Button variant="secondary" onClick={() => window.location.assign('/ordini-condivisi')}>
+              Ordini condivisi
+            </Button>
+            <Button disabled={!manualPlanValid || manualApplyMutation.isPending} onClick={() => setManualConfirmOpen(true)}>
+              Verifica e conferma piano
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={manualConfirmOpen} onOpenChange={setManualConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confermare il piano manuale?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Verranno registrate {manualTotals.reduce((sum, item) => sum + item.assigned, 0)} unità
+              sulla vendita {manualSale?.saleNumber}, distribuite su {Object.values(manualAllocations).filter(Boolean).length} righe ordine.
+              Il server ricontrollerà i residui prima di applicare una sola richiesta per l’intero piano.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={manualApplyMutation.isPending}
+              onClick={() => manualApplyMutation.mutate()}
+            >
+              {manualApplyMutation.isPending
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Applicazione...</>
+                : "Conferma riconciliazione"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={reconciliationConfirmOpen} onOpenChange={setReconciliationConfirmOpen}>
         <AlertDialogContent>

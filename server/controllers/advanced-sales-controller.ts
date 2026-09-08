@@ -64,6 +64,11 @@ import {
   validateNextDdrNumber,
   type DdrNumberingStore
 } from "../services/ddr-numbering";
+import {
+  aggregateManualAllocationsBySaleSize,
+  parseManualOrderReconciliationRequest,
+  type ManualOrderAllocation
+} from "../services/manual-order-reconciliation";
 
 let documentSchemaReady: Promise<void> | null = null;
 function ensureAdvancedSaleDocumentSchema() {
@@ -2771,6 +2776,263 @@ async function applyHistoricalOrderReconciliation(
     throw error;
   } finally {
     client.release();
+  }
+}
+
+function reconciliationError(message: string, details?: unknown): never {
+  const error: any = new Error(message);
+  error.code = "ORDER_RECONCILIATION_REQUIRED";
+  error.details = details;
+  throw error;
+}
+
+function manualSourceReference(allocation: ManualOrderAllocation) {
+  return `advanced-sale:${allocation.saleId}:order:${allocation.orderId}:size:${allocation.sizeCode}`;
+}
+
+function assertSaleCanBeReconciled(context: Awaited<ReturnType<typeof getSaleDeliveryContext>>) {
+  if (!["confirmed", "completed"].includes(context.sale.status) || context.sale.cancelledAt) {
+    reconciliationError(`La vendita ${context.sale.saleNumber} non è confermata oppure è stata stornata`);
+  }
+}
+
+export async function getManualOrderReconciliation(req: Request, res: Response) {
+  try {
+    if (!poolEsterno) throw new Error("Database ordini non disponibile");
+    const saleId = Number(req.params.saleId);
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      return res.status(400).json({ success: false, error: "Identificativo vendita non valido" });
+    }
+    const context = await getSaleDeliveryContext(saleId);
+    assertSaleCanBeReconciled(context);
+    const registered = await queryEsterno(
+      `SELECT sale_size_code, COALESCE(SUM(quantita_consegnata), 0)::integer AS quantity
+       FROM consegne_condivise WHERE advanced_sale_id = $1
+       GROUP BY sale_size_code`,
+      [saleId]
+    );
+    const registeredBySize = new Map(registered.map(row => [String(row.sale_size_code || ""), Number(row.quantity)]));
+    if (context.components.every(component => registeredBySize.get(component.sizeCode) === component.animalCount)) {
+      return res.status(409).json({ success: false, error: "La vendita risulta già riconciliata analiticamente" });
+    }
+
+    const sizeCodes = context.components.map(component => component.sizeCode);
+    const rows = await queryEsterno(
+      `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.cancellato, o.stato,
+              c.piva AS customer_vat, COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
+              COALESCE(SUM(cc.quantita_consegnata), 0)::integer AS delivered
+       FROM ordini o
+       LEFT JOIN clienti c ON c.id=o.cliente_id
+       LEFT JOIN consegne_condivise cc ON cc.ordine_id=o.id
+       WHERE o.taglia_richiesta = ANY($1::text[])
+       GROUP BY o.id, c.piva, c.denominazione
+       ORDER BY o.data, o.id`,
+      [sizeCodes]
+    );
+    const saleDate = toDateKey(context.sale.saleDate);
+    const ordersBySize = new Map<string, any[]>();
+    for (const order of rows) {
+      if (!sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name)) continue;
+      const ordered = Number(order.quantita || 0);
+      const delivered = Number(order.delivered || 0);
+      const residual = Math.max(0, ordered - delivered);
+      let issue: string | null = null;
+      if (toDateKey(order.data) > saleDate) issue = "Ordine successivo alla vendita";
+      else if (order.cancellato || !["Aperto", "Parziale", "In Lavorazione"].includes(order.stato)) issue = "Ordine non disponibile";
+      else if (residual <= 0) issue = "Ordine senza residuo";
+      const size = String(order.taglia_richiesta);
+      const items = ordersBySize.get(size) || [];
+      items.push({
+        orderId: Number(order.id), orderNumber: order.numero === null ? null : Number(order.numero),
+        orderDate: toDateKey(order.data), ordered, delivered, residual, eligible: issue === null, issue
+      });
+      ordersBySize.set(size, items);
+    }
+    res.json({
+      success: true,
+      sale: {
+        saleId: context.sale.id,
+        saleNumber: context.sale.saleNumber,
+        saleDate: context.sale.saleDate,
+        customerName: context.customerName,
+        components: context.components
+          .map(component => {
+            const alreadyRegistered = registeredBySize.get(component.sizeCode) || 0;
+            return {
+              sizeCode: component.sizeCode,
+              totalAnimals: component.animalCount,
+              alreadyRegistered,
+              requiredAnimals: Math.max(0, component.animalCount - alreadyRegistered),
+              candidates: ordersBySize.get(component.sizeCode) || []
+            };
+          })
+          .filter(component => component.requiredAnimals > 0)
+      }
+    });
+  } catch (error: any) {
+    console.error("Errore dettaglio riconciliazione manuale:", error);
+    res.status(error.code === "ORDER_RECONCILIATION_REQUIRED" ? 409 : 500)
+      .json({ success: false, error: error.message || "Impossibile preparare la riconciliazione manuale" });
+  }
+}
+
+export async function applyManualOrderReconciliation(req: Request, res: Response) {
+  try {
+    if (!poolEsterno) throw new Error("Database ordini non disponibile");
+    const request = parseManualOrderReconciliationRequest(req.body);
+    const saleIds = Array.from(new Set(request.allocations.map(item => item.saleId))).sort((a, b) => a - b);
+    const contexts = new Map<number, Awaited<ReturnType<typeof getSaleDeliveryContext>>>();
+    for (const saleId of saleIds) {
+      const context = await getSaleDeliveryContext(saleId);
+      assertSaleCanBeReconciled(context);
+      contexts.set(saleId, context);
+    }
+    const plannedBySize = aggregateManualAllocationsBySaleSize(request.allocations);
+    for (const [saleId, context] of contexts) {
+      const expected = new Set(context.components.map(component => component.sizeCode));
+      for (const allocation of request.allocations.filter(item => item.saleId === saleId)) {
+        if (!expected.has(allocation.sizeCode)) reconciliationError(`Taglia ${allocation.sizeCode} non presente nella vendita`);
+      }
+    }
+
+    const client = await poolEsterno.connect();
+    try {
+      await client.query("BEGIN");
+      for (const saleId of saleIds) await client.query("SELECT pg_advisory_xact_lock($1, $2)", [73151, saleId]);
+
+      // Reload local delivery contexts after the sale locks; never infer completeness from just one delivery row.
+      for (const saleId of saleIds) {
+        const context = await getSaleDeliveryContext(saleId);
+        assertSaleCanBeReconciled(context);
+        contexts.set(saleId, context);
+      }
+      const existing = await client.query(
+        `SELECT source_reference, quantita_consegnata, advanced_sale_id, sale_size_code, ordine_id
+         FROM consegne_condivise WHERE advanced_sale_id = ANY($1::integer[])`,
+        [saleIds]
+      );
+      const existingBySource = new Map(existing.rows.map(row => [String(row.source_reference || ""), row]));
+      let replayedRows = 0;
+      for (const allocation of request.allocations) {
+        const row = existingBySource.get(manualSourceReference(allocation));
+        if (!row) continue;
+        if (Number(row.quantita_consegnata) !== allocation.quantity ||
+            Number(row.ordine_id) !== allocation.orderId ||
+            String(row.sale_size_code || "") !== allocation.sizeCode) {
+          reconciliationError("La stessa associazione risulta già registrata con una quantità diversa");
+        }
+        replayedRows++;
+      }
+      if (replayedRows === request.allocations.length) {
+        await client.query("COMMIT");
+        return res.json({
+          success: true,
+          alreadyApplied: true,
+          idempotencyKey: request.idempotencyKey,
+          reconciledRows: replayedRows
+        });
+      }
+      if (replayedRows > 0) {
+        reconciliationError("La riconciliazione precedente risulta applicata solo in parte");
+      }
+
+      const existingBySaleSize = new Map<string, number>();
+      for (const row of existing.rows) {
+        const key = `${Number(row.advanced_sale_id)}:${String(row.sale_size_code || "")}`;
+        existingBySaleSize.set(key, (existingBySaleSize.get(key) || 0) + Number(row.quantita_consegnata || 0));
+      }
+      for (const [saleId, context] of contexts) {
+        const expectedSizes = new Set(context.components.map(component => component.sizeCode));
+        for (const row of existing.rows.filter(item => Number(item.advanced_sale_id) === saleId)) {
+          if (!expectedSizes.has(String(row.sale_size_code || ""))) {
+            reconciliationError(`Esiste una consegna senza taglia valida per ${context.sale.saleNumber}`);
+          }
+        }
+        for (const component of context.components) {
+          const key = `${saleId}:${component.sizeCode}`;
+          const alreadyRegistered = existingBySaleSize.get(key) || 0;
+          const outstanding = component.animalCount - alreadyRegistered;
+          if (outstanding < 0) {
+            reconciliationError(`Le consegne della vendita ${context.sale.saleNumber} superano la taglia ${component.sizeCode}`);
+          }
+          if ((plannedBySize.get(key) || 0) !== outstanding) {
+            reconciliationError(
+              `La vendita ${context.sale.saleNumber} deve ancora associare esattamente ${outstanding.toLocaleString("it-IT")} animali della taglia ${component.sizeCode}`
+            );
+          }
+        }
+      }
+
+      const orderIds = Array.from(new Set(request.allocations.map(item => item.orderId))).sort((a, b) => a - b);
+      await client.query(
+        `SELECT id FROM ordini WHERE id = ANY($1::integer[]) ORDER BY id FOR UPDATE`,
+        [orderIds]
+      );
+      const ordersResult = await client.query(
+        `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.cancellato, o.stato,
+                c.piva AS customer_vat, COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
+                COALESCE(SUM(cc.quantita_consegnata), 0)::integer AS delivered
+         FROM ordini o LEFT JOIN clienti c ON c.id=o.cliente_id
+         LEFT JOIN consegne_condivise cc ON cc.ordine_id=o.id
+         WHERE o.id = ANY($1::integer[])
+         GROUP BY o.id, c.piva, c.denominazione
+         ORDER BY o.id`,
+        [orderIds]
+      );
+      const orders = new Map(ordersResult.rows.map(order => [Number(order.id), order]));
+      const plannedByOrder = new Map<number, number>();
+      for (const allocation of request.allocations) {
+        const order = orders.get(allocation.orderId);
+        const context = contexts.get(allocation.saleId)!;
+        if (!order || order.cancellato || !["Aperto", "Parziale", "In Lavorazione"].includes(order.stato) ||
+            order.taglia_richiesta !== allocation.sizeCode || toDateKey(order.data) > toDateKey(context.sale.saleDate) ||
+            !sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name)) {
+          reconciliationError(`L'ordine ${allocation.orderId} non è compatibile con la vendita ${context.sale.saleNumber}`);
+        }
+        plannedByOrder.set(allocation.orderId, (plannedByOrder.get(allocation.orderId) || 0) + allocation.quantity);
+      }
+      for (const [orderId, planned] of plannedByOrder) {
+        const order = orders.get(orderId)!;
+        if (planned > Math.max(0, Number(order.quantita) - Number(order.delivered))) {
+          reconciliationError(`Residuo insufficiente per l'ordine ${order.numero || orderId}`);
+        }
+      }
+      for (const allocation of request.allocations) {
+        const context = contexts.get(allocation.saleId)!;
+        await client.query(
+          `INSERT INTO consegne_condivise (ordine_id, data_consegna, quantita_consegnata, app_origine, note,
+             advanced_sale_id, advanced_sale_number, sale_size_code, ddt_id, source_reference)
+           VALUES ($1,$2,$3,'delta_futuro',$4,$5,$6,$7,NULL,$8)`,
+          [allocation.orderId, context.sale.saleDate, allocation.quantity,
+            `Riconciliazione manuale della vendita ${context.sale.saleNumber}`, allocation.saleId,
+            context.sale.saleNumber, allocation.sizeCode, manualSourceReference(allocation)]
+        );
+      }
+      for (const orderId of orderIds) await client.query(
+        `UPDATE ordini o SET stato = CASE
+           WHEN COALESCE((SELECT SUM(quantita_consegnata) FROM consegne_condivise WHERE ordine_id=o.id),0) >= o.quantita THEN 'Completato'
+           WHEN COALESCE((SELECT SUM(quantita_consegnata) FROM consegne_condivise WHERE ordine_id=o.id),0) > 0 THEN 'Parziale'
+           ELSE 'Aperto' END, updated_at=NOW() WHERE o.id=$1`, [orderId]
+      );
+      await client.query("COMMIT");
+      res.json({
+        success: true,
+        alreadyApplied: false,
+        idempotencyKey: request.idempotencyKey,
+        reconciledRows: request.allocations.length,
+        allocations: request.allocations
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error("Errore applicazione riconciliazione manuale:", error);
+    res.status(error.code === "MANUAL_ORDER_RECONCILIATION_VALIDATION" ? 400 :
+      error.code === "ORDER_RECONCILIATION_REQUIRED" ? 409 : 500)
+      .json({ success: false, error: error.message || "Riconciliazione manuale non riuscita", details: error.details });
   }
 }
 
