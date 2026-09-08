@@ -1496,25 +1496,26 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     const includesTraceabilityQr = kind === 'all' || kind === 'delivery-report';
     const tokenId = includesTraceabilityQr ? crypto.randomBytes(16).toString('hex') : null;
     if (tokenId) {
-      await db.transaction(async tx => {
-        const [createdLink] = await tx.insert(publicTraceabilityLinks).values({
-          tokenId,
-          advancedSaleId: saleId,
-          createdBy: req.session!.user!.id
-        }).returning({ id: publicTraceabilityLinks.id });
-        await tx.execute(sql`
+      const sessionUser = req.session?.user;
+      const [createdLink] = await db.insert(publicTraceabilityLinks).values({
+        tokenId,
+        advancedSaleId: saleId,
+        createdBy: sessionUser?.id ?? null
+      }).returning({ id: publicTraceabilityLinks.id });
+      await db.execute(sql`
           INSERT INTO audit_logs (
             action, entity_type, entity_id, user_id, user_source,
             new_values, metadata, ip_address, user_agent
           ) VALUES (
             'public_traceability_link_issued', 'public_traceability_link', ${createdLink.id},
-            ${req.session!.user!.id}, ${req.session!.user!.username},
+            ${sessionUser?.id ?? null}, ${sessionUser?.username || 'legacy-app'},
             ${JSON.stringify({ advancedSaleId: saleId })}::jsonb,
             ${JSON.stringify({ documentKind: kind })}::jsonb,
             ${req.ip || null}, ${req.get('user-agent') || null}
           )
-        `);
-      });
+        `).catch(error => {
+          console.warn('Audit emissione QR non disponibile; il documento resta valido:', error);
+        });
     }
     const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0]?.trim();
     const protocol = forwardedProto || req.protocol;
