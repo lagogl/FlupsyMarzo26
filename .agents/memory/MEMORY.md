@@ -29,3 +29,4 @@
 - [Consegne ordini da vendite](sale-order-delivery-boundary.md) — genera/ristampa DDT non tocca ordini; solo successo “Invia a FIC” registra consegne, con riferimento idempotente vendita-ordine-taglia.
 - [Unità peso vendite avanzate](advanced-sales-weight-units.md) — totale vendita in grammi per lista/dettaglio; pesi dei singoli sacchi in kg. Non applicare due volte la conversione.
 - [Prenotazione progressivo DDT](ddt-number-reservation.md) — per azienda/anno, il numero si riserva alla creazione locale considerando anche FIC; mai rinumerare automaticamente lo storico.
+- [Stato fatturazione FIC senza importi](fic-invoice-status-privacy.md) — mostra solo prova DDT→fattura e quantità; mai cache/log/browser con dati economici o testo libero FIC.

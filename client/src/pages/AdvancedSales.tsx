@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, ChevronDown, Calculator, Truck, ExternalLink, Loader2, Trash2, Users, Waves, Link2Off } from "lucide-react";
+import { Plus, Package, FileText, Download, Eye, CheckCircle, Check, ChevronsUpDown, ChevronDown, Calculator, Truck, ExternalLink, Loader2, Trash2, Users, Waves, Link2Off, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
@@ -287,6 +287,35 @@ export default function AdvancedSales() {
   const { data: salesData, isLoading: loadingSales } = useQuery({
     queryKey: ['/api/advanced-sales'],
     queryFn: () => apiRequest('/api/advanced-sales?pageSize=10000')
+  });
+  const saleIdsForBilling = (salesData?.sales || []).map((sale: any) => sale.id);
+  const saleIdsForBillingKey = saleIdsForBilling.join(",");
+  const {
+    data: ficBillingData,
+    isFetching: checkingFicBilling,
+    refetch: refetchFicBilling
+  } = useQuery({
+    queryKey: ['/api/advanced-sales/fic-billing-status', saleIdsForBillingKey],
+    queryFn: async () => {
+      const batches: number[][] = [];
+      for (let index = 0; index < saleIdsForBilling.length; index += 200) {
+        batches.push(saleIdsForBilling.slice(index, index + 200));
+      }
+      const responses = [];
+      for (const saleIds of batches) {
+        responses.push(await apiRequest('/api/advanced-sales/fic-billing-status', {
+          method: 'POST',
+          body: JSON.stringify({ saleIds })
+        }));
+      }
+      return {
+        success: true,
+        statuses: Object.assign({}, ...responses.map(response => response.statuses || {}))
+      };
+    },
+    enabled: saleIdsForBilling.length > 0,
+    staleTime: 60_000,
+    retry: false
   });
   const {
     data: reconciliationData,
@@ -1626,6 +1655,16 @@ export default function AdvancedSales() {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!saleIdsForBilling.length || checkingFicBilling}
+                  onClick={() => refetchFicBilling()}
+                  title="Controlla su Fatture in Cloud senza importare valori economici"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${checkingFicBilling ? "animate-spin" : ""}`} />
+                  Verifica fatture FIC
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
                     setSelectedReconciliationSaleIds([]);
                     setReconciliationOpen(true);
@@ -1703,6 +1742,7 @@ export default function AdvancedSales() {
                       <TableHead>Animali</TableHead>
                       <TableHead>Peso (kg)</TableHead>
                       <TableHead>Stato</TableHead>
+                      <TableHead>Fatturazione FIC</TableHead>
                       <TableHead>Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1723,6 +1763,29 @@ export default function AdvancedSales() {
                             {sale.status === 'completed' ? 'Completata' :
                              sale.status === 'confirmed' ? 'Confermata' : 'Bozza'}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const billing = ficBillingData?.statuses?.[sale.id];
+                            if (!billing) return <Badge variant="outline">{checkingFicBilling ? "Verifica..." : "Non verificato"}</Badge>;
+                            const ddtQuantity = billing.deliveryNoteQuantity != null
+                              ? <div className="mt-1 text-xs text-muted-foreground">Quantità DDT: {Number(billing.deliveryNoteQuantity).toLocaleString("it-IT")}</div>
+                              : null;
+                            if (billing.status === "invoiced") {
+                              return (
+                                <div title={`Verificato su FIC il ${new Date(billing.checkedAt).toLocaleString("it-IT")}`}>
+                                  <Badge className="bg-emerald-700">Fatturata · {billing.invoiceNumber || "FIC"}</Badge>
+                                  {billing.invoiceDate && <div className="mt-1 text-xs text-muted-foreground">{format(new Date(billing.invoiceDate), "dd/MM/yyyy")}</div>}
+                                  {ddtQuantity}
+                                </div>
+                              );
+                            }
+                            if (billing.status === "delivery_note_only") return <div><Badge className="bg-green-100 text-green-800">DDT inviato</Badge>{ddtQuantity}</div>;
+                            if (billing.status === "ambiguous") return <div><Badge className="bg-amber-100 text-amber-900" title={billing.reason}>Possibile fattura</Badge>{ddtQuantity}</div>;
+                            if (billing.status === "delivery_note_local") return <div><Badge variant="secondary">DDT locale</Badge>{ddtQuantity}</div>;
+                            if (billing.status === "unavailable") return <div><Badge variant="destructive" title={billing.reason}>Verifica non disponibile</Badge>{ddtQuantity}</div>;
+                            return <Badge variant="outline">Non inviato</Badge>;
+                          })()}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">

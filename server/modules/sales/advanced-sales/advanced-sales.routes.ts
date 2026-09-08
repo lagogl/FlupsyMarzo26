@@ -24,6 +24,7 @@ router.get('/order-reconciliation/preview', AdvancedSalesController.getOrderReco
 router.post('/order-reconciliation/apply', AdvancedSalesController.applyOrderReconciliation);
 router.get('/order-reconciliation/manual/:saleId', AdvancedSalesController.getManualOrderReconciliation);
 router.post('/order-reconciliation/manual/apply', AdvancedSalesController.applyManualOrderReconciliation);
+router.post('/fic-billing-status', requireAuth, requireOperator, AdvancedSalesController.getFicBillingStatuses);
 
 // CRUD vendite avanzate
 router.get('/', AdvancedSalesController.getAdvancedSales);

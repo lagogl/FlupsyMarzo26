@@ -72,8 +72,10 @@ import {
   parseManualOrderReconciliationRequest,
   type ManualOrderAllocation
 } from "../services/manual-order-reconciliation";
+import { buildBillingEvidence, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
 
 let documentSchemaReady: Promise<void> | null = null;
+const ficInvoiceCache = new Map<string, { expiresAt: number; invoices: any[] }>();
 function ensureAdvancedSaleDocumentSchema() {
   if (!documentSchemaReady) {
     documentSchemaReady = (async () => {
@@ -1854,6 +1856,114 @@ export async function getAdvancedSales(req: Request, res: Response) {
       success: false,
       error: "Errore nel recupero delle vendite avanzate"
     });
+  }
+}
+
+export async function getFicBillingStatuses(req: Request, res: Response) {
+  const checkedAt = new Date().toISOString();
+  try {
+    const requestedIds = Array.isArray(req.body?.saleIds) ? req.body.saleIds : [];
+    const saleIds = [...new Set(requestedIds.map(Number).filter(id => Number.isInteger(id) && id > 0))];
+    if (saleIds.length > 2000) return res.status(400).json({ success: false, error: "Troppe vendite richieste" });
+    if (!saleIds.length) return res.json({ success: true, statuses: {} });
+
+    const rows = await db.select({
+      saleId: advancedSales.id,
+      saleQuantity: advancedSales.totalAnimals,
+      ddtStatus: advancedSales.ddtStatus,
+      ddtId: ddt.id,
+      ddtDate: ddt.data,
+      ddtNumber: ddt.numero,
+      companyId: ddt.companyId,
+      ficDdtId: ddt.fattureInCloudId,
+      customerFicId: clienti.fattureInCloudId
+    }).from(advancedSales)
+      .leftJoin(ddt, eq(ddt.id, advancedSales.ddtId))
+      .leftJoin(clienti, eq(clienti.id, advancedSales.customerId))
+      .where(inArray(advancedSales.id, saleIds));
+
+    const statuses: Record<number, BillingEvidence> = {};
+    const groups = new Map<string, typeof rows>();
+    for (const row of rows) {
+      if (!row.ddtId) {
+        statuses[row.saleId] = { status: "not_sent", invoiceId: null, invoiceNumber: null, invoiceDate: null, invoicedQuantity: null, deliveryNoteQuantity: null, checkedAt };
+      } else if (row.ddtStatus !== "inviato" || !row.ficDdtId || !row.companyId) {
+        statuses[row.saleId] = { status: "delivery_note_local", invoiceId: null, invoiceNumber: null, invoiceDate: null, invoicedQuantity: null, deliveryNoteQuantity: Number(row.saleQuantity || 0), checkedAt };
+      } else {
+        const key = `${row.companyId}:${String(row.ddtDate).slice(0, 4)}`;
+        groups.set(key, [...(groups.get(key) || []), row]);
+      }
+    }
+
+    const accessToken = await getConfigValue("fatture_in_cloud_access_token");
+    if (!accessToken) {
+      for (const groupRows of groups.values()) {
+        for (const row of groupRows) {
+          statuses[row.saleId] = {
+            status: "unavailable", invoiceId: null, invoiceNumber: null,
+            invoiceDate: null, invoicedQuantity: null, checkedAt,
+            deliveryNoteQuantity: Number(row.saleQuantity || 0),
+            reason: "Autorizzazione FIC non disponibile"
+          };
+        }
+      }
+      return res.json({ success: true, statuses });
+    }
+
+    for (const [key, groupRows] of groups) {
+      const [companyId, year] = key.split(":");
+      try {
+        const cacheKey = `${companyId}:${year}`;
+        const cached = ficInvoiceCache.get(cacheKey);
+        let invoices = cached && cached.expiresAt > Date.now() ? cached.invoices : null;
+        if (!invoices) {
+          invoices = [];
+          const firstYear = Number(year);
+          const lastYear = new Date().getFullYear();
+          for (let invoiceYear = firstYear; invoiceYear <= lastYear; invoiceYear++) {
+            for (let page = 1; page <= 100; page++) {
+              const response = await ficApiRequest("GET", companyId, accessToken,
+                `/issued_documents?type=invoice&year=${invoiceYear}&page=${page}&per_page=100&fieldset=detailed`);
+              const body = response.data || {};
+              const pageRows = Array.isArray(body.data) ? body.data : [];
+              invoices.push(...pageRows.map(sanitizeFicInvoice));
+              const lastPage = Number(body.last_page || body.meta?.pagination?.last_page || body.pagination?.last_page || 0);
+              if (!pageRows.length || (lastPage > 0 && page >= lastPage)) break;
+            }
+          }
+          ficInvoiceCache.set(cacheKey, { invoices, expiresAt: Date.now() + 60_000 });
+          setTimeout(() => {
+            if (ficInvoiceCache.get(cacheKey)?.expiresAt <= Date.now()) ficInvoiceCache.delete(cacheKey);
+          }, 61_000).unref();
+        }
+        for (const row of groupRows) {
+          statuses[row.saleId] = {
+            ...buildBillingEvidence(invoices, {
+            ficId: row.ficDdtId!,
+            number: row.ddtNumber!,
+            date: String(row.ddtDate),
+            customerFicId: row.customerFicId
+            }, checkedAt),
+            deliveryNoteQuantity: Number(row.saleQuantity || 0)
+          };
+        }
+      } catch (error: any) {
+        for (const row of groupRows) {
+          statuses[row.saleId] = {
+            status: "unavailable", invoiceId: null, invoiceNumber: null,
+            invoiceDate: null, invoicedQuantity: null, checkedAt,
+            deliveryNoteQuantity: Number(row.saleQuantity || 0),
+            reason: error?.message?.includes("403")
+              ? "Riautorizzare FIC per consentire la lettura dello stato fatture"
+              : "Verifica FIC temporaneamente non disponibile"
+          };
+        }
+      }
+    }
+    res.json({ success: true, statuses });
+  } catch (error) {
+    console.error("Errore verifica fatturazione FIC:", error);
+    res.status(503).json({ success: false, error: "Verifica FIC non disponibile" });
   }
 }
 
@@ -4109,7 +4219,10 @@ async function ficApiRequest(method: string, companyId: string, accessToken: str
       throw new Error('Token scaduto. Riautenticare dalla pagina Fatture in Cloud.');
     }
     if (error.response?.data) {
-      console.error('FIC API Error:', error.response.data);
+      console.error('FIC API Error:', {
+        status: error.response.status,
+        code: String(error.response.data?.error?.code || 'upstream_error').slice(0, 80)
+      });
       throw new Error(error.response.data.error?.message || error.message);
     }
     throw error;

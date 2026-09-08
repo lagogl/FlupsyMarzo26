@@ -260,7 +260,7 @@ router.get('/oauth/url', async (req: Request, res: Response) => {
       `?response_type=code` +
       `&client_id=${clientId}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=entity.clients:r entity.clients:a issued_documents.delivery_notes:r issued_documents.delivery_notes:a`;
+      `&scope=entity.clients:r entity.clients:a issued_documents.delivery_notes:r issued_documents.delivery_notes:a issued_documents.invoices:r`;
     
     res.json({ success: true, url: authUrl });
   } catch (error: any) {
