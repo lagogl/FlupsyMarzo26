@@ -1360,6 +1360,8 @@ export const bagAllocations = pgTable("bag_allocations", {
   saleBagId: integer("sale_bag_id").notNull(), // Riferimento sacco
   sourceOperationId: integer("source_operation_id").notNull(), // Operazione vendita originale
   sourceBasketId: integer("source_basket_id").notNull(), // Cestello origine
+  sourceFlupsyNameSnapshot: text("source_flupsy_name_snapshot"), // Nome FLUPSY congelato alla conferma
+  sourceBasketPhysicalNumberSnapshot: integer("source_basket_physical_number_snapshot"), // Numero fisico cesta congelato alla conferma
   allocatedAnimals: integer("allocated_animals").notNull(), // Animali allocati da questa fonte
   allocatedWeight: real("allocated_weight").notNull(), // Peso allocato da questa fonte
   sourceAnimalsPerKg: real("source_animals_per_kg"), // AnimalsPerKg originale

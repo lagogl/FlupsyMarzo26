@@ -159,3 +159,31 @@ test('la risposta documento resta PDF binario anche con un Uint8Array', () => {
   assert.equal(headers.get('Content-Disposition'), 'inline; filename="DDT-417.pdf"');
   assert.equal(headers.get('Content-Length'), bytes.length);
 });
+
+test('i documenti mostrano l’origine congelata del sacco', async () => {
+  const html = await renderAdvancedSaleDocumentHtml('ddt', {
+    sale: {
+      saleNumber: 'VEN-SNAPSHOT',
+      saleDate: '2026-09-08',
+      companyId: 1052922
+    },
+    bags: [{
+      bagNumber: 1,
+      originalWeight: 2,
+      totalWeight: 2,
+      animalCount: 2000,
+      animalsPerKg: 1000,
+      sizeCode: 'M',
+      origins: [{ flupsyName: 'FLUPSY STORICO', basketPhysicalNumber: 17 }]
+    }],
+    operations: [],
+    ddt: {
+      numero: 1,
+      data: '2026-09-08',
+      mittenteRagioneSociale: 'Venditore',
+      clienteNome: 'Cliente'
+    }
+  });
+
+  assert.match(html, /F\. STORICO · C\. 17/);
+});

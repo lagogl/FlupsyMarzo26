@@ -88,6 +88,11 @@ function ensureAdvancedSaleDocumentSchema() {
         ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_allevamento text
       `));
       await db.execute(sql.raw(`
+        ALTER TABLE bag_allocations
+          ADD COLUMN IF NOT EXISTS source_flupsy_name_snapshot text,
+          ADD COLUMN IF NOT EXISTS source_basket_physical_number_snapshot integer
+      `));
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS ddr_number_sequences (
           id serial PRIMARY KEY,
           company_id integer NOT NULL,
@@ -1351,8 +1356,8 @@ export async function getAdvancedSale(req: Request, res: Response) {
           allocatedWeight: bagAllocations.allocatedWeight,
           sourceAnimalsPerKg: bagAllocations.sourceAnimalsPerKg,
           sourceSizeCode: bagAllocations.sourceSizeCode,
-          basketPhysicalNumber: baskets.physicalNumber,
-          flupsyName: flupsys.name
+          basketPhysicalNumber: sql<number | null>`coalesce(${bagAllocations.sourceBasketPhysicalNumberSnapshot}, ${baskets.physicalNumber})`,
+          flupsyName: sql<string | null>`coalesce(${bagAllocations.sourceFlupsyNameSnapshot}, ${flupsys.name})`
         })
         .from(bagAllocations)
         .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
@@ -1542,8 +1547,9 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       .where(eq(saleBags.advancedSaleId, saleId)).orderBy(saleBags.bagNumber);
     const allocationRows = await db.select({
       saleBagId: bagAllocations.saleBagId,
-      basketPhysicalNumber: baskets.physicalNumber,
-      flupsyName: flupsys.name
+      sourceOperationId: bagAllocations.sourceOperationId,
+      basketPhysicalNumber: sql<number | null>`coalesce(${bagAllocations.sourceBasketPhysicalNumberSnapshot}, ${baskets.physicalNumber})`,
+      flupsyName: sql<string | null>`coalesce(${bagAllocations.sourceFlupsyNameSnapshot}, ${flupsys.name})`
     }).from(bagAllocations)
       .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
       .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
@@ -1566,7 +1572,7 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
           .filter((value): value is number => value !== null)
       )]
     }));
-    const operationRows = await db.select({
+    const currentOperationRows = await db.select({
       operationId: saleOperationsRef.operationId,
       basketId: saleOperationsRef.basketId,
       basketPhysicalNumber: baskets.physicalNumber,
@@ -1580,6 +1586,21 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
       .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
       .where(eq(saleOperationsRef.advancedSaleId, saleId));
+    const originByOperation = new Map(
+      allocationRows
+        .filter(row => row.basketPhysicalNumber !== null)
+        .map(row => [
+          row.sourceOperationId,
+          {
+            basketPhysicalNumber: row.basketPhysicalNumber,
+            flupsyName: row.flupsyName
+          }
+        ])
+    );
+    const operationRows = currentOperationRows.map(operation => ({
+      ...operation,
+      ...(originByOperation.get(operation.operationId) || {})
+    }));
 
     const [storedCustomer] = sale.customerId
       ? await db.select().from(clienti).where(eq(clienti.id, sale.customerId)).limit(1)
@@ -1911,7 +1932,7 @@ export async function generateSalePDF(req: Request, res: Response) {
           allocatedWeight: bagAllocations.allocatedWeight,
           sourceAnimalsPerKg: bagAllocations.sourceAnimalsPerKg,
           sourceSizeCode: bagAllocations.sourceSizeCode,
-          basketPhysicalNumber: baskets.physicalNumber
+          basketPhysicalNumber: sql<number | null>`coalesce(${bagAllocations.sourceBasketPhysicalNumberSnapshot}, ${baskets.physicalNumber})`
         })
         .from(bagAllocations)
         .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
@@ -2057,6 +2078,7 @@ export async function downloadSalePDF(req: Request, res: Response) {
  */
 export async function updateSaleStatus(req: Request, res: Response) {
   try {
+    await ensureAdvancedSaleDocumentSchema();
     const { id } = req.params;
     const { status } = req.body;
     const saleId = parseInt(id);
@@ -2089,6 +2111,21 @@ export async function updateSaleStatus(req: Request, res: Response) {
         !(allowedTransitions[currentSale.status] || []).includes(status)
       ) {
         throw new Error(`Transizione di stato non consentita: ${currentSale.status} → ${status}`);
+      }
+
+      if (currentSale.status === 'draft' && status === 'confirmed') {
+        await tx.execute(sql`
+          UPDATE ${bagAllocations} AS ba
+          SET
+            source_flupsy_name_snapshot = f.name,
+            source_basket_physical_number_snapshot = b.physical_number
+          FROM ${saleBags} AS sb, ${baskets} AS b
+          LEFT JOIN ${flupsys} AS f ON f.id = b.flupsy_id
+          WHERE ba.sale_bag_id = sb.id
+            AND b.id = ba.source_basket_id
+            AND sb.advanced_sale_id = ${saleId}
+            AND ba.source_basket_physical_number_snapshot IS NULL
+        `);
       }
 
       if (currentSale.source_type === 'manual' && currentSale.status === 'draft' && status !== 'draft') {
@@ -3401,10 +3438,12 @@ export async function generateDDT(req: Request, res: Response) {
       for (const [bagId, bagItems] of Array.from(bagsMap.entries())) {
         const bagData = bagItems[0].bag;
         const originNames = [...new Set(bagItems
-          .filter((item: any) => item.basket)
+          .filter((item: any) => item.allocation || item.basket)
           .map((item: any) => [
-            abbreviateFlupsyName(item.flupsy?.name),
-            `C. ${item.basket!.physicalNumber}`
+            abbreviateFlupsyName(item.allocation?.sourceFlupsyNameSnapshot || item.flupsy?.name),
+            (item.allocation?.sourceBasketPhysicalNumberSnapshot ?? item.basket?.physicalNumber) != null
+              ? `C. ${item.allocation?.sourceBasketPhysicalNumberSnapshot ?? item.basket?.physicalNumber}`
+              : null
           ].filter(Boolean).join(' · ')))].join(', ');
 
         const descrizione = `Sacco #${bagData.bagNumber} · ${originNames || 'Origine N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${(bagData.totalWeight || 0).toFixed(2)} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
@@ -3419,7 +3458,9 @@ export async function generateDDT(req: Request, res: Response) {
           saleBagId: bagData.id,
           basketId: bagItems[0].basket?.id || null,
           sizeCode: sizeCode,
-          flupsyName: [...new Set(bagItems.map((item: any) => item.flupsy?.name).filter(Boolean))].join(', ') || null
+          flupsyName: [...new Set(bagItems
+            .map((item: any) => item.allocation?.sourceFlupsyNameSnapshot || item.flupsy?.name)
+            .filter(Boolean))].join(', ') || null
         }).returning();
 
         righeCreate.push(riga);
