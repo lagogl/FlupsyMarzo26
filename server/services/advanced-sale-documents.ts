@@ -148,7 +148,12 @@ function productRows(bags: any[]) {
     const loss = Number(bag.weightLoss ?? Math.max(0, gross - net));
     const identifiers = [
       `Sacco ${bag.bagNumber || index + 1}`,
-      bag.basketNumbers?.length ? `Ceste ${bag.basketNumbers.join(', ')}` : ''
+      ...(bag.origins?.length
+        ? bag.origins.map((origin: any) => [
+            origin.flupsyName ? `FLUPSY ${origin.flupsyName}` : null,
+            origin.basketPhysicalNumber != null ? `Cesta ${origin.basketPhysicalNumber}` : null
+          ].filter(Boolean).join(' · '))
+        : (bag.basketNumbers?.length ? [`Ceste ${bag.basketNumbers.join(', ')}`] : []))
     ].filter(Boolean).join(' · ');
     return `<tr>
       <td class="left"><strong>${esc(identifiers)}</strong></td>
@@ -275,7 +280,7 @@ export async function renderAdvancedSaleDocumentHtml(
       : `DDR · Rif. ${reference}`;
     subtitle = `${ddrReference} · novellame destinato alla reimmersione`;
     const origin = data.operations.map(operation =>
-      `Cesta ${operation.basketPhysicalNumber || operation.basketId}${operation.date ? ` (${displayDate(operation.date)})` : ''}`
+      `${operation.flupsyName ? `FLUPSY ${operation.flupsyName} · ` : ''}Cesta ${operation.basketPhysicalNumber || operation.basketId}${operation.date ? ` (${displayDate(operation.date)})` : ''}`
     ).join(', ') || '________________';
     body = `<div class="parties">${seller}${recipient}</div>
       <div class="two"><div class="field"><span class="label">Persona delegata alla firma</span><span class="value">${blank}</span></div>

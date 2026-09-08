@@ -1278,10 +1278,12 @@ export async function getAdvancedSale(req: Request, res: Response) {
           allocatedWeight: bagAllocations.allocatedWeight,
           sourceAnimalsPerKg: bagAllocations.sourceAnimalsPerKg,
           sourceSizeCode: bagAllocations.sourceSizeCode,
-          basketPhysicalNumber: baskets.physicalNumber
+          basketPhysicalNumber: baskets.physicalNumber,
+          flupsyName: flupsys.name
         })
         .from(bagAllocations)
         .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
+        .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
         .where(eq(bagAllocations.saleBagId, bag.id));
 
         return {
@@ -1300,6 +1302,7 @@ export async function getAdvancedSale(req: Request, res: Response) {
       originalAnimalsPerKg: saleOperationsRef.originalAnimalsPerKg,
       includedInSale: saleOperationsRef.includedInSale,
       basketPhysicalNumber: baskets.physicalNumber,
+      flupsyName: flupsys.name,
       date: operations.date,
       sizeId: operations.sizeId,
       sizeCode: sizes.code,
@@ -1307,6 +1310,7 @@ export async function getAdvancedSale(req: Request, res: Response) {
     })
     .from(saleOperationsRef)
     .leftJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+    .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
     .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
     .leftJoin(sizes, eq(operations.sizeId, sizes.id))
     .where(eq(saleOperationsRef.advancedSaleId, parseInt(id)));
@@ -1465,13 +1469,23 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       .where(eq(saleBags.advancedSaleId, saleId)).orderBy(saleBags.bagNumber);
     const allocationRows = await db.select({
       saleBagId: bagAllocations.saleBagId,
-      basketPhysicalNumber: baskets.physicalNumber
+      basketPhysicalNumber: baskets.physicalNumber,
+      flupsyName: flupsys.name
     }).from(bagAllocations)
       .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
+      .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
       .innerJoin(saleBags, eq(bagAllocations.saleBagId, saleBags.id))
       .where(eq(saleBags.advancedSaleId, saleId));
     const bagsWithOrigins = bags.map(bag => ({
       ...bag,
+      origins: [...new Map(
+        allocationRows
+          .filter(row => row.saleBagId === bag.id && row.basketPhysicalNumber !== null)
+          .map(row => [
+            `${row.flupsyName || ''}:${row.basketPhysicalNumber}`,
+            { flupsyName: row.flupsyName, basketPhysicalNumber: row.basketPhysicalNumber }
+          ])
+      ).values()],
       basketNumbers: [...new Set(
         allocationRows
           .filter(row => row.saleBagId === bag.id)
@@ -1483,12 +1497,14 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       operationId: saleOperationsRef.operationId,
       basketId: saleOperationsRef.basketId,
       basketPhysicalNumber: baskets.physicalNumber,
+      flupsyName: flupsys.name,
       originalAnimals: saleOperationsRef.originalAnimals,
       originalWeight: saleOperationsRef.originalWeight,
       originalAnimalsPerKg: saleOperationsRef.originalAnimalsPerKg,
       date: operations.date
     }).from(saleOperationsRef)
       .leftJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+      .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
       .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
       .where(eq(saleOperationsRef.advancedSaleId, saleId));
 
@@ -3173,11 +3189,13 @@ export async function generateDDT(req: Request, res: Response) {
       bag: saleBags,
       allocation: bagAllocations,
       basket: baskets,
+      flupsy: flupsys,
       size: sizes
     })
     .from(saleBags)
     .leftJoin(bagAllocations, eq(saleBags.id, bagAllocations.saleBagId))
     .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
+    .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
     .leftJoin(sizes, eq(saleBags.sizeCode, sizes.code))
     .where(eq(saleBags.advancedSaleId, parseInt(id)))
     .orderBy(saleBags.bagNumber);
@@ -3298,12 +3316,14 @@ export async function generateDDT(req: Request, res: Response) {
       // Crea una riga per ogni sacco
       for (const [bagId, bagItems] of Array.from(bagsMap.entries())) {
         const bagData = bagItems[0].bag;
-        const basketNames = bagItems
+        const originNames = [...new Set(bagItems
           .filter((item: any) => item.basket)
-          .map((item: any) => `${item.basket!.physicalNumber}`)
-          .join(', ');
+          .map((item: any) => [
+            item.flupsy?.name ? `FLUPSY ${item.flupsy.name}` : null,
+            `Cesta #${item.basket!.physicalNumber}`
+          ].filter(Boolean).join(' · ')))].join(', ');
 
-        const descrizione = `Sacco #${bagData.bagNumber} - Cestelli: ${basketNames || 'N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${(bagData.totalWeight || 0).toFixed(2)} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
+        const descrizione = `Sacco #${bagData.bagNumber} · ${originNames || 'Origine N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${(bagData.totalWeight || 0).toFixed(2)} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
 
         const [riga] = await db.insert(ddtRighe).values({
           ddtId: ddtCreato.id,
@@ -3315,7 +3335,7 @@ export async function generateDDT(req: Request, res: Response) {
           saleBagId: bagData.id,
           basketId: bagItems[0].basket?.id || null,
           sizeCode: sizeCode,
-          flupsyName: null // Potresti aggiungere query per recuperare nome FLUPSY
+          flupsyName: [...new Set(bagItems.map((item: any) => item.flupsy?.name).filter(Boolean))].join(', ') || null
         }).returning();
 
         righeCreate.push(riga);
@@ -3573,7 +3593,7 @@ export async function generatePDFReport(req: Request, res: Response) {
     xPos += col1Width;
     doc.text('Taglia', xPos, currentY + 3, { width: col2Width, continued: false });
     xPos += col2Width;
-    doc.text('Cestelli / FLUPSY', xPos, currentY + 3, { width: col3Width, continued: false });
+    doc.text('FLUPSY / Ceste', xPos, currentY + 3, { width: col3Width, continued: false });
     xPos += col3Width;
     doc.text('Animali', xPos, currentY + 3, { width: col4Width, continued: false });
     xPos += col4Width;
@@ -3601,7 +3621,7 @@ export async function generatePDFReport(req: Request, res: Response) {
       const bagData = bagItems[0].bag;
       const basketInfo = bagItems
         .filter((item: any) => item.basket && item.flupsy)
-        .map((item: any) => `${item.basket!.physicalNumber} (${item.flupsy!.name})`)
+        .map((item: any) => `FLUPSY ${item.flupsy!.name} · Cesta #${item.basket!.physicalNumber}`)
         .join(', ');
 
       xPos = margin;

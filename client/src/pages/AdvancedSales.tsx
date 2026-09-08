@@ -2493,7 +2493,7 @@ export default function AdvancedSales() {
                                 ? bag.allocations
                                     .map((allocation: any) =>
                                       allocation.basketPhysicalNumber
-                                        ? `Cesta #${allocation.basketPhysicalNumber}`
+                                        ? `${allocation.flupsyName ? `FLUPSY ${allocation.flupsyName} · ` : ""}Cesta #${allocation.basketPhysicalNumber}`
                                         : `ID ${allocation.sourceBasketId}`
                                     )
                                     .join(", ")

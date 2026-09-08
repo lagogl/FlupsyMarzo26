@@ -13,6 +13,7 @@ import { Plus, Trash2, Copy, AlertCircle, FileText, Package } from "lucide-react
 interface BasketSupply {
   basketId: number;
   basketPhysicalNumber: number;
+  flupsyName?: string | null;
   operationId: number;
   sizeCode: string;
   sizeName: string;
@@ -104,6 +105,17 @@ export default function AdvancedSalesConfigTab({
     return bag.animalCount / (netWeightGrams / 1000);
   };
 
+  const bagOrigins = (bag: BagConfiguration): string[] => [...new Set(
+    bag.allocations.map(allocation => {
+      const supply = baseSupplyByBasket[allocation.sourceBasketId];
+      if (!supply) return `Cesta #${allocation.sourceBasketId}`;
+      return [
+        supply.flupsyName ? `FLUPSY ${supply.flupsyName}` : null,
+        `Cesta #${supply.basketPhysicalNumber}`
+      ].filter(Boolean).join(" · ");
+    })
+  )];
+
   return (
     <Card>
       <CardHeader>
@@ -153,7 +165,8 @@ export default function AdvancedSalesConfigTab({
                           value={supply.basketId.toString()}
                           data-testid={`basket-option-${supply.basketId}`}
                         >
-                          #{supply.basketPhysicalNumber} - {supply.sizeCode} 
+                          {supply.flupsyName ? `FLUPSY ${supply.flupsyName} · ` : ""}
+                          Cesta #{supply.basketPhysicalNumber} - {supply.sizeCode}
                           ({(remainingByBasket[supply.basketId] || 0).toLocaleString()} disponibili)
                         </SelectItem>
                       ))}
@@ -272,6 +285,7 @@ export default function AdvancedSalesConfigTab({
               <TableHeader>
                 <TableRow>
                   <TableHead>Sacco #</TableHead>
+                  <TableHead>FLUPSY / Cesta</TableHead>
                   <TableHead>Peso Netto (kg)</TableHead>
                   <TableHead>Scarto (%)</TableHead>
                   <TableHead>Animali/kg</TableHead>
@@ -287,6 +301,9 @@ export default function AdvancedSalesConfigTab({
                   return (
                     <TableRow key={index} data-testid={`bag-row-${index}`}>
                       <TableCell className="font-medium">{index + 1}</TableCell>
+                      <TableCell className="min-w-48 text-sm">
+                        {bagOrigins(bag).map(origin => <div key={origin}>{origin}</div>)}
+                      </TableCell>
                       <TableCell>
                         <Input
                           type="number"
