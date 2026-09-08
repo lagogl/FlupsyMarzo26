@@ -1774,7 +1774,9 @@ export default function AdvancedSales() {
                             if (billing.status === "invoiced") {
                               return (
                                 <div title={`Verificato su FIC il ${new Date(billing.checkedAt).toLocaleString("it-IT")}`}>
-                                  <Badge className="bg-emerald-700">Fatturata · {billing.invoiceNumber || "FIC"}</Badge>
+                                  <Badge className="border-green-600 bg-green-600 text-white hover:bg-green-600">
+                                    Fatturata · {billing.invoiceNumber || "FIC"}
+                                  </Badge>
                                   {billing.invoiceDate && <div className="mt-1 text-xs text-muted-foreground">{format(new Date(billing.invoiceDate), "dd/MM/yyyy")}</div>}
                                   {ddtQuantity}
                                 </div>
