@@ -57,6 +57,17 @@ interface Props {
   onRequestAutomaticGeneration?: () => void;
 }
 
+const abbreviateFlupsyName = (value: string | null | undefined): string => {
+  const name = String(value ?? "")
+    .trim()
+    .replace(/^flupsy[\s._-]*/i, "")
+    .replace(/\bvetroresina\b/gi, "VTR")
+    .replace(/\bacciaio inox\b/gi, "Inox")
+    .replace(/\s+/g, " ")
+    .trim();
+  return name ? `F. ${name}` : "";
+};
+
 export default function AdvancedSalesConfigTab({
   baseSupplyByBasket,
   bagConfigs,
@@ -108,10 +119,10 @@ export default function AdvancedSalesConfigTab({
   const bagOrigins = (bag: BagConfiguration): string[] => [...new Set(
     bag.allocations.map(allocation => {
       const supply = baseSupplyByBasket[allocation.sourceBasketId];
-      if (!supply) return `Cesta #${allocation.sourceBasketId}`;
+      if (!supply) return `C. ${allocation.sourceBasketId}`;
       return [
-        supply.flupsyName ? `FLUPSY ${supply.flupsyName}` : null,
-        `Cesta #${supply.basketPhysicalNumber}`
+        abbreviateFlupsyName(supply.flupsyName) || null,
+        `C. ${supply.basketPhysicalNumber}`
       ].filter(Boolean).join(" · ");
     })
   )];
@@ -284,8 +295,7 @@ export default function AdvancedSalesConfigTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Sacco #</TableHead>
-                  <TableHead>FLUPSY / Cesta</TableHead>
+                  <TableHead>Sacco / origine</TableHead>
                   <TableHead>Peso Netto (kg)</TableHead>
                   <TableHead>Scarto (%)</TableHead>
                   <TableHead>Animali/kg</TableHead>
@@ -300,9 +310,12 @@ export default function AdvancedSalesConfigTab({
                   const animalsPerKg = calculateAnimalsPerKg(bag);
                   return (
                     <TableRow key={index} data-testid={`bag-row-${index}`}>
-                      <TableCell className="font-medium">{index + 1}</TableCell>
-                      <TableCell className="min-w-48 text-sm">
-                        {bagOrigins(bag).map(origin => <div key={origin}>{origin}</div>)}
+                      <TableCell className="min-w-64 text-sm font-medium">
+                        {bagOrigins(bag).map((origin, originIndex) => (
+                          <div key={origin}>
+                            {originIndex === 0 ? `Sacco ${index + 1} · ` : "↳ "}{origin}
+                          </div>
+                        ))}
                       </TableCell>
                       <TableCell>
                         <Input
