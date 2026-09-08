@@ -38,6 +38,21 @@ const present = (value: unknown) => {
   return !text || text === 'N/A' ? '________________' : esc(text);
 };
 
+const meaningful = (value: unknown) => {
+  const text = String(value ?? '').trim();
+  return text && text.toUpperCase() !== 'N/A' ? text : '';
+};
+
+export function abbreviateFlupsyName(value: unknown): string {
+  const name = meaningful(value)
+    .replace(/^flupsy[\s._-]*/i, '')
+    .replace(/\bvetroresina\b/gi, 'VTR')
+    .replace(/\bacciaio inox\b/gi, 'Inox')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return name ? `F. ${name}` : '';
+}
+
 function parseDetails(value: any): any {
   if (!value) return {};
   if (typeof value !== 'string') return value;
@@ -50,24 +65,43 @@ export function normalizeSaleCustomerSnapshot(
 ) {
   const snapshot = parseDetails(customerDetails);
   return {
-    name: snapshot.businessName || snapshot.denominazione || snapshot.name || customerName || '',
-    address: snapshot.address || snapshot.indirizzo || snapshot.details || '',
-    city: snapshot.city || snapshot.comune || '',
-    postalCode: snapshot.postalCode || snapshot.cap || '',
-    province: snapshot.province || snapshot.provincia || '',
-    country: snapshot.country || snapshot.paese || 'Italia',
-    vatNumber: snapshot.vatNumber || snapshot.piva || '',
-    taxCode: snapshot.taxCode || snapshot.codiceFiscale || '',
-    phone: snapshot.phone || snapshot.telefono || '',
-    email: snapshot.email || '',
-    farmCode: snapshot.farmCode || snapshot.codiceAllevamento || '',
-    productionZone: snapshot.productionZone || snapshot.zonaProduzione || ''
+    name: meaningful(snapshot.businessName || snapshot.denominazione || snapshot.name || customerName),
+    address: meaningful(snapshot.address || snapshot.address_street || snapshot.indirizzo || snapshot.details),
+    city: meaningful(snapshot.city || snapshot.address_city || snapshot.comune),
+    postalCode: meaningful(snapshot.postalCode || snapshot.address_postal_code || snapshot.cap),
+    province: meaningful(snapshot.province || snapshot.address_province || snapshot.provincia),
+    country: meaningful(snapshot.country || snapshot.paese) || 'Italia',
+    vatNumber: meaningful(snapshot.vatNumber || snapshot.vat_number || snapshot.piva),
+    taxCode: meaningful(snapshot.taxCode || snapshot.tax_code || snapshot.codiceFiscale),
+    phone: meaningful(snapshot.phone || snapshot.telefono),
+    email: meaningful(snapshot.email),
+    farmCode: meaningful(snapshot.farmCode || snapshot.codiceAllevamento || snapshot.code),
+    productionZone: meaningful(snapshot.productionZone || snapshot.zonaProduzione)
+  };
+}
+
+export function mergeSaleCustomerData(...sources: unknown[]) {
+  const normalized = sources.map(source => normalizeSaleCustomerSnapshot(source));
+  const field = (name: keyof ReturnType<typeof normalizeSaleCustomerSnapshot>) =>
+    normalized.map(item => meaningful(item[name])).find(Boolean) || '';
+  return {
+    name: field('name'),
+    address: field('address'),
+    city: field('city'),
+    postalCode: field('postalCode'),
+    province: field('province'),
+    country: field('country') || 'Italia',
+    vatNumber: field('vatNumber'),
+    taxCode: field('taxCode'),
+    phone: field('phone'),
+    email: field('email'),
+    farmCode: field('farmCode'),
+    productionZone: field('productionZone')
   };
 }
 
 function buildBuyer(data: AdvancedSaleDocumentData) {
-  if (data.ddt) {
-    return {
+  const ddtSnapshot = data.ddt ? {
       name: data.ddt.clienteNome,
       address: data.ddt.clienteIndirizzo,
       city: data.ddt.clienteCitta,
@@ -80,24 +114,12 @@ function buildBuyer(data: AdvancedSaleDocumentData) {
       email: '',
       farmCode: data.ddt.clienteCodiceAllevamento || '',
       productionZone: ''
-    };
-  }
-  const snapshot = normalizeSaleCustomerSnapshot(data.sale.customerDetails, data.sale.customerName);
-  const customer = data.customer || {};
-  return {
-    name: snapshot.name || customer.denominazione,
-    address: snapshot.address || customer.indirizzo,
-    city: snapshot.city || customer.comune,
-    postalCode: snapshot.postalCode || customer.cap,
-    province: snapshot.province || customer.provincia,
-    country: snapshot.country || customer.paese || 'Italia',
-    vatNumber: snapshot.vatNumber || customer.piva,
-    taxCode: snapshot.taxCode || customer.codiceFiscale,
-    phone: snapshot.phone || customer.telefono,
-    email: snapshot.email || customer.email,
-    farmCode: snapshot.farmCode || customer.codiceAllevamento || '',
-    productionZone: snapshot.productionZone
-  };
+    } : null;
+  return mergeSaleCustomerData(
+    ddtSnapshot,
+    normalizeSaleCustomerSnapshot(data.sale.customerDetails, data.sale.customerName),
+    data.customer
+  );
 }
 
 function companyFromDdt(ddt: any) {
@@ -150,8 +172,8 @@ function productRows(bags: any[]) {
       `Sacco ${bag.bagNumber || index + 1}`,
       ...(bag.origins?.length
         ? bag.origins.map((origin: any) => [
-            origin.flupsyName ? `FLUPSY ${origin.flupsyName}` : null,
-            origin.basketPhysicalNumber != null ? `Cesta ${origin.basketPhysicalNumber}` : null
+            abbreviateFlupsyName(origin.flupsyName),
+            origin.basketPhysicalNumber != null ? `C. ${origin.basketPhysicalNumber}` : null
           ].filter(Boolean).join(' · '))
         : (bag.basketNumbers?.length ? [`Ceste ${bag.basketNumbers.join(', ')}`] : []))
     ].filter(Boolean).join(' · ');
@@ -280,7 +302,7 @@ export async function renderAdvancedSaleDocumentHtml(
       : `DDR · Rif. ${reference}`;
     subtitle = `${ddrReference} · novellame destinato alla reimmersione`;
     const origin = data.operations.map(operation =>
-      `${operation.flupsyName ? `FLUPSY ${operation.flupsyName} · ` : ''}Cesta ${operation.basketPhysicalNumber || operation.basketId}${operation.date ? ` (${displayDate(operation.date)})` : ''}`
+      `${abbreviateFlupsyName(operation.flupsyName) ? `${abbreviateFlupsyName(operation.flupsyName)} · ` : ''}C. ${operation.basketPhysicalNumber || operation.basketId}${operation.date ? ` (${displayDate(operation.date)})` : ''}`
     ).join(', ') || '________________';
     body = `<div class="parties">${seller}${recipient}</div>
       <div class="two"><div class="field"><span class="label">Persona delegata alla firma</span><span class="value">${blank}</span></div>

@@ -8,6 +8,8 @@ import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzl
 import { pdfGenerator } from "../services/pdf-generator";
 import {
   generateAdvancedSaleDocument as buildAdvancedSaleDocument,
+  abbreviateFlupsyName,
+  mergeSaleCustomerData,
   normalizeSaleCustomerSnapshot,
   sendPdfBinaryResponse,
   type AdvancedSaleDocumentKind
@@ -117,7 +119,7 @@ function ensureAdvancedSaleDocumentSchema() {
  *
  * @param companyId - ID azienda FIC che emette il DDT (OBBLIGATORIO)
  */
-async function getNextAvailableDDTNumber(companyId?: number | null): Promise<number> {
+async function getNextAvailableDDTNumber(companyId?: number | null, year = new Date().getFullYear()): Promise<number> {
   if (!companyId) {
     throw new Error("ID azienda mancante: impossibile leggere la numerazione DDT da Fatture in Cloud. Associare un'azienda emittente alla vendita.");
   }
@@ -128,7 +130,7 @@ async function getNextAvailableDDTNumber(companyId?: number | null): Promise<num
   }
 
   // La numerazione FIC riparte ogni anno: filtriamo per anno corrente.
-  const currentYear = new Date().getFullYear();
+  const currentYear = year;
 
   // Legge gli ultimi DDT (delivery_note) DELL'AZIENDA specifica direttamente da FIC,
   // usando lo stesso canale per-azienda dell'invio del DDT (ficApiRequest → /c/{companyId}).
@@ -151,11 +153,66 @@ async function getNextAvailableDDTNumber(companyId?: number | null): Promise<num
   const pool = documentiSerie.length > 0 ? documentiSerie : docs;
 
   const numeroFIC = pool.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
-  const prossimoNumero = numeroFIC + 1;
+  const localResult = await db.execute(sql`
+    SELECT COALESCE(MAX(numero), 0) AS max_number
+    FROM ${ddt}
+    WHERE company_id = ${companyId}
+      AND EXTRACT(YEAR FROM data)::integer = ${currentYear}
+  `);
+  const numeroLocale = Number((localResult as any).rows?.[0]?.max_number || 0);
+  const prossimoNumero = Math.max(numeroFIC, numeroLocale) + 1;
 
-  console.log(`✅ Prossimo numero DDT per azienda ${companyId} (anno ${currentYear}, serie "${serie}"): ${prossimoNumero} — ultimo su FIC: ${numeroFIC} (documenti analizzati: ${pool.length})`);
+  console.log(`✅ Prossimo numero DDT per azienda ${companyId} (anno ${currentYear}, serie "${serie}"): ${prossimoNumero} — ultimo FIC: ${numeroFIC}, ultimo locale: ${numeroLocale}`);
 
   return prossimoNumero;
+}
+
+async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?: number | null) {
+  const saleSnapshot = normalizeSaleCustomerSnapshot(sale?.customerDetails, sale?.customerName);
+  const preliminary = mergeSaleCustomerData(saleSnapshot, localCustomer);
+  let ficDetail: any = null;
+
+  if (
+    companyId &&
+    (!preliminary.address || !preliminary.farmCode || !preliminary.postalCode)
+  ) {
+    try {
+      const accessToken = await getConfigValue('fatture_in_cloud_access_token');
+      if (accessToken) {
+        let ficClientId = localCustomer?.fattureInCloudId || null;
+        if (!ficClientId && preliminary.vatNumber) {
+          const normalizedVat = preliminary.vatNumber.replace(/\W/g, '').toUpperCase();
+          for (let page = 1; page <= 20 && !ficClientId; page++) {
+            const listResponse = await ficApiRequest(
+              'GET',
+              String(companyId),
+              accessToken,
+              `/entities/clients?page=${page}&per_page=100`
+            );
+            const clients: any[] = listResponse.data?.data || [];
+            const match = clients.find(client =>
+              String(client.vat_number || '').replace(/\W/g, '').toUpperCase() === normalizedVat
+            );
+            if (match?.id) ficClientId = match.id;
+            const lastPage = Number(listResponse.data?.meta?.pagination?.last_page || page);
+            if (page >= lastPage || clients.length < 100) break;
+          }
+        }
+        if (!ficClientId) return preliminary;
+        const response = await ficApiRequest(
+          'GET',
+          String(companyId),
+          accessToken,
+          `/entities/clients/${ficClientId}`
+        );
+        ficDetail = response.data?.data || null;
+      }
+    } catch (error) {
+      console.warn(`Dettaglio FIC non disponibile per il cliente ${localCustomer?.id || sale?.customerName}; uso lo snapshot locale`);
+    }
+  }
+
+  return mergeSaleCustomerData(saleSnapshot, localCustomer, ficDetail);
 }
 
 /**
@@ -451,7 +508,7 @@ async function createManualAdvancedSale(req: Request, res: Response) {
         companyId: companyId || null,
         customerId: customerData?.id || null,
         customerName: customerData?.name || null,
-        customerDetails: customerData ? JSON.stringify(customerData) : null,
+        customerDetails: customerData ? normalizeSaleCustomerSnapshot(customerData, customerData?.name) : null,
         saleDate,
         status: 'draft',
         notes: notes || null
@@ -580,7 +637,7 @@ export async function createAdvancedSale(req: Request, res: Response) {
         companyId: companyId || null,
         customerId: customerData?.id || null,
         customerName: customerData?.name || null,
-        customerDetails: customerData ? JSON.stringify(customerData) : null,
+        customerDetails: customerData ? normalizeSaleCustomerSnapshot(customerData, customerData?.name) : null,
         saleDate: saleDate || format(new Date(), 'yyyy-MM-dd'),
         status: 'draft',
         notes: notes || null
@@ -897,7 +954,7 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
           companyId: companyId || null,
           customerId: customerData?.id || null,
           customerName: customerData?.name || null,
-          customerDetails: customerData ? JSON.stringify(customerData) : null,
+          customerDetails: customerData ? normalizeSaleCustomerSnapshot(customerData, customerData?.name) : null,
           saleDate,
           status: 'draft',
           notes: saleEntry.notes || null
@@ -1508,9 +1565,10 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
       .where(eq(saleOperationsRef.advancedSaleId, saleId));
 
-    const [customer] = sale.customerId
+    const [storedCustomer] = sale.customerId
       ? await db.select().from(clienti).where(eq(clienti.id, sale.customerId)).limit(1)
       : [];
+    const customer = await getCompleteSaleCustomer(sale, storedCustomer, sale.companyId);
     const [existingDdt] = sale.ddtId
       ? await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
       : [];
@@ -3234,8 +3292,6 @@ export async function generateDDT(req: Request, res: Response) {
       });
     }
 
-    // Ottieni il prossimo numero DDT disponibile da FIC per questa azienda
-    const numeroDDT = await getNextAvailableDDTNumber(companyId);
     let fiscalData: any = null;
     
     if (companyId) {
@@ -3250,21 +3306,31 @@ export async function generateDDT(req: Request, res: Response) {
       }
     }
 
-    // Crea DDT locale con snapshot cliente e mittente
-    const [ddtCreato] = await db.insert(ddt).values({
-      numero: numeroDDT,
+    const completeCustomer = await getCompleteSaleCustomer(saleData, cliente, companyId);
+
+    // La creazione locale riserva immediatamente il progressivo. Il lock per
+    // azienda/anno impedisce che due vendite ricevano lo stesso numero.
+    const { numeroDDT, ddtCreato } = await db.transaction(async tx => {
+      const numberingKey = `advanced-ddt:${companyId}:${new Date(saleData.saleDate).getFullYear()}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
+      const reservedNumber = await getNextAvailableDDTNumber(
+        companyId,
+        new Date(saleData.saleDate).getFullYear()
+      );
+      const [createdDdt] = await tx.insert(ddt).values({
+      numero: reservedNumber,
       data: saleData.saleDate,
       clienteId: cliente.id || null,
       // Snapshot immutabile cliente
-      clienteNome: cliente.denominazione,
-      clienteIndirizzo: cliente.indirizzo !== 'N/A' ? cliente.indirizzo : '',
-      clienteCitta: cliente.comune !== 'N/A' ? cliente.comune : '',
-      clienteCap: cliente.cap !== 'N/A' ? cliente.cap : '',
-      clienteProvincia: cliente.provincia !== 'N/A' ? cliente.provincia : '',
-      clientePiva: cliente.piva !== 'N/A' ? cliente.piva : '',
-      clienteCodiceFiscale: cliente.codiceFiscale !== 'N/A' ? cliente.codiceFiscale : '',
-      clienteCodiceAllevamento: cliente.codiceAllevamento || '',
-      clientePaese: cliente.paese || 'Italia',
+      clienteNome: completeCustomer.name,
+      clienteIndirizzo: completeCustomer.address,
+      clienteCitta: completeCustomer.city,
+      clienteCap: completeCustomer.postalCode,
+      clienteProvincia: completeCustomer.province,
+      clientePiva: completeCustomer.vatNumber,
+      clienteCodiceFiscale: completeCustomer.taxCode,
+      clienteCodiceAllevamento: completeCustomer.farmCode,
+      clientePaese: completeCustomer.country,
       // Snapshot immutabile mittente (azienda)
       companyId: companyId,
       mittenteRagioneSociale: fiscalData?.ragioneSociale || null,
@@ -3282,7 +3348,9 @@ export async function generateDDT(req: Request, res: Response) {
       pesoTotale: saleData.totalWeight ? Math.round(saleData.totalWeight * 1000).toString() : '0',
       note: saleData.notes,
       ddtStato: 'locale'
-    }).returning();
+      }).returning();
+      return { numeroDDT: reservedNumber, ddtCreato: createdDdt };
+    });
 
     // Raggruppa sacchi per taglia per creare righe con subtotali
     const bagsPerSize: Record<string, typeof bags> = {};
@@ -3319,8 +3387,8 @@ export async function generateDDT(req: Request, res: Response) {
         const originNames = [...new Set(bagItems
           .filter((item: any) => item.basket)
           .map((item: any) => [
-            item.flupsy?.name ? `FLUPSY ${item.flupsy.name}` : null,
-            `Cesta #${item.basket!.physicalNumber}`
+            abbreviateFlupsyName(item.flupsy?.name),
+            `C. ${item.basket!.physicalNumber}`
           ].filter(Boolean).join(' · ')))].join(', ');
 
         const descrizione = `Sacco #${bagData.bagNumber} · ${originNames || 'Origine N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${(bagData.totalWeight || 0).toFixed(2)} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
@@ -3411,6 +3479,7 @@ export async function generatePDFReport(req: Request, res: Response) {
     }
 
     const saleData = sale[0];
+    const companyId = saleData.companyId;
 
     // Recupera cliente se presente
     let cliente = null;
@@ -3420,6 +3489,7 @@ export async function generatePDFReport(req: Request, res: Response) {
         cliente = clienteResult[0];
       }
     }
+    cliente = await getCompleteSaleCustomer(saleData, cliente, companyId);
 
     // Recupera sacchi con dettagli
     const bags = await db.select({
@@ -3453,8 +3523,6 @@ export async function generatePDFReport(req: Request, res: Response) {
     });
 
     // Usa Company ID dalla vendita (se specificato)
-    const companyId = saleData.companyId;
-    
     // Recupera dati fiscali basati sul Company ID dalla vendita
     const companiesResult = companyId 
       ? await db.select()
@@ -3621,7 +3689,7 @@ export async function generatePDFReport(req: Request, res: Response) {
       const bagData = bagItems[0].bag;
       const basketInfo = bagItems
         .filter((item: any) => item.basket && item.flupsy)
-        .map((item: any) => `FLUPSY ${item.flupsy!.name} · Cesta #${item.basket!.physicalNumber}`)
+        .map((item: any) => `${abbreviateFlupsyName(item.flupsy!.name)} · C. ${item.basket!.physicalNumber}`)
         .join(', ');
 
       xPos = margin;

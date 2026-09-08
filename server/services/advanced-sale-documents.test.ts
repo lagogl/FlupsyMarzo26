@@ -3,11 +3,31 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  abbreviateFlupsyName,
   logoFromDdt,
+  mergeSaleCustomerData,
   normalizeSaleCustomerSnapshot,
   renderAdvancedSaleDocumentHtml,
   sendPdfBinaryResponse
 } from './advanced-sale-documents';
+
+test('abbrevia il nome FLUPSY senza perdere il riferimento alla cesta', () => {
+  assert.equal(abbreviateFlupsyName('Flupsy 1 Bianco Vetroresina'), 'F. 1 Bianco VTR');
+  assert.equal(abbreviateFlupsyName('Ca Pisani'), 'F. Ca Pisani');
+});
+
+test('completa via e codice allevamento usando solo i campi mancanti', () => {
+  const customer = mergeSaleCustomerData(
+    { businessName: 'Cliente storico', vatNumber: '01234567890' },
+    { denominazione: 'Cliente locale', comune: 'Goro', cap: '44020' },
+    { address_street: 'Via del Porto 7', code: '025FE999' }
+  );
+  assert.equal(customer.name, 'Cliente storico');
+  assert.equal(customer.address, 'Via del Porto 7');
+  assert.equal(customer.city, 'Goro');
+  assert.equal(customer.postalCode, '44020');
+  assert.equal(customer.farmCode, '025FE999');
+});
 
 test('normalizza lo snapshot di un cliente inserito manualmente per DDT e documenti', () => {
   assert.deepEqual(
