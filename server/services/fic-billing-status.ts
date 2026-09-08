@@ -53,6 +53,19 @@ function referencedDeliveryNoteIds(invoice: any): number[] {
 }
 
 export function sanitizeFicInvoice(invoice: any): any {
+  const deliveryNoteMentionDates = new Set<string>();
+  const quantities: number[] = [];
+  for (const item of Array.isArray(invoice?.items_list) ? invoice.items_list : []) {
+    const quantity = Number(item?.qty);
+    if (Number.isFinite(quantity) && quantity >= 0) quantities.push(quantity);
+    for (const text of [item?.name, item?.description].filter(Boolean).map(String)) {
+      for (const match of text.matchAll(/\bddt\b\s*(?:n(?:[.°])?\s*)?\d+\s+(?:del|del\s+giorno|data)\s+(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/gi)) {
+        deliveryNoteMentionDates.add(
+          `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`
+        );
+      }
+    }
+  }
   return {
     id: asId(invoice?.id),
     type: String(invoice?.type || ""),
@@ -96,21 +109,30 @@ export function sanitizeFicInvoice(invoice: any): any {
       od_number: String(invoice?.ei_data?.od_number || ""),
       od_date: String(invoice?.ei_data?.od_date || "")
     },
+    quantities,
+    delivery_note_mention_dates: [...deliveryNoteMentionDates]
   };
 }
 
 export function matchInvoiceToDeliveryNote(invoice: any, deliveryNote: {
-  ficId: number;
+  ficId?: number | null;
   number: number | string;
   date: string;
   customerFicId?: number | null;
+  quantity?: number | null;
+  allowUnstructuredMatch?: boolean;
+  allowedFingerprintInvoiceId?: number | null;
 }): "certain" | "ambiguous" | "none" {
-  if (referencedDeliveryNoteIds(invoice).includes(deliveryNote.ficId)) return "certain";
+  if (deliveryNote.ficId && referencedDeliveryNoteIds(invoice).includes(deliveryNote.ficId)) return "certain";
 
   const originalNumber = normalizedNumber(invoice?.ei_data?.od_number);
   const originalDate = String(invoice?.ei_data?.od_date ?? "");
-  const sameCustomer = !deliveryNote.customerFicId
-    || asId(invoice?.entity?.id) === deliveryNote.customerFicId;
+  const sameCustomer = asId(deliveryNote.customerFicId)
+    && asId(invoice?.entity?.id) === asId(deliveryNote.customerFicId);
+  const allowedInvoiceId = deliveryNote.allowedFingerprintInvoiceId;
+  if (deliveryNote.allowUnstructuredMatch !== false
+      && (allowedInvoiceId == null || asId(invoice?.id) === allowedInvoiceId)
+      && matchesInvoiceFingerprint(invoice, deliveryNote)) return "certain";
   if (
     originalNumber &&
     originalNumber === normalizedNumber(deliveryNote.number) &&
@@ -121,13 +143,37 @@ export function matchInvoiceToDeliveryNote(invoice: any, deliveryNote: {
   return "none";
 }
 
+export function matchesInvoiceFingerprint(invoice: any, deliveryNote: {
+  date: string;
+  customerFicId?: number | null;
+  quantity?: number | null;
+}): boolean {
+  if (referencedDeliveryNoteIds(invoice).length > 0) return false;
+  const invoiceCustomerId = asId(invoice?.entity?.id);
+  const ddtCustomerId = asId(deliveryNote.customerFicId);
+  if (!invoiceCustomerId || !ddtCustomerId || invoiceCustomerId !== ddtCustomerId) return false;
+  const ddtQuantity = Number(deliveryNote.quantity);
+  if (!Number.isFinite(ddtQuantity) || ddtQuantity <= 0) return false;
+  const sameDdtDate = String(invoice?.date || "") === String(deliveryNote.date);
+  const mentionedDdtDate = Array.isArray(invoice?.delivery_note_mention_dates)
+    && invoice.delivery_note_mention_dates.includes(String(deliveryNote.date));
+  const exactQuantity = Array.isArray(invoice?.quantities)
+    && invoice.quantities.filter((quantity: unknown) =>
+      Number(quantity) === ddtQuantity).length === 1;
+  return sameDdtDate && mentionedDdtDate && exactQuantity;
+}
+
 export function buildBillingEvidence(
   invoices: any[],
   deliveryNote: {
-    ficId: number;
+    ficId?: number | null;
     number: number | string;
     date: string;
     customerFicId?: number | null;
+    quantity?: number | null;
+    fallbackStatus?: "delivery_note_local" | "delivery_note_only";
+    allowUnstructuredMatch?: boolean;
+    allowedFingerprintInvoiceId?: number | null;
   },
   checkedAt: string
 ): BillingEvidence {
@@ -144,7 +190,7 @@ export function buildBillingEvidence(
   }
   const ambiguous = invoices.find(invoice => matchInvoiceToDeliveryNote(invoice, deliveryNote) === "ambiguous");
   return {
-    status: ambiguous ? "ambiguous" : "delivery_note_only",
+    status: ambiguous ? "ambiguous" : (deliveryNote.fallbackStatus || "delivery_note_only"),
     invoiceId: null,
     invoiceNumber: ambiguous ? [ambiguous.number, ambiguous.numeration].filter(Boolean).join("") : null,
     invoiceDate: ambiguous?.date || null,

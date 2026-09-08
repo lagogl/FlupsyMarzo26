@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildBillingEvidence, matchInvoiceToDeliveryNote, sanitizeFicInvoice } from "./fic-billing-status";
+import {
+  buildBillingEvidence,
+  matchInvoiceToDeliveryNote,
+  matchesInvoiceFingerprint,
+  sanitizeFicInvoice
+} from "./fic-billing-status";
 
 const ddt = { ficId: 456, number: 25, date: "2026-09-08", customerFicId: 99 };
 
@@ -89,4 +94,101 @@ test("non inventa il tipo DDT per relazioni senza tipo o contraddittorie", () =>
   });
   assert.equal(matchInvoiceToDeliveryNote(wrongType, ddt), "none");
   assert.equal(matchInvoiceToDeliveryNote(missingType, ddt), "none");
+});
+
+test("riconosce una fattura manuale con impronta esatta cliente-data-quantità-DDT", () => {
+  const invoice = sanitizeFicInvoice({
+    id: 550926617,
+    type: "invoice",
+    number: 135,
+    date: "2026-09-07",
+    entity: { id: 65131227 },
+    items_list: [
+      { qty: 885335, description: "Ruditapes Philippinarum Taglia T3" },
+      { qty: 1, description: "DDT n. 310 del 07.09.2026" }
+    ]
+  });
+  const manualDdt = {
+    number: 14,
+    date: "2026-09-07",
+    customerFicId: 65131227,
+    quantity: 885335,
+    fallbackStatus: "delivery_note_local" as const
+  };
+  assert.equal(matchInvoiceToDeliveryNote(invoice, manualDdt), "certain");
+  assert.equal(buildBillingEvidence([invoice], manualDdt, "2026-09-08T15:30:00.000Z").status, "invoiced");
+  assert.equal(JSON.stringify(invoice).includes("Ruditapes"), false);
+  assert.equal(JSON.stringify(invoice).includes("DDT n."), false);
+});
+
+test("non associa l'impronta se cliente o quantità non coincidono", () => {
+  const invoice = sanitizeFicInvoice({
+    id: 550926617,
+    date: "2026-09-07",
+    entity: { id: 65131227 },
+    items_list: [
+      { qty: 885335 },
+      { qty: 1, description: "DDT n. 310 del 07/09/2026" }
+    ]
+  });
+  assert.equal(matchInvoiceToDeliveryNote(invoice, {
+    number: 14, date: "2026-09-07", customerFicId: 65131227, quantity: 875451
+  }), "none");
+  assert.equal(matchInvoiceToDeliveryNote(invoice, {
+    number: 14, date: "2026-09-07", customerFicId: 999, quantity: 885335
+  }), "none");
+  assert.equal(matchInvoiceToDeliveryNote(invoice, {
+    number: 14, date: "2026-09-07", customerFicId: null, quantity: 885335
+  }), "none");
+  assert.equal(matchInvoiceToDeliveryNote(invoice, {
+    number: 14, date: "2026-09-07", customerFicId: 65131227, quantity: null
+  }), "none");
+});
+
+test("estrae solo la data associata sintatticamente al riferimento DDT", () => {
+  const invoice = sanitizeFicInvoice({
+    id: 907,
+    date: "2026-09-07",
+    entity: { id: 65131227 },
+    items_list: [{
+      qty: 885335,
+      description: "DDT n. 310 del 06.09.2026 - ordine cliente del 07.09.2026"
+    }]
+  });
+  assert.deepEqual(invoice.delivery_note_mention_dates, ["2026-09-06"]);
+  assert.equal(matchInvoiceToDeliveryNote(invoice, {
+    number: 14, date: "2026-09-07", customerFicId: 65131227, quantity: 885335
+  }), "none");
+});
+
+test("non usa la data di un ordine successivo per un DDT senza data", () => {
+  const invoice = sanitizeFicInvoice({
+    id: 908,
+    date: "2026-09-07",
+    entity: { id: 65131227 },
+    items_list: [{
+      qty: 885335,
+      description: "DDT n. 310 - ordine cliente del 07.09.2026"
+    }]
+  });
+  assert.deepEqual(invoice.delivery_note_mention_dates, []);
+  assert.equal(matchInvoiceToDeliveryNote(invoice, {
+    number: 14, date: "2026-09-07", customerFicId: 65131227, quantity: 885335
+  }), "none");
+});
+
+test("una fattura già collegata strutturalmente non è riutilizzabile per impronta", () => {
+  const invoice = sanitizeFicInvoice({
+    id: 909,
+    date: "2026-09-07",
+    entity: { id: 65131227 },
+    original_document: { id: 999, type: "delivery_note" },
+    items_list: [{
+      qty: 885335,
+      description: "DDT n. 310 del 07.09.2026"
+    }]
+  });
+  assert.equal(matchesInvoiceFingerprint(invoice, {
+    date: "2026-09-07", customerFicId: 65131227, quantity: 885335
+  }), false);
 });

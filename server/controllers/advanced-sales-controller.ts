@@ -72,7 +72,7 @@ import {
   parseManualOrderReconciliationRequest,
   type ManualOrderAllocation
 } from "../services/manual-order-reconciliation";
-import { buildBillingEvidence, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
+import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
 
 let documentSchemaReady: Promise<void> | null = null;
 const ficInvoiceCache = new Map<string, { expiresAt: number; invoices: any[] }>();
@@ -1881,14 +1881,25 @@ export async function getFicBillingStatuses(req: Request, res: Response) {
       .leftJoin(ddt, eq(ddt.id, advancedSales.ddtId))
       .leftJoin(clienti, eq(clienti.id, advancedSales.customerId))
       .where(inArray(advancedSales.id, saleIds));
+    const loadDdtQuantities = async (ids: number[]) => ids.length
+      ? db.select({
+          ddtId: ddtRighe.ddtId,
+          quantity: sql<string>`sum(${ddtRighe.quantita})`
+        }).from(ddtRighe)
+          .where(and(inArray(ddtRighe.ddtId, ids), isNotNull(ddtRighe.saleBagId)))
+          .groupBy(ddtRighe.ddtId)
+      : [];
+    const ddtIds = rows.map(row => row.ddtId).filter((id): id is number => Boolean(id));
+    const ddtQuantities = await loadDdtQuantities(ddtIds);
+    const ddtQuantityById = new Map(ddtQuantities.map(row => [row.ddtId, Number(row.quantity)]));
 
     const statuses: Record<number, BillingEvidence> = {};
     const groups = new Map<string, typeof rows>();
     for (const row of rows) {
       if (!row.ddtId) {
         statuses[row.saleId] = { status: "not_sent", invoiceId: null, invoiceNumber: null, invoiceDate: null, invoicedQuantity: null, deliveryNoteQuantity: null, checkedAt };
-      } else if (row.ddtStatus !== "inviato" || !row.ficDdtId || !row.companyId) {
-        statuses[row.saleId] = { status: "delivery_note_local", invoiceId: null, invoiceNumber: null, invoiceDate: null, invoicedQuantity: null, deliveryNoteQuantity: Number(row.saleQuantity || 0), checkedAt };
+      } else if (!row.companyId || !row.ddtDate) {
+        statuses[row.saleId] = { status: "delivery_note_local", invoiceId: null, invoiceNumber: null, invoiceDate: null, invoicedQuantity: null, deliveryNoteQuantity: row.ddtId ? ddtQuantityById.get(row.ddtId) ?? null : null, checkedAt };
       } else {
         const key = `${row.companyId}:${String(row.ddtDate).slice(0, 4)}`;
         groups.set(key, [...(groups.get(key) || []), row]);
@@ -1902,7 +1913,7 @@ export async function getFicBillingStatuses(req: Request, res: Response) {
           statuses[row.saleId] = {
             status: "unavailable", invoiceId: null, invoiceNumber: null,
             invoiceDate: null, invoicedQuantity: null, checkedAt,
-            deliveryNoteQuantity: Number(row.saleQuantity || 0),
+            deliveryNoteQuantity: row.ddtId ? ddtQuantityById.get(row.ddtId) ?? null : null,
             reason: "Autorizzazione FIC non disponibile"
           };
         }
@@ -1936,23 +1947,87 @@ export async function getFicBillingStatuses(req: Request, res: Response) {
             if (ficInvoiceCache.get(cacheKey)?.expiresAt <= Date.now()) ficInvoiceCache.delete(cacheKey);
           }, 61_000).unref();
         }
+        const relevantDates = [...new Set(groupRows.map(row => String(row.ddtDate)))];
+        const candidateRows = await db.select({
+          saleId: advancedSales.id,
+          ddtStatus: advancedSales.ddtStatus,
+          ddtId: ddt.id,
+          ddtDate: ddt.data,
+          ddtNumber: ddt.numero,
+          companyId: ddt.companyId,
+          ficDdtId: ddt.fattureInCloudId,
+          customerFicId: clienti.fattureInCloudId
+        }).from(advancedSales)
+          .innerJoin(ddt, eq(ddt.id, advancedSales.ddtId))
+          .leftJoin(clienti, eq(clienti.id, advancedSales.customerId))
+          .where(and(
+            eq(ddt.companyId, Number(companyId)),
+            inArray(ddt.data, relevantDates)
+          ));
+        const candidateDdtIds = candidateRows.map(row => row.ddtId);
+        const candidateQuantityRows = await loadDdtQuantities(candidateDdtIds);
+        const candidateQuantityByDdt = new Map(candidateQuantityRows.map(row => [row.ddtId, Number(row.quantity)]));
+        const candidateInvoicesBySale = new Map<number, number[]>();
+        const candidateSalesByInvoice = new Map<number, number[]>();
+        for (const invoice of invoices) {
+          const invoiceId = Number(invoice.id);
+          const hasStructuredOwner = candidateRows.some(row =>
+            Boolean(row.ficDdtId) && matchInvoiceToDeliveryNote(invoice, {
+              ficId: row.ficDdtId,
+              number: row.ddtNumber,
+              date: String(row.ddtDate),
+              customerFicId: row.customerFicId,
+              allowUnstructuredMatch: false
+            }) === "certain");
+          if (hasStructuredOwner) continue;
+          for (const row of candidateRows) {
+            const quantity = candidateQuantityByDdt.get(row.ddtId) ?? null;
+            if (!matchesInvoiceFingerprint(invoice, {
+              date: String(row.ddtDate),
+              customerFicId: row.customerFicId,
+              quantity
+            })) continue;
+            candidateInvoicesBySale.set(row.saleId, [...(candidateInvoicesBySale.get(row.saleId) || []), invoiceId]);
+            candidateSalesByInvoice.set(invoiceId, [...(candidateSalesByInvoice.get(invoiceId) || []), row.saleId]);
+          }
+        }
         for (const row of groupRows) {
+          const quantity = row.ddtId ? ddtQuantityById.get(row.ddtId) ?? null : null;
+          const candidateInvoices = candidateInvoicesBySale.get(row.saleId) || [];
+          const uniqueFingerprint = candidateInvoices.length === 1
+            && (candidateSalesByInvoice.get(candidateInvoices[0]) || []).length === 1;
           statuses[row.saleId] = {
             ...buildBillingEvidence(invoices, {
-            ficId: row.ficDdtId!,
+            ficId: row.ficDdtId,
             number: row.ddtNumber!,
             date: String(row.ddtDate),
-            customerFicId: row.customerFicId
+            customerFicId: row.customerFicId,
+            quantity,
+            allowUnstructuredMatch: uniqueFingerprint,
+            allowedFingerprintInvoiceId: uniqueFingerprint ? candidateInvoices[0] : null,
+            fallbackStatus: row.ddtStatus === "inviato" && row.ficDdtId
+              ? "delivery_note_only"
+              : "delivery_note_local"
             }, checkedAt),
-            deliveryNoteQuantity: Number(row.saleQuantity || 0)
+            deliveryNoteQuantity: quantity
           };
+          if (candidateInvoices.length && !uniqueFingerprint && !row.ficDdtId) {
+            statuses[row.saleId] = {
+              ...statuses[row.saleId],
+              status: "ambiguous",
+              invoiceId: null,
+              invoiceNumber: null,
+              invoiceDate: null,
+              reason: "Più vendite o fatture condividono gli stessi riferimenti"
+            };
+          }
         }
       } catch (error: any) {
         for (const row of groupRows) {
           statuses[row.saleId] = {
             status: "unavailable", invoiceId: null, invoiceNumber: null,
             invoiceDate: null, invoicedQuantity: null, checkedAt,
-            deliveryNoteQuantity: Number(row.saleQuantity || 0),
+            deliveryNoteQuantity: row.ddtId ? ddtQuantityById.get(row.ddtId) ?? null : null,
             reason: error?.message?.includes("403")
               ? "Riautorizzare FIC per consentire la lettura dello stato fatture"
               : "Verifica FIC temporaneamente non disponibile"
