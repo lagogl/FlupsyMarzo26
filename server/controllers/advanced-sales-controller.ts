@@ -467,7 +467,7 @@ async function createManualAdvancedSale(req: Request, res: Response) {
       await tx.update(advancedSales)
         .set({
           totalAnimals: selectedBaskets.reduce((sum, item) => sum + item.animalCount, 0),
-          totalWeight: selectedBaskets.reduce((sum, item) => sum + item.totalWeight / 1000, 0),
+          totalWeight: selectedBaskets.reduce((sum, item) => sum + item.totalWeight, 0),
           updatedAt: new Date()
         })
         .where(eq(advancedSales.id, newSale.id));
@@ -923,7 +923,7 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
 
         // Crea sacchi e allocazioni
         let totalAnimalsForSale = 0;
-        let totalWeightKgForSale = 0;
+        let totalWeightGramsForSale = 0;
         for (let j = 0; j < saleEntry.bags.length; j++) {
           const bag = saleEntry.bags[j];
           const weightLossGrams = Math.min(bag.weightLoss || 0, 1500);
@@ -964,7 +964,7 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
           }
 
           totalAnimalsForSale += bag.animalCount;
-          totalWeightKgForSale += finalWeightKg;
+          totalWeightGramsForSale += finalWeightGrams;
         }
 
         // Aggiorna totali della vendita
@@ -972,7 +972,7 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
           .set({
             totalBags: saleEntry.bags.length,
             totalAnimals: totalAnimalsForSale,
-            totalWeight: totalWeightKgForSale,
+            totalWeight: totalWeightGramsForSale,
             updatedAt: new Date()
           })
           .where(eq(advancedSales.id, newSale.id));
@@ -981,7 +981,7 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
           ...newSale,
           totalBags: saleEntry.bags.length,
           totalAnimals: totalAnimalsForSale,
-          totalWeight: totalWeightKgForSale
+          totalWeight: totalWeightGramsForSale
         });
       }
 
@@ -1203,9 +1203,9 @@ export async function configureBags(req: Request, res: Response) {
         }
       }
 
-      // Aggiorna totali vendita (converti grammi → kg)
+      // Il totale della vendita è in grammi; i singoli sacchi restano in kg.
       const totalBags = bags.length;
-      const totalWeight = bags.reduce((sum, bag) => sum + ((bag.originalWeight - (bag.weightLoss || 0)) / 1000), 0);
+      const totalWeight = bags.reduce((sum, bag) => sum + (bag.originalWeight - (bag.weightLoss || 0)), 0);
       const savedTotalAnimals = bags.reduce((sum: number, bag: any) => sum + Number(bag.animalCount || 0), 0);
 
       await tx.update(advancedSales)
