@@ -156,7 +156,7 @@ export function logoFromDdt(ddt: any): string {
       }
     }
   }
-  return '';
+  return getCompanyLogoBase64(ddt?.companyId);
 }
 
 function farmCodeForCompany(companyId: unknown): string {

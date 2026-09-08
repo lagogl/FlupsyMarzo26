@@ -53,6 +53,7 @@ import { OperationsCache } from "../operations-cache-service.js";
 import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
 import { sendAdvancedSaleDocumentsReadyEmail } from "../services/advanced-sale-documents-email";
+import { getCompanyLogo } from "../services/logo-service";
 import { poolEsterno, queryEsterno } from "../db-esterno";
 import {
   allocateIntegerByWeight,
@@ -182,6 +183,7 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
         let ficClientId = localCustomer?.fattureInCloudId || null;
         if (!ficClientId && preliminary.vatNumber) {
           const normalizedVat = preliminary.vatNumber.replace(/\W/g, '').toUpperCase();
+          const seenPages = new Set<string>();
           for (let page = 1; page <= 20 && !ficClientId; page++) {
             const listResponse = await ficApiRequest(
               'GET',
@@ -189,13 +191,27 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
               accessToken,
               `/entities/clients?page=${page}&per_page=100`
             );
-            const clients: any[] = listResponse.data?.data || [];
+            const responseBody = listResponse.data || {};
+            const clients: any[] = responseBody.data || [];
+            if (clients.length === 0) break;
+            const pageFingerprint = clients.map(client => client.id).join(',');
+            if (seenPages.has(pageFingerprint)) break;
+            seenPages.add(pageFingerprint);
             const match = clients.find(client =>
               String(client.vat_number || '').replace(/\W/g, '').toUpperCase() === normalizedVat
             );
             if (match?.id) ficClientId = match.id;
-            const lastPage = Number(listResponse.data?.meta?.pagination?.last_page || page);
-            if (page >= lastPage || clients.length < 100) break;
+            const explicitLastPage = Number(
+              responseBody.last_page
+              || responseBody.meta?.pagination?.last_page
+              || responseBody.pagination?.last_page
+              || 0
+            );
+            const calculatedLastPage = Number(responseBody.total)
+              ? Math.ceil(Number(responseBody.total) / 100)
+              : 0;
+            const lastPage = explicitLastPage || calculatedLastPage;
+            if (lastPage > 0 && page >= lastPage) break;
           }
         }
         if (!ficClientId) return preliminary;
@@ -3342,7 +3358,7 @@ export async function generateDDT(req: Request, res: Response) {
       mittenteCodiceFiscale: fiscalData?.codiceFiscale || null,
       mittenteTelefono: fiscalData?.telefono || null,
       mittenteEmail: fiscalData?.email || null,
-      mittenteLogoPath: fiscalData?.logoPath || null,
+      mittenteLogoPath: fiscalData?.logoPath || getCompanyLogo(companyId),
       // Totali
       totaleColli: saleData.totalBags || 0,
       pesoTotale: saleData.totalWeight ? Math.round(saleData.totalWeight * 1000).toString() : '0',

@@ -132,8 +132,8 @@ test('la ristampa DDT usa identità, numero e logo congelati nello snapshot', as
 });
 
 test('un percorso logo DDT esterno agli asset consentiti viene ignorato', () => {
-  assert.equal(logoFromDdt({ mittenteLogoPath: '/etc/passwd' }), '');
-  assert.equal(logoFromDdt({ mittenteLogoPath: '../package.json' }), '');
+  assert.match(logoFromDdt({ mittenteLogoPath: '/etc/passwd', companyId: 1052922 }), /^data:image\/png;base64,/);
+  assert.match(logoFromDdt({ mittenteLogoPath: '../package.json', companyId: 1017299 }), /^data:image\/png;base64,/);
 });
 
 test('la risposta documento resta PDF binario anche con un Uint8Array', () => {
