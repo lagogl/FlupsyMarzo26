@@ -35,7 +35,7 @@ test("aggrega i sacchi con lo stesso codice prodotto FIC", () => {
 
   assert.equal(items.length, 1);
   assert.deepEqual(items[0], {
-    product_id: "TPH3000",
+    product_id: 123,
     name: "Seme vivo vongola TP-3000",
     description: "TP-3000 · Sacco #1 · F2C7 ; Sacco #2 · F2C8",
     qty: 350,
@@ -60,10 +60,10 @@ test("esclude le righe di subtotale dal payload FIC", () => {
   assert.equal(items[0].qty, 100);
 });
 
-test("rifiuta una riga prodotto senza codice FIC", () => {
+test("rifiuta una riga prodotto senza identificativo FIC", () => {
   assert.throws(
-    () => buildAggregatedFicDdtItems([row({ ficProductCode: null })] as any),
-    /senza codice prodotto FIC/
+    () => buildAggregatedFicDdtItems([row({ ficProductId: null })] as any),
+    /senza prodotto FIC valido/
   );
 });
 

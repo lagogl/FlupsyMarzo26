@@ -3629,7 +3629,9 @@ export async function generateDDT(req: Request, res: Response) {
       mittenteLogoPath: fiscalData?.logoPath || getCompanyLogo(companyId),
       // Totali
       totaleColli: saleData.totalBags || 0,
-      pesoTotale: saleData.totalWeight ? Math.round(saleData.totalWeight * 1000).toString() : '0',
+      // advanced_sales.total_weight è già espresso in grammi; ddt.peso_totale
+      // conserva i grammi e viene convertito in kg solo in fase di visualizzazione/invio FCloud.
+      pesoTotale: saleData.totalWeight ? saleData.totalWeight.toFixed(2) : '0',
       note: saleData.notes,
       ddtStato: 'locale'
       }).returning();

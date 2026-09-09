@@ -267,11 +267,11 @@ export function buildAggregatedFicDdtItems(
 
   for (const row of rows) {
     if (!row.sizeCode || row.descrizione.toUpperCase().startsWith("SUBTOTALE")) continue;
-    if (!row.ficProductCode) {
-      throw new Error(`Riga DDT ${row.id} senza codice prodotto FIC`);
+    if (!row.ficProductCode || !row.ficProductId || !Number.isSafeInteger(Number(row.ficProductId))) {
+      throw new Error(`Riga DDT ${row.id} senza prodotto FIC valido`);
     }
     const current = grouped.get(row.ficProductCode) || {
-      productId: row.ficProductCode,
+      productId: row.ficProductId,
       name: row.ficProductName || row.ficProductCode,
       sizeCode: row.sizeCode,
       quantity: 0,
@@ -285,7 +285,7 @@ export function buildAggregatedFicDdtItems(
   }
 
   const items = [...grouped.values()].map((item) => ({
-    product_id: item.productId,
+    product_id: Number(item.productId),
     name: item.name,
     description: `${item.sizeCode} · ${item.descriptions.join(" ; ")}`,
     qty: item.quantity,
