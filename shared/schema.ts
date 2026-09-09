@@ -1,4 +1,5 @@
-import { pgTable, text, serial, integer, boolean, timestamp, real, date, numeric, jsonb, decimal, index, unique } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, varchar, serial, integer, boolean, timestamp, real, date, numeric, json, jsonb, decimal, index, uniqueIndex, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -18,6 +19,17 @@ export const insertUserSchema = createInsertSchema(users)
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Store PostgreSQL usato da express-session/connect-pg-simple.
+// Deve rimanere nello schema Drizzle per evitare che Publish lo interpreti
+// come tabella estranea e proponga di eliminarlo.
+export const userSessions = pgTable("user_sessions", {
+  sid: varchar("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+}, (table) => ({
+  expireIdx: index("IDX_session_expire").on(table.expire),
+}));
 
 // Preferenze menu utente
 export const userMenuPreferences = pgTable("user_menu_preferences", {
@@ -61,7 +73,9 @@ export const flupsys = pgTable("flupsys", {
   maxPositions: integer("max_positions").notNull().default(10), // numero massimo di posizioni per fila (da 10 a 20)
   productionCenter: text("production_center"), // centro di produzione (ad es. "Ca Pisani", "Goro", ecc.)
   moduleType: text("module_type", { enum: ["flupsy", "raceway", "bins"] }).notNull().default("flupsy"), // FASE 5.0: etichetta vera di tipo modulo (non dedotta dal nome)
-});
+}, (table) => ({
+  activeIdx: index("idx_flupsys_active").on(table.active),
+}));
 
 // Basket Groups (Gruppi Ceste)
 export const basketGroups = pgTable("basket_groups", {
@@ -95,6 +109,16 @@ export const baskets = pgTable("baskets", {
 }, (table) => ({
   flupsyIdIdx: index("baskets_flupsy_id_idx").on(table.flupsyId),
   groupIdIdx: index("baskets_group_id_idx").on(table.groupId),
+  runtimeFlupsyIdIdx: index("idx_baskets_flupsy_id").on(table.flupsyId),
+  stateIdx: index("idx_baskets_state").on(table.state),
+  flupsyPositionIdx: index("idx_baskets_flupsy_position").on(table.flupsyId, table.row, table.position),
+  positionedBasketIdx: index("idx_baskets_position_not_null")
+    .on(table.flupsyId, table.row, table.position)
+    .where(sql`${table.position} IS NOT NULL`),
+  currentCycleIdIdx: index("idx_baskets_current_cycle_id").on(table.currentCycleId),
+  cycleCodeIdx: index("idx_baskets_cycle_code").on(table.cycleCode),
+  physicalNumberIdx: index("idx_baskets_physical_number").on(table.physicalNumber),
+  flupsyStateCycleIdx: index("idx_baskets_flupsy_state_cycle").on(table.flupsyId, table.state, table.currentCycleId),
   // Impedisce che due ceste occupino la stessa casella (flupsy + fila + posizione).
   // In DB è DEFERRABLE INITIALLY IMMEDIATE (verifica a fine istruzione) così lo scambio
   // atomico di posizioni resta possibile; i doppioni reali restano vietati.
@@ -477,6 +501,12 @@ export const operations = pgTable("operations", {
 }, (table) => ({
   basketIdIdx: index("operations_basket_id_idx").on(table.basketId),
   cycleIdIdx: index("operations_cycle_id_idx").on(table.cycleId),
+  runtimeBasketIdIdx: index("idx_operations_basket_id").on(table.basketId),
+  basketIdIdIdx: index("idx_operations_basket_id_id").on(table.basketId, table.id),
+  runtimeCycleIdIdx: index("idx_operations_cycle_id").on(table.cycleId),
+  dateIdx: index("idx_operations_date").on(table.date),
+  lotIdIdx: index("idx_operations_lot_id").on(table.lotId),
+  typeIdx: index("idx_operations_type").on(table.type),
 }));
 
 // SGR (Indici di Crescita)
@@ -1307,7 +1337,11 @@ export const advancedSales = pgTable("advanced_sales", {
   cancellationReason: text("cancellation_reason"), // Motivazione auditabile dello storno
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at"),
-});
+}, (table) => ({
+  ddrNumberUnique: uniqueIndex("advanced_sales_ddr_number_unique")
+    .on(table.companyId, table.ddrYear, table.ddrNumber)
+    .where(sql`${table.ddrNumber} IS NOT NULL`),
+}));
 
 // Singole emissioni dei QR di tracciabilità pubblica, revocabili senza modificare la vendita.
 export const publicTraceabilityLinks = pgTable("public_traceability_links", {
