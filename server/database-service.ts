@@ -7,11 +7,11 @@
 import { DATABASE_URL, BACKUP_RETENTION_DAYS } from './config';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 
-const execPromise = promisify(exec);
+const execFilePromise = promisify(execFile);
 
 // Directory per i backup
 const BACKUP_DIR = path.resolve('./database_backups');
@@ -29,10 +29,30 @@ export interface BackupInfo {
   size: number;
 }
 
+function getPostgresConnection() {
+  const dbUrl = new URL(DATABASE_URL);
+  return {
+    host: dbUrl.hostname,
+    port: dbUrl.port,
+    user: decodeURIComponent(dbUrl.username),
+    password: decodeURIComponent(dbUrl.password),
+    database: dbUrl.pathname.substring(1),
+  };
+}
+
+function postgresProcessEnv(password: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PGSSLMODE: 'require',
+    PGPASSWORD: password,
+  };
+}
+
 /**
  * Crea un backup del database
  */
 export async function createDatabaseBackup(): Promise<BackupInfo> {
+  let filePath: string | undefined;
   try {
     // Creiamo un file temporaneo per testare la connessione al database
     const testId = randomUUID().substring(0, 8);
@@ -52,55 +72,37 @@ export async function createDatabaseBackup(): Promise<BackupInfo> {
     const timestamp = new Date();
     const formattedDate = timestamp.toISOString().replace(/:/g, '-').replace(/\..+/, '');
     const filename = `backup_${formattedDate}_${backupId.substring(0, 8)}.sql`;
-    const filePath = path.join(BACKUP_DIR, filename);
-    
-    // Estrai le informazioni di connessione dall'URL
-    const dbUrl = new URL(DATABASE_URL);
-    const dbUser = dbUrl.username;
-    const dbPassword = dbUrl.password;
-    const dbHost = dbUrl.hostname;
-    const dbPort = dbUrl.port;
-    const dbName = dbUrl.pathname.substring(1);
-    
-    // Comando pg_dump con parametri SSL per Neon
-    // Costruiamo le parti del comando solo se i valori sono presenti
-    const commandParts = [
-      `PGSSLMODE=require PGPASSWORD="${dbPassword}" pg_dump`,
-      `-h ${dbHost}`
+    filePath = path.join(BACKUP_DIR, filename);
+
+    const connection = getPostgresConnection();
+    const args = [
+      '-h', connection.host,
+      ...(connection.port ? ['-p', connection.port] : []),
+      '-U', connection.user,
+      '-d', connection.database,
+      '-f', filePath,
+      '--format=p',
+      '--no-owner',
+      '--no-acl',
+      '--no-privileges',
+      '-c',
+      '--if-exists',
+      '--verbose',
+      '--no-security-labels',
+      '--no-tablespaces',
+      '--no-comments',
+      '--schema=public',
+      '--no-publications',
+      '--no-subscriptions',
+      '--no-sync',
+      '--no-password',
     ];
-    
-    // Aggiungi parametro porta solo se disponibile
-    if (dbPort && dbPort.trim() !== '') {
-      commandParts.push(`-p ${dbPort}`);
-    }
-    
-    // Aggiungi il resto dei parametri
-    commandParts.push(
-      `-U ${dbUser}`,
-      `-d ${dbName}`,
-      `-f "${filePath}"`,
-      `--format=p`,
-      `--no-owner`,
-      `--no-acl`,
-      `--no-privileges`,
-      `-c`,
-      `--if-exists`,
-      `--verbose`,
-      `--no-security-labels`,
-      `--no-tablespaces`,
-      `--no-comments`,
-      `--schema=public`,
-      `--no-publications`,
-      `--no-subscriptions`,
-      `--no-sync`,
-      `--no-password`
-    );
-    
-    const command = commandParts.join(' ');
-    
-    // Esegui pg_dump
+
     console.log(`Avvio backup del database in: ${filePath}`);
-    await execPromise(command);
+    await execFilePromise('pg_dump', args, {
+      env: postgresProcessEnv(connection.password),
+      maxBuffer: 10 * 1024 * 1024,
+    });
     
     const stats = fs.statSync(filePath);
     
@@ -114,6 +116,9 @@ export async function createDatabaseBackup(): Promise<BackupInfo> {
     console.log(`Backup completato: ${filename}, Dimensione: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
     return backupInfo;
   } catch (error) {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
     console.error('Errore durante la creazione del backup:', error);
     throw new Error(`Errore durante la creazione del backup: ${(error as Error).message}`);
   }
@@ -131,38 +136,21 @@ export async function restoreDatabaseFromBackup(backupFilename: string): Promise
       return false;
     }
     
-    // Estrai le informazioni di connessione dall'URL
-    const dbUrl = new URL(DATABASE_URL);
-    const dbUser = dbUrl.username;
-    const dbPassword = dbUrl.password;
-    const dbHost = dbUrl.hostname;
-    const dbPort = dbUrl.port;
-    const dbName = dbUrl.pathname.substring(1);
-    
-    // Comando psql con parametri SSL per Neon
-    // Costruiamo le parti del comando solo se i valori sono presenti
-    const commandParts = [
-      `PGSSLMODE=require PGPASSWORD="${dbPassword}" psql`,
-      `-h ${dbHost}`
+    const connection = getPostgresConnection();
+    const args = [
+      '-h', connection.host,
+      ...(connection.port ? ['-p', connection.port] : []),
+      '-U', connection.user,
+      '-d', connection.database,
+      '-f', backupPath,
+      '--no-password',
     ];
     
-    // Aggiungi parametro porta solo se disponibile
-    if (dbPort && dbPort.trim() !== '') {
-      commandParts.push(`-p ${dbPort}`);
-    }
-    
-    // Aggiungi il resto dei parametri
-    commandParts.push(
-      `-U ${dbUser}`,
-      `-d ${dbName}`,
-      `-f "${backupPath}"`,
-      `--no-password`
-    );
-    
-    const command = commandParts.join(' ');
-    
     console.log(`Avvio ripristino del database da: ${backupPath}`);
-    await execPromise(command);
+    await execFilePromise('psql', args, {
+      env: postgresProcessEnv(connection.password),
+      maxBuffer: 10 * 1024 * 1024,
+    });
     
     console.log('Ripristino completato con successo');
     return true;
@@ -182,38 +170,21 @@ export async function restoreDatabaseFromUploadedFile(filePath: string): Promise
       return false;
     }
     
-    // Estrai le informazioni di connessione dall'URL
-    const dbUrl = new URL(DATABASE_URL);
-    const dbUser = dbUrl.username;
-    const dbPassword = dbUrl.password;
-    const dbHost = dbUrl.hostname;
-    const dbPort = dbUrl.port;
-    const dbName = dbUrl.pathname.substring(1);
-    
-    // Comando psql con parametri SSL per Neon
-    // Costruiamo le parti del comando solo se i valori sono presenti
-    const commandParts = [
-      `PGSSLMODE=require PGPASSWORD="${dbPassword}" psql`,
-      `-h ${dbHost}`
+    const connection = getPostgresConnection();
+    const args = [
+      '-h', connection.host,
+      ...(connection.port ? ['-p', connection.port] : []),
+      '-U', connection.user,
+      '-d', connection.database,
+      '-f', filePath,
+      '--no-password',
     ];
     
-    // Aggiungi parametro porta solo se disponibile
-    if (dbPort && dbPort.trim() !== '') {
-      commandParts.push(`-p ${dbPort}`);
-    }
-    
-    // Aggiungi il resto dei parametri
-    commandParts.push(
-      `-U ${dbUser}`,
-      `-d ${dbName}`,
-      `-f "${filePath}"`,
-      `--no-password`
-    );
-    
-    const command = commandParts.join(' ');
-    
     console.log(`Avvio ripristino del database da file caricato: ${filePath}`);
-    await execPromise(command);
+    await execFilePromise('psql', args, {
+      env: postgresProcessEnv(connection.password),
+      maxBuffer: 10 * 1024 * 1024,
+    });
     
     console.log('Ripristino da file caricato completato con successo');
     return true;
@@ -315,59 +286,45 @@ export function getBackupFilePath(backupId: string): string | null {
  * Genera un backup completo del database
  */
 export async function generateFullDatabaseDump(): Promise<string> {
+  let tempFilePath: string | undefined;
   try {
     const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-    const tempFilePath = path.join(BACKUP_DIR, `temp_dump_${timestamp}.sql`);
-    
-    // Estrai le informazioni di connessione dall'URL
-    const dbUrl = new URL(DATABASE_URL);
-    const dbUser = dbUrl.username;
-    const dbPassword = dbUrl.password;
-    const dbHost = dbUrl.hostname;
-    const dbPort = dbUrl.port;
-    const dbName = dbUrl.pathname.substring(1);
-    
-    // Comando pg_dump con parametri SSL per Neon
-    // Costruiamo le parti del comando solo se i valori sono presenti
-    const commandParts = [
-      `PGSSLMODE=require PGPASSWORD="${dbPassword}" pg_dump`,
-      `-h ${dbHost}`
+    tempFilePath = path.join(BACKUP_DIR, `temp_dump_${timestamp}.sql`);
+
+    const connection = getPostgresConnection();
+    const args = [
+      '-h', connection.host,
+      ...(connection.port ? ['-p', connection.port] : []),
+      '-U', connection.user,
+      '-d', connection.database,
+      '-f', tempFilePath,
+      '--format=p',
+      '--no-owner',
+      '--no-acl',
+      '--no-privileges',
+      '-c',
+      '--if-exists',
+      '--verbose',
+      '--no-security-labels',
+      '--no-tablespaces',
+      '--no-comments',
+      '--schema=public',
+      '--no-publications',
+      '--no-subscriptions',
+      '--no-password',
     ];
-    
-    // Aggiungi parametro porta solo se disponibile
-    if (dbPort && dbPort.trim() !== '') {
-      commandParts.push(`-p ${dbPort}`);
-    }
-    
-    // Aggiungi il resto dei parametri
-    commandParts.push(
-      `-U ${dbUser}`,
-      `-d ${dbName}`,
-      `-f "${tempFilePath}"`,
-      `--format=p`,
-      `--no-owner`,
-      `--no-acl`,
-      `--no-privileges`,
-      `-c`,
-      `--if-exists`,
-      `--verbose`,
-      `--no-security-labels`,
-      `--no-tablespaces`,
-      `--no-comments`,
-      `--schema=public`,
-      `--no-publications`,
-      `--no-subscriptions`,
-      `--no-password`
-    );
-    
-    const command = commandParts.join(' ');
-    
-    // Esegui pg_dump
+
     console.log(`Generazione dump completo del database in: ${tempFilePath}`);
-    await execPromise(command);
+    await execFilePromise('pg_dump', args, {
+      env: postgresProcessEnv(connection.password),
+      maxBuffer: 10 * 1024 * 1024,
+    });
     
     return tempFilePath;
   } catch (error) {
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
     console.error('Errore durante la generazione del dump completo:', error);
     throw new Error(`Errore durante la generazione del dump completo: ${(error as Error).message}`);
   }
