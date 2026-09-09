@@ -11,4 +11,4 @@ const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_U
 
 **Why:** DATABASE_URL (Replit-managed Postgres) viene aggiornato solo via sync esterno disabilitato; NEON_DATABASE_URL è il database Neon dell'utente con tutti i dati operativi aggiornati (4368+ ops vs 2940 in DATE_URL).
 
-**How to apply:** Se si vedono 0 operazioni nel Diario o dati fermi a giugno 2026, verificare quale DB è attivo controllando nei log di avvio: `current_database: 'neondb'` = corretto; `current_database: 'heliumdb'` = sbagliato.
+**How to apply:** Tutti i servizi che leggono, esportano, salvano, ripristinano o sottopongono a manutenzione il database devono preferire `NEON_DATABASE_URL`, inclusi backup manuali e automatici. Se si vedono dati fermi a giugno 2026, verificare nei log: `current_database: 'neondb'` = corretto; `current_database: 'heliumdb'` = sbagliato.
