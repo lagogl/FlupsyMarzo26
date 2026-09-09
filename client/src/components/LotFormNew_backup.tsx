@@ -514,7 +514,6 @@ export default function LotFormNew({
                   </FormControl>
                 </FormItem>
               </div>
-            </div>
           </div>
           
           {/* Campo note */}

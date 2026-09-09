@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { getSizeColor } from '@/lib/sizeUtils';
-import { Eye, Search, Filter, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Download, Loader2 } from 'lucide-react';
+import { Eye, Search, Filter, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Download, Loader2, InfoIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -123,9 +123,14 @@ export default function Cycles() {
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: 'ascending' | 'descending';
+    multiSort: Array<{
+      key: string;
+      direction: 'ascending' | 'descending';
+    }>;
   }>({
     key: 'id',
-    direction: 'descending'
+    direction: 'descending',
+    multiSort: []
   });
   
   // Query per i dati necessari
@@ -304,141 +309,6 @@ export default function Cycles() {
   
   // Cicli da visualizzare attualmente
   const cycles = paginatedCycles;
-    
-    // Funzione per confrontare i valori in base al tipo di campo
-    const compareValues = (a: any, b: any, key: string, direction: 'ascending' | 'descending') => {
-      // Gestisci valori nulli o undefined
-      if (a === undefined || a === null) return direction === 'ascending' ? -1 : 1;
-      if (b === undefined || b === null) return direction === 'ascending' ? 1 : -1;
-      
-      // Per le date, converti in oggetti Date
-      if (key === 'startDate' || key === 'endDate') {
-        const dateA = new Date(a);
-        const dateB = new Date(b);
-        return direction === 'ascending' 
-          ? dateA.getTime() - dateB.getTime() 
-          : dateB.getTime() - dateA.getTime();
-      }
-      
-      // Per i numeri
-      if (typeof a === 'number' && typeof b === 'number') {
-        return direction === 'ascending' ? a - b : b - a;
-      }
-      
-      // Per le stringhe
-      if (typeof a === 'string' && typeof b === 'string') {
-        return direction === 'ascending' 
-          ? a.localeCompare(b)
-          : b.localeCompare(a);
-      }
-      
-      // Default
-      return direction === 'ascending' ? (a > b ? 1 : -1) : (a < b ? 1 : -1);
-    };
-    
-    // Ordinamento primario
-    if (sortConf.key) {
-      sortedCycles.sort((a, b) => {
-        let aValue, bValue;
-        
-        // Estrai i valori in base alla chiave di ordinamento
-        switch (sortConf.key) {
-          case 'id':
-            aValue = a.id;
-            bValue = b.id;
-            break;
-          case 'basket':
-            aValue = a.basket?.physicalNumber || a.basketId;
-            bValue = b.basket?.physicalNumber || b.basketId;
-            break;
-          case 'flupsy':
-            // Cerca il FLUPSY per il cestello a
-            const basketA = baskets.find(bsk => bsk.id === a.basketId);
-            const flupsyA = basketA ? flupsys.find(f => f.id === basketA.flupsyId) : null;
-            aValue = flupsyA?.name || '';
-            
-            // Cerca il FLUPSY per il cestello b
-            const basketB = baskets.find(bsk => bsk.id === b.basketId);
-            const flupsyB = basketB ? flupsys.find(f => f.id === basketB.flupsyId) : null;
-            bValue = flupsyB?.name || '';
-            break;
-          case 'startDate':
-            aValue = a.startDate;
-            bValue = b.startDate;
-            break;
-          case 'endDate':
-            aValue = a.endDate;
-            bValue = b.endDate;
-            break;
-          case 'size':
-            aValue = a.currentSize?.code || '';
-            bValue = b.currentSize?.code || '';
-            break;
-          case 'lot':
-            // Cerca l'operazione di prima attivazione per a
-            const opA = operations.find(op => op.cycleId === a.id && op.type === 'prima-attivazione');
-            const lotA = opA?.lotId ? lots.find(l => l.id === opA.lotId) : null;
-            aValue = lotA?.supplier || '';
-            
-            // Cerca l'operazione di prima attivazione per b
-            const opB = operations.find(op => op.cycleId === b.id && op.type === 'prima-attivazione');
-            const lotB = opB?.lotId ? lots.find(l => l.id === opB.lotId) : null;
-            bValue = lotB?.supplier || '';
-            break;
-          case 'sgr':
-            aValue = a.currentSgr?.percentage || 0;
-            bValue = b.currentSgr?.percentage || 0;
-            break;
-          default:
-            aValue = (a as any)[sortConf.key];
-            bValue = (b as any)[sortConf.key];
-        }
-        
-        return compareValues(aValue, bValue, sortConf.key, sortConf.direction);
-      });
-    }
-    
-    // Ordinamento secondario (multi-sort)
-    if (sortConf.multiSort && sortConf.multiSort.length > 0) {
-      // Ordina per ogni criterio secondario
-      sortConf.multiSort.forEach(secondaryCriterion => {
-        if (secondaryCriterion.key !== sortConf.key) {
-          sortedCycles = stableSort(sortedCycles, (a, b) => {
-            let aValue, bValue;
-            
-            // Estrai i valori in base alla chiave di ordinamento secondario
-            switch (secondaryCriterion.key) {
-              case 'id':
-                aValue = a.id;
-                bValue = b.id;
-                break;
-              // Ripeti gli stessi casi dell'ordinamento primario
-              // ...altri casi come sopra
-              
-              default:
-                aValue = (a as any)[secondaryCriterion.key];
-                bValue = (b as any)[secondaryCriterion.key];
-            }
-            
-            return compareValues(aValue, bValue, secondaryCriterion.key, secondaryCriterion.direction);
-          });
-        }
-      });
-    }
-    
-    return sortedCycles;
-  };
-  
-  // Funzione per ordinamento stabile
-  const stableSort = <T,>(array: T[], compare: (a: T, b: T) => number): T[] => {
-    return array
-      .map((item, index) => ({ item, index }))
-      .sort((a, b) => {
-        const order = compare(a.item, b.item);
-        return order !== 0 ? order : a.index - b.index;
-      })
-      .map(({ item }) => item);
-  };
 
   // Gestore per il click sulle intestazioni delle colonne per l'ordinamento
   const handleSort = (key: string) => {
@@ -879,20 +749,20 @@ export default function Cycles() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {isLoading ? (
+              {isAllCyclesLoading ? (
                 <tr>
                   <td colSpan={12} className="px-2 py-2 whitespace-nowrap text-center text-gray-500">
                     Caricamento cicli...
                   </td>
                 </tr>
-              ) : sortedFilteredCycles.length === 0 ? (
+              ) : sortedCycles.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="px-2 py-2 whitespace-nowrap text-center text-gray-500">
                     Nessun ciclo trovato
                   </td>
                 </tr>
               ) : (
-                sortedFilteredCycles.map((cycle) => {
+                sortedCycles.map((cycle) => {
                   // Format dates
                   const startDate = format(new Date(cycle.startDate), 'dd MMM yy', { locale: it });
                   const endDate = cycle.endDate 
