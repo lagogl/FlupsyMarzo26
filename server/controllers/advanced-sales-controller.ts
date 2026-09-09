@@ -74,6 +74,7 @@ import {
   type ManualOrderAllocation
 } from "../services/manual-order-reconciliation";
 import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
+import { getNextDdtNumber } from "../services/ddt-numbering-fic";
 
 let documentSchemaReady: Promise<void> | null = null;
 const ficInvoiceCache = new Map<string, { expiresAt: number; invoices: any[] }>();
@@ -142,39 +143,36 @@ async function getNextAvailableDDTNumber(companyId?: number | null, year = new D
   // La numerazione FIC riparte ogni anno: filtriamo per anno corrente.
   const currentYear = year;
 
-  // FIC può restituire più pagine. La fonte di verità è il campo numerico
-  // `number` del DDT per questa azienda/anno, non `numeration`.
-  const docs: any[] = [];
-  for (let page = 1; page <= 100; page++) {
-    const ficResponse = await ficApiRequest(
-      'GET',
-      String(companyId),
-      accessToken,
-      `/issued_documents?type=delivery_note&year=${currentYear}&page=${page}&per_page=100`
-    );
-    const pageDocs: any[] = ficResponse.data?.data ?? [];
-    docs.push(...pageDocs);
-    const lastPage = Number(
-      ficResponse.data?.last_page
-      ?? ficResponse.data?.meta?.pagination?.last_page
-      ?? ficResponse.data?.pagination?.last_page
-      ?? 0
-    );
-    if (!pageDocs.length || (lastPage > 0 && page >= lastPage)) break;
-  }
+  const prossimoNumero = await getNextDdtNumber({
+    async fetchFicPage(ficCompanyId, ficYear, page) {
+      const ficResponse = await ficApiRequest(
+        'GET',
+        String(ficCompanyId),
+        accessToken,
+        `/issued_documents?type=delivery_note&year=${ficYear}&page=${page}&per_page=100`
+      );
+      return {
+        documents: ficResponse.data?.data ?? [],
+        lastPage: Number(
+          ficResponse.data?.last_page
+          ?? ficResponse.data?.meta?.pagination?.last_page
+          ?? ficResponse.data?.pagination?.last_page
+          ?? 0
+        )
+      };
+    },
+    async getLocalDeliveryNotes(localCompanyId, localYear) {
+      const localResult = await db.execute(sql`
+        SELECT numero AS number, ddt_stato AS status
+        FROM ${ddt}
+        WHERE company_id = ${localCompanyId}
+          AND EXTRACT(YEAR FROM data)::integer = ${localYear}
+      `);
+      return (localResult as any).rows ?? [];
+    }
+  }, companyId, currentYear);
 
-  const numeroFIC = docs.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
-  const localResult = await db.execute(sql`
-    SELECT COALESCE(MAX(numero), 0) AS max_number
-    FROM ${ddt}
-    WHERE company_id = ${companyId}
-      AND EXTRACT(YEAR FROM data)::integer = ${currentYear}
-      AND ddt_stato IN ('locale', 'invio')
-  `);
-  const numeroLocale = Number((localResult as any).rows?.[0]?.max_number || 0);
-  const prossimoNumero = Math.max(numeroFIC, numeroLocale) + 1;
-
-  console.log(`✅ Prossimo numero DDT per azienda ${companyId} (anno ${currentYear}): ${prossimoNumero} — ultimo FIC: ${numeroFIC}, ultimo locale pendente: ${numeroLocale}`);
+  console.log(`✅ Prossimo numero DDT per azienda ${companyId} (anno ${currentYear}): ${prossimoNumero}`);
 
   return prossimoNumero;
 }
