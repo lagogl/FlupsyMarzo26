@@ -8,6 +8,7 @@ import { it } from 'date-fns/locale';
 import path from 'path';
 import fs from 'fs/promises';
 import { getCompanyLogoBase64, getCompanyInfo } from './logo-service';
+import { formatFlupsyBasketIdentifier } from './sale-document-identifiers';
 
 interface SaleData {
   sale: {
@@ -42,6 +43,7 @@ interface SaleData {
       sourceAnimalsPerKg: number;
       sourceSizeCode: string;
       basketPhysicalNumber?: number;
+      flupsyName?: string;
     }>;
   }>;
   operations: Array<{
@@ -52,6 +54,7 @@ interface SaleData {
     originalAnimalsPerKg: number;
     basketPhysicalNumber: number;
     date: string;
+      flupsyName?: string;
   }>;
 }
 
@@ -383,7 +386,7 @@ const HTML_TEMPLATE = `
             </tr>
             {{#each allocations}}
             <tr class="allocation-row">
-                <td>└─ Cestello #{{basketPhysicalNumber}}</td>
+                <td>└─ {{formatFlupsyBasketIdentifier flupsyName basketPhysicalNumber}}</td>
                 <td>{{sourceSizeCode}}</td>
                 <td class="text-right">{{formatNumber allocatedAnimals}}</td>
                 <td class="text-right">{{formatWeight allocatedWeight}}</td>
@@ -416,7 +419,7 @@ const HTML_TEMPLATE = `
             <tr>
                 <td><strong>#{{operationId}}</strong></td>
                 <td>{{formatDate date}}</td>
-                <td>#{{basketPhysicalNumber}}</td>
+                <td>{{formatFlupsyBasketIdentifier flupsyName basketPhysicalNumber}}</td>
                 <td class="text-right">{{formatNumber originalAnimals}}</td>
                 <td class="text-right">{{formatWeight originalWeight}}</td>
                 <td class="text-right">{{formatNumber originalAnimalsPerKg}}</td>
@@ -562,6 +565,8 @@ export class PDFGeneratorService {
       if (!animals || !weight) return '0';
       return Math.round(animals / weight).toLocaleString('it-IT');
     });
+
+    handlebars.registerHelper('formatFlupsyBasketIdentifier', formatFlupsyBasketIdentifier);
 
     // Helper per formattare stato
     handlebars.registerHelper('formatStatus', (status: string) => {

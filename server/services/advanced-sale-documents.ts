@@ -5,6 +5,7 @@ import path from 'path';
 import QRCode from 'qrcode';
 import { getCompanyFiscalData, getCompanyLogoBase64, hasCompanyLogo } from './logo-service';
 import { pdfGenerator } from './pdf-generator';
+import { formatFlupsyBasketIdentifier } from './sale-document-identifiers';
 
 export type AdvancedSaleDocumentKind = 'delivery-report' | 'sale-conditions' | 'bivalve-transfer' | 'ddt';
 
@@ -52,6 +53,8 @@ export function abbreviateFlupsyName(value: unknown): string {
     .trim();
   return name ? `F. ${name}` : '';
 }
+
+export { formatFlupsyBasketIdentifier };
 
 function parseDetails(value: any): any {
   if (!value) return {};
@@ -168,13 +171,16 @@ function productRows(bags: any[]) {
     const gross = Number(bag.originalWeight ?? bag.totalWeight ?? 0);
     const net = Number(bag.totalWeight ?? gross);
     const loss = Number(bag.weightLoss ?? Math.max(0, gross - net));
+    const originIdentifiers = bag.origins
+      ?.map((origin: any) => formatFlupsyBasketIdentifier(
+        origin.flupsyName,
+        origin.basketPhysicalNumber
+      ))
+      .filter(Boolean);
     const identifiers = [
       `Sacco ${bag.bagNumber || index + 1}`,
-      ...(bag.origins?.length
-        ? bag.origins.map((origin: any) => [
-            abbreviateFlupsyName(origin.flupsyName),
-            origin.basketPhysicalNumber != null ? `C. ${origin.basketPhysicalNumber}` : null
-          ].filter(Boolean).join(' · '))
+      ...(originIdentifiers?.length
+        ? [originIdentifiers.join(', ')]
         : (bag.basketNumbers?.length ? [`Ceste ${bag.basketNumbers.join(', ')}`] : []))
     ].filter(Boolean).join(' · ');
     return `<tr>
@@ -301,9 +307,13 @@ export async function renderAdvancedSaleDocumentHtml(
       ? `DDR n. ${data.sale.ddrNumber}/${data.sale.ddrYear}`
       : `DDR · Rif. ${reference}`;
     subtitle = `${ddrReference} · novellame destinato alla reimmersione`;
-    const origin = data.operations.map(operation =>
-      `${abbreviateFlupsyName(operation.flupsyName) ? `${abbreviateFlupsyName(operation.flupsyName)} · ` : ''}C. ${operation.basketPhysicalNumber || operation.basketId}${operation.date ? ` (${displayDate(operation.date)})` : ''}`
-    ).join(', ') || '________________';
+     const origin = data.operations.map(operation => {
+       const identifier = formatFlupsyBasketIdentifier(
+         operation.flupsyName,
+         operation.basketPhysicalNumber || operation.basketId
+       );
+       return `${identifier || `C${operation.basketPhysicalNumber || operation.basketId}`}${operation.date ? ` (${displayDate(operation.date)})` : ''}`;
+     }).join(', ') || '________________';
     body = `<div class="parties">${seller}${recipient}</div>
       <div class="two"><div class="field"><span class="label">Persona delegata alla firma</span><span class="value">${blank}</span></div>
       <div class="field"><span class="label">Data di raccolta / preparazione</span><span class="value">${displayDate(data.sale.saleDate)}</span></div></div>

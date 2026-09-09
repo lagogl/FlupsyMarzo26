@@ -11,6 +11,7 @@ import {
   abbreviateFlupsyName,
   mergeSaleCustomerData,
   normalizeSaleCustomerSnapshot,
+  formatFlupsyBasketIdentifier,
   sendPdfBinaryResponse,
   type AdvancedSaleDocumentKind
 } from "../services/advanced-sale-documents";
@@ -2120,10 +2121,12 @@ export async function generateSalePDF(req: Request, res: Response) {
           allocatedWeight: bagAllocations.allocatedWeight,
           sourceAnimalsPerKg: bagAllocations.sourceAnimalsPerKg,
           sourceSizeCode: bagAllocations.sourceSizeCode,
-          basketPhysicalNumber: sql<number | null>`coalesce(${bagAllocations.sourceBasketPhysicalNumberSnapshot}, ${baskets.physicalNumber})`
+          basketPhysicalNumber: sql<number | null>`coalesce(${bagAllocations.sourceBasketPhysicalNumberSnapshot}, ${baskets.physicalNumber})`,
+          flupsyName: sql<string | null>`coalesce(${bagAllocations.sourceFlupsyNameSnapshot}, ${flupsys.name})`
         })
         .from(bagAllocations)
         .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
+        .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
         .where(eq(bagAllocations.saleBagId, bag.id));
 
         return {
@@ -2142,10 +2145,12 @@ export async function generateSalePDF(req: Request, res: Response) {
       originalAnimalsPerKg: saleOperationsRef.originalAnimalsPerKg,
       includedInSale: saleOperationsRef.includedInSale,
       basketPhysicalNumber: baskets.physicalNumber,
+      flupsyName: flupsys.name,
       date: operations.date
     })
     .from(saleOperationsRef)
     .leftJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+    .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
     .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
     .where(eq(saleOperationsRef.advancedSaleId, parseInt(id)));
 
@@ -2170,7 +2175,8 @@ export async function generateSalePDF(req: Request, res: Response) {
           allocatedWeight: (alloc.allocatedWeight || 0) / 1000, // DB in grammi → converti in kg per display
           sourceAnimalsPerKg: alloc.sourceAnimalsPerKg || 0, // Coerce null to 0
           sourceSizeCode: alloc.sourceSizeCode || '', // Coerce null to empty string
-          basketPhysicalNumber: alloc.basketPhysicalNumber || undefined // Coerce null to undefined
+          basketPhysicalNumber: alloc.basketPhysicalNumber || undefined, // Coerce null to undefined
+          flupsyName: alloc.flupsyName || undefined
         }))
       })),
       operations: operationsRefs
@@ -3627,12 +3633,11 @@ export async function generateDDT(req: Request, res: Response) {
         const bagData = bagItems[0].bag;
         const originNames = [...new Set(bagItems
           .filter((item: any) => item.allocation || item.basket)
-          .map((item: any) => [
-            abbreviateFlupsyName(item.allocation?.sourceFlupsyNameSnapshot || item.flupsy?.name),
-            (item.allocation?.sourceBasketPhysicalNumberSnapshot ?? item.basket?.physicalNumber) != null
-              ? `C. ${item.allocation?.sourceBasketPhysicalNumberSnapshot ?? item.basket?.physicalNumber}`
-              : null
-          ].filter(Boolean).join(' · ')))].join(', ');
+          .map((item: any) => formatFlupsyBasketIdentifier(
+            item.allocation?.sourceFlupsyNameSnapshot || item.flupsy?.name,
+            item.allocation?.sourceBasketPhysicalNumberSnapshot ?? item.basket?.physicalNumber
+          ))
+          .filter(Boolean))].join(', ');
 
         const descrizione = `Sacco #${bagData.bagNumber} · ${originNames || 'Origine N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${(bagData.totalWeight || 0).toFixed(2)} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
 
@@ -3932,9 +3937,13 @@ export async function generatePDFReport(req: Request, res: Response) {
     // Stampa righe
     for (const [bagId, bagItems] of Array.from(bagsMap.entries())) {
       const bagData = bagItems[0].bag;
-      const basketInfo = bagItems
+       const basketInfo = bagItems
         .filter((item: any) => item.basket && item.flupsy)
-        .map((item: any) => `${abbreviateFlupsyName(item.flupsy!.name)} · C. ${item.basket!.physicalNumber}`)
+         .map((item: any) => formatFlupsyBasketIdentifier(
+           item.flupsy!.name,
+           item.basket!.physicalNumber
+         ))
+         .filter(Boolean)
         .join(', ');
 
       xPos = margin;

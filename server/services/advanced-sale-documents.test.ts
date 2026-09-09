@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   abbreviateFlupsyName,
+  formatFlupsyBasketIdentifier,
   logoFromDdt,
   mergeSaleCustomerData,
   normalizeSaleCustomerSnapshot,
@@ -14,6 +15,12 @@ import {
 test('abbrevia il nome FLUPSY senza perdere il riferimento alla cesta', () => {
   assert.equal(abbreviateFlupsyName('Flupsy 1 Bianco Vetroresina'), 'F. 1 Bianco VTR');
   assert.equal(abbreviateFlupsyName('Ca Pisani'), 'F. Ca Pisani');
+});
+
+test('formatta il riferimento FLUPSY/cesta nel formato compatto dei documenti', () => {
+  assert.equal(formatFlupsyBasketIdentifier('Flupsy 1 Bianco Vetroresina', 3), 'F1C3');
+  assert.equal(formatFlupsyBasketIdentifier('F. 2 nero PVC', 7), 'F2C7');
+  assert.equal(formatFlupsyBasketIdentifier('Ca Pisani', 4), 'C4');
 });
 
 test('completa via e codice allevamento usando solo i campi mancanti', () => {
@@ -174,7 +181,7 @@ test('i documenti mostrano l’origine congelata del sacco', async () => {
       animalCount: 2000,
       animalsPerKg: 1000,
       sizeCode: 'M',
-      origins: [{ flupsyName: 'FLUPSY STORICO', basketPhysicalNumber: 17 }]
+      origins: [{ flupsyName: 'FLUPSY 2 STORICO', basketPhysicalNumber: 17 }]
     }],
     operations: [],
     ddt: {
@@ -185,5 +192,5 @@ test('i documenti mostrano l’origine congelata del sacco', async () => {
     }
   });
 
-  assert.match(html, /F\. STORICO · C\. 17/);
+  assert.match(html, /F2C17/);
 });
