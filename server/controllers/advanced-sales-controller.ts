@@ -51,7 +51,7 @@ import {
 import { format } from "date-fns";
 import { getConfigValue } from "./fatture-in-cloud-controller";
 import { OperationsCache } from "../operations-cache-service.js";
-import { sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
+import { resolveFCloudCompanyId, sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
 import { sendAdvancedSaleDocumentsReadyEmail } from "../services/advanced-sale-documents-email";
 import { getCompanyLogo } from "../services/logo-service";
@@ -75,6 +75,11 @@ import {
 } from "../services/manual-order-reconciliation";
 import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
 import { getNextDdtNumber } from "../services/ddt-numbering-fic";
+import {
+  buildAggregatedFicDdtItems,
+  getProductSnapshotsBySizeCodes,
+  hydrateDdtProductSnapshots
+} from "../services/external-product-catalog";
 
 let documentSchemaReady: Promise<void> | null = null;
 const ficInvoiceCache = new Map<string, { expiresAt: number; invoices: any[] }>();
@@ -1529,6 +1534,9 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     return res.status(400).json({ success: false, error: 'Tipo documento non valido' });
   }
 
+  let createdTraceabilityLinkId: number | null = null;
+  let documentStatePersisted = false;
+  let emailNotification: Parameters<typeof sendAdvancedSaleDocumentsReadyEmail>[0] | null = null;
   try {
     await ensureAdvancedSaleDocumentSchema();
     const saleId = Number(req.params.id);
@@ -1622,6 +1630,7 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
         advancedSaleId: saleId,
         createdBy: sessionUser?.id ?? null
       }).returning({ id: publicTraceabilityLinks.id });
+      createdTraceabilityLinkId = createdLink.id;
       await db.execute(sql`
           INSERT INTO audit_logs (
             action, entity_type, entity_id, user_id, user_source,
@@ -1676,18 +1685,6 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
         pages.forEach(page => merged.addPage(page));
       }
       pdf = Buffer.from(await merged.save());
-      const [companyConfig] = sale.companyId
-        ? await db.select().from(fattureInCloudConfig)
-            .where(eq(fattureInCloudConfig.companyId, sale.companyId)).limit(1)
-        : [];
-      await sendAdvancedSaleDocumentsReadyEmail({
-        sale,
-        customer,
-        companyName: existingDdt?.mittenteRagioneSociale
-          || companyConfig?.ragioneSociale
-          || (isDeltaFuturo ? 'Delta Futuro Soc. Agr. Srl' : 'Ecotapes'),
-        attachments: emailAttachments
-      });
       await db.execute(sql`
         UPDATE ${advancedSales}
         SET generated_documents = COALESCE(generated_documents, '{}'::jsonb) || jsonb_build_object(
@@ -1698,6 +1695,14 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
         updated_at = NOW()
         WHERE id = ${saleId}
       `);
+      documentStatePersisted = true;
+      emailNotification = {
+        sale,
+        customer,
+        companyName: existingDdt?.mittenteRagioneSociale
+          || (isDeltaFuturo ? 'Delta Futuro Soc. Agr. Srl' : 'Ecotapes'),
+        attachments: emailAttachments
+      };
     } else {
       const generated = await buildAdvancedSaleDocument(kind, documentData);
       // Puppeteer può restituire Uint8Array: viene normalizzato prima della risposta.
@@ -1713,6 +1718,7 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
         updated_at = NOW()
         WHERE id = ${saleId}
       `);
+      documentStatePersisted = true;
     }
     const labels: Record<AdvancedSaleDocumentKind, string> = {
       'delivery-report': 'Rapporto-consegna',
@@ -1722,9 +1728,27 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     };
     const filename = kind === 'all' ? `Documenti-vendita-${sale.saleNumber}` : `${labels[kind]}-${sale.saleNumber}`;
     sendPdfBinaryResponse(res, pdf, filename);
+    if (emailNotification) {
+      // Il download è già stato consegnato: Gmail è un effetto secondario e
+      // non può più rallentare o annullare la stampa del fascicolo.
+      void sendAdvancedSaleDocumentsReadyEmail(emailNotification).catch(emailError => {
+        console.error('Invio email fascicolo non riuscito; PDF già consegnato:', emailError);
+      });
+    }
   } catch (error) {
     console.error('Errore nella generazione del documento vendita:', error);
-    res.status(500).json({ success: false, error: 'Errore nella generazione del documento' });
+    if (createdTraceabilityLinkId && !documentStatePersisted && !res.headersSent) {
+      await db.delete(publicTraceabilityLinks)
+        .where(eq(publicTraceabilityLinks.id, createdTraceabilityLinkId))
+        .catch(cleanupError => {
+          console.warn('Impossibile rimuovere il link QR creato dal tentativo fallito:', cleanupError);
+        });
+    }
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'Errore nella generazione del documento' });
+    } else if (!res.writableEnded) {
+      res.end();
+    }
   }
 }
 
@@ -3522,6 +3546,35 @@ export async function generateDDT(req: Request, res: Response) {
       });
     }
 
+    const saleSizeCodes = [...new Set(bags.map((item) => item.bag.sizeCode))];
+    const ficProductSnapshots = await getProductSnapshotsBySizeCodes(
+      "fic",
+      String(companyId),
+      saleSizeCodes
+    );
+    const missingFicMappings = saleSizeCodes.filter((code) => !ficProductSnapshots.has(code));
+    if (missingFicMappings.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: `Manca l'associazione prodotto FIC per: ${missingFicMappings.join(", ")}`,
+        code: "FIC_PRODUCT_MAPPING_REQUIRED",
+        missingSizeCodes: missingFicMappings
+      });
+    }
+
+    let fiscalData: any = null;
+    const fiscalDataResult = await db.select()
+      .from(fattureInCloudConfig)
+      .where(eq(fattureInCloudConfig.companyId, companyId))
+      .limit(1);
+    if (fiscalDataResult.length > 0) {
+      fiscalData = fiscalDataResult[0];
+    }
+    const fcloudCompanyKey = resolveFCloudCompanyId(fiscalData?.partitaIva);
+    const fcloudProductSnapshots = fcloudCompanyKey
+      ? await getProductSnapshotsBySizeCodes("fcloud", fcloudCompanyKey, saleSizeCodes)
+      : new Map();
+
     const [claimedSale] = await db.update(advancedSales)
       .set({ ddtStatus: 'generazione', updatedAt: new Date() })
       .where(and(
@@ -3535,20 +3588,6 @@ export async function generateDDT(req: Request, res: Response) {
         success: false,
         error: "Il DDT è già presente, in generazione o la vendita non è più confermata"
       });
-    }
-
-    let fiscalData: any = null;
-    
-    if (companyId) {
-      // Recupera dati fiscali dell'azienda
-      const fiscalDataResult = await db.select()
-        .from(fattureInCloudConfig)
-        .where(eq(fattureInCloudConfig.companyId, companyId))
-        .limit(1);
-      
-      if (fiscalDataResult.length > 0) {
-        fiscalData = fiscalDataResult[0];
-      }
     }
 
     const completeCustomer = await getCompleteSaleCustomer(saleData, cliente, companyId);
@@ -3638,6 +3677,8 @@ export async function generateDDT(req: Request, res: Response) {
           .filter(Boolean))].join(', ');
 
         const descrizione = `Sacco #${bagData.bagNumber} · ${originNames || 'Origine N/A'} | ${bagData.animalCount.toLocaleString('it-IT')} animali | ${(bagData.totalWeight || 0).toFixed(2)} kg | ${Math.round(bagData.animalsPerKg).toLocaleString('it-IT')} anim/kg`;
+        const ficProduct = ficProductSnapshots.get(sizeCode);
+        const fcloudProduct = fcloudProductSnapshots.get(sizeCode);
 
         const [riga] = await db.insert(ddtRighe).values({
           ddtId: ddtCreato.id,
@@ -3649,6 +3690,12 @@ export async function generateDDT(req: Request, res: Response) {
           saleBagId: bagData.id,
           basketId: bagItems[0].basket?.id || null,
           sizeCode: sizeCode,
+          ficProductId: ficProduct?.externalProductId || null,
+          ficProductCode: ficProduct?.code || null,
+          ficProductName: ficProduct?.name || null,
+          fcloudProductId: fcloudProduct?.externalProductId || null,
+          fcloudProductCode: fcloudProduct?.code || null,
+          fcloudProductName: fcloudProduct?.name || null,
           flupsyName: [...new Set(bagItems
             .map((item: any) => item.allocation?.sourceFlupsyNameSnapshot || item.flupsy?.name)
             .filter(Boolean))].join(', ') || null
@@ -4373,6 +4420,13 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       });
     }
 
+    const fcloudCompanyKey = resolveFCloudCompanyId(ddtData.mittentePartitaIva);
+    const righe = await hydrateDdtProductSnapshots({
+      ddtId: parseInt(ddtId),
+      ficCompanyKey: String(companyId),
+      fcloudCompanyKey
+    });
+
     const [claimedDdt] = await db.update(ddt)
       .set({ ddtStato: 'invio', updatedAt: new Date() })
       .where(and(eq(ddt.id, parseInt(ddtId)), eq(ddt.ddtStato, 'locale')))
@@ -4385,9 +4439,6 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     }
 
     console.log(`📤 Invio DDT a Fatture in Cloud - Company ID: ${companyId} (${companyId === 1017299 ? 'Ecotapes' : companyId === 13263 ? 'Delta Futuro' : 'Altro'})`);
-
-    // Recupera righe DDT
-    const righe = await db.select().from(ddtRighe).where(eq(ddtRighe.ddtId, parseInt(ddtId))).orderBy(ddtRighe.id);
 
     // Prepara payload per Fatture in Cloud con campi DN_AI (Delivery Note Accompanying Invoice)
     const ddtPayload = {
@@ -4408,12 +4459,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
         numeration: '/ddt',
         dn_ai_packages_number: ddtData.totaleColli ? ddtData.totaleColli.toString() : null,
         dn_ai_weight: ddtData.pesoTotale || null,
-        items_list: righe.map(riga => ({
-          name: riga.descrizione,
-          qty: parseFloat(riga.quantita || '0'),
-          measure: riga.unitaMisura,
-          net_price: parseFloat(riga.prezzoUnitario || '0')
-        }))
+        items_list: buildAggregatedFicDdtItems(righe)
       }
     };
     
@@ -4532,9 +4578,12 @@ export async function sendDDTToFIC(req: Request, res: Response) {
         ))
         .catch(() => {});
     }
-    res.status(500).json({
+    const status = error.code === "FIC_PRODUCT_MAPPING_REQUIRED" ? 409 : 500;
+    res.status(status).json({
       success: false,
-      error: error.message || "Errore nell'invio del DDT a Fatture in Cloud"
+      error: error.message || "Errore nell'invio del DDT a Fatture in Cloud",
+      code: error.code,
+      missingSizeCodes: error.missingSizeCodes
     });
   }
 }

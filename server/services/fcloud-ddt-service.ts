@@ -37,6 +37,23 @@ function normalizePiva(piva: string | null | undefined): string {
   return (piva || '').replace(/\s/g, '').replace(/^IT/i, '').toUpperCase();
 }
 
+export function resolveFCloudCompanyId(piva: string | null | undefined): string | null {
+  return PIVA_TO_FCLOUD[normalizePiva(piva)] || null;
+}
+
+export async function fetchFCloudProducts(fcloudCompanyId: string) {
+  const resp = await fetch(`${FCLOUD_BASE_URL}/api/ext/products?companyId=${encodeURIComponent(fcloudCompanyId)}`, {
+    method: 'GET',
+    headers: headers(),
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`FCloud products error ${resp.status}: ${err}`);
+  }
+  const data = await resp.json();
+  return Array.isArray(data) ? data : [];
+}
+
 /**
  * Risolve (o crea) il clientId FCloud tramite upsert per P.IVA.
  * Usa POST /api/ext/clients che restituisce 200 se esiste, 201 se creato.
@@ -103,7 +120,7 @@ export async function sendDDTToFCloud(ddtId: number): Promise<FCloudDdtResult> {
 
   // 2. Risolvi companyId FCloud dalla P.IVA del mittente (cedente)
   const mittentePiva = normalizePiva(ddtData.mittentePartitaIva);
-  const fcloudCompanyId = PIVA_TO_FCLOUD[mittentePiva];
+  const fcloudCompanyId = resolveFCloudCompanyId(mittentePiva);
   if (!fcloudCompanyId) {
     return {
       success: false,
@@ -132,7 +149,11 @@ export async function sendDDTToFCloud(ddtId: number): Promise<FCloudDdtResult> {
   const righe = await db.select().from(ddtRighe).where(eq(ddtRighe.ddtId, ddtId)).orderBy(ddtRighe.id);
 
   // 5. Costruisci payload FCloud
-  const items = righe.map(r => ({
+  const items = righe
+    .filter(r => !r.descrizione.toUpperCase().startsWith('SUBTOTALE'))
+    .map(r => ({
+    codice:        r.fcloudProductCode || undefined,
+    productId:     r.fcloudProductId || undefined,
     descrizione:    r.descrizione,
     quantita:       parseFloat(r.quantita   || '1'),
     prezzoUnitario: parseFloat(r.prezzoUnitario || '0'),

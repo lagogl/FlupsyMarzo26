@@ -24,6 +24,18 @@ import {
 import { eq, desc, sql, sum, and, notInArray } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
+import {
+  deleteProductMapping,
+  listProductMappings,
+  replaceExternalProductCatalog,
+  saveProductMapping,
+  type ImportedExternalProduct,
+  type ProductProvider
+} from '../services/external-product-catalog';
+import {
+  fetchFCloudProducts,
+  resolveFCloudCompanyId
+} from '../services/fcloud-ddt-service';
 
 const router = express.Router();
 
@@ -260,7 +272,7 @@ router.get('/oauth/url', async (req: Request, res: Response) => {
       `?response_type=code` +
       `&client_id=${clientId}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=entity.clients:r entity.clients:a issued_documents.delivery_notes:r issued_documents.delivery_notes:a issued_documents.invoices:r`;
+      `&scope=entity.clients:r entity.clients:a products:r issued_documents.delivery_notes:r issued_documents.delivery_notes:a issued_documents.invoices:r`;
     
     res.json({ success: true, url: authUrl });
   } catch (error: any) {
@@ -369,6 +381,156 @@ router.post('/config', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Errore nell\'impostazione configurazione:', error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ===== CATALOGO PRODOTTI E MAPPING TAGLIE =====
+
+function parseProductProvider(value: unknown): ProductProvider {
+  if (value === 'fic' || value === 'fcloud') return value;
+  throw new Error('Provider prodotti non valido');
+}
+
+async function resolveProductCompanyKey(provider: ProductProvider, companyId: number) {
+  if (provider === 'fic') return String(companyId);
+  const [company] = await db.select({
+    partitaIva: fattureInCloudConfig.partitaIva
+  }).from(fattureInCloudConfig)
+    .where(eq(fattureInCloudConfig.companyId, companyId))
+    .limit(1);
+  const fcloudCompanyId = resolveFCloudCompanyId(company?.partitaIva);
+  if (!fcloudCompanyId) {
+    throw new Error('Azienda non configurata nel canale FCloud');
+  }
+  return fcloudCompanyId;
+}
+
+function normalizeFicProduct(product: any): ImportedExternalProduct | null {
+  const code = String(product?.code ?? product?.product_id ?? product?.id ?? '').trim();
+  const name = String(product?.name ?? product?.description ?? code).trim();
+  if (!code || !name) return null;
+  return {
+    externalProductId: product?.id == null ? null : String(product.id),
+    code,
+    name,
+    description: product?.description ? String(product.description) : null,
+    unitOfMeasure: product?.measure ? String(product.measure) : null,
+    active: product?.is_active !== false && product?.active !== false
+  };
+}
+
+function extractFicProducts(body: any): any[] {
+  const candidates = [
+    body?.data?.data,
+    body?.data?.products,
+    body?.data,
+    body?.products
+  ];
+  return candidates.find(Array.isArray) || [];
+}
+
+router.post('/products/sync', async (req: Request, res: Response) => {
+  try {
+    const companyId = Number(req.body?.companyId);
+    const provider = parseProductProvider(req.body?.provider);
+    if (!Number.isInteger(companyId) || companyId <= 0) {
+      return res.status(400).json({ success: false, message: 'Azienda richiesta' });
+    }
+    const companyKey = await resolveProductCompanyKey(provider, companyId);
+    let products: ImportedExternalProduct[] = [];
+
+    if (provider === 'fic') {
+      await refreshTokenIfNeeded();
+      const perPage = 100;
+      for (let page = 1; page <= 100; page++) {
+        const response = await withRetry(() =>
+          apiRequest('GET', `/c/${companyId}/products?page=${page}&per_page=${perPage}`)
+        );
+        const pageProducts = extractFicProducts(response.data);
+        products.push(...pageProducts
+          .map(normalizeFicProduct)
+          .filter((product): product is ImportedExternalProduct => product !== null));
+        const lastPage = Number(
+          response.data?.data?.pagination?.last_page ??
+          response.data?.pagination?.last_page ??
+          response.data?.data?.last_page
+        );
+        if ((lastPage && page >= lastPage) || pageProducts.length < perPage) break;
+      }
+    } else {
+      const responseProducts = await fetchFCloudProducts(companyKey);
+      products = responseProducts.map((product: any) => ({
+        externalProductId: product?.id == null ? null : String(product.id),
+        code: String(product?.codice ?? product?.id ?? '').trim(),
+        name: String(product?.descrizione ?? product?.codice ?? '').trim(),
+        description: product?.descrizione ? String(product.descrizione) : null,
+        unitOfMeasure: product?.unitaMisura ? String(product.unitaMisura) : null,
+        active: product?.attivo !== false
+      })).filter((product) => product.code && product.name);
+    }
+
+    const result = await replaceExternalProductCatalog(provider, companyKey, products);
+    res.json({
+      success: true,
+      imported: result.imported,
+      message: `${result.imported} prodotti ${provider === 'fic' ? 'FIC' : 'FCloud'} sincronizzati`
+    });
+  } catch (error: any) {
+    const status = error.response?.status === 403 ? 403 : 500;
+    res.status(status).json({
+      success: false,
+      message: status === 403
+        ? 'Il collegamento FIC non dispone del permesso products:r. Riautorizzare l’integrazione.'
+        : error.message
+    });
+  }
+});
+
+router.get('/product-mappings', async (req: Request, res: Response) => {
+  try {
+    const companyId = Number(req.query.companyId);
+    const provider = parseProductProvider(req.query.provider);
+    if (!Number.isInteger(companyId) || companyId <= 0) {
+      return res.status(400).json({ success: false, message: 'Azienda richiesta' });
+    }
+    const companyKey = await resolveProductCompanyKey(provider, companyId);
+    const data = await listProductMappings(provider, companyKey);
+    res.json({ success: true, provider, companyKey, ...data });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+router.put('/product-mappings/:sizeId', async (req: Request, res: Response) => {
+  try {
+    const sizeId = Number(req.params.sizeId);
+    const companyId = Number(req.body?.companyId);
+    const productCatalogId = Number(req.body?.productCatalogId);
+    const provider = parseProductProvider(req.body?.provider);
+    if (![sizeId, companyId, productCatalogId].every((value) => Number.isInteger(value) && value > 0)) {
+      return res.status(400).json({ success: false, message: 'Dati associazione non validi' });
+    }
+    const companyKey = await resolveProductCompanyKey(provider, companyId);
+    await saveProductMapping({ provider, companyKey, sizeId, productCatalogId });
+    res.json({ success: true, message: 'Associazione prodotto salvata' });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+router.delete('/product-mappings/:sizeId', async (req: Request, res: Response) => {
+  try {
+    const sizeId = Number(req.params.sizeId);
+    const companyId = Number(req.query.companyId);
+    const provider = parseProductProvider(req.query.provider);
+    if (![sizeId, companyId].every((value) => Number.isInteger(value) && value > 0)) {
+      return res.status(400).json({ success: false, message: 'Dati associazione non validi' });
+    }
+    const companyKey = await resolveProductCompanyKey(provider, companyId);
+    await deleteProductMapping(provider, companyKey, sizeId);
+    res.json({ success: true, message: 'Associazione rimossa' });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

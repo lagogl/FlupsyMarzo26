@@ -1456,6 +1456,45 @@ export const fattureInCloudConfig = pgTable("fatture_in_cloud_config", {
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 });
 
+// Catalogo prodotti importato dai sistemi documentali esterni.
+// Non contiene prezzi: l'identità fiscale del prodotto resta separata dal listino commerciale locale.
+export const externalProductCatalog = pgTable("external_product_catalog", {
+  id: serial("id").primaryKey(),
+  provider: text("provider", { enum: ["fic", "fcloud"] }).notNull(),
+  companyKey: text("company_key").notNull(),
+  externalProductId: text("external_product_id"),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  unitOfMeasure: text("unit_of_measure"),
+  active: boolean("active").notNull().default(true),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  providerCompanyCodeUnique: unique("external_product_catalog_provider_company_code_unique")
+    .on(table.provider, table.companyKey, table.code),
+  providerCompanyIdx: index("external_product_catalog_provider_company_idx")
+    .on(table.provider, table.companyKey)
+}));
+
+// Associazione esplicita tra taglia commerciale APP e prodotto del catalogo esterno.
+export const sizeExternalProductMappings = pgTable("size_external_product_mappings", {
+  id: serial("id").primaryKey(),
+  sizeId: integer("size_id").notNull().references(() => sizes.id, { onDelete: "cascade" }),
+  provider: text("provider", { enum: ["fic", "fcloud"] }).notNull(),
+  companyKey: text("company_key").notNull(),
+  productCatalogId: integer("product_catalog_id").notNull()
+    .references(() => externalProductCatalog.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  sizeProviderCompanyUnique: unique("size_external_product_mappings_size_provider_company_unique")
+    .on(table.sizeId, table.provider, table.companyKey),
+  productProviderCompanyUnique: unique("size_external_product_mappings_product_provider_company_unique")
+    .on(table.productCatalogId, table.provider, table.companyKey)
+}));
+
 // Clienti estesi per integrazione Fatture in Cloud
 export const clienti = pgTable("clienti", {
   id: serial("id").primaryKey(),
@@ -1534,6 +1573,13 @@ export const ddtRighe = pgTable("ddt_righe", {
   basketId: integer("basket_id"),
   sizeCode: text("size_code"),
   flupsyName: text("flupsy_name"),
+  // Snapshot immutabile dell'articolo esterno associato alla taglia al momento del DDT.
+  ficProductId: text("fic_product_id"),
+  ficProductCode: text("fic_product_code"),
+  ficProductName: text("fic_product_name"),
+  fcloudProductId: text("fcloud_product_id"),
+  fcloudProductCode: text("fcloud_product_code"),
+  fcloudProductName: text("fcloud_product_name"),
   createdAt: timestamp("created_at").notNull().defaultNow()
 });
 
@@ -1603,6 +1649,9 @@ export type InsertConfigurazione = z.infer<typeof insertConfigurazioneSchema>;
 
 export type FattureInCloudConfig = typeof fattureInCloudConfig.$inferSelect;
 export type InsertFattureInCloudConfig = z.infer<typeof insertFattureInCloudConfigSchema>;
+
+export type ExternalProductCatalog = typeof externalProductCatalog.$inferSelect;
+export type SizeExternalProductMapping = typeof sizeExternalProductMappings.$inferSelect;
 
 export type Cliente = typeof clienti.$inferSelect;
 export type InsertCliente = z.infer<typeof insertClientiSchema>;

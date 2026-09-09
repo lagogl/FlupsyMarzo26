@@ -30,3 +30,4 @@
 - [Unità peso vendite avanzate](advanced-sales-weight-units.md) — totale vendita in grammi per lista/dettaglio; pesi dei singoli sacchi in kg. Non applicare due volte la conversione.
 - [Prenotazione progressivo DDT](ddt-number-reservation.md) — per azienda/anno, il numero si riserva alla creazione locale considerando anche FIC; mai rinumerare automaticamente lo storico.
 - [Stato fatturazione FIC senza importi](fic-invoice-status-privacy.md) — mostra solo prova DDT→fattura e quantità; mai cache/log/browser con dati economici o testo libero FIC.
+- [Prodotti FIC per taglia](fic-product-size-mapping.md) — mapping esplicito per azienda/provider; il DDT congela codice e nome prodotto e l’invio FIC fallisce se manca l’associazione.

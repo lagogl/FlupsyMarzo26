@@ -1,10 +1,10 @@
 ---
 name: Email fascicolo vendite
-description: Regole dell'invio automatico dei documenti di vendita prima dell'esportazione a Fatture in Cloud.
+description: Regole dell'invio automatico dei documenti di vendita senza bloccare la stampa.
 ---
 
-La generazione del fascicolo completo invia automaticamente un'email operativa con riepilogo della vendita e documenti PDF allegati, prima che i dati siano esportati a Fatture in Cloud.
+La generazione del fascicolo completo prepara un'email operativa con riepilogo e PDF allegati, ma il download del fascicolo deve restare indipendente dal connettore email.
 
-**Why:** i referenti devono ricevere subito la documentazione pronta, mentre un errore di invio non deve essere nascosto come se l'operazione fosse riuscita.
+**Why:** i referenti devono ricevere la documentazione, ma un guasto o timeout Gmail non deve impedire la stampa di PDF già generati correttamente.
 
-**How to apply:** inviare sincronicamente durante la generazione del fascicolo completo. Delta Futuro allega quattro documenti incluso il DDR numerato; Ecotapes allega tre documenti e non genera il DDR, perché usa il modulo prestampato esterno. La generazione di un singolo documento non invia l'email.
+**How to apply:** salvare prima lo stato documentale, consegnare il PDF e avviare poi l'email come effetto secondario non bloccante. Delta Futuro allega quattro documenti incluso il DDR numerato; Ecotapes tre senza DDR. Il documento singolo non invia email.

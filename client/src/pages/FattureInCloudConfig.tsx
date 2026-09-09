@@ -29,7 +29,8 @@ import {
   Save,
   Loader2,
   ShoppingCart,
-  Eye
+  Eye,
+  PackageSearch
 } from 'lucide-react';
 
 interface ConfigurationType {
@@ -82,6 +83,24 @@ interface OrderItemType {
   totale: string;
 }
 
+interface ProductMappingSize {
+  id: number;
+  code: string;
+  name: string;
+  mappedProductId: number | null;
+  mappedProductCode: string | null;
+  mappedProductName: string | null;
+}
+
+interface ExternalProductType {
+  id: number;
+  externalProductId: string | null;
+  code: string;
+  name: string;
+  description?: string | null;
+  unitOfMeasure?: string | null;
+}
+
 const FattureInCloudConfig: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -93,6 +112,8 @@ const FattureInCloudConfig: React.FC = () => {
   const [companyId, setCompanyId] = useState('');
   const [apiToken, setApiToken] = useState('');
   const [authMode, setAuthMode] = useState<'oauth' | 'token'>('token');
+  const [productProvider, setProductProvider] = useState<'fic' | 'fcloud'>('fic');
+  const [productCompanyId, setProductCompanyId] = useState('');
   
   // Stati per il progresso della sincronizzazione
   const [syncProgress, setSyncProgress] = useState(0);
@@ -190,6 +211,37 @@ const FattureInCloudConfig: React.FC = () => {
       if (!response.ok) throw new Error('Errore nel caricamento ordini');
       return response.json();
     }
+  });
+
+  const localCompaniesQuery = useQuery({
+    queryKey: ['/api/fatture-in-cloud/companies/local'],
+    queryFn: async () => {
+      const response = await fetch('/api/fatture-in-cloud/companies/local');
+      if (!response.ok) throw new Error('Errore nel caricamento aziende locali');
+      return response.json();
+    }
+  });
+
+  useEffect(() => {
+    const configuredCompanyId = configQuery.data?.config?.fatture_in_cloud_company_id;
+    if (!productCompanyId && configuredCompanyId) {
+      setProductCompanyId(String(configuredCompanyId));
+    }
+  }, [configQuery.data, productCompanyId]);
+
+  const productMappingsQuery = useQuery({
+    queryKey: ['/api/fatture-in-cloud/product-mappings', productProvider, productCompanyId],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        provider: productProvider,
+        companyId: productCompanyId
+      });
+      const response = await fetch(`/api/fatture-in-cloud/product-mappings?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Errore nel caricamento associazioni prodotti');
+      return data;
+    },
+    enabled: activeTab === 'prodotti' && !!productCompanyId
   });
 
   // Query per recuperare i dettagli di un ordine specifico
@@ -311,6 +363,82 @@ const FattureInCloudConfig: React.FC = () => {
       setSyncMessage('');
       toast({
         title: "Errore sincronizzazione ordini",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const syncProductsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/fatture-in-cloud/products/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: productProvider,
+          companyId: Number(productCompanyId)
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Errore nella sincronizzazione prodotti');
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ['/api/fatture-in-cloud/product-mappings', productProvider, productCompanyId]
+      });
+      toast({
+        title: "Catalogo aggiornato",
+        description: data.message
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Errore sincronizzazione prodotti",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const saveProductMappingMutation = useMutation({
+    mutationFn: async ({ sizeId, productCatalogId }: {
+      sizeId: number;
+      productCatalogId: number | null;
+    }) => {
+      const endpoint = `/api/fatture-in-cloud/product-mappings/${sizeId}`;
+      const response = await fetch(
+        productCatalogId
+          ? endpoint
+          : `${endpoint}?provider=${productProvider}&companyId=${productCompanyId}`,
+        productCatalogId
+          ? {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                provider: productProvider,
+                companyId: Number(productCompanyId),
+                productCatalogId
+              })
+            }
+          : { method: 'DELETE' }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Errore nel salvataggio associazione');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['/api/fatture-in-cloud/product-mappings', productProvider, productCompanyId]
+      });
+      toast({
+        title: "Associazione aggiornata",
+        description: "Il collegamento tra prodotto esterno e taglia è stato aggiornato"
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Errore associazione",
         description: error.message,
         variant: "destructive"
       });
@@ -703,7 +831,7 @@ const FattureInCloudConfig: React.FC = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-6 w-full">
           <TabsTrigger value="configurazione">
             <Key className="w-4 h-4 mr-2" />
             Configurazione
@@ -715,6 +843,10 @@ const FattureInCloudConfig: React.FC = () => {
           <TabsTrigger value="ordini">
             <ShoppingCart className="w-4 h-4 mr-2" />
             Ordini
+          </TabsTrigger>
+          <TabsTrigger value="prodotti">
+            <PackageSearch className="w-4 h-4 mr-2" />
+            Prodotti
           </TabsTrigger>
           <TabsTrigger value="ddt">
             <FileText className="w-4 h-4 mr-2" />
@@ -1250,6 +1382,145 @@ const FattureInCloudConfig: React.FC = () => {
                     </div>
                   )}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="prodotti" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Associazione prodotti alle taglie APP</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <Alert>
+                <PackageSearch className="w-4 h-4" />
+                <AlertDescription>
+                  Ogni taglia venduta deve essere collegata al codice articolo del catalogo esterno.
+                  Il collegamento viene congelato nelle righe DDT e non modifica i documenti storici.
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Azienda emittente</Label>
+                  <Select value={productCompanyId} onValueChange={setProductCompanyId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona azienda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {localCompaniesQuery.data?.companies
+                        ?.filter((company: any) => company.companyId)
+                        .map((company: any) => (
+                          <SelectItem key={company.companyId} value={String(company.companyId)}>
+                            {company.ragioneSociale || `Azienda ${company.companyId}`}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Catalogo</Label>
+                  <Select
+                    value={productProvider}
+                    onValueChange={(value) => setProductProvider(value as 'fic' | 'fcloud')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fic">Fatture in Cloud</SelectItem>
+                      <SelectItem value="fcloud">FCloud</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    disabled={!productCompanyId || syncProductsMutation.isPending}
+                    onClick={() => syncProductsMutation.mutate()}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${syncProductsMutation.isPending ? 'animate-spin' : ''}`} />
+                    Importa catalogo
+                  </Button>
+                </div>
+              </div>
+
+              {productMappingsQuery.isLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  Caricamento prodotti...
+                </div>
+              ) : productMappingsQuery.error ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertDescription>
+                    {(productMappingsQuery.error as Error).message}
+                  </AlertDescription>
+                </Alert>
+              ) : productCompanyId ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <Badge variant="outline">
+                      {productMappingsQuery.data?.products?.length || 0} prodotti importati
+                    </Badge>
+                    <Badge variant={
+                      productMappingsQuery.data?.sizes?.some((size: ProductMappingSize) => !size.mappedProductId)
+                        ? "destructive"
+                        : "default"
+                    }>
+                      {productMappingsQuery.data?.sizes?.filter((size: ProductMappingSize) => !size.mappedProductId).length || 0} taglie da associare
+                    </Badge>
+                  </div>
+
+                  {productMappingsQuery.data?.products?.length === 0 ? (
+                    <Alert>
+                      <AlertCircle className="w-4 h-4" />
+                      <AlertDescription>
+                        Importa il catalogo prima di associare i prodotti alle taglie.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="border rounded-lg divide-y">
+                      {productMappingsQuery.data?.sizes?.map((size: ProductMappingSize) => (
+                        <div key={size.id} className="grid gap-3 p-4 md:grid-cols-[180px_1fr] md:items-center">
+                          <div>
+                            <div className="font-semibold">{size.code}</div>
+                            <div className="text-sm text-muted-foreground">{size.name}</div>
+                          </div>
+                          <Select
+                            value={size.mappedProductId ? String(size.mappedProductId) : "__none__"}
+                            disabled={saveProductMappingMutation.isPending}
+                            onValueChange={(value) => saveProductMappingMutation.mutate({
+                              sizeId: size.id,
+                              productCatalogId: value === "__none__" ? null : Number(value)
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleziona prodotto" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Nessuna associazione</SelectItem>
+                              {productMappingsQuery.data?.products?.map((product: ExternalProductType) => (
+                                <SelectItem key={product.id} value={String(product.id)}>
+                                  {product.code} — {product.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Alert>
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertDescription>Seleziona un’azienda per gestire il catalogo.</AlertDescription>
+                </Alert>
               )}
             </CardContent>
           </Card>
