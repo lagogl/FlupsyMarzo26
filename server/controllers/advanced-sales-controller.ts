@@ -118,12 +118,13 @@ function ensureAdvancedSaleDocumentSchema() {
 }
 
 /**
- * Ottiene il prossimo numero DDT disponibile leggendo SEMPRE l'ultimo DDT da
+ * Ottiene il prossimo numero DDT disponibile leggendo il massimo progressivo da
  * Fatture in Cloud (FIC) per l'azienda emittente specificata.
  *
  * La numerazione FIC è PER AZIENDA (endpoint /c/{companyId}) e riparte ogni anno,
  * quindi interroghiamo direttamente l'azienda corretta e l'anno corrente. Il numero
- * NON viene più derivato dal database locale: la fonte di verità è Fatture in Cloud.
+ * Il database locale interviene solo per eventuali DDT già riservati ma ancora
+ * non trasmessi a FIC.
  *
  * @param companyId - ID azienda FIC che emette il DDT (OBBLIGATORIO)
  */
@@ -140,37 +141,39 @@ async function getNextAvailableDDTNumber(companyId?: number | null, year = new D
   // La numerazione FIC riparte ogni anno: filtriamo per anno corrente.
   const currentYear = year;
 
-  // Legge gli ultimi DDT (delivery_note) DELL'AZIENDA specifica direttamente da FIC,
-  // usando lo stesso canale per-azienda dell'invio del DDT (ficApiRequest → /c/{companyId}).
-  // L'API non supporta sort=-number, quindi recuperiamo fino a 100 documenti e
-  // calcoliamo lato server il numero più alto.
-  const ficResponse = await ficApiRequest(
-    'GET',
-    String(companyId),
-    accessToken,
-    `/issued_documents?type=delivery_note&year=${currentYear}&per_page=100`
-  );
+  // FIC può restituire più pagine. La fonte di verità è il campo numerico
+  // `number` del DDT per questa azienda/anno, non `numeration`.
+  const docs: any[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const ficResponse = await ficApiRequest(
+      'GET',
+      String(companyId),
+      accessToken,
+      `/issued_documents?type=delivery_note&year=${currentYear}&page=${page}&per_page=100`
+    );
+    const pageDocs: any[] = ficResponse.data?.data ?? [];
+    docs.push(...pageDocs);
+    const lastPage = Number(
+      ficResponse.data?.last_page
+      ?? ficResponse.data?.meta?.pagination?.last_page
+      ?? ficResponse.data?.pagination?.last_page
+      ?? 0
+    );
+    if (!pageDocs.length || (lastPage > 0 && page >= lastPage)) break;
+  }
 
-  const docs: any[] = ficResponse.data?.data ?? [];
-
-  // I DDT vengono emessi con la serie di numerazione '/ddt' (vedi sendDDTToFIC).
-  // Il campo `number` di FIC è progressivo PER SERIE, quindi consideriamo i documenti
-  // di quella serie; se nessuno corrisponde, ripieghiamo su tutti i DDT dell'anno.
-  const serie = '/ddt';
-  const documentiSerie = docs.filter((d) => (d.numeration || '') === serie);
-  const pool = documentiSerie.length > 0 ? documentiSerie : docs;
-
-  const numeroFIC = pool.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
+  const numeroFIC = docs.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
   const localResult = await db.execute(sql`
     SELECT COALESCE(MAX(numero), 0) AS max_number
     FROM ${ddt}
     WHERE company_id = ${companyId}
       AND EXTRACT(YEAR FROM data)::integer = ${currentYear}
+      AND ddt_stato IN ('locale', 'invio')
   `);
   const numeroLocale = Number((localResult as any).rows?.[0]?.max_number || 0);
   const prossimoNumero = Math.max(numeroFIC, numeroLocale) + 1;
 
-  console.log(`✅ Prossimo numero DDT per azienda ${companyId} (anno ${currentYear}, serie "${serie}"): ${prossimoNumero} — ultimo FIC: ${numeroFIC}, ultimo locale: ${numeroLocale}`);
+  console.log(`✅ Prossimo numero DDT per azienda ${companyId} (anno ${currentYear}): ${prossimoNumero} — ultimo FIC: ${numeroFIC}, ultimo locale pendente: ${numeroLocale}`);
 
   return prossimoNumero;
 }
