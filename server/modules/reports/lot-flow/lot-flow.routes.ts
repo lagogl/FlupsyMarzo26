@@ -52,6 +52,9 @@ function parseParams(req: Request): { params: FlowParams; error?: string } {
   if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) {
     return { params: { from, to, suppliers: "all" }, error: "Parametri 'from' e 'to' devono essere date in formato YYYY-MM-DD" };
   }
+  if (from > to) {
+    return { params: { from, to, suppliers: "all" }, error: "La data iniziale non può essere successiva alla data finale" };
+  }
   const suppliersRaw = ((req.query.suppliers as string) || "roem,ecotapes,zeeland")
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -121,6 +124,172 @@ interface StageBalanceRow {
   saldo: number; // entrati - usciti - morti (giacenza teorica residua nella tappa)
   giacenza: number; // animali realmente presenti adesso nella tappa (conteggio ultima operazione)
   perditaNonSpiegata: number; // saldo - giacenza: animali "spariti" senza mortalità registrata
+}
+
+interface MortalityEvent {
+  id: string;
+  operationId: string;
+  kind: "selection" | "screening";
+  date: string;
+  operationNumber: number;
+  tappa: string;
+  flupsy: string;
+  sourceAnimals: number;
+  destinationAnimals: number;
+  mortality: number;
+  mortalityPct: number;
+  confidence: "high" | "medium" | "low";
+  mixedLots: boolean;
+}
+
+interface MortalityStageRow {
+  tappa: string;
+  eventi: number;
+  eventiConMortalita: number;
+  animaliLavorati: number;
+  mortalitaRilevata: number;
+  mortalitaPct: number;
+  eventoPeggiore: number;
+  eventiBassaAffidabilita: number;
+}
+
+async function computeMortalityAnalysis(
+  p: FlowParams,
+): Promise<{ events: MortalityEvent[]; stages: MortalityStageRow[] }> {
+  const supplierPatterns =
+    p.suppliers === "all" ? ["%"] : p.suppliers.map((s) => `%${s}%`);
+
+  const query = `
+    WITH raw_events AS (
+      SELECT
+        'selection'::text AS kind,
+        s.id,
+        s.date,
+        s.selection_number AS operation_number
+      FROM selections s
+      WHERE s.status = 'completed' AND s.date >= $1 AND s.date <= $2
+
+      UNION ALL
+
+      SELECT
+        'screening'::text AS kind,
+        o.id,
+        o.date,
+        o.screening_number AS operation_number
+      FROM screening_operations o
+      WHERE o.status = 'completed' AND o.date >= $1 AND o.date <= $2
+    ), source_rows AS (
+      SELECT 'selection'::text AS kind, ss.selection_id AS event_id,
+        COALESCE(ss.flupsy_id, b.flupsy_id) AS origin_fid,
+        ss.lot_id, COALESCE(ss.animal_count, 0)::numeric AS animal_count
+      FROM selection_source_baskets ss
+      LEFT JOIN baskets b ON b.id = ss.basket_id
+
+      UNION ALL
+
+      SELECT 'screening'::text AS kind, ss.screening_id AS event_id,
+        COALESCE(ss.flupsy_id, b.flupsy_id) AS origin_fid,
+        ss.lot_id, COALESCE(ss.animal_count, 0)::numeric AS animal_count
+      FROM screening_source_baskets ss
+      LEFT JOIN baskets b ON b.id = ss.basket_id
+    ), destination_totals AS (
+      SELECT 'selection'::text AS kind, sd.selection_id AS event_id,
+        COALESCE(SUM(COALESCE(sd.animal_count, 0)), 0)::numeric AS destination_total
+      FROM selection_destination_baskets sd
+      GROUP BY sd.selection_id
+
+      UNION ALL
+
+      SELECT 'screening'::text AS kind, sd.screening_id AS event_id,
+        COALESCE(SUM(COALESCE(sd.animal_count, 0)), 0)::numeric AS destination_total
+      FROM screening_destination_baskets sd
+      GROUP BY sd.screening_id
+    ), source_totals AS (
+      SELECT sr.kind, sr.event_id,
+        SUM(sr.animal_count)::numeric AS source_total,
+        COUNT(DISTINCT sr.lot_id)::int AS lot_count,
+        COUNT(DISTINCT sr.origin_fid)::int AS origin_count
+      FROM source_rows sr
+      GROUP BY sr.kind, sr.event_id
+    ), selected_origins AS (
+      SELECT sr.kind, sr.event_id, sr.origin_fid,
+        SUM(sr.animal_count)::numeric AS selected_source
+      FROM source_rows sr
+      JOIN lots l ON l.id = sr.lot_id
+      WHERE LOWER(l.supplier) LIKE ANY($3::text[])
+      GROUP BY sr.kind, sr.event_id, sr.origin_fid
+    )
+    SELECT
+      e.kind, e.id, e.date, e.operation_number,
+      so.origin_fid, st.source_total, COALESCE(dt.destination_total, 0) AS destination_total,
+      so.selected_source, st.lot_count, st.origin_count,
+      COALESCE(f.name, 'Contenitore non identificato') AS flupsy_name,
+      ${CATEGORY_SQL("f.name")} AS stage,
+      COALESCE(dt.destination_total, 0) * so.selected_source
+        / NULLIF(st.source_total, 0) AS selected_destination,
+      GREATEST(0, st.source_total - COALESCE(dt.destination_total, 0))
+        * so.selected_source / NULLIF(st.source_total, 0) AS selected_mortality
+    FROM raw_events e
+    JOIN source_totals st ON st.kind = e.kind AND st.event_id = e.id
+    JOIN selected_origins so ON so.kind = e.kind AND so.event_id = e.id
+    LEFT JOIN destination_totals dt ON dt.kind = e.kind AND dt.event_id = e.id
+    LEFT JOIN flupsys f ON f.id = so.origin_fid
+    WHERE st.source_total > 0 AND so.selected_source > 0
+    ORDER BY e.date DESC, e.id DESC, so.origin_fid`;
+
+  const result = await pool.query(query, [p.from, p.to, supplierPatterns]);
+  const events: MortalityEvent[] = result.rows.map((r: any) => {
+    const sourceAnimals = Number(r.selected_source) || 0;
+    const destinationAnimals = Number(r.selected_destination) || 0;
+    const mortality = Math.max(0, Number(r.selected_mortality) || 0);
+    const mixedLots = Number(r.lot_count) > 1;
+    const stageUnknown = r.stage === "(altro)";
+    const partiallyAllocated = Number(r.selected_source) < Number(r.source_total);
+    const multipleOrigins = Number(r.origin_count) > 1;
+    const confidence: MortalityEvent["confidence"] = stageUnknown
+      ? "low"
+      : mixedLots || partiallyAllocated || multipleOrigins
+        ? "medium"
+        : "high";
+    return {
+      id: `${r.kind}-${r.id}-${r.origin_fid ?? "unknown"}`,
+      operationId: `${r.kind}-${r.id}`,
+      kind: r.kind,
+      date: String(r.date),
+      operationNumber: Number(r.operation_number),
+      tappa: r.stage,
+      flupsy: r.flupsy_name,
+      sourceAnimals,
+      destinationAnimals,
+      mortality,
+      mortalityPct: sourceAnimals > 0 ? (mortality / sourceAnimals) * 100 : 0,
+      confidence,
+      mixedLots,
+    };
+  });
+
+  const order = ["RACEWAY", "BINS", "MINI FLUPSY", "FLUPSY", "(altro)"];
+  const stages = order.map((tappa) => {
+    const rows = events.filter((event) => event.tappa === tappa);
+    const operationIds = new Set(rows.map((event) => event.operationId));
+    const mortalityOperationIds = new Set(
+      rows.filter((event) => event.mortality > 0).map((event) => event.operationId),
+    );
+    const animaliLavorati = rows.reduce((sum, event) => sum + event.sourceAnimals, 0);
+    const mortalitaRilevata = rows.reduce((sum, event) => sum + event.mortality, 0);
+    return {
+      tappa,
+      eventi: operationIds.size,
+      eventiConMortalita: mortalityOperationIds.size,
+      animaliLavorati,
+      mortalitaRilevata,
+      mortalitaPct: animaliLavorati > 0 ? (mortalitaRilevata / animaliLavorati) * 100 : 0,
+      eventoPeggiore: rows.reduce((max, event) => Math.max(max, event.mortalityPct), 0),
+      eventiBassaAffidabilita: rows.filter((event) => event.confidence !== "high").length,
+    };
+  });
+
+  return { events, stages };
 }
 
 // Giacenza attuale per tappa: somma del conteggio dell'ultima operazione di
@@ -228,7 +397,7 @@ async function computeStageBalance(p: FlowParams): Promise<StageBalanceRow[]> {
       COALESCE(SUM(CASE WHEN pos.type='transfer_in' AND pos.origine=c.k
             AND pos.origine IS DISTINCT FROM pos.destinazione THEN pos.quantity END),0)::bigint
         + COALESCE(SUM(CASE WHEN pos.type='sale' AND pos.cesta=c.k THEN pos.quantity END),0)::bigint AS usciti,
-      COALESCE(SUM(CASE WHEN pos.type='mortality' AND COALESCE(NULLIF(pos.origine,'(altro)'),pos.cesta)=c.k THEN pos.quantity END),0)::bigint AS morti
+      COALESCE(SUM(CASE WHEN pos.type='mortality' AND COALESCE(NULLIF(pos.origine,'(altro)'),pos.cesta)=c.k THEN ABS(pos.quantity) END),0)::bigint AS morti
     FROM (VALUES ('RACEWAY'),('BINS'),('MINI FLUPSY'),('FLUPSY'),('(altro)')) AS c(k)
     LEFT JOIN pos ON TRUE
     GROUP BY c.k`;
@@ -262,11 +431,20 @@ lotFlowRoutes.get("/lot-flow", async (req: Request, res: Response) => {
   try {
     const { params, error } = parseParams(req);
     if (error) return res.status(400).json({ success: false, message: error });
-    const [matrix, stageBalance] = await Promise.all([
+    const [matrix, stageBalance, mortalityAnalysis] = await Promise.all([
       computeLotFlow(params),
       computeStageBalance(params),
+      computeMortalityAnalysis(params),
     ]);
-    res.json({ from: params.from, to: params.to, suppliers: params.suppliers, matrix, stageBalance });
+    res.json({
+      from: params.from,
+      to: params.to,
+      suppliers: params.suppliers,
+      matrix,
+      stageBalance,
+      mortalityEvents: mortalityAnalysis.events,
+      mortalityStages: mortalityAnalysis.stages,
+    });
   } catch (error) {
     console.error("Errore report flusso lotti:", error);
     return sendError(res, error, "Impossibile generare il report flusso");
@@ -277,9 +455,10 @@ lotFlowRoutes.get("/lot-flow/export", async (req: Request, res: Response) => {
   try {
     const { params, error } = parseParams(req);
     if (error) return res.status(400).json({ success: false, message: error });
-    const [matrix, stageBalance] = await Promise.all([
+    const [matrix, stageBalance, mortalityAnalysis] = await Promise.all([
       computeLotFlow(params),
       computeStageBalance(params),
+      computeMortalityAnalysis(params),
     ]);
 
     const find = (o: string, d: string) =>
@@ -370,6 +549,63 @@ lotFlowRoutes.get("/lot-flow/export", async (req: Request, res: Response) => {
     );
     s4.addRow({});
     s4.addRow({ t: "Nota", e: "Mortalità attribuita alla tappa di origine della vagliatura (dove erano gli animali prima della conta). 'Saldo teorico' = entrati − usciti − morti. 'Giacenza attuale' = animali realmente presenti adesso nelle ceste attive (conteggio ultima operazione, ripartito sui nostri lotti). 'Perdita non spiegata' = saldo teorico − giacenza: animali spariti senza mortalità o vendita registrata." });
+
+    const s5 = wb.addWorksheet("Diagnostica mortalità");
+    s5.columns = [
+      { header: "Tappa", key: "tappa", width: 20 },
+      { header: "Operazioni completate", key: "eventi", width: 22, style: { numFmt: fmtInt } },
+      { header: "Eventi con mortalità", key: "eventiMort", width: 22, style: { numFmt: fmtInt } },
+      { header: "Animali lavorati", key: "lavorati", width: 20, style: { numFmt: fmtInt } },
+      { header: "Mortalità rilevata", key: "mortalita", width: 20, style: { numFmt: fmtInt } },
+      { header: "% sul lavorato", key: "percentuale", width: 18, style: { numFmt: "0.0" } },
+      { header: "Peggior evento %", key: "peggiore", width: 18, style: { numFmt: "0.0" } },
+      { header: "Eventi da verificare", key: "verificare", width: 20, style: { numFmt: fmtInt } },
+    ];
+    s5.getRow(1).font = { bold: true };
+    mortalityAnalysis.stages.forEach((r) => s5.addRow({
+      tappa: r.tappa,
+      eventi: r.eventi,
+      eventiMort: r.eventiConMortalita,
+      lavorati: r.animaliLavorati,
+      mortalita: r.mortalitaRilevata,
+      percentuale: r.mortalitaPct,
+      peggiore: r.eventoPeggiore,
+      verificare: r.eventiBassaAffidabilita,
+    }));
+    s5.addRow({});
+    s5.addRow({
+      tappa: "Nota",
+      eventi: "Mortalità osservata nelle operazioni completate: differenza positiva tra animali nelle ceste di origine e animali nelle ceste di destinazione. È attribuita alla tappa di origine, dove la differenza è stata rilevata, non necessariamente causata.",
+    });
+
+    const s6 = wb.addWorksheet("Eventi mortalità");
+    s6.columns = [
+      { header: "Data", key: "data", width: 14 },
+      { header: "Tipo", key: "tipo", width: 14 },
+      { header: "Numero operazione", key: "numero", width: 18, style: { numFmt: fmtInt } },
+      { header: "Tappa", key: "tappa", width: 18 },
+      { header: "FLUPSY", key: "flupsy", width: 30 },
+      { header: "Animali origine", key: "origine", width: 20, style: { numFmt: fmtInt } },
+      { header: "Animali destinazione", key: "destinazione", width: 22, style: { numFmt: fmtInt } },
+      { header: "Mortalità rilevata", key: "mortalita", width: 20, style: { numFmt: fmtInt } },
+      { header: "Mortalità %", key: "percentuale", width: 16, style: { numFmt: "0.0" } },
+      { header: "Affidabilità", key: "affidabilita", width: 16 },
+      { header: "Lotti misti", key: "misti", width: 14 },
+    ];
+    s6.getRow(1).font = { bold: true };
+    mortalityAnalysis.events.forEach((event) => s6.addRow({
+      data: event.date,
+      tipo: event.kind === "selection" ? "Selezione" : "Screening",
+      numero: event.operationNumber,
+      tappa: event.tappa,
+      flupsy: safeCell(event.flupsy),
+      origine: event.sourceAnimals,
+      destinazione: event.destinationAnimals,
+      mortalita: event.mortality,
+      percentuale: event.mortalityPct,
+      affidabilita: event.confidence === "high" ? "Alta" : event.confidence === "medium" ? "Media" : "Bassa",
+      misti: event.mixedLots ? "Sì" : "No",
+    }));
 
     const filename = `Flusso_animali_${params.from}_${params.to}.xlsx`;
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
