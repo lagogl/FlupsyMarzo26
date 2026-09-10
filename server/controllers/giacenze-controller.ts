@@ -225,29 +225,6 @@ async function calculateGiacenzeForRange(startDate: Date, endDate: Date, flupsyI
     ? sql`AND b.flupsy_id = ${parseInt(flupsyId)}` 
     : sql``;
 
-  // Carica taglie per determinare la taglia effettiva da animali/kg
-  const sizesForLookup = await db.execute(sql`
-    SELECT code, min_animals_per_kg, max_animals_per_kg 
-    FROM sizes 
-    ORDER BY COALESCE(max_animals_per_kg, 999999999) ASC
-  `);
-  const sizeRanges: { code: string; min: number | null; max: number | null }[] = 
-    (sizesForLookup.rows as any[]).map(r => ({
-      code: r.code,
-      min: r.min_animals_per_kg ? parseInt(r.min_animals_per_kg) : null,
-      max: r.max_animals_per_kg ? parseInt(r.max_animals_per_kg) : null,
-    }));
-
-  // Funzione: determina taglia effettiva da animali/kg
-  const getEffectiveSizeCode = (animalsPerKg: number | null, registeredCode: string): string => {
-    if (!animalsPerKg || animalsPerKg <= 0) return registeredCode;
-    const match = sizeRanges.find(s => 
-      (s.min === null || animalsPerKg >= s.min) && 
-      (s.max === null || animalsPerKg <= s.max)
-    );
-    return match ? match.code : registeredCode;
-  };
-
   // Query CORRETTA per giacenza: ultima operazione di ogni cestello attivo
   const giacenzaResult = await db.execute(sql`
     WITH latest_ops AS (
@@ -383,9 +360,8 @@ async function calculateGiacenzeForRange(startDate: Date, endDate: Date, flupsyI
     const animalCount = parseInt(row.animal_count) || 0;
     totale_giacenza += animalCount;
 
-    // Aggrega per taglia effettiva (da animali/kg misurati, non size_code registrato)
-    const animalsPerKgRaw = parseInt(row.animals_per_kg) || 0;
-    const sizeCode = getEffectiveSizeCode(animalsPerKgRaw, row.size_code || 'N/A');
+    // La sizeId registrata sull'ultima operazione è la verità storica.
+    const sizeCode = row.size_code || 'N/A';
     taglieMap.set(sizeCode, (taglieMap.get(sizeCode) || 0) + animalCount);
 
     // Aggrega per FLUPSY
