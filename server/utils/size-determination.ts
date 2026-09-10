@@ -1,87 +1,137 @@
 /**
- * Utility functions for automatic size determination based on animals per kg
+ * Utility functions for automatic size determination based on animals per kg.
  */
 
-import { db } from '../db';
-import { sizes } from '../../shared/schema';
-import { and, sql } from 'drizzle-orm';
+import { and, asc, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { db } from "../db";
+import { sizeRangeVersions, sizes } from "../../shared/schema";
+
+export type SizeDeterminationOptions = {
+  /**
+   * Data ISO YYYY-MM-DD per cui applicare i range.
+   * Se omessa, PostgreSQL usa CURRENT_DATE.
+   */
+  atDate?: string;
+};
+
+export type SizeRangeCandidate = {
+  sizeId: number;
+  code: string;
+  minAnimalsPerKg: number;
+  maxAnimalsPerKg: number;
+};
+
+function validateIsoDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`Data range taglia non valida: ${value}`);
+  }
+
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new Error(`Data range taglia non valida: ${value}`);
+  }
+
+  return value;
+}
 
 /**
- * Determines the appropriate size ID based on animals per kg value.
- * Handles exact matches, out-of-range values, and gaps in size ranges.
- * 
- * @param animalsPerKg - Number of animals per kg
- * @returns Promise resolving to the appropriate size ID, or null if out of range
+ * Pure range matcher shared by runtime code and focused tests.
+ * Returns null outside the configured scale and chooses the nearest boundary
+ * only when a value falls inside a gap.
  */
-export async function determineSizeByAnimalsPerKg(animalsPerKg: number): Promise<number | null> {
-  if (!animalsPerKg || animalsPerKg <= 0) return null;
-  
-  try {
-    // 1. Try exact range match first
-    const exactMatch = await db
-      .select()
-      .from(sizes)
-      .where(
-        and(
-          sql`${animalsPerKg} >= ${sizes.minAnimalsPerKg}`,
-          sql`${animalsPerKg} <= ${sizes.maxAnimalsPerKg}`
-        )
-      )
-      .limit(1);
-    
-    if (exactMatch.length > 0) {
-      console.log(`✅ Taglia esatta per ${animalsPerKg} animali/kg:`, exactMatch[0].code);
-      return exactMatch[0].id;
-    }
-    
-    // 2. No exact match - get all sizes ordered by min range
-    const allSizes = await db.select().from(sizes).orderBy(sizes.minAnimalsPerKg);
-    
-    if (allSizes.length === 0) {
-      console.error("❌ Nessuna taglia trovata nel database!");
-      return null;
-    }
-    
-    // 3. Find actual min/max from all sizes
-    const minRange = allSizes[0].minAnimalsPerKg!;
-    const maxRange = allSizes[allSizes.length - 1].maxAnimalsPerKg!;
-    
-    // 4. Handle out-of-range values
-    if (animalsPerKg < minRange) {
-      // Below minimum → TP-10000+ (fuori scala, pesci troppo grandi)
-      console.log(`⚠️ ${animalsPerKg} SOTTO range minimo ${minRange} → TP-10000+ (pesci troppo grandi) → NULL`);
-      return null;
-    }
-    
-    if (animalsPerKg > maxRange) {
-      // Above maximum → TP-180- (fuori scala, pesci troppo piccoli)
-      console.log(`⚠️ ${animalsPerKg} SOPRA range massimo ${maxRange} → TP-180- (pesci troppo piccoli) → NULL`);
-      return null;
-    }
-    
-    // 5. Value falls in a gap between ranges - find closest boundary
-    let closestSize = allSizes[0];
-    let minDistance = Math.min(
-      Math.abs(animalsPerKg - closestSize.minAnimalsPerKg!),
-      Math.abs(animalsPerKg - closestSize.maxAnimalsPerKg!)
+export function findSizeInRanges(
+  animalsPerKg: number,
+  candidates: SizeRangeCandidate[],
+): SizeRangeCandidate | null {
+  if (!Number.isFinite(animalsPerKg) || animalsPerKg <= 0 || candidates.length === 0) {
+    return null;
+  }
+
+  const ordered = [...candidates].sort(
+    (a, b) => a.minAnimalsPerKg - b.minAnimalsPerKg,
+  );
+
+  const exact = ordered.find(
+    (candidate) =>
+      animalsPerKg >= candidate.minAnimalsPerKg &&
+      animalsPerKg <= candidate.maxAnimalsPerKg,
+  );
+  if (exact) return exact;
+
+  const scaleMin = Math.min(...ordered.map((candidate) => candidate.minAnimalsPerKg));
+  const scaleMax = Math.max(...ordered.map((candidate) => candidate.maxAnimalsPerKg));
+  if (animalsPerKg < scaleMin || animalsPerKg > scaleMax) return null;
+
+  return ordered.reduce((closest, candidate) => {
+    const closestDistance = Math.min(
+      Math.abs(animalsPerKg - closest.minAnimalsPerKg),
+      Math.abs(animalsPerKg - closest.maxAnimalsPerKg),
     );
-    
-    for (const size of allSizes) {
-      const distanceFromMin = Math.abs(animalsPerKg - size.minAnimalsPerKg!);
-      const distanceFromMax = Math.abs(animalsPerKg - size.maxAnimalsPerKg!);
-      const distance = Math.min(distanceFromMin, distanceFromMax);
-      
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestSize = size;
-      }
+    const candidateDistance = Math.min(
+      Math.abs(animalsPerKg - candidate.minAnimalsPerKg),
+      Math.abs(animalsPerKg - candidate.maxAnimalsPerKg),
+    );
+    return candidateDistance < closestDistance ? candidate : closest;
+  });
+}
+
+async function getRangeCandidates(atDate?: string): Promise<SizeRangeCandidate[]> {
+  const effectiveDate = atDate ? validateIsoDate(atDate) : null;
+  const dateExpression = effectiveDate
+    ? sql`${effectiveDate}::date`
+    : sql`CURRENT_DATE`;
+
+  return db
+    .select({
+      sizeId: sizes.id,
+      code: sizes.code,
+      minAnimalsPerKg: sizeRangeVersions.minAnimalsPerKg,
+      maxAnimalsPerKg: sizeRangeVersions.maxAnimalsPerKg,
+    })
+    .from(sizeRangeVersions)
+    .innerJoin(sizes, sql`${sizes.id} = ${sizeRangeVersions.sizeId}`)
+    .where(
+      and(
+        lte(sizeRangeVersions.validFrom, dateExpression),
+        or(
+          isNull(sizeRangeVersions.validTo),
+          gte(sizeRangeVersions.validTo, dateExpression),
+        ),
+      ),
+    )
+    .orderBy(asc(sizeRangeVersions.minAnimalsPerKg));
+}
+
+/**
+ * Determines the appropriate size ID using the range version valid on atDate.
+ * Existing callers can omit options and retain current-date behaviour.
+ */
+export async function determineSizeByAnimalsPerKg(
+  animalsPerKg: number,
+  options: SizeDeterminationOptions = {},
+): Promise<number | null> {
+  if (!Number.isFinite(animalsPerKg) || animalsPerKg <= 0) return null;
+
+  try {
+    const candidates = await getRangeCandidates(options.atDate);
+    if (candidates.length === 0) {
+      console.error(
+        `Nessun range taglia valido per la data ${options.atDate ?? "corrente"}`,
+      );
+      return null;
     }
-    
-    console.log(`📍 Gap nei range: ${animalsPerKg} animali/kg → taglia più vicina ${closestSize.code}`);
-    return closestSize.id;
-    
+
+    const match = findSizeInRanges(animalsPerKg, candidates);
+    if (!match) {
+      console.warn(
+        `${animalsPerKg} animali/kg fuori dalla scala valida alla data ${options.atDate ?? "corrente"}`,
+      );
+      return null;
+    }
+
+    return match.sizeId;
   } catch (error) {
-    console.error("❌ Errore determinazione taglia:", error);
+    console.error("Errore determinazione temporale taglia:", error);
     return null;
   }
 }
