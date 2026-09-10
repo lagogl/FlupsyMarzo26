@@ -22,6 +22,14 @@ const formSchema = insertSizeSchema.extend({
   sizeMm: z.coerce.number().min(0, "La misura deve essere maggiore o uguale a 0"),
   minAnimalsPerKg: z.coerce.number().min(0, "Il valore minimo deve essere maggiore o uguale a 0"),
   maxAnimalsPerKg: z.coerce.number().min(0, "Il valore massimo deve essere maggiore o uguale a 0"),
+}).superRefine((values, ctx) => {
+  if (values.minAnimalsPerKg > values.maxAnimalsPerKg) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["maxAnimalsPerKg"],
+      message: "Il valore massimo deve essere maggiore o uguale al minimo",
+    });
+  }
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -118,6 +126,7 @@ export default function SizeForm({
                     onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : 0)}
                   />
                 </FormControl>
+                <FormDescription>Estremo inferiore incluso nel range.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -137,6 +146,7 @@ export default function SizeForm({
                     onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : 0)}
                   />
                 </FormControl>
+                <FormDescription>Estremo superiore incluso nel range.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

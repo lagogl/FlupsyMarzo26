@@ -187,16 +187,8 @@ export default function Sizes() {
       }
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || 'Errore durante l\'aggiornamento della taglia';
-      
-      if (errorMessage.includes('PROTEZIONE DATI') || errorMessage.includes('range')) {
-        setEditError(
-          'I range (minAnimalsPerKg/maxAnimalsPerKg) di questa taglia non possono essere modificati perché è associata a operazioni esistenti. ' +
-          'Puoi modificare: nome, colore, e note.'
-        );
-      } else {
-        setEditError(errorMessage);
-      }
+      const errorMessage = error?.response?.data?.message || error?.message || 'Errore durante l\'aggiornamento della taglia';
+      setEditError(errorMessage);
       
       toast({
         variant: 'destructive',
@@ -289,6 +281,10 @@ export default function Sizes() {
 
       {/* Sizes Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          <Pencil className="h-4 w-4 shrink-0" />
+          <span>Clicca sui valori Min o Max di una taglia per modificarne il range.</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -324,7 +320,7 @@ export default function Sizes() {
                 <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   Note
                 </th>
-                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <th scope="col" className="sticky right-0 z-10 bg-gray-50 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide shadow-[-4px_0_6px_-5px_rgba(0,0,0,0.35)]">
                   Azioni
                 </th>
               </tr>
@@ -381,21 +377,37 @@ export default function Sizes() {
                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                         {size.sizeMm}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                        {size.minAnimalsPerKg ? size.minAnimalsPerKg.toLocaleString('it-IT') : '-'}
+                      <td className="px-3 py-2 whitespace-nowrap text-sm">
+                        <button
+                          type="button"
+                          className="group/range inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-gray-700 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onClick={() => { setEditError(''); setEditingSize(size); }}
+                          title="Modifica il range della taglia"
+                        >
+                          {size.minAnimalsPerKg != null ? size.minAnimalsPerKg.toLocaleString('it-IT') : '-'}
+                          <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover/range:opacity-100" />
+                        </button>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                        {size.maxAnimalsPerKg ? size.maxAnimalsPerKg.toLocaleString('it-IT') : '-'}
+                      <td className="px-3 py-2 whitespace-nowrap text-sm">
+                        <button
+                          type="button"
+                          className="group/range inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-gray-700 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onClick={() => { setEditError(''); setEditingSize(size); }}
+                          title="Modifica il range della taglia"
+                        >
+                          {size.maxAnimalsPerKg != null ? size.maxAnimalsPerKg.toLocaleString('it-IT') : '-'}
+                          <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover/range:opacity-100" />
+                        </button>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                         {size.notes || '-'}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm font-medium">
+                      <td className="sticky right-0 bg-white px-3 py-2 whitespace-nowrap text-sm font-medium shadow-[-4px_0_6px_-5px_rgba(0,0,0,0.35)] group-hover:bg-gray-50">
                         <Button 
                           variant="ghost" 
                           size="sm"
                           className="h-8 w-8 p-0"
-                          onClick={() => setEditingSize(size)}>
+                           onClick={() => { setEditError(''); setEditingSize(size); }}>
                           <Pencil className="h-3 w-3 text-gray-600" />
                         </Button>
                       </td>
@@ -432,7 +444,7 @@ export default function Sizes() {
         }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Modifica Taglia</DialogTitle>
+            <DialogTitle>Modifica Taglia e Range</DialogTitle>
           </DialogHeader>
           {editingSize && (
             <>
