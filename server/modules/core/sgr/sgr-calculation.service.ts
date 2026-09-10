@@ -1,6 +1,7 @@
 import { storage } from "../../../storage";
 import { Operation, Size } from "../../../../shared/schema";
 import { sgrAiQualityService } from "./sgr-ai-quality.service";
+import { determineSizeByAnimalsPerKg } from "../../../utils/size-determination";
 
 /**
  * Service for calculating SGR from historical operations data
@@ -9,20 +10,19 @@ import { sgrAiQualityService } from "./sgr-ai-quality.service";
  */
 export class SgrCalculationService {
   
-  /**
-   * Find size for given animalsPerKg
-   * Handles open bounds (null min/max) for edge sizes
-   */
-  private async findSizeForAnimalsPerKg(animalsPerKg: number): Promise<Size | null> {
-    const sizes = await storage.getAllSizes();
-    
-    const matchingSize = sizes.find(size => {
-      const minBound = size.minAnimalsPerKg || 0;
-      const maxBound = size.maxAnimalsPerKg || Infinity;
-      return animalsPerKg >= minBound && animalsPerKg <= maxBound;
-    });
-    
-    return matchingSize || null;
+  private async resolveHistoricalSize(
+    operation: Operation,
+    sizeMap: Map<number, Size>
+  ): Promise<Size | null> {
+    const recordedSize = sizeMap.get(operation.sizeId);
+    if (recordedSize) return recordedSize;
+    if (!operation.animalsPerKg) return null;
+
+    const fallbackSizeId = await determineSizeByAnimalsPerKg(
+      operation.animalsPerKg,
+      { atDate: String(operation.date).substring(0, 10) }
+    );
+    return fallbackSizeId ? sizeMap.get(fallbackSizeId) ?? null : null;
   }
 
   /**
@@ -54,6 +54,7 @@ export class SgrCalculationService {
    */
   private async collectCrossCyclePairs(
     allOperations: Operation[],
+    sizeMap: Map<number, Size>,
     windowStart: Date,
     windowEnd: Date
   ): Promise<Array<{ sizeId: number; sgr: number; parentCycleId: number; childCycleId: number }>> {
@@ -97,9 +98,6 @@ export class SgrCalculationService {
       const childDate = new Date(childPA.date);
       if (childDate < windowStart || childDate > windowEnd) continue;
 
-      // We need animalsPerKg on the parent op to determine size class
-      if (!parentPA.animalsPerKg) continue;
-
       const days = Math.floor(
         (new Date(childPA.date).getTime() - new Date(parentPA.date).getTime()) / (1000 * 60 * 60 * 24)
       );
@@ -113,8 +111,8 @@ export class SgrCalculationService {
 
       if (sgr === null || sgr <= 0 || sgr >= 10) continue;
 
-      // Attribute SGR to the parent's size class (where the animals were at T1)
-      const parentSize = await this.findSizeForAnimalsPerKg(parentPA.animalsPerKg);
+      // Attribuisce l'SGR alla taglia storica del ciclo padre.
+      const parentSize = await this.resolveHistoricalSize(parentPA, sizeMap);
       if (!parentSize) continue;
 
       results.push({
@@ -150,7 +148,11 @@ export class SgrCalculationService {
     
     console.log(`📅 SGR CALCULATION: Date range ${startDate.toISOString()} to ${endDate.toISOString()}`);
     
-    const allOperations = await storage.getOperations();
+    const [allOperations, sizes] = await Promise.all([
+      storage.getOperations(),
+      storage.getAllSizes(),
+    ]);
+    const sizeMap = new Map(sizes.map((size) => [size.id, size]));
     
     // Filter weighing operations in the target month
     const targetOperations = allOperations.filter(op => {
@@ -216,8 +218,8 @@ export class SgrCalculationService {
         
         if (days < 5) continue;
         
-        const size1 = await this.findSizeForAnimalsPerKg(op1.animalsPerKg!);
-        const size2 = await this.findSizeForAnimalsPerKg(op2.animalsPerKg!);
+        const size1 = await this.resolveHistoricalSize(op1, sizeMap);
+        const size2 = await this.resolveHistoricalSize(op2, sizeMap);
         
         if (!size1 || !size2 || size1.id !== size2.id) continue;
         
@@ -239,6 +241,7 @@ export class SgrCalculationService {
     // Parent prima-attivazione can be from any time (we use allOperations)
     const crossCyclePairs = await this.collectCrossCyclePairs(
       allOperations,
+      sizeMap,
       startDate,
       endDate
     );
