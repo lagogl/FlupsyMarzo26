@@ -33,3 +33,4 @@
 - [Prodotti FIC per taglia](fic-product-size-mapping.md) — mapping esplicito per azienda/provider; il DDT congela codice e nome prodotto e l’invio FIC fallisce se manca l’associazione.
 - [Schema runtime e Publish](runtime-schema-publish-drift.md) — tabelle e indici creati dal server devono essere anche nello schema Drizzle, altrimenti Publish propone DROP distruttivi.
 - [Backup PostgreSQL client](backup-postgres-client.md) — il deploy deve usare pg_dump 16 per Neon 16; credenziali solo nell’environment di execFile, mai nella command line.
+- [Fabbisogno schiuditoio non additivo](hatchery-need-non-additive.md) — i fabbisogni mensili della proiezione includono arretrati riportati; non sommarli come raccomandazione totale.

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays, RefreshCw } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays, RefreshCw, AlertTriangle, Info, ShieldCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useCallback, useRef, useMemo } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1284,6 +1284,47 @@ export default function ProiezioneCrescita() {
   const groupsBelow = data.groups.filter(g => !g.alreadyAtTarget);
   const groupsAbove = data.groups.filter(g => g.alreadyAtTarget);
   const mc = data.monthlyContext;
+  const decisionSupport = (() => {
+    const totalDemand = (mc[0]?.ordiniArretrati || 0) + mc.reduce((sum, m) => sum + (m.domandaEffettiva || 0), 0);
+    const totalFulfilled = Math.min(
+      totalDemand,
+      mc.reduce((sum, m) => sum + (m.ordiniEvasi || 0), 0),
+    );
+    const peakBacklogMonth = mc.reduce<MonthlyContext | null>(
+      (peak, m) => {
+        const outgoing = Math.max(0, (m.domandaEffettiva || 0) + (m.ordiniArretrati || 0) - (m.ordiniEvasi || 0));
+        const peakOutgoing = peak
+          ? Math.max(0, (peak.domandaEffettiva || 0) + (peak.ordiniArretrati || 0) - (peak.ordiniEvasi || 0))
+          : -1;
+        return outgoing > peakOutgoing ? m : peak;
+      },
+      null,
+    );
+    const peakBacklog = peakBacklogMonth
+      ? Math.max(0, (peakBacklogMonth.domandaEffettiva || 0) + (peakBacklogMonth.ordiniArretrati || 0) - (peakBacklogMonth.ordiniEvasi || 0))
+      : 0;
+    const totalArrivals = mc.reduce((sum, m) => sum + (m.arriviSchiuditoio || 0), 0);
+    const nextNeededMonth = mc.find(m => (m.schiuditoioNecessario || 0) > 0) || null;
+    const nextNeeded = nextNeededMonth?.schiuditoioNecessario || 0;
+    const lateMonths = mc.filter(m => m.arrivalTooLate && (m.arriviSchiuditoio || 0) > 0).length;
+    const coverage = totalDemand > 0 ? Math.min(100, (totalFulfilled / totalDemand) * 100) : null;
+    const hatcheryPeakMonth = mc.reduce<MonthlyContext | null>((peak, m) => {
+      const contribution = Math.max(0, m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario);
+      const peakContribution = peak ? Math.max(0, peak.giacenzaLordaConSchiuditoio - peak.giacenzaLordaInventario) : -1;
+      return contribution > peakContribution ? m : peak;
+    }, null);
+    const hatcheryContribution = hatcheryPeakMonth
+      ? Math.max(0, hatcheryPeakMonth.giacenzaLordaConSchiuditoio - hatcheryPeakMonth.giacenzaLordaInventario)
+      : 0;
+    const stockViewsEqual = mc.length > 0 && mc.every(m => m.giacenzaLordaConSchiuditoio === m.giacenzaLordaInventario);
+    const firstMonth = translateMonthLabel(mc[0]?.monthLabel || "", lang);
+    const lastMonth = translateMonthLabel(mc[mc.length - 1]?.monthLabel || "", lang);
+    return {
+      totalDemand, totalFulfilled, peakBacklog, peakBacklogMonth, totalArrivals, nextNeeded, nextNeededMonth, lateMonths,
+      coverage, hatcheryContribution, hatcheryPeakMonth, stockViewsEqual,
+      period: firstMonth && lastMonth ? `${firstMonth} – ${lastMonth}` : "",
+    };
+  })();
 
   const handleSaveHatchery = (year: number, month: number) => {
     const key = `${year}-${month}`;
@@ -1334,18 +1375,20 @@ export default function ProiezioneCrescita() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center justify-between gap-3">
+    <div className="p-4 md:p-6 space-y-6 bg-[linear-gradient(135deg,hsl(176_35%_97%),hsl(42_40%_98%))] min-h-[100dvh]">
+      <div className="flex flex-col items-stretch justify-between gap-3 rounded-2xl border border-teal-900/10 bg-[#f7fbfa]/90 px-4 py-4 shadow-[0_8px_30px_rgba(20,83,82,0.06)] sm:flex-row sm:items-center">
         <div className="flex items-center gap-3">
-          <TrendingUp className="h-7 w-7 text-primary" />
+          <div className="rounded-xl bg-[#0f766e] p-2.5 text-white shadow-sm">
+            <TrendingUp className="h-6 w-6" />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold">{t("pc_header_title_pre")} {data.targetSize}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-[#123b3a]">{t("pc_header_title_pre")} {data.targetSize}</h1>
             <p className="text-sm text-muted-foreground">
               {t("pc_header_subtitle_pre")} {monthsHorizon} {t("pc_header_subtitle_suf")}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center justify-end gap-2 shrink-0">
           <div className="flex rounded-md overflow-hidden border text-xs font-medium">
             <button onClick={() => setLang("it")} className={`px-2 py-1 ${lang === "it" ? "bg-primary text-primary-foreground" : "bg-white text-muted-foreground hover:bg-muted"}`}>IT</button>
             <button onClick={() => setLang("en")} className={`px-2 py-1 ${lang === "en" ? "bg-primary text-primary-foreground" : "bg-white text-muted-foreground hover:bg-muted"}`}>EN</button>
@@ -1357,17 +1400,18 @@ export default function ProiezioneCrescita() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <Card className="border-teal-900/10 bg-[#f7fbfa] shadow-sm transition-shadow hover:shadow-md">
           <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <div className="flex items-center gap-2 text-sm text-[#39706e] mb-1">
               <Target className="h-4 w-4" />
               {t("pc_kpi_giacenza_tot")}
             </div>
-            <div className="text-2xl font-bold">{formatNumber(data.totalCurrentQuantity)}</div>
+            <div className="text-2xl font-bold text-[#123b3a]">{formatNumber(data.totalCurrentQuantity)}</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">{t("pc_kpi_giacenza_tot")} · {t("pc_controls_avvio")} {startMonth}/{startYear}</div>
           </CardContent>
         </Card>
-        <Card className="border-green-200">
+        <Card className="border-emerald-200 bg-emerald-50/60 shadow-sm transition-shadow hover:shadow-md">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-green-700 mb-1">
               <CheckCircle2 className="h-4 w-4" />
@@ -1376,7 +1420,7 @@ export default function ProiezioneCrescita() {
             <div className="text-2xl font-bold text-green-700">{formatNumber(data.totalAlreadyAtTarget)}</div>
           </CardContent>
         </Card>
-        <Card className="border-amber-200">
+        <Card className="border-amber-200 bg-amber-50/60 shadow-sm transition-shadow hover:shadow-md">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-sm text-amber-700 mb-1">
               <Clock className="h-4 w-4" />
@@ -1385,7 +1429,70 @@ export default function ProiezioneCrescita() {
             <div className="text-2xl font-bold text-amber-700">{formatNumber(data.totalNotYetAtTarget)}</div>
           </CardContent>
         </Card>
+        <Card className={`shadow-sm transition-shadow hover:shadow-md ${decisionSupport.coverage !== null && decisionSupport.coverage < 100 ? "border-rose-200 bg-rose-50/60" : "border-teal-200 bg-teal-50/60"}`}>
+          <CardContent className="pt-4 pb-4">
+            <div className={`flex items-center gap-2 text-sm mb-1 ${decisionSupport.coverage !== null && decisionSupport.coverage < 100 ? "text-rose-700" : "text-teal-700"}`}>
+              {decisionSupport.coverage !== null && decisionSupport.coverage < 100 ? <AlertTriangle className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+              {lang === "it" ? "Copertura domanda target" : "Target demand coverage"}
+            </div>
+            <div className="text-2xl font-bold text-[#123b3a]">{decisionSupport.coverage === null ? "—" : `${decisionSupport.coverage.toFixed(1)}%`}</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">{formatNumber(decisionSupport.totalFulfilled)} / {formatNumber(decisionSupport.totalDemand)} {lang === "it" ? "soddisfatti" : "fulfilled"}</div>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card className="overflow-hidden border-[#8ac8c0]/50 bg-[#f4fbf9] shadow-sm">
+        <CardHeader className="border-b border-[#8ac8c0]/30 bg-[#e7f5f1] px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-semibold text-[#164e4b]">{lang === "it" ? "Segnali operativi" : "Operating signals"}</CardTitle>
+              <p className="mt-0.5 text-xs text-[#39706e]">{decisionSupport.period} · target {data.targetSize} · {lang === "it" ? "sintesi dell’orizzonte simulato" : "simulated horizon summary"}</p>
+            </div>
+            <span className="rounded-full border border-[#8ac8c0] bg-[#f7fffd] px-2.5 py-1 text-[11px] font-medium text-[#39706e]">{monthsHorizon} {t("pc_controls_mesi")}</span>
+          </div>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-white/80 bg-white/70 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#39706e]"><Target className="h-3.5 w-3.5" /> {lang === "it" ? "Copertura domanda target" : "Target demand coverage"}</div>
+            <p className="mt-1 text-sm font-semibold text-[#164e4b]">{decisionSupport.coverage === null ? (lang === "it" ? "Nessuna domanda" : "No demand") : `${decisionSupport.coverage.toFixed(1)}% ${lang === "it" ? "coperta" : "covered"}`}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(decisionSupport.totalDemand)} {lang === "it" ? "richiesti" : "requested"} · {formatNumber(decisionSupport.totalFulfilled)} {lang === "it" ? "evasi" : "fulfilled"}</p>
+          </div>
+          <div className={`rounded-xl border p-3 ${decisionSupport.peakBacklog > 0 ? "border-rose-200 bg-rose-50/70" : "border-white/80 bg-white/70"}`}>
+            <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${decisionSupport.peakBacklog > 0 ? "text-rose-700" : "text-[#39706e]"}`}><AlertTriangle className="h-3.5 w-3.5" /> {lang === "it" ? "Rischio arretrato" : "Backlog risk"}</div>
+            <p className="mt-1 text-sm font-semibold text-[#164e4b]">
+              {formatNumber(decisionSupport.peakBacklog)} {lang === "it" ? "picco" : "peak"}
+              {decisionSupport.peakBacklog > 0 && decisionSupport.peakBacklogMonth ? ` · ${translateMonthLabel(decisionSupport.peakBacklogMonth.monthLabel, lang)}` : ""}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{decisionSupport.peakBacklog > 0 ? (lang === "it" ? "Domanda trascinata al mese successivo" : "Demand carried into the next month") : (lang === "it" ? "Nessun arretrato nei mesi simulati" : "No backlog in simulated months")}</p>
+          </div>
+          <div className="rounded-xl border border-white/80 bg-white/70 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#39706e]"><Plus className="h-3.5 w-3.5" /> {lang === "it" ? "Schiuditoio" : "Hatchery"}</div>
+            <p className="mt-1 text-sm font-semibold text-[#164e4b]">{formatNumber(decisionSupport.totalArrivals)} {lang === "it" ? "arrivi" : "arrivals"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {decisionSupport.nextNeeded > 0 && decisionSupport.nextNeededMonth
+                ? `${formatNumber(decisionSupport.nextNeeded)} ${lang === "it" ? "necessari nel primo mese critico" : "needed in first critical month"} · ${translateMonthLabel(decisionSupport.nextNeededMonth.monthLabel, lang)}`
+                : (lang === "it" ? "Nessun fabbisogno aggiuntivo calcolato" : "No additional need calculated")}
+              {" · "}{decisionSupport.lateMonths}{" "}
+              {lang === "it" ? (decisionSupport.lateMonths === 1 ? "mese con arrivi a target dopo l’orizzonte" : "mesi con arrivi a target dopo l’orizzonte") : (decisionSupport.lateMonths === 1 ? "month with arrivals maturing after the horizon" : "months with arrivals maturing after the horizon")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/80 bg-white/70 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#39706e]"><Info className="h-3.5 w-3.5" /> {lang === "it" ? "Lettura stock" : "Stock reading"}</div>
+            <p className="mt-1 text-sm font-semibold text-[#164e4b]">
+              {decisionSupport.stockViewsEqual
+                ? (decisionSupport.totalArrivals > 0 ? (lang === "it" ? "Contributo non ancora a target" : "Contribution not at target yet") : (lang === "it" ? "Nessun arrivo pianificato" : "No planned arrivals"))
+                : `${formatNumber(decisionSupport.hatcheryContribution)} ${lang === "it" ? "picco dal vivaio" : "peak from hatchery"}`}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {decisionSupport.stockViewsEqual
+                ? (decisionSupport.totalArrivals > 0
+                    ? (lang === "it" ? "Gli arrivi presenti non raggiungono la taglia target nell’orizzonte." : "Current arrivals do not reach target size within the horizon.")
+                    : (lang === "it" ? "Le due viste coincidono perché non risultano arrivi nel periodo." : "The two views match because there are no arrivals in the period."))
+                : `${lang === "it" ? "Massima differenza mensile" : "Maximum monthly difference"}${decisionSupport.hatcheryPeakMonth ? ` · ${translateMonthLabel(decisionSupport.hatcheryPeakMonth.monthLabel, lang)}` : ""}`}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <ExcelTable
         data={data}
