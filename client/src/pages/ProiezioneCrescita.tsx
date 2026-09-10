@@ -9,6 +9,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePlanningLang, translateMonthLabel } from "@/lib/planningI18n";
+import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndicators";
 
 interface SizeMonthProjection {
   month: number;
@@ -450,9 +451,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       to: { row: 2 + excelRows.length, column: mc.length + 1 },
     };
 
-    // ===========================================================
+    // Foglio 2
     // FOGLIO 2: Già a taglia target o superiore
-    // ===========================================================
+    // Già a taglia target o superiore
     if (groupsAbove.length > 0) {
       const ws2 = wb.addWorksheet(`${t("pc_excel_s2_name_pre")} ${data.targetSize}`, {
         views: [{ state: 'frozen', ySplit: 2 }]
@@ -508,9 +509,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       ws2.columns = [{ width: 18 }, { width: 12 }, { width: 18 }, { width: 18 }];
     }
 
-    // ===========================================================
+    // Foglio 3
     // FOGLIO 3: Progressione mensile verso target
-    // ===========================================================
+    // Dettaglio proiezione crescita
     if (groupsBelow.length > 0) {
       const ws3 = wb.addWorksheet(t("pc_excel_s3_name"), {
         views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }]
@@ -584,9 +585,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       ];
     }
 
-    // ===========================================================
+    // Foglio 4
     // FOGLIO 4: Arrivi Schiuditoio (Previsione vs Reale)
-    // ===========================================================
+    // Arrivi schiuditoio
     if (allHatcheryData.length > 0) {
       const ws4 = wb.addWorksheet(t("pc_excel_s4_name"), {
         views: [{ state: 'frozen', ySplit: 2 }]
@@ -1285,43 +1286,11 @@ export default function ProiezioneCrescita() {
   const groupsAbove = data.groups.filter(g => g.alreadyAtTarget);
   const mc = data.monthlyContext;
   const decisionSupport = (() => {
-    const totalDemand = (mc[0]?.ordiniArretrati || 0) + mc.reduce((sum, m) => sum + (m.domandaEffettiva || 0), 0);
-    const totalFulfilled = Math.min(
-      totalDemand,
-      mc.reduce((sum, m) => sum + (m.ordiniEvasi || 0), 0),
-    );
-    const peakBacklogMonth = mc.reduce<MonthlyContext | null>(
-      (peak, m) => {
-        const outgoing = Math.max(0, (m.domandaEffettiva || 0) + (m.ordiniArretrati || 0) - (m.ordiniEvasi || 0));
-        const peakOutgoing = peak
-          ? Math.max(0, (peak.domandaEffettiva || 0) + (peak.ordiniArretrati || 0) - (peak.ordiniEvasi || 0))
-          : -1;
-        return outgoing > peakOutgoing ? m : peak;
-      },
-      null,
-    );
-    const peakBacklog = peakBacklogMonth
-      ? Math.max(0, (peakBacklogMonth.domandaEffettiva || 0) + (peakBacklogMonth.ordiniArretrati || 0) - (peakBacklogMonth.ordiniEvasi || 0))
-      : 0;
-    const totalArrivals = mc.reduce((sum, m) => sum + (m.arriviSchiuditoio || 0), 0);
-    const nextNeededMonth = mc.find(m => (m.schiuditoioNecessario || 0) > 0) || null;
-    const nextNeeded = nextNeededMonth?.schiuditoioNecessario || 0;
-    const lateMonths = mc.filter(m => m.arrivalTooLate && (m.arriviSchiuditoio || 0) > 0).length;
-    const coverage = totalDemand > 0 ? Math.min(100, (totalFulfilled / totalDemand) * 100) : null;
-    const hatcheryPeakMonth = mc.reduce<MonthlyContext | null>((peak, m) => {
-      const contribution = Math.max(0, m.giacenzaLordaConSchiuditoio - m.giacenzaLordaInventario);
-      const peakContribution = peak ? Math.max(0, peak.giacenzaLordaConSchiuditoio - peak.giacenzaLordaInventario) : -1;
-      return contribution > peakContribution ? m : peak;
-    }, null);
-    const hatcheryContribution = hatcheryPeakMonth
-      ? Math.max(0, hatcheryPeakMonth.giacenzaLordaConSchiuditoio - hatcheryPeakMonth.giacenzaLordaInventario)
-      : 0;
-    const stockViewsEqual = mc.length > 0 && mc.every(m => m.giacenzaLordaConSchiuditoio === m.giacenzaLordaInventario);
+    const indicators = calculateGrowthProjectionIndicators(mc);
     const firstMonth = translateMonthLabel(mc[0]?.monthLabel || "", lang);
     const lastMonth = translateMonthLabel(mc[mc.length - 1]?.monthLabel || "", lang);
     return {
-      totalDemand, totalFulfilled, peakBacklog, peakBacklogMonth, totalArrivals, nextNeeded, nextNeededMonth, lateMonths,
-      coverage, hatcheryContribution, hatcheryPeakMonth, stockViewsEqual,
+      ...indicators,
       period: firstMonth && lastMonth ? `${firstMonth} – ${lastMonth}` : "",
     };
   })();
