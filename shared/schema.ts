@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, boolean, timestamp, real, date, numeric, json, jsonb, decimal, index, uniqueIndex, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, boolean, timestamp, real, date, numeric, json, jsonb, decimal, index, uniqueIndex, unique, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -445,6 +445,32 @@ export const sizes = pgTable("sizes", {
   color: text("color"), // colore HEX per visualizzazione grafica
 });
 
+// Versioni temporali dei range animali/kg.
+// `sizes` resta l'identità commerciale; questa tabella conserva come cambiano
+// i confini nel tempo senza riclassificare le operazioni storiche.
+export const sizeRangeVersions = pgTable("size_range_versions", {
+  id: serial("id").primaryKey(),
+  sizeId: integer("size_id").notNull().references(() => sizes.id, { onDelete: "restrict" }),
+  minAnimalsPerKg: integer("min_animals_per_kg").notNull(),
+  maxAnimalsPerKg: integer("max_animals_per_kg").notNull(),
+  validFrom: date("valid_from").notNull(),
+  validTo: date("valid_to"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  sizeValidFromUnique: uniqueIndex("size_range_versions_size_valid_from_unique")
+    .on(table.sizeId, table.validFrom),
+  validityIdx: index("size_range_versions_validity_idx")
+    .on(table.validFrom, table.validTo),
+  validRangeCheck: check(
+    "size_range_versions_min_lte_max_check",
+    sql`${table.minAnimalsPerKg} <= ${table.maxAnimalsPerKg}`,
+  ),
+  validPeriodCheck: check(
+    "size_range_versions_period_check",
+    sql`${table.validTo} IS NULL OR ${table.validTo} >= ${table.validFrom}`,
+  ),
+}));
+
 // Basket Size Capacity (Capacità massima per taglia)
 // Definisce, per ogni taglia, la capacità massima di una cesta espressa con DUE limiti:
 // numero massimo di animali E peso massimo (in grammi). L'allarme scatta al raggiungimento
@@ -713,6 +739,11 @@ export const insertCycleSchema = createInsertSchema(cycles).omit({
 
 export const insertSizeSchema = createInsertSchema(sizes).omit({ 
   id: true 
+});
+
+export const insertSizeRangeVersionSchema = createInsertSchema(sizeRangeVersions).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertBasketSizeCapacitySchema = createInsertSchema(basketSizeCapacity).omit({

@@ -34,3 +34,4 @@
 - [Schema runtime e Publish](runtime-schema-publish-drift.md) — tabelle e indici creati dal server devono essere anche nello schema Drizzle, altrimenti Publish propone DROP distruttivi.
 - [Backup PostgreSQL client](backup-postgres-client.md) — il deploy deve usare pg_dump 16 per Neon 16; credenziali solo nell’environment di execFile, mai nella command line.
 - [Fabbisogno schiuditoio non additivo](hatchery-need-non-additive.md) — i fabbisogni mensili della proiezione includono arretrati riportati; non sommarli come raccomandazione totale.
+- [Versioni temporali dei range taglia](size-range-versioning.md) — `sizes` resta l’identità; nuovi confini hanno validità temporale e non devono riclassificare record con `size_id` storica.
