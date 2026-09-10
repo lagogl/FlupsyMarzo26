@@ -1,6 +1,7 @@
 import { storage } from "../../../storage";
 import { sgrService } from "./sgr.service";
 import { Operation, Size } from "../../../../shared/schema";
+import { determineSizeByAnimalsPerKg } from "../../../utils/size-determination";
 
 /**
  * SGR MATRIX SERVICE
@@ -62,19 +63,6 @@ interface CellAccumulator {
 
 export class SgrMatrixService {
   /**
-   * Trova la taglia per un dato valore animalsPerKg.
-   */
-  private findSize(sizes: Size[], animalsPerKg: number): Size | null {
-    return (
-      sizes.find((size) => {
-        const min = size.minAnimalsPerKg ?? 0;
-        const max = size.maxAnimalsPerKg ?? Infinity;
-        return animalsPerKg >= min && animalsPerKg <= max;
-      }) || null
-    );
-  }
-
-  /**
    * Ricava animalsPerKg da un'operazione: usa il valore diretto se presente,
    * altrimenti lo deriva da averageWeight (mg/animale): apk = 1.000.000 / avgWeight.
    */
@@ -104,6 +92,7 @@ export class SgrMatrixService {
     const orderedSizes = [...sizes].sort(
       (a, b) => (a.minAnimalsPerKg ?? 0) - (b.minAnimalsPerKg ?? 0)
     );
+    const sizeMap = new Map(orderedSizes.map((size) => [size.id, size]));
 
     // Mappa cicli per stato + lookup veloce
     const cycleMap = new Map(allCycles.map((c) => [c.id, c]));
@@ -174,10 +163,18 @@ export class SgrMatrixService {
 
         const monthIndex = date1.getMonth(); // 0-11 (mese di inizio crescita)
 
-        // Determina taglia all'inizio del segmento
+        // Attribuisce il segmento alla taglia storica registrata sull'operazione.
+        // Il fallback temporale serve soltanto per eventuali dati legacy privi
+        // di sizeId e non riclassifica le operazioni già classificate.
         const apk1 = this.getAnimalsPerKg(op1);
         if (apk1 == null) continue;
-        const size = this.findSize(orderedSizes, apk1);
+        let size = sizeMap.get(op1.sizeId);
+        if (!size) {
+          const fallbackSizeId = await determineSizeByAnimalsPerKg(apk1, {
+            atDate: String(op1.date).substring(0, 10),
+          });
+          size = fallbackSizeId ? sizeMap.get(fallbackSizeId) : undefined;
+        }
         if (!size) continue;
 
         // ── SGR-P (peso medio individuale, averageWeight in mg) ──
