@@ -11,7 +11,7 @@ export type SizeDeterminationOptions = {
    * Data ISO YYYY-MM-DD per cui applicare i range.
    * Se omessa, PostgreSQL usa CURRENT_DATE.
    */
-  atDate?: string;
+  atDate?: string | Date;
 };
 
 export type SizeRangeCandidate = {
@@ -21,7 +21,14 @@ export type SizeRangeCandidate = {
   maxAnimalsPerKg: number;
 };
 
-function validateIsoDate(value: string): string {
+function normalizeIsoDate(value: string | Date): string {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new Error("Data range taglia non valida");
+    }
+    return value.toISOString().slice(0, 10);
+  }
+
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(`Data range taglia non valida: ${value}`);
   }
@@ -75,8 +82,8 @@ export function findSizeInRanges(
   });
 }
 
-async function getRangeCandidates(atDate?: string): Promise<SizeRangeCandidate[]> {
-  const effectiveDate = atDate ? validateIsoDate(atDate) : null;
+async function getRangeCandidates(atDate?: string | Date): Promise<SizeRangeCandidate[]> {
+  const effectiveDate = atDate ? normalizeIsoDate(atDate) : null;
   const dateExpression = effectiveDate
     ? sql`${effectiveDate}::date`
     : sql`CURRENT_DATE`;

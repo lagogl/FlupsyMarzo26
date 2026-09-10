@@ -1474,7 +1474,10 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         let actualSizeId = destBasket.sizeId;
         if (!actualSizeId || actualSizeId === 0) {
           if (destBasket.animalsPerKg) {
-            actualSizeId = await determineSizeId(destBasket.animalsPerKg);
+            actualSizeId = await determineSizeId(
+              destBasket.animalsPerKg,
+              selection[0].date,
+            );
           }
         }
 
@@ -2109,9 +2112,12 @@ export async function completeSelectionFixed(req: Request, res: Response) {
  * Determina automaticamente l'ID della taglia basandosi sugli animali per kg
  * Uses shared utility function for consistent sizing logic
  */
-async function determineSizeId(animalsPerKg: number): Promise<number | null> {
+async function determineSizeId(
+  animalsPerKg: number,
+  atDate?: string | Date,
+): Promise<number | null> {
   const { determineSizeByAnimalsPerKg } = await import('../utils/size-determination.js');
-  return determineSizeByAnimalsPerKg(animalsPerKg);
+  return determineSizeByAnimalsPerKg(animalsPerKg, { atDate });
 }
 
 /**

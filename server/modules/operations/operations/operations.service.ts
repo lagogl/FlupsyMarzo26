@@ -8,7 +8,6 @@ import { operations, baskets, flupsys, lots, sizes, basketLotComposition, cycles
 import { sql, eq, and, or, between, desc, inArray } from 'drizzle-orm';
 import { OperationsCache } from '../../../operations-cache-service';
 import { isBasketMixedLot, getBasketLotComposition } from '../../../services/basket-lot-composition.service';
-import { determineSizeByAnimalsPerKg } from '../../../utils/size-determination';
 
 // Colonne per le query ottimizzate
 const OPERATION_COLUMNS = {
@@ -715,8 +714,7 @@ class OperationsService {
     }
 
     // 4b. Per operazioni PESO: se cambia il peso totale (o il conteggio animali),
-    //     ricalcola animali/kg e peso medio, così la taglia si aggiorna anche
-    //     modificando un'operazione già registrata (stesso comportamento della creazione).
+    //     ricalcola animali/kg e peso medio. La taglia storica resta separata.
     if (existingOperation.type === 'peso') {
       const effectiveAnimalCount = Number(data.animalCount ?? existingOperation.animalCount);
       const effectiveTotalWeight = Number(data.totalWeight ?? existingOperation.totalWeight);
@@ -728,13 +726,13 @@ class OperationsService {
       }
     }
 
-    // 4c. Ricalcola sizeId automaticamente se animali/kg è presente/aggiornato
-    if (data.animalsPerKg && Number(data.animalsPerKg) > 0) {
-      const recalcSizeId = await determineSizeByAnimalsPerKg(Number(data.animalsPerKg));
-      if (recalcSizeId) {
-        data.sizeId = recalcSizeId;
-        console.log(`📊 UPDATE ${id}: Taglia ricalcolata → sizeId=${recalcSizeId} (animalsPerKg=${data.animalsPerKg})`);
-      }
+    // 4c. La taglia storica non viene mai riclassificata implicitamente.
+    // Se l'operatore vuole cambiarla deve inviare sizeId in modo esplicito.
+    if (data.animalsPerKg && data.sizeId === undefined) {
+      console.log(
+        `🔒 UPDATE ${id}: mantenuta sizeId storica=${existingOperation.sizeId}; ` +
+        `animalsPerKg aggiornato senza richiesta esplicita di cambio taglia`,
+      );
     }
 
     // 5. Esegui l'aggiornamento

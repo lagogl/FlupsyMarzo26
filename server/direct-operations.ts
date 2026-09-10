@@ -16,8 +16,11 @@ import { computeMisuraAnimalCount } from './utils/misura-mortality.js';
  * Wrapper for backward compatibility
  * @deprecated Use determineSizeByAnimalsPerKg from utils/size-determination.ts
  */
-async function findSizeIdByAnimalsPerKg(animalsPerKg: number): Promise<number | null> {
-  return determineSizeByAnimalsPerKg(animalsPerKg);
+async function findSizeIdByAnimalsPerKg(
+  animalsPerKg: number,
+  atDate?: string | Date,
+): Promise<number | null> {
+  return determineSizeByAnimalsPerKg(animalsPerKg, { atDate });
 }
 
 /**
@@ -272,7 +275,10 @@ export function implementDirectOperationRoute(app: Express) {
         if (totalWeightKg > 0 && operationData.animalCount > 0) {
           operationData.animalsPerKg = Math.round(operationData.animalCount / totalWeightKg);
           operationData.averageWeight = 1000000 / operationData.animalsPerKg;
-          const newSizeId = await findSizeIdByAnimalsPerKg(operationData.animalsPerKg);
+          const newSizeId = await findSizeIdByAnimalsPerKg(
+            operationData.animalsPerKg,
+            operationData.date,
+          );
           operationData.sizeId = newSizeId || lastMeasureOp.sizeId;
           console.log(`📊 PESO: Ricalcolato - animalsPerKg=${operationData.animalsPerKg}, averageWeight=${operationData.averageWeight}, sizeId=${operationData.sizeId}, animalCount=${operationData.animalCount}, totalWeight=${operationData.totalWeight}`);
         } else {
@@ -517,7 +523,10 @@ export function implementDirectOperationRoute(app: Express) {
           console.log(`Calcolo automatico della taglia in base a ${operationData.animalsPerKg} animali/kg...`);
           
           // Trova la taglia appropriata in base al numero di animali per kg
-          const appropriateSizeId = await findSizeIdByAnimalsPerKg(operationData.animalsPerKg);
+          const appropriateSizeId = await findSizeIdByAnimalsPerKg(
+            operationData.animalsPerKg,
+            operationData.date,
+          );
           
           if (appropriateSizeId) {
             // Se l'utente non ha specificato una taglia o se la taglia è diversa da quella calcolata
@@ -997,7 +1006,10 @@ export function implementDirectOperationRoute(app: Express) {
             console.log(`PESO: Calcolo taglia automatica - ${operationData.totalWeight}g / ${operationData.animalCount} animali = ${averageWeightGrams}g/animale = ${calculatedAnimalsPerKg} animali/kg`);
             
             // Trova la taglia appropriata
-            const appropriateSizeId = await findSizeIdByAnimalsPerKg(calculatedAnimalsPerKg);
+            const appropriateSizeId = await findSizeIdByAnimalsPerKg(
+              calculatedAnimalsPerKg,
+              operationData.date,
+            );
             
             if (appropriateSizeId) {
               operationData.sizeId = appropriateSizeId;

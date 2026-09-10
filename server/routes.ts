@@ -3222,7 +3222,10 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
           calculatedAverageWeight = 1000000 / calculatedAnimalsPerKg;
           console.log(`📊 MISURA ALLINEATA - averageWeight: ${calculatedAverageWeight}, animalsPerKg: ${calculatedAnimalsPerKg}`);
           
-          const appropriateSizeId = await determineSizeByAnimalsPerKg(calculatedAnimalsPerKg);
+          const appropriateSizeId = await determineSizeByAnimalsPerKg(
+            calculatedAnimalsPerKg,
+            { atDate: formattedDate },
+          );
           if (appropriateSizeId) {
             calculatedSizeId = appropriateSizeId;
             console.log(`📊 MISURA ALLINEATA - Taglia calcolata automaticamente: sizeId=${calculatedSizeId}`);
@@ -3403,7 +3406,10 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         if (totalWeightKg > 0 && req.body.animalCount > 0) {
           req.body.animalsPerKg = Math.round(req.body.animalCount / totalWeightKg);
           req.body.averageWeight = 1000000 / req.body.animalsPerKg;
-          const newSizeId = await determineSizeByAnimalsPerKg(req.body.animalsPerKg);
+          const newSizeId = await determineSizeByAnimalsPerKg(
+            req.body.animalsPerKg,
+            { atDate: pesoDate },
+          );
           req.body.sizeId = newSizeId || lastOp.sizeId;
           console.log(`📊 PESO: Ricalcolato - animalsPerKg=${req.body.animalsPerKg}, averageWeight=${req.body.averageWeight}, sizeId=${req.body.sizeId}, animalCount=${req.body.animalCount}, totalWeight=${req.body.totalWeight}`);
         } else {
@@ -4028,9 +4034,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       // Log dei dati di aggiornamento
       console.log(`Aggiornamento operazione ${id} di tipo ${operationType}:`, JSON.stringify(updateData, null, 2));
       
-      // Per operazioni PESO in MODIFICA: se cambia il peso totale, ricalcola animali/kg
-      // dal peso e dal conteggio animali, così la taglia si aggiorna anche modificando
-      // un'operazione già registrata (stesso comportamento della creazione).
+      // Per operazioni PESO in MODIFICA: se cambia il peso totale, ricalcola
+      // animali/kg e peso medio. La taglia storica resta separata.
       if (operationType === 'peso') {
         const effectiveAnimalCount = Number(updateData.animalCount ?? operation.animalCount);
         const effectiveTotalWeight = Number(updateData.totalWeight ?? operation.totalWeight);
@@ -4042,13 +4047,13 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         }
       }
 
-      // Ricalcola sizeId automaticamente se animalsPerKg viene aggiornato
-      if (updateData.animalsPerKg && Number(updateData.animalsPerKg) > 0) {
-        const recalcSizeId = await determineSizeByAnimalsPerKg(Number(updateData.animalsPerKg));
-        if (recalcSizeId) {
-          updateData.sizeId = recalcSizeId;
-          console.log(`📊 PATCH operazione ${id}: Taglia ricalcolata → sizeId=${recalcSizeId} (animalsPerKg=${updateData.animalsPerKg})`);
-        }
+      // Non riclassificare implicitamente una taglia storica quando cambia
+      // animalsPerKg. Un cambio sizeId deve arrivare esplicitamente dal client.
+      if (updateData.animalsPerKg && updateData.sizeId === undefined) {
+        console.log(
+          `🔒 PATCH operazione ${id}: mantenuta sizeId storica=${operation.sizeId}; ` +
+          `animalsPerKg aggiornato senza richiesta esplicita di cambio taglia`,
+        );
       }
       
       // Update the operation

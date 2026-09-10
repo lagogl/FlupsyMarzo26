@@ -112,7 +112,7 @@ export async function prepareScreeningOperation(req: Request, res: Response) {
     const mortalityRate = (Number(deadCount) / Number(sampleCount)) * 100;
     
     // Determinazione taglia in base ad animali per kg
-    const sizeId = await determineSizeId(animalsPerKg);
+    const sizeId = await determineSizeId(animalsPerKg, date);
     
     // 3. Recupero informazioni taglia
     let sizeData = null;
@@ -490,12 +490,15 @@ export async function executeScreeningOperation(req: Request, res: Response) {
  * @param animalsPerKg - Numero di animali per kg
  * @returns Promise<number|null> - ID della taglia o null se non trovata
  */
-async function determineSizeId(animalsPerKg: number): Promise<number | null> {
+async function determineSizeId(
+  animalsPerKg: number,
+  atDate?: string | Date,
+): Promise<number | null> {
   if (!animalsPerKg || animalsPerKg <= 0) return null;
   
   // Use shared utility function for consistent sizing logic
   const { determineSizeByAnimalsPerKg } = await import('../utils/size-determination.js');
-  return determineSizeByAnimalsPerKg(animalsPerKg);
+  return determineSizeByAnimalsPerKg(animalsPerKg, { atDate });
 }
 
 /**
