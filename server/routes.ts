@@ -6400,19 +6400,15 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         console.log(`DEBUG: Nessun dato valido per calcolare il peso, impossibile fare previsioni accurate`);
       }
       
-      // Determina il sizeId basandosi sull'animalsPerKg dell'ultima misurazione
-      let sizeId: number | undefined = undefined;
-      if (lastMeasurement.animalsPerKg) {
-        const allSizes = await storage.getAllSizes();
-        const matchingSize = allSizes.find(size => {
-          const minBound = size.minAnimalsPerKg || 0;
-          const maxBound = size.maxAnimalsPerKg || Infinity;
-          return lastMeasurement.animalsPerKg! >= minBound && lastMeasurement.animalsPerKg! <= maxBound;
-        });
-        if (matchingSize) {
-          sizeId = matchingSize.id;
-          console.log(`DEBUG: Taglia identificata: ${matchingSize.name} (ID ${sizeId}) per ${lastMeasurement.animalsPerKg} animali/kg`);
-        }
+      // La taglia registrata nell'ultima misurazione è il punto di partenza
+      // storico della previsione. Il fallback temporale serve solo per dati
+      // legacy privi di sizeId.
+      let sizeId: number | undefined = lastMeasurement.sizeId ?? undefined;
+      if (!sizeId && lastMeasurement.animalsPerKg) {
+        sizeId =
+          (await determineSizeByAnimalsPerKg(lastMeasurement.animalsPerKg, {
+            atDate: lastMeasurement.date,
+          })) ?? undefined;
       }
       
       // Ottiene l'SGR mensile corretto per il periodo (prende quello del database o usa quello calcolato)
