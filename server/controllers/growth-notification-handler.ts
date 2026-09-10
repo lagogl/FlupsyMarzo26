@@ -31,11 +31,31 @@ function simulateGrowthWithDailySGR(initialWeight: number, dailyRate: number, da
  * @param sizeId ID della taglia da verificare
  * @returns Oggetto con info sulla taglia se rientra, null altrimenti
  */
-async function checkSizeMatch(animalsPerKg: number, sizeId: number): Promise<{ id: number; name: string; code: string } | null> {
+async function checkSizeMatch(
+  animalsPerKg: number,
+  sizeId: number,
+  atDate: string | Date,
+): Promise<{ id: number; name: string; code: string } | null> {
   try {
+    const effectiveDate =
+      atDate instanceof Date
+        ? `${atDate.getFullYear()}-${String(atDate.getMonth() + 1).padStart(2, '0')}-${String(atDate.getDate()).padStart(2, '0')}`
+        : String(atDate).substring(0, 10);
+
     const sizeData = await db.execute(sql`
-      SELECT id, name, code, min_animals_per_kg, max_animals_per_kg FROM sizes
-      WHERE id = ${sizeId}
+      SELECT
+        s.id,
+        s.name,
+        s.code,
+        srv.min_animals_per_kg,
+        srv.max_animals_per_kg
+      FROM sizes s
+      JOIN size_range_versions srv ON srv.size_id = s.id
+      WHERE s.id = ${sizeId}
+        AND srv.valid_from <= ${effectiveDate}::date
+        AND (srv.valid_to IS NULL OR srv.valid_to >= ${effectiveDate}::date)
+      ORDER BY srv.valid_from DESC
+      LIMIT 1
     `);
 
     if (!sizeData.rows || sizeData.rows.length === 0) {
@@ -335,7 +355,7 @@ export async function checkCyclesForTargetSizes(): Promise<number> {
       
       // Verifica per ogni taglia configurata
       for (const sizeId of targetSizeIds) {
-        const matchedSize = await checkSizeMatch(valueToCheck, sizeId);
+        const matchedSize = await checkSizeMatch(valueToCheck, sizeId, currentDate);
         
         if (matchedSize) {
           // Crea una notifica
@@ -446,7 +466,7 @@ export async function checkOperationForTargetSize(operationId: number): Promise<
 
     // Verifica per ogni taglia configurata
     for (const sizeId of targetSizeIds) {
-      const matchedSize = await checkSizeMatch(valueToCheck, sizeId);
+      const matchedSize = await checkSizeMatch(valueToCheck, sizeId, operation.date);
       
       if (matchedSize) {
         const notificationId = await createTargetSizeNotification(
