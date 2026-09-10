@@ -7106,6 +7106,12 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       // Parametro per il numero di giorni, default 14 (2 settimane)
       const withinDays = req.query.days ? parseInt(req.query.days as string) : 14;
       
+      const today = new Date();
+      const horizonEnd = new Date(today);
+      horizonEnd.setDate(horizonEnd.getDate() + withinDays);
+      const todayKey = format(today, "yyyy-MM-dd");
+      const horizonEndKey = format(horizonEnd, "yyyy-MM-dd");
+
       // Recupera la taglia target
       const targetSize = await storage.getSizeByCode(targetSizeCode);
       if (!targetSize) {
@@ -7114,13 +7120,62 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         });
       }
 
-      // Recupera tutte le taglie disponibili
+      // Recupera tutte le taglie disponibili e le versioni che intersecano
+      // l'orizzonte, così ogni giorno simulato usa la propria soglia valida.
       const allSizes = await storage.getSizes();
+      const rangeVersions = await db
+        .select({
+          sizeId: schema.sizeRangeVersions.sizeId,
+          minAnimalsPerKg: schema.sizeRangeVersions.minAnimalsPerKg,
+          maxAnimalsPerKg: schema.sizeRangeVersions.maxAnimalsPerKg,
+          validFrom: schema.sizeRangeVersions.validFrom,
+          validTo: schema.sizeRangeVersions.validTo,
+        })
+        .from(schema.sizeRangeVersions)
+        .where(sql`
+          ${schema.sizeRangeVersions.validFrom} <= ${horizonEndKey}::date
+          AND (
+            ${schema.sizeRangeVersions.validTo} IS NULL
+            OR ${schema.sizeRangeVersions.validTo} >= ${todayKey}::date
+          )
+        `);
+
+      const rangesBySize = new Map<number, typeof rangeVersions>();
+      for (const version of rangeVersions) {
+        const versions = rangesBySize.get(version.sizeId) ?? [];
+        versions.push(version);
+        rangesBySize.set(version.sizeId, versions);
+      }
+
+      const getRangeAtDate = (sizeId: number, date: Date) => {
+        const dateKey = format(date, "yyyy-MM-dd");
+        return (rangesBySize.get(sizeId) ?? [])
+          .filter(version =>
+            String(version.validFrom) <= dateKey
+            && (version.validTo === null || String(version.validTo) >= dateKey)
+          )
+          .sort((a, b) => String(b.validFrom).localeCompare(String(a.validFrom)))[0] ?? null;
+      };
+
+      const getTargetWeightAtDate = (sizeId: number, date: Date): number | null => {
+        const range = getRangeAtDate(sizeId, date);
+        return range?.maxAnimalsPerKg && range.maxAnimalsPerKg > 0
+          ? 1_000_000 / range.maxAnimalsPerKg
+          : null;
+      };
+
+      const targetRangeToday = getRangeAtDate(targetSize.id, today);
+      if (!targetRangeToday) {
+        return res.status(422).json({
+          message: `Nessun range valido oggi per la taglia ${targetSizeCode}`,
+        });
+      }
       
       // Filtriamo le taglie che sono uguali o superiori alla taglia target
       const validSizes = allSizes.filter(size => {
-        if (!size.minAnimalsPerKg || !targetSize.minAnimalsPerKg) return false;
-        return size.minAnimalsPerKg <= targetSize.minAnimalsPerKg;
+        const sizeRangeToday = getRangeAtDate(size.id, today);
+        if (!sizeRangeToday.minAnimalsPerKg || !targetRangeToday.minAnimalsPerKg) return false;
+        return sizeRangeToday.minAnimalsPerKg <= targetRangeToday.minAnimalsPerKg;
       });
       
       if (validSizes.length === 0) {
@@ -7133,16 +7188,15 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
       console.log(`[size-predictions] Contesto caricato: ${Object.keys(simCtx.sgrByMonthAndSize).length} combinazioni mese×taglia`);
 
-      const today = new Date();
       const simulate = (
         currentWeightMg: number,
         startCount: number,
-        targetWeightMg: number | null,
+        targetSizeId: number,
         maxDays: number
       ): { daysToReach: number | null; finalWeightMg: number; finalCount: number } => {
         const r = simulateForward(simCtx, currentWeightMg, startCount, maxDays, {
           today,
-          targetWeightMg,
+          targetWeightMgForDate: date => getTargetWeightAtDate(targetSizeId, date),
         });
         return { daysToReach: r.daysToReach, finalWeightMg: r.finalWeightMg, finalCount: Math.round(r.finalCount) };
       };
@@ -7224,7 +7278,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         // Calcola il peso d'ingresso della taglia target in mg
         // Una cesta "arriva" alla taglia quando entra nel range (animale più leggero = max an/kg)
         // TP-3000 = 20.001-29.000 an/kg → ingresso a 1.000.000/29.000 ≈ 34,5 mg
-        const targetWeight = targetSize.maxAnimalsPerKg ? 1000000 / targetSize.maxAnimalsPerKg : 0;
+        const targetWeight = getTargetWeightAtDate(targetSize.id, today) ?? 0;
         if (targetWeight <= 0) return null;
         
         const startCount = lastOperation.animalCount ?? 0;
@@ -7248,12 +7302,13 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         }
 
         // Simulazione giorno-per-giorno: SGR + mortalità per taglia/mese
-        const sim = simulate(currentWeight, startCount, targetWeight, withinDays);
+        const sim = simulate(currentWeight, startCount, targetSize.id, withinDays);
 
         // Se il numero di giorni è entro il periodo specificato
         if (sim.daysToReach !== null && sim.daysToReach <= withinDays) {
           const predictedDate = new Date();
           predictedDate.setDate(predictedDate.getDate() + sim.daysToReach);
+          const predictedTargetWeight = getTargetWeightAtDate(targetSize.id, predictedDate) ?? targetWeight;
 
           return {
             id: cycleData.cycleId * 10000 + targetSize.id,
@@ -7265,7 +7320,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
             lastOperation,
             daysRemaining: sim.daysToReach,
             currentWeight,
-            targetWeight,
+            targetWeight: predictedTargetWeight,
             projectedAnimalCount: sim.finalCount,
             projectedAnimalsPerKg: sim.finalWeightMg > 0 ? Math.round(1_000_000 / sim.finalWeightMg) : null
           };
@@ -7276,7 +7331,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
           if (size.id === targetSize.id) continue;
           
           // Anche per le taglie superiori, soglia d'ingresso = animale più leggero (max an/kg)
-          const sizeWeight = size.maxAnimalsPerKg ? 1000000 / size.maxAnimalsPerKg : 0;
+          const sizeWeight = getTargetWeightAtDate(size.id, today) ?? 0;
           if (sizeWeight <= 0 || sizeWeight < targetWeight) continue;
           
           if (currentWeight >= sizeWeight) {
@@ -7298,11 +7353,12 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
             };
           }
 
-          const simUp = simulate(currentWeight, startCount, sizeWeight, withinDays);
+          const simUp = simulate(currentWeight, startCount, size.id, withinDays);
 
           if (simUp.daysToReach !== null && simUp.daysToReach <= withinDays) {
             const predictedDate = new Date();
             predictedDate.setDate(predictedDate.getDate() + simUp.daysToReach);
+            const predictedSizeWeight = getTargetWeightAtDate(size.id, predictedDate) ?? sizeWeight;
 
             return {
               id: cycleData.cycleId * 10000 + size.id,
@@ -7314,7 +7370,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
               lastOperation,
               daysRemaining: simUp.daysToReach,
               currentWeight,
-              targetWeight: sizeWeight,
+              targetWeight: predictedSizeWeight,
               actualSize: size,
               requestedSize: targetSize,
               projectedAnimalCount: simUp.finalCount,

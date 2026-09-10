@@ -228,6 +228,7 @@ export function simulateForward(
   options: {
     today?: Date;
     targetWeightMg?: number | null;
+    targetWeightMgForDate?: (date: Date) => number | null;
     overrideMonthlyMortality?: number;
   } = {}
 ): { daysToReach: number | null; finalWeightMg: number; finalCount: number } {
@@ -245,7 +246,10 @@ export function simulateForward(
     weight = next.weightMg;
     count = next.count;
 
-    if (targetWeightMg !== null && daysToReach === null && weight >= targetWeightMg) {
+    const targetForDate = options.targetWeightMgForDate
+      ? options.targetWeightMgForDate(new Date(cursor))
+      : targetWeightMg;
+    if (targetForDate !== null && daysToReach === null && weight >= targetForDate) {
       daysToReach = day;
       break;
     }
