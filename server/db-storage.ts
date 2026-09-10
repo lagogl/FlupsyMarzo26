@@ -6,7 +6,7 @@ import {
   BasketGroup, InsertBasketGroup, basketGroups,
   Basket, Cycle, InsertBasket, InsertCycle, InsertLot, InsertOperation, 
   InsertSgr, InsertSize, Lot, Operation, Size, Sgr, baskets, cycles, lots,
-  operations, sgr, sizes,
+  operations, sgr, sizes, sizeRangeVersions,
   SgrGiornaliero, InsertSgrGiornaliero, sgrGiornalieri,
   SgrPerTaglia, InsertSgrPerTaglia, sgrPerTaglia,
   MortalityRate, InsertMortalityRate, mortalityRates,
@@ -1213,6 +1213,38 @@ export class DbStorage implements IStorage {
   private sizesCacheTimestamp = 0;
   private SIZES_CACHE_TTL = 300000; // 5 minuti
 
+  private async overlayCurrentSizeRanges(baseSizes: Size[]): Promise<Size[]> {
+    const currentRanges = await db
+      .select({
+        sizeId: sizeRangeVersions.sizeId,
+        minAnimalsPerKg: sizeRangeVersions.minAnimalsPerKg,
+        maxAnimalsPerKg: sizeRangeVersions.maxAnimalsPerKg,
+      })
+      .from(sizeRangeVersions)
+      .where(
+        and(
+          lte(sizeRangeVersions.validFrom, sql`CURRENT_DATE`),
+          or(
+            isNull(sizeRangeVersions.validTo),
+            gte(sizeRangeVersions.validTo, sql`CURRENT_DATE`),
+          ),
+        ),
+      );
+
+    const rangeBySizeId = new Map(
+      currentRanges.map(range => [range.sizeId, range]),
+    );
+
+    return baseSizes.map(size => {
+      const range = rangeBySizeId.get(size.id);
+      return {
+        ...size,
+        minAnimalsPerKg: range?.minAnimalsPerKg ?? null,
+        maxAnimalsPerKg: range?.maxAnimalsPerKg ?? null,
+      };
+    });
+  }
+
   async getSizes(): Promise<Size[]> {
     // 🚀 OTTIMIZZAZIONE: Cache per sizes
     const now = Date.now();
@@ -1220,8 +1252,11 @@ export class DbStorage implements IStorage {
       return this.sizesCache;
     }
 
-    // Query ottimizzata senza mapping inutile
-    const allSizes = await db.select().from(sizes).orderBy(sizes.minAnimalsPerKg);
+    const storedSizes = await db.select().from(sizes);
+    const allSizes = (await this.overlayCurrentSizeRanges(storedSizes)).sort(
+      (a, b) => (a.minAnimalsPerKg ?? Number.MAX_SAFE_INTEGER)
+        - (b.minAnimalsPerKg ?? Number.MAX_SAFE_INTEGER),
+    );
     
     // Salva in cache
     this.sizesCache = allSizes;
@@ -1251,12 +1286,12 @@ export class DbStorage implements IStorage {
 
   async getSize(id: number): Promise<Size | undefined> {
     const results = await db.select().from(sizes).where(eq(sizes.id, id));
-    return results[0];
+    return (await this.overlayCurrentSizeRanges(results))[0];
   }
 
   async getSizeByCode(code: string): Promise<Size | undefined> {
     const results = await db.select().from(sizes).where(eq(sizes.code, code));
-    return results[0];
+    return (await this.overlayCurrentSizeRanges(results))[0];
   }
 
   async createSize(size: InsertSize): Promise<Size> {

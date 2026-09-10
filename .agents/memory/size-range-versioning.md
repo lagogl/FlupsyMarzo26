@@ -9,4 +9,4 @@ La taglia commerciale rimane un’identità stabile. I confini Min/Max cambiano 
 
 **Why:** Nel database esistono già operazioni in cui la taglia scelta e quella ottenuta applicando i range correnti non coincidono. Alcune differenze sono intenzionali, soprattutto nelle vagliature; riclassificare il passato cambierebbe report e scelte operative.
 
-**How to apply:** Per record storici usare prima la `size_id` salvata. Solo quando manca, classificare animali/kg con la versione valida alla data del record. Proiezioni e nuove operazioni usano la versione valida alla data futura o corrente.
+**How to apply:** Per record storici usare prima la `size_id` salvata. Solo quando manca, classificare animali/kg con la versione valida alla data del record. Proiezioni e nuove operazioni usano la versione valida alla data futura o corrente. Le classi commerciali “800/500/350/250/200” sotto TP-10000 sono solo classi di prezzo al kg, non nuove taglie operative.
