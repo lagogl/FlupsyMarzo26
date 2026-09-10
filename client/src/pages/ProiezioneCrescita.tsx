@@ -948,15 +948,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           <TooltipProvider delayDuration={200}>
           <table
             ref={tableRef}
-            className="w-full text-sm border-collapse select-none"
+            className="w-full border-separate border-spacing-0 text-sm select-none"
             style={{ fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}
             onClick={() => { setSelectedCells(new Set()); setSelectedRow(null); setSelectedCol(null); setAnchorCell(null); }}
           >
             <thead>
               <tr>
                 <th
-                  className="sticky left-0 z-20 bg-gradient-to-b from-gray-100 to-gray-200 border-r-2 border-b border-gray-300 p-0 min-w-[220px]"
-                  style={{ borderRight: '2px solid #9ca3af' }}
+                  className="sticky left-0 z-30 bg-gradient-to-b from-gray-100 to-gray-200 border-r-2 border-b border-gray-300 p-0 min-w-[220px]"
+                  style={{
+                    borderRight: '2px solid #9ca3af',
+                    boxShadow: '6px 0 8px -8px rgba(15, 23, 42, 0.7)',
+                  }}
                 >
                   <div className="px-2 py-1.5 text-left text-[13px] font-semibold text-gray-600 tracking-wide uppercase">
                     Indicatore
@@ -979,8 +982,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
               {rows.map((row, rowIdx) => (
                 <tr key={rowIdx} className="group">
                   <td
-                    className={`sticky left-0 z-10 border-b border-gray-200 p-0 cursor-pointer transition-colors ${selectedRow === rowIdx ? 'bg-blue-100' : row.bgClass}`}
-                    style={{ borderRight: '2px solid #9ca3af' }}
+                    className="sticky left-0 z-20 border-b border-gray-200 p-0 cursor-pointer transition-colors"
+                    style={{
+                      backgroundColor: selectedRow === rowIdx
+                        ? '#dbeafe'
+                        : row.bgClass
+                          ? '#fff7ed'
+                          : '#ffffff',
+                      borderRight: '2px solid #9ca3af',
+                      boxShadow: '6px 0 8px -8px rgba(15, 23, 42, 0.7)',
+                    }}
                     onClick={(e) => { e.stopPropagation(); handleRowHeaderClick(rowIdx); }}
                   >
                     <Tooltip>
