@@ -1497,10 +1497,10 @@ router.get('/orders/:id', async (req: Request, res: Response) => {
 // Creazione DDT da report consegna
 router.post('/ddt', async (req: Request, res: Response) => {
   try {
-    const { reportId } = req.body;
+    const reportId = Number(req.body?.reportId);
     
-    if (!reportId) {
-      return res.status(400).json({ success: false, message: 'ID report richiesto' });
+    if (!Number.isInteger(reportId) || reportId <= 0) {
+      return res.status(400).json({ success: false, message: 'ID report non valido' });
     }
     
     await refreshTokenIfNeeded();
@@ -1546,41 +1546,125 @@ router.post('/ddt', async (req: Request, res: Response) => {
     // configurata. apiRequest usa l'azienda globale (fatture_in_cloud_company_id), la stessa
     // a cui il documento viene poi inviato qui sotto, quindi lettura e invio sono coerenti.
     // La numerazione FIC riparte ogni anno ed è progressiva per serie ('/ddt').
-    const annoCorrenteDdt = new Date().getFullYear();
-    const ultimiDdtFICResp = await apiRequest('GET', `/issued_documents?type=delivery_note&year=${annoCorrenteDdt}&per_page=100`);
+    const configuredCompanyId = Number(await getConfigValue('fatture_in_cloud_company_id'));
+    if (!Number.isInteger(configuredCompanyId) || configuredCompanyId <= 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Azienda Fatture in Cloud non configurata'
+      });
+    }
+    const annoCorrenteDdt = new Date(report.dataConsegna).getFullYear();
+    const ultimiDdtFICResp = await apiRequest(
+      'GET',
+      `/c/${configuredCompanyId}/issued_documents?type=delivery_note&year=${annoCorrenteDdt}&per_page=100`
+    );
     const documentiFIC: any[] = ultimiDdtFICResp.data?.data ?? [];
     const serieDdt = '/ddt';
     const documentiSerieDdt = documentiFIC.filter((d) => (d.numeration || '') === serieDdt);
     const poolDdt = documentiSerieDdt.length > 0 ? documentiSerieDdt : documentiFIC;
     const numeroMassimoFIC = poolDdt.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
-    const nuovoNumero = numeroMassimoFIC + 1;
-    console.log(`✅ Prossimo numero DDT (da report) letto da FIC per azienda configurata (anno ${annoCorrenteDdt}, serie "${serieDdt}"): ${nuovoNumero} — ultimo su FIC: ${numeroMassimoFIC} (documenti analizzati: ${poolDdt.length})`);
-    
-    // Crea DDT locale prima
-    const [nuovoDdt] = await db.insert(ddt).values({
-      numero: nuovoNumero,
-      clienteId: cliente.id,
-      data: report.dataConsegna,
-      totaleColli: report.numeroTotaleCeste,
-      pesoTotale: report.pesoTotaleKg.toString(),
-      note: `DDT generato da report consegna ${report.id}`,
-      ddtStato: 'locale'
-    }).returning();
-    
-    // Crea righe DDT
-    const righe = [];
-    for (const dettaglio of reportDettagli) {
-      const riga = {
-        ddtId: nuovoDdt.id,
-        descrizione: `${dettaglio.codiceSezione} | ${dettaglio.taglia} | ${dettaglio.pesoCesteKg}kg | ${dettaglio.animaliPerKg} pz/kg | ${dettaglio.percentualeGuscio}% guscio | ${dettaglio.percentualeMortalita}% mortalità`,
+    const numeroCandidatoFIC = numeroMassimoFIC + 1;
+    console.log(`✅ Prossimo numero DDT (da report) letto da FIC per azienda configurata (anno ${annoCorrenteDdt}, serie "${serieDdt}"): ${numeroCandidatoFIC} — ultimo su FIC: ${numeroMassimoFIC} (documenti analizzati: ${poolDdt.length})`);
+
+    const rowValues = reportDettagli.map(dettaglio => ({
+        descrizione: `${dettaglio.codiceSezione} | ${dettaglio.taglia} | ${dettaglio.pesoCesteKg}kg | ${dettaglio.animaliPerKg} pz/kg | ${dettaglio.percentualeScarto}% scarto | ${dettaglio.percentualeMortalita}% mortalità`,
         quantita: dettaglio.numeroAnimali.toString(),
         unitaMisura: 'NR',
         prezzoUnitario: '0',
         reportDettaglioId: dettaglio.id
-      };
-      
-      const [rigaCreata] = await db.insert(ddtRighe).values(riga).returning();
-      righe.push(rigaCreata);
+    }));
+
+    const { nuovoDdt, righe, alreadySent } = await db.transaction(async tx => {
+      const reportLockKey = `delivery-report-ddt:${reportId}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${reportLockKey}))`);
+
+      const [existingResult] = await tx.select({ document: ddt })
+        .from(ddt)
+        .innerJoin(ddtRighe, eq(ddtRighe.ddtId, ddt.id))
+        .innerJoin(
+          externalDeliveryDetailsSync,
+          eq(externalDeliveryDetailsSync.id, ddtRighe.reportDettaglioId)
+        )
+        .where(eq(externalDeliveryDetailsSync.reportId, reportId))
+        .limit(1);
+      if (existingResult) {
+        if (existingResult.document.companyId !== configuredCompanyId) {
+          const companyConflict = new Error(
+            'Il report è già associato a un DDT di un’altra azienda'
+          );
+          (companyConflict as any).statusCode = 409;
+          throw companyConflict;
+        }
+
+        const existingRows = await tx.select()
+          .from(ddtRighe)
+          .where(eq(ddtRighe.ddtId, existingResult.document.id));
+        if (
+          existingResult.document.ddtStato === 'inviato'
+          && existingResult.document.fattureInCloudId
+        ) {
+          return {
+            nuovoDdt: existingResult.document,
+            righe: existingRows,
+            alreadySent: true
+          };
+        }
+
+        const [claimedDdt] = await tx.update(ddt)
+          .set({ ddtStato: 'invio', updatedAt: new Date() })
+          .where(and(
+            eq(ddt.id, existingResult.document.id),
+            eq(ddt.ddtStato, 'locale')
+          ))
+          .returning();
+        if (!claimedDdt) {
+          const sendConflict = new Error(
+            'Il DDT è già in invio o richiede una verifica prima di essere ritentato'
+          );
+          (sendConflict as any).statusCode = 409;
+          throw sendConflict;
+        }
+        return { nuovoDdt: claimedDdt, righe: existingRows, alreadySent: false };
+      }
+
+      const numberingKey = `advanced-ddt:${configuredCompanyId}:${annoCorrenteDdt}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
+
+      const localMaxResult = await tx.execute(sql`
+        SELECT COALESCE(MAX(numero), 0)::integer AS max_number
+        FROM ${ddt}
+        WHERE company_id = ${configuredCompanyId}
+          AND EXTRACT(YEAR FROM data)::integer = ${annoCorrenteDdt}
+      `);
+      const localMax = Number((localMaxResult as any).rows?.[0]?.max_number || 0);
+      const numeroRiservato = Math.max(numeroCandidatoFIC, localMax + 1);
+
+      const [createdDdt] = await tx.insert(ddt).values({
+        numero: numeroRiservato,
+        clienteId: cliente.id,
+        data: report.dataConsegna,
+        companyId: configuredCompanyId,
+        totaleColli: report.numeroTotaleCeste,
+        pesoTotale: report.pesoTotaleKg.toString(),
+        note: `DDT generato da report consegna ${report.id}`,
+        ddtStato: 'invio'
+      }).returning();
+
+      const createdRows = await tx.insert(ddtRighe)
+        .values(rowValues.map(row => ({ ...row, ddtId: createdDdt.id })))
+        .returning();
+
+      return { nuovoDdt: createdDdt, righe: createdRows, alreadySent: false };
+    });
+
+    if (alreadySent) {
+      return res.json({
+        success: true,
+        ddt_id: nuovoDdt.id,
+        fatture_in_cloud_id: nuovoDdt.fattureInCloudId,
+        numero: nuovoDdt.numero,
+        message: 'DDT già inviato a Fatture in Cloud'
+      });
     }
     
     // Raggruppa per taglia e crea subtotali
@@ -1616,7 +1700,10 @@ router.post('/ddt', async (req: Request, res: Response) => {
     let datiCliente = cliente;
     if (cliente.fattureInCloudId && (cliente.indirizzo === 'N/A' || !cliente.indirizzo)) {
       try {
-        const clienteResponse = await withRetry(() => apiRequest('GET', `/entities/clients/${cliente.fattureInCloudId}`));
+        const clienteResponse = await withRetry(() => apiRequest(
+          'GET',
+          `/c/${configuredCompanyId}/entities/clients/${cliente.fattureInCloudId}`
+        ));
         const clienteFIC = clienteResponse.data.data;
         
         datiCliente = {
@@ -1663,12 +1750,28 @@ router.post('/ddt', async (req: Request, res: Response) => {
       }
     };
     
-    // Invia a Fatture in Cloud
-    const ficResponse = await withRetry(() => apiRequest('POST', '/issued_documents', ddtPayload));
+    // Un retry dopo timeout può trovare su FIC il documento già creato:
+    // riconcilia per azienda/anno/serie/numero prima di tentare un nuovo POST.
+    const existingFicDocument = poolDdt.find((documento: any) =>
+      Number(documento.number) === Number(nuovoDdt.numero)
+      && documento.numeration === serieDdt
+      && String(documento.date || '') === String(report.dataConsegna)
+      && Boolean(cliente.fattureInCloudId)
+      && Number(documento.entity?.id) === Number(cliente.fattureInCloudId)
+    );
+    let ficDocumentId = nuovoDdt.fattureInCloudId || existingFicDocument?.id || null;
+    if (!ficDocumentId) {
+      const ficResponse = await withRetry(() => apiRequest(
+        'POST',
+        `/c/${configuredCompanyId}/issued_documents`,
+        ddtPayload
+      ));
+      ficDocumentId = ficResponse.data.data.id;
+    }
     
     // Aggiorna DDT con ID esterno
     await db.update(ddt).set({
-      fattureInCloudId: ficResponse.data.data.id,
+      fattureInCloudId: ficDocumentId,
       ddtStato: 'inviato',
       updatedAt: new Date()
     }).where(eq(ddt.id, nuovoDdt.id));
@@ -1676,14 +1779,15 @@ router.post('/ddt', async (req: Request, res: Response) => {
     res.json({
       success: true,
       ddt_id: nuovoDdt.id,
-      fatture_in_cloud_id: ficResponse.data.data.id,
+      fatture_in_cloud_id: ficDocumentId,
       numero: nuovoDdt.numero,
       message: 'DDT creato e inviato con successo a Fatture in Cloud'
     });
     
   } catch (error: any) {
     console.error('Errore nella creazione DDT:', error);
-    res.status(500).json({ 
+    const statusCode = Number(error?.statusCode) || 500;
+    res.status(statusCode).json({
       success: false, 
       message: `Errore nella creazione DDT: ${error.message}` 
     });

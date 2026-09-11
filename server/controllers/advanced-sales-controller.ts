@@ -3575,68 +3575,12 @@ export async function generateDDT(req: Request, res: Response) {
       ? await getProductSnapshotsBySizeCodes("fcloud", fcloudCompanyKey, saleSizeCodes)
       : new Map();
 
-    const [claimedSale] = await db.update(advancedSales)
-      .set({ ddtStatus: 'generazione', updatedAt: new Date() })
-      .where(and(
-        eq(advancedSales.id, parseInt(id)),
-        eq(advancedSales.status, 'confirmed'),
-        eq(advancedSales.ddtStatus, 'nessuno')
-      ))
-      .returning();
-    if (!claimedSale) {
-      return res.status(409).json({
-        success: false,
-        error: "Il DDT è già presente, in generazione o la vendita non è più confermata"
-      });
-    }
-
     const completeCustomer = await getCompleteSaleCustomer(saleData, cliente, companyId);
 
-    // La creazione locale riserva immediatamente il progressivo. Il lock per
-    // azienda/anno impedisce che due vendite ricevano lo stesso numero.
-    const { numeroDDT, ddtCreato } = await db.transaction(async tx => {
-      const numberingKey = `advanced-ddt:${companyId}:${new Date(saleData.saleDate).getFullYear()}`;
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
-      const reservedNumber = await getNextAvailableDDTNumber(
-        companyId,
-        new Date(saleData.saleDate).getFullYear()
-      );
-      const [createdDdt] = await tx.insert(ddt).values({
-      numero: reservedNumber,
-      data: saleData.saleDate,
-      clienteId: cliente.id || null,
-      // Snapshot immutabile cliente
-      clienteNome: completeCustomer.name,
-      clienteIndirizzo: completeCustomer.address,
-      clienteCitta: completeCustomer.city,
-      clienteCap: completeCustomer.postalCode,
-      clienteProvincia: completeCustomer.province,
-      clientePiva: completeCustomer.vatNumber,
-      clienteCodiceFiscale: completeCustomer.taxCode,
-      clienteCodiceAllevamento: completeCustomer.farmCode,
-      clientePaese: completeCustomer.country,
-      // Snapshot immutabile mittente (azienda)
-      companyId: companyId,
-      mittenteRagioneSociale: fiscalData?.ragioneSociale || null,
-      mittenteIndirizzo: fiscalData?.indirizzo || null,
-      mittenteCap: fiscalData?.cap || null,
-      mittenteCitta: fiscalData?.citta || null,
-      mittenteProvincia: fiscalData?.provincia || null,
-      mittentePartitaIva: fiscalData?.partitaIva || null,
-      mittenteCodiceFiscale: fiscalData?.codiceFiscale || null,
-      mittenteTelefono: fiscalData?.telefono || null,
-      mittenteEmail: fiscalData?.email || null,
-      mittenteLogoPath: fiscalData?.logoPath || getCompanyLogo(companyId),
-      // Totali
-      totaleColli: saleData.totalBags || 0,
-      // advanced_sales.total_weight è già espresso in grammi; ddt.peso_totale
-      // conserva i grammi e viene convertito in kg solo in fase di visualizzazione/invio FCloud.
-      pesoTotale: saleData.totalWeight ? saleData.totalWeight.toFixed(2) : '0',
-      note: saleData.notes,
-      ddtStato: 'locale'
-      }).returning();
-      return { numeroDDT: reservedNumber, ddtCreato: createdDdt };
-    });
+    const numberingYear = new Date(saleData.saleDate).getFullYear();
+    // FIC viene interrogato prima della transazione. Il candidato sarà
+    // riconciliato con il massimo locale mentre il lock annuale è attivo.
+    const externalNumberCandidate = await getNextAvailableDDTNumber(companyId, numberingYear);
 
     // Raggruppa sacchi per taglia per creare righe con subtotali
     const bagsPerSize: Record<string, typeof bags> = {};
@@ -3650,7 +3594,7 @@ export async function generateDDT(req: Request, res: Response) {
     }
 
     // Crea righe DDT con pattern subtotali
-    const righeCreate = [];
+    const ddtRowValues: any[] = [];
     
     for (const [sizeCode, sizeBags] of Object.entries(bagsPerSize)) {
       // Raggruppa per sacco (un sacco può avere più allocazioni)
@@ -3682,8 +3626,7 @@ export async function generateDDT(req: Request, res: Response) {
         const ficProduct = ficProductSnapshots.get(sizeCode);
         const fcloudProduct = fcloudProductSnapshots.get(sizeCode);
 
-        const [riga] = await db.insert(ddtRighe).values({
-          ddtId: ddtCreato.id,
+        ddtRowValues.push({
           descrizione,
           quantita: bagData.animalCount.toString(),
           unitaMisura: 'NR',
@@ -3701,35 +3644,108 @@ export async function generateDDT(req: Request, res: Response) {
           flupsyName: [...new Set(bagItems
             .map((item: any) => item.allocation?.sourceFlupsyNameSnapshot || item.flupsy?.name)
             .filter(Boolean))].join(', ') || null
-        }).returning();
-
-        righeCreate.push(riga);
+        });
         totalAnimalsSize += bagData.animalCount;
         totalWeightSize += bagData.totalWeight;
       }
 
       // Aggiungi riga SUBTOTALE per taglia
-      const [rigaSubtotale] = await db.insert(ddtRighe).values({
-        ddtId: ddtCreato.id,
+      ddtRowValues.push({
         descrizione: `SUBTOTALE ${sizeCode}`,
         quantita: totalAnimalsSize.toString(),
         unitaMisura: 'NR',
         prezzoUnitario: '0',
         advancedSaleId: parseInt(id),
         sizeCode: sizeCode
-      }).returning();
-
-      righeCreate.push(rigaSubtotale);
+      });
     }
 
-    // Aggiorna vendita con riferimento DDT
-    await db.update(advancedSales)
-      .set({
-        ddtId: ddtCreato.id,
-        ddtStatus: 'locale',
-        updatedAt: new Date()
-      })
-      .where(eq(advancedSales.id, parseInt(id)));
+    // DDT, righe e collegamento vendita diventano visibili con un solo commit.
+    const { numeroDDT, ddtCreato, righeCreate } = await db.transaction(async tx => {
+      const [claimedSale] = await tx.update(advancedSales)
+        .set({ ddtStatus: 'generazione', updatedAt: new Date() })
+        .where(and(
+          eq(advancedSales.id, parseInt(id)),
+          eq(advancedSales.status, 'confirmed'),
+          eq(advancedSales.ddtStatus, 'nessuno')
+        ))
+        .returning({ id: advancedSales.id });
+      if (!claimedSale) {
+        const conflictError = new Error(
+          'Il DDT è già presente, in generazione o la vendita non è più confermata'
+        );
+        (conflictError as any).statusCode = 409;
+        throw conflictError;
+      }
+
+      const numberingKey = `advanced-ddt:${companyId}:${numberingYear}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
+
+      const localMaxResult = await tx.execute(sql`
+        SELECT COALESCE(MAX(numero), 0)::integer AS max_number
+        FROM ${ddt}
+        WHERE company_id = ${companyId}
+          AND EXTRACT(YEAR FROM data)::integer = ${numberingYear}
+      `);
+      const localMax = Number((localMaxResult as any).rows?.[0]?.max_number || 0);
+      const reservedNumber = Math.max(externalNumberCandidate, localMax + 1);
+
+      const [createdDdt] = await tx.insert(ddt).values({
+        numero: reservedNumber,
+        data: saleData.saleDate,
+        clienteId: cliente.id || null,
+        clienteNome: completeCustomer.name,
+        clienteIndirizzo: completeCustomer.address,
+        clienteCitta: completeCustomer.city,
+        clienteCap: completeCustomer.postalCode,
+        clienteProvincia: completeCustomer.province,
+        clientePiva: completeCustomer.vatNumber,
+        clienteCodiceFiscale: completeCustomer.taxCode,
+        clienteCodiceAllevamento: completeCustomer.farmCode,
+        clientePaese: completeCustomer.country,
+        companyId,
+        mittenteRagioneSociale: fiscalData?.ragioneSociale || null,
+        mittenteIndirizzo: fiscalData?.indirizzo || null,
+        mittenteCap: fiscalData?.cap || null,
+        mittenteCitta: fiscalData?.citta || null,
+        mittenteProvincia: fiscalData?.provincia || null,
+        mittentePartitaIva: fiscalData?.partitaIva || null,
+        mittenteCodiceFiscale: fiscalData?.codiceFiscale || null,
+        mittenteTelefono: fiscalData?.telefono || null,
+        mittenteEmail: fiscalData?.email || null,
+        mittenteLogoPath: fiscalData?.logoPath || getCompanyLogo(companyId),
+        totaleColli: saleData.totalBags || 0,
+        pesoTotale: saleData.totalWeight ? saleData.totalWeight.toFixed(2) : '0',
+        note: saleData.notes,
+        ddtStato: 'locale'
+      }).returning();
+
+      const createdRows = await tx.insert(ddtRighe)
+        .values(ddtRowValues.map(row => ({ ...row, ddtId: createdDdt.id })))
+        .returning();
+
+      const [linkedSale] = await tx.update(advancedSales)
+        .set({
+          ddtId: createdDdt.id,
+          ddtStatus: 'locale',
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(advancedSales.id, parseInt(id)),
+          eq(advancedSales.status, 'confirmed'),
+          eq(advancedSales.ddtStatus, 'generazione')
+        ))
+        .returning();
+      if (!linkedSale) {
+        throw new Error('La vendita è cambiata durante la generazione del DDT');
+      }
+
+      return {
+        numeroDDT: reservedNumber,
+        ddtCreato: createdDdt,
+        righeCreate: createdRows
+      };
+    });
 
     res.json({
       success: true,
@@ -3740,13 +3756,12 @@ export async function generateDDT(req: Request, res: Response) {
 
   } catch (error) {
     console.error("Errore nella generazione DDT:", error);
-    // Non riportare automaticamente lo stato a "nessuno": dopo il claim non
-    // possiamo escludere che un DDT o una consegna siano già stati creati.
-    // Lo stato "generazione" è quindi un marker fail-safe non reversibile che
-    // richiede una verifica/risoluzione esplicita prima di un nuovo tentativo.
-    res.status(500).json({
+    const statusCode = Number((error as any)?.statusCode) || 500;
+    res.status(statusCode).json({
       success: false,
-      error: "Errore nella generazione del DDT. La vendita resta bloccata per verifica manuale"
+      error: statusCode === 409
+        ? (error as Error).message
+        : "Errore nella generazione del DDT. Nessun documento locale è stato salvato"
     });
   }
 }
