@@ -1623,7 +1623,7 @@ export const ddt = pgTable("ddt", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
 }, (table) => ({
-  companyYearNumberIdx: index("ddt_company_year_number_idx")
+  companyYearNumberUnique: uniqueIndex("ddt_company_year_numero_unique")
     .on(table.companyId, table.numberingYear, table.numero),
 }));
 

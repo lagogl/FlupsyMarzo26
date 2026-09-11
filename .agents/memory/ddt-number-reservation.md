@@ -11,4 +11,4 @@ La riconciliazione automatica di un DDT già presente su FIC è distinta dal cal
 
 **Why:** usare soltanto l'ultimo numero remoto assegna ripetutamente lo stesso progressivo finché i DDT locali non vengono inviati; richieste concorrenti possono inoltre ottenere lo stesso numero. Un retry remoto non coordinato può creare un secondo documento o collegare quello di un altro cliente.
 
-**How to apply:** leggere tutte le pagine FIC, serializzare l’assegnazione per azienda/anno, usare il massimo tra FIC e prenotazioni locali pendenti, rendere idempotente la sorgente del DDT e non rinumerare automaticamente documenti storici o già inviati.
+**How to apply:** leggere tutte le pagine FIC, serializzare l’assegnazione per azienda/anno, usare il massimo tra FIC e prenotazioni locali pendenti, rendere idempotente la sorgente del DDT e non rinumerare automaticamente documenti storici o già inviati. La garanzia finale è l’indice univoco `(company_id, numbering_year, numero)`: dichiararlo nello schema Drizzle e trasformare la sua violazione PostgreSQL in un conflitto `409`; i lock applicativi evitano collisioni ma non sostituiscono il vincolo DB.

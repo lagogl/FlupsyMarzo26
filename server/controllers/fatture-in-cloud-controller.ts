@@ -38,6 +38,10 @@ import {
 } from '../services/fcloud-ddt-service';
 import { requireAdmin, requireAuth } from '../modules/system/auth';
 import { randomUUID } from 'node:crypto';
+import {
+  DDT_NUMBER_CONFLICT_MESSAGE,
+  isDdtNumberConflict,
+} from '../services/ddt-number-conflict';
 
 const router = express.Router();
 
@@ -1802,10 +1806,15 @@ router.post('/ddt', async (req: Request, res: Response) => {
     
   } catch (error: any) {
     console.error('Errore nella creazione DDT:', error);
-    const statusCode = Number(error?.statusCode) || 500;
+    const ddtNumberConflict = isDdtNumberConflict(error);
+    const statusCode = ddtNumberConflict
+      ? 409
+      : Number(error?.statusCode) || 500;
     res.status(statusCode).json({
       success: false, 
-      message: `Errore nella creazione DDT: ${error.message}` 
+      message: ddtNumberConflict
+        ? DDT_NUMBER_CONFLICT_MESSAGE
+        : `Errore nella creazione DDT: ${error.message}`
     });
   }
 });

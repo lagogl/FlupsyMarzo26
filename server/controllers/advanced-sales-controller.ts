@@ -76,6 +76,10 @@ import {
 import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
 import { getNextDdtNumber } from "../services/ddt-numbering-fic";
 import {
+  DDT_NUMBER_CONFLICT_MESSAGE,
+  isDdtNumberConflict,
+} from "../services/ddt-number-conflict";
+import {
   buildAggregatedFicDdtItems,
   getProductSnapshotsBySizeCodes,
   hydrateDdtProductSnapshots
@@ -3756,11 +3760,14 @@ export async function generateDDT(req: Request, res: Response) {
 
   } catch (error) {
     console.error("Errore nella generazione DDT:", error);
-    const statusCode = Number((error as any)?.statusCode) || 500;
+    const ddtNumberConflict = isDdtNumberConflict(error);
+    const statusCode = ddtNumberConflict
+      ? 409
+      : Number((error as any)?.statusCode) || 500;
     res.status(statusCode).json({
       success: false,
       error: statusCode === 409
-        ? (error as Error).message
+        ? (ddtNumberConflict ? DDT_NUMBER_CONFLICT_MESSAGE : (error as Error).message)
         : "Errore nella generazione del DDT. Nessun documento locale è stato salvato"
     });
   }
