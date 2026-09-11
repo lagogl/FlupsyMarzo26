@@ -1,6 +1,7 @@
 import { Express } from 'express';
 import * as EmailController from '../../controllers/email-controller';
 import * as TelegramController from '../../controllers/telegram-controller';
+import { requireAdmin, requireAuth } from '../system/auth';
 
 /**
  * Registra tutte le route del modulo INTEGRATIONS
@@ -9,20 +10,20 @@ import * as TelegramController from '../../controllers/telegram-controller';
 export function registerIntegrationsRoutes(app: Express) {
   // ===== EMAIL INTEGRATION =====
   // Genera email diario operazioni
-  app.get('/api/email/generate-diario', EmailController.generateEmailDiario);
+  app.get('/api/email/generate-diario', requireAuth, EmailController.generateEmailDiario);
   
   // Invia email diario
-  app.post('/api/email/send-diario', EmailController.sendEmailDiario);
+  app.post('/api/email/send-diario', requireAdmin, EmailController.sendEmailDiario);
   
   // Auto-invio email diario (scheduler)
-  app.get('/api/email/auto-send-diario', EmailController.autoSendEmailDiario);
+  app.get('/api/email/auto-send-diario', requireAdmin, EmailController.autoSendEmailDiario);
   
   // Configurazione email
-  app.get('/api/email/config', EmailController.getEmailConfiguration);
-  app.post('/api/email/config', EmailController.saveEmailConfiguration);
+  app.get('/api/email/config', requireAdmin, EmailController.getEmailConfiguration);
+  app.post('/api/email/config', requireAdmin, EmailController.saveEmailConfiguration);
   
   // Test email Gmail
-  app.post('/api/email/test', async (req, res) => {
+  app.post('/api/email/test', requireAdmin, async (req, res) => {
     try {
       const { sendGmailEmail, getEmailRecipients } = await import('../../services/gmail-service');
       const recipients = await getEmailRecipients();
@@ -62,11 +63,11 @@ export function registerIntegrationsRoutes(app: Express) {
 
   // ===== TELEGRAM INTEGRATION =====
   // Invia messaggio Telegram con diario
-  app.post('/api/telegram/send-diario', TelegramController.sendTelegramDiario);
+  app.post('/api/telegram/send-diario', requireAdmin, TelegramController.sendTelegramDiario);
   
   // Configurazione Telegram
-  app.get('/api/telegram/config', TelegramController.getTelegramConfiguration);
-  app.post('/api/telegram/config', TelegramController.saveTelegramConfiguration);
+  app.get('/api/telegram/config', requireAdmin, TelegramController.getTelegramConfiguration);
+  app.post('/api/telegram/config', requireAdmin, TelegramController.saveTelegramConfiguration);
 
   console.log('✅ Modulo INTEGRATIONS registrato su /api/email e /api/telegram');
 }

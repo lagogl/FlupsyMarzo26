@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { sgrController } from "./sgr.controller";
+import { requireAuth } from "../../system/auth";
 
 const router = Router();
+router.use(
+  ["/sgr", "/sgr-giornalieri", "/sgr-matrix", "/sgr-per-taglia", "/sgr-calculation"],
+  requireAuth
+);
 
 // ========== SGR Mensili (Monthly) Routes ==========
 router.get("/sgr", (req, res) => sgrController.getAllSgr(req, res));

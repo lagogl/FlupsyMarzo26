@@ -36,6 +36,8 @@ import {
   fetchFCloudProducts,
   resolveFCloudCompanyId
 } from '../services/fcloud-ddt-service';
+import { requireAdmin, requireAuth } from '../modules/system/auth';
+import { randomUUID } from 'node:crypto';
 
 const router = express.Router();
 
@@ -233,7 +235,7 @@ async function withRetry<T>(operation: () => Promise<T>, maxRetries = 1): Promis
 // ===== ENDPOINTS OAUTH2 =====
 
 // Endpoint per ottenere URL di autorizzazione
-router.get('/oauth/url', async (req: Request, res: Response) => {
+router.get('/oauth/url', requireAdmin, async (req: Request, res: Response) => {
   try {
     const clientId = await getConfigValue('fatture_in_cloud_client_id');
     const clientSecret = await getConfigValue('fatture_in_cloud_client_secret');
@@ -268,11 +270,14 @@ router.get('/oauth/url', async (req: Request, res: Response) => {
     console.log(`🔐 Generazione URL OAuth2 per Client ID: ${clientId.substring(0, 8)}...`);
     console.log(`🔗 Redirect URI: ${redirectUri}`);
     
+    const oauthState = randomUUID();
+    (req.session as any).ficOAuthState = oauthState;
     const authUrl = `${FATTURE_IN_CLOUD_API_BASE}/oauth/authorize` +
       `?response_type=code` +
       `&client_id=${clientId}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=entity.clients:r entity.clients:a products:r issued_documents.delivery_notes:r issued_documents.delivery_notes:a issued_documents.invoices:r`;
+      `&scope=entity.clients:r entity.clients:a products:r issued_documents.delivery_notes:r issued_documents.delivery_notes:a issued_documents.invoices:r` +
+      `&state=${encodeURIComponent(oauthState)}`;
     
     res.json({ success: true, url: authUrl });
   } catch (error: any) {
@@ -284,7 +289,16 @@ router.get('/oauth/url', async (req: Request, res: Response) => {
 // Callback OAuth2
 router.get('/oauth/callback', async (req: Request, res: Response) => {
   try {
-    const { code, error: oauthError } = req.query;
+    const { code, error: oauthError, state } = req.query;
+    const expectedState = (req.session as any)?.ficOAuthState;
+    if (
+      typeof state !== 'string'
+      || typeof expectedState !== 'string'
+      || state !== expectedState
+    ) {
+      return res.redirect('/fatture-in-cloud?oauth=error&reason=invalid_state');
+    }
+    delete (req.session as any).ficOAuthState;
     
     if (oauthError) {
       return res.redirect('/fatture-in-cloud?oauth=cancelled');
@@ -330,6 +344,8 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
   }
 });
 
+router.use(requireAuth);
+
 // ===== ENDPOINTS CONFIGURAZIONE =====
 
 // Endpoint per recuperare la configurazione
@@ -355,7 +371,7 @@ router.get('/config', async (req: Request, res: Response) => {
 });
 
 // Endpoint per impostare configurazione
-router.post('/config', async (req: Request, res: Response) => {
+router.post('/config', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { chiave, valore, descrizione } = req.body;
     
@@ -429,7 +445,7 @@ function extractFicProducts(body: any): any[] {
   return candidates.find(Array.isArray) || [];
 }
 
-router.post('/products/sync', async (req: Request, res: Response) => {
+router.post('/products/sync', requireAdmin, async (req: Request, res: Response) => {
   try {
     const companyId = Number(req.body?.companyId);
     const provider = parseProductProvider(req.body?.provider);
@@ -501,7 +517,7 @@ router.get('/product-mappings', async (req: Request, res: Response) => {
   }
 });
 
-router.put('/product-mappings/:sizeId', async (req: Request, res: Response) => {
+router.put('/product-mappings/:sizeId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const sizeId = Number(req.params.sizeId);
     const companyId = Number(req.body?.companyId);
@@ -518,7 +534,7 @@ router.put('/product-mappings/:sizeId', async (req: Request, res: Response) => {
   }
 });
 
-router.delete('/product-mappings/:sizeId', async (req: Request, res: Response) => {
+router.delete('/product-mappings/:sizeId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const sizeId = Number(req.params.sizeId);
     const companyId = Number(req.query.companyId);
@@ -537,7 +553,7 @@ router.delete('/product-mappings/:sizeId', async (req: Request, res: Response) =
 // ===== ENDPOINTS CLIENTI =====
 
 // Sincronizzazione clienti da Fatture in Cloud
-router.post('/clients/sync', async (req: Request, res: Response) => {
+router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) => {
   try {
     await refreshTokenIfNeeded();
     
@@ -755,7 +771,7 @@ router.get('/clients', async (req: Request, res: Response) => {
 // ===== ENDPOINTS ORDINI =====
 
 // Sincronizzazione ordini da Fatture in Cloud
-router.post('/orders/sync', async (req: Request, res: Response) => {
+router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) => {
   try {
     await refreshTokenIfNeeded();
     
@@ -1910,7 +1926,7 @@ router.get('/companies', async (req: Request, res: Response) => {
 });
 
 // Aggiorna azienda selezionata
-router.patch('/company-id', async (req: Request, res: Response) => {
+router.patch('/company-id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { company_id } = req.body;
     
@@ -2029,7 +2045,7 @@ router.get('/fiscal-data', async (req: Request, res: Response) => {
 });
 
 // PUT /fiscal-data - Crea o aggiorna i dati fiscali dell'azienda attiva (UPSERT)
-router.put('/fiscal-data', async (req: Request, res: Response) => {
+router.put('/fiscal-data', requireAdmin, async (req: Request, res: Response) => {
   try {
     const companyId = await getConfigValue('fatture_in_cloud_company_id');
     

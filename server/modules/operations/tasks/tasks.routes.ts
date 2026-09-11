@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { tasksController } from "./tasks.controller";
 import { operatorsController } from "./operators.controller";
+import { requireAuth } from "../../system/auth";
 
 const router = Router();
+router.use(["/operators", "/tasks", "/selections"], requireAuth);
 
 // ========== OPERATORS ROUTES ==========
 router.get("/operators", (req, res) => operatorsController.getAll(req, res));

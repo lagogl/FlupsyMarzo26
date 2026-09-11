@@ -156,12 +156,12 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.use('/tracciabilita', traceabilityModule.publicTraceabilityRoutes);
 
   // 🎯 MODULI ORGANIZZATI - Registrazione route modularizzate
-  app.use('/api/flupsys', flupsyRoutes);
+  app.use('/api/flupsys', authModule.requireAuth, flupsyRoutes);
   console.log('✅ Modulo FLUPSYS registrato su /api/flupsys');
 
   // Registra il modulo BASKETS
   const basketsModule = await import('./modules/operations/baskets');
-  app.use('/api/baskets', basketsModule.basketsRoutes);
+  app.use('/api/baskets', authModule.requireAuth, basketsModule.basketsRoutes);
   console.log('✅ Modulo BASKETS registrato su /api/baskets');
 
   // Registra il modulo OPERATIONS
@@ -170,22 +170,22 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   console.log('✅ Modulo OPERATIONS registrato su /api/operations');
 
   // Registra il modulo CYCLES
-  app.use('/api/cycles', cyclesRoutes);
+  app.use('/api/cycles', authModule.requireAuth, cyclesRoutes);
   console.log('✅ Modulo CYCLES registrato su /api/cycles');
 
   // Registra il modulo LOTS
   const lotsModule = await import('./modules/core/lots');
-  app.use('/api/lots', lotsModule.lotsRoutes);
+  app.use('/api/lots', authModule.requireAuth, lotsModule.lotsRoutes);
   console.log('✅ Modulo LOTS registrato su /api/lots');
 
   // Registra il modulo SIZES
   const sizesModule = await import('./modules/core/sizes');
-  app.use('/api/sizes', sizesModule.sizesRoutes);
+  app.use('/api/sizes', authModule.requireAuth, sizesModule.sizesRoutes);
   console.log('✅ Modulo SIZES registrato su /api/sizes');
 
   // Registra il modulo BASKET CAPACITY (Capacità massima per taglia)
   const basketCapacityModule = await import('./modules/core/basket-capacity');
-  app.use('/api/basket-capacity', basketCapacityModule.basketCapacityRoutes);
+  app.use('/api/basket-capacity', authModule.requireAuth, basketCapacityModule.basketCapacityRoutes);
   console.log('✅ Modulo BASKET CAPACITY registrato su /api/basket-capacity');
 
   // Registra il modulo SGR (Indici di Crescita)
@@ -218,7 +218,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   console.log('✅ Modulo MORTALITY-RATES registrato su /api/mortality-rates*');
 
   // API MORTALITY-EXPECTATIONS (Nuovo sistema: mortalità totale da semina a vendita)
-  app.get('/api/mortality-expectations', async (req, res) => {
+  app.get('/api/mortality-expectations', authModule.requireAuth, async (req, res) => {
     try {
       const expectations = await storage.getMortalityExpectations();
       res.json(expectations);
@@ -228,7 +228,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  app.get('/api/mortality-expectations/:id', async (req, res) => {
+  app.get('/api/mortality-expectations/:id', authModule.requireAuth, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const expectation = await storage.getMortalityExpectation(id);
@@ -242,7 +242,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  app.post('/api/mortality-expectations', async (req, res) => {
+  app.post('/api/mortality-expectations', authModule.requireAdmin, async (req, res) => {
     try {
       const { seedSize, saleSize, totalMortalityPercent, notes } = req.body;
       const expectation = await storage.upsertMortalityExpectation(
@@ -258,7 +258,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  app.patch('/api/mortality-expectations/:id', async (req, res) => {
+  app.patch('/api/mortality-expectations/:id', authModule.requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const expectation = await storage.updateMortalityExpectation(id, req.body);
@@ -281,17 +281,19 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
   // Registra il modulo GIACENZE
   const giacenzeModule = await import('./modules/core/giacenze');
+  app.use('/api/giacenze', authModule.requireAuth);
   app.use('/api', giacenzeModule.giacenzeRoutes);
   console.log('✅ Modulo GIACENZE registrato su /api/giacenze/*');
 
   // Registra il modulo MORNING SUMMARY
   const morningSummaryModule = await import('./modules/core/morning-summary/morning-summary.routes');
+  app.use('/api/morning-summary', authModule.requireAuth);
   app.use('/api', morningSummaryModule.default);
   console.log('✅ Modulo MORNING SUMMARY registrato su /api/morning-summary');
 
   // Registra il modulo AI GROWTH VARIABILITY ANALYSIS
   const growthVariabilityModule = await import('./modules/ai-growth-variability/growth-variability.routes');
-  app.use('/api/growth-variability', growthVariabilityModule.default);
+  app.use('/api/growth-variability', authModule.requireAuth, growthVariabilityModule.default);
   console.log('✅ Modulo AI GROWTH VARIABILITY registrato su /api/growth-variability/*');
 
   // Registra il modulo DATABASE
@@ -301,7 +303,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
   // Registra il modulo DIARIO
   const diarioModule = await import('./modules/reports/diario');
-  app.use('/api/diario', diarioModule.diarioRoutes);
+  app.use('/api/diario', authModule.requireAuth, diarioModule.diarioRoutes);
   console.log('✅ Modulo DIARIO registrato su /api/diario/*');
 
   // Registra il modulo SENEYE (sonda DF SIFONI)
@@ -331,35 +333,37 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
   // Registra il modulo REPORT FLUSSO LOTTI (passaggi tra contenitori)
   const lotFlowModule = await import('./modules/reports/lot-flow');
-  app.use('/api/reports', lotFlowModule.lotFlowRoutes);
+  app.use('/api/reports', authModule.requireAuth, lotFlowModule.lotFlowRoutes);
   console.log('✅ Modulo REPORT FLUSSO registrato su /api/reports/lot-flow');
 
   // Registra il modulo ADVANCED-SALES
   const advancedSalesModule = await import('./modules/sales/advanced-sales');
-  app.use('/api/advanced-sales', advancedSalesModule.advancedSalesRoutes);
+  app.use('/api/advanced-sales', authModule.requireAuth, advancedSalesModule.advancedSalesRoutes);
   console.log('✅ Modulo ADVANCED-SALES registrato su /api/advanced-sales/*, /api/ddt/*');
 
   // Registra il modulo TARGET-SIZE-ANNOTATIONS
   const targetSizeModule = await import('./modules/planning/target-size-annotations');
-  app.use('/api/target-size-annotations', targetSizeModule.targetSizeAnnotationsRoutes);
+  app.use('/api/target-size-annotations', authModule.requireAuth, targetSizeModule.targetSizeAnnotationsRoutes);
   console.log('✅ Modulo TARGET-SIZE-ANNOTATIONS registrato su /api/target-size-annotations/*');
 
   // Registra il modulo VERIFICA COPERTURA ORDINI
   const orderCoverageModule = await import('./modules/planning/order-coverage');
-  app.use('/api/verifica-copertura', orderCoverageModule.orderCoverageRoutes);
+  app.use('/api/verifica-copertura', authModule.requireAuth, orderCoverageModule.orderCoverageRoutes);
   console.log('✅ Modulo VERIFICA COPERTURA ORDINI registrato su /api/verifica-copertura/*');
 
   // Registra il modulo PROIEZIONE CRESCITA
   const growthProjectionModule = await import('./modules/planning/growth-projection');
-  app.use('/api/proiezione-crescita', growthProjectionModule.growthProjectionRoutes);
+  app.use('/api/proiezione-crescita', authModule.requireAuth, growthProjectionModule.growthProjectionRoutes);
   console.log('✅ Modulo PROIEZIONE CRESCITA registrato su /api/proiezione-crescita/*');
 
   // Registra il modulo PIANIFICAZIONE VENDITE
   const salesPlanningModule = await import('./modules/planning/sales-planning');
-  app.use('/api/pianificazione-vendite', salesPlanningModule.default);
+  app.use('/api/pianificazione-vendite', authModule.requireAuth, salesPlanningModule.default);
   console.log('✅ Modulo PIANIFICAZIONE VENDITE registrato su /api/pianificazione-vendite/*');
 
   // Registra il modulo SCREENING
+  app.use('/api/screening', authModule.requireAuth);
+  app.use('/api/screenings', authModule.requireAuth);
   registerScreeningRoutes(app);
 
   // Registra il modulo ANALYTICS
@@ -369,14 +373,14 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   registerIntegrationsRoutes(app);
 
   // Modulo STORIA ANIMALI (genealogia cicli)
-  app.get('/api/lineage/all', (req, res, next) => import("./controllers/lineage-controller").then(m => m.getAllLineageGroups(req, res)).catch(next));
-  app.get('/api/lineage', (req, res, next) => import("./controllers/lineage-controller").then(m => m.getLineageData(req, res)).catch(next));
-  app.get('/api/lineage/export', (req, res, next) => import("./controllers/lineage-controller").then(m => m.exportLineageExcel(req, res)).catch(next));
+  app.get('/api/lineage/all', authModule.requireAuth, (req, res, next) => import("./controllers/lineage-controller").then(m => m.getAllLineageGroups(req, res)).catch(next));
+  app.get('/api/lineage', authModule.requireAuth, (req, res, next) => import("./controllers/lineage-controller").then(m => m.getLineageData(req, res)).catch(next));
+  app.get('/api/lineage/export', authModule.requireAuth, (req, res, next) => import("./controllers/lineage-controller").then(m => m.exportLineageExcel(req, res)).catch(next));
   console.log('✅ Modulo LINEAGE ANIMALI registrato su /api/lineage');
 
   // Report lotto dedicato (bilancio + distribuzione + timeline)
-  app.get('/api/lot-report/list', getLotsForReport);
-  app.get('/api/lot-report/:lotId', getLotReport);
+  app.get('/api/lot-report/list', authModule.requireAuth, getLotsForReport);
+  app.get('/api/lot-report/:lotId', authModule.requireAuth, getLotReport);
   console.log('✅ Modulo REPORT LOTTO registrato su /api/lot-report');
 
   // Method-override workaround implemented - PATCH/PUT converted to POST + header in frontend
@@ -413,15 +417,15 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   console.log("✅ Route Fatture in Cloud registrate con successo");
   
   // Registra route per ordini condivisi (database esterno)
-  app.use('/api/ordini-condivisi', ordiniCondivisiRouter);
+  app.use('/api/ordini-condivisi', authModule.requireAuth, ordiniCondivisiRouter);
   console.log("✅ Modulo ORDINI CONDIVISI registrato su /api/ordini-condivisi*");
 
   // Registra route per trasferimento ciclo ceste
-  app.use('/api/basket-transfer', basketTransferRouter);
+  app.use('/api/basket-transfer', authModule.requireAuth, basketTransferRouter);
   console.log("✅ Modulo TRASFERIMENTO CICLO registrato su /api/basket-transfer/*");
 
   // Registra route per invio mappa termica su WhatsApp (gruppo Delta Futuro Equipe Tecnica)
-  app.use('/api/whatsapp', whatsappRouter);
+  app.use('/api/whatsapp', authModule.requireAdmin, whatsappRouter);
   console.log("✅ Modulo WHATSAPP registrato su /api/whatsapp/*");
 
   // Registra il modulo MARINE DATA (dati mare Delta Po/Adriatico)
@@ -566,10 +570,12 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   */
   
   // Registra la route diretta per le operazioni
+  app.use('/api/direct-operations', authModule.requireAuth);
+  app.use('/api/emergency-delete', authModule.requireAdmin);
   implementDirectOperationRoute(app);
   
   // === Sequence reset routes ===
-  app.post("/api/sequences/reset", SequenceController.resetSequence);
+  app.post("/api/sequences/reset", authModule.requireAdmin, SequenceController.resetSequence);
 
   // === AI Routes (caricamento lazy: openai/exceljs/xlsx pesanti, fuori dall'avvio) ===
   (await import("./controllers/ai-controller")).registerAIRoutes(app);
@@ -579,8 +585,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.get("/api/sequences/info", SequenceController.getSequencesInfo);
   
   // === Lot Lifecycle Management Routes ===
-  app.post("/api/lot-lifecycle/check-all-lots", LotLifecycleController.checkAllLotsStatus);
-  app.post("/api/lot-lifecycle/recalculate-lot/:lotId", LotLifecycleController.recalculateLotStats);
+  app.post("/api/lot-lifecycle/check-all-lots", authModule.requireAdmin, LotLifecycleController.checkAllLotsStatus);
+  app.post("/api/lot-lifecycle/recalculate-lot/:lotId", authModule.requireAdmin, LotLifecycleController.recalculateLotStats);
   app.get("/api/lot-lifecycle/stats", LotLifecycleController.getLifecycleStats);
   
   // Endpoint per totale animali nei cestelli attivi (calcolo autoritativo dal database)
@@ -2809,7 +2815,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // SOLUZIONE FINALE - ENDPOINT OPERAZIONI SEMPLIFICATO SENZA RETURNING
-  app.post("/api/create-operation", async (req, res) => {
+  app.post("/api/create-operation", authModule.requireAuth, async (req, res) => {
     console.log("🚀 CREATE-OPERATION - Richiesta ricevuta");
     console.log("🚀 CREATE-OPERATION - Body:", JSON.stringify(req.body, null, 2));
     
@@ -2980,7 +2986,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // ENDPOINT OPERAZIONI BYPASS FUNZIONANTE
-  app.post("/api/operations-bypass", async (req, res) => {
+  app.post("/api/operations-bypass", authModule.requireAuth, async (req, res) => {
     console.log("🚀 OPERATIONS-BYPASS - Richiesta ricevuta");
     
     try {
@@ -4662,7 +4668,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // POST /api/admin/recalc-misure/apply?cycleId=NN  → applica gli update al DB
-  app.post("/api/admin/recalc-misure/apply", async (req, res) => {
+  app.post("/api/admin/recalc-misure/apply", authModule.requireAdmin, async (req, res) => {
     try {
       const cycleIdParam = req.query.cycleId ? parseInt(String(req.query.cycleId)) : null;
 
@@ -4719,7 +4725,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // ====== FASE 2: RICALCOLO MORTALITÀ LOTTI (da vagliature, contata una sola volta) ======
   // GET  /api/admin/recalc-lot-mortality  → anteprima (dry-run) senza scrivere
   // POST /api/admin/recalc-lot-mortality  → applica il ricalcolo a tutti i lotti
-  app.get("/api/admin/recalc-lot-mortality", async (req, res) => {
+  app.get("/api/admin/recalc-lot-mortality", authModule.requireAdmin, async (req, res) => {
     try {
       const { computeRecalcPreview } = await import('./services/lot-mortality-preview');
       const preview = await computeRecalcPreview();
@@ -4730,7 +4736,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  app.post("/api/admin/recalc-lot-mortality", async (req, res) => {
+  app.post("/api/admin/recalc-lot-mortality", authModule.requireAdmin, async (req, res) => {
     try {
       const { recomputeAllLotsMortality } = await import('./services/lot-mortality');
       const results = await recomputeAllLotsMortality();
@@ -4811,7 +4817,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // ====== FASE 3: BACKFILL COORTI STORICHE (admin, idempotente) ======
-  app.post("/api/admin/backfill-cohorts", async (req, res) => {
+  app.post("/api/admin/backfill-cohorts", authModule.requireAdmin, async (req, res) => {
     try {
       const { backfillCohorts } = await import('./services/cohort-backfill');
       const result = await backfillCohorts();
@@ -4822,7 +4828,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  app.post("/api/admin/lots/sync-sequence", async (req, res) => {
+  app.post("/api/admin/lots/sync-sequence", authModule.requireAdmin, async (req, res) => {
     try {
       // Importa il controller per la sequenza dei lotti
       const { synchronizeLotIdSequence } = await import('./controllers/lot-sequence-controller');
@@ -6462,18 +6468,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // Route per azzerare operazioni, cicli e cestelli
-  app.post("/api/reset-operations", async (req, res) => {
+  app.post("/api/reset-operations", authModule.requireAdmin, async (req, res) => {
     try {
-      // Verifica la password
-      const { password } = req.body;
-      
-      if (password !== "Gianluigi") {
-        return res.status(401).json({
-          success: false,
-          message: "Password non valida. Operazione non autorizzata."
-        });
-      }
-      
       // Importiamo db dal modulo db
       const { db } = await import("./db");
       const { sql } = await import("drizzle-orm");
@@ -6720,18 +6716,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // Route per azzerare i dati delle vagliature
-  app.post("/api/reset-screening", async (req, res) => {
+  app.post("/api/reset-screening", authModule.requireAdmin, async (req, res) => {
     try {
-      // Verifica la password
-      const { password } = req.body;
-      
-      if (password !== "Gianluigi") {
-        return res.status(401).json({
-          success: false,
-          message: "Password non valida. Operazione non autorizzata."
-        });
-      }
-      
       // Importiamo il db dal modulo db
       const { db } = await import("./db");
       const { sql } = await import("drizzle-orm");
@@ -6813,18 +6799,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
   
   // Route per azzerare i dati delle selezioni
-  app.post("/api/reset-selections", async (req, res) => {
+  app.post("/api/reset-selections", authModule.requireAdmin, async (req, res) => {
     try {
-      // Verifica la password
-      const { password } = req.body;
-      
-      if (password !== "Gianluigi") {
-        return res.status(401).json({
-          success: false,
-          message: "Password non valida. Operazione non autorizzata."
-        });
-      }
-      
       // Importiamo il db dal modulo db
       const { db } = await import("./db");
       const { sql } = await import("drizzle-orm");
@@ -6891,18 +6867,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // === Fix Null Row Values Endpoint ===
-  app.post("/api/baskets/fix-null-rows", async (req, res) => {
+  app.post("/api/baskets/fix-null-rows", authModule.requireAdmin, async (req, res) => {
     try {
-      // Verifica la password
-      const { password } = req.body;
-      
-      if (password !== "Gianluigi") {
-        return res.status(401).json({
-          success: false,
-          message: "Password non valida. Operazione non autorizzata."
-        });
-      }
-      
       // Importa la funzione dal modulo fix_null_rows.js
       const { fixNullRows } = await import("../fix_null_rows.js");
       
@@ -9385,19 +9351,19 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   
   // ===== Inventory Transaction Routes =====
   // Registra una nuova transazione di inventario
-  app.post('/api/lot-inventory/:lotId/transaction', LotInventoryController.createTransaction);
+  app.post('/api/lot-inventory/:lotId/transaction', authModule.requireAuth, LotInventoryController.createTransaction);
   
   // Ottiene la giacenza attuale di un lotto
   app.get('/api/lot-inventory/:lotId/current', LotInventoryController.getCurrentInventory);
   
   // Registra un calcolo di mortalità per un lotto
-  app.post('/api/lot-inventory/:lotId/mortality-calculation', LotInventoryController.recordMortalityCalculation);
+  app.post('/api/lot-inventory/:lotId/mortality-calculation', authModule.requireAuth, LotInventoryController.recordMortalityCalculation);
   
   // Ottiene la cronologia dei calcoli di mortalità per un lotto
   app.get('/api/lot-inventory/:lotId/mortality-history', LotInventoryController.getMortalityHistory);
   
   // Ottiene tutte le transazioni di inventario per un lotto
-  app.get('/api/lot-inventory/:lotId/transactions', LotInventoryController.getLotTransactions);
+  app.get('/api/lot-inventory/:lotId/transactions', authModule.requireAuth, LotInventoryController.getLotTransactions);
   
   // Ottiene il riepilogo dell'inventario per tutti i lotti
   app.get('/api/lot-inventory/all-summary', LotInventoryController.getAllLotsSummary);
@@ -9444,7 +9410,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   
   // API per gestione sequenze ID database
   app.get("/api/sequences", SequenceController.getSequencesInfo);
-  app.post("/api/sequences/reset", SequenceController.resetSequence);
+  app.post("/api/sequences/reset", authModule.requireAdmin, SequenceController.resetSequence);
   
   // Registra il modulo SALES REPORTS  
   const salesReportsModule = await import('./modules/reports/sales-reports');
@@ -9634,7 +9600,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
 
   // === ENDPOINT SINCRONIZZAZIONE DATABASE ESTERNO ===
-  app.post("/api/sync/external-database", async (req, res) => {
+  app.post("/api/sync/external-database", authModule.requireAdmin, async (req, res) => {
     try {
       // Importa il servizio di sincronizzazione
       const { ExternalSyncService } = await import("./external-sync-service");
@@ -9708,8 +9674,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   
   // Download PDF DDT - Mantenuti qui per base path diverso
   const AdvancedSalesController = await import('./controllers/advanced-sales-controller');
-  app.get("/api/ddt/:ddtId/pdf", AdvancedSalesController.generateDDTPDF);
-  app.post("/api/ddt/:ddtId/send-to-fic", AdvancedSalesController.sendDDTToFIC);
+  app.get("/api/ddt/:ddtId/pdf", authModule.requireAuth, AdvancedSalesController.generateDDTPDF);
+  app.post("/api/ddt/:ddtId/send-to-fic", authModule.requireAdmin, AdvancedSalesController.sendDDTToFIC);
 
   // Guida operatori PDF
   const { generateOperatorGuidePDF } = await import('./services/operator-guide-pdf.service');
@@ -9740,18 +9706,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // Route per eliminare tutti i dati relativi ai lotti
-  app.post("/api/reset-lots", async (req, res) => {
+  app.post("/api/reset-lots", authModule.requireAdmin, async (req, res) => {
     try {
-      // Verifica la password
-      const { password } = req.body;
-      
-      if (password !== "Gianluigi") {
-        return res.status(401).json({
-          success: false,
-          message: "Password non valida. Operazione non autorizzata."
-        });
-      }
-      
       // Importiamo db dal modulo db
       const { db } = await import("./db");
       const { sql } = await import("drizzle-orm");
@@ -9945,7 +9901,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
 
   // Cancellazione completa di un FLUPSY con tutti i dati correlati
-  app.post("/api/delete-flupsy", async (req, res) => {
+  app.post("/api/delete-flupsy", authModule.requireAdmin, async (req, res) => {
     try {
       const { flupsyId, confirmationName } = req.body;
       
@@ -10279,7 +10235,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
   
   // ── ENDPOINT: Apri DDT in FCloud (crea se non esiste, ritorna deep-link) ──
-  app.post("/api/ddt/:ddtId/open-in-fcloud", async (req: Request, res: Response) => {
+  app.post("/api/ddt/:ddtId/open-in-fcloud", authModule.requireAdmin, async (req: Request, res: Response) => {
     try {
       const ddtId = parseInt(req.params.ddtId);
       if (isNaN(ddtId)) {
@@ -10299,7 +10255,10 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // ──────────────────────────────────────────────────────────────────────────
 
   // ── ENDPOINT TEST FCLOUD (solo sviluppo) ──────────────────────────────────
-  app.post("/api/test/fcloud-ddt/:ddtId", async (req: Request, res: Response) => {
+  app.post("/api/test/fcloud-ddt/:ddtId", authModule.requireAdmin, async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ success: false, error: 'Endpoint non disponibile' });
+    }
     try {
       const ddtId = parseInt(req.params.ddtId);
       if (isNaN(ddtId)) {

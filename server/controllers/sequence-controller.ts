@@ -51,16 +51,7 @@ export async function getSequencesInfo(req: Request, res: Response) {
  */
 export async function resetSequence(req: Request, res: Response) {
   try {
-    const { table, startValue, password } = req.body;
-
-    // Verifica della password di sicurezza
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Gianluigi'; // Password predefinita come fallback
-    if (password !== adminPassword) {
-      return res.status(403).json({
-        success: false,
-        message: "Password di sicurezza non valida"
-      });
-    }
+    const { table, startValue } = req.body;
 
     // Verifica la tabella specificata
     if (!table || typeof table !== 'string') {

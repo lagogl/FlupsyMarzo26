@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { selectionsController } from "./selections.controller";
+import { requireAdmin, requireAuth } from "../../system/auth";
 
 const router = Router();
+router.use(["/selections", "/flupsy/available-positions"], requireAuth);
 
 // ========== GET Routes ==========
 router.get("/selections", (req, res) => selectionsController.getAll(req, res));
@@ -20,7 +22,7 @@ router.post("/selections", (req, res) => selectionsController.create(req, res));
 router.post("/selections/:id/source-baskets", (req, res) => selectionsController.addSourceBaskets(req, res));
 router.post("/selections/:id/destination-baskets", (req, res) => selectionsController.addDestinationBaskets(req, res));
 router.post("/selections/:id/complete", (req, res) => selectionsController.complete(req, res));
-router.post("/selections/migrate-basket-lot-data", (req, res) => selectionsController.migrateData(req, res));
+router.post("/selections/migrate-basket-lot-data", requireAdmin, (req, res) => selectionsController.migrateData(req, res));
 
 // ========== DELETE Routes ==========
 router.delete("/selections/:id/source-baskets/:sourceBasketId", (req, res) => selectionsController.removeSourceBasket(req, res));
