@@ -1,5 +1,11 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+function notifyExpiredSession() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("auth:expired"));
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -81,6 +87,9 @@ export async function apiRequest<T = any>(
     });
     
     console.log(`API Response status: ${res.status}`);
+    if (res.status === 401) {
+      notifyExpiredSession();
+    }
     
     // Gestione migliore delle risposte
     if (!res.ok) {
@@ -187,8 +196,11 @@ export const getQueryFn: <T>(options: {
 
       clearTimeout(timeoutId);
 
-      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-        return null;
+      if (res.status === 401) {
+        notifyExpiredSession();
+        if (unauthorizedBehavior === "returnNull") {
+          return null;
+        }
       }
 
       await throwIfResNotOk(res);

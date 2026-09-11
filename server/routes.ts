@@ -7372,38 +7372,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     try {
       const targetSizeCode = req.query.size ? String(req.query.size) : "TP-3000";
       const withinDays = req.query.days ? parseInt(req.query.days as string) : 14;
-      const today = new Date();
-      const targetDate = new Date(today);
-      targetDate.setDate(targetDate.getDate() + withinDays);
-      const targetDateKey = format(targetDate, "yyyy-MM-dd");
 
       const targetSize = await storage.getSizeByCode(targetSizeCode);
       if (!targetSize) {
         return res.status(404).json({ message: `Taglia ${targetSizeCode} non trovata` });
       }
-
-      const [targetRange] = await db
-        .select({
-          maxAnimalsPerKg: schema.sizeRangeVersions.maxAnimalsPerKg,
-        })
-        .from(schema.sizeRangeVersions)
-        .where(sql`
-          ${schema.sizeRangeVersions.sizeId} = ${targetSize.id}
-          AND ${schema.sizeRangeVersions.validFrom} <= ${targetDateKey}::date
-          AND (
-            ${schema.sizeRangeVersions.validTo} IS NULL
-            OR ${schema.sizeRangeVersions.validTo} >= ${targetDateKey}::date
-          )
-        `)
-        .orderBy(desc(schema.sizeRangeVersions.validFrom))
-        .limit(1);
-
-      if (!targetRange?.maxAnimalsPerKg) {
-        return res.status(422).json({
-          message: `Nessun range valido per la taglia ${targetSizeCode} alla data ${targetDateKey}`,
-        });
-      }
-      const targetMaxApk = targetRange.maxAnimalsPerKg;
 
       // Carica il contesto di simulazione condiviso (stesso codice di /api/size-predictions e Proiezione Crescita).
       const simCtx = await loadGrowthSimulationContext();

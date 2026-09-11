@@ -42,23 +42,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const { toast } = useToast();
 
-  // Carica l'utente dal localStorage all'avvio
+  // Verifica sempre la sessione server: localStorage è solo una cache del profilo.
   useEffect(() => {
-    const loadUser = () => {
+    let cancelled = false;
+
+    const loadUser = async () => {
       try {
-        const userJson = localStorage.getItem('user');
-        if (userJson) {
-          const userData = JSON.parse(userJson);
-          setUser(userData);
+        const response = await fetch('/api/users/current', {
+          credentials: 'include',
+        });
+        const data = await response.json();
+
+        if (cancelled) return;
+
+        if (response.ok && data.success && data.user) {
+          setUser(data.user);
+          localStorage.setItem('user', JSON.stringify(data.user));
+        } else {
+          localStorage.removeItem('user');
+          setUser(null);
         }
       } catch (err) {
-        console.error('Errore nel caricamento dei dati utente:', err);
+        if (!cancelled) {
+          console.error('Errore nella verifica della sessione:', err);
+          localStorage.removeItem('user');
+          setUser(null);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
-    
+
     loadUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Allinea subito l'interfaccia quando una API segnala che la sessione è scaduta.
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      localStorage.removeItem('user');
+      setUser(null);
+      setError(null);
+      if (window.location.pathname !== '/auth') {
+        window.location.assign('/auth');
+      }
+    };
+
+    window.addEventListener('auth:expired', handleExpiredSession);
+    return () => window.removeEventListener('auth:expired', handleExpiredSession);
   }, []);
 
   // Funzione di login
