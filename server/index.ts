@@ -92,11 +92,16 @@ async function runBackgroundInitialization(app: Express) {
   // Test di connessione database con timeout
   console.log("\n===== TEST DI CONNESSIONE DATABASE =====");
   try {
-    const timeoutPromise = new Promise((_, reject) =>
+    const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Timeout connessione database (10s)')), 10000)
     );
-    await Promise.race([testDatabaseConnection(), timeoutPromise]);
-    console.log("✅ Connessione database principale verificata con successo");
+    const diagnosticsPassed = await Promise.race([testDatabaseConnection(), timeoutPromise]);
+    if (diagnosticsPassed) {
+      console.log("✅ Connessione database principale verificata con successo");
+    } else {
+      console.error("❌ Diagnostica della connessione database principale fallita");
+      console.log("⚠️ Continuando comunque...");
+    }
   } catch (error) {
     console.error("❌ Errore connessione database principale:", error);
     console.log("⚠️ Continuando comunque...");
