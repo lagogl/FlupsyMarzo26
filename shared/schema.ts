@@ -1597,7 +1597,9 @@ export const ddt = pgTable("ddt", {
   clienteCodiceAllevamento: text("cliente_codice_allevamento"),
   clientePaese: text("cliente_paese").default("Italia"),
   // Collegamento all'azienda e snapshot dati fiscali mittente
-  companyId: integer("company_id"),
+  companyId: integer("company_id").notNull(),
+  numberingYear: integer("numbering_year")
+    .generatedAlwaysAs(sql`(EXTRACT(YEAR FROM data))::integer`),
   mittenteRagioneSociale: text("mittente_ragione_sociale"),
   mittenteIndirizzo: text("mittente_indirizzo"),
   mittenteCap: text("mittente_cap"),
@@ -1620,7 +1622,10 @@ export const ddt = pgTable("ddt", {
   fcloudStato: text("fcloud_stato"),       // Stato sincronizzazione FCloud: 'inviato'|'errore'|null
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
-});
+}, (table) => ({
+  companyYearNumberIdx: index("ddt_company_year_number_idx")
+    .on(table.companyId, table.numberingYear, table.numero),
+}));
 
 // Righe dettaglio DDT
 export const ddtRighe = pgTable("ddt_righe", {
