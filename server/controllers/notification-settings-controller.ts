@@ -38,7 +38,13 @@ export async function updateNotificationSetting(req: Request, res: Response) {
   const { type } = req.params;
   const { isEnabled, targetSizeIds } = req.body;
 
-  console.log('📝 Update notification setting:', { type, isEnabled, targetSizeIds, body: req.body });
+  const allowedTypes = new Set(['vendita', 'accrescimento']);
+  if (!allowedTypes.has(type)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Tipo di notifica non valido'
+    });
+  }
 
   if (typeof isEnabled !== 'boolean') {
     console.error('❌ isEnabled validation failed:', { isEnabled, type: typeof isEnabled });
@@ -47,6 +53,24 @@ export async function updateNotificationSetting(req: Request, res: Response) {
       error: `Il valore 'isEnabled' deve essere un booleano, ricevuto: ${typeof isEnabled}`
     });
   }
+
+  if (
+    targetSizeIds !== undefined &&
+    (!Array.isArray(targetSizeIds) ||
+      targetSizeIds.length > 100 ||
+      targetSizeIds.some(id => !Number.isSafeInteger(id) || id <= 0))
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: 'targetSizeIds deve contenere solo ID numerici positivi'
+    });
+  }
+
+  console.log('📝 Update notification setting:', {
+    type,
+    isEnabled,
+    targetSizeCount: targetSizeIds?.length || 0
+  });
 
   try {
     // Prima verifica se l'impostazione esiste

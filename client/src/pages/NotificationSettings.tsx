@@ -80,7 +80,7 @@ export default function NotificationSettings() {
   const testMutation = useMutation({
     mutationFn: () => 
       apiRequest({
-        url: '/api/check-growth-notifications',
+        url: '/api/notifications/test-growth',
         method: 'POST',
       }),
     onSuccess: (data) => {

@@ -39,13 +39,14 @@ async function initializeAIClient() {
 initializeAIClient();
 
 // Ricarica periodica del client per aggiornamenti API key
-setInterval(() => {
+const aiClientRefreshTimer = setInterval(() => {
   const newApiKey = process.env.OPENAI_API_KEY;
   if (newApiKey && (!aiClient || newApiKey !== AI_API_KEY)) {
     console.log('🔄 Rilevato aggiornamento API key, ricarico OpenAI client...');
     initializeAIClient();
   }
 }, 10000); // Controlla ogni 10 secondi
+aiClientRefreshTimer.unref();
 
 export interface PredictiveGrowthData {
   basketId: number;

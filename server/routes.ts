@@ -32,7 +32,6 @@ import {
   updateNotificationSetting
 } from "./controllers/notification-settings-controller";
 import { 
-  checkCyclesForTP3000,
   checkOperationForTargetSize
 } from "./controllers/growth-notification-handler";
 
@@ -9384,23 +9383,6 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   });
   */
   
-  // Esegui controllo manuale per cicli che hanno raggiunto TP-3000
-  app.post("/api/check-growth-notifications", async (req, res) => {
-    try {
-      const notificationsCreated = await checkCyclesForTP3000();
-      return res.json({ 
-        success: true, 
-        message: `Check completato, create ${notificationsCreated} notifiche` 
-      });
-    } catch (error) {
-      console.error("Errore durante il controllo delle notifiche di crescita:", error);
-      return res.status(500).json({ 
-        success: false, 
-        message: "Errore durante il controllo delle notifiche di crescita" 
-      });
-    }
-  });
-
   // ===== Inventory Transaction Routes =====
   // Registra una nuova transazione di inventario
   app.post('/api/lot-inventory/:lotId/transaction', LotInventoryController.createTransaction);

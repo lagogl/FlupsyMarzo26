@@ -86,7 +86,7 @@ export async function apiRequest<T = any>(
     if (!res.ok) {
       // Se la risposta non è OK, lancia un errore con i dati JSON se possibile
       const text = await res.text();
-      const error = new Error(`${res.status}: ${text || res.statusText}`);
+      const error = new Error(`${res.status}: ${res.statusText || 'Request failed'}`);
       
       // Aggiungi proprietà personalizzate all'errore per un migliore handling
       try {
@@ -107,16 +107,14 @@ export async function apiRequest<T = any>(
     // Clona la risposta per poterla ispezionare e poi restituirla
     const resClone = res.clone();
     
-    // Log del payload della risposta se è JSON
+    // Analizza la risposta senza stampare payload potenzialmente sensibili.
     let responseData: any = null;
     try {
       const contentType = res.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         responseData = await resClone.json();
-        console.log('API Response data:', JSON.stringify(responseData));
       } else {
         const text = await resClone.text();
-        console.log('API Response data (text):', text || 'Empty response');
         // Se la risposta è vuota ma lo stato è OK, mappa a un oggetto di successo
         if (!text || text.trim() === '') {
           responseData = { success: true };
@@ -147,7 +145,10 @@ export async function apiRequest<T = any>(
     // Altrimenti restituisci l'oggetto Response
     return res as unknown as T;
   } catch (error) {
-    console.error(`API Request failed: ${url}`, error);
+    console.error('API Request failed', {
+      url,
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
     throw error;
   }
 }

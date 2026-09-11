@@ -14,6 +14,7 @@ import {
   setColumnWidths,
   applyNumberFormat
 } from '../utils/excel-formatter';
+import { requireAdmin, requireAuth } from "../modules/system/auth/auth.middleware";
 
 /**
  * Controller per i servizi AI
@@ -33,7 +34,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo 1: Previsioni di crescita avanzate (supporta lotti misti)
-  app.post("/api/ai/predictive-growth", async (req: Request, res: Response) => {
+  app.post("/api/ai/predictive-growth", requireAuth, async (req: Request, res: Response) => {
     try {
       const { flupsyId, basketIds, basketId, targetSizeId, days = 30 } = req.body;
 
@@ -230,7 +231,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo 1: Ottimizzazione posizioni cestelli
-  app.post("/api/ai/optimize-positions", async (req: Request, res: Response) => {
+  app.post("/api/ai/optimize-positions", requireAuth, async (req: Request, res: Response) => {
     try {
       const { flupsyId } = req.body;
 
@@ -311,7 +312,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo 3: Rilevamento anomalie (supporta lotti misti)
-  app.get("/api/ai/anomaly-detection", async (req: Request, res: Response) => {
+  app.get("/api/ai/anomaly-detection", requireAuth, async (req: Request, res: Response) => {
     try {
       const { flupsyId, days = 7 } = req.query;
 
@@ -459,7 +460,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo 3: Analisi business intelligence (supporta lotti misti)
-  app.get("/api/ai/business-analytics", async (req: Request, res: Response) => {
+  app.get("/api/ai/business-analytics", requireAuth, async (req: Request, res: Response) => {
     try {
       const { timeframe = '30' } = req.query;
       const days = Number(timeframe);
@@ -607,7 +608,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo 8: Analisi sostenibilità (supporta lotti misti)
-  app.get("/api/ai/sustainability", async (req: Request, res: Response) => {
+  app.get("/api/ai/sustainability", requireAuth, async (req: Request, res: Response) => {
     try {
       const { flupsyId, timeframe = '30' } = req.query;
       const days = Number(timeframe);
@@ -769,7 +770,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo 8: Verifica compliance
-  app.get("/api/ai/compliance", async (req: Request, res: Response) => {
+  app.get("/api/ai/compliance", requireAuth, async (req: Request, res: Response) => {
     try {
       const { timeframe = '30' } = req.query;
       const days = Number(timeframe);
@@ -838,7 +839,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo: Attività Consigliate AI
-  app.get("/api/ai/recommended-activities", async (req: Request, res: Response) => {
+  app.get("/api/ai/recommended-activities", requireAuth, async (req: Request, res: Response) => {
     try {
       const { flupsyId } = req.query;
       const { RecommendedActivitiesService } = await import('../ai/recommended-activities-service');
@@ -855,7 +856,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo: Analisi Pattern Mortalità con Alert Anomalie
-  app.get("/api/ai/mortality-analysis", async (req: Request, res: Response) => {
+  app.get("/api/ai/mortality-analysis", requireAuth, async (req: Request, res: Response) => {
     try {
       const flupsyIdsParam = req.query.flupsyIds as string | undefined;
       const flupsyIds: number[] = flupsyIdsParam
@@ -877,7 +878,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Modulo: Analisi Scostamenti Produzione
-  app.get("/api/ai/production-forecast", async (req: Request, res: Response) => {
+  app.get("/api/ai/production-forecast", requireAuth, async (req: Request, res: Response) => {
     try {
       const { year, mortalityT1, mortalityT3, mortalityT10 } = req.query;
       const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
@@ -899,7 +900,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // GET targets per anno
-  app.get("/api/ai/production-targets", async (req: Request, res: Response) => {
+  app.get("/api/ai/production-targets", requireAuth, async (req: Request, res: Response) => {
     try {
       const { year } = req.query;
       const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
@@ -915,7 +916,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Diagnostica ordini - verifica date e distribuzione per taglia
-  app.get("/api/ai/orders-diagnostic", async (req: Request, res: Response) => {
+  app.get("/api/ai/orders-diagnostic", requireAuth, async (req: Request, res: Response) => {
     try {
       const { productionForecastService } = await import('../ai/production-forecast-service');
       const diagnostic = await productionForecastService.getOrdersDiagnostic();
@@ -927,7 +928,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // POST/PUT target singolo
-  app.post("/api/ai/production-targets", async (req: Request, res: Response) => {
+  app.post("/api/ai/production-targets", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { year, month, sizeCategory, targetAnimals, targetWeight, notes } = req.body;
       
@@ -953,7 +954,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Export Excel Semplice formattato
-  app.get("/api/ai/production-forecast/export-simple", async (req: Request, res: Response) => {
+  app.get("/api/ai/production-forecast/export-simple", requireAuth, async (req: Request, res: Response) => {
     try {
       const { year, mortalityT1, mortalityT3, mortalityT10, category } = req.query;
       const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
@@ -1104,7 +1105,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Export Excel Analitico con tutti i calcoli commentati
-  app.get("/api/ai/production-forecast/export-analytical", async (req: Request, res: Response) => {
+  app.get("/api/ai/production-forecast/export-analytical", requireAuth, async (req: Request, res: Response) => {
     try {
       const { year, mortalityT1, mortalityT3, mortalityT10 } = req.query;
       const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
@@ -1441,7 +1442,7 @@ export function registerAIRoutes(app: Express) {
   });
 
   // Endpoint per analisi scenario AI
-  app.post("/api/ai/scenario-analysis", async (req: Request, res: Response) => {
+  app.post("/api/ai/scenario-analysis", requireAuth, async (req: Request, res: Response) => {
     try {
       const { question, context, year = new Date().getFullYear() } = req.body;
       
@@ -1458,7 +1459,11 @@ export function registerAIRoutes(app: Express) {
         mortalityAdjustment: context?.mortalityAdjustment || 0
       };
       
-      console.log('🤖 AI Scenario Analysis:', { question, year, hasContext: !!context });
+      console.log('🤖 AI Scenario Analysis:', {
+        questionLength: question.length,
+        year,
+        hasContext: !!context
+      });
       
       const { scenarioAnalysisService } = await import('../ai/scenario-analysis-service');
       

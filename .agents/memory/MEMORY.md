@@ -37,3 +37,4 @@
 - [Versioni temporali dei range taglia](size-range-versioning.md) — `sizes` resta l’identità; nuovi confini hanno validità temporale e non devono riclassificare record con `size_id` storica.
 - [Auth su router Express generici](express-router-auth-scope.md) — su router montati a `/api`, middleware globali possono bloccare route successive non correlate; usare controlli per route o prefissi specifici.
 - [Confine dati AI Enhanced](ai-enhanced-data-boundary.md) — metadata statici, schema dinamico e SQL devono condividere una allowlist; niente campioni, raw SQL solo admin e transazione read-only.
+- [Alias route e autorizzazione](auth-route-alias-audit.md) — proteggere il router principale non basta: cercare ed eliminare alias e route legacy che invocano la stessa operazione.

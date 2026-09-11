@@ -18,7 +18,6 @@ export enum LogLevel {
 
 interface LoggerConfig {
   level: LogLevel;
-  enableApiResponseLogging: boolean;
   enablePiiRedaction: boolean;
   maxLogLength: number;
 }
@@ -29,7 +28,6 @@ function getLoggerConfig(): LoggerConfig {
   
   return {
     level: isProduction ? LogLevel.WARN : LogLevel.DEBUG,
-    enableApiResponseLogging: !isProduction, // Disable full API response logging in production
     enablePiiRedaction: true, // Always enable PII redaction
     maxLogLength: isProduction ? 200 : 500 // Shorter logs in production
   };
@@ -149,19 +147,6 @@ export function createSecureApiLogger() {
   return (req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
     const path = req.path;
-    let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-    // Skip logging for binary files (PDF, images, etc.)
-    const isBinaryFile = path.endsWith('.pdf') || path.endsWith('.jpg') || path.endsWith('.png') || path.endsWith('.zip');
-    
-    // Only capture response in development for API endpoints (excluding binary files)
-    if (config.enableApiResponseLogging && path.startsWith("/api") && !isBinaryFile) {
-      const originalResJson = res.json;
-      res.json = function (bodyJson, ...args) {
-        capturedJsonResponse = bodyJson;
-        return originalResJson.apply(res, [bodyJson, ...args]);
-      };
-    }
 
     res.on("finish", () => {
       const duration = Date.now() - start;
@@ -169,18 +154,12 @@ export function createSecureApiLogger() {
       if (path.startsWith("/api")) {
         const logMessage = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
         
-        // In production, only log basic info without response data
-        if (config.enableApiResponseLogging && capturedJsonResponse) {
-          logger.info(logMessage, { response: capturedJsonResponse });
+        if (res.statusCode >= 400) {
+          logger.error(logMessage);
+        } else if (duration > 1000) {
+          logger.warn(`${logMessage} [SLOW_API]`);
         } else {
-          // Production logging: only basic metrics
-          if (res.statusCode >= 400) {
-            logger.error(logMessage);
-          } else if (duration > 1000) {
-            logger.warn(`${logMessage} [SLOW_API]`);
-          } else {
-            logger.debug(logMessage);
-          }
+          logger.debug(logMessage);
         }
       }
     });
