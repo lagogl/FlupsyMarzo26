@@ -9,7 +9,7 @@ import { sizeRangeVersions, sizes } from "../../shared/schema";
 export type SizeDeterminationOptions = {
   /**
    * Data ISO YYYY-MM-DD per cui applicare i range.
-   * Se omessa, PostgreSQL usa CURRENT_DATE.
+   * Se omessa, usa la data operativa corrente nel fuso Europe/Rome.
    */
   atDate?: string | Date;
 };
@@ -21,12 +21,19 @@ export type SizeRangeCandidate = {
   maxAnimalsPerKg: number;
 };
 
-function normalizeIsoDate(value: string | Date): string {
+const BUSINESS_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Rome",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function toBusinessIsoDate(value: string | Date): string {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) {
       throw new Error("Data range taglia non valida");
     }
-    return value.toISOString().slice(0, 10);
+    return BUSINESS_DATE_FORMATTER.format(value);
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -82,11 +89,11 @@ export function findSizeInRanges(
   });
 }
 
-async function getRangeCandidates(atDate?: string | Date): Promise<SizeRangeCandidate[]> {
-  const effectiveDate = atDate ? normalizeIsoDate(atDate) : null;
-  const dateExpression = effectiveDate
-    ? sql`${effectiveDate}::date`
-    : sql`CURRENT_DATE`;
+export async function getSizeRangeCandidates(
+  atDate?: string | Date,
+): Promise<SizeRangeCandidate[]> {
+  const effectiveDate = toBusinessIsoDate(atDate ?? new Date());
+  const dateExpression = sql`${effectiveDate}::date`;
 
   return db
     .select({
@@ -120,7 +127,7 @@ export async function determineSizeByAnimalsPerKg(
   if (!Number.isFinite(animalsPerKg) || animalsPerKg <= 0) return null;
 
   try {
-    const candidates = await getRangeCandidates(options.atDate);
+    const candidates = await getSizeRangeCandidates(options.atDate);
     if (candidates.length === 0) {
       console.error(
         `Nessun range taglia valido per la data ${options.atDate ?? "corrente"}`,

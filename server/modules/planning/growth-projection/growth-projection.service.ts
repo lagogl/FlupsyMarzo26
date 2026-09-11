@@ -1,8 +1,8 @@
-import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
+import { productionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
-import { loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
+import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -106,10 +106,6 @@ export class GrowthProjectionService {
     const horizon = Math.max(12, Math.min(36, monthsHorizon || 12));
     const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
 
-    const threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === targetSize);
-    if (!threshold) throw new Error(`Taglia target ${targetSize} non trovata`);
-    const targetMaxAnimalsPerKg = threshold.maxAnimalsPerKg;
-
     // startMonth è 1-based (1=Gennaio…12=Dicembre); se non passato usa il mese corrente
     const currentMonth0 = startMonth != null ? startMonth - 1 : now.getMonth();
     const currentDay = now.getDate();
@@ -125,6 +121,13 @@ export class GrowthProjectionService {
       loadGrowthSimulationContext(),
       ...yearsNeeded.map(y => productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders })))
     ]);
+    const targetSizeRow = simCtx.allSizes.find((size: any) => size.code === targetSize);
+    const projectionStartDate = new Date(startYear, currentMonth0, Math.max(1, currentDay));
+    const targetRange = targetSizeRow
+      ? findRangeForSize(targetSizeRow.id, projectionStartDate, simCtx.sizeRangeVersions)
+      : null;
+    if (!targetRange) throw new Error(`Taglia target ${targetSize} senza range valido alla data di proiezione`);
+    const targetMaxAnimalsPerKg = targetRange.maxAnimalsPerKg;
 
     const [budgetRows, hatcheryRows] = await Promise.all([
       yearsNeeded.length > 0
@@ -186,15 +189,19 @@ export class GrowthProjectionService {
 
     const grouped: Record<string, Array<{basketId: number, animalsPerKg: number, animalCount: number}>> = {};
     for (const b of basketInventory) {
-      const saleSize = productionForecastService.mapAnimalsPerKgToSaleSize(b.animalsPerKg);
+      const size = findProjectedSize(1_000_000 / b.animalsPerKg, projectionStartDate, simCtx.sizeRangeVersions);
+      if (!size) continue;
+      const saleSize = size.code;
       if (!grouped[saleSize]) grouped[saleSize] = [];
       grouped[saleSize].push({ ...b });
     }
 
     const sortedSizes = Object.keys(grouped).sort((a, b) => {
-      const idxA = ProductionForecastService.SALE_SIZES.indexOf(a);
-      const idxB = ProductionForecastService.SALE_SIZES.indexOf(b);
-      return idxB - idxA;
+      const sizeA = simCtx.allSizes.find((size: any) => size.code === a);
+      const sizeB = simCtx.allSizes.find((size: any) => size.code === b);
+      const rangeA = sizeA ? findRangeForSize(sizeA.id, projectionStartDate, simCtx.sizeRangeVersions) : null;
+      const rangeB = sizeB ? findRangeForSize(sizeB.id, projectionStartDate, simCtx.sizeRangeVersions) : null;
+      return (rangeB?.maxAnimalsPerKg ?? 0) - (rangeA?.maxAnimalsPerKg ?? 0);
     });
 
     let hatcheryBasketCounter = 900000;
@@ -230,6 +237,10 @@ export class GrowthProjectionService {
       }
 
       const ymKey = `${y}-${step.month1Based}`;
+      const monthDate = new Date(y, m0, Math.max(1, i === 0 ? currentDay : 1));
+      const datedTargetRange = findRangeForSize(targetSizeRow.id, monthDate, simCtx.sizeRangeVersions);
+      if (!datedTargetRange) throw new Error(`Taglia target ${targetSize} senza range valido in ${ymKey}`);
+      const datedTargetMaxApk = datedTargetRange.maxAnimalsPerKg;
       const hatcheryEntry = hatcheryByYearMonth[ymKey];
       // Mesi passati e mese corrente (rispetto a oggi) = reale consolidato (anche 0 se non consolidato).
       // Mesi futuri (dopo oggi) = previsione.
@@ -244,8 +255,13 @@ export class GrowthProjectionService {
           : hatcheryEntry.forecast;
       }
       if (hatcheryThisMonth > 0) {
-        const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
-        const hatcheryApk = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
+        const tp300 = simCtx.allSizes.find((size: any) => size.code === "TP-300");
+        const hatcheryDate = new Date(y, step.monthIndex, 1);
+        const hatcheryRange = tp300
+          ? findRangeForSize(tp300.id, hatcheryDate, simCtx.sizeRangeVersions)
+          : null;
+        if (!hatcheryRange) throw new Error("TP-300 senza range valido per l'arrivo schiuditoio");
+        const hatcheryApk = hatcheryRange.maxAnimalsPerKg;
         globalBaskets.push({
           basketId: hatcheryBasketCounter++,
           weightMg: 1000000 / hatcheryApk,
@@ -285,7 +301,7 @@ export class GrowthProjectionService {
       let giacenzaLordaConSchiuditoio = 0;
       for (const b of globalBaskets) {
         const apk = 1000000 / b.weightMg;
-        if (apk <= targetMaxAnimalsPerKg) {
+        if (apk <= datedTargetMaxApk) {
           giacenzaLordaConSchiuditoio += b.animalCount;
           if (!b.isHatchery) {
             giacenzaLordaInventario += b.animalCount;
@@ -312,10 +328,13 @@ export class GrowthProjectionService {
       const ordiniEvasiBySize: Record<string, number> = {};
       for (const [sz, qty] of Object.entries(ordiniBySize)) {
         if (!qty || sz === targetSize) continue;
-        const sizeNum = parseInt(sz.replace('TP-', ''));
-        if (isNaN(sizeNum)) continue;
+        const orderSize = simCtx.allSizes.find((size: any) => size.code === sz);
+        const orderRange = orderSize
+          ? findRangeForSize(orderSize.id, monthDate, simCtx.sizeRangeVersions)
+          : null;
+        if (!orderRange) continue;
         const available = globalBaskets
-          .filter(b => (1000000 / b.weightMg) <= sizeNum && b.animalCount > 0)
+          .filter(b => (1000000 / b.weightMg) <= orderRange.maxAnimalsPerKg && b.animalCount > 0)
           .reduce((s, b) => s + b.animalCount, 0);
         ordiniEvasiBySize[sz] = Math.min(available, qty);
       }
@@ -325,7 +344,7 @@ export class GrowthProjectionService {
       if (totalToFulfill > 0) {
         let toFulfill = totalToFulfill;
         const eligibleBaskets = globalBaskets
-          .filter(b => (1000000 / b.weightMg) <= targetMaxAnimalsPerKg && b.animalCount > 0)
+          .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
           .sort((a, b) => (1000000 / a.weightMg) - (1000000 / b.weightMg));
 
         for (const eb of eligibleBaskets) {
@@ -343,7 +362,7 @@ export class GrowthProjectionService {
       let giacenzaNetTarget = 0;
       for (const b of globalBaskets) {
         const apk = 1000000 / b.weightMg;
-        if (apk <= targetMaxAnimalsPerKg) {
+        if (apk <= datedTargetMaxApk) {
           giacenzaNetTarget += b.animalCount;
         }
       }
@@ -379,8 +398,12 @@ export class GrowthProjectionService {
     // Calcola il fattore di sopravvivenza cumulativo e verifica se TP-300 raggiunge
     // la taglia target entro quel mese. Se sì: schiuditoioNecessario = gap / survivalFactor
     // (quanti TP-300 servono ORA per avere "gap" animali a taglia entro quel mese).
-    const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
-    const startApk = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
+    const tp300 = simCtx.allSizes.find((size: any) => size.code === "TP-300");
+    const tp300Range = tp300
+      ? findRangeForSize(tp300.id, projectionStartDate, simCtx.sizeRangeVersions)
+      : null;
+    if (!tp300Range) throw new Error("TP-300 senza range valido alla data di proiezione");
+    const startApk = tp300Range.maxAnimalsPerKg;
 
     // Precalcolo: simula crescita cumulativa da TP-300 mese per mese,
     // salvando il fattore di sopravvivenza e se ha raggiunto la taglia target
@@ -402,24 +425,17 @@ export class GrowthProjectionService {
       if (!simReachedTarget && simulDays > 0) {
         const dailyMortalityFraction = 1 / daysInMonth;
         for (let day = 0; day < simulDays; day++) {
-          const apk = 1000000 / simWeightMg;
-          const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
-          simWeightMg = simWeightMg * (1 + sgr / 100);
-
-          let dailyMortality: number;
-          if (useCustomMortality) {
-            dailyMortality = customMonthlyRate * dailyMortalityFraction;
-          } else {
-            const sizeName = productionForecastService.mapAnimalsPerKgToSaleSize(apk);
-            const month1Based = m0 + 1;
-            const dbRate = dbMortalityRates[sizeName]?.[month1Based];
-            const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-            const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
-            dailyMortality = monthlyRate * dailyMortalityFraction;
-          }
-          simSurvival *= (1 - dailyMortality);
-
-          if ((1000000 / simWeightMg) <= targetMaxAnimalsPerKg) {
+          const cursorDate = new Date(y, m0, (i === 0 ? currentDay : 0) + day + 1);
+          const next = stepOneDay(
+            simCtx,
+            { weightMg: simWeightMg, count: simSurvival },
+            cursorDate,
+            useCustomMortality ? customMonthlyRate : undefined,
+          );
+          simWeightMg = next.weightMg;
+          simSurvival = next.count;
+          const datedRange = findRangeForSize(targetSizeRow.id, cursorDate, simCtx.sizeRangeVersions);
+          if (datedRange && (1000000 / simWeightMg) <= datedRange.maxAnimalsPerKg) {
             simReachedTarget = true;
             break;
           }
@@ -473,7 +489,7 @@ export class GrowthProjectionService {
         basketsInGroup.reduce((s, b) => s + b.animalsPerKg * b.animalCount, 0) / totalQty
       );
 
-      const alreadyAtTarget = avgApk <= targetMaxAnimalsPerKg;
+      const alreadyAtTarget = avgApk <= targetRange.maxAnimalsPerKg;
 
       let workingBaskets = basketsInGroup.map(b => ({
         basketId: b.basketId,
@@ -495,27 +511,16 @@ export class GrowthProjectionService {
         }
 
         if (simulDays > 0) {
-          const dailyMortalityFraction = 1 / daysInMonth;
           for (let day = 0; day < simulDays; day++) {
+            const cursorDate = new Date(y, m0, (i === 0 ? currentDay : 0) + day + 1);
             workingBaskets = workingBaskets.map(b => {
-              const apk = 1000000 / b.weightMg;
-              const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
-              const newWeight = b.weightMg * (1 + sgr / 100);
-
-              let dailyMortality: number;
-              if (useCustomMortality) {
-                dailyMortality = customMonthlyRate * dailyMortalityFraction;
-              } else {
-                const sizeName = productionForecastService.mapAnimalsPerKgToSaleSize(apk);
-                const month1Based = m0 + 1;
-                const dbRate = dbMortalityRates[sizeName]?.[month1Based];
-                const category = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-                const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
-                dailyMortality = monthlyRate * dailyMortalityFraction;
-              }
-
-              const surviving = Math.round(b.animalCount * (1 - dailyMortality));
-              return { basketId: b.basketId, weightMg: newWeight, animalCount: surviving };
+              const next = stepOneDay(
+                simCtx,
+                { weightMg: b.weightMg, count: b.animalCount },
+                cursorDate,
+                useCustomMortality ? customMonthlyRate : undefined,
+              );
+              return { basketId: b.basketId, weightMg: next.weightMg, animalCount: Math.round(next.count) };
             });
           }
         }
@@ -525,8 +530,13 @@ export class GrowthProjectionService {
           ? Math.round(workingBaskets.reduce((s, b) => s + (1000000 / b.weightMg) * b.animalCount, 0) / totalAnimals)
           : 0;
 
-        const projSize = productionForecastService.mapAnimalsPerKgToSaleSize(weightedApk);
-        const reached = weightedApk <= targetMaxAnimalsPerKg && weightedApk > 0;
+        const monthDate = new Date(y, m0 + 1, 0);
+        const projectedSize = weightedApk > 0
+          ? findProjectedSize(1_000_000 / weightedApk, monthDate, simCtx.sizeRangeVersions)
+          : null;
+        const monthTargetRange = findRangeForSize(targetSizeRow.id, monthDate, simCtx.sizeRangeVersions);
+        const projSize = projectedSize?.code ?? "N/D";
+        const reached = !!monthTargetRange && weightedApk <= monthTargetRange.maxAnimalsPerKg && weightedApk > 0;
 
         if (reached && !monthReached && !alreadyAtTarget) {
           monthReached = `${MONTH_NAMES[m0]} ${y}`;

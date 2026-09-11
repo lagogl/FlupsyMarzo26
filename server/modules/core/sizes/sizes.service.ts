@@ -1,10 +1,21 @@
 import { storage } from "../../../storage";
 import NodeCache from "node-cache";
+import { db } from "../../../db";
+import { sizeRangeVersions, sizes } from "../../../../shared/schema";
+import { asc, eq, sql } from "drizzle-orm";
+import { toBusinessIsoDate } from "../../../utils/size-determination";
 
 // Cache per sizes (TTL: 300 secondi = 5 minuti, raramente cambiano)
 const sizesCache = new NodeCache({ stdTTL: 300 });
 
 export class SizesService {
+  async getRangeVersions() {
+    return db.select().from(sizeRangeVersions).orderBy(
+      asc(sizeRangeVersions.validFrom),
+      asc(sizeRangeVersions.minAnimalsPerKg),
+    );
+  }
+
   /**
    * Get all sizes
    */
@@ -43,7 +54,35 @@ export class SizesService {
    * Create new size
    */
   async createSize(sizeData: any) {
-    const result = await storage.createSize(sizeData);
+    if (sizeData.minAnimalsPerKg == null || sizeData.maxAnimalsPerKg == null) {
+      throw new Error("Entrambi i confini animali/kg sono obbligatori");
+    }
+    const businessDate = toBusinessIsoDate(new Date());
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`LOCK TABLE ${sizes} IN SHARE ROW EXCLUSIVE MODE`);
+      if (sizeData.minAnimalsPerKg != null && sizeData.maxAnimalsPerKg != null) {
+        const overlap = await tx.execute(sql`
+          SELECT code FROM sizes
+          WHERE ${sizeData.minAnimalsPerKg} <= max_animals_per_kg
+            AND ${sizeData.maxAnimalsPerKg} >= min_animals_per_kg
+          LIMIT 1
+        `);
+        if (overlap.rows.length > 0) {
+          throw new Error(`Il range si sovrappone alla taglia ${overlap.rows[0].code}`);
+        }
+      }
+      const [created] = await tx.insert(sizes).values(sizeData).returning();
+      if (created.minAnimalsPerKg != null && created.maxAnimalsPerKg != null) {
+        await tx.insert(sizeRangeVersions).values({
+          sizeId: created.id,
+          minAnimalsPerKg: created.minAnimalsPerKg,
+          maxAnimalsPerKg: created.maxAnimalsPerKg,
+          validFrom: businessDate,
+          validTo: null,
+        });
+      }
+      return created;
+    });
     this.invalidateCache(); // Invalida DOPO il salvataggio
     return result;
   }
@@ -52,7 +91,68 @@ export class SizesService {
    * Update size
    */
   async updateSize(id: number, updateData: any) {
-    const result = await storage.updateSize(id, updateData);
+    const businessDate = toBusinessIsoDate(new Date());
+    const previousDateValue = new Date(`${businessDate}T00:00:00Z`);
+    previousDateValue.setUTCDate(previousDateValue.getUTCDate() - 1);
+    const previousBusinessDate = previousDateValue.toISOString().slice(0, 10);
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`LOCK TABLE ${sizes} IN SHARE ROW EXCLUSIVE MODE`);
+      const [current] = await tx.select().from(sizes).where(eq(sizes.id, id)).limit(1);
+      if (!current) return undefined;
+
+      if (updateData.minAnimalsPerKg === null || updateData.maxAnimalsPerKg === null) {
+        throw new Error("I confini animali/kg non possono essere rimossi");
+      }
+      const nextMin = updateData.minAnimalsPerKg ?? current.minAnimalsPerKg;
+      const nextMax = updateData.maxAnimalsPerKg ?? current.maxAnimalsPerKg;
+      const rangeChanged =
+        nextMin !== current.minAnimalsPerKg ||
+        nextMax !== current.maxAnimalsPerKg;
+
+      if (rangeChanged && nextMin != null && nextMax != null) {
+        const overlap = await tx.execute(sql`
+          SELECT code FROM sizes
+          WHERE id <> ${id}
+            AND ${nextMin} <= max_animals_per_kg
+            AND ${nextMax} >= min_animals_per_kg
+          LIMIT 1
+        `);
+        if (overlap.rows.length > 0) {
+          throw new Error(`Il range si sovrappone alla taglia ${overlap.rows[0].code}`);
+        }
+      }
+
+      const [updated] = await tx.update(sizes)
+        .set(updateData)
+        .where(eq(sizes.id, id))
+        .returning();
+
+      if (rangeChanged && nextMin != null && nextMax != null) {
+        const [todayVersion] = await tx.select()
+          .from(sizeRangeVersions)
+          .where(sql`${sizeRangeVersions.sizeId} = ${id} AND ${sizeRangeVersions.validFrom} = ${businessDate}::date`)
+          .limit(1);
+
+        if (todayVersion) {
+          await tx.update(sizeRangeVersions)
+            .set({ minAnimalsPerKg: nextMin, maxAnimalsPerKg: nextMax })
+            .where(eq(sizeRangeVersions.id, todayVersion.id));
+        } else {
+          await tx.update(sizeRangeVersions)
+            .set({ validTo: previousBusinessDate })
+            .where(sql`${sizeRangeVersions.sizeId} = ${id} AND ${sizeRangeVersions.validTo} IS NULL`);
+          await tx.insert(sizeRangeVersions).values({
+            sizeId: id,
+            minAnimalsPerKg: nextMin,
+            maxAnimalsPerKg: nextMax,
+            validFrom: businessDate,
+            validTo: null,
+          });
+        }
+      }
+
+      return updated;
+    });
     this.invalidateCache(); // Invalida DOPO il salvataggio
     return result;
   }

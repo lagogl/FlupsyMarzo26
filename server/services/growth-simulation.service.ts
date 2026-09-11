@@ -21,6 +21,11 @@
 import { db } from "../db";
 import * as schema from "../../shared/schema";
 import { storage } from "../storage";
+import {
+  findSizeInRanges,
+  toBusinessIsoDate,
+  type SizeRangeCandidate,
+} from "../utils/size-determination";
 
 const MONTH_NAMES_IT = [
   "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
@@ -70,6 +75,10 @@ export const FALLBACK_MONTHLY_MORTALITY = 0.03; // 3 %/mese
 
 export interface GrowthSimulationContext {
   allSizes: any[];
+  sizeRangeVersions: Array<SizeRangeCandidate & {
+    validFrom: string;
+    validTo: string | null;
+  }>;
   /** "monthLower|sizeId" → frazione giornaliera (es. 0.025) */
   sgrByMonthAndSize: Record<string, number>;
   /** "monthLower" → frazione giornaliera */
@@ -79,16 +88,37 @@ export interface GrowthSimulationContext {
   /** "month1Based|TP-XXXX" → frazione mensile (es. 0.01) */
   mortalityByMonthAndSize: Record<string, number>;
   /** Trova size_id più adatto per un peso in mg */
-  findSizeIdForWeight: (weightMg: number) => number | null;
+  findSizeIdForWeight: (weightMg: number, atDate: Date) => number | null;
 }
 
+export function findProjectedSize(
+  weightMg: number,
+  atDate: Date,
+  versions: GrowthSimulationContext["sizeRangeVersions"],
+): SizeRangeCandidate | null {
+  if (!Number.isFinite(weightMg) || weightMg <= 0) return null;
+  const isoDate = toBusinessIsoDate(atDate);
+  const activeRanges = versions.filter(
+    (range) =>
+      range.validFrom <= isoDate &&
+      (range.validTo === null || range.validTo >= isoDate),
+  );
+  return findSizeInRanges(1_000_000 / weightMg, activeRanges);
+}
 /**
  * Carica una sola volta tutte le strutture dati necessarie alla simulazione.
  * Costoso: chiamare una volta per richiesta e riusare.
  */
 export async function loadGrowthSimulationContext(): Promise<GrowthSimulationContext> {
-  const [allSizes, sgrs, sgrPerTagliaAll, mortalityRows] = await Promise.all([
+  const [allSizes, rangeVersions, sgrs, sgrPerTagliaAll, mortalityRows] = await Promise.all([
     storage.getSizes(),
+    db.select({
+      sizeId: schema.sizeRangeVersions.sizeId,
+      minAnimalsPerKg: schema.sizeRangeVersions.minAnimalsPerKg,
+      maxAnimalsPerKg: schema.sizeRangeVersions.maxAnimalsPerKg,
+      validFrom: schema.sizeRangeVersions.validFrom,
+      validTo: schema.sizeRangeVersions.validTo,
+    }).from(schema.sizeRangeVersions),
     storage.getSgrs(),
     storage.getSgrPerTaglia(),
     db.select().from(schema.projectionMortalityRates),
@@ -119,32 +149,18 @@ export async function loadGrowthSimulationContext(): Promise<GrowthSimulationCon
     }
   }
 
-  const findSizeIdForWeight = (weightMg: number): number | null => {
-    if (weightMg <= 0) return null;
-    const apk = 1_000_000 / weightMg;
-    const exact = (allSizes as any[]).find(
-      (s) =>
-        s.minAnimalsPerKg != null &&
-        s.maxAnimalsPerKg != null &&
-        apk >= s.minAnimalsPerKg &&
-        apk <= s.maxAnimalsPerKg
-    );
-    if (exact) return exact.id;
-    let best: any = null;
-    let bestDist = Infinity;
-    for (const s of allSizes as any[]) {
-      if (s.minAnimalsPerKg == null) continue;
-      const d = Math.abs(s.minAnimalsPerKg - apk);
-      if (d < bestDist) {
-        bestDist = d;
-        best = s;
-      }
-    }
-    return best?.id ?? null;
-  };
+  const normalizedRangeVersions = rangeVersions.map((range) => ({
+    ...range,
+    code: String((allSizes as any[]).find((size) => size.id === range.sizeId)?.code ?? range.sizeId),
+    validFrom: String(range.validFrom),
+    validTo: range.validTo ? String(range.validTo) : null,
+  }));
+  const findSizeIdForWeight = (weightMg: number, atDate: Date): number | null =>
+    findProjectedSize(weightMg, atDate, normalizedRangeVersions)?.sizeId ?? null;
 
   return {
     allSizes,
+    sizeRangeVersions: normalizedRangeVersions,
     sgrByMonthAndSize,
     sgrFallbackByMonth,
     globalFallback,
@@ -156,10 +172,10 @@ export async function loadGrowthSimulationContext(): Promise<GrowthSimulationCon
 function getSgrForWeightInMonth(
   ctx: GrowthSimulationContext,
   weightMg: number,
-  monthIndex0Based: number
+  date: Date,
 ): number {
-  const monthLower = MONTH_NAMES_IT[monthIndex0Based];
-  const sizeId = ctx.findSizeIdForWeight(weightMg);
+  const monthLower = MONTH_NAMES_IT[date.getMonth()];
+  const sizeId = ctx.findSizeIdForWeight(weightMg, date);
   if (sizeId != null) {
     const v = ctx.sgrByMonthAndSize[`${monthLower}|${sizeId}`];
     if (v !== undefined) return v;
@@ -173,11 +189,12 @@ function getSgrForWeightInMonth(
 function getMonthlyMortalityForWeight(
   ctx: GrowthSimulationContext,
   weightMg: number,
-  month1Based: number
+  date: Date,
 ): number {
-  const apk = weightMg > 0 ? 1_000_000 / weightMg : Number.MAX_SAFE_INTEGER;
-  const sizeCode = mapAnimalsPerKgToSizeCode(apk);
-  return ctx.mortalityByMonthAndSize[`${month1Based}|${sizeCode}`] ?? FALLBACK_MONTHLY_MORTALITY;
+  const size = findProjectedSize(weightMg, date, ctx.sizeRangeVersions);
+  return size
+    ? ctx.mortalityByMonthAndSize[`${date.getMonth() + 1}|${size.code}`] ?? FALLBACK_MONTHLY_MORTALITY
+    : FALLBACK_MONTHLY_MORTALITY;
 }
 
 /**
@@ -195,17 +212,15 @@ export function stepOneDay(
   date: Date,
   overrideMonthlyMortality?: number
 ): { weightMg: number; count: number } {
-  const m0 = date.getMonth();
-  const m1 = m0 + 1;
-  const daysInMonth = new Date(date.getFullYear(), m1, 0).getDate();
+  const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
-  const sgr = getSgrForWeightInMonth(ctx, state.weightMg, m0);
+  const sgr = getSgrForWeightInMonth(ctx, state.weightMg, date);
   const newWeight = state.weightMg * (1 + sgr);
 
   const monthlyMortality =
     overrideMonthlyMortality !== undefined
       ? overrideMonthlyMortality
-      : getMonthlyMortalityForWeight(ctx, newWeight, m1);
+      : getMonthlyMortalityForWeight(ctx, newWeight, date);
   const dailyMortality = monthlyMortality / daysInMonth;
   const newCount = state.count * (1 - dailyMortality);
 
@@ -229,11 +244,13 @@ export function simulateForward(
     today?: Date;
     targetWeightMg?: number | null;
     targetWeightMgForDate?: (date: Date) => number | null;
+    targetSizeId?: number | null;
     overrideMonthlyMortality?: number;
   } = {}
 ): { daysToReach: number | null; finalWeightMg: number; finalCount: number } {
   const today = options.today ?? new Date();
   const targetWeightMg = options.targetWeightMg ?? null;
+  const targetSizeId = options.targetSizeId ?? null;
 
   let weight = startWeightMg;
   let count = startCount;
@@ -246,9 +263,14 @@ export function simulateForward(
     weight = next.weightMg;
     count = next.count;
 
+    const datedTargetRange = targetSizeId !== null
+      ? findRangeForSize(targetSizeId, cursor, ctx.sizeRangeVersions)
+      : null;
     const targetForDate = options.targetWeightMgForDate
       ? options.targetWeightMgForDate(new Date(cursor))
-      : targetWeightMg;
+      : datedTargetRange
+        ? 1_000_000 / datedTargetRange.maxAnimalsPerKg
+        : targetWeightMg;
     if (targetForDate !== null && daysToReach === null && weight >= targetForDate) {
       daysToReach = day;
       break;
@@ -256,4 +278,18 @@ export function simulateForward(
   }
 
   return { daysToReach, finalWeightMg: weight, finalCount: count };
+}
+
+export function findRangeForSize(
+  sizeId: number,
+  atDate: Date,
+  versions: GrowthSimulationContext["sizeRangeVersions"],
+) {
+  const isoDate = toBusinessIsoDate(atDate);
+  return versions.find(
+    (range) =>
+      range.sizeId === sizeId &&
+      range.validFrom <= isoDate &&
+      (range.validTo === null || range.validTo >= isoDate),
+  ) ?? null;
 }

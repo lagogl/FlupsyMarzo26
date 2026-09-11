@@ -28,6 +28,15 @@ function findOverlappingSize(
 }
 
 export class SizesController {
+  async getRangeVersions(req: Request, res: Response) {
+    try {
+      res.json(await sizesService.getRangeVersions());
+    } catch (error) {
+      console.error("Error fetching size range versions:", error);
+      res.status(500).json({ message: "Failed to fetch size range versions" });
+    }
+  }
+
   /**
    * GET /api/sizes
    * Get all sizes

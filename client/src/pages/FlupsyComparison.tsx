@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { format, addDays, differenceInWeeks } from 'date-fns';
 import { Calendar, Clock, ArrowRight, Info, ZoomIn, ZoomOut, RefreshCw, Fan, Download } from 'lucide-react';
-import { getTargetSizeForWeight, getFutureWeightAtDate, getSizeColor } from '@/lib/utils';
+import { getFutureWeightAtDate, getSizeColor } from '@/lib/utils';
 import SizeGrowthTimeline from '@/components/SizeGrowthTimeline';
 import * as ExcelJS from 'exceljs';
 
@@ -115,6 +115,10 @@ export default function FlupsyComparison() {
     queryKey: ['/api/sizes'],
   });
 
+  const { data: sizeRangeVersions } = useQuery({
+    queryKey: ['/api/sizes/range-versions'],
+  });
+
   const { data: sgrs } = useQuery({
     queryKey: ['/api/sgr'],
   });
@@ -156,18 +160,54 @@ export default function FlupsyComparison() {
     )[0];
   };
 
+  const toRomeIsoDate = (date: Date) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+
   // Helper function per identificare la taglia basandosi su animalsPerKg
-  const getSizeForAnimalsPerKg = (animalsPerKg: number) => {
+  const getSizeForAnimalsPerKg = (animalsPerKg: number, atDate = new Date()) => {
     if (!sizes || !animalsPerKg) return null;
-    
-    // Trova la taglia che contiene questo valore di animalsPerKg
-    const matchingSize = sizes.find(size => {
-      const minBound = size.minAnimalsPerKg || 0;
-      const maxBound = size.maxAnimalsPerKg || Infinity;
+    const isoDate = toRomeIsoDate(atDate);
+    const validRanges = Array.isArray(sizeRangeVersions)
+      ? sizeRangeVersions.filter(range =>
+          range.validFrom <= isoDate &&
+          (!range.validTo || range.validTo >= isoDate)
+        )
+      : [];
+    const matchingRange = validRanges.find(range => {
+      const minBound = range.minAnimalsPerKg;
+      const maxBound = range.maxAnimalsPerKg;
       return animalsPerKg >= minBound && animalsPerKg <= maxBound;
     });
-    
-    return matchingSize || null;
+    if (matchingRange) {
+      return sizes.find(size => size.id === matchingRange.sizeId) || null;
+    }
+    return null;
+  };
+
+  const getRangeForSizeAtDate = (sizeId: number, atDate: Date) => {
+    const isoDate = toRomeIsoDate(atDate);
+    return Array.isArray(sizeRangeVersions)
+      ? sizeRangeVersions.find(range =>
+          range.sizeId === sizeId &&
+          range.validFrom <= isoDate &&
+          (!range.validTo || range.validTo >= isoDate)
+        )
+      : null;
+  };
+
+  const getRecordedOrCalculatedSize = (operation) => {
+    if (!operation) return null;
+    const recorded = operation.sizeId
+      ? sizes?.find(size => size.id === operation.sizeId)
+      : null;
+    return recorded || getSizeForAnimalsPerKg(
+      operation.animalsPerKg,
+      operation.date ? new Date(operation.date) : new Date(),
+    );
   };
 
   // Helper function per convertire indice mese (0-11) a nome mese italiano
@@ -214,22 +254,24 @@ export default function FlupsyComparison() {
     let currentWeight = latestOperation.animalsPerKg ? 1000000 / latestOperation.animalsPerKg : 0;
     const measurementDate = new Date(latestOperation.date);
     
-    // Simula la crescita giorno per giorno, aggiornando la taglia quando necessario
+    // Porta la misura fino alla data richiesta. In questo modo "tra N giorni"
+    // resta ancorato a oggi anche quando l'ultima misura è precedente.
     let simulatedWeight = currentWeight;
     let currentDate = new Date(measurementDate);
+    const targetDate = addDays(new Date(), daysToAdd);
     let currentAnimalsPerKg = latestOperation.animalsPerKg;
+    let projectedSizeId = getRecordedOrCalculatedSize(latestOperation)?.id;
     
-    for (let i = 0; i < daysToAdd; i++) {
-      // Aggiorna la data corrente
-      if (i > 0) {
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+    while (currentDate < targetDate) {
+      currentDate.setDate(currentDate.getDate() + 1);
       
       const monthName = getItalianMonthName(currentDate.getMonth());
       
       // Determina la taglia corrente basandosi su animalsPerKg
-      const currentSize = getSizeForAnimalsPerKg(currentAnimalsPerKg);
-      const sizeId = currentSize ? currentSize.id : undefined;
+      const currentSize = projectedSizeId
+        ? sizes?.find(size => size.id === projectedSizeId)
+        : getSizeForAnimalsPerKg(currentAnimalsPerKg, currentDate);
+      const sizeId = currentSize?.id;
       
       // Ottieni l'SGR usando la gerarchia: sgr_per_taglia → sgr → fallback
       const dailyRate = getSgrForMonthAndSize(monthName, sizeId);
@@ -239,6 +281,7 @@ export default function FlupsyComparison() {
       
       // Aggiorna animalsPerKg per la prossima iterazione (per detectare cambio taglia)
       currentAnimalsPerKg = simulatedWeight > 0 ? 1000000 / simulatedWeight : currentAnimalsPerKg;
+      projectedSizeId = undefined;
     }
     
     return Math.round(simulatedWeight);
@@ -255,9 +298,10 @@ export default function FlupsyComparison() {
     // Trova la taglia target dal database
     const targetSizeObj = sizes ? sizes.find(s => s.code === targetSize) : null;
     if (!targetSizeObj) return false;
+    const targetRange = getRangeForSizeAtDate(targetSizeObj.id, new Date());
     
-    // Calcola il peso target in mg (utilizziamo il valore minimo per la taglia)
-    const targetWeight = targetSizeObj.minAnimalsPerKg ? 1000000 / targetSizeObj.minAnimalsPerKg : 0;
+    // Ingresso nella taglia: confine con il massimo numero di animali/kg.
+    const targetWeight = targetRange?.maxAnimalsPerKg ? 1000000 / targetRange.maxAnimalsPerKg : 0;
     
     // Se il peso corrente è già maggiore del peso target, è già nella taglia target
     if (currentWeight >= targetWeight) return true;
@@ -266,8 +310,11 @@ export default function FlupsyComparison() {
     const futureWeight = calculateFutureWeight(basketId, 180);
     if (!futureWeight) return false;
     
-    // Verifica se il peso futuro raggiunge il peso target
-    return futureWeight >= targetWeight;
+    const futureRange = getRangeForSizeAtDate(targetSizeObj.id, addDays(new Date(), 180));
+    const futureTargetWeight = futureRange?.maxAnimalsPerKg
+      ? 1000000 / futureRange.maxAnimalsPerKg
+      : Number.POSITIVE_INFINITY;
+    return futureWeight >= futureTargetWeight;
   };
 
   // Calcola il numero di giorni necessari per raggiungere una taglia target usando la gerarchia SGR
@@ -281,43 +328,48 @@ export default function FlupsyComparison() {
     // Trova la taglia target dal database
     const targetSizeObj = sizes ? sizes.find(s => s.code === targetSize) : null;
     if (!targetSizeObj) return null;
-    
-    // Calcola il peso target in mg (utilizziamo il valore minimo per la taglia)
-    const targetWeight = targetSizeObj.minAnimalsPerKg ? 1000000 / targetSizeObj.minAnimalsPerKg : 0;
-    
-    // Se il peso corrente è già maggiore del peso target, è già nella taglia target
-    if (currentWeight >= targetWeight) return 0;
-    
-    // Calcolo dei giorni necessari usando i valori SGR con gerarchia sgr_per_taglia → sgr → fallback
+
+    // Simula dalla misura; i giorni restituiti decorrono da oggi.
     let simulationWeight = currentWeight;
     let days = 0;
     const measureDate = new Date(latestOperation.date);
     let currentDate = new Date(measureDate);
+    const today = new Date();
     let currentAnimalsPerKg = latestOperation.animalsPerKg;
+    let projectedSizeId = getRecordedOrCalculatedSize(latestOperation)?.id;
     
-    while (simulationWeight < targetWeight && days < 365) {
+    while (days < 365) {
+      const targetRange = getRangeForSizeAtDate(targetSizeObj.id, currentDate);
+      const targetWeight = targetRange?.maxAnimalsPerKg
+        ? 1000000 / targetRange.maxAnimalsPerKg
+        : Number.POSITIVE_INFINITY;
+      if (currentDate >= today && simulationWeight >= targetWeight) return days;
+
+      currentDate.setDate(currentDate.getDate() + 1);
+
       // Determina il mese corrente (in italiano)
       const monthName = getItalianMonthName(currentDate.getMonth());
       
       // Determina la taglia corrente basandosi su animalsPerKg
-      const currentSize = getSizeForAnimalsPerKg(currentAnimalsPerKg);
-      const sizeId = currentSize ? currentSize.id : undefined;
+      const currentSize = days === 0 && projectedSizeId
+        ? sizes?.find(size => size.id === projectedSizeId)
+        : getSizeForAnimalsPerKg(currentAnimalsPerKg, currentDate);
+      const sizeId = currentSize?.id;
       
       // Ottieni l'SGR usando la gerarchia: sgr_per_taglia → sgr → fallback
       const dailyRate = getSgrForMonthAndSize(monthName, sizeId);
       
       // Applica la crescita giornaliera: W(t+1) = W(t) * e^(SGR/100)
       simulationWeight = simulationWeight * Math.exp(dailyRate / 100);
-      days++;
+      if (currentDate >= today) days++;
       
       // Aggiorna animalsPerKg per la prossima iterazione (per detectare cambio taglia)
       currentAnimalsPerKg = simulationWeight > 0 ? 1000000 / simulationWeight : currentAnimalsPerKg;
+      projectedSizeId = undefined;
       
-      // Aggiorna la data corrente per il giorno successivo
-      currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    return days < 365 ? days : null;
+    return null;
   };
 
   // Prepara i dati per la visualizzazione
@@ -384,7 +436,9 @@ export default function FlupsyComparison() {
           // Calcola il peso minimo della taglia target
           // Una taglia è "maggiore" (più grande) se ha animalsPerKg più piccolo
           // quindi il peso minimo è 1000000 / maxAnimalsPerKg
-          const targetMaxApk = targetSize.maxAnimalsPerKg !== undefined ? targetSize.maxAnimalsPerKg : targetSize.max_animals_per_kg;
+          const targetDate = addDays(new Date(), daysInFuture);
+          const targetRange = getRangeForSizeAtDate(targetSize.id, targetDate);
+          const targetMaxApk = targetRange?.maxAnimalsPerKg;
           const targetMinWeight = targetMaxApk ? 1000000 / targetMaxApk : 0;
           
           // Raggiungi il target se il peso futuro >= peso minimo target
@@ -404,7 +458,7 @@ export default function FlupsyComparison() {
         // Modalità Taglia Target: verifica se può raggiungere la taglia target
         const daysToTarget = getDaysToReachTargetSize(basket.id, targetSizeCode);
         const currentWeight = 1000000 / latestOperation.animalsPerKg;
-        const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+        const currentSize = getRecordedOrCalculatedSize(latestOperation);
         
         if (currentSize?.code === targetSizeCode) {
           // Già nella taglia target
@@ -438,7 +492,7 @@ export default function FlupsyComparison() {
       total,
       totalCount
     };
-  }, [fluspyBaskets, currentTabId, daysInFuture, targetSizeCode, sizes, operations]);
+  }, [fluspyBaskets, currentTabId, daysInFuture, targetSizeCode, sizes, sizeRangeVersions, operations]);
   
   // Ottiene le dimensioni delle carte dei cestelli in base al livello di zoom
   const getBasketCardSize = () => {
@@ -490,9 +544,7 @@ export default function FlupsyComparison() {
       : null;
     
     // Determina la taglia attuale
-    const currentSize = currentWeight 
-      ? getTargetSizeForWeight(currentWeight, sizes) 
-      : null;
+    const currentSize = getRecordedOrCalculatedSize(latestOperation);
     
     // Classe CSS per il colore del cestello
     const colorClass = currentSize?.code 
@@ -606,7 +658,10 @@ export default function FlupsyComparison() {
     if (!futureWeight) return renderCurrentBasket(basket);
     
     // Determina la taglia futura
-    const futureSize = getTargetSizeForWeight(futureWeight, sizes);
+    const futureSize = getSizeForAnimalsPerKg(
+      1000000 / futureWeight,
+      addDays(new Date(), daysInFuture),
+    );
     
     // Calcola il numero attuale di animali per kg
     const currentAnimalsPerKg = latestOperation.animalsPerKg;
@@ -633,7 +688,7 @@ export default function FlupsyComparison() {
         ? differenceInWeeks(targetDate, operationDate) 
         : null;
       
-      const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+      const currentSize = getRecordedOrCalculatedSize(latestOperation);
       
       return (
         <div className="p-2 max-w-xs">
@@ -764,7 +819,7 @@ export default function FlupsyComparison() {
     const daysToTarget = getDaysToReachTargetSize(basket.id, targetSizeCode);
     
     // Determina la taglia attuale
-    const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+    const currentSize = getRecordedOrCalculatedSize(latestOperation);
     
     // Ottiene l'oggetto taglia target
     const targetSize = sizes ? sizes.find(s => s.code === targetSizeCode) : null;
@@ -967,9 +1022,12 @@ export default function FlupsyComparison() {
                 }
                 
                 const currentWeight = 1000000 / latestOperation.animalsPerKg;
-                const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+                const currentSize = getRecordedOrCalculatedSize(latestOperation);
                 const futureWeight = calculateFutureWeight(basket.id, daysInFuture);
-                const futureSize = futureWeight ? getTargetSizeForWeight(futureWeight, sizes) : null;
+                const futureSize = futureWeight ? getSizeForAnimalsPerKg(
+                  1000000 / futureWeight,
+                  addDays(new Date(), daysInFuture),
+                ) : null;
                 const futureAnimalsPerKg = futureWeight ? Math.round(1000000 / futureWeight) : null;
                 const growthPercentage = futureWeight && currentWeight > 0 
                   ? Math.round((futureWeight / currentWeight - 1) * 100) 
@@ -1061,7 +1119,7 @@ export default function FlupsyComparison() {
                 }
                 
                 const currentWeight = 1000000 / latestOperation.animalsPerKg;
-                const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+                const currentSize = getRecordedOrCalculatedSize(latestOperation);
                 const daysToTarget = getDaysToReachTargetSize(basket.id, targetSizeCode);
                 const willReach = willReachTargetSize(basket.id, targetSizeCode);
                 
@@ -1205,9 +1263,12 @@ export default function FlupsyComparison() {
       }
 
       const currentWeight = 1000000 / latestOperation.animalsPerKg;
-      const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+      const currentSize = getRecordedOrCalculatedSize(latestOperation);
       const futureWeight = calculateFutureWeight(basket.id, daysInFuture);
-      const futureSize = futureWeight ? getTargetSizeForWeight(futureWeight, sizes) : null;
+      const futureSize = futureWeight ? getSizeForAnimalsPerKg(
+        1000000 / futureWeight,
+        addDays(new Date(), daysInFuture),
+      ) : null;
       const futureAnimalsPerKg = futureWeight ? Math.round(1000000 / futureWeight) : null;
       const growthPct = futureWeight && currentWeight > 0 ? Math.round((futureWeight / currentWeight - 1) * 100) : 0;
 
@@ -1250,7 +1311,7 @@ export default function FlupsyComparison() {
       }
 
       const currentWeight = 1000000 / latestOperation.animalsPerKg;
-      const currentSize = getTargetSizeForWeight(currentWeight, sizes);
+      const currentSize = getRecordedOrCalculatedSize(latestOperation);
       const daysToTarget = getDaysToReachTargetSize(basket.id, targetSizeCode);
       
       let stato = '';

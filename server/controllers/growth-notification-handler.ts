@@ -2,6 +2,7 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { isNotificationTypeEnabled, getConfiguredTargetSizes } from "./notification-settings-controller";
 import { NotificationsCache } from "./notification-controller";
+import { getSizeRangeCandidates } from "../utils/size-determination";
 
 /**
  * Converte un tasso di crescita mensile in tasso giornaliero equivalente
@@ -34,40 +35,24 @@ function simulateGrowthWithDailySGR(initialWeight: number, dailyRate: number, da
 async function checkSizeMatch(
   animalsPerKg: number,
   sizeId: number,
-  atDate: string | Date,
+  atDate: Date,
 ): Promise<{ id: number; name: string; code: string } | null> {
   try {
-    const effectiveDate =
-      atDate instanceof Date
-        ? `${atDate.getFullYear()}-${String(atDate.getMonth() + 1).padStart(2, '0')}-${String(atDate.getDate()).padStart(2, '0')}`
-        : String(atDate).substring(0, 10);
-
-    const sizeData = await db.execute(sql`
-      SELECT
-        s.id,
-        s.name,
-        s.code,
-        srv.min_animals_per_kg,
-        srv.max_animals_per_kg
-      FROM sizes s
-      JOIN size_range_versions srv ON srv.size_id = s.id
-      WHERE s.id = ${sizeId}
-        AND srv.valid_from <= ${effectiveDate}::date
-        AND (srv.valid_to IS NULL OR srv.valid_to >= ${effectiveDate}::date)
-      ORDER BY srv.valid_from DESC
-      LIMIT 1
-    `);
+    const [rangeCandidates, sizeData] = await Promise.all([
+      getSizeRangeCandidates(atDate),
+      db.execute(sql`SELECT id, name, code FROM sizes WHERE id = ${sizeId}`),
+    ]);
 
     if (!sizeData.rows || sizeData.rows.length === 0) {
       return null;
     }
 
     const size = sizeData.rows[0] as any;
-    const min_animals_per_kg = Number(size.min_animals_per_kg);
-    const max_animals_per_kg = Number(size.max_animals_per_kg);
+    const range = rangeCandidates.find((candidate) => candidate.sizeId === sizeId);
+    if (!range) return null;
     
     // Verifica se animalsPerKg rientra nell'intervallo
-    if (animalsPerKg >= min_animals_per_kg && animalsPerKg <= max_animals_per_kg) {
+    if (animalsPerKg >= range.minAnimalsPerKg && animalsPerKg <= range.maxAnimalsPerKg) {
       return {
         id: Number(size.id),
         name: String(size.name),
@@ -466,7 +451,7 @@ export async function checkOperationForTargetSize(operationId: number): Promise<
 
     // Verifica per ogni taglia configurata
     for (const sizeId of targetSizeIds) {
-      const matchedSize = await checkSizeMatch(valueToCheck, sizeId, operation.date);
+      const matchedSize = await checkSizeMatch(valueToCheck, sizeId, new Date(operation.date));
       
       if (matchedSize) {
         const notificationId = await createTargetSizeNotification(

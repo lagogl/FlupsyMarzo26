@@ -5,6 +5,7 @@ const router = Router();
 
 // GET routes
 router.get("/", (req, res) => sizesController.getAll(req, res));
+router.get("/range-versions", (req, res) => sizesController.getRangeVersions(req, res));
 router.get("/:id", (req, res) => sizesController.getById(req, res));
 
 // POST routes

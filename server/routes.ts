@@ -45,7 +45,7 @@ import { sendError, sendSuccess } from "./utils/error-handler";
 import * as SequenceController from "./controllers/sequence-controller";
 import { getOperationsUnified } from "./controllers/operations-unified-controller";
 import { invalidateAllCaches } from "./services/operations-lifecycle.service";
-import { loadGrowthSimulationContext, simulateForward } from "./services/growth-simulation.service";
+import { findRangeForSize, loadGrowthSimulationContext, simulateForward } from "./services/growth-simulation.service";
 
 // 🎯 MODULI ORGANIZZATI
 import { flupsyRoutes } from "./modules/core/flupsys";
@@ -62,7 +62,7 @@ import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import basketTransferRouter from "./modules/operations/transfer/basket-transfer.routes";
 import whatsappRouter from "./modules/whatsapp/whatsapp.routes";
 import { getBasketLotComposition } from "./services/basket-lot-composition.service";
-import { determineSizeByAnimalsPerKg } from "./utils/size-determination";
+import { determineSizeByAnimalsPerKg, toBusinessIsoDate } from "./utils/size-determination";
 import { computeMisuraAnimalCount, recomputeCycleMisure } from "./utils/misura-mortality";
 import { operationsLifecycleService } from "./services/operations-lifecycle.service";
 
@@ -408,7 +408,6 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // ===== ROUTE DI ELIMINAZIONE DI EMERGENZA =====
   // ROUTE ELIMINATA - Ora gestita da direct-operations.ts per evitare duplicazioni
   console.log("🗑️ Route di eliminazione di emergenza gestita da direct-operations.ts");
-
 
 
   // ===== ROUTE FATTURE IN CLOUD =====
@@ -2210,12 +2209,12 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  // ============================================================================
+  // ----------------------------------------------------------------------------
   // Mortalità Lotto v2 — calcolo basato su operazioni con nuova formula
   // GET /api/lots/:lotId/mortality-v2
   // Per ogni ciclo del lotto: initial=prima operazione, current=ultima non-vendita
   // Aggrega a livello lotto e segnala qualità dei dati (v1 vs v2)
-  // ============================================================================
+  // ----------------------------------------------------------------------------
   app.get('/api/lots/:lotId/mortality-v2', async (req: Request, res: Response) => {
     try {
       const lotId = parseInt(req.params.lotId);
@@ -2321,11 +2320,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  // ============================================================================
+  // ----------------------------------------------------------------------------
   // Report Peso Ceste — scostamenti biomassa e peso medio vs target TP-3000
   // GET /api/report/peso-ceste
   // Ritorna tutte le ceste attive con ultima operazione, peso medio, deviazioni
-  // ============================================================================
+  // ----------------------------------------------------------------------------
   app.get('/api/report/peso-ceste', async (req: Request, res: Response) => {
     try {
       const result = await db.execute(sql`
@@ -2794,7 +2793,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     try {
       const { basketId, basketNumber, error } = req.body;
       
-      console.log("\n🔴 ========== ERRORE NFC DA MOBILE ==========");
+      console.log("\n🔴 ---------- ERRORE NFC DA MOBILE ----------");
       console.log("📱 Cestello:", `#${basketNumber} (ID: ${basketId})`);
       console.log("⚠️  Messaggio:", error.message);
       console.log("📍 Contesto:", error.context);
@@ -2805,7 +2804,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         console.log("📚 Stack Trace:");
         console.log(error.stack);
       }
-      console.log("🔴 =========================================\n");
+      console.log("🔴 -----------------------------------------\n");
       
       res.json({ success: true, message: "Errore NFC ricevuto e loggato" });
     } catch (err) {
@@ -3334,7 +3333,6 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       return sendError(res, error, "Errore interno server");
     }
   });
-
 
 
   app.post("/api/operations", async (req, res) => {
@@ -7075,8 +7073,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       const today = new Date();
       const horizonEnd = new Date(today);
       horizonEnd.setDate(horizonEnd.getDate() + withinDays);
-      const todayKey = format(today, "yyyy-MM-dd");
-      const horizonEndKey = format(horizonEnd, "yyyy-MM-dd");
+      const todayKey = toBusinessIsoDate(today);
+      const horizonEndKey = toBusinessIsoDate(horizonEnd);
 
       // Recupera la taglia target
       const targetSize = await storage.getSizeByCode(targetSizeCode);
@@ -7114,7 +7112,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       }
 
       const getRangeAtDate = (sizeId: number, date: Date) => {
-        const dateKey = format(date, "yyyy-MM-dd");
+        const dateKey = toBusinessIsoDate(date);
         return (rangesBySize.get(sizeId) ?? [])
           .filter(version =>
             String(version.validFrom) <= dateKey
@@ -7364,12 +7362,12 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
 
-  // ========================================
+  // ----------------------------------------
   // 📊 STOCK CUMULATIVO ALLA DATA
   // Per "Ceste in arrivo": simula TUTTE le ceste attive fino a (oggi + days) e somma
   // gli animali con apk ≤ targetSize.maxAnimalsPerKg (es. TP-3000 → ≤ 29.000 an/kg).
   // Coincide concettualmente con la giacenza lorda della Proiezione Crescita alla stessa data.
-  // ========================================
+  // ----------------------------------------
   app.get("/api/size-predictions/stock-at-date", async (req, res) => {
     try {
       const targetSizeCode = req.query.size ? String(req.query.size) : "TP-3000";
@@ -7409,6 +7407,14 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
       // Carica il contesto di simulazione condiviso (stesso codice di /api/size-predictions e Proiezione Crescita).
       const simCtx = await loadGrowthSimulationContext();
+      const today = new Date();
+      const targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + withinDays);
+      const targetRange = findRangeForSize(targetSize.id, targetDate, simCtx.sizeRangeVersions);
+      if (!targetRange) {
+        return res.status(404).json({ message: `Nessun range valido per ${targetSizeCode} alla data richiesta` });
+      }
+      const targetMaxApk = targetRange.maxAnimalsPerKg;
 
       // Recupera ceste attive + ultima operazione con peso
       const cyclesWithBaskets = await db
@@ -7483,11 +7489,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // Create HTTP server (or reuse the one already listening for fast health checks)
   const httpServer = existingServer || createServer(app);
   
-  // ========================================
+  // ----------------------------------------
   // 🔄 SCREENING MODULE - MIGRATED
   // Le route di screening sono state migrate al modulo server/modules/screening
   // Questo blocco è commentato per rollback safety
-  // ========================================
+  // ----------------------------------------
   /*
   // API routes for the screening (vagliatura) module
   app.get("/api/screening/operations", async (req, res) => {
@@ -8032,19 +8038,19 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   });
   */
-  // ========================================
+  // ----------------------------------------
   // END SCREENING MODULE - MIGRATION COMPLETE
-  // ========================================
+  // ----------------------------------------
 
   // Registra il modulo DATABASE MANAGEMENT (backup, restore, export)
   const dbManagementModule = await import('./modules/system/database-management');
   app.use('/api', dbManagementModule.databaseManagementRoutes);
   console.log('✅ Modulo DATABASE MANAGEMENT registrato su /api/export/giacenze, /api/database/backup, /api/database/backups, /api/database/restore');
   
-  // ========================================
+  // ----------------------------------------
   // REPORT ANALISI OPERAZIONI PESO (Gennaio 2026)
   // Genera Excel con analisi comparativa operazioni
-  // ========================================
+  // ----------------------------------------
   app.get("/api/export/analisi-operazioni-peso", async (req, res) => {
     console.log("📊 EXPORT ANALISI OPERAZIONI PESO - Generazione report...");
     
@@ -8088,14 +8094,16 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       const allSizes = await db.select().from(sizes);
       const allLots = await db.select().from(lots);
       
-      // Funzione per determinare taglia da animali/kg
-      const getSizeCodeFromAnimalsPerKg = (animalsPerKg: number): string => {
-        const matchingSize = allSizes.find((size: any) => {
-          const min = size.minAnimalsPerKg || 0;
-          const max = size.maxAnimalsPerKg || Infinity;
-          return animalsPerKg >= min && animalsPerKg <= max;
+      // La classificazione registrata prevale; solo i record legacy senza size_id
+      // vengono riclassificati con il range valido alla data dell'operazione.
+      const getHistoricalSizeCode = async (op: typeof allOperations[number]): Promise<string | null> => {
+        const recorded = allSizes.find((size) => size.id === op.sizeId);
+        if (recorded) return recorded.code;
+        if (!op.animalsPerKg) return null;
+        const fallbackId = await determineSizeByAnimalsPerKg(op.animalsPerKg, {
+          atDate: String(op.date).substring(0, 10),
         });
-        return matchingSize ? matchingSize.code : `TP-${Math.round(animalsPerKg/1000)*1000}`;
+        return allSizes.find((size) => size.id === fallbackId)?.code ?? null;
       };
       
       // FOGLIO 1: Tutte le operazioni con dettaglio
@@ -8129,7 +8137,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         const flupsy = allFlupsys.find(f => f.id === basket?.flupsyId);
         const size = allSizes.find(s => s.id === op.sizeId);
         const lot = allLots.find(l => l.id === op.lotId);
-        const calcSize = op.animalsPerKg ? getSizeCodeFromAnimalsPerKg(op.animalsPerKg) : null;
+        const calcSize = await getHistoricalSizeCode(op);
         
         const row = sheetOperazioni.addRow({
           opId: op.id,
@@ -8197,7 +8205,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         // SITUAZIONE ATTUALE: ultima operazione con animalsPerKg
         const lastOpWithAnimals = basketOps.find(op => op.animalsPerKg && op.animalsPerKg > 0);
         const currentAnimalsPerKg = lastOpWithAnimals?.animalsPerKg || null;
-        const currentSize = currentAnimalsPerKg ? getSizeCodeFromAnimalsPerKg(currentAnimalsPerKg) : null;
+        const currentSize = lastOpWithAnimals ? await getHistoricalSizeCode(lastOpWithAnimals) : null;
         const currentAnimalCount = lastOpWithAnimals?.animalCount || null;
         
         // NUOVA LOGICA: solo misura e prima-attivazione determinano taglia
@@ -8206,7 +8214,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
           op.animalsPerKg && op.animalsPerKg > 0
         );
         const newAnimalsPerKg = lastMeasurementOp?.animalsPerKg || null;
-        const newSize = newAnimalsPerKg ? getSizeCodeFromAnimalsPerKg(newAnimalsPerKg) : null;
+        const newSize = lastMeasurementOp ? await getHistoricalSizeCode(lastMeasurementOp) : null;
         const newAnimalCount = lastMeasurementOp?.animalCount || null;
         
         // Conta operazioni peso
@@ -8313,8 +8321,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
           (op.type === 'misura' || op.type === 'prima-attivazione') && op.animalsPerKg && op.animalsPerKg > 0
         );
         if (lastOpWithAnimals && lastMeasurementOp) {
-          const current = getSizeCodeFromAnimalsPerKg(lastOpWithAnimals.animalsPerKg!);
-          const newCalc = getSizeCodeFromAnimalsPerKg(lastMeasurementOp.animalsPerKg!);
+          const current = await getHistoricalSizeCode(lastOpWithAnimals);
+          const newCalc = await getHistoricalSizeCode(lastMeasurementOp);
           if (current !== newCalc) cesteDifferenti++;
         }
       }
@@ -9268,11 +9276,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     }
   };
 
-  // ========================================
+  // ----------------------------------------
   // 🔄 INTEGRATIONS MODULE - MIGRATED
   // Le route di integrazioni Email/Telegram sono state migrate al modulo server/modules/integrations
   // Questo blocco è commentato per rollback safety
-  // ========================================
+  // ----------------------------------------
   /*
   // === Route per invio email (WhatsApp rimosso) ===
   // Rotta WhatsApp rimossa: app.get("/api/whatsapp/diario")
@@ -9309,9 +9317,9 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   
   // Rotta WhatsApp rimossa: app.post("/api/whatsapp/config")
   */
-  // ========================================
+  // ----------------------------------------
   // END INTEGRATIONS MODULE - MIGRATION COMPLETE
-  // ========================================
+  // ----------------------------------------
   
   // === Route per gestione notifiche ===
   // 🔄 MIGRATO AL MODULO: server/modules/system/notifications
@@ -9368,11 +9376,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // Ottiene il riepilogo dell'inventario per tutti i lotti
   app.get('/api/lot-inventory/all-summary', LotInventoryController.getAllLotsSummary);
   
-  // ========================================
+  // ----------------------------------------
   // 🔄 ANALYTICS MODULE - MIGRATED
   // Le route di analytics sono state migrate al modulo server/modules/analytics
   // Questo blocco è commentato per rollback safety
-  // ========================================
+  // ----------------------------------------
   /*
   // === Analytics Routes ===
   // Analytics completi per lotti con mortalità e performance
@@ -9399,9 +9407,9 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // Tracciabilità completa di un lotto attraverso operazioni di vagliatura
   app.get('/api/analytics/lot-traceability/:lotId', AnalyticsController.getLotTraceability);
   */
-  // ========================================
+  // ----------------------------------------
   // END ANALYTICS MODULE - MIGRATION COMPLETE
-  // ========================================
+  // ----------------------------------------
   
   // Registra il modulo ECO-IMPACT
   const ecoImpactModule = await import('./modules/reports/eco-impact');
@@ -9629,7 +9637,6 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       return sendError(res, error, "Errore durante la sincronizzazione con il database esterno");
     }
   });
-
 
 
   // Endpoint per verificare lo stato della sincronizzazione
