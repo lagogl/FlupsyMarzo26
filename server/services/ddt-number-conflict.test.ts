@@ -8,7 +8,7 @@ import {
 test("riconosce solo il vincolo univoco della numerazione DDT", () => {
   assert.equal(isDdtNumberConflict({
     code: "23505",
-    constraint: "ddt_company_year_numero_unique",
+    constraint: "ddt_company_year_number_unique",
   }), true);
   assert.equal(isDdtNumberConflict({
     code: "23505",

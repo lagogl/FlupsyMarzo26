@@ -47,6 +47,18 @@ test("una prenotazione locale pendente più alta avanza il progressivo", async (
   assert.equal(await getNextDdtNumber(data, 10, 2026), 315);
 });
 
+test("documenti storici con numero basso non spostano il prossimo numero FIC", async () => {
+  const data = sources(
+    new Map([["10:2026:1", { documents: [{ number: 316 }], lastPage: 1 }]]),
+    new Map([["10:2026", [
+      { number: 14, status: "locale" },
+      { number: 14, status: "invio" },
+    ]]])
+  );
+
+  assert.equal(await getNextDdtNumber(data, 10, 2026), 317);
+});
+
 test("un DDT locale già inviato con numero più alto non altera il progressivo FIC", async () => {
   const data = sources(
     new Map([["10:2026:1", { documents: [{ number: 312 }], lastPage: 1 }]]),
