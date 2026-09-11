@@ -10,12 +10,10 @@
 import type OpenAI from "openai";
 import { pool } from "../../db.js";
 import { 
+  AI_SAFE_TABLES,
   generateDatabaseDescription, 
-  generateMinimalContext,
   generateDynamicSchemaDescription,
-  COMMON_QUERY_PATTERNS,
-  KEY_METRICS,
-  getTableMetadata
+  getSafeAIMetadata,
 } from "./metadata.service.js";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY;
@@ -43,13 +41,14 @@ async function initializeClient() {
 initializeClient();
 
 // Ricarica periodica
-setInterval(() => {
+const clientRefreshTimer = setInterval(() => {
   const newApiKey = process.env.OPENAI_API_KEY;
   if (newApiKey && (!aiClient || newApiKey !== AI_API_KEY)) {
     console.log('🔄 Enhanced AI: Ricaricando client...');
     initializeClient();
   }
 }, 10000);
+clientRefreshTimer.unref();
 
 // Cache per lo schema dinamico (ricaricato ogni 5 minuti)
 let dynamicSchemaCache: string | null = null;
@@ -93,19 +92,6 @@ ${dbDescription}
 
 # SCHEMA REALE DEL DATABASE (letto dinamicamente con dati di esempio)
 ${dynamicSchema}
-
-# PATTERN DI QUERY COMUNI
-${COMMON_QUERY_PATTERNS.map(p => `
-**${p.name}**: ${p.description}
-Tabelle: ${p.tables.join(', ')}
-`).join('\n')}
-
-# METRICHE CALCOLABILI
-Puoi calcolare automaticamente:
-${Object.entries(KEY_METRICS).map(([category, metrics]) => `
-**${category}**:
-${metrics.slice(0, 5).map(m => `- ${m}`).join('\n')}
-`).join('\n')}
 
 # ISTRUZIONI
 1. **Analizza la domanda** - Identifica quali tabelle servono
@@ -242,7 +228,7 @@ export async function analyzeQuestionWithEnhancedAI(
 
   try {
     console.log('🤖 Enhanced AI Request:', {
-      question: request.question,
+      questionLength: request.question.length,
       mode: request.mode || 'analysis',
       hasContext: !!request.context
     });
@@ -341,12 +327,24 @@ export async function executeAndAnalyzeQuery(
   
   try {
     console.log('📊 Executing AI-generated query:', {
-      queryPreview: sqlQuery.substring(0, 100) + '...',
+      queryLength: sqlQuery.length,
       paramsCount: queryParams.length
     });
 
-    // Esegui query usando il pool PostgreSQL direttamente
-    const result = await pool.query(sqlQuery, queryParams);
+    const client = await pool.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
+      await client.query('SET TRANSACTION READ ONLY');
+      await client.query(`SET LOCAL statement_timeout = '5000ms'`);
+      result = await client.query(sqlQuery, queryParams);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
     
     console.log('✅ Query executed:', {
       rowCount: result.rows?.length || 0
@@ -440,9 +438,9 @@ export function healthCheck(): {
     status: aiClient ? 'ready' : 'not_configured',
     model: AI_MODEL,
     metadata: {
-      tablesDocumented: 15, // Tabelle principali documentate
-      queryPatterns: COMMON_QUERY_PATTERNS.length,
-      metricsAvailable: Object.values(KEY_METRICS).flat().length
+      tablesDocumented: AI_SAFE_TABLES.length,
+      queryPatterns: 0,
+      metricsAvailable: getSafeAIMetadata().flatMap(table => table.keyMetrics || []).length
     }
   };
 }

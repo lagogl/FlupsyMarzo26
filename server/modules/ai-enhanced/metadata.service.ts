@@ -38,6 +38,39 @@ export interface RelationshipMetadata {
   description: string;
 }
 
+export const AI_SAFE_TABLES = [
+  'flupsys', 'baskets', 'cycles', 'operations', 'sizes', 'lots',
+  'basket_lot_composition', 'basket_groups',
+  'sgr', 'sgr_giornalieri', 'sgr_per_taglia',
+  'growth_analysis_runs', 'basket_growth_profiles', 'growth_distributions',
+  'lot_ledger', 'lot_inventory_transactions', 'lot_mortality_records', 'mortality_rates',
+  'target_size_annotations',
+  'screening_operations', 'screening_source_baskets', 'screening_destination_baskets',
+  'screening_basket_history', 'screening_lot_references', 'screening_impact_analysis',
+  'selections', 'selection_source_baskets', 'selection_destination_baskets',
+  'selection_basket_history', 'selection_lot_references',
+  'selection_tasks', 'selection_task_baskets', 'selection_task_assignments',
+  'bag_allocations'
+] as const;
+
+const AI_SAFE_TABLE_SET = new Set<string>(AI_SAFE_TABLES);
+const AI_BLOCKED_FIELD_PATTERN = /(password|secret|token|api.?key|email|phone|address|customer|client)/i;
+
+export function getSafeAIMetadata(): TableMetadata[] {
+  return DATABASE_METADATA
+    .filter(table => AI_SAFE_TABLE_SET.has(table.name.toLowerCase()))
+    .map(table => ({
+      ...table,
+      fields: table.fields.filter(field =>
+        !field.isPII && !AI_BLOCKED_FIELD_PATTERN.test(field.name)
+      ),
+      relationships: table.relationships.filter(relationship =>
+        AI_SAFE_TABLE_SET.has(relationship.targetTable.toLowerCase())
+      ),
+      sensitiveFields: undefined
+    }));
+}
+
 /**
  * Metadata completo del database FLUPSY Management System
  */
@@ -1301,12 +1334,13 @@ export function getTablesByCategory(category: string): TableMetadata[] {
  */
 export function generateDatabaseDescription(): string {
   const categories = ['Core', 'Operations', 'Screening', 'Sales', 'Analytics', 'Sync', 'Config'];
+  const safeMetadata = getSafeAIMetadata();
   
   let description = `# DATABASE SCHEMA - FLUPSY Management System\n\n`;
-  description += `Totale tabelle: ${DATABASE_METADATA.length}\n\n`;
+  description += `Totale tabelle: ${safeMetadata.length}\n\n`;
   
   categories.forEach(category => {
-    const tables = getTablesByCategory(category);
+    const tables = safeMetadata.filter(table => table.category === category);
     if (tables.length > 0) {
       description += `## ${category} (${tables.length} tabelle)\n\n`;
       tables.forEach(table => {
@@ -1322,9 +1356,10 @@ export function generateDatabaseDescription(): string {
   });
   
   description += `## RELAZIONI CHIAVE\n\n`;
-  Object.entries(RELATIONSHIP_GRAPH).forEach(([key, graph]) => {
-    description += `**${key}**: ${graph.description}\n`;
-    description += `Path: ${graph.path.join(' → ')}\n\n`;
+  safeMetadata.forEach(table => {
+    table.relationships.forEach(relationship => {
+      description += `- ${table.name} → ${relationship.targetTable}: ${relationship.description}\n`;
+    });
   });
   
   return description;
@@ -1377,19 +1412,25 @@ export async function getDynamicDatabaseSchema(): Promise<{
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
         AND table_type = 'BASE TABLE'
+        AND table_name = ANY($1::text[])
       ORDER BY table_name
-    `);
+    `, [AI_SAFE_TABLES]);
 
     const tables: any[] = [];
 
     for (const tableRow of tablesResult.rows) {
       const tableName = tableRow.table_name;
+      const safeTableMetadata = getSafeAIMetadata().find(table => table.name === tableName);
+      const safeColumnNames = new Set(
+        (safeTableMetadata?.fields || []).map(field => field.name.replace(/_/g, '').toLowerCase())
+      );
 
       // 2. Ottieni le colonne per ogni tabella
       const columnsResult = await pool.query(`
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = $1
+          AND column_name !~* '(password|secret|token|api.?key|email|phone|address|customer|client)'
         ORDER BY ordinal_position
       `, [tableName]);
 
@@ -1397,25 +1438,15 @@ export async function getDynamicDatabaseSchema(): Promise<{
       const countResult = await pool.query(`SELECT COUNT(*) FROM "${tableName}"`);
       const rowCount = parseInt(countResult.rows[0].count);
 
-      // 4. Prendi 3 esempi (solo per tabelle con dati)
-      let sampleData: any[] = [];
-      if (rowCount > 0) {
-        try {
-          const sampleResult = await pool.query(`SELECT * FROM "${tableName}" LIMIT 3`);
-          sampleData = sampleResult.rows;
-        } catch (e) {
-          // Ignora errori sui sample
-        }
-      }
-
       tables.push({
         name: tableName,
-        columns: columnsResult.rows.map(col => ({
-          name: col.column_name,
-          type: col.data_type,
-          nullable: col.is_nullable === 'YES'
-        })),
-        sampleData: sampleData.length > 0 ? sampleData : undefined,
+        columns: columnsResult.rows
+          .filter(col => safeColumnNames.has(col.column_name.replace(/_/g, '').toLowerCase()))
+          .map(col => ({
+            name: col.column_name,
+            type: col.data_type,
+            nullable: col.is_nullable === 'YES'
+          })),
         rowCount
       });
     }
@@ -1436,7 +1467,9 @@ export async function getDynamicDatabaseSchema(): Promise<{
         AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY'
         AND tc.table_schema = 'public'
-    `);
+        AND tc.table_name = ANY($1::text[])
+        AND ccu.table_name = ANY($1::text[])
+    `, [AI_SAFE_TABLES]);
 
     const foreignKeys = fkResult.rows.map(fk => ({
       table: fk.table_name,
@@ -1469,9 +1502,6 @@ export async function generateDynamicSchemaDescription(): Promise<string> {
     description += `### ${table.name} (${table.rowCount} righe)\n`;
     description += `Colonne: ${table.columns.map(c => `${c.name}:${c.type}`).join(', ')}\n`;
     
-    if (table.sampleData && table.sampleData.length > 0) {
-      description += `Esempio: ${JSON.stringify(table.sampleData[0], null, 0).substring(0, 200)}...\n`;
-    }
     description += `\n`;
   }
 

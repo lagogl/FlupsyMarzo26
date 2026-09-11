@@ -6,6 +6,12 @@ import { getDatabaseSchema, getTableStats } from "../services/ai-report/schema-s
 import { getAllTemplates, getTemplatesByCategory, getTemplateById, applyTemplateParameters } from "../services/ai-report/report-templates";
 import { getCachedQuery, setCachedQuery, invalidateQueryCache, getCacheStats, getCacheInfo } from "../services/ai-report/query-cache-service";
 import { generateDataInsights, formatInsightsForUser, createInsightsSheet } from "../services/ai-report/insights-service";
+import { requireAdmin, requireAuth } from "../modules/system/auth/auth.middleware";
+import {
+  getAllowedDatabaseDescription,
+  prepareSafeQuery,
+  validateSQLQuery
+} from "../modules/ai-enhanced/enhanced-ai.controller";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY;
 const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
@@ -162,7 +168,7 @@ async function generateReportHandler(req: Request, res: Response) {
       });
     }
 
-    console.log('📊 AI REPORT REQUEST:', prompt.substring(0, 100) + '...');
+    console.log('📊 AI REPORT REQUEST:', { promptLength: prompt.length });
 
     // Validazione preventiva del prompt
     const validation = validatePrompt(prompt);
@@ -182,8 +188,8 @@ async function generateReportHandler(req: Request, res: Response) {
     }
 
     // Step 1: Ottieni schema database dinamico
-    const dbSchema = await getDatabaseSchema();
-    console.log(`📋 Schema caricato: ${dbSchema.tables.length} tabelle, ${dbSchema.relationships.length} relazioni`);
+    const safeSchemaDescription = getAllowedDatabaseDescription();
+    console.log('📋 Schema AI sicuro caricato');
     
     // Costruisci contesto conversazionale se presente
     let conversationContext = '';
@@ -213,7 +219,7 @@ async function generateReportHandler(req: Request, res: Response) {
 Sei un esperto di database PostgreSQL e analisi dati per sistemi di acquacoltura.
 
 SCHEMA DATABASE (aggiornato automaticamente):
-${dbSchema.schemaText}
+${safeSchemaDescription}
 ${conversationContext}
 
 RICHIESTA UTENTE CORRENTE:
@@ -265,7 +271,10 @@ IMPORTANTE:
     });
 
     const analysis = JSON.parse(analysisResponse.choices[0].message.content || '{}');
-    console.log('🔍 AI ANALYSIS:', analysis);
+    console.log('🔍 AI ANALYSIS:', {
+      hasSqlQuery: !!analysis.sqlQuery,
+      columnsCount: analysis.columns?.length || 0
+    });
 
     if (!analysis.sqlQuery) {
       return res.status(500).json({ 
@@ -274,8 +283,14 @@ IMPORTANTE:
       });
     }
 
+    const sqlValidation = validateSQLQuery(analysis.sqlQuery);
+    if (!sqlValidation.valid) {
+      return res.status(403).json({ success: false, error: sqlValidation.error });
+    }
+    const safeSqlQuery = prepareSafeQuery(analysis.sqlQuery, 1000);
+
     // Step 2: Controlla cache prima di eseguire query
-    const cachedResult = getCachedQuery(analysis.sqlQuery);
+    const cachedResult = getCachedQuery(safeSqlQuery);
     let rows: any[];
     
     if (cachedResult) {
@@ -284,13 +299,17 @@ IMPORTANTE:
       console.log(`✅ CACHE HIT: ${rows.length} righe estratte (cached at ${cachedResult.cachedAt})`);
     } else {
       // Esegui query SQL
-      console.log('🔍 EXECUTING SQL:', analysis.sqlQuery);
+      console.log('🔍 EXECUTING SQL:', { queryLength: safeSqlQuery.length });
       
       let queryResult;
       try {
-        queryResult = await db.execute(sql.raw(analysis.sqlQuery));
+        queryResult = await db.transaction(async tx => {
+          await tx.execute(sql.raw('SET TRANSACTION READ ONLY'));
+          await tx.execute(sql.raw(`SET LOCAL statement_timeout = '5000ms'`));
+          return tx.execute(sql.raw(safeSqlQuery));
+        });
       } catch (sqlError: any) {
-        console.error('❌ SQL ERROR:', sqlError);
+        console.error('❌ SQL ERROR:', { name: sqlError.name, message: sqlError.message });
         
         // Chiedi all'AI di correggere la query
         const fixPrompt = `
@@ -318,10 +337,19 @@ Correggi la query e restituisci un JSON con:
         });
         
         const fix = JSON.parse(fixResponse.choices[0].message.content || '{}');
-        console.log('🔧 AI FIX:', fix);
+        console.log('🔧 AI FIX:', { hasSqlQuery: !!fix.sqlQuery });
         
         if (fix.sqlQuery) {
-          queryResult = await db.execute(sql.raw(fix.sqlQuery));
+          const fixValidation = validateSQLQuery(fix.sqlQuery);
+          if (!fixValidation.valid) {
+            throw new Error(fixValidation.error);
+          }
+          const safeFixedQuery = prepareSafeQuery(fix.sqlQuery, 1000);
+          queryResult = await db.transaction(async tx => {
+            await tx.execute(sql.raw('SET TRANSACTION READ ONLY'));
+            await tx.execute(sql.raw(`SET LOCAL statement_timeout = '5000ms'`));
+            return tx.execute(sql.raw(safeFixedQuery));
+          });
         } else {
           throw sqlError;
         }
@@ -332,7 +360,7 @@ Correggi la query e restituisci un JSON con:
       
       // Salva in cache solo se ci sono risultati
       if (rows.length > 0) {
-        setCachedQuery(analysis.sqlQuery, rows, analysis);
+        setCachedQuery(safeSqlQuery, rows, analysis);
       }
     }
 
@@ -468,7 +496,7 @@ export function registerAIReportRoutes(app: Express) {
   /**
    * Visualizza schema database corrente
    */
-  app.get("/api/ai/schema", async (req: Request, res: Response) => {
+  app.get("/api/ai/schema", requireAdmin, async (req: Request, res: Response) => {
     console.log('📊 GET /api/ai/schema chiamato');
     try {
       const includeStats = req.query.includeStats === 'true';
@@ -502,7 +530,7 @@ export function registerAIReportRoutes(app: Express) {
   /**
    * Forza aggiornamento schema database
    */
-  app.post("/api/ai/schema/refresh", async (req: Request, res: Response) => {
+  app.post("/api/ai/schema/refresh", requireAdmin, async (req: Request, res: Response) => {
     try {
       const schema = await getDatabaseSchema(true); // Force refresh
       res.json({
@@ -522,7 +550,7 @@ export function registerAIReportRoutes(app: Express) {
   /**
    * Valida un prompt prima dell'invio all'AI
    */
-  app.post("/api/ai/validate-prompt", (req: Request, res: Response) => {
+  app.post("/api/ai/validate-prompt", requireAuth, (req: Request, res: Response) => {
     try {
       const { prompt } = req.body;
       
@@ -554,7 +582,7 @@ export function registerAIReportRoutes(app: Express) {
   /**
    * Ottieni tutti i template report disponibili
    */
-  app.get("/api/ai/templates", (req: Request, res: Response) => {
+  app.get("/api/ai/templates", requireAuth, (req: Request, res: Response) => {
     try {
       const category = req.query.category as string | undefined;
       
@@ -578,7 +606,7 @@ export function registerAIReportRoutes(app: Express) {
   /**
    * Ottieni singolo template per ID
    */
-  app.get("/api/ai/templates/:id", (req: Request, res: Response) => {
+  app.get("/api/ai/templates/:id", requireAuth, (req: Request, res: Response) => {
     try {
       const template = getTemplateById(req.params.id);
       
@@ -605,7 +633,7 @@ export function registerAIReportRoutes(app: Express) {
    * Genera report da template con parametri
    * Applica il template e genera effettivamente il report Excel
    */
-  app.post("/api/ai/generate-from-template", async (req: Request, res: Response) => {
+  app.post("/api/ai/generate-from-template", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { templateId, parameters } = req.body;
 
@@ -649,12 +677,12 @@ export function registerAIReportRoutes(app: Express) {
    * Endpoint principale per generazione report AI
    * Usa l'handler riusabile
    */
-  app.post("/api/ai/generate-report", generateReportHandler);
+  app.post("/api/ai/generate-report", requireAdmin, generateReportHandler);
 
   /**
    * Ottieni statistiche cache query AI
    */
-  app.get("/api/ai/cache/stats", (req: Request, res: Response) => {
+  app.get("/api/ai/cache/stats", requireAdmin, (req: Request, res: Response) => {
     try {
       const stats = getCacheStats();
       const info = getCacheInfo();
@@ -675,7 +703,7 @@ export function registerAIReportRoutes(app: Express) {
   /**
    * Invalida manualmente tutta la cache query AI
    */
-  app.post("/api/ai/cache/invalidate", (req: Request, res: Response) => {
+  app.post("/api/ai/cache/invalidate", requireAdmin, (req: Request, res: Response) => {
     try {
       invalidateQueryCache();
       

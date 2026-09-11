@@ -8,7 +8,7 @@ const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via sec
 console.log('🔧 OpenAI GPT-4o Config:', { 
   model: AI_MODEL,
   hasApiKey: !!AI_API_KEY,
-  keyStatus: AI_API_KEY ? `${AI_API_KEY.slice(0, 8)}...${AI_API_KEY.slice(-4)}` : 'MISSING'
+  keyStatus: AI_API_KEY ? 'CONFIGURED' : 'MISSING'
 });
 
 // Client OpenAI configurato con ricaricamento dinamico

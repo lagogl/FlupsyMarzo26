@@ -7,7 +7,8 @@
  * Routes: /api/ai-enhanced/*
  */
 
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
+import { requireAdmin, requireAuth } from "../system/auth/auth.middleware.js";
 import { 
   analyzeQuestionWithEnhancedAI,
   executeAndAnalyzeQuery,
@@ -17,13 +18,8 @@ import {
   type EnhancedAIRequest
 } from "./enhanced-ai.service.js";
 import { 
-  generateDatabaseDescription,
-  generateMinimalContext,
-  getTableMetadata,
-  getTablesByCategory,
-  DATABASE_METADATA,
-  RELATIONSHIP_GRAPH,
-  KEY_METRICS
+  AI_SAFE_TABLES,
+  getSafeAIMetadata,
 } from "./metadata.service.js";
 
 /**
@@ -32,35 +28,27 @@ import {
  * NOTA: Nomi normalizzati in lowercase per confronto case-insensitive
  * AGGIORNATO: 54 tabelle totali documentate con nomi snake_case corretti
  */
-const ALLOWED_TABLES = [
-  // Core
-  'flupsys', 'baskets', 'cycles', 'operations', 'sizes', 'lots',
-  'basket_lot_composition', 'basket_groups',
-  // Analytics
-  'sgr', 'sgr_giornalieri', 'sgr_per_taglia',
-  'growth_analysis_runs', 'basket_growth_profiles', 'growth_distributions',
-  'lot_ledger', 'lot_inventory_transactions', 'lot_mortality_records', 'mortality_rates',
-  'target_size_annotations',
-  // Screening
-  'screening_operations', 'screening_source_baskets', 'screening_destination_baskets',
-  'screening_basket_history', 'screening_lot_references', 'screening_impact_analysis',
-  // Selection
-  'selections', 'selection_source_baskets', 'selection_destination_baskets',
-  'selection_basket_history', 'selection_lot_references',
-  'selection_tasks', 'selection_task_baskets', 'selection_task_assignments',
-  'bag_allocations',
-  // Sales
-  'advanced_sales', 'sale_bags', 'sale_operations_ref', 'ddt', 'ddt_righe', 'clienti',
-  // Orders  
-  'ordini', 'ordini_righe',
-  // Task operators
-  'task_operators',
-  // Sync
-  'external_customers_sync', 'external_deliveries_sync', 'external_delivery_details_sync',
-  'external_sales_sync', 'sync_status',
-  // Config (non-sensitive)
-  'notifications', 'notification_settings', 'configurazione'
-];
+const ALLOWED_TABLES: readonly string[] = AI_SAFE_TABLES;
+
+function getAllowedMinimalContext() {
+  const tables = getSafeAIMetadata();
+  return {
+    tables: tables.map(table => `${table.name}: ${table.description}`),
+    relationships: Object.fromEntries(
+      tables.map(table => [
+        table.name,
+        table.relationships.map(relationship => relationship.targetTable)
+      ])
+    ),
+    keyMetrics: tables.flatMap(table => table.keyMetrics || []).slice(0, 20)
+  };
+}
+
+export function getAllowedDatabaseDescription() {
+  return getSafeAIMetadata()
+    .map(table => `${table.name}: ${table.description}. Campi: ${table.fields.map(field => field.name).join(', ')}`)
+    .join('\n');
+}
 
 /**
  * SECURITY: Valida query SQL per sicurezza
@@ -68,8 +56,24 @@ const ALLOWED_TABLES = [
  * - Blocca accesso a tabelle sensibili
  * - Blocca accesso a colonne password/token
  */
-function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } {
+export function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } {
   const lowerQuery = sqlQuery.toLowerCase().trim();
+
+  if (!lowerQuery.startsWith('select ')) {
+    return { valid: false, error: 'Query non permessa: è consentita una sola SELECT' };
+  }
+
+  const withoutTrailingSemicolon = lowerQuery.replace(/;\s*$/, '');
+  if (
+    withoutTrailingSemicolon.includes(';') ||
+    /--|\/\*|\*\/|\$\$|["`[\]]/.test(lowerQuery)
+  ) {
+    return { valid: false, error: 'Query non permessa: sintassi non supportata' };
+  }
+
+  if (/\bselect\s+(?:distinct\s+)?(?:[a-z_][a-z0-9_]*\s*\.\s*)?\*/i.test(lowerQuery)) {
+    return { valid: false, error: 'Query non permessa: SELECT * non consentito' };
+  }
   
   // 1. Blocca query distruttive
   const destructiveKeywords = ['drop', 'delete', 'truncate', 'update', 'insert', 'alter', 'create', 'grant', 'revoke'];
@@ -102,7 +106,7 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
   const cteMatches = lowerQuery.matchAll(cteRegex);
   const cteNames = new Set<string>();
   
-  for (const match of cteMatches) {
+  for (const match of Array.from(cteMatches)) {
     cteNames.add(match[1]); // Nome della CTE temporanea
   }
   
@@ -110,7 +114,7 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
   const multipleCteRegex = /,\s*([a-z_][a-z0-9_]*)(?:\s*\([^)]*\))?\s+as\s*\(/gi;
   const multipleCteMatches = lowerQuery.matchAll(multipleCteRegex);
   
-  for (const match of multipleCteMatches) {
+  for (const match of Array.from(multipleCteMatches)) {
     cteNames.add(match[1]); // Nomi delle CTEs aggiuntive
   }
   
@@ -137,7 +141,7 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     'permissions', 'roles', 'role'
   ];
   
-  for (const match of matches) {
+  for (const match of Array.from(matches)) {
     const firstToken = match[1];
     const secondToken = match[2];
     
@@ -177,10 +181,11 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     'now', 'today', 'dual', 'unnest', 'generate_series',
     'lateral', 'values', 'ordinality'
   ]);
+  let validatedTableCount = 0;
   
   // Verifica che tutte le tabelle REALI (escluse CTEs e parole riservate) siano nella whitelist
   // SICUREZZA: Validazione SOLO su nomi di tabelle reali, MAI sugli alias
-  for (const tableName of tablesToValidate) {
+  for (const tableName of Array.from(tablesToValidate)) {
     // Ignora le CTEs (sono tabelle temporanee definite nella query stessa)
     if (cteNames.has(tableName)) {
       continue;
@@ -196,9 +201,57 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
     if (!ALLOWED_TABLES.includes(tableName)) {
       return { valid: false, error: `Query non permessa: tabella '${tableName}' non nella whitelist` };
     }
+    validatedTableCount += 1;
+  }
+
+  if (validatedTableCount === 0) {
+    return { valid: false, error: 'Query non permessa: deve leggere almeno una tabella autorizzata' };
+  }
+
+  const safeFunctions = new Set([
+    'abs', 'avg', 'cast', 'ceil', 'ceiling', 'coalesce', 'count',
+    'date_trunc', 'extract', 'floor', 'greatest', 'least', 'lower',
+    'max', 'min', 'nullif', 'power', 'round', 'sqrt', 'sum',
+    'to_char', 'upper'
+  ]);
+  const functionMatches = lowerQuery.matchAll(/\b([a-z_][a-z0-9_]*)\s*\(/gi);
+  for (const match of Array.from(functionMatches)) {
+    if (!safeFunctions.has(match[1])) {
+      return { valid: false, error: `Query non permessa: funzione '${match[1]}' non autorizzata` };
+    }
   }
   
   return { valid: true };
+}
+
+export function normalizeQueryLimit(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isSafeInteger(numeric)) {
+    return 200;
+  }
+  return Math.min(Math.max(numeric, 1), 1000);
+}
+
+export function prepareSafeQuery(sqlQuery: string, requestedLimit: unknown): string {
+  const safeLimit = normalizeQueryLimit(requestedLimit);
+  let query = sqlQuery.trim().replace(/;\s*$/, '').trim();
+  const limitMatches = Array.from(query.matchAll(/\blimit\b/gi));
+
+  if (limitMatches.length > 1) {
+    throw new Error('Query non permessa: clausole LIMIT multiple');
+  }
+
+  let effectiveLimit = safeLimit;
+  if (limitMatches.length === 1) {
+    const trailingLimit = query.match(/\s+limit\s+(\d+)\s*$/i);
+    if (!trailingLimit) {
+      throw new Error('Query non permessa: clausola LIMIT non supportata');
+    }
+    effectiveLimit = Math.min(safeLimit, normalizeQueryLimit(Number(trailingLimit[1])));
+    query = query.slice(0, trailingLimit.index).trim();
+  }
+
+  return `${query} LIMIT ${effectiveLimit};`;
 }
 
 /**
@@ -226,7 +279,7 @@ function validateSQLQuery(sqlQuery: string): { valid: boolean; error?: string } 
  * NOTA: Per uso interno, verifica solo che l'API key sia configurata lato server.
  * In produzione, aggiungere autenticazione utente + autorizzazione basata su ruoli.
  */
-function requireAIEnhancedAPIKey(req: Request, res: Response, next: Function) {
+function requireAIEnhancedAPIKey(req: Request, res: Response, next: NextFunction) {
   // Se API key non configurata, modulo disabilitato
   const expectedApiKey = process.env.AI_ENHANCED_API_KEY;
   
@@ -238,14 +291,7 @@ function requireAIEnhancedAPIKey(req: Request, res: Response, next: Function) {
     });
   }
   
-  // ✅ MODALITÀ TESTING INTERNO:
-  // Se l'API key è configurata lato server, consenti l'accesso.
-  // Per uso interno, non richiediamo la chiave dal client.
-  // TODO: In produzione, aggiungere qui controllo autenticazione utente/ruolo
-  
-  // Audit log
-  console.log('✅ SECURITY: Accesso autorizzato a AI Enhanced (API key configurata lato server)');
-  next();
+  return requireAuth(req, res, next);
 }
 
 export function registerEnhancedAIRoutes(app: Express) {
@@ -293,16 +339,12 @@ export function registerEnhancedAIRoutes(app: Express) {
       if (format === 'full') {
         res.json({
           success: true,
-          metadata: {
-            tables: DATABASE_METADATA,
-            relationships: RELATIONSHIP_GRAPH,
-            keyMetrics: KEY_METRICS
-          }
+          metadata: { tables: getSafeAIMetadata() }
         });
       } else {
         res.json({
           success: true,
-          metadata: generateMinimalContext()
+          metadata: getAllowedMinimalContext()
         });
       }
     } catch (error: any) {
@@ -320,7 +362,7 @@ export function registerEnhancedAIRoutes(app: Express) {
    */
   app.get("/api/ai-enhanced/database-description", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
-      const description = generateDatabaseDescription();
+      const description = getAllowedDatabaseDescription();
       res.json({
         success: true,
         description
@@ -358,7 +400,7 @@ export function registerEnhancedAIRoutes(app: Express) {
       }
 
       console.log('📥 Enhanced AI Question:', {
-        question: aiRequest.question,
+        questionLength: aiRequest.question.length,
         mode: aiRequest.mode || 'analysis',
         hasContext: !!aiRequest.context
       });
@@ -387,9 +429,10 @@ export function registerEnhancedAIRoutes(app: Express) {
    *   limit?: number (default 1000)
    * }
    */
-  app.post("/api/ai-enhanced/execute-query", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
+  app.post("/api/ai-enhanced/execute-query", requireAIEnhancedAPIKey, requireAdmin, async (req: Request, res: Response) => {
     try {
       const { sqlQuery, queryParams = [], limit = 1000 } = req.body;
+      const safeLimit = normalizeQueryLimit(limit);
 
       if (!sqlQuery || sqlQuery.trim() === '') {
         return res.status(400).json({
@@ -410,25 +453,17 @@ export function registerEnhancedAIRoutes(app: Express) {
       
       // Audit logging
       console.log('📊 AI Query Execution:', {
-        queryPreview: sqlQuery.substring(0, 150) + '...',
+        queryLength: sqlQuery.length,
         timestamp: new Date().toISOString(),
         paramsCount: queryParams.length
       });
 
-      // Aggiungi LIMIT se non presente
-      let finalQuery = sqlQuery.trim();
-      const queryLowerCheck = finalQuery.toLowerCase();
-      if (!queryLowerCheck.includes('limit')) {
-        // Rimuovi punto e virgola finale se presente
-        finalQuery = finalQuery.replace(/;[\s]*$/, '').trim();
-        // Aggiungi LIMIT prima del punto e virgola
-        finalQuery += ` LIMIT ${limit};`;
-      }
+      const finalQuery = prepareSafeQuery(sqlQuery, safeLimit);
 
       console.log('📊 Executing query:', {
-        queryPreview: finalQuery.substring(0, 100) + '...',
+        queryLength: finalQuery.length,
         paramsCount: queryParams.length,
-        limit
+        limit: safeLimit
       });
 
       const result = await executeAndAnalyzeQuery(finalQuery, queryParams);
@@ -456,7 +491,7 @@ export function registerEnhancedAIRoutes(app: Express) {
    *   limit?: number
    * }
    */
-  app.post("/api/ai-enhanced/ask-and-execute", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
+  app.post("/api/ai-enhanced/ask-and-execute", requireAIEnhancedAPIKey, requireAdmin, async (req: Request, res: Response) => {
     try {
       const { 
         question, 
@@ -465,6 +500,7 @@ export function registerEnhancedAIRoutes(app: Express) {
         executeQuery = true, 
         limit = 1000 
       } = req.body;
+      const safeLimit = normalizeQueryLimit(limit);
 
       if (!question || question.trim() === '') {
         return res.status(400).json({
@@ -474,9 +510,9 @@ export function registerEnhancedAIRoutes(app: Express) {
       }
 
       console.log('🔮 Enhanced AI: Ask & Execute:', {
-        question,
+        questionLength: question?.length || 0,
         executeQuery,
-        limit
+        limit: safeLimit
       });
 
       // Step 1: Analizza domanda
@@ -499,23 +535,9 @@ export function registerEnhancedAIRoutes(app: Express) {
         
         if (validation.valid) {
           
-          // Audit logging with FULL query
-          console.log('🔮 AI Generated Query (ORIGINAL):', aiResponse.sqlQuery);
+          const finalQuery = prepareSafeQuery(aiResponse.sqlQuery, safeLimit);
           
-          let finalQuery = aiResponse.sqlQuery.trim();
-          const queryLower = finalQuery.toLowerCase();
-          
-          // Smart LIMIT handling: only add if not present anywhere in query
-          if (!queryLower.includes('limit')) {
-            // Rimuovi punto e virgola finale se presente
-            finalQuery = finalQuery.replace(/;[\s]*$/, '').trim();
-            // Aggiungi LIMIT prima del punto e virgola
-            finalQuery += ` LIMIT ${limit};`;
-          } else {
-            console.log('⚠️ Query already contains LIMIT clause - using as-is');
-          }
-          
-          console.log('🔮 AI Ask&Execute Final Query:', finalQuery);
+          console.log('🔮 AI Ask&Execute query validata', { queryLength: finalQuery.length });
 
           queryResult = await executeAndAnalyzeQuery(
             finalQuery, 
@@ -576,8 +598,8 @@ export function registerEnhancedAIRoutes(app: Express) {
       conversation.addMessage('user', question);
 
       console.log('💬 Conversation:', {
-        sessionId,
-        question,
+        sessionIdLength: sessionId.length,
+        questionLength: question.length,
         historyLength: conversation.getMessages().length
       });
 
@@ -644,9 +666,9 @@ export function registerEnhancedAIRoutes(app: Express) {
     try {
       const { category } = req.query;
 
-      let tables = DATABASE_METADATA;
+      let tables = getSafeAIMetadata();
       if (category) {
-        tables = getTablesByCategory(category as string);
+        tables = tables.filter(table => table.category === category);
       }
 
       res.json({
@@ -677,7 +699,9 @@ export function registerEnhancedAIRoutes(app: Express) {
   app.get("/api/ai-enhanced/tables/:tableName", requireAIEnhancedAPIKey, async (req: Request, res: Response) => {
     try {
       const { tableName } = req.params;
-      const table = getTableMetadata(tableName);
+      const table = getSafeAIMetadata().find(
+        candidate => candidate.name.toLowerCase() === tableName.toLowerCase()
+      );
 
       if (!table) {
         return res.status(404).json({
