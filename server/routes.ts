@@ -150,6 +150,8 @@ import {
 } from "./services/basket-lot-composition.service";
 
 export async function registerRoutes(app: Express, existingServer?: Server): Promise<Server> {
+  const authModule = await import('./modules/system/auth');
+
   // Pagina cliente pubblica, in sola lettura e protetta da token cifrato.
   const traceabilityModule = await import('./modules/public-traceability/public-traceability.routes');
   app.use('/tracciabilita', traceabilityModule.publicTraceabilityRoutes);
@@ -165,7 +167,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
   // Registra il modulo OPERATIONS
   const operationsModule = await import('./modules/operations/operations');
-  app.use('/api/operations', operationsModule.operationsRoutes);
+  app.use('/api/operations', authModule.requireAuth, operationsModule.operationsRoutes);
   console.log('✅ Modulo OPERATIONS registrato su /api/operations');
 
   // Registra il modulo CYCLES
@@ -203,7 +205,6 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   console.log('✅ Modulo TASKS registrato su /api/tasks*, /api/operators*, /api/selections/:id/tasks');
 
   // Registra il modulo AUTH
-  const authModule = await import('./modules/system/auth');
   app.use('/api', authModule.authRoutes);
   console.log('✅ Modulo AUTH registrato su /api/login, /api/logout, /api/register, /api/users/current');
 
@@ -296,7 +297,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
 
   // Registra il modulo DATABASE
   const databaseModule = await import('./modules/system/database');
-  app.use('/api/database', databaseModule.databaseRoutes);
+  app.use('/api/database', authModule.requireAdmin, databaseModule.databaseRoutes);
   console.log('✅ Modulo DATABASE registrato su /api/database/*');
 
   // Registra il modulo DIARIO

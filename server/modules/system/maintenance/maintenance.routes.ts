@@ -16,6 +16,7 @@ import {
   handleBasketLotCompositionOnUpdate 
 } from "../../../services/basket-lot-composition.service";
 import { storage } from "../../../storage";
+import { requireAdmin } from "../auth/auth.middleware";
 
 export const maintenanceRoutes = Router();
 
@@ -23,7 +24,7 @@ export const maintenanceRoutes = Router();
  * WORKAROUND: GET endpoint per aggiornare operazioni 
  * (quando i metodi POST/PATCH non funzionano da client specifici)
  */
-maintenanceRoutes.get('/operations/:id/update', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/operations/:id/update', requireAdmin, async (req: Request, res: Response) => {
   try {
     const operationId = parseInt(req.params.id);
     console.log(`📝 WORKAROUND GET UPDATE per operazione ${operationId}:`, req.query);
@@ -76,7 +77,7 @@ maintenanceRoutes.get('/operations/:id/update', async (req: Request, res: Respon
  * Route di test per verificare il routing e debugging
  * Solo per ambiente di sviluppo
  */
-maintenanceRoutes.get('/test-delete/:id', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/test-delete/:id', requireAdmin, async (req: Request, res: Response) => {
   console.log("🧪🧪🧪 TEST ROUTE CHIAMATA! 🧪🧪🧪");
   const id = req.params.id;
   console.log(`🧪 TEST: ID ricevuto: ${id}`);
@@ -92,7 +93,7 @@ maintenanceRoutes.get('/test-delete/:id', async (req: Request, res: Response) =>
  * Endpoint per generare uno snapshot completo del database
  * Utile per debugging e test di vagliatura
  */
-maintenanceRoutes.get('/database-snapshot', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/database-snapshot', requireAdmin, async (req: Request, res: Response) => {
   try {
     console.log('📊 Generazione snapshot database...');
     
@@ -275,7 +276,7 @@ maintenanceRoutes.get('/database-snapshot', async (req: Request, res: Response) 
 /**
  * Route per invalidare manualmente la cache delle operazioni
  */
-maintenanceRoutes.get('/operations-cache-clear', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/operations-cache-clear', requireAdmin, async (req: Request, res: Response) => {
   try {
     console.log('🗑️ Pulizia cache operazioni richiesta...');
     
@@ -298,7 +299,7 @@ maintenanceRoutes.get('/operations-cache-clear', async (req: Request, res: Respo
  * Route di emergenza per eliminazione diretta
  * ATTENZIONE: Usare solo in caso di emergenza!
  */
-maintenanceRoutes.delete('/emergency-delete/:id', async (req: Request, res: Response) => {
+maintenanceRoutes.delete('/emergency-delete/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     console.log(`🚨 EMERGENZA: Richiesta eliminazione diretta operazione ${id}`);
@@ -345,7 +346,7 @@ maintenanceRoutes.delete('/emergency-delete/:id', async (req: Request, res: Resp
 /**
  * Route per eseguire manualmente il controllo di integrità del database
  */
-maintenanceRoutes.get('/integrity-check', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/integrity-check', requireAdmin, async (req: Request, res: Response) => {
   try {
     console.log('🔍 Controllo integrità manuale richiesto...');
     
@@ -366,7 +367,7 @@ maintenanceRoutes.get('/integrity-check', async (req: Request, res: Response) =>
 /**
  * Route per visualizzare l'ultimo risultato del controllo di integrità
  */
-maintenanceRoutes.get('/integrity-check/last', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/integrity-check/last', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { getLastCheckResult } = await import("../../../services/nightly-integrity-check.service");
     const result = getLastCheckResult();
@@ -388,7 +389,7 @@ maintenanceRoutes.get('/integrity-check/last', async (req: Request, res: Respons
 /**
  * Route per visualizzare gli audit logs
  */
-maintenanceRoutes.get('/audit-logs', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/audit-logs', requireAdmin, async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     const { getRecentAuditLogs } = await import("../../../services/audit-log.service");
@@ -407,7 +408,7 @@ maintenanceRoutes.get('/audit-logs', async (req: Request, res: Response) => {
 /**
  * Route per visualizzare gli audit logs di un'entità specifica
  */
-maintenanceRoutes.get('/audit-logs/:entityType/:entityId', async (req: Request, res: Response) => {
+maintenanceRoutes.get('/audit-logs/:entityType/:entityId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { entityType, entityId } = req.params;
     const { getAuditLogsForEntity } = await import("../../../services/audit-log.service");

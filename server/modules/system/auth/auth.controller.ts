@@ -34,6 +34,11 @@ export class AuthController {
         
         const userResponse = authService.sanitizeUser(validatedUser);
 
+        // Rigenera l'identificativo per impedire il riuso di una sessione pre-login.
+        await new Promise<void>((resolve, reject) => {
+          req.session.regenerate((error) => error ? reject(error) : resolve());
+        });
+
         // Crea la sessione server-side
         req.session.user = {
           id: validatedUser.id,
@@ -72,7 +77,9 @@ export class AuthController {
    */
   async logout(req: Request, res: Response) {
     try {
-      req.session?.destroy(() => {});
+      await new Promise<void>((resolve, reject) => {
+        req.session.destroy((error) => error ? reject(error) : resolve());
+      });
       res.clearCookie('flupsy.sid');
       return res.status(200).json({
         success: true,
@@ -102,9 +109,11 @@ export class AuthController {
           errors: validationResult.error.errors
         });
       }
+
+      const userData = validationResult.data;
       
       // Check if user already exists
-      const existingUser = await authService.getUserByUsername(req.body.username);
+      const existingUser = await authService.getUserByUsername(userData.username);
       if (existingUser) {
         return res.status(409).json({
           success: false,
@@ -113,7 +122,7 @@ export class AuthController {
       }
       
       // Create new user
-      const newUser = await authService.createUser(req.body);
+      const newUser = await authService.createUser(userData);
       
       const userResponse = authService.sanitizeUser(newUser);
       
@@ -168,6 +177,13 @@ export class AuthController {
         return res.status(400).json({
           success: false,
           message: "ID utente non valido"
+        });
+      }
+
+      if (req.session?.user?.id !== userIdNum) {
+        return res.status(403).json({
+          success: false,
+          message: "Puoi modificare soltanto la password del tuo account"
         });
       }
 

@@ -11,6 +11,7 @@ import {
 import { storage } from "../../../storage";
 import path from "path";
 import fs from "fs";
+import { requireAdmin } from "../auth/auth.middleware";
 
 export const databaseManagementRoutes = Router();
 
@@ -18,7 +19,7 @@ export const databaseManagementRoutes = Router();
  * Endpoint per l'esportazione delle giacenze
  * Esporta i dati in formato JSON strutturato
  */
-databaseManagementRoutes.get('/export/giacenze', async (req: Request, res: Response) => {
+databaseManagementRoutes.get('/export/giacenze', requireAdmin, async (req: Request, res: Response) => {
   try {
     // Importa il servizio di esportazione on-demand
     const { generateExportGiacenze } = await import("../../../export-service");
@@ -54,7 +55,7 @@ databaseManagementRoutes.get('/export/giacenze', async (req: Request, res: Respo
  * Crea un nuovo backup del database
  * Salva lo stato corrente del database in un file SQL
  */
-databaseManagementRoutes.post('/database/backup', async (req: Request, res: Response) => {
+databaseManagementRoutes.post('/database/backup', requireAdmin, async (req: Request, res: Response) => {
   try {
     console.log('🗄️ Creazione backup database in corso...');
     
@@ -78,7 +79,7 @@ databaseManagementRoutes.post('/database/backup', async (req: Request, res: Resp
  * Ottiene la lista dei backup disponibili
  * Mostra tutti i backup salvati con relativi dettagli
  */
-databaseManagementRoutes.get('/database/backups', (req: Request, res: Response) => {
+databaseManagementRoutes.get('/database/backups', requireAdmin, (req: Request, res: Response) => {
   try {
     console.log('📋 Recupero lista backup disponibili...');
     
@@ -98,7 +99,7 @@ databaseManagementRoutes.get('/database/backups', (req: Request, res: Response) 
  * Ripristina il database da un backup esistente
  * @param backupId - ID univoco del backup da ripristinare
  */
-databaseManagementRoutes.post('/database/restore/:backupId', async (req: Request, res: Response) => {
+databaseManagementRoutes.post('/database/restore/:backupId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const backupId = req.params.backupId;
     console.log(`🔄 Richiesta ripristino backup con ID: ${backupId}`);
@@ -144,7 +145,7 @@ databaseManagementRoutes.post('/database/restore/:backupId', async (req: Request
  * Ripristina il database da un file SQL caricato
  * Accetta contenuto SQL in formato base64
  */
-databaseManagementRoutes.post('/database/restore', async (req: Request, res: Response) => {
+databaseManagementRoutes.post('/database/restore', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { sqlContent, fileName } = req.body;
     
