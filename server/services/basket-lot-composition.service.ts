@@ -7,15 +7,15 @@
  * Gestisce l'impatto dell'eliminazione di un'operazione sulla composizione lotti misti
  * @param operation - L'operazione che sta per essere eliminata
  */
-export async function handleBasketLotCompositionOnDelete(operation: any) {
-  try {
+export async function handleBasketLotCompositionOnDelete(operation: any, executor?: any) {
     console.log(`🎯 Verifica impatto eliminazione operazione ${operation.id} su lotti misti del cestello ${operation.basketId}`);
     
     const { db } = await import("../db");
     const { sql } = await import("drizzle-orm");
+    const database = executor ?? db;
     
     // Verifica se il cestello ha una composizione mista
-    const composition = await db.execute(sql`
+    const composition = await database.execute(sql`
       SELECT COUNT(*) as count FROM basket_lot_composition 
       WHERE basket_id = ${operation.basketId}
     `);
@@ -30,7 +30,7 @@ export async function handleBasketLotCompositionOnDelete(operation: any) {
           console.log(`🎯 Operazione critica per lotti misti - ricalcolo composizione`);
           
           // Verifica se ci sono altre operazioni che mantengono il lotto misto
-          const otherMixedOps = await db.execute(sql`
+      const otherMixedOps = await database.execute(sql`
             SELECT COUNT(*) as count FROM operations o
             WHERE o.basket_id = ${operation.basketId} 
             AND o.id != ${operation.id}
@@ -39,16 +39,13 @@ export async function handleBasketLotCompositionOnDelete(operation: any) {
           
           if (otherMixedOps[0]?.count === 0) {
             console.log(`🎯 Nessun'altra operazione mantiene il lotto misto - eliminazione composizione`);
-            await db.execute(sql`
+            await database.execute(sql`
               DELETE FROM basket_lot_composition WHERE basket_id = ${operation.basketId}
             `);
           }
         }
       }
     }
-  } catch (error) {
-    console.error('❌ Errore gestione composizione lotti misti su eliminazione:', error);
-  }
 }
 
 /**

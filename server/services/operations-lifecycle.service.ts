@@ -32,7 +32,8 @@ import { OperationsCache } from '../operations-cache-service.js';
 import { BasketsCache } from '../baskets-cache-service.js';
 import { positionCache } from '../position-cache-service.js';
 import { handleBasketLotCompositionOnDelete } from './basket-lot-composition.service.js';
-import { logOperationDeleted, logBasketStateChanged, logCycleClosed } from './audit-log.service.js';
+import { logOperationDeletedIfAvailable } from './audit-log.service.js';
+import { runAtomicDeletion } from './atomic-deletion.js';
 
 interface DeleteOperationResult {
   success: boolean;
@@ -51,7 +52,30 @@ interface SetBasketCycleStateParams {
   state: 'available' | 'active' | 'cessated';
 }
 
-class OperationsLifecycleService {
+interface OperationsLifecycleDependencies {
+  handleCompositionDelete: typeof handleBasketLotCompositionOnDelete;
+  logDeleted: typeof logOperationDeletedIfAvailable;
+  afterCommit?: (
+    service: OperationsLifecycleService,
+    operation: typeof operations.$inferSelect,
+    cascade?: { cycleId: number; basketId: number }
+  ) => void | Promise<void>;
+}
+
+const defaultDependencies: OperationsLifecycleDependencies = {
+  handleCompositionDelete: handleBasketLotCompositionOnDelete,
+  logDeleted: logOperationDeletedIfAvailable
+};
+
+export class OperationsLifecycleService {
+  private readonly dependencies: OperationsLifecycleDependencies;
+
+  constructor(
+    private readonly database: any = db,
+    dependencies: Partial<OperationsLifecycleDependencies> = {}
+  ) {
+    this.dependencies = { ...defaultDependencies, ...dependencies };
+  }
   
   /**
    * METODO PRINCIPALE: Elimina un'operazione con TUTTE le pulizie necessarie
@@ -73,57 +97,55 @@ class OperationsLifecycleService {
     try {
       console.log(`🔄 [LIFECYCLE] Inizio eliminazione operazione ${operationId}`);
 
-      // 1. Recupera i dettagli dell'operazione
-      const [operation] = await db
-        .select()
-        .from(operations)
-        .where(eq(operations.id, operationId));
+      let committedOperation: typeof operations.$inferSelect | undefined;
+      let cascadeNotification: { cycleId: number; basketId: number } | undefined;
 
-      if (!operation) {
-        console.log(`❌ [LIFECYCLE] Operazione ${operationId} non trovata`);
-        result.errors.push(`Operazione ${operationId} non trovata`);
-        return result;
-      }
+      await runAtomicDeletion(this.database, async (tx) => {
+        // Lettura e tutte le scritture condividono la stessa transazione.
+        const [operation] = await tx
+          .select()
+          .from(operations)
+          .where(eq(operations.id, operationId));
 
-      result.operationType = operation.type;
-      console.log(`📋 [LIFECYCLE] Operazione trovata: tipo=${operation.type}, basketId=${operation.basketId}, cycleId=${operation.cycleId}`);
+        if (!operation) {
+          throw new Error(`Operazione ${operationId} non trovata`);
+        }
 
-      // 2. Verifica se è una prima-attivazione (richiede cascade completo)
-      if (operation.type === 'prima-attivazione' && operation.cycleId) {
-        console.log(`🔗 [LIFECYCLE] Prima-attivazione rilevata - avvio cascade completo`);
-        return await this.deletePrimaAttivazioneWithCascade(operation, result);
-      }
+        committedOperation = operation;
+        result.operationType = operation.type;
+        console.log(`📋 [LIFECYCLE] Operazione trovata: tipo=${operation.type}, basketId=${operation.basketId}, cycleId=${operation.cycleId}`);
 
-      // 3. Per operazioni normali:
-      // 3a. PRIMA gestisci la composizione lotti misti (CRITICO - deve essere fatto PRIMA della delete)
-      console.log(`🎯 [LIFECYCLE] Gestione composizione lotti misti per operazione ${operationId}`);
-      await handleBasketLotCompositionOnDelete(operation);
-      result.cleanedTables.push('basket_lot_composition (checked)');
+        if (operation.type === 'prima-attivazione' && operation.cycleId) {
+          console.log(`🔗 [LIFECYCLE] Prima-attivazione rilevata - avvio cascade completo`);
+          await this.deletePrimaAttivazioneWithCascade(tx, operation, result);
+          cascadeNotification = { cycleId: operation.cycleId, basketId: operation.basketId };
+          return;
+        }
 
-      // 3b. Elimina operation_impacts associati
-      try {
-        await db.execute(sql`DELETE FROM operation_impacts WHERE operation_id = ${operationId}`);
-        result.cleanedTables.push('operation_impacts');
-      } catch (e) {
-        console.log(`⚠️ [LIFECYCLE] Nessun operation_impacts per operazione ${operationId}`);
-      }
-
-      // 3c. Elimina l'operazione
-      console.log(`🗑️ [LIFECYCLE] Eliminazione operazione normale ${operationId}`);
-      await db.delete(operations).where(eq(operations.id, operationId));
-      result.cleanedTables.push('operations');
-
-      // 3d. Registra nel log di audit
-      await logOperationDeleted(operationId, operation, {
-        cascadeType: 'normal',
-        cleanedTables: result.cleanedTables
+        await this.dependencies.handleCompositionDelete(operation, tx);
+        result.cleanedTables.push('basket_lot_composition (checked)');
+        await tx.delete(operations).where(eq(operations.id, operationId));
+        result.cleanedTables.push('operations');
+        await this.dependencies.logDeleted(operationId, operation, {
+          cascadeType: 'normal',
+          cleanedTables: result.cleanedTables
+        }, tx);
+      }, () => {
+        // Effetti esterni esclusivamente dopo la risoluzione (commit) della transazione.
+        if (this.dependencies.afterCommit) {
+          return this.dependencies.afterCommit(
+            this,
+            committedOperation!,
+            cascadeNotification
+          );
+        }
+        this.invalidateAllCaches();
+        if (cascadeNotification) {
+          this.broadcastCascadeDelete(committedOperation!, cascadeNotification.cycleId, cascadeNotification.basketId);
+        } else {
+          this.broadcastOperationDeleted(committedOperation!);
+        }
       });
-
-      // 4. Invalida cache
-      this.invalidateAllCaches();
-
-      // 5. Invia notifiche WebSocket
-      this.broadcastOperationDeleted(operation);
 
       result.success = true;
       console.log(`✅ [LIFECYCLE] Operazione ${operationId} eliminata con successo`);
@@ -133,6 +155,10 @@ class OperationsLifecycleService {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(`❌ [LIFECYCLE] Errore durante eliminazione: ${errorMsg}`);
+      // La transazione è stata annullata: nessuna pulizia può essere dichiarata completata.
+      result.cleanedTables = [];
+      result.cycleDeleted = null;
+      result.basketReset = null;
       result.errors.push(errorMsg);
       return result;
     }
@@ -146,60 +172,48 @@ class OperationsLifecycleService {
    * - Reset del cestello
    */
   private async deletePrimaAttivazioneWithCascade(
+    tx: any,
     operation: typeof operations.$inferSelect,
     result: DeleteOperationResult
-  ): Promise<DeleteOperationResult> {
+  ): Promise<void> {
     
     const cycleId = operation.cycleId!;
     const basketId = operation.basketId;
 
     console.log(`🔗 [LIFECYCLE] CASCADE per ciclo ${cycleId}, cestello ${basketId}`);
 
-    try {
       // FASE 1: Recupera tutte le operazioni del ciclo PRIMA di eliminarle
       // (necessario per poter pulire le tabelle dipendenti)
-      const cycleOperations = await db
+      const cycleOperations = await tx
         .select()
         .from(operations)
         .where(eq(operations.cycleId, cycleId));
 
       console.log(`📝 [LIFECYCLE] Trovate ${cycleOperations.length} operazioni nel ciclo ${cycleId}`);
-      const operationIds = cycleOperations.map(op => op.id);
 
       // FASE 1a: Gestisci composizione lotti misti per TUTTE le operazioni (CRITICO - prima della delete)
       for (const op of cycleOperations) {
-        await handleBasketLotCompositionOnDelete(op);
+        await this.dependencies.handleCompositionDelete(op, tx);
       }
       result.cleanedTables.push('basket_lot_composition (checked for all ops)');
 
-      // FASE 2: Pulisci operation_impacts PRIMA di eliminare le operazioni
-      // (usa gli ID pre-fetchati perché dopo la delete non li troveremmo)
-      if (operationIds.length > 0) {
-        try {
-          await db.execute(sql`DELETE FROM operation_impacts WHERE operation_id IN (${sql.join(operationIds.map(id => sql`${id}`), sql`, `)})`);
-          result.cleanedTables.push('operation_impacts');
-        } catch (e) {
-          console.log(`⚠️ [LIFECYCLE] Nessun operation_impacts per le operazioni del ciclo`);
-        }
-      }
-
       // FASE 3: Pulisci tutte le altre tabelle correlate al ciclo
-      await this.cleanupCycleRelatedTables(cycleId, result);
+      await this.cleanupCycleRelatedTables(tx, cycleId, result);
 
       // FASE 4: ORA elimina tutte le operazioni del ciclo
       for (const op of cycleOperations) {
-        await db.delete(operations).where(eq(operations.id, op.id));
+        await tx.delete(operations).where(eq(operations.id, op.id));
       }
       result.cleanedTables.push(`operations (${cycleOperations.length} record)`);
 
       // FASE 3: Elimina il ciclo
-      await db.delete(cycles).where(eq(cycles.id, cycleId));
+      await tx.delete(cycles).where(eq(cycles.id, cycleId));
       result.cleanedTables.push('cycles');
       result.cycleDeleted = cycleId;
       console.log(`🗑️ [LIFECYCLE] Ciclo ${cycleId} eliminato`);
 
       // FASE 4: Reset del cestello (CRITICO - usa il metodo unificato)
-      await this.setBasketCycleState({
+      await this.setBasketCycleStateWithExecutor(tx, {
         basketId,
         currentCycleId: null,
         cycleCode: null,
@@ -210,171 +224,95 @@ class OperationsLifecycleService {
       console.log(`🔄 [LIFECYCLE] Cestello ${basketId} resettato a disponibile`);
 
       // FASE 4b: Registra nel log di audit (cascade)
-      await logOperationDeleted(operation.id, operation, {
+      await this.dependencies.logDeleted(operation.id, operation, {
         cascadeType: 'prima-attivazione',
         cycleId,
         basketId,
         operationsDeleted: cycleOperations.length,
         cleanedTables: result.cleanedTables
-      });
-
-      // FASE 5: Invalida cache
-      this.invalidateAllCaches();
-
-      // FASE 6: Invia notifiche WebSocket
-      this.broadcastCascadeDelete(operation, cycleId, basketId);
-
-      result.success = true;
-      console.log(`✅ [LIFECYCLE] CASCADE completato per prima-attivazione ${operation.id}`);
-
-      return result;
-
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`❌ [LIFECYCLE] Errore durante CASCADE: ${errorMsg}`);
-      result.errors.push(errorMsg);
-      return result;
-    }
+      }, tx);
+      console.log(`✅ [LIFECYCLE] CASCADE DB completato per prima-attivazione ${operation.id}`);
   }
 
   /**
    * Pulisce tutte le tabelle correlate a un ciclo
    */
-  private async cleanupCycleRelatedTables(cycleId: number, result: DeleteOperationResult): Promise<void> {
+  private async cleanupCycleRelatedTables(tx: any, cycleId: number, result: DeleteOperationResult): Promise<void> {
     
-    // 1. operation_impacts
-    try {
-      await db.execute(sql`
-        DELETE FROM operation_impacts 
-        WHERE operation_id IN (SELECT id FROM operations WHERE cycle_id = ${cycleId})
-      `);
-      result.cleanedTables.push('operation_impacts');
-    } catch (e) {
-      console.log(`⚠️ [LIFECYCLE] Tabella operation_impacts non presente o vuota`);
-    }
-
-    // 2. basket_lot_composition
-    try {
-      const deleted = await db.delete(basketLotComposition)
+    // 1. basket_lot_composition
+      const deletedCompositions = await tx.delete(basketLotComposition)
         .where(eq(basketLotComposition.cycleId, cycleId))
         .returning({ id: basketLotComposition.id });
-      if (deleted.length > 0) {
-        result.cleanedTables.push(`basket_lot_composition (${deleted.length})`);
+      if (deletedCompositions.length > 0) {
+        result.cleanedTables.push(`basket_lot_composition (${deletedCompositions.length})`);
       }
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia basket_lot_composition:`, e);
-    }
 
-    // 3. cycle_impacts (usa SQL raw - tabella potrebbe non esistere)
-    try {
-      await db.execute(sql`DELETE FROM cycle_impacts WHERE cycle_id = ${cycleId}`);
-      result.cleanedTables.push('cycle_impacts');
-    } catch (e) {
-      // Tabella potrebbe non esistere, ignora silenziosamente
-    }
-
-    // 4. lot_ledger (SET NULL per preservare storico)
-    try {
-      await db.update(lotLedger)
+    // 3. lot_ledger (SET NULL per preservare storico)
+      await tx.update(lotLedger)
         .set({ sourceCycleId: null })
         .where(eq(lotLedger.sourceCycleId, cycleId));
-      await db.update(lotLedger)
+      await tx.update(lotLedger)
         .set({ destCycleId: null })
         .where(eq(lotLedger.destCycleId, cycleId));
       result.cleanedTables.push('lot_ledger (nullified refs)');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia lot_ledger:`, e);
-    }
 
     // 5. screening_source_baskets
-    try {
-      await db.update(screeningSourceBaskets)
+      await tx.update(screeningSourceBaskets)
         .set({ cycleId: null })
         .where(eq(screeningSourceBaskets.cycleId, cycleId));
       result.cleanedTables.push('screening_source_baskets');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia screening_source_baskets:`, e);
-    }
 
     // 6. screening_destination_baskets
-    try {
-      await db.update(screeningDestinationBaskets)
+      await tx.update(screeningDestinationBaskets)
         .set({ cycleId: null })
         .where(eq(screeningDestinationBaskets.cycleId, cycleId));
       result.cleanedTables.push('screening_destination_baskets');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia screening_destination_baskets:`, e);
-    }
 
     // 7. screening_basket_history
-    try {
-      await db.update(screeningBasketHistory)
+      await tx.update(screeningBasketHistory)
         .set({ sourceCycleId: null })
         .where(eq(screeningBasketHistory.sourceCycleId, cycleId));
-      await db.update(screeningBasketHistory)
+      await tx.update(screeningBasketHistory)
         .set({ destinationCycleId: null })
         .where(eq(screeningBasketHistory.destinationCycleId, cycleId));
       result.cleanedTables.push('screening_basket_history');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia screening_basket_history:`, e);
-    }
 
     // 8. screening_lot_references
-    try {
-      await db.update(screeningLotReferences)
+      await tx.update(screeningLotReferences)
         .set({ destinationCycleId: null })
         .where(eq(screeningLotReferences.destinationCycleId, cycleId));
       result.cleanedTables.push('screening_lot_references');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia screening_lot_references:`, e);
-    }
 
     // 9. selection_source_baskets (cycle_id è NOT NULL → elimina le righe invece di nullificare)
-    try {
-      const deleted = await db.delete(selectionSourceBaskets)
+      const deletedSelectionSources = await tx.delete(selectionSourceBaskets)
         .where(eq(selectionSourceBaskets.cycleId, cycleId))
         .returning({ id: selectionSourceBaskets.id });
-      if (deleted.length > 0) {
-        result.cleanedTables.push(`selection_source_baskets (${deleted.length} eliminati)`);
+      if (deletedSelectionSources.length > 0) {
+        result.cleanedTables.push(`selection_source_baskets (${deletedSelectionSources.length} eliminati)`);
       } else {
         result.cleanedTables.push('selection_source_baskets (nessun record)');
       }
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia selection_source_baskets:`, e);
-    }
 
     // 10. selection_destination_baskets
-    try {
-      await db.update(selectionDestinationBaskets)
+      await tx.update(selectionDestinationBaskets)
         .set({ cycleId: null })
         .where(eq(selectionDestinationBaskets.cycleId, cycleId));
       result.cleanedTables.push('selection_destination_baskets');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia selection_destination_baskets:`, e);
-    }
 
     // 11. selection_basket_history
-    try {
-      await db.update(selectionBasketHistory)
+      await tx.update(selectionBasketHistory)
         .set({ sourceCycleId: null })
         .where(eq(selectionBasketHistory.sourceCycleId, cycleId));
-      await db.update(selectionBasketHistory)
+      await tx.update(selectionBasketHistory)
         .set({ destinationCycleId: null })
         .where(eq(selectionBasketHistory.destinationCycleId, cycleId));
       result.cleanedTables.push('selection_basket_history');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia selection_basket_history:`, e);
-    }
 
     // 12. selection_lot_references
-    try {
-      await db.update(selectionLotReferences)
+      await tx.update(selectionLotReferences)
         .set({ destinationCycleId: null })
         .where(eq(selectionLotReferences.destinationCycleId, cycleId));
       result.cleanedTables.push('selection_lot_references');
-    } catch (e) {
-      console.warn(`⚠️ [LIFECYCLE] Errore pulizia selection_lot_references:`, e);
-    }
 
     console.log(`🧹 [LIFECYCLE] Pulizia tabelle correlate completata per ciclo ${cycleId}`);
   }
@@ -390,6 +328,10 @@ class OperationsLifecycleService {
    * Questo previene disallineamenti causati da aggiornamenti parziali.
    */
   async setBasketCycleState(params: SetBasketCycleStateParams): Promise<void> {
+    return this.setBasketCycleStateWithExecutor(db, params);
+  }
+
+  private async setBasketCycleStateWithExecutor(executor: any, params: SetBasketCycleStateParams): Promise<void> {
     const { basketId, currentCycleId, cycleCode, state } = params;
 
     console.log(`🔄 [LIFECYCLE] setBasketCycleState - basketId=${basketId}, cycleId=${currentCycleId}, code=${cycleCode}, state=${state}`);
@@ -407,7 +349,7 @@ class OperationsLifecycleService {
       updateData.groupId = null;
     }
 
-    await db.update(baskets)
+    await executor.update(baskets)
       .set(updateData)
       .where(eq(baskets.id, basketId));
 

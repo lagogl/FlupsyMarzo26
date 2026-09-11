@@ -49,9 +49,9 @@ export interface AuditLogEntry {
 /**
  * Registra un evento nell'audit log
  */
-export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
+export async function logAuditEvent(entry: AuditLogEntry, executor: any = db, failOnError = false): Promise<void> {
   try {
-    await db.execute(sql`
+    await executor.execute(sql`
       INSERT INTO audit_logs (
         action, 
         entity_type, 
@@ -78,6 +78,9 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
     `);
   } catch (error) {
     console.error('⚠️ Errore durante la scrittura audit log:', error);
+    if (failOnError) {
+      throw error;
+    }
   }
 }
 
@@ -87,7 +90,9 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
 export async function logOperationDeleted(
   operationId: number,
   operation: any,
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
+  executor: any = db,
+  failOnError = false
 ): Promise<void> {
   await logAuditEvent({
     action: 'operation_deleted',
@@ -104,7 +109,28 @@ export async function logOperationDeleted(
       ...metadata,
       deletedAt: new Date().toISOString()
     }
-  });
+  }, executor, failOnError);
+}
+
+/**
+ * Alcune installazioni precedenti non hanno la tabella audit_logs.
+ * Se la tabella esiste, la scrittura resta obbligatoria e partecipa alla
+ * transazione chiamante; se non esiste, non viene eseguito SQL invalidante.
+ */
+export async function logOperationDeletedIfAvailable(
+  operationId: number,
+  operation: any,
+  metadata?: Record<string, any>,
+  executor: any = db
+): Promise<void> {
+  const lookup = await executor.execute(sql`
+    SELECT to_regclass('public.audit_logs') AS relation
+  `);
+  const row = lookup?.rows?.[0] ?? lookup?.[0];
+  if (!row?.relation) {
+    return;
+  }
+  await logOperationDeleted(operationId, operation, metadata, executor, true);
 }
 
 /**
