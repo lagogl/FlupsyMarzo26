@@ -6,7 +6,8 @@ import { operations, flupsys, baskets } from '../shared/schema';
 import { sql } from 'drizzle-orm';
 
 /**
- * Funzione che testa la connessione e le operazioni di base sul database
+ * Verifica la connessione e l'accesso alle tabelle usando esclusivamente query
+ * read-only, così la diagnostica è sicura anche se il processo si interrompe.
  */
 export async function testDatabaseConnection() {
   console.log("===== AVVIO TEST DIAGNOSTICI DATABASE =====");
@@ -33,31 +34,6 @@ export async function testDatabaseConnection() {
     
     const operationsCount = await db.select({ count: sql`count(*)` }).from(operations);
     console.log(`- Tabella operations: ${operationsCount[0].count} righe`);
-    
-    // 4. Test Inserimento e Cancellazione
-    console.log("Test 4: Test di inserimento e cancellazione...");
-    
-    // Inserimento di un record di test
-    console.log("Tentativo inserimento record di test...");
-    const testData = {
-      name: `test-flupsy-${Date.now()}`,
-      location: "TEST-LOCATION",
-      description: "Record di test per diagnostica",
-      active: true
-    };
-    
-    const insertResult = await db.insert(flupsys).values(testData).returning();
-    console.log("Risultato inserimento:", insertResult);
-    
-    if (insertResult && insertResult.length > 0) {
-      const testId = insertResult[0].id;
-      console.log(`Record di test inserito con ID: ${testId}`);
-      
-      // Cancellazione del record di test
-      console.log("Tentativo cancellazione record di test...");
-      const deleteResult = await db.delete(flupsys).where(sql`id = ${testId}`).returning();
-      console.log("Risultato cancellazione:", deleteResult);
-    }
     
     console.log("===== DIAGNOSTICA DATABASE COMPLETATA CON SUCCESSO =====");
     return true;
