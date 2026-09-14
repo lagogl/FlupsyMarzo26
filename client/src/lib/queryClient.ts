@@ -95,20 +95,27 @@ export async function apiRequest<T = any>(
     if (!res.ok) {
       // Se la risposta non è OK, lancia un errore con i dati JSON se possibile
       const text = await res.text();
-      const error = new Error(`${res.status}: ${res.statusText || 'Request failed'}`);
+      let responseMessage = '';
+      let responseData: unknown;
       
       // Aggiungi proprietà personalizzate all'errore per un migliore handling
       try {
         if (text && text.trim().startsWith('{')) {
           const jsonData = JSON.parse(text);
-          // @ts-ignore - Aggiungiamo proprietà personalizzate all'oggetto Error
-          error.data = jsonData;
-          // @ts-ignore - Aggiungiamo il messaggio come proprietà autonoma
-          error.responseMessage = jsonData.message || '';
+          responseData = jsonData;
+          responseMessage = jsonData.error || jsonData.message || '';
         }
       } catch (e) {
         console.warn('Failed to parse error response as JSON:', e);
       }
+
+      const error = new Error(
+        responseMessage || `${res.status}: ${res.statusText || 'Request failed'}`
+      );
+      // @ts-ignore - Aggiungiamo proprietà personalizzate all'oggetto Error
+      error.data = responseData;
+      // @ts-ignore - Aggiungiamo il messaggio come proprietà autonoma
+      error.responseMessage = responseMessage;
       
       throw error;
     }
