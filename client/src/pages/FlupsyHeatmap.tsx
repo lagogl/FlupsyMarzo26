@@ -582,7 +582,9 @@ export default function FlupsyHeatmap() {
           </div>
 
           <div className="flex flex-wrap gap-2 items-center">
-            {(sizes ?? []).map((size: any) => {
+            {(sizes ?? [])
+              .filter((size: any) => (animalsByLegend[size.code]?.baskets ?? 0) > 0)
+              .map((size: any) => {
               const { bg, text } = getSizeHexColor(size.code);
               const stat = animalsByLegend[size.code];
               const animals = stat?.animals ?? 0;
@@ -610,7 +612,7 @@ export default function FlupsyHeatmap() {
                   </TooltipContent>
                 </Tooltip>
               );
-            })}
+              })}
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 shadow-sm">
               Vuota
             </span>
