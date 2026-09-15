@@ -123,6 +123,7 @@ interface SpreadsheetRow {
   isSubRow?: boolean;
   subRowSize?: string;
   groupKey?: string;
+  showForecastCoverage?: boolean;
 }
 
 const MONTH_SHORT_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
@@ -237,6 +238,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.forecastEvadibileTarget || 0),
+      showForecastCoverage: true,
       isSuccess: (colIdx: number) => {
         const m = mc[colIdx];
         return m ? m.budgetProduzione > 0 && m.forecastEvadibileTarget >= m.budgetProduzione : false;
@@ -1014,14 +1016,21 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                   >
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div
-                          className={`px-2 py-2 flex items-center gap-2 ${row.isExpandable ? 'cursor-pointer' : 'cursor-help'}`}
-                          onClick={row.isExpandable ? (e) => { e.stopPropagation(); setOrdersExpanded(!ordersExpanded); } : undefined}
-                        >
+                        <div className="px-2 py-2 flex items-center gap-2 cursor-pointer">
                           {row.isExpandable ? (
-                            ordersExpanded
-                              ? <ChevronDown className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
-                              : <ChevronRight className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+                            <button
+                              type="button"
+                              className="flex-shrink-0 rounded-sm hover:bg-orange-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOrdersExpanded(!ordersExpanded);
+                              }}
+                              aria-label={ordersExpanded ? "Comprimi dettaglio ordini" : "Espandi dettaglio ordini"}
+                            >
+                              {ordersExpanded
+                                ? <ChevronDown className="w-3.5 h-3.5 text-orange-600" />
+                                : <ChevronRight className="w-3.5 h-3.5 text-orange-600" />}
+                            </button>
                           ) : row.isSubRow ? (
                             <span className="w-2.5 h-2.5 flex-shrink-0" />
                           ) : (
@@ -1057,10 +1066,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                         key={colIdx}
                         className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
                         onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleRowHeaderClick(rowIdx);
+                        }}
                       >
                         <div className={`px-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor} flex flex-col items-end ${
                           (row.isSubRow && row.subRowSize && (mc[colIdx]?.ordiniBySize?.[row.subRowSize] || 0) > 0) ||
-                          (row.isExpandable && row.groupKey === 'ordini' && (mc[colIdx]?.ordiniTotali || 0) > 0)
+                           (row.isExpandable && row.groupKey === 'ordini' && (mc[colIdx]?.ordiniTotali || 0) > 0) ||
+                           (row.showForecastCoverage && (mc[colIdx]?.budgetProduzione || 0) > 0)
                             ? 'py-1 gap-0.5' : 'py-2'}`}>
                           <div className="flex items-center justify-end gap-1">
                             {info && (
@@ -1075,6 +1089,24 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                             )}
                             <span>{displayVal}</span>
                           </div>
+                          {row.showForecastCoverage && (() => {
+                            const m = mc[colIdx];
+                            const forecast = m?.budgetProduzione || 0;
+                            if (forecast <= 0) return null;
+                            const evadibile = m?.forecastEvadibileTarget || 0;
+                            const pct = Math.min(100, Math.round(evadibile / forecast * 100));
+                            const barFill = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                            const textPct = pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
+                            const icon = pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗';
+                            return (
+                              <div className="w-full flex items-center gap-1">
+                                <div className="flex-1 h-[3px] bg-gray-200 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barFill }} />
+                                </div>
+                                <span className={`text-[10px] font-bold tabular-nums leading-none ${textPct}`} style={{ minWidth: 30, textAlign: 'right' }}>{icon} {pct}%</span>
+                              </div>
+                            );
+                          })()}
                           {row.isSubRow && row.subRowSize && (() => {
                             const m = mc[colIdx];
                             const ordered = m?.ordiniBySize?.[row.subRowSize] || 0;
