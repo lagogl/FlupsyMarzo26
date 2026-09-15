@@ -101,16 +101,7 @@ function ensureAdvancedSaleDocumentSchema() {
       `));
       await db.execute(sql.raw(`
         ALTER TABLE clienti ADD COLUMN IF NOT EXISTS codice_allevamento text;
-        ALTER TABLE clienti ADD COLUMN IF NOT EXISTS pec text;
-        ALTER TABLE clienti ADD COLUMN IF NOT EXISTS codice_destinatario text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_allevamento text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_email text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_pec text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_telefono text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_destinatario text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_fatture_in_cloud_id integer;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS oggetto text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS causale_trasporto text DEFAULT 'Vendita'
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_allevamento text
       `));
       await db.execute(sql.raw(`
         ALTER TABLE bag_allocations
