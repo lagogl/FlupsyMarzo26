@@ -61,7 +61,6 @@ import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-
 import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import basketTransferRouter from "./modules/operations/transfer/basket-transfer.routes";
 import whatsappRouter from "./modules/whatsapp/whatsapp.routes";
-import { getBasketLotComposition } from "./services/basket-lot-composition.service";
 import { determineSizeByAnimalsPerKg, toBusinessIsoDate } from "./utils/size-determination";
 import { computeMisuraAnimalCount, recomputeCycleMisure } from "./utils/misura-mortality";
 import { operationsLifecycleService } from "./services/operations-lifecycle.service";
@@ -4339,7 +4338,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       const offset = (page - 1) * pageSize;
       
       // Query base con join ai lotti per info aggiuntive
-      let query = db
+      const query = db
         .select({
           id: lotLedger.id,
           date: lotLedger.date,
@@ -4361,12 +4360,15 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         .leftJoin(lots, eq(lotLedger.lotId, lots.id));
       
       // Applica filtri
-      const conditions = [];
+      const conditions: import("drizzle-orm").SQL[] = [];
       if (lotId) {
         conditions.push(eq(lotLedger.lotId, lotId));
       }
       if (type) {
-        conditions.push(eq(lotLedger.type, type));
+        const ledgerTypes = ["in", "activation", "transfer_out", "transfer_in", "sale", "mortality"] as const;
+        if ((ledgerTypes as readonly string[]).includes(type)) {
+          conditions.push(eq(lotLedger.type, type as (typeof ledgerTypes)[number]));
+        }
       }
       if (startDate) {
         conditions.push(sql`${lotLedger.date} >= ${startDate}`);
@@ -4375,26 +4377,18 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         conditions.push(sql`${lotLedger.date} <= ${endDate}`);
       }
       
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-      }
-      
       // Ordina per data discendente e ID per consistenza
-      const timeline = await query
+      const timeline = await (conditions.length > 0 ? query.where(and(...conditions)) : query)
         .orderBy(desc(lotLedger.date), desc(lotLedger.id))
         .limit(pageSize)
         .offset(offset);
       
       // Conta il totale per paginazione
-      let countQuery = db
+      const countQuery = db
         .select({ count: count() })
         .from(lotLedger);
       
-      if (conditions.length > 0) {
-        countQuery = countQuery.where(and(...conditions));
-      }
-      
-      const [{ count: totalCount }] = await countQuery;
+      const [{ count: totalCount }] = await (conditions.length > 0 ? countQuery.where(and(...conditions)) : countQuery);
       
       res.json({
         success: true,
@@ -6498,7 +6492,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
             await tx.execute(sql`UPDATE sync_status SET last_sync_at = NULL, record_count = 0`);
             console.log("✅ Dati di sincronizzazione esterni eliminati");
           } catch (syncError) {
-            console.log("⚠️ Errore nell'eliminazione dati sincronizzazione, continuo con il reset:", syncError.message);
+            console.log("⚠️ Errore nell'eliminazione dati sincronizzazione, continuo con il reset:", syncError instanceof Error ? syncError.message : String(syncError));
           }
           
           console.log("✅ Tabelle vendite avanzate e sincronizzazione pulite");
@@ -6676,10 +6670,10 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
           // Invalidazione cache dopo azzeramento completo
           try {
             const { BasketsCache } = await import('./baskets-cache-service');
-            const { CyclesCache } = await import('./controllers/cycles-controller-optimized.js');
+            const { cacheService: cyclesCache } = await import('./controllers/cycles-controller-optimized.js');
             
             BasketsCache.clear();
-            CyclesCache.clear();
+            cyclesCache.clear();
             
             console.log("✅ Cache invalidate dopo azzeramento");
             
@@ -6689,7 +6683,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
               caches: ['baskets', 'cycles', 'operations', 'lots']
             });
           } catch (error) {
-            console.warn("Cache invalidation warning:", error.message);
+            console.warn("Cache invalidation warning:", error instanceof Error ? error.message : String(error));
           }
           
           return true; // Successo - commit implicito
@@ -6868,6 +6862,9 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.post("/api/baskets/fix-null-rows", authModule.requireAdmin, async (req, res) => {
     try {
       // Importa la funzione dal modulo fix_null_rows.js
+      // The maintenance script is plain JavaScript and intentionally has no
+      // runtime dependency on the TypeScript graph.
+      // @ts-expect-error no declaration file exists for this legacy maintenance script
       const { fixNullRows } = await import("../fix_null_rows.js");
       
       // Esegui la correzione
@@ -8701,7 +8698,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.post("/api/selections/:id/cancel", cancelSelection);
 
   // Registra le route per cancellare e completare le selezioni
-  implementSelectionRoutes(app, db);
+    implementSelectionRoutes(app, db);
   
   
   // === Route per storico vagliature (lista e PDF) ===
@@ -8716,7 +8713,11 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       const dateTo = req.query.dateTo as string;
       
       // Costruisci le condizioni di filtro
-      const conditions = [eq(selections.status, status)];
+      const selectionStatuses = ['draft', 'completed', 'cancelled'] as const;
+      const normalizedStatus = selectionStatuses.includes(status as (typeof selectionStatuses)[number])
+        ? status as (typeof selectionStatuses)[number]
+        : 'completed';
+      const conditions: import("drizzle-orm").SQL[] = [eq(selections.status, normalizedStatus)];
       
       if (screeningNumber) {
         conditions.push(eq(selections.selectionNumber, parseInt(screeningNumber)));
@@ -8855,7 +8856,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         }
         
         // Traduzione categoria in italiano
-        let categoryIT = b.destinationType;
+         let categoryIT: string = b.destinationType;
         if (b.destinationType === 'sold') {
           categoryIT = 'Venduta';
         } else if (b.destinationType === 'placed') {
@@ -8965,7 +8966,9 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         .where(eq(schema.configurazione.chiave, 'fatture_in_cloud_company_id'))
         .limit(1);
       
-      const companyId = companyIdConfig.length > 0 ? parseInt(companyIdConfig[0].valore, 10) : null;
+       const companyId = companyIdConfig.length > 0 && companyIdConfig[0].valore
+         ? parseInt(companyIdConfig[0].valore, 10)
+         : null;
       
       // Recupera dati fiscali basati sul Company ID
       const companiesResult = companyId 
@@ -9473,7 +9476,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       });
     } catch (error) {
       console.error('❌ Error forcing baskets refresh:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9486,7 +9489,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, status });
     } catch (error) {
       console.error('Error getting sync status:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9497,7 +9500,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, customers });
     } catch (error) {
       console.error('Error getting external customers:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9518,7 +9521,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, sales });
     } catch (error) {
       console.error('Error getting external sales:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9529,7 +9532,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, deliveries });
     } catch (error) {
       console.error('Error getting external deliveries:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9540,7 +9543,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, deliveryDetails });
     } catch (error) {
       console.error('Error getting external delivery details:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9551,7 +9554,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, deliveries });
     } catch (error) {
       console.error('Error getting external deliveries:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9562,7 +9565,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, deliveryDetails });
     } catch (error) {
       console.error('Error getting external delivery details:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9575,7 +9578,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       res.json({ success: true, deliveryDetails: filteredDetails });
     } catch (error) {
       console.error('Error getting external sales:', error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -9585,10 +9588,10 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     try {
       // Importa il servizio di sincronizzazione
       const { ExternalSyncService } = await import("./external-sync-service");
-      const { externalDbConfig, defaultSyncConfig } = await import("./external-db-config");
+       const { externalDbConfig } = await import("./external-db-config");
       
       // Crea un'istanza del servizio
-      const syncService = new ExternalSyncService(storage, defaultSyncConfig);
+       const syncService = new ExternalSyncService();
       
       // Configura il database esterno
       await syncService.configureExternalDatabase(externalDbConfig);
@@ -9616,9 +9619,9 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.get("/api/sync/status", async (req, res) => {
     try {
       const { ExternalSyncService } = await import("./external-sync-service");
-      const { externalDbConfig, defaultSyncConfig } = await import("./external-db-config");
+       const { externalDbConfig, defaultSyncConfig } = await import("./external-db-config");
       
-      const syncService = new ExternalSyncService(storage, defaultSyncConfig);
+       const syncService = new ExternalSyncService();
       
       // Configura il database esterno
       await syncService.configureExternalDatabase(externalDbConfig);
@@ -9781,7 +9784,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
               caches: ['lots', 'operations', 'baskets', 'inventory']
             });
           } catch (error) {
-            console.warn("Cache invalidation warning:", error.message);
+            console.warn("Cache invalidation warning:", error instanceof Error ? error.message : String(error));
           }
           
           return true; // Successo - commit implicito
@@ -9819,7 +9822,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       const basketsResult = await db.execute(sql`
         SELECT COUNT(*) as count FROM baskets WHERE flupsy_id = ${flupsyId}
       `);
-      const basketsCount = parseInt(basketsResult.rows[0]?.count || '0');
+      const basketsCount = parseInt(String(basketsResult.rows[0]?.count ?? '0'), 10);
       
       // Conta i cicli dei cestelli di questo FLUPSY
       const cyclesResult = await db.execute(sql`
@@ -9828,7 +9831,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         JOIN baskets b ON b.id = c.basket_id
         WHERE b.flupsy_id = ${flupsyId}
       `);
-      const cyclesCount = parseInt(cyclesResult.rows[0]?.count || '0');
+      const cyclesCount = parseInt(String(cyclesResult.rows[0]?.count ?? '0'), 10);
       
       // Conta le operazioni dei cestelli di questo FLUPSY
       const operationsResult = await db.execute(sql`
@@ -9837,7 +9840,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         JOIN baskets b ON b.id = o.basket_id
         WHERE b.flupsy_id = ${flupsyId}
       `);
-      const operationsCount = parseInt(operationsResult.rows[0]?.count || '0');
+      const operationsCount = parseInt(String(operationsResult.rows[0]?.count ?? '0'), 10);
       
       // Conta le composizioni lotti misti dei cestelli di questo FLUPSY
       const compositionsResult = await db.execute(sql`
@@ -9846,7 +9849,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         JOIN baskets b ON b.id = blc.basket_id
         WHERE b.flupsy_id = ${flupsyId}
       `);
-      const compositionsCount = parseInt(compositionsResult.rows[0]?.count || '0');
+      const compositionsCount = parseInt(String(compositionsResult.rows[0]?.count ?? '0'), 10);
       
       // Conta le ceste di screening/selezione collegate a questo FLUPSY
       const screeningDestResult = await db.execute(sql`
@@ -9854,14 +9857,14 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
         FROM screening_destination_baskets
         WHERE flupsy_id = ${flupsyId}
       `);
-      const screeningDestCount = parseInt(screeningDestResult.rows[0]?.count || '0');
+      const screeningDestCount = parseInt(String(screeningDestResult.rows[0]?.count ?? '0'), 10);
       
       const selectionDestResult = await db.execute(sql`
         SELECT COUNT(*) as count 
         FROM selection_destination_baskets
         WHERE flupsy_id = ${flupsyId}
       `);
-      const selectionDestCount = parseInt(selectionDestResult.rows[0]?.count || '0');
+      const selectionDestCount = parseInt(String(selectionDestResult.rows[0]?.count ?? '0'), 10);
       
       res.json({
         success: true,
@@ -10012,7 +10015,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
               caches: ['flupsys', 'baskets', 'cycles', 'operations']
             });
           } catch (error) {
-            console.warn("Cache invalidation warning:", error.message);
+            console.warn("Cache invalidation warning:", error instanceof Error ? error.message : String(error));
           }
           
           return true; // Successo - commit implicito

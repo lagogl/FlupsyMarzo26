@@ -5,11 +5,26 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
+interface FlupsyDetailsData {
+  id: number;
+  name: string;
+  location: string;
+  active: boolean;
+  productionCenter?: string | null;
+  totalBaskets?: number;
+  maxPositions: number;
+  activeBaskets?: number;
+  avgAnimalDensity?: number | null;
+  activeBasketPercentage?: number;
+  sizeDistribution?: Record<string, number>;
+  description?: string | null;
+}
+
 export default function FlupsyDetails() {
   const { id } = useParams();
   const flupsyId = id ? parseInt(id) : null;
   
-  const { data: flupsy, isLoading, error } = useQuery({
+  const { data: flupsy, isLoading, error } = useQuery<FlupsyDetailsData>({
     queryKey: [`/api/flupsys/${flupsyId}`],
     enabled: !!flupsyId
   });
@@ -40,6 +55,8 @@ export default function FlupsyDetails() {
       </div>
     );
   }
+
+  const sizeDistribution = flupsy.sizeDistribution ?? {};
 
   return (
     <div className="container p-4 mx-auto space-y-6">
@@ -139,13 +156,16 @@ export default function FlupsyDetails() {
             <div className="space-y-2">
               <h3 className="font-medium text-muted-foreground">Distribuzione Taglie</h3>
               <div className="border rounded p-4">
-                {flupsy.sizeDistribution && Object.keys(flupsy.sizeDistribution).length > 0 ? (
+                {Object.keys(sizeDistribution).length > 0 ? (
                   <div className="space-y-3">
-                    {Object.entries(flupsy.sizeDistribution)
+                    {Object.entries(sizeDistribution)
                       .sort(([, countA], [, countB]) => Number(countB) - Number(countA))
                       .slice(0, 6)
                       .map(([size, count]) => {
-                        const totalCount = Object.values(flupsy.sizeDistribution).reduce((sum, c) => Number(sum) + Number(c), 0);
+                        const totalCount = Object.values(sizeDistribution).reduce(
+                          (sum, c) => sum + c,
+                          0,
+                        );
                         const percentage = totalCount > 0 ? (Number(count) / totalCount) * 100 : 0;
                         
                         return (

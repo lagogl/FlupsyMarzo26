@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { AIService, PredictiveGrowthData } from "../ai/ai-service";
+import { AIService, PredictiveGrowthAI, PredictiveGrowthData, SustainabilityAI } from "../ai/ai-service";
 import { db } from "../db";
 import { baskets, operations, cycles, sgrGiornalieri, sizes, basketLotComposition, lots, flupsys } from "../../shared/schema";
 import { eq, desc, and, gte, lte, sql, isNotNull } from "drizzle-orm";
@@ -123,7 +123,7 @@ export function registerAIRoutes(app: Express) {
           if (singleLot.length > 0) {
             lotComposition = [{
               lotId: singleLot[0].id,
-              animalCount: singleLot[0].animalCount,
+              animalCount: singleLot[0].animalCount ?? 0,
               percentage: 100,
               supplier: singleLot[0].supplier,
               supplierLotNumber: singleLot[0].supplierLotNumber,
@@ -146,11 +146,7 @@ export function registerAIRoutes(app: Express) {
         console.log(`📊 Cestello ${basket.physicalNumber}: ${lotComposition.length} lotti, mortalità media: ${mixedLotMetrics.averageMortality}`);
         
         // Chiamata AI con dati potenziati
-        const prediction = await AIService.predictiveGrowth(basket.basketId, targetSizeId, days, {
-          mixedLots: true,
-          lotComposition: lotComposition,
-          mixedMetrics: mixedLotMetrics
-        });
+        const prediction = await AIService.predictiveGrowth(basket.basketId, targetSizeId, days);
         
         basketPredictions.push({
           basketId: basket.basketId,
@@ -289,7 +285,7 @@ export function registerAIRoutes(app: Express) {
         { zone: 'SX-bassa', conditions: { flow: 'basso', light: 'medio', temperature: 19.8 } }
       ];
 
-      const optimization = await AIService.predictiveGrowth.optimizeBasketPositions({
+      const optimization = await PredictiveGrowthAI.optimizeBasketPositions({
         flupsyId,
         baskets: basketsWithData,
         environmentalZones
@@ -351,16 +347,12 @@ export function registerAIRoutes(app: Express) {
       .innerJoin(cycles, eq(operations.cycleId, cycles.id))
       .leftJoin(basketLotComposition, eq(cycles.id, basketLotComposition.cycleId))
       .leftJoin(lots, eq(basketLotComposition.lotId, lots.id))
-      .where(gte(operations.date, dateLimit.toISOString().split('T')[0]));
-
-      if (flupsyId && flupsyId !== 'undefined' && flupsyId !== 'null') {
-        operationsQuery = operationsQuery.where(
-          and(
-            eq(baskets.flupsyId, Number(flupsyId)),
-            gte(operations.date, dateLimit.toISOString().split('T')[0])
-          )
-        );
-      }
+       .where(flupsyId && flupsyId !== 'undefined' && flupsyId !== 'null'
+         ? and(
+             eq(baskets.flupsyId, Number(flupsyId)),
+             gte(operations.date, dateLimit.toISOString().split('T')[0])
+           )
+         : gte(operations.date, dateLimit.toISOString().split('T')[0]));
 
       const recentOperations = await operationsQuery.limit(200);
 
@@ -431,7 +423,10 @@ export function registerAIRoutes(app: Express) {
         flupsyId: flupsyId || 'tutti'
       };
 
-      const anomalyAnalysis = await AIService.detectAnomalies(anomaliesData);
+      const anomalyAnalysis = await AIService.anomalyDetection(
+        flupsyId && flupsyId !== 'undefined' && flupsyId !== 'null' ? Number(flupsyId) : undefined,
+        Number(days)
+      );
 
       res.json({
         success: true,
@@ -557,7 +552,7 @@ export function registerAIRoutes(app: Express) {
 
       // Simula dati vendite per lotti misti
       const salesData = recentOperations
-        .filter(op => op.type === 'vendita' || op.type === 'raccolta-finale')
+        .filter(op => op.type === 'vendita')
         .map(op => ({
           date: op.date.toString(),
           amount: (op.totalWeight || 0) * avgPricePerKg / 1000, // Euro
@@ -580,7 +575,7 @@ export function registerAIRoutes(app: Express) {
         }))
       };
 
-      const businessAnalysis = await AIService.businessAnalytics(days, businessData);
+      const businessAnalysis = await AIService.businessAnalytics(Number(days));
 
       res.json({
         success: true,
@@ -650,16 +645,12 @@ export function registerAIRoutes(app: Express) {
       .innerJoin(cycles, eq(operations.cycleId, cycles.id))
       .leftJoin(basketLotComposition, eq(cycles.id, basketLotComposition.cycleId))
       .leftJoin(lots, eq(basketLotComposition.lotId, lots.id))
-      .where(gte(operations.date, dateLimit.toISOString().split('T')[0]));
-
-      if (flupsyId && flupsyId !== 'undefined' && flupsyId !== 'null') {
-        operationsQuery = operationsQuery.where(
-          and(
-            eq(baskets.flupsyId, Number(flupsyId)),
-            gte(operations.date, dateLimit.toISOString().split('T')[0])
-          )
-        );
-      }
+       .where(flupsyId && flupsyId !== 'undefined' && flupsyId !== 'null'
+         ? and(
+             eq(baskets.flupsyId, Number(flupsyId)),
+             gte(operations.date, dateLimit.toISOString().split('T')[0])
+           )
+         : gte(operations.date, dateLimit.toISOString().split('T')[0]));
 
       const sustainabilityOps = await operationsQuery.limit(100);
 
@@ -741,7 +732,7 @@ export function registerAIRoutes(app: Express) {
         }
       };
 
-      const sustainabilityAnalysis = await AIService.sustainabilityAnalysis(flupsyId ? Number(flupsyId) : undefined, days, sustainabilityData);
+      const sustainabilityAnalysis = await AIService.sustainabilityAnalysis(flupsyId ? Number(flupsyId) : undefined, Number(days));
 
       res.json({
         success: true,
@@ -818,7 +809,7 @@ export function registerAIRoutes(app: Express) {
         regulations
       };
 
-      const complianceAnalysis = await AIService.sustainability.checkCompliance(complianceData);
+      const complianceAnalysis = await SustainabilityAI.checkCompliance(complianceData);
 
       res.json({
         success: true,
@@ -969,7 +960,10 @@ export function registerAIRoutes(app: Express) {
       const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
       
       let monthlyData = forecast.monthlyData || [];
-      const ordersAbsoluteBySize = forecast.ordersAbsoluteBySize || {};
+      const ordersAbsoluteBySize = "ordersAbsoluteBySize" in forecast
+        && forecast.ordersAbsoluteBySize
+        ? forecast.ordersAbsoluteBySize
+        : {};
       const absoluteBySizeRecord = ordersAbsoluteBySize as Record<string, number>;
       
       if (category && category !== 'all') {
@@ -1120,7 +1114,10 @@ export function registerAIRoutes(app: Express) {
       
       // Recupera forecast principale (include ordersAbsoluteBySize)
       const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
-      const ordersAbsoluteBySize = forecast.ordersAbsoluteBySize || {};
+      const ordersAbsoluteBySize = "ordersAbsoluteBySize" in forecast
+        && forecast.ordersAbsoluteBySize
+        ? forecast.ordersAbsoluteBySize
+        : {};
       const totalOrdersAbsolute = Object.values(ordersAbsoluteBySize as Record<string, number>).reduce((sum, v) => sum + v, 0);
       
       const targets = await productionForecastService.getProductionTargets(targetYear);
@@ -1177,7 +1174,7 @@ export function registerAIRoutes(app: Express) {
       parametriData.push(['TOTALE ORDINI', totalOrdersAbsolute, '-', '100%']);
       
       // FOGLIO 2: TABELLA SGR PER MESE
-      const sgrData = [
+      const sgrData: Array<Array<string | number>> = [
         ['TABELLA SGR (Specific Growth Rate) PER MESE E TAGLIA'],
         [''],
         ['Commento: SGR = tasso di crescita giornaliero specifico. Varia stagionalmente.'],

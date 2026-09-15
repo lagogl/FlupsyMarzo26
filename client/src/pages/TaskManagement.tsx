@@ -15,6 +15,29 @@ import { CheckCircle, Clock, AlertCircle, Users, Package, User, Inbox, Calendar,
 import { format } from "date-fns";
 import { useWebSocketMessage } from "@/lib/websocket";
 
+interface TaskListItem {
+  id: number;
+  taskType: string;
+  description?: string | null;
+  notes?: string | null;
+  priority: string;
+  status: string;
+  selectionId?: number | null;
+  createdAt?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  dueDate?: string | null;
+  cadence?: string | null;
+  cadenceInterval: number;
+  baskets?: Array<{ id: number; flupsyId?: number; flupsyName?: string; physicalNumber?: number }>;
+  assignments?: Array<{ id: number; status: string; operatorFirstName?: string; operatorLastName?: string }>;
+}
+
+interface FlupsySystem {
+  id: number;
+  name: string;
+}
+
 const priorityColors = {
   low: "bg-slate-500",
   medium: "bg-blue-500",
@@ -60,12 +83,12 @@ export default function TaskManagement() {
   });
 
   // Query FLUPSY list
-  const { data: flupsySystems } = useQuery({
+  const { data: flupsySystems = [] } = useQuery<FlupsySystem[]>({
     queryKey: ['/api/flupsy-systems'],
   });
 
   // Query tasks
-  const { data: tasks, isLoading: loadingTasks, refetch: refetchTasks } = useQuery({
+  const { data: tasks = [], isLoading: loadingTasks, refetch: refetchTasks } = useQuery<TaskListItem[]>({
     queryKey: ['/api/tasks'],
   });
 

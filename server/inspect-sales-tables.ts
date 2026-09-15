@@ -44,7 +44,7 @@ async function inspectSalesTables() {
         const countResult = await client.query(`SELECT COUNT(*) as count FROM "${tableName}"`);
         console.log(`  Record totali: ${countResult.rows[0].count}`);
       } catch (error) {
-        console.log(`  Errore conteggio: ${error.message}`);
+        console.log(`  Errore conteggio: ${error instanceof Error ? error.message : String(error)}`);
       }
 
       // Esempi di dati (max 2 righe)
@@ -59,13 +59,13 @@ async function inspectSalesTables() {
           console.log('  (Tabella vuota)');
         }
       } catch (error) {
-        console.log(`  Errore accesso dati: ${error.message}`);
+        console.log(`  Errore accesso dati: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
     client.release();
   } catch (error) {
-    console.error('❌ Errore:', error.message);
+    console.error('❌ Errore:', error instanceof Error ? error.message : String(error));
     return false;
   } finally {
     await pool.end();

@@ -172,7 +172,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         { icon: <TrendingUp className="h-5 w-5 mr-2 text-green-600" />, label: "SGR per Lotto", path: "/sgr-lineage" },
         { icon: <ClipboardList className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.taskManagement || "Gestione Attività", path: "/task-management" },
         { icon: <FileText className="h-5 w-5 mr-2 text-purple-600" />, label: translations.menuItems.plantDiary, path: "/diario-di-impianto" },
-        { icon: <Users className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.operators || "Gestione Operatori", path: "/operators" },
+        { icon: <Users className="h-5 w-5 mr-2 text-green-600" />, label: translations.menuItems.operators, path: "/operators" },
         { icon: <History className="h-5 w-5 mr-2 text-emerald-600" />, label: "Storia Animali", path: "/storia-animali" },
         { icon: <GitMerge className="h-5 w-5 mr-2 text-violet-600" />, label: "Coorti di Mescolamento", path: "/coorti" },
         { icon: <Gauge className="h-5 w-5 mr-2 text-emerald-600" />, label: "Cruscotto Sopravvivenza", path: "/cruscotto-sopravvivenza" },

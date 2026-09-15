@@ -78,7 +78,7 @@ export async function computeMisuraAnimalCount(
   let referenceMortPct = 0;
   let lastCount = 0;
   for (const op of priorOps) {
-    if (op.type === 'prima-attivazione' || op.type === 'prima-attivazione-da-vagliatura') {
+    if (op.type === 'prima-attivazione') {
       lastCount = op.animalCount || lastCount;
       if (op.mortalityRate != null && Number(op.mortalityRate) > referenceMortPct) {
         referenceMortPct = Number(op.mortalityRate);
@@ -173,7 +173,7 @@ export async function recomputeCycleMisure(cycleId: number): Promise<CycleRecalc
   let lastCount = 0;
 
   for (const op of ops) {
-    if (op.type === 'prima-attivazione' || op.type === 'prima-attivazione-da-vagliatura') {
+    if (op.type === 'prima-attivazione') {
       lastCount = op.animalCount || lastCount;
       if (op.mortalityRate != null && Number(op.mortalityRate) > referenceMortPct) {
         referenceMortPct = Number(op.mortalityRate);

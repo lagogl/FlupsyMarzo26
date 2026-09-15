@@ -28,6 +28,7 @@ import {
   User, InsertUser, users
 } from '../shared/schema';
 import { IStorage } from './storage';
+import { cycleImpacts } from '../shared/eco-impact/schema';
 
 export class DbStorage implements IStorage {
   // Cache per i lotti
@@ -396,7 +397,7 @@ export class DbStorage implements IStorage {
       basket = {
         ...basket,
         rfidUhfUserData: nextCode,
-        rfidUhfProgrammedAt: new Date()
+        rfidUhfProgrammedAt: new Date().toISOString()
       };
       console.log(`createBasket - Auto-assegnato codice RFID UHF: ${nextCode}`);
     }
@@ -580,19 +581,14 @@ export class DbStorage implements IStorage {
         : undefined;
         
       // 1. Prima esegui una query per ottenere il conteggio totale
-      let totalCountQuery = db
-        .select({ count: sql`count(*)` })
-        .from(operations);
-        
-      if (whereClause) {
-        totalCountQuery = totalCountQuery.where(whereClause);
-      }
-      
-      const totalCountResult = await totalCountQuery;
+      const totalCountResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(operations)
+        .where(whereClause);
       const totalCount = Number(totalCountResult[0].count || 0);
       
       // 2. Poi esegui la query paginata con JOIN per includere i dati del cestello e FLUPSY
-      let query = db
+      const results = await db
         .select({
           // Seleziona tutti i campi delle operazioni esistenti
           id: operations.id,
@@ -608,9 +604,15 @@ export class DbStorage implements IStorage {
           animalsPerKg: operations.animalsPerKg,
           averageWeight: operations.averageWeight,
           deadCount: operations.deadCount,
+          sampleCount: operations.sampleCount,
           mortalityRate: operations.mortalityRate,
           notes: operations.notes,
           metadata: operations.metadata,
+          source: operations.source,
+          cancelledAt: operations.cancelledAt,
+          cancellationReason: operations.cancellationReason,
+          restoredToFlupsyId: operations.restoredToFlupsyId,
+          formulaVersion: operations.formulaVersion,
           // Aggiungi i campi necessari dal cestello e FLUPSY
           basketPhysicalNumber: baskets.physicalNumber,
           basketRow: baskets.row,
@@ -622,21 +624,24 @@ export class DbStorage implements IStorage {
         .from(operations)
         .leftJoin(baskets, eq(operations.basketId, baskets.id))
         .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
-        .orderBy(desc(operations.date));
-      
-      if (whereClause) {
-        query = query.where(whereClause);
-      }
-      
-      // Applica paginazione
-      query = query.limit(pageSize).offset(offset);
-      
-      const results = await query;
+        .where(whereClause)
+        .orderBy(desc(operations.date))
+        .limit(pageSize)
+        .offset(offset);
       
       console.log(`Query completata: ${results.length} risultati su ${totalCount} totali`);
+      const normalizedResults = results.map(result => ({
+        ...result,
+        metadata: result.metadata ?? null,
+        source: result.source ?? 'desktop_manager',
+        formulaVersion: result.formulaVersion ?? 1,
+        cancelledAt: result.cancelledAt ?? null,
+        cancellationReason: result.cancellationReason ?? null,
+        restoredToFlupsyId: result.restoredToFlupsyId ?? null
+      }));
       
       return {
-        operations: results,
+        operations: normalizedResults,
         totalCount
       };
     } catch (error) {
@@ -671,6 +676,7 @@ export class DbStorage implements IStorage {
     // Logging per debugging
     console.log("DB-STORAGE - createOperation - Received data:", JSON.stringify(operation, null, 2));
     
+    let operationMetadata: string | null = operation.metadata ?? null;
     // ✨ ARRICCHIMENTO METADATA E NOTE PER LOTTI MISTI
     if ((operation.type === 'peso' || operation.type === 'misura') && operation.basketId) {
       const { isBasketMixedLot, getBasketLotComposition } = await import('./services/basket-lot-composition.service');
@@ -698,7 +704,7 @@ export class DbStorage implements IStorage {
           };
           
           const notesParts = composition.map(c => {
-            const lotName = c.lot?.supplier || `Lotto ${c.lotId}`;
+            const lotName = c.supplier ?? c.supplierLotNumber ?? `Lotto ${c.lotId}`;
             const percentage = (c.percentage * 100).toFixed(1);
             return `${lotName} (${percentage}% - ${c.animalCount} animali)`;
           });
@@ -707,14 +713,20 @@ export class DbStorage implements IStorage {
           console.log('DB-STORAGE - Metadata generati:', JSON.stringify(metadata, null, 2));
           console.log('DB-STORAGE - Note generate:', notes);
           
-          operation.metadata = metadata as any;
+          operationMetadata = JSON.stringify(metadata);
           operation.notes = notes;
         }
       }
     }
     
     // Crea una copia dei dati per la manipolazione
-    const operationData = { ...operation };
+    const operationData = {
+      ...operation,
+      metadata: operationMetadata,
+      source: operation.source ?? 'desktop_manager',
+      formulaVersion: operation.formulaVersion ?? 1,
+      averageWeight: operation.averageWeight ?? null
+    };
     
     try {
       // Convert any dates to string format - FIX TIMEZONE BUG
@@ -850,10 +862,6 @@ export class DbStorage implements IStorage {
       }
       
       // Convert any dates to string format
-      if (operationUpdate.date && typeof operationUpdate.date === 'object' && 'toISOString' in operationUpdate.date) {
-        operationUpdate.date = operationUpdate.date.toISOString().split('T')[0];
-      }
-      
       // Calcola automaticamente averageWeight se animalsPerKg è stato aggiornato
       const updateData = { ...operationUpdate };
       if (updateData.animalsPerKg && updateData.animalsPerKg > 0) {
@@ -919,6 +927,52 @@ export class DbStorage implements IStorage {
       
       // Se l'operazione è una prima-attivazione, gestisce la cancellazione speciale
       if (isPrimaAttivazione && cycleId) {
+        // Gli archivi di vagliatura/selezione conservano il lineage del ciclo.
+        // Le colonne coinvolte sono NOT NULL nello schema corrente: non è
+        // consentito cancellare il ciclo lasciando riferimenti storici orfani.
+        const {
+          screeningSourceBaskets,
+          screeningBasketHistory,
+          screeningLotReferences,
+          selectionSourceBaskets,
+          selectionBasketHistory,
+        } = await import('@shared/schema');
+        const [screeningSources, screeningHistory, screeningLots, selectionSources, selectionHistory] =
+          await Promise.all([
+            db.select({ id: screeningSourceBaskets.id }).from(screeningSourceBaskets)
+              .where(eq(screeningSourceBaskets.cycleId, cycleId)).limit(1),
+            db.select({ id: screeningBasketHistory.id }).from(screeningBasketHistory)
+              .where(or(
+                eq(screeningBasketHistory.sourceCycleId, cycleId),
+                eq(screeningBasketHistory.destinationCycleId, cycleId)
+              )).limit(1),
+            db.select({ id: screeningLotReferences.id }).from(screeningLotReferences)
+              .where(eq(screeningLotReferences.destinationCycleId, cycleId)).limit(1),
+            db.select({ id: selectionSourceBaskets.id }).from(selectionSourceBaskets)
+              .where(eq(selectionSourceBaskets.cycleId, cycleId)).limit(1),
+            db.select({ id: selectionBasketHistory.id }).from(selectionBasketHistory)
+              .where(or(
+                eq(selectionBasketHistory.sourceCycleId, cycleId),
+                eq(selectionBasketHistory.destinationCycleId, cycleId)
+              )).limit(1),
+          ]);
+        if (
+          screeningSources.length > 0 ||
+          screeningHistory.length > 0 ||
+          screeningLots.length > 0 ||
+          selectionSources.length > 0 ||
+          selectionHistory.length > 0
+        ) {
+          throw new Error(
+            `Impossibile cancellare il ciclo ${cycleId}: esistono riferimenti storici ` +
+            'di vagliatura/selezione con FK non nullable.'
+          );
+        }
+        const deletedImpacts = await db.delete(cycleImpacts)
+          .where(eq(cycleImpacts.cycleId, cycleId))
+          .returning({ id: cycleImpacts.id });
+        console.log(`Eliminati ${deletedImpacts.length} impatti ambientali del ciclo ID: ${cycleId}`);
+
         console.log(`Operazione di prima-attivazione rilevata (ID: ${id}). Procedendo con la cancellazione a cascata.`);
         
         // Ottiene il ciclo associato per recuperare il cestello
@@ -947,30 +1001,9 @@ export class DbStorage implements IStorage {
         // 2. Elimina i record correlati al ciclo in tutte le tabelle
         console.log(`Eliminazione dati correlati al ciclo ID: ${cycleId} in tutte le tabelle`);
         
-        // 2.1 Elimina eventuali impatti ambientali associati al ciclo
-        try {
-          // Prova a eliminare gli impatti ambientali se la tabella esiste
-          const impactResult = await db.execute(sql`
-            DELETE FROM operation_impacts 
-            WHERE operation_id IN (
-              SELECT id FROM operations WHERE cycle_id = ${cycleId}
-            )
-          `);
-          console.log(`Eliminati impatti ambientali per operazioni del ciclo ID: ${cycleId}`);
-        } catch (error) {
-          // Ignora errori se la tabella non esiste (ancora)
-          console.log(`Tabella impatti ambientali non presente, continuando...`);
-        }
-        
         // 2.2 Gestione dati di vagliatura correlati
         try {
           const { screeningSourceBaskets, screeningDestinationBaskets, screeningBasketHistory } = await import('@shared/schema');
-          
-          // Elimina riferimenti nelle ceste di origine della vagliatura
-          console.log(`Pulizia riferimenti al ciclo ${cycleId} nelle ceste di origine della vagliatura`);
-          await db.update(screeningSourceBaskets)
-            .set({ cycleId: null })
-            .where(eq(screeningSourceBaskets.cycleId, cycleId));
           
           // Elimina riferimenti nelle ceste di destinazione della vagliatura
           console.log(`Pulizia riferimenti al ciclo ${cycleId} nelle ceste di destinazione della vagliatura`);
@@ -978,15 +1011,8 @@ export class DbStorage implements IStorage {
             .set({ cycleId: null })
             .where(eq(screeningDestinationBaskets.cycleId, cycleId));
           
-          // Aggiorna storia delle ceste nella vagliatura
-          console.log(`Pulizia riferimenti al ciclo ${cycleId} nella storia delle ceste di vagliatura`);
-          await db.update(screeningBasketHistory)
-            .set({ sourceCycleId: null })
-            .where(eq(screeningBasketHistory.sourceCycleId, cycleId));
-          
-          await db.update(screeningBasketHistory)
-            .set({ destinationCycleId: null })
-            .where(eq(screeningBasketHistory.destinationCycleId, cycleId));
+           // Lo storico non viene mai cancellato. I riferimenti non-nullable
+           // sono verificati nel preflight sopra.
         } catch (error) {
           console.error(`Errore durante pulizia riferimenti alla vagliatura: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -995,26 +1021,14 @@ export class DbStorage implements IStorage {
         try {
           const { selectionSourceBaskets, selectionDestinationBaskets, selectionBasketHistory } = await import('@shared/schema');
           
-          // Elimina righe nelle ceste di origine della selezione (cycle_id è NOT NULL → delete invece di null)
-          console.log(`Pulizia riferimenti al ciclo ${cycleId} nelle ceste di origine della selezione`);
-          await db.delete(selectionSourceBaskets)
-            .where(eq(selectionSourceBaskets.cycleId, cycleId));
-          
           // Elimina riferimenti nelle ceste di destinazione della selezione
           console.log(`Pulizia riferimenti al ciclo ${cycleId} nelle ceste di destinazione della selezione`);
           await db.update(selectionDestinationBaskets)
             .set({ cycleId: null })
             .where(eq(selectionDestinationBaskets.cycleId, cycleId));
           
-          // Aggiorna storia delle ceste nella selezione
-          console.log(`Pulizia riferimenti al ciclo ${cycleId} nella storia delle ceste di selezione`);
-          await db.update(selectionBasketHistory)
-            .set({ sourceCycleId: null })
-            .where(eq(selectionBasketHistory.sourceCycleId, cycleId));
-          
-          await db.update(selectionBasketHistory)
-            .set({ destinationCycleId: null })
-            .where(eq(selectionBasketHistory.destinationCycleId, cycleId));
+           // Lo storico non viene mai cancellato. I riferimenti non-nullable
+           // sono verificati nel preflight sopra.
         } catch (error) {
           console.error(`Errore durante pulizia riferimenti alla selezione: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -1031,20 +1045,6 @@ export class DbStorage implements IStorage {
           console.log(`✅ Eliminati ${deletedCompositions.length} record di composizione lotti per ciclo ${cycleId}`);
         } catch (error) {
           console.error(`Errore durante eliminazione composizione lotti: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        
-        // 2.5 Eliminazione impatti del ciclo (cycle_impacts)
-        try {
-          const { cycleImpacts } = await import('@shared/schema');
-          
-          console.log(`Eliminazione impatti per ciclo ${cycleId} dalla tabella cycle_impacts`);
-          const deletedImpacts = await db.delete(cycleImpacts)
-            .where(eq(cycleImpacts.cycleId, cycleId))
-            .returning({ id: cycleImpacts.id });
-          
-          console.log(`✅ Eliminati ${deletedImpacts.length} record di impatti per ciclo ${cycleId}`);
-        } catch (error) {
-          console.error(`Errore durante eliminazione impatti ciclo: ${error instanceof Error ? error.message : String(error)}`);
         }
         
         // 2.6 Pulizia movimenti lotti (lot_ledger)
@@ -1072,12 +1072,7 @@ export class DbStorage implements IStorage {
         try {
           const { screeningLotReferences } = await import('@shared/schema');
           
-          console.log(`Pulizia riferimenti al ciclo ${cycleId} nella tabella screening_lot_references`);
-          await db.update(screeningLotReferences)
-            .set({ destinationCycleId: null })
-            .where(eq(screeningLotReferences.destinationCycleId, cycleId));
-          
-          console.log(`✅ Puliti riferimenti al ciclo ${cycleId} in screening_lot_references`);
+           console.log(`Riferimenti storici screening_lot_references preservati per il ciclo ${cycleId}`);
         } catch (error) {
           console.error(`Errore durante pulizia screening_lot_references: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -1086,12 +1081,7 @@ export class DbStorage implements IStorage {
         try {
           const { selectionLotReferences } = await import('@shared/schema');
           
-          console.log(`Pulizia riferimenti al ciclo ${cycleId} nella tabella selection_lot_references`);
-          await db.update(selectionLotReferences)
-            .set({ destinationCycleId: null })
-            .where(eq(selectionLotReferences.destinationCycleId, cycleId));
-          
-          console.log(`✅ Puliti riferimenti al ciclo ${cycleId} in selection_lot_references`);
+           console.log(`Riferimenti storici selection_lot_references preservati per il ciclo ${cycleId}`);
         } catch (error) {
           console.error(`Errore durante pulizia selection_lot_references: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -1179,10 +1169,6 @@ export class DbStorage implements IStorage {
 
   async createCycle(cycle: InsertCycle): Promise<Cycle> {
     // Convert any dates to string format
-    if (cycle.startDate && typeof cycle.startDate === 'object' && 'toISOString' in cycle.startDate) {
-      cycle.startDate = cycle.startDate.toISOString().split('T')[0];
-    }
-    
     const results = await db.insert(cycles).values({
       ...cycle,
       state: 'active',
@@ -1413,12 +1399,6 @@ export class DbStorage implements IStorage {
       const pageSize = options.pageSize || 20;
       const offset = (page - 1) * pageSize;
       
-      // Costruisci la query base per il conteggio totale
-      let countQuery = db.select({ count: sql<number>`count(*)` }).from(lots);
-      
-      // Query principale - semplice e sicura
-      let query = db.select().from(lots);
-      
       // Applica i filtri a entrambe le query
       const filters = [];
       
@@ -1444,19 +1424,15 @@ export class DbStorage implements IStorage {
         filters.push(lte(lots.arrivalDate, dateToStr));
       }
       
-      // Applica tutti i filtri alle query
-      if (filters.length > 0) {
-        const condition = and(...filters);
-        countQuery = countQuery.where(condition);
-        query = query.where(condition);
-      }
+      const condition = filters.length > 0 ? and(...filters) : undefined;
       
       // Esegui la query di conteggio
-      const countResult = await countQuery;
+      const countResult = await db.select({ count: sql<number>`count(*)` }).from(lots).where(condition);
       const totalCount = countResult[0]?.count || 0;
       
       // Esegui la query principale con paginazione e ordinamento
-      const results = await query
+      const results = await db.select().from(lots)
+        .where(condition)
         .orderBy(desc(lots.arrivalDate))
         .limit(pageSize)
         .offset(offset);
@@ -1503,10 +1479,6 @@ export class DbStorage implements IStorage {
 
   async createLot(lot: InsertLot): Promise<Lot> {
     // Convert any dates to string format
-    if (lot.arrivalDate && typeof lot.arrivalDate === 'object' && 'toISOString' in lot.arrivalDate) {
-      lot.arrivalDate = lot.arrivalDate.toISOString().split('T')[0];
-    }
-    
     // 🚀 OTTIMIZZAZIONE: Inserimento diretto senza sequence management
     // PostgreSQL gestisce automaticamente l'auto-increment
     const results = await db.insert(lots).values({
@@ -1522,10 +1494,6 @@ export class DbStorage implements IStorage {
 
   async updateLot(id: number, lotUpdate: Partial<Lot>): Promise<Lot | undefined> {
     // Convert any dates to string format
-    if (lotUpdate.arrivalDate && typeof lotUpdate.arrivalDate === 'object' && 'toISOString' in lotUpdate.arrivalDate) {
-      lotUpdate.arrivalDate = lotUpdate.arrivalDate.toISOString().split('T')[0];
-    }
-    
     const results = await db.update(lots)
       .set(lotUpdate)
       .where(eq(lots.id, id))
@@ -1599,10 +1567,6 @@ export class DbStorage implements IStorage {
 
   async createSgrGiornaliero(sgrGiornaliero: InsertSgrGiornaliero): Promise<SgrGiornaliero> {
     // Convert date to string format if it's a Date object
-    if (sgrGiornaliero.recordDate && typeof sgrGiornaliero.recordDate === 'object' && 'toISOString' in sgrGiornaliero.recordDate) {
-      sgrGiornaliero.recordDate = sgrGiornaliero.recordDate.toISOString().split('T')[0];
-    }
-    
     const results = await db.insert(sgrGiornalieri)
       .values(sgrGiornaliero)
       .returning();
@@ -1611,10 +1575,6 @@ export class DbStorage implements IStorage {
 
   async updateSgrGiornaliero(id: number, sgrGiornalieroUpdate: Partial<SgrGiornaliero>): Promise<SgrGiornaliero | undefined> {
     // Convert date to string format if it's a Date object
-    if (sgrGiornalieroUpdate.recordDate && typeof sgrGiornalieroUpdate.recordDate === 'object' && 'toISOString' in sgrGiornalieroUpdate.recordDate) {
-      sgrGiornalieroUpdate.recordDate = sgrGiornalieroUpdate.recordDate.toISOString().split('T')[0];
-    }
-    
     const results = await db.update(sgrGiornalieri)
       .set(sgrGiornalieroUpdate)
       .where(eq(sgrGiornalieri.id, id))
@@ -1846,16 +1806,7 @@ export class DbStorage implements IStorage {
   }
   
   async createTargetSizeAnnotation(annotation: InsertTargetSizeAnnotation): Promise<TargetSizeAnnotation> {
-    // Convert date strings if they're Date objects
     const annotationData = { ...annotation };
-    
-    if (annotationData.predictedDate && typeof annotationData.predictedDate === 'object' && 'toISOString' in annotationData.predictedDate) {
-      annotationData.predictedDate = annotationData.predictedDate.toISOString().split('T')[0];
-    }
-    
-    if (annotationData.reachedDate && typeof annotationData.reachedDate === 'object' && 'toISOString' in annotationData.reachedDate) {
-      annotationData.reachedDate = annotationData.reachedDate.toISOString().split('T')[0];
-    }
     
     // Set default status and dates
     const now = new Date();
@@ -1872,16 +1823,7 @@ export class DbStorage implements IStorage {
   }
   
   async updateTargetSizeAnnotation(id: number, annotation: Partial<TargetSizeAnnotation>): Promise<TargetSizeAnnotation | undefined> {
-    // Convert date strings if they're Date objects
     const annotationData = { ...annotation };
-    
-    if (annotationData.predictedDate && typeof annotationData.predictedDate === 'object' && 'toISOString' in annotationData.predictedDate) {
-      annotationData.predictedDate = annotationData.predictedDate.toISOString().split('T')[0];
-    }
-    
-    if (annotationData.reachedDate && typeof annotationData.reachedDate === 'object' && 'toISOString' in annotationData.reachedDate) {
-      annotationData.reachedDate = annotationData.reachedDate.toISOString().split('T')[0];
-    }
     
     // Update the updatedAt timestamp
     annotationData.updatedAt = new Date();
@@ -2070,7 +2012,7 @@ export class DbStorage implements IStorage {
   // IMPLEMENTAZIONE METODI PER IL MODULO DI VAGLIATURA
   
   // Screening Operations
-  async getScreeningOperations(): Promise<ScreeningOperation[]> {
+  async getScreeningOperations(): Promise<Array<ScreeningOperation & { referenceSize?: Size | undefined }>> {
     return await db.select().from(screeningOperations);
   }
 
@@ -2078,7 +2020,7 @@ export class DbStorage implements IStorage {
     return await db.select().from(screeningOperations).where(eq(screeningOperations.status, status));
   }
 
-  async getScreeningOperation(id: number): Promise<ScreeningOperation | undefined> {
+  async getScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined> {
     const results = await db.select().from(screeningOperations).where(eq(screeningOperations.id, id));
     if (results.length === 0) return undefined;
     
@@ -2092,7 +2034,7 @@ export class DbStorage implements IStorage {
     return operation;
   }
 
-  async createScreeningOperation(operation: InsertScreeningOperation): Promise<ScreeningOperation> {
+  async createScreeningOperation(operation: InsertScreeningOperation): Promise<ScreeningOperation & { referenceSize?: Size }> {
     const now = new Date();
     const results = await db.insert(screeningOperations)
       .values({
@@ -2107,7 +2049,9 @@ export class DbStorage implements IStorage {
     // Aggiungi il riferimento alla taglia
     if (newOperation.referenceSizeId) {
       const size = await this.getSize(newOperation.referenceSizeId);
-      return { ...newOperation, referenceSize: size };
+      const enrichedOperation: ScreeningOperation & { referenceSize?: Size } = { ...newOperation };
+      enrichedOperation.referenceSize = size;
+      return enrichedOperation;
     }
     
     return newOperation;
@@ -2132,13 +2076,15 @@ export class DbStorage implements IStorage {
     const updatedOperation = results[0];
     if (updatedOperation.referenceSizeId) {
       const size = await this.getSize(updatedOperation.referenceSizeId);
-      return { ...updatedOperation, referenceSize: size };
+      const enrichedOperation: ScreeningOperation & { referenceSize?: Size } = { ...updatedOperation };
+      enrichedOperation.referenceSize = size;
+      return enrichedOperation;
     }
     
     return updatedOperation;
   }
 
-  async completeScreeningOperation(id: number): Promise<ScreeningOperation | undefined> {
+  async completeScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined> {
     const now = new Date();
     const results = await db.update(screeningOperations)
       .set({
@@ -2154,13 +2100,15 @@ export class DbStorage implements IStorage {
     const completedOperation = results[0];
     if (completedOperation.referenceSizeId) {
       const size = await this.getSize(completedOperation.referenceSizeId);
-      return { ...completedOperation, referenceSize: size };
+      const enrichedOperation: ScreeningOperation & { referenceSize?: Size } = { ...completedOperation };
+      enrichedOperation.referenceSize = size;
+      return enrichedOperation;
     }
     
     return completedOperation;
   }
 
-  async cancelScreeningOperation(id: number): Promise<ScreeningOperation | undefined> {
+  async cancelScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined> {
     // Prima recuperiamo l'operazione per verificare il suo stato attuale
     const operation = await this.getScreeningOperation(id);
     if (!operation) return undefined;
@@ -2554,20 +2502,17 @@ export class DbStorage implements IStorage {
 
   async getSalesReportsSummary(startDate?: string, endDate?: string): Promise<any> {
     try {
-      let query = db.select({
-        totalSales: count(externalSalesSync.id),
-        totalRevenue: sum(externalSalesSync.totalAmount),
-        totalCustomers: countDistinct(externalSalesSync.customerId)
-      }).from(externalSalesSync);
-
-      if (startDate && endDate) {
-        query = query.where(
-          and(
+      const condition = startDate && endDate
+        ? and(
             gte(externalSalesSync.saleDate, startDate),
             lte(externalSalesSync.saleDate, endDate)
           )
-        );
-      }
+        : undefined;
+      const query = db.select({
+        totalSales: count(externalSalesSync.id),
+        totalRevenue: sum(externalSalesSync.totalAmount),
+        totalCustomers: countDistinct(externalSalesSync.customerId)
+      }).from(externalSalesSync).where(condition);
 
       const result = await query;
       return result[0] || { totalSales: 0, totalRevenue: 0, totalCustomers: 0 };
@@ -2579,7 +2524,13 @@ export class DbStorage implements IStorage {
 
   async getSalesReportsByProduct(startDate?: string, endDate?: string): Promise<any[]> {
     try {
-      let query = db.select({
+      const condition = startDate && endDate
+        ? and(
+            gte(externalSalesSync.saleDate, startDate),
+            lte(externalSalesSync.saleDate, endDate)
+          )
+        : undefined;
+      const query = db.select({
         productName: externalSalesSync.productName,
         productCode: externalSalesSync.productCode,
         totalQuantity: sum(externalSalesSync.quantity),
@@ -2587,16 +2538,8 @@ export class DbStorage implements IStorage {
         orderCount: count(externalSalesSync.id)
       })
       .from(externalSalesSync)
+      .where(condition)
       .groupBy(externalSalesSync.productCode, externalSalesSync.productName);
-
-      if (startDate && endDate) {
-        query = query.where(
-          and(
-            gte(externalSalesSync.saleDate, startDate),
-            lte(externalSalesSync.saleDate, endDate)
-          )
-        );
-      }
 
       const results = await query;
       return results;
@@ -2608,7 +2551,13 @@ export class DbStorage implements IStorage {
 
   async getSalesReportsByCustomer(startDate?: string, endDate?: string): Promise<any[]> {
     try {
-      let query = db.select({
+      const condition = startDate && endDate
+        ? and(
+            gte(externalSalesSync.saleDate, startDate),
+            lte(externalSalesSync.saleDate, endDate)
+          )
+        : undefined;
+      const query = db.select({
         customerName: externalSalesSync.customerName,
         customerId: externalSalesSync.customerId,
         totalOrders: count(externalSalesSync.id),
@@ -2616,16 +2565,8 @@ export class DbStorage implements IStorage {
         lastOrderDate: max(externalSalesSync.saleDate)
       })
       .from(externalSalesSync)
+      .where(condition)
       .groupBy(externalSalesSync.customerId, externalSalesSync.customerName);
-
-      if (startDate && endDate) {
-        query = query.where(
-          and(
-            gte(externalSalesSync.saleDate, startDate),
-            lte(externalSalesSync.saleDate, endDate)
-          )
-        );
-      }
 
       const results = await query;
       return results;
@@ -2637,7 +2578,13 @@ export class DbStorage implements IStorage {
 
   async getSalesReportsMonthly(startDate?: string, endDate?: string): Promise<any[]> {
     try {
-      let query = db.select({
+      const condition = startDate && endDate
+        ? and(
+            gte(externalSalesSync.saleDate, startDate),
+            lte(externalSalesSync.saleDate, endDate)
+          )
+        : undefined;
+      const query = db.select({
         month: sql<string>`EXTRACT(MONTH FROM ${externalSalesSync.saleDate})`,
         year: sql<number>`EXTRACT(YEAR FROM ${externalSalesSync.saleDate})`,
         totalSales: count(externalSalesSync.id),
@@ -2645,6 +2592,7 @@ export class DbStorage implements IStorage {
         uniqueCustomers: countDistinct(externalSalesSync.customerId)
       })
       .from(externalSalesSync)
+      .where(condition)
       .groupBy(
         sql`EXTRACT(YEAR FROM ${externalSalesSync.saleDate})`,
         sql`EXTRACT(MONTH FROM ${externalSalesSync.saleDate})`
@@ -2654,15 +2602,6 @@ export class DbStorage implements IStorage {
         sql`EXTRACT(MONTH FROM ${externalSalesSync.saleDate}) DESC`
       );
 
-      if (startDate && endDate) {
-        query = query.where(
-          and(
-            gte(externalSalesSync.saleDate, startDate),
-            lte(externalSalesSync.saleDate, endDate)
-          )
-        );
-      }
-
       const results = await query;
       return results;
     } catch (error) {
@@ -2671,10 +2610,23 @@ export class DbStorage implements IStorage {
     }
   }
 
+  async getSalesReportSummary(startDate: string, endDate: string): Promise<any> {
+    return this.getSalesReportsSummary(startDate, endDate);
+  }
+  async getSalesReportByProduct(startDate: string, endDate: string): Promise<any[]> {
+    return this.getSalesReportsByProduct(startDate, endDate);
+  }
+  async getSalesReportByCustomer(startDate: string, endDate: string): Promise<any[]> {
+    return this.getSalesReportsByCustomer(startDate, endDate);
+  }
+  async getSalesReportMonthly(year: number): Promise<any[]> {
+    return this.getSalesReportsMonthly(`${year}-01-01`, `${year}-12-31`);
+  }
+
   // Metodi per il conteggio dei record sincronizzati
   async getSyncCustomersCount(): Promise<number> {
     try {
-      const result = await this.db.select({ count: count() }).from(externalCustomersSync);
+      const result = await db.select({ count: count() }).from(externalCustomersSync);
       return result[0]?.count || 0;
     } catch (error) {
       console.error('Errore nel conteggio clienti sincronizzati:', error);
@@ -2684,7 +2636,7 @@ export class DbStorage implements IStorage {
 
   async getSyncSalesCount(): Promise<number> {
     try {
-      const result = await this.db.select({ count: count() }).from(externalSalesSync);
+      const result = await db.select({ count: count() }).from(externalSalesSync);
       return result[0]?.count || 0;
     } catch (error) {
       console.error('Errore nel conteggio vendite sincronizzate:', error);
@@ -2692,11 +2644,84 @@ export class DbStorage implements IStorage {
     }
   }
 
-  async bulkUpsertExternalCustomersSync(customers: any[]): Promise<void> {
+  async createSyncStatus(data: InsertSyncStatus): Promise<SyncStatus> {
+    const [row] = await db.insert(syncStatus).values(data).returning();
+    return row;
+  }
+
+  async createExternalCustomerSync(data: InsertExternalCustomerSync): Promise<ExternalCustomerSync> {
+    const [row] = await db.insert(externalCustomersSync).values(data).returning();
+    return row;
+  }
+  async getExternalCustomerSync(id: number): Promise<ExternalCustomerSync | undefined> {
+    return (await db.select().from(externalCustomersSync).where(eq(externalCustomersSync.id, id)))[0];
+  }
+  async getExternalCustomerSyncByExternalId(externalId: number): Promise<ExternalCustomerSync | undefined> {
+    return (await db.select().from(externalCustomersSync).where(eq(externalCustomersSync.externalId, externalId)))[0];
+  }
+  async updateExternalCustomerSync(id: number, data: Partial<ExternalCustomerSync>): Promise<ExternalCustomerSync | undefined> {
+    return (await db.update(externalCustomersSync).set(data).where(eq(externalCustomersSync.id, id)).returning())[0];
+  }
+  async deleteExternalCustomerSync(id: number): Promise<boolean> {
+    return (await db.delete(externalCustomersSync).where(eq(externalCustomersSync.id, id)).returning()).length > 0;
+  }
+
+  async createExternalSaleSync(data: InsertExternalSaleSync): Promise<ExternalSaleSync> {
+    const [row] = await db.insert(externalSalesSync).values(data).returning();
+    return row;
+  }
+  async getExternalSaleSync(id: number): Promise<ExternalSaleSync | undefined> {
+    return (await db.select().from(externalSalesSync).where(eq(externalSalesSync.id, id)))[0];
+  }
+  async getExternalSaleSyncByExternalId(externalId: number): Promise<ExternalSaleSync | undefined> {
+    return (await db.select().from(externalSalesSync).where(eq(externalSalesSync.externalId, externalId)))[0];
+  }
+  async updateExternalSaleSync(id: number, data: Partial<ExternalSaleSync>): Promise<ExternalSaleSync | undefined> {
+    return (await db.update(externalSalesSync).set(data).where(eq(externalSalesSync.id, id)).returning())[0];
+  }
+  async deleteExternalSaleSync(id: number): Promise<boolean> {
+    return (await db.delete(externalSalesSync).where(eq(externalSalesSync.id, id)).returning()).length > 0;
+  }
+
+  async createExternalDeliverySync(data: InsertExternalDeliverySync): Promise<ExternalDeliverySync> {
+    const [row] = await db.insert(externalDeliveriesSync).values(data).returning();
+    return row;
+  }
+  async getExternalDeliverySync(id: number): Promise<ExternalDeliverySync | undefined> {
+    return (await db.select().from(externalDeliveriesSync).where(eq(externalDeliveriesSync.id, id)))[0];
+  }
+  async getExternalDeliverySyncByExternalId(externalId: number): Promise<ExternalDeliverySync | undefined> {
+    return (await db.select().from(externalDeliveriesSync).where(eq(externalDeliveriesSync.externalId, externalId)))[0];
+  }
+  async updateExternalDeliverySync(id: number, data: Partial<ExternalDeliverySync>): Promise<ExternalDeliverySync | undefined> {
+    return (await db.update(externalDeliveriesSync).set(data).where(eq(externalDeliveriesSync.id, id)).returning())[0];
+  }
+  async deleteExternalDeliverySync(id: number): Promise<boolean> {
+    return (await db.delete(externalDeliveriesSync).where(eq(externalDeliveriesSync.id, id)).returning()).length > 0;
+  }
+
+  async createExternalDeliveryDetailSync(data: InsertExternalDeliveryDetailSync): Promise<ExternalDeliveryDetailSync> {
+    const [row] = await db.insert(externalDeliveryDetailsSync).values(data).returning();
+    return row;
+  }
+  async getExternalDeliveryDetailSync(id: number): Promise<ExternalDeliveryDetailSync | undefined> {
+    return (await db.select().from(externalDeliveryDetailsSync).where(eq(externalDeliveryDetailsSync.id, id)))[0];
+  }
+  async getExternalDeliveryDetailSyncByExternalId(externalId: number): Promise<ExternalDeliveryDetailSync | undefined> {
+    return (await db.select().from(externalDeliveryDetailsSync).where(eq(externalDeliveryDetailsSync.externalId, externalId)))[0];
+  }
+  async updateExternalDeliveryDetailSync(id: number, data: Partial<ExternalDeliveryDetailSync>): Promise<ExternalDeliveryDetailSync | undefined> {
+    return (await db.update(externalDeliveryDetailsSync).set(data).where(eq(externalDeliveryDetailsSync.id, id)).returning())[0];
+  }
+  async deleteExternalDeliveryDetailSync(id: number): Promise<boolean> {
+    return (await db.delete(externalDeliveryDetailsSync).where(eq(externalDeliveryDetailsSync.id, id)).returning()).length > 0;
+  }
+
+  async bulkUpsertExternalCustomersSync(customers: InsertExternalCustomerSync[]): Promise<ExternalCustomerSync[]> {
     try {
-      if (customers.length === 0) return;
+      if (customers.length === 0) return [];
       
-      await db.insert(externalCustomersSync)
+      const result = await db.insert(externalCustomersSync)
         .values(customers)
         .onConflictDoUpdate({
           target: externalCustomersSync.externalId,
@@ -2707,24 +2732,25 @@ export class DbStorage implements IStorage {
             phone: sql`excluded.phone`,
             address: sql`excluded.address`,
             city: sql`excluded.city`,
-            zipCode: sql`excluded.zip_code`,
+            postalCode: sql`excluded.postal_code`,
             country: sql`excluded.country`,
             vatNumber: sql`excluded.vat_number`,
-            fiscalCode: sql`excluded.fiscal_code`,
-            lastSyncAt: sql`excluded.last_sync_at`
+            taxCode: sql`excluded.tax_code`,
+            syncedAt: sql`CURRENT_TIMESTAMP`
           }
-        });
+        }).returning();
+      return result;
     } catch (error) {
       console.error('Errore nell\'upsert bulk clienti:', error);
       throw error;
     }
   }
 
-  async bulkUpsertExternalSalesSync(sales: any[]): Promise<void> {
+  async bulkUpsertExternalSalesSync(sales: InsertExternalSaleSync[]): Promise<ExternalSaleSync[]> {
     try {
-      if (sales.length === 0) return;
+      if (sales.length === 0) return [];
       
-      await db.insert(externalSalesSync)
+      const result = await db.insert(externalSalesSync)
         .values(sales)
         .onConflictDoUpdate({
           target: externalSalesSync.externalId,
@@ -2737,9 +2763,10 @@ export class DbStorage implements IStorage {
             unitPrice: sql`excluded.unit_price`,
             totalAmount: sql`excluded.total_amount`,
             saleDate: sql`excluded.sale_date`,
-            lastSyncAt: sql`excluded.last_sync_at`
+            syncedAt: sql`CURRENT_TIMESTAMP`
           }
-        });
+        }).returning();
+      return result;
     } catch (error) {
       console.error('Errore nell\'upsert bulk vendite:', error);
       throw error;
@@ -2817,7 +2844,7 @@ export class DbStorage implements IStorage {
             pesoCesteKg: sql`excluded.peso_ceste_kg`,
             taglia: sql`excluded.taglia`,
             animaliPerKg: sql`excluded.animali_per_kg`,
-            percentualeGuscio: sql`excluded.percentuale_guscio`,
+            percentualeScarto: sql`excluded.percentuale_scarto`,
             percentualeMortalita: sql`excluded.percentuale_mortalita`,
             numeroAnimali: sql`excluded.numero_animali`,
             note: sql`excluded.note`,
@@ -2836,23 +2863,8 @@ export class DbStorage implements IStorage {
 
   async getExternalDeliveriesSync(): Promise<ExternalDeliverySync[]> {
     try {
-      return await db.select({
-        id: externalDeliveriesSync.id,
-        externalId: externalDeliveriesSync.externalId,
-        dataCreazione: externalDeliveriesSync.dataCreazione,
-        clienteId: externalDeliveriesSync.clienteId,
-        ordineId: externalDeliveriesSync.ordineId,
-        dataConsegna: externalDeliveriesSync.dataConsegna,
-        stato: externalDeliveriesSync.stato,
-        numeroTotaleCeste: externalDeliveriesSync.numeroTotaleCeste,
-        pesoTotaleKg: externalDeliveriesSync.pesoTotaleKg,
-        totaleAnimali: externalDeliveriesSync.totaleAnimali,
-        tagliaMedia: externalDeliveriesSync.tagliaMedia,
-        qrcodeUrl: externalDeliveriesSync.qrcodeUrl,
-        note: externalDeliveriesSync.note,
-        numeroProgressivo: externalDeliveriesSync.numeroProgressivo,
-        syncedAt: externalDeliveriesSync.syncedAt
-      }).from(externalDeliveriesSync).orderBy(desc(externalDeliveriesSync.dataConsegna));
+      return await db.select().from(externalDeliveriesSync)
+        .orderBy(desc(externalDeliveriesSync.dataConsegna));
     } catch (error) {
       console.error('Errore nel recupero consegne sincronizzate:', error);
       return [];
@@ -2861,23 +2873,8 @@ export class DbStorage implements IStorage {
 
   async getExternalDeliveryDetailsSync(): Promise<ExternalDeliveryDetailSync[]> {
     try {
-      return await db.select({
-        id: externalDeliveryDetailsSync.id,
-        externalId: externalDeliveryDetailsSync.externalId,
-        reportId: externalDeliveryDetailsSync.reportId,
-        misurazioneId: externalDeliveryDetailsSync.misurazioneId,
-        vascaId: externalDeliveryDetailsSync.vascaId,
-        codiceSezione: externalDeliveryDetailsSync.codiceSezione,
-        numeroCeste: externalDeliveryDetailsSync.numeroCeste,
-        pesoCesteKg: externalDeliveryDetailsSync.pesoCesteKg,
-        taglia: externalDeliveryDetailsSync.taglia,
-        animaliPerKg: externalDeliveryDetailsSync.animaliPerKg,
-        percentualeScarto: externalDeliveryDetailsSync.percentualeScarto,
-        percentualeMortalita: externalDeliveryDetailsSync.percentualeMortalita,
-        numeroAnimali: externalDeliveryDetailsSync.numeroAnimali,
-        note: externalDeliveryDetailsSync.note,
-        syncedAt: externalDeliveryDetailsSync.syncedAt
-      }).from(externalDeliveryDetailsSync).orderBy(externalDeliveryDetailsSync.reportId);
+      return await db.select().from(externalDeliveryDetailsSync)
+        .orderBy(externalDeliveryDetailsSync.reportId);
     } catch (error) {
       console.error('Errore nel recupero dettagli consegne sincronizzati:', error);
       return [];

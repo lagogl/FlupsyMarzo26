@@ -19,8 +19,16 @@ interface BasketPositionHistoryProps {
   basketId: number;
 }
 
+interface PositionHistoryEntry {
+  id: number;
+  startDate: string;
+  endDate: string | null;
+  row: string;
+  position: number;
+}
+
 export default function BasketPositionHistory({ basketId }: BasketPositionHistoryProps) {
-  const { data: positionHistory, isLoading } = useQuery({
+  const { data: positionHistory = [], isLoading } = useQuery<PositionHistoryEntry[]>({
     queryKey: [`/api/baskets/${basketId}/positions`],
     queryFn: getQueryFn({ on401: "throw" }),
     enabled: !!basketId

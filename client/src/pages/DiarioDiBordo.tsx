@@ -1780,7 +1780,13 @@ export default function DiarioDiBordo() {
                         const isCurrentDay = isSameDay(date, selectedDate);
                         
                         // Utilizziamo sempre i dati dal monthlyData per tutti i giorni
-                        let dayStats = {
+                        let dayStats: {
+                          operations: Array<{ size_code?: string; animal_count?: string | number; type?: string }>;
+                          totals: { totale_entrate: number; totale_uscite: number; totale_mortalita?: number; bilancio_netto: number; numero_operazioni: number };
+                          giacenza: number;
+                          taglie: unknown[];
+                          dettaglio_taglie: Array<{ taglia: string; quantita?: number }>;
+                        } = {
                           operations: [],
                           totals: { totale_entrate: 0, totale_uscite: 0, bilancio_netto: 0, numero_operazioni: 0 },
                           giacenza: 0,
@@ -1831,7 +1837,7 @@ export default function DiarioDiBordo() {
                             </td>
                             <td className="py-1 px-2 text-right font-medium text-orange-600">
                               {dayStats.totals && Number(dayStats.totals.totale_mortalita) > 0 ? 
-                                formatNumberWithCommas(dayStats.totals.totale_mortalita) : '-'}
+                                formatNumberWithCommas(dayStats.totals.totale_mortalita ?? 0) : '-'}
                             </td>
                             <td className="py-1 px-2 text-right font-medium">
                               {dayStats.totals && dayStats.totals.bilancio_netto && Number(dayStats.totals.bilancio_netto) !== 0 ? (
@@ -1889,7 +1895,7 @@ export default function DiarioDiBordo() {
                                     
                                     for (const op of operazioniPerTaglia) {
                                       conteggio++;
-                                      const animalCount = parseInt(op.animal_count || '0', 10);
+                                      const animalCount = Number(op.animal_count || 0);
                                       if (op.type === 'prima-attivazione' || op.type === 'prima-attivazione-da-vagliatura') {
                                         totaleEntrate += animalCount;
                                       } else if (op.type === 'vendita' || op.type === 'cessazione') {

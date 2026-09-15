@@ -15,6 +15,53 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+interface BasicFlupsy {
+  id: number;
+  name: string;
+  location: string;
+  maxPositions?: number;
+}
+
+interface BasicBasket {
+  id: number;
+  physicalNumber: number;
+  flupsyId: number;
+  state: string;
+  currentCycleId: number | null;
+  row: string | null;
+  position: number | null;
+}
+
+interface BasicOperation {
+  id: number;
+  basketId: number;
+  cycleId?: number | null;
+  date: string;
+  type: string;
+  animalsPerKg: number | null;
+  animalCount?: number | null;
+  sizeId?: number | null;
+  size?: { code: string } | null;
+  lotId?: number | null;
+  lastMortalityCount?: number | null;
+  lastMortalityRate?: number | null;
+  lastMortalityDate?: string | null;
+  notes?: string | null;
+}
+
+interface BasicCycle {
+  id: number;
+  basketId: number;
+  startDate: string;
+  state: string;
+}
+
+interface BasicSize {
+  id: number;
+  code: string;
+  name?: string;
+}
+
 // Importa esplicitamente la funzione getDefaultColorForSize per usarla nel componente
 function getDefaultColorForSize(code: string): string {
   // TP-XXXX dove XXXX è il numero di animali per kg
@@ -63,13 +110,13 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
   });
   
   // Fetch data
-  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery({ 
+  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery<BasicFlupsy[]>({
     queryKey: ['/api/flupsys'] 
   });
   
   // Utilizziamo includeAll=true per recuperare TUTTI i cestelli senza paginazione e senza filtro
   // Filtreremo lato client in base ai FLUPSY selezionati
-  const { data: baskets, isLoading: isLoadingBaskets } = useQuery({ 
+  const { data: baskets, isLoading: isLoadingBaskets } = useQuery<BasicBasket[]>({
     queryKey: ['/api/baskets', { 
       includeAll: true
     }],
@@ -83,11 +130,11 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
     
     if (selectedFlupsyIds.length === 0) {
       // Se nessun FLUPSY è selezionato, mostriamo tutti i cestelli
-      return baskets as any[];
+      return baskets;
     }
     
     // Altrimenti, filtriamo i cestelli per mostrare solo quelli nei FLUPSY selezionati
-    return (baskets as any[]).filter(basket => selectedFlupsyIds.includes(basket.flupsyId));
+    return baskets.filter(basket => selectedFlupsyIds.includes(basket.flupsyId));
   }, [baskets, selectedFlupsyIds]);
   
   // Aggiungiamo un log per debug
@@ -103,28 +150,28 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
     }
   }, [filteredBaskets]);
   
-  const { data: operations } = useQuery({ 
+  const { data: operations } = useQuery<BasicOperation[]>({
     queryKey: ['/api/operations', {
       includeAll: true
     }] 
   });
   
-  const { data: cyclesData } = useQuery({ 
+  const { data: cyclesData } = useQuery<{ cycles: BasicCycle[] } | BasicCycle[]>({
     queryKey: ['/api/cycles', {
       includeAll: true
     }] 
   });
   
-  const cycles = cyclesData?.cycles || [];
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles || [];
   
-  const { data: lots } = useQuery({ 
+  const { data: lots } = useQuery<Array<{ id: number; supplier?: string }>>({
     queryKey: ['/api/lots', {
       includeAll: true
     }] 
   });
   
   // Aggiungi la query per le taglie a livello globale, invece che in una condizione
-  const { data: allSizes } = useQuery({ 
+  const { data: allSizes } = useQuery<BasicSize[]>({
     queryKey: ['/api/sizes', {
       includeAll: true
     }] 
@@ -575,7 +622,9 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
           {latestOperation.sizeId && (
             <div className="flex justify-between">
               <span className="font-medium">Taglia:</span>
-              <span>{latestOperation.size?.code || getSizeFromAnimalsPerKg(latestOperation.animalsPerKg)?.code || 'N/D'}</span>
+              <span>{latestOperation.size?.code || (latestOperation.animalsPerKg !== null
+                ? getSizeFromAnimalsPerKg(latestOperation.animalsPerKg)?.code
+                : null) || 'N/D'}</span>
             </div>
           )}
           

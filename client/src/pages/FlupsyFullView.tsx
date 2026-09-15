@@ -17,6 +17,37 @@ import { Link, useLocation } from "wouter";
 
 type ViewMode = 'compact' | 'detailed' | 'positions';
 
+interface FlupsySummary {
+  id: number;
+  name: string;
+  location?: string | null;
+}
+
+interface BasketSummary {
+  id: number;
+  physicalNumber: number;
+  flupsyId: number;
+  row: 'DX' | 'SX' | null;
+  position: number | null;
+  state: string;
+  currentCycleId: number | null;
+}
+
+interface OperationSummary {
+  id: number;
+  basketId: number;
+  date: string;
+  type: string;
+}
+
+interface CycleSummary {
+  id: number;
+  basketId: number;
+  startDate: string;
+  endDate: string | null;
+  state: string;
+}
+
 export default function FlupsyFullView() {
   const { filterFlupsys } = useFlupsyPreferences();
   const [selectedFlupsyId, setSelectedFlupsyId] = useState<number | null>(null);
@@ -24,24 +55,25 @@ export default function FlupsyFullView() {
   const [showSidebar, setShowSidebar] = useState(true);
   
   // Fetch flupsys
-  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery({
+  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery<FlupsySummary[]>({
     queryKey: ['/api/flupsys'],
   });
   
   // Fetch baskets
-  const { data: baskets, isLoading: isLoadingBaskets } = useQuery({
+  const { data: baskets, isLoading: isLoadingBaskets } = useQuery<BasketSummary[]>({
     queryKey: ['/api/baskets'],
   });
   
   // Fetch operations
-  const { data: operations, isLoading: isLoadingOperations } = useQuery({
+  const { data: operations, isLoading: isLoadingOperations } = useQuery<OperationSummary[]>({
     queryKey: ['/api/operations'],
   });
   
   // Fetch cycles
-  const { data: cycles, isLoading: isLoadingCycles } = useQuery({
+  const { data: cyclesData, isLoading: isLoadingCycles } = useQuery<CycleSummary[] | { cycles: CycleSummary[] }>({
     queryKey: ['/api/cycles'],
   });
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles ?? [];
   
   // Select the first FLUPSY by default
   if (flupsys && flupsys.length > 0 && !selectedFlupsyId) {
@@ -49,43 +81,43 @@ export default function FlupsyFullView() {
   }
   
   // Get the selected FLUPSY
-  const selectedFlupsy = flupsys?.find((f: any) => f.id === selectedFlupsyId);
+  const selectedFlupsy = flupsys?.find(f => f.id === selectedFlupsyId);
   
   // Filter baskets by selected FLUPSY
   const filteredBaskets = baskets 
-    ? baskets.filter((b: any) => b.flupsyId === selectedFlupsyId)
+    ? baskets.filter(b => b.flupsyId === selectedFlupsyId)
     : [];
   
   // Create a grid of baskets
   const maxPositions = Math.max(
     ...filteredBaskets
-      .filter((b: any) => b.position !== null && b.position !== undefined)
-      .map((b: any) => b.position),
+      .filter(b => b.position !== null)
+      .map(b => b.position as number),
     10 // Minimum of 10 positions
   );
   
   // Group baskets by row
-  const dxRow = filteredBaskets.filter((b: any) => b.row === 'DX');
-  const sxRow = filteredBaskets.filter((b: any) => b.row === 'SX');
-  const noRowAssigned = filteredBaskets.filter((b: any) => b.row === null || b.row === undefined);
+  const dxRow = filteredBaskets.filter(b => b.row === 'DX');
+  const sxRow = filteredBaskets.filter(b => b.row === 'SX');
+  const noRowAssigned = filteredBaskets.filter(b => b.row === null);
   
   // Helper function to get basket by position for a specific row
   const getBasketByPosition = (row: 'DX' | 'SX', position: number) => {
     if (row === 'DX') {
-      return dxRow.find((b: any) => b.position === position);
+      return dxRow.find(b => b.position === position);
     }
-    return sxRow.find((b: any) => b.position === position);
+    return sxRow.find(b => b.position === position);
   };
   
   // Get operations for a specific basket
   const getBasketOperations = (basketId: number) => {
-    return operations ? operations.filter((op: any) => op.basketId === basketId) : [];
+    return operations ? operations.filter(op => op.basketId === basketId) : [];
   };
 
   // Get current cycle for a basket
   const getBasketCycle = (cycleId: number | null) => {
     if (!cycleId) return null;
-    return cycles ? cycles.find((c: any) => c.id === cycleId) : null;
+    return cycles.find(c => c.id === cycleId) ?? null;
   };
   
   // Loading state
@@ -255,6 +287,7 @@ export default function FlupsyFullView() {
                             basket={basket}
                             operations={basketOperations}
                             cycle={cycle}
+                            cycles={cycles}
                             viewMode={viewMode}
                           />
                         );
@@ -283,6 +316,7 @@ export default function FlupsyFullView() {
                             basket={basket}
                             operations={basketOperations}
                             cycle={cycle}
+                            cycles={cycles}
                             viewMode={viewMode}
                           />
                         );
@@ -309,6 +343,7 @@ export default function FlupsyFullView() {
                           basket={basket}
                           operations={basketOperations}
                           cycle={cycle}
+                          cycles={cycles}
                           viewMode={viewMode}
                         />
                       );
@@ -330,10 +365,11 @@ interface BasketPositionCardProps {
   basket?: any;
   operations?: any[];
   cycle?: any;
+  cycles?: CycleSummary[];
   viewMode: ViewMode;
 }
 
-function BasketPositionCard({ position, basket, operations = [], cycle, viewMode }: BasketPositionCardProps) {
+function BasketPositionCard({ position, basket, operations = [], cycle, cycles = [], viewMode }: BasketPositionCardProps) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   
@@ -409,7 +445,7 @@ function BasketPositionCard({ position, basket, operations = [], cycle, viewMode
       navigate(`/cycles/${basket.currentCycleId}`);
     } else {
       // Se il cestello è disponibile, trova l'ultimo ciclo chiuso associato a questo cestello
-      const basketCycles = cycles?.filter(cycle => cycle.basketId === basket.id) || [];
+      const basketCycles = cycles.filter(cycle => cycle.basketId === basket.id);
       const latestCycle = basketCycles.length > 0 
         ? basketCycles.sort((a, b) => 
             new Date(b.startDate).getTime() - new Date(a.startDate).getTime()

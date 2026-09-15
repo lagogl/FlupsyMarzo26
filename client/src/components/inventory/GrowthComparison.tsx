@@ -58,6 +58,15 @@ interface SizeInventory {
   maxAnimalsPerKg: number | null;
 }
 
+interface GrowthBySize {
+  name: string;
+  sizeName: string;
+  color: string;
+  growthRates: number[];
+  averageGrowth: number;
+  count: number;
+}
+
 interface GrowthComparisonProps {
   basketsData: BasketData[];
   inventoryStats: {
@@ -128,7 +137,7 @@ const GrowthComparison: React.FC<GrowthComparisonProps> = ({
                         }
                         
                         return acc;
-                      }, new Map<string, any>())
+                      }, new Map<string, GrowthBySize>())
                   )
                   .map(([_, value]) => value)
                   .sort((a, b) => {
@@ -185,7 +194,7 @@ const GrowthComparison: React.FC<GrowthComparisonProps> = ({
                           }
                           
                           return acc;
-                        }, new Map<string, any>())
+                         }, new Map<string, GrowthBySize>())
                     )
                     .map(([_, value]) => value)
                     .sort((a, b) => {

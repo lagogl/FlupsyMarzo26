@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { sizesService } from "./sizes.service";
-import { insertSizeSchema } from "@shared/schema";
+import { insertSizeSchema, type Size } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 const updateSizeSchema = insertSizeSchema.partial();
 
@@ -12,7 +12,7 @@ function validateRange(minAnimalsPerKg: number | null | undefined, maxAnimalsPer
 }
 
 function findOverlappingSize(
-  allSizes: Awaited<ReturnType<typeof sizesService.getAllSizes>>,
+  allSizes: Size[],
   minAnimalsPerKg: number | null | undefined,
   maxAnimalsPerKg: number | null | undefined,
   excludedId?: number,
@@ -43,7 +43,7 @@ export class SizesController {
    */
   async getAll(req: Request, res: Response) {
     try {
-      const sizes = await sizesService.getAllSizes();
+      const sizes = await sizesService.getAllSizes() as Size[];
       res.json(sizes);
     } catch (error) {
       console.error("Error fetching sizes:", error);
@@ -62,7 +62,7 @@ export class SizesController {
         return res.status(400).json({ message: "Invalid size ID" });
       }
 
-      const size = await sizesService.getSizeById(id);
+      const size = await sizesService.getSizeById(id) as Size | undefined;
       if (!size) {
         return res.status(404).json({ message: "Size not found" });
       }
@@ -91,7 +91,7 @@ export class SizesController {
         return res.status(400).json({ message: rangeError });
       }
 
-      const allSizes = await sizesService.getAllSizes();
+      const allSizes = await sizesService.getAllSizes() as Size[];
       const overlap = findOverlappingSize(
         allSizes,
         parsedData.data.minAnimalsPerKg,
@@ -137,7 +137,7 @@ export class SizesController {
         return res.status(400).json({ message: "Invalid size ID" });
       }
 
-      const size = await sizesService.getSizeById(id);
+      const size = await sizesService.getSizeById(id) as Size | undefined;
       if (!size) {
         return res.status(404).json({ message: "Size not found" });
       }
@@ -155,7 +155,7 @@ export class SizesController {
         return res.status(400).json({ message: rangeError });
       }
 
-      const allSizes = await sizesService.getAllSizes();
+      const allSizes = await sizesService.getAllSizes() as Size[];
       const overlap = findOverlappingSize(allSizes, nextMin, nextMax, id);
       if (overlap) {
         return res.status(400).json({
@@ -171,7 +171,7 @@ export class SizesController {
         }
       }
 
-      const updatedSize = await sizesService.updateSize(id, parsedData.data);
+      const updatedSize = await sizesService.updateSize(id, parsedData.data) as Size | undefined;
 
       // Broadcast update if WebSocket is available
       if (updatedSize && typeof (global as any).broadcastUpdate === 'function') {
@@ -199,7 +199,7 @@ export class SizesController {
         return res.status(400).json({ message: "Invalid size ID" });
       }
 
-      const size = await sizesService.getSizeById(id);
+      const size = await sizesService.getSizeById(id) as Size | undefined;
       if (!size) {
         return res.status(404).json({ message: "Size not found" });
       }

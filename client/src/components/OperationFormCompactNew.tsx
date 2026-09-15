@@ -63,6 +63,28 @@ interface OperationFormCompactProps {
   preSelectedBasketId?: number;
 }
 
+interface CompactNewBasket {
+  id: number;
+  state: string;
+  flupsyId: number;
+  currentCycleId: number | null;
+}
+interface CompactNewItem {
+  id?: number;
+  basketId: number;
+  cycleId?: number | null;
+  date: string;
+  type: string;
+  animalsPerKg?: number | null;
+}
+interface CompactNewSize {
+  id: number;
+  code: string;
+  name?: string;
+  minAnimalsPerKg?: number | null;
+  maxAnimalsPerKg?: number | null;
+}
+
 export default function OperationFormCompact({
   onClose,
   onSuccess,
@@ -78,13 +100,13 @@ export default function OperationFormCompact({
   const [sampleWeightText, setSampleWeightText] = useState<string>('');
 
   // Queries per i dati
-  const { data: baskets } = useQuery({ queryKey: ['/api/baskets'] });
-  const { data: flupsys } = useQuery({ queryKey: ['/api/flupsys'] });
-  const { data: cycles } = useQuery({ queryKey: ['/api/cycles'] });
-  const { data: sizes } = useQuery({ queryKey: ['/api/sizes'] });
-  const { data: lots } = useQuery({ queryKey: ['/api/lots'] });
-  const { data: sgrs } = useQuery({ queryKey: ['/api/sgr'] });
-  const { data: operations } = useQuery({ queryKey: ['/api/operations'] });
+  const { data: baskets } = useQuery<CompactNewBasket[]>({ queryKey: ['/api/baskets'] });
+  const { data: flupsys } = useQuery<Array<{ id: number; name: string }>>({ queryKey: ['/api/flupsys'] });
+  const { data: cycles } = useQuery<CompactNewItem[]>({ queryKey: ['/api/cycles'] });
+  const { data: sizes } = useQuery<CompactNewSize[]>({ queryKey: ['/api/sizes'] });
+  const { data: lots } = useQuery<Array<{ id: number; name?: string }>>({ queryKey: ['/api/lots'] });
+  const { data: sgrs } = useQuery<Array<{ id: number; month: string; percentage: number }>>({ queryKey: ['/api/sgr'] });
+  const { data: operations } = useQuery<CompactNewItem[]>({ queryKey: ['/api/operations'] });
 
   const form = useForm<OperationFormData>({
     resolver: zodResolver(operationSchema),
@@ -115,13 +137,13 @@ export default function OperationFormCompact({
   const watchType = form.watch('type');
   const watchBasketId = form.watch('basketId');
   const watchFlupsyId = form.watch('flupsyId');
-  const watchAnimalsPerKg = form.watch('animalsPerKg');
-  const watchSampleWeight = form.watch('sampleWeight');
-  const watchLiveAnimals = form.watch('liveAnimals');
-  const watchTotalSample = form.watch('totalSample');
-  const watchTotalWeight = form.watch('totalWeight');
-  const watchMortalityRate = form.watch('mortalityRate');
-  const deadCount = form.watch('deadCount');
+  const watchAnimalsPerKg = form.watch('animalsPerKg') ?? 0;
+  const watchSampleWeight = form.watch('sampleWeight') ?? 0;
+  const watchLiveAnimals = form.watch('liveAnimals') ?? 0;
+  const watchTotalSample = form.watch('totalSample') ?? 0;
+  const watchTotalWeight = form.watch('totalWeight') ?? 0;
+  const watchMortalityRate = form.watch('mortalityRate') ?? 0;
+  const deadCount = form.watch('deadCount') ?? 0;
 
   // Logica cestello selezionato
   const selectedBasket = baskets?.find((b: any) => b.id === watchBasketId);

@@ -6,7 +6,7 @@
  */
 
 import { db } from '../db';
-import { sql, eq, and, isNull, inArray } from 'drizzle-orm';
+import { sql, eq, and, or, isNull, inArray } from 'drizzle-orm';
 import {
   flupsys,
   baskets,
@@ -201,9 +201,8 @@ async function checkOrphanedBaskets(fix: boolean): Promise<number> {
   if (fix && orphanedBaskets.length > 0) {
     console.log('Correzione cestelli orfani...');
     for (const basket of orphanedBaskets) {
-      // Imposta flupsyId a NULL invece di eliminare il cestello
-      await db.update(baskets)
-        .set({ flupsyId: null, row: null, position: null })
+      // Il riferimento FLUPSY è obbligatorio nello schema: elimina il record orfano.
+      await db.delete(baskets)
         .where(eq(baskets.id, basket.baskets.id));
     }
     console.log(`Corretti ${orphanedBaskets.length} cestelli orfani`);
@@ -284,14 +283,14 @@ async function checkOrphanedScreeningDestinationBaskets(fix: boolean): Promise<n
   if (fix && totalOrphaned > 0) {
     console.log('Eliminazione destination baskets orfani...');
     // Elimina record orfani (screening non valido)
-    for (const db of orphanedDestBaskets1) {
+    for (const destination of orphanedDestBaskets1) {
       await db.delete(screeningDestinationBaskets)
-        .where(eq(screeningDestinationBaskets.id, db.screening_destination_baskets.id));
+        .where(eq(screeningDestinationBaskets.id, destination.screening_destination_baskets.id));
     }
     // Elimina record orfani (cestello non valido)
-    for (const db of orphanedDestBaskets2) {
+    for (const destination of orphanedDestBaskets2) {
       await db.delete(screeningDestinationBaskets)
-        .where(eq(screeningDestinationBaskets.id, db.screening_destination_baskets.id));
+        .where(eq(screeningDestinationBaskets.id, destination.screening_destination_baskets.id));
     }
     console.log(`Eliminati ${totalOrphaned} destination baskets orfani`);
   }
@@ -363,7 +362,7 @@ async function checkIncompleteScreenings(fix: boolean): Promise<number> {
     )
     .where(
       and(
-        eq(screenings.state, 'in-corso'),
+        eq(screenings.status, 'in-corso'),
         isNull(screeningSourceBaskets.id)
       )
     )
@@ -376,8 +375,8 @@ async function checkIncompleteScreenings(fix: boolean): Promise<number> {
     for (const screening of screeningsWithoutSource) {
       // Imposta lo stato a "cancelled" per le vagliature incomplete
       await db.update(screenings)
-        .set({ state: 'cancelled' })
-        .where(eq(screenings.id, screening.screenings.id));
+        .set({ status: 'cancelled' })
+        .where(eq(screenings.id, screening.screening_operations.id));
     }
     console.log(`Corrette ${screeningsWithoutSource.length} vagliature incomplete`);
   }
@@ -444,8 +443,7 @@ async function checkDanglingSizeReferences(fix: boolean): Promise<number> {
   if (fix && orphanedOperations.length > 0) {
     console.log('Correzione riferimenti a taglie non esistenti...');
     for (const op of orphanedOperations) {
-      await db.update(operations)
-        .set({ sizeId: null })
+      await db.delete(operations)
         .where(eq(operations.id, op.id));
     }
     console.log(`Corretti ${orphanedOperations.length} riferimenti a taglie non esistenti`);
@@ -498,10 +496,7 @@ async function checkBasketsWithoutPositions(): Promise<number> {
     .where(
       and(
         sql`${baskets.flupsyId} IS NOT NULL`,
-        or(
-          isNull(baskets.row),
-          isNull(baskets.position)
-        )
+        or(isNull(baskets.row), isNull(baskets.position))
       )
     );
   

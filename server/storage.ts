@@ -7,7 +7,6 @@ import {
   Size, InsertSize, 
   Sgr, InsertSgr, 
   Lot, InsertLot,
-  BasketPositionHistory, InsertBasketPositionHistory,
   SgrGiornaliero, InsertSgrGiornaliero,
   SgrPerTaglia, InsertSgrPerTaglia,
   MortalityRate, InsertMortalityRate,
@@ -25,7 +24,10 @@ import {
   // Importazioni per la sincronizzazione dati esterni
   SyncStatus, InsertSyncStatus,
   ExternalCustomerSync, InsertExternalCustomerSync,
-  ExternalSaleSync, InsertExternalSaleSync
+  ExternalSaleSync, InsertExternalSaleSync,
+  ExternalDeliverySync, InsertExternalDeliverySync,
+  ExternalDeliveryDetailSync, InsertExternalDeliveryDetailSync,
+  SelectionSourceBasket, SelectionDestinationBasket, SelectionBasketHistory
 } from "@shared/schema";
 
 export interface IStorage {
@@ -85,13 +87,13 @@ export interface IStorage {
   }): Promise<{operations: Operation[]; totalCount: number}>;
   
   // Screening Operation methods
-  getScreeningOperations(): Promise<ScreeningOperation[]>;
+  getScreeningOperations(): Promise<Array<ScreeningOperation & { referenceSize?: Size | undefined }>>;
   getScreeningOperationsByStatus(status: string): Promise<ScreeningOperation[]>;
-  getScreeningOperation(id: number): Promise<ScreeningOperation | undefined>;
+  getScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined>;
   createScreeningOperation(operation: InsertScreeningOperation): Promise<ScreeningOperation>;
   updateScreeningOperation(id: number, operation: Partial<ScreeningOperation>): Promise<ScreeningOperation | undefined>;
-  completeScreeningOperation(id: number): Promise<ScreeningOperation | undefined>;
-  cancelScreeningOperation(id: number): Promise<ScreeningOperation | undefined>;
+  completeScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined>;
+  cancelScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined>;
   
   // Screening Source Basket methods
   getScreeningSourceBasketsByScreening(screeningId: number): Promise<any[]>;
@@ -220,13 +222,13 @@ export interface IStorage {
   ): Promise<any>;
   
   // Screening (Vagliatura) methods
-  getScreeningOperations(): Promise<ScreeningOperation[]>;
-  getScreeningOperation(id: number): Promise<ScreeningOperation | undefined>;
+  getScreeningOperations(): Promise<Array<ScreeningOperation & { referenceSize?: Size | undefined }>>;
+  getScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined>;
   getScreeningOperationsByStatus(status: string): Promise<ScreeningOperation[]>;
   createScreeningOperation(operation: InsertScreeningOperation): Promise<ScreeningOperation>;
   updateScreeningOperation(id: number, operation: Partial<ScreeningOperation>): Promise<ScreeningOperation | undefined>;
-  completeScreeningOperation(id: number): Promise<ScreeningOperation | undefined>;
-  cancelScreeningOperation(id: number): Promise<ScreeningOperation | undefined>;
+  completeScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined>;
+  cancelScreeningOperation(id: number): Promise<(ScreeningOperation & { referenceSize?: Size | undefined }) | undefined>;
   
   // Screening Source Baskets methods
   getScreeningSourceBasketsByScreening(screeningId: number): Promise<ScreeningSourceBasket[]>;
@@ -303,11 +305,7 @@ export interface IStorage {
   // Sync status methods
   getSyncCustomersCount(): Promise<number>;
   getSyncSalesCount(): Promise<number>;
-  bulkUpsertExternalCustomersSync(customers: any[]): Promise<void>;
-  bulkUpsertExternalSalesSync(sales: any[]): Promise<void>;
-  getSyncStatusByTable(tableName: string): Promise<any>;
-  upsertSyncStatus(tableName: string, data: any): Promise<void>;
-  updateSyncStatus(tableName: string, data: any): Promise<SyncStatus | undefined>;
+  upsertSyncStatus(tableName: string, data: Partial<InsertSyncStatus>): Promise<void>;
   
   // Sync table clearing methods
   clearExternalCustomersSync(): Promise<void>;
@@ -317,7 +315,7 @@ export interface IStorage {
 
 }
 
-export class MemStorage implements IStorage {
+export class MemStorage {
   private flupsys: Map<number, Flupsy>;
   private baskets: Map<number, Basket>;
   private operations: Map<number, Operation>;
@@ -325,7 +323,17 @@ export class MemStorage implements IStorage {
   private sizes: Map<number, Size>;
   private sgrs: Map<number, Sgr>;
   private lots: Map<number, Lot>;
-  private basketPositions: Map<number, BasketPositionHistory>;
+  private basketPositions: Map<number, {
+    id: number;
+    basketId: number;
+    flupsyId: number;
+    row: string;
+    position: number;
+    endDate: Date | null;
+  }>;
+  private selectionSourceBaskets: Map<number, SelectionSourceBasket>;
+  private selectionDestinationBaskets: Map<number, SelectionDestinationBasket>;
+  private selectionBasketHistory: Map<number, SelectionBasketHistory>;
   private sgrGiornalieri: Map<number, SgrGiornaliero>;
   private mortalityRates: Map<number, MortalityRate>;
   private targetSizeAnnotations: Map<number, TargetSizeAnnotation>;
@@ -365,6 +373,9 @@ export class MemStorage implements IStorage {
     this.sgrs = new Map();
     this.lots = new Map();
     this.basketPositions = new Map();
+    this.selectionSourceBaskets = new Map();
+    this.selectionDestinationBaskets = new Map();
+    this.selectionBasketHistory = new Map();
     this.sgrGiornalieri = new Map();
     this.mortalityRates = new Map();
     this.targetSizeAnnotations = new Map();
@@ -522,7 +533,16 @@ export class MemStorage implements IStorage {
   
   async createFlupsy(flupsy: InsertFlupsy): Promise<Flupsy> {
     const id = this.flupsyId++;
-    const newFlupsy: Flupsy = { ...flupsy, id };
+    const newFlupsy: Flupsy = {
+      id,
+      name: flupsy.name,
+      location: flupsy.location ?? null,
+      description: flupsy.description ?? null,
+      active: flupsy.active ?? true,
+      maxPositions: flupsy.maxPositions ?? 10,
+      productionCenter: flupsy.productionCenter ?? null,
+      moduleType: flupsy.moduleType ?? "flupsy"
+    };
     this.flupsys.set(id, newFlupsy);
     return newFlupsy;
   }
@@ -568,7 +588,24 @@ export class MemStorage implements IStorage {
   
   async createBasket(basket: InsertBasket): Promise<Basket> {
     const id = this.basketId++;
-    const newBasket: Basket = { ...basket, id, currentCycleId: null, nfcData: null, state: "available" };
+    const newBasket: Basket = {
+      id,
+      physicalNumber: basket.physicalNumber,
+      flupsyId: basket.flupsyId,
+      cycleCode: basket.cycleCode ?? null,
+      state: basket.state ?? "available",
+      currentCycleId: null,
+      nfcData: null,
+      nfcLastProgrammedAt: basket.nfcLastProgrammedAt ?? null,
+      rfidUhfEpc: basket.rfidUhfEpc ?? null,
+      rfidUhfUserData: basket.rfidUhfUserData ?? null,
+      rfidUhfProgrammedAt: basket.rfidUhfProgrammedAt ?? null,
+      row: basket.row,
+      position: basket.position,
+      groupId: basket.groupId ?? null,
+      tareWeightG: basket.tareWeightG ?? null,
+      netMesh: basket.netMesh ?? null
+    };
     this.baskets.set(id, newBasket);
     return newBasket;
   }
@@ -625,7 +662,7 @@ export class MemStorage implements IStorage {
   
   async createOperation(operation: InsertOperation): Promise<Operation> {
     // Calculate average weight if animals per kg is provided
-    let averageWeight = null;
+    let averageWeight = operation.averageWeight ?? null;
     if (operation.animalsPerKg && operation.animalsPerKg > 0) {
       averageWeight = 1000000 / operation.animalsPerKg;
     }
@@ -634,7 +671,22 @@ export class MemStorage implements IStorage {
     const newOperation: Operation = { 
       ...operation, 
       id,
-      averageWeight
+      averageWeight,
+      metadata: operation.metadata ?? null,
+      sgrId: operation.sgrId ?? null,
+      lotId: operation.lotId ?? null,
+      animalCount: operation.animalCount ?? null,
+      totalWeight: operation.totalWeight ?? null,
+      animalsPerKg: operation.animalsPerKg ?? null,
+      deadCount: operation.deadCount ?? null,
+      sampleCount: operation.sampleCount ?? null,
+      mortalityRate: operation.mortalityRate ?? null,
+      notes: operation.notes ?? null,
+      source: operation.source ?? "desktop_manager",
+      cancelledAt: operation.cancelledAt ?? null,
+      cancellationReason: operation.cancellationReason ?? null,
+      restoredToFlupsyId: operation.restoredToFlupsyId ?? null,
+      formulaVersion: operation.formulaVersion ?? 1
     };
     
     this.operations.set(id, newOperation);
@@ -708,6 +760,21 @@ export class MemStorage implements IStorage {
     // Se l'operazione è una prima-attivazione, gestisce la cancellazione speciale
     if (isPrimaAttivazione && cycleId) {
       console.log(`Operazione di prima-attivazione rilevata (ID: ${id}). Procedendo con la cancellazione a cascata.`);
+      const hasHistoricalReferences =
+        Array.from(this.screeningSourceBaskets.values()).some(source => source.cycleId === cycleId) ||
+        Array.from(this.screeningBasketHistory.values()).some(history =>
+          history.sourceCycleId === cycleId || history.destinationCycleId === cycleId) ||
+        Array.from(this.screeningLotReferences.values()).some(reference =>
+          reference.destinationCycleId === cycleId) ||
+        Array.from(this.selectionSourceBaskets.values()).some(source => source.cycleId === cycleId) ||
+        Array.from(this.selectionBasketHistory.values()).some(history =>
+          history.sourceCycleId === cycleId || history.destinationCycleId === cycleId);
+      if (hasHistoricalReferences) {
+        throw new Error(
+          `Impossibile cancellare il ciclo ${cycleId}: esistono riferimenti storici ` +
+          'di vagliatura/selezione con FK non nullable.'
+        );
+      }
       
       // Ottiene il ciclo associato per recuperare il cestello
       if (!basketId) {
@@ -733,28 +800,12 @@ export class MemStorage implements IStorage {
       // 2. Elimina i record correlati al ciclo in tutte le tabelle
       console.log(`Eliminazione dati correlati al ciclo ID: ${cycleId} in tutte le tabelle`);
       
-      // 2.1 Impatti ambientali
-      const cycleImpactsToRemove = [];
-      for (const [impactId, impact] of this.cycleImpacts.entries()) {
-        if (impact.cycleId === cycleId) {
-          cycleImpactsToRemove.push(impactId);
-        }
-      }
-      
-      for (const impactId of cycleImpactsToRemove) {
-        console.log(`Eliminazione impatto ambientale ID: ${impactId} per il ciclo ${cycleId}`);
-        this.cycleImpacts.delete(impactId);
-      }
-      
-      // 2.2 Gestione dati di vagliatura correlati
+      // 2.1 Gestione dati di vagliatura correlati
       // Aggiorna ceste di origine della vagliatura
       for (const [sourceId, source] of this.screeningSourceBaskets.entries()) {
         if (source.cycleId === cycleId) {
           console.log(`Pulizia riferimento al ciclo ${cycleId} nella cesta di origine vagliatura ID: ${sourceId}`);
-          this.screeningSourceBaskets.set(sourceId, {
-            ...source,
-            cycleId: null
-          });
+          this.screeningSourceBaskets.delete(sourceId);
         }
       }
       
@@ -769,37 +820,14 @@ export class MemStorage implements IStorage {
         }
       }
       
-      // Aggiorna storia delle ceste nella vagliatura
-      for (const [historyId, history] of this.screeningBasketHistory.entries()) {
-        let updated = false;
-        let newHistory = { ...history };
-        
-        if (history.sourceCycleId === cycleId) {
-          console.log(`Pulizia riferimento al ciclo di origine ${cycleId} nella storia ceste vagliatura ID: ${historyId}`);
-          newHistory.sourceCycleId = null;
-          updated = true;
-        }
-        
-        if (history.destinationCycleId === cycleId) {
-          console.log(`Pulizia riferimento al ciclo di destinazione ${cycleId} nella storia ceste vagliatura ID: ${historyId}`);
-          newHistory.destinationCycleId = null;
-          updated = true;
-        }
-        
-        if (updated) {
-          this.screeningBasketHistory.set(historyId, newHistory);
-        }
-      }
+      // Lo storico di vagliatura viene preservato.
       
       // 2.3 Gestione dati di selezione correlati
       // Aggiorna ceste di origine della selezione
       for (const [sourceId, source] of this.selectionSourceBaskets.entries()) {
         if (source.cycleId === cycleId) {
           console.log(`Pulizia riferimento al ciclo ${cycleId} nella cesta di origine selezione ID: ${sourceId}`);
-          this.selectionSourceBaskets.set(sourceId, {
-            ...source,
-            cycleId: null
-          });
+          this.selectionSourceBaskets.delete(sourceId);
         }
       }
       
@@ -809,32 +837,12 @@ export class MemStorage implements IStorage {
           console.log(`Pulizia riferimento al ciclo ${cycleId} nella cesta di destinazione selezione ID: ${destId}`);
           this.selectionDestinationBaskets.set(destId, {
             ...dest,
-            cycleId: null
+             cycleId: dest.cycleId
           });
         }
       }
       
-      // Aggiorna storia delle ceste nella selezione
-      for (const [historyId, history] of this.selectionBasketHistory.entries()) {
-        let updated = false;
-        let newHistory = { ...history };
-        
-        if (history.sourceCycleId === cycleId) {
-          console.log(`Pulizia riferimento al ciclo di origine ${cycleId} nella storia ceste selezione ID: ${historyId}`);
-          newHistory.sourceCycleId = null;
-          updated = true;
-        }
-        
-        if (history.destinationCycleId === cycleId) {
-          console.log(`Pulizia riferimento al ciclo di destinazione ${cycleId} nella storia ceste selezione ID: ${historyId}`);
-          newHistory.destinationCycleId = null;
-          updated = true;
-        }
-        
-        if (updated) {
-          this.selectionBasketHistory.set(historyId, newHistory);
-        }
-      }
+      // Lo storico di selezione viene preservato.
       
       // 2.4 Infine, elimina il ciclo
       console.log(`Eliminazione ciclo ID: ${cycleId}`);
@@ -910,11 +918,17 @@ export class MemStorage implements IStorage {
   
   async createCycle(cycle: InsertCycle): Promise<Cycle> {
     const id = this.cycleId++;
-    const newCycle: Cycle = { 
-      ...cycle, 
+    const newCycle: Cycle = {
+      ...cycle,
       id,
+      lotId: cycle.lotId ?? null,
       endDate: null,
-      state: 'active'
+      state: 'active',
+      parentCycleId: cycle.parentCycleId ?? null,
+      lineageGroupId: cycle.lineageGroupId ?? null,
+      qualityClass: cycle.qualityClass ?? null,
+      screeningLabel: cycle.screeningLabel ?? null,
+      cohortId: cycle.cohortId ?? null
     };
     
     this.cycles.set(id, newCycle);
@@ -934,7 +948,7 @@ export class MemStorage implements IStorage {
     
     const updatedCycle = { 
       ...currentCycle, 
-      endDate,
+      endDate: endDate.toISOString().split('T')[0],
       state: 'closed'
     };
     
@@ -967,7 +981,16 @@ export class MemStorage implements IStorage {
   
   async createSize(size: InsertSize): Promise<Size> {
     const id = this.sizeId++;
-    const newSize: Size = { ...size, id };
+    const newSize: Size = {
+      id,
+      code: size.code,
+      name: size.name,
+      sizeMm: size.sizeMm ?? null,
+      minAnimalsPerKg: size.minAnimalsPerKg ?? null,
+      maxAnimalsPerKg: size.maxAnimalsPerKg ?? null,
+      notes: size.notes ?? null,
+      color: size.color ?? null
+    };
     this.sizes.set(id, newSize);
     return newSize;
   }
@@ -996,7 +1019,12 @@ export class MemStorage implements IStorage {
   
   async createSgr(sgr: InsertSgr): Promise<Sgr> {
     const id = this.sgrId++;
-    const newSgr: Sgr = { ...sgr, id };
+    const newSgr: Sgr = {
+      id,
+      month: sgr.month,
+      percentage: sgr.percentage,
+      calculatedFromReal: null
+    };
     this.sgrs.set(id, newSgr);
     return newSgr;
   }
@@ -1025,10 +1053,25 @@ export class MemStorage implements IStorage {
   
   async createLot(lot: InsertLot): Promise<Lot> {
     const id = this.lotId++;
-    const newLot: Lot = { 
-      ...lot, 
+    const newLot: Lot = {
       id,
-      state: 'active'
+      arrivalDate: lot.arrivalDate,
+      supplier: lot.supplier,
+      supplierLotNumber: lot.supplierLotNumber ?? null,
+      quality: lot.quality ?? null,
+      animalCount: lot.animalCount ?? null,
+      weight: lot.weight ?? null,
+      sizeId: lot.sizeId ?? null,
+      notes: lot.notes ?? null,
+      state: 'active',
+      active: lot.active ?? true,
+      externalId: lot.externalId ?? null,
+      description: lot.description ?? null,
+      origin: lot.origin ?? null,
+      totalMortality: lot.totalMortality ?? 0,
+      lastMortalityDate: lot.lastMortalityDate ?? null,
+      mortalityNotes: lot.mortalityNotes ?? null,
+      createdAt: new Date()
     };
     this.lots.set(id, newLot);
     return newLot;
@@ -1090,7 +1133,22 @@ export class MemStorage implements IStorage {
       pH: sgrGiornaliero.pH || null,
       ammonia: sgrGiornaliero.ammonia || null,
       oxygen: sgrGiornaliero.oxygen || null,
-      salinity: sgrGiornaliero.salinity || null
+      salinity: sgrGiornaliero.salinity || null,
+      operatorId: sgrGiornaliero.operatorId ?? null,
+      operatorName: sgrGiornaliero.operatorName ?? null,
+      site: sgrGiornaliero.site ?? null,
+      airTempMin: sgrGiornaliero.airTempMin ?? null,
+      airTempMax: sgrGiornaliero.airTempMax ?? null,
+      meteo: sgrGiornaliero.meteo ?? null,
+      waterTemperature: sgrGiornaliero.waterTemperature ?? null,
+      secchiDisk: sgrGiornaliero.secchiDisk ?? null,
+      microalgaeConcentration: sgrGiornaliero.microalgaeConcentration ?? null,
+      nh3: sgrGiornaliero.nh3 ?? null,
+      waterColor: sgrGiornaliero.waterColor ?? null,
+      microalgaeSpecies: sgrGiornaliero.microalgaeSpecies ?? null,
+      mortality: sgrGiornaliero.mortality ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
     this.sgrGiornalieri.set(id, newSgrGiornaliero);
     return newSgrGiornaliero;
@@ -1269,7 +1327,9 @@ export class MemStorage implements IStorage {
       id,
       status: 'pending',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      reachedDate: annotation.reachedDate ?? null,
+      notes: annotation.notes ?? null
     };
     
     this.targetSizeAnnotations.set(id, newAnnotation);
@@ -1405,7 +1465,9 @@ export class MemStorage implements IStorage {
       createdAt: now,
       updatedAt: now,
       notes: operation.notes || null,
-      purpose: operation.purpose || null
+      purpose: operation.purpose || null,
+      isCrossFlupsy: operation.isCrossFlupsy ?? null,
+      transportMetadata: operation.transportMetadata ?? null
     };
     
     this.screeningOperations.set(id, newOperation);
@@ -1509,7 +1571,13 @@ export class MemStorage implements IStorage {
       id,
       dismissed: false,
       positionReleased: false,
-      createdAt: now
+      createdAt: now,
+      flupsyId: sourceBasket.flupsyId ?? null,
+      animalCount: sourceBasket.animalCount ?? null,
+      totalWeight: sourceBasket.totalWeight ?? null,
+      animalsPerKg: sourceBasket.animalsPerKg ?? null,
+      sizeId: sourceBasket.sizeId ?? null,
+      lotId: sourceBasket.lotId ?? null
     };
     
     this.screeningSourceBaskets.set(id, newSourceBasket);
@@ -1576,7 +1644,17 @@ export class MemStorage implements IStorage {
       cycleId: null,
       positionAssigned: false,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      flupsyId: destinationBasket.flupsyId ?? null,
+      row: destinationBasket.row ?? null,
+      position: destinationBasket.position ?? null,
+      animalCount: destinationBasket.animalCount ?? null,
+      liveAnimals: destinationBasket.liveAnimals ?? null,
+      totalWeight: destinationBasket.totalWeight ?? null,
+      animalsPerKg: destinationBasket.animalsPerKg ?? null,
+      deadCount: destinationBasket.deadCount ?? null,
+      mortalityRate: destinationBasket.mortalityRate ?? null,
+      notes: destinationBasket.notes ?? null
     };
     
     this.screeningDestinationBaskets.set(id, newDestinationBasket);

@@ -211,7 +211,7 @@ export default function IMM() {
     <div className="container mx-auto px-4 py-6 space-y-6">
       <PageHeader
         title="IMM — Indice di Maturità del Magazzino"
-        description="Punteggio 0–100 che indica quanto il magazzino è vicino alla taglia commerciale obiettivo. Pesa size, tempo, qualità e affidabilità (mortalità)."
+        subtitle="Punteggio 0–100 che indica quanto il magazzino è vicino alla taglia commerciale obiettivo. Pesa size, tempo, qualità e affidabilità (mortalità)."
       />
 
       {/* Config */}

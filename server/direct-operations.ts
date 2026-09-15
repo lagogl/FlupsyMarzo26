@@ -388,7 +388,7 @@ export function implementDirectOperationRoute(app: Express) {
       console.log("Validazione date per operazione...");
       
       // Per prima-attivazione su cestello LIBERO, non validare contro vecchi cicli chiusi
-      let existingOperations = [];
+      let existingOperations: (typeof operations.$inferSelect)[] = [];
       
       if (operationData.type === 'prima-attivazione' && !operationData.cycleId) {
         // Prima-attivazione su cestello libero: controlla solo che il cestello sia disponibile
@@ -734,8 +734,8 @@ export function implementDirectOperationRoute(app: Express) {
         // Per operazioni standard, il cycleId deve essere fornito
         if (!operationData.cycleId) {
           // Tenta di recuperare il ciclo attivo del cestello
-          if (basket[0].currentCycleId) {
-            operationData.cycleId = basket[0].currentCycleId;
+          if (basket.currentCycleId) {
+            operationData.cycleId = basket.currentCycleId;
             console.log(`Recuperato automaticamente cycleId ${operationData.cycleId} dal cestello`);
           } else {
             throw new Error("cycleId è obbligatorio per operazioni che non sono di prima attivazione");
@@ -811,14 +811,14 @@ export function implementDirectOperationRoute(app: Express) {
             try {
               console.log("Creazione notifica per operazione di vendita...");
               app.locals.createSaleNotification(newOperation[0].id)
-                .then((notification) => {
+                .then((notification: { id: number } | null | undefined) => {
                   if (notification) {
                     console.log("Notifica di vendita creata con successo:", notification.id);
                   } else {
                     console.log("Nessuna notifica creata");
                   }
                 })
-                .catch((notificationError) => {
+                .catch((notificationError: unknown) => {
                   console.error("Errore nella creazione della notifica di vendita:", notificationError);
                 });
             } catch (notificationError) {

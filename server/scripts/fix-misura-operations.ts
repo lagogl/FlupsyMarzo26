@@ -74,7 +74,7 @@ async function fixMisuraOperations() {
     ORDER BY basket_id, cycle_id, date
   `);
 
-  const misuraToFix = result.rows as MisuraToFix[];
+  const misuraToFix = result.rows as unknown as MisuraToFix[];
   console.log(`📊 Trovate ${misuraToFix.length} operazioni MISURA da correggere`);
   console.log("");
 

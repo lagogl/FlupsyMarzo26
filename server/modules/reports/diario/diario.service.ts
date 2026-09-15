@@ -18,7 +18,7 @@ class DiarioService {
     const totaliPerTaglia: Record<string, number> = {};
     
     for (const ciclo of cicliAttiviQuery.rows) {
-      const cycleId = ciclo.cycle_id;
+        const cycleId = Number(ciclo.cycle_id);
       
       const operazioneQuery = await db.execute(sql`
         SELECT o.animal_count, o.size_id, s.code AS size_code
@@ -33,9 +33,9 @@ class DiarioService {
       
       if (operazioneQuery.rows.length > 0) {
         const operazione = operazioneQuery.rows[0];
-        const animalCount = parseInt(operazione.animal_count);
+        const animalCount = parseInt(String(operazione.animal_count), 10);
         
-        let sizeCode = operazione.size_code;
+        let sizeCode = typeof operazione.size_code === 'string' ? operazione.size_code : undefined;
         
         if (!operazione.size_id) {
           const tagliaQuery = await db.execute(sql`
@@ -50,7 +50,7 @@ class DiarioService {
           `);
           
           if (tagliaQuery.rows.length > 0) {
-            sizeCode = tagliaQuery.rows[0].code;
+            sizeCode = String(tagliaQuery.rows[0].code);
           } else {
             sizeCode = 'Non specificata';
           }

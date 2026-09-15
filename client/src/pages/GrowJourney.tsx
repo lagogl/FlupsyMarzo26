@@ -617,7 +617,15 @@ export default function GrowJourney() {
                   <div>
                     <h3 className="text-sm font-medium mb-3">Storico Misurazioni</h3>
                     <div className="space-y-2">
-                      {weightHistory.map((entry, index) => (
+                      {weightHistory.map((entry: {
+                        formattedDate: string;
+                        date?: string;
+                        sizeColor: string;
+                        sizeCode: string;
+                        type?: string;
+                        weight: number;
+                        animalsPerKg: number;
+                      }, index: number) => (
                         <div key={index} className="relative">
                           {index < weightHistory.length - 1 && (
                             <div className="absolute top-7 left-3 h-full w-0.5 bg-gray-200"></div>

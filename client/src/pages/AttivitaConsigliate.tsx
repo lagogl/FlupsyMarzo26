@@ -195,7 +195,7 @@ export default function AttivitaConsigliate() {
     <div className="container mx-auto p-6 space-y-6">
       <PageHeader 
         title="Attività Consigliate Oggi" 
-        description="Suggerimenti AI basati sui dati dell'impianto per ottimizzare crescita e ridurre mortalità"
+        subtitle="Suggerimenti AI basati sui dati dell'impianto per ottimizzare crescita e ridurre mortalità"
       />
 
       <Card>

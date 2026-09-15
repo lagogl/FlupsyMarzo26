@@ -104,7 +104,7 @@ export class LotLifecycleController {
           await LotAutoStatsService.recalculateAllLotStats(lot.id);
 
         } catch (error) {
-          const errorMessage = `Errore controllo lotto ${lot.id}: ${error.message}`;
+          const errorMessage = `Errore controllo lotto ${lot.id}: ${error instanceof Error ? error.message : String(error)}`;
           results.errors.push(errorMessage);
           console.error(`❌ LOT-LIFECYCLE: ${errorMessage}`);
         }
@@ -126,7 +126,7 @@ export class LotLifecycleController {
       console.error('❌ LOT-LIFECYCLE: Errore controllo batch:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
@@ -220,7 +220,7 @@ export class LotLifecycleController {
       console.error('❌ LOT-LIFECYCLE: Errore ricalcolo lotto:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
@@ -298,7 +298,7 @@ export class LotLifecycleController {
       console.error('❌ LOT-LIFECYCLE: Errore generazione statistiche:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }

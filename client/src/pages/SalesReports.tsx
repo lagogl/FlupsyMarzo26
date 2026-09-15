@@ -30,12 +30,12 @@ export default function SalesReports() {
   });
 
   // Query per i clienti  
-  const { data: customersData, refetch: refetchCustomers } = useQuery({
+  const { data: customersData, isLoading: customersLoading, refetch: refetchCustomers } = useQuery({
     queryKey: ['/api/sync/customers'],
   });
 
   // Query per le consegne
-  const { data: deliveriesData, refetch: refetchDeliveries } = useQuery({
+  const { data: deliveriesData, isLoading: deliveriesLoading, refetch: refetchDeliveries } = useQuery({
     queryKey: ['/api/sync/deliveries'],
   });
 
@@ -431,7 +431,7 @@ export default function SalesReports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {deliveriesData?.isLoading ? (
+                    {deliveriesLoading ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-8">
                           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
@@ -538,7 +538,7 @@ export default function SalesReports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {customersData?.isLoading ? (
+                    {customersLoading ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-8">
                           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />

@@ -165,19 +165,19 @@ export class LotsService {
     endDate?: string;
   }) {
     const { lotLedger } = await import("@shared/schema");
-    const { and, gte, lte, eq, desc } = await import("drizzle-orm");
+    const { and, gte, lte, eq, desc, sql } = await import("drizzle-orm");
 
     const page = filters?.page || 1;
     const pageSize = filters?.pageSize || 50;
     
-    const conditions = [];
+    const conditions: import("drizzle-orm").SQL[] = [];
     
     if (filters?.lotId) {
       conditions.push(eq(lotLedger.lotId, filters.lotId));
     }
     
     if (filters?.type && filters.type !== 'all') {
-      conditions.push(eq(lotLedger.type, filters.type));
+      conditions.push(sql`${lotLedger.type} = ${filters.type}`);
     }
     
     if (filters?.startDate) {

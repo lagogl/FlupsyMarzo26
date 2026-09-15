@@ -47,7 +47,7 @@ class NfcService {
 
     // 3. Controlla Bluetooth NFC  
     try {
-      if (bluetoothNFCDetector.isBluetoothAvailable()) {
+      if ('bluetooth' in navigator) {
         return true;
       }
     } catch (error) {

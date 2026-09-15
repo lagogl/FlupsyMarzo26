@@ -36,6 +36,14 @@ interface PesoDirectFormProps {
   onCancel: () => void;
 }
 
+interface PesoSizeOption {
+  id: number;
+  code: string;
+  maxAnimalsPerKg: number | null;
+  minAnimalsPerKg: number | null;
+  color?: string | null;
+}
+
 // Funzione per formattare le date in formato italiano
 const formatDate = (dateString: string) => {
   try {
@@ -114,7 +122,7 @@ export default function PesoDirectForm({
   const [calculatedSize, setCalculatedSize] = useState<{code: string, id: number} | null>(null);
   
   // Recupera le taglie per determinare quella corrispondente al peso medio
-  const { data: sizes } = useQuery({
+  const { data: sizes = [] } = useQuery<PesoSizeOption[]>({
     queryKey: ['/api/sizes'],
   });
   
@@ -122,8 +130,10 @@ export default function PesoDirectForm({
   useEffect(() => {
     if (formData.averageWeight && sizes && sizes.length > 0) {
       // Trova la taglia corrispondente al peso medio
-      const matchingSize = sizes.find(size => 
-        formData.averageWeight! >= (1000000 / size.maxAnimalsPerKg) && 
+      const matchingSize = sizes.find(size =>
+        size.maxAnimalsPerKg !== null &&
+        size.minAnimalsPerKg !== null &&
+        formData.averageWeight! >= (1000000 / size.maxAnimalsPerKg) &&
         formData.averageWeight! <= (1000000 / size.minAnimalsPerKg)
       );
       
@@ -212,11 +222,10 @@ export default function PesoDirectForm({
       // IMPORTANTE: Non inviamo esplicitamente il sizeId per le operazioni peso
       // Lasciamo che il server calcoli la taglia appropriata in base a animalsPerKg
       const operationData = {
-        type: 'peso',
+        type: 'peso' as const,
         date: selectedDate.toISOString(), // Usa la data validata
         basketId,
         cycleId,
-        // sizeId: omesso intenzionalmente per far calcolare la taglia al server
         lotId,
         animalsPerKg: formData.animalsPerKg,
         averageWeight: formData.averageWeight,
@@ -232,7 +241,7 @@ export default function PesoDirectForm({
       
       // Invia al server usando la route diretta per bypassare i controlli di una operazione al giorno
       // Questo evita l'errore "Per ogni cesta è consentita una sola operazione al giorno"
-      const response = await createDirectOperation(operationData);
+      const response = await createDirectOperation(operationData as Parameters<typeof createDirectOperation>[0]);
       
       // Mostra notifica principale
       toast({

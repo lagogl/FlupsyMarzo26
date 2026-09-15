@@ -47,6 +47,8 @@ export interface MenuTranslations {
     statistics: string;
     lotsAnalytics: string;
     mixedLotsAnalytics: string;
+    reportLotto: string;
+    operators: string;
     lotLedgerStatistics: string;
     sgrIndices: string;
     salesReports: string;
@@ -112,6 +114,7 @@ export const translations: Record<'it' | 'en', MenuTranslations> = {
       lotsAnalytics: "Analisi Lotti",
       mixedLotsAnalytics: "Analytics Lotti Misti",
       reportLotto: "Report Lotto",
+      operators: "Gestione Operatori",
       lotLedgerStatistics: "Statistiche Lot Ledger",
       sgrIndices: "Indici SGR",
       salesReports: "Report di Vendita",
@@ -172,6 +175,8 @@ export const translations: Record<'it' | 'en', MenuTranslations> = {
       statistics: "Statistics",
       lotsAnalytics: "Lots Analytics",
       mixedLotsAnalytics: "Mixed Lots Analytics",
+      reportLotto: "Lot Report",
+      operators: "Operator Management",
       lotLedgerStatistics: "Lot Ledger Statistics",
       sgrIndices: "SGR Indices",
       salesReports: "Sales Reports",

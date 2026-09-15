@@ -30,7 +30,7 @@ export class LotInventoryService {
           sql`SELECT COALESCE(SUM(quantity), 0) as activation_total FROM lot_ledger 
               WHERE lot_id = ${lotId} AND type = 'activation'`
         );
-        const activationsResult = activationsData.rows?.[0] || activationsData[0];
+        const activationsResult = activationsData.rows?.[0];
         const activationsTotal = Number(activationsResult?.activation_total || 0); // Già negativo
         
         const storageAvailable = initialCount + activationsTotal; // Sottrae le attivazioni
@@ -43,7 +43,7 @@ export class LotInventoryService {
           sql`SELECT COALESCE(SUM(quantity), 0) as mortality_count FROM lot_ledger 
               WHERE lot_id = ${lotId} AND type = 'mortality'`
         );
-        const mortalityResult = mortalityData.rows?.[0] || mortalityData[0];
+        const mortalityResult = mortalityData.rows?.[0];
         const mortalityCount = Math.abs(Number(mortalityResult?.mortality_count || 0));
         
         // Vendite dall'allevamento
@@ -51,7 +51,7 @@ export class LotInventoryService {
           sql`SELECT COALESCE(SUM(quantity), 0) as sold_count FROM lot_ledger 
               WHERE lot_id = ${lotId} AND type = 'sale'`
         );
-        const soldResult = soldData.rows?.[0] || soldData[0];
+        const soldResult = soldData.rows?.[0];
         const soldCount = Math.abs(Number(soldResult?.sold_count || 0));
         
         const inCultivation = immessi - mortalityCount - soldCount;
@@ -148,7 +148,7 @@ export class LotInventoryService {
             RETURNING *`
       );
       
-      const result = resultData.rows?.[0] || resultData[0];
+      const result = resultData.rows?.[0];
       return result;
     } catch (error) {
       console.error("Errore durante la creazione della transazione:", error);
@@ -179,7 +179,7 @@ export class LotInventoryService {
             RETURNING *`
       );
       
-      const result = resultData.rows?.[0] || resultData[0];
+      const result = resultData.rows?.[0];
       return result;
     } catch (error) {
       console.error("Errore durante la registrazione del calcolo di mortalità:", error);

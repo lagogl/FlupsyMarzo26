@@ -23,12 +23,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Save, RotateCcw, CheckCircle2, AlertCircle, Loader2, Download, PieChart, X, Award } from "lucide-react";
 import ExcelJS from 'exceljs';
+// @ts-expect-error react-pivottable does not ship declarations for this subpath
 import PivotTableUI from 'react-pivottable/PivotTableUI';
 import 'react-pivottable/pivottable.css';
+// @ts-expect-error react-pivottable does not ship declarations for this subpath
 import TableRenderers from 'react-pivottable/TableRenderers';
+// @ts-expect-error react-pivottable does not ship declarations for this subpath
 import { aggregators as defaultAggregators } from 'react-pivottable/Utilities';
 import "../styles/spreadsheet.css";
 import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
+
 
 const italianRenderers: { [key: string]: any } = {
   'Tabella': TableRenderers['Table'],
@@ -76,6 +80,7 @@ interface BasketData {
     totalWeight?: number;
     animalsPerKg?: number;
   };
+  activationOperation?: { date: string };
 }
 
 // Separatore tra note di sistema (lotto misto) e note dell'operatore
@@ -151,13 +156,15 @@ interface OperationRowData {
   activationDate?: string;  // Data prima attivazione ciclo corrente
   flupsyName?: string;
   // Dati SGR (Specific Growth Rate)
-  currentCycleId?: number;
+  currentCycleId?: number | null;
   sgrPeso?: number | null;        // SGR calcolato da operazioni PESO
   sgrMedio?: number | null;       // SGR medio (media pesata)
   sgrMisura?: number | null;      // SGR calcolato da operazioni MISURA
   // Storico note del ciclo per tooltip
   allCycleNotes?: { date: string; note: string; type: string }[];
   vagliatureNote?: string | null;
+  lastOperation?: BasketData['lastOperation'];
+  lotComposition?: unknown;
 }
 
 // Tipi operazione per il modulo Spreadsheet
@@ -286,6 +293,8 @@ export default function SpreadsheetOperations() {
     notes?: string;
     date?: string;
     lotId?: number;
+    currentCycleId?: number | null;
+    physicalNumber?: number;
   } | null>(null);
   const [editingPosition, setEditingPosition] = useState<{top: number, left: number} | null>(null);
 
@@ -3084,7 +3093,7 @@ export default function SpreadsheetOperations() {
                   'SGR Misura': row.sgrMisura || 0,
                 };
               })}
-              onChange={s => setPivotState(s)}
+              onChange={(s: Record<string, unknown>) => setPivotState(s)}
               renderers={italianRenderers}
               aggregators={italianAggregators}
               rendererName={pivotState.rendererName || 'Tabella'}
@@ -4275,7 +4284,7 @@ export default function SpreadsheetOperations() {
                               {(() => {
                                 const lot = ((lots as any[]) || []).find((l: any) => l.id === (row.lotId || 1));
                                 // Verifica lotti misti dai dati lotComposition (più affidabile delle note)
-                                const isMixedLot = row.lotComposition && row.lotComposition.length > 1;
+                                const isMixedLot = Array.isArray(row.lotComposition) && row.lotComposition.length > 1;
                                 
                                 return (
                                   <>
@@ -4820,7 +4829,7 @@ export default function SpreadsheetOperations() {
                   </span>
                 </span>
                 <button 
-                  onClick={closeEditingForm}
+                  onClick={() => closeEditingForm()}
                   className="text-gray-500 hover:text-gray-700 text-xl font-bold leading-none 
                            w-6 h-6 md:w-6 md:h-6 max-md:w-8 max-md:h-8 
                            flex items-center justify-center rounded hover:bg-gray-100
@@ -5225,7 +5234,7 @@ export default function SpreadsheetOperations() {
                   Annulla
                 </button>
                 <button
-                  onClick={saveEditingForm}
+                  onClick={() => saveEditingForm()}
                   disabled={!validateEditingForm().valid}
                   className={`px-3 py-1 md:px-3 md:py-1 max-md:px-4 max-md:py-3 
                            text-xs md:text-xs max-md:text-sm font-medium border rounded max-md:flex-1 max-md:h-12 

@@ -1485,7 +1485,7 @@ export default function OrdiniCondivisi() {
                                 <CalendarComponent
                                   mode="range"
                                   selected={selectedDateRange}
-                                  onSelect={handleDateRangeSelect}
+                                  onSelect={(range) => { void handleDateRangeSelect(range ? { from: range.from, to: range.to } : undefined); }}
                                   numberOfMonths={2}
                                   disabled={(date) => date < new Date(ordine.data) || salvaDateConsegnaMutation.isPending}
                                   className="rounded-md"

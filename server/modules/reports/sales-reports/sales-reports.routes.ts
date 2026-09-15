@@ -54,7 +54,7 @@ salesReportsRoutes.get('/sales', async (req: Request, res: Response) => {
     .leftJoin(lots, eq(operations.lotId, lots.id))
     .where(
       and(
-        inArray(operations.type, ['vendita', 'selezione-per-vendita', 'cessazione']),
+        inArray(operations.type, ['vendita', 'selezione-vendita', 'cessazione']),
         gte(operations.date, from),
         lte(operations.date, to)
       )
@@ -113,7 +113,7 @@ salesReportsRoutes.get('/sales/summary', async (req: Request, res: Response) => 
       .from(operations)
       .where(
         and(
-          inArray(operations.type, ['vendita', 'selezione-per-vendita']),
+          inArray(operations.type, ['vendita', 'selezione-vendita']),
           gte(operations.date, startDate as string),
           lte(operations.date, endDate as string)
         )
@@ -215,7 +215,7 @@ salesReportsRoutes.get('/sales/monthly', async (req: Request, res: Response) => 
       .from(operations)
       .where(
         and(
-          inArray(operations.type, ['vendita', 'selezione-per-vendita']),
+          inArray(operations.type, ['vendita', 'selezione-vendita']),
           sql`EXTRACT(YEAR FROM ${operations.date}) = ${year}`
         )
       )

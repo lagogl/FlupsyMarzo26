@@ -56,25 +56,17 @@ const operationSchema = z.object({
   type: z.string({
     required_error: "Il tipo di operazione è obbligatorio",
   }),
-  basketId: z.number({
-    required_error: "Il cestello è obbligatorio",
-  }),
+  basketId: z.number().nullable().optional(),
   flupsyId: z.number({
     required_error: "Il FLUPSY è obbligatorio",
   }),
   cycleId: z.number().nullable().optional(),
   sizeId: z.number().nullable().optional(),
   sgrId: z.number().nullable().optional(),
-  lotId: z.number({
-    required_error: "Il lotto è obbligatorio",
-  }),
+  lotId: z.number().nullable().optional(),
   // CAMPI OBBLIGATORI per tutte le operazioni
-  animalCount: z.number({
-    required_error: "Il numero animali vivi è obbligatorio",
-  }).min(1, "Il numero animali vivi deve essere maggiore di 0"),
-  totalWeight: z.number({
-    required_error: "Il peso totale grammi è obbligatorio",
-  }).min(1, "Il peso totale deve essere maggiore di 0"),
+  animalCount: z.number().nullable().optional(),
+  totalWeight: z.number().nullable().optional(),
   // Campi opzionali di base, validati condizionalmente tramite superRefine
   sampleWeight: z.number().nullable().optional(),
   deadCount: z.number().nullable().optional().default(0),
@@ -85,8 +77,21 @@ const operationSchema = z.object({
   liveAnimals: z.number().nullable().optional(),
   totalSample: z.number().nullable().optional(),
   mortalityRate: z.number().nullable().optional(),
+  averageWeight: z.number().nullable().optional(),
   manualCountAdjustment: z.boolean().default(false).optional(),
 }).superRefine((data, ctx) => {
+  if (data.basketId === null || data.basketId === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['basketId'], message: 'Il cestello è obbligatorio' });
+  }
+  if (data.lotId === null || data.lotId === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lotId'], message: 'Il lotto è obbligatorio' });
+  }
+  if (data.animalCount === null || data.animalCount === undefined || data.animalCount < 1) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['animalCount'], message: 'Il numero animali vivi deve essere maggiore di 0' });
+  }
+  if (data.totalWeight === null || data.totalWeight === undefined || data.totalWeight < 1) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['totalWeight'], message: 'Il peso totale deve essere maggiore di 0' });
+  }
   // Validazione condizionale: se NON è attiva la modifica manuale,
   // sampleWeight e liveAnimals diventano obbligatori per operazioni misura/prima-attivazione
   if (!data.manualCountAdjustment) {
@@ -161,6 +166,58 @@ type OperationFormProps = {
   defaultOperationDate?: string;
 };
 
+interface CompactOperation {
+  id?: number;
+  basketId: number;
+  cycleId: number | null;
+  date: string;
+  type: string;
+  animalCount?: number | null;
+  totalWeight?: number | null;
+  animalsPerKg?: number | null;
+  averageWeight?: number | null;
+  lotId?: number | null;
+  [key: string]: unknown;
+}
+
+interface CompactBasket {
+  id: number;
+  flupsyId: number;
+  state: string;
+  currentCycleId: number | null;
+  physicalNumber?: number;
+  row?: string | null;
+  position?: number | null;
+  cycleCode?: string | null;
+  tareWeightG?: number | null;
+}
+
+interface CompactFlupsy {
+  id: number;
+  name: string;
+}
+
+interface CompactCycle {
+  id: number;
+  basketId: number;
+  state?: string;
+  startDate?: string;
+}
+
+interface CompactSize {
+  id: number;
+  code: string;
+  name?: string;
+  minAnimalsPerKg: number | null;
+  maxAnimalsPerKg: number | null;
+  color?: string | null;
+}
+
+interface CompactLot {
+  id: number;
+  name?: string;
+}
+
 export default function OperationFormCompact({
   onSubmit,
   onCancel,
@@ -222,10 +279,10 @@ export default function OperationFormCompact({
   const watchDate = form.watch("date");
   const watchLotId = form.watch("lotId");
   const watchTotalWeight = form.watch("totalWeight");
-  const watchAnimalsPerKg = form.watch("animalsPerKg");
-  const watchSampleWeight = form.watch("sampleWeight");
-  const watchLiveAnimals = form.watch("liveAnimals");
-  const watchTotalSample = form.watch("totalSample");
+  const watchAnimalsPerKg = form.watch("animalsPerKg") ?? 0;
+  const watchSampleWeight = form.watch("sampleWeight") ?? 0;
+  const watchLiveAnimals = form.watch("liveAnimals") ?? 0;
+  const watchTotalSample = form.watch("totalSample") ?? 0;
   const deadCount = form.watch("deadCount") || 0;
   const watchManualCountAdjustment = form.watch("manualCountAdjustment");
   const watchAnimalCount = form.watch("animalCount");
@@ -236,7 +293,7 @@ export default function OperationFormCompact({
 
   // Query per ottenere operazioni (necessarie per validazione data)
   // CRITICO: includeAll=true per caricare TUTTE le operazioni, non solo le prime 20
-  const { data: operations } = useQuery({
+  const { data: operations } = useQuery<CompactOperation[]>({
     queryKey: ['/api/operations', { includeAll: true, pageSize: 1000 }],
     enabled: !isLoading,
   });
@@ -379,17 +436,17 @@ export default function OperationFormCompact({
   }, [watchFlupsyId, watchBasketId, watchType, watchDate, watchLotId, watchAnimalsPerKg, watchSampleWeight, watchLiveAnimals, watchTotalWeight, watchManualCountAdjustment, watchAnimalCount, isDateValid, form, formErrors.animalsPerKg, animalBalance, watchCycleId]);
 
   // Query per ottenere dati da database
-  const { data: flupsys } = useQuery({ 
+  const { data: flupsys } = useQuery<CompactFlupsy[]>({
     queryKey: ['/api/flupsys'],
     enabled: !isLoading,
   });
   
-  const { data: sizes } = useQuery({ 
+  const { data: sizes } = useQuery<CompactSize[]>({
     queryKey: ['/api/sizes'],
     enabled: !isLoading,
   });
   
-  const { data: baskets, refetch: refetchBaskets } = useQuery({ 
+  const { data: baskets, refetch: refetchBaskets } = useQuery<CompactBasket[]>({
     queryKey: ['/api/baskets', 'includeAll'],
     queryFn: async () => {
       // Usa cache ottimizzata senza bypass per performance
@@ -401,7 +458,7 @@ export default function OperationFormCompact({
     staleTime: 60000, // Cache for 1 minute
   });
   
-  const { data: cyclesData, refetch: refetchCycles } = useQuery({ 
+  const { data: cyclesData, refetch: refetchCycles } = useQuery<CompactCycle[]>({
     queryKey: ['/api/cycles'],
     queryFn: async () => {
       // Usa cache ottimizzata per performance
@@ -415,7 +472,7 @@ export default function OperationFormCompact({
   
   const cycles = cyclesData || [];
   
-  const { data: lots } = useQuery({ 
+  const { data: lots } = useQuery<CompactLot[]>({
     queryKey: ['/api/lots/active'],
     enabled: !isLoading,
   });
@@ -476,7 +533,7 @@ export default function OperationFormCompact({
   useEffect(() => {
     if (watchFlupsyId && baskets && baskets.length > 0) {
       setIsLoadingFlupsyBaskets(true);
-      const flupsyIdNum = parseInt(watchFlupsyId);
+      const flupsyIdNum = Number(watchFlupsyId);
       const filtered = baskets.filter((basket: any) => basket.flupsyId === flupsyIdNum);
       
       // Log per debug - mostra stato attuale dei cestelli
@@ -690,7 +747,7 @@ export default function OperationFormCompact({
             op.cycleId === currentCycleId
           );
           
-          if (firstActivationOp && form.getValues('lotId') !== firstActivationOp.lotId) {
+          if (firstActivationOp && firstActivationOp.lotId != null && form.getValues('lotId') !== firstActivationOp.lotId) {
             console.log('✅ Trovata Prima Attivazione - impostazione lotto:', firstActivationOp);
             form.setValue('lotId', firstActivationOp.lotId);
           }
@@ -771,7 +828,7 @@ export default function OperationFormCompact({
       // (1 - mortalità), sarebbe un doppio sconto. La mortalità resta salvata come dato.
       if (watchTotalWeight && watchTotalWeight > 0) {
         const calculatedAnimalCount = Math.round((watchTotalWeight / 1000) * apk);
-        form.setValue('animalCount', calculatedAnimalCount > 0 ? calculatedAnimalCount : null);
+        form.setValue('animalCount', calculatedAnimalCount > 0 ? calculatedAnimalCount : 0);
 
         // Trova e imposta taglia
         if (sizes && sizes.length > 0) {
@@ -850,7 +907,7 @@ export default function OperationFormCompact({
     if (lastOpWithCount) {
       // FORMULA v1: cascata mortalità sul conteggio precedente
       // Nr animali nuovo = Nr animali precedente × (100 - mortalità%) / 100
-      const previousAnimalCount = lastOpWithCount.animalCount;
+      const previousAnimalCount = lastOpWithCount.animalCount ?? 0;
       const liveCount = watchLiveAnimals || 0;
       const totalSample = liveCount + deadCount;
       
@@ -1188,11 +1245,11 @@ export default function OperationFormCompact({
                             // NON resettiamo il sizeId, sarà ricalcolato automaticamente
                             // form.setValue('sizeId', null);
                           } else if (value === 'misura') {
-                            form.setValue('sampleWeight', null);
-                            form.setValue('liveAnimals', null);
+                            form.setValue('sampleWeight', undefined);
+                            form.setValue('liveAnimals', undefined);
                             form.setValue('deadCount', null);
-                            form.setValue('totalSample', null);
-                            form.setValue('mortalityRate', null);
+                            form.setValue('totalSample', undefined);
+                            form.setValue('mortalityRate', undefined);
                             form.setValue('totalWeight', null);
                             form.setValue('animalsPerKg', null);
                             form.setValue('sizeId', null);
@@ -1247,7 +1304,7 @@ export default function OperationFormCompact({
                       <FormLabel className="text-xs font-medium">Data <span className="text-red-500">*</span></FormLabel>
                       <DatePicker
                         date={field.value as Date}
-                        setDate={(date) => {
+                        setDate={(date: Date | undefined) => {
                           field.onChange(date);
                           // La validazione della data è gestita dal useMemo validateOperationDate
                         }}
@@ -1317,9 +1374,9 @@ export default function OperationFormCompact({
                       {watchFlupsyId && baskets && baskets.length > 0 && (
                         <div className="mt-2 p-2 bg-gray-50 rounded-md border">
                           <div className="text-xs font-medium text-gray-600">
-                            Occupazione FLUPSY ({baskets.filter(b => b.flupsyId === parseInt(watchFlupsyId)).length} cestelli) - 
-                            Attivi: {baskets.filter(b => b.flupsyId === parseInt(watchFlupsyId) && b.state === 'active').length}, 
-                            Disponibili: {baskets.filter(b => b.flupsyId === parseInt(watchFlupsyId) && b.state === 'available').length}
+                            Occupazione FLUPSY ({baskets.filter(b => b.flupsyId === Number(watchFlupsyId)).length} cestelli) -
+                            Attivi: {baskets.filter(b => b.flupsyId === Number(watchFlupsyId) && b.state === 'active').length},
+                            Disponibili: {baskets.filter(b => b.flupsyId === Number(watchFlupsyId) && b.state === 'available').length}
                           </div>
                         </div>
                       )}
@@ -1359,7 +1416,7 @@ export default function OperationFormCompact({
                         </div>
                       ) : (
                         <Select
-                          disabled={!watchFlupsyId || isLoading || (baskets && watchFlupsyId ? baskets.filter(b => b.flupsyId === parseInt(watchFlupsyId)).length === 0 : true)}
+                          disabled={!watchFlupsyId || isLoading || (baskets && watchFlupsyId ? baskets.filter(b => b.flupsyId === Number(watchFlupsyId)).length === 0 : true)}
                           value={field.value?.toString() || ''}
                           onValueChange={(value) => {
                             const basketId = Number(value);
@@ -1492,7 +1549,7 @@ export default function OperationFormCompact({
                               ) : (
                                 <span>
                                   {watchFlupsyId ? 
-                                    ((baskets && baskets.filter(b => b.flupsyId === parseInt(watchFlupsyId)).length > 0) ? "Seleziona cestello" : "Nessun cestello") : 
+                                    ((baskets && baskets.filter(b => b.flupsyId === Number(watchFlupsyId)).length > 0) ? "Seleziona cestello" : "Nessun cestello") :
                                     "Seleziona prima FLUPSY"}
                                 </span>
                               )}
@@ -1501,8 +1558,8 @@ export default function OperationFormCompact({
                         </FormControl>
                         <SelectContent>
                           {/* TEMPORANEO: usa baskets direttamente invece di flupsyBaskets */}
-                          {(baskets && watchFlupsyId ? baskets.filter(b => b.flupsyId === parseInt(watchFlupsyId)) : []).length > 0 ? (
-                            (baskets ? baskets.filter(b => b.flupsyId === parseInt(watchFlupsyId)) : []).map((basket) => {
+                          {(baskets && watchFlupsyId ? baskets.filter(b => b.flupsyId === Number(watchFlupsyId)) : []).length > 0 ? (
+                            (baskets ? baskets.filter(b => b.flupsyId === Number(watchFlupsyId)) : []).map((basket) => {
                               // Trova l'ultima operazione per questo cestello dalle operazioni caricate
                               const basketOperations = operations?.filter((op: any) => 
                                 op.basketId === basket.id && 
@@ -1990,8 +2047,8 @@ export default function OperationFormCompact({
                                   value={(() => {
                                     // Trova la taglia in base al valore di animalsPerKg
                                     const size = sizes.find(s => 
-                                      s.minAnimalsPerKg <= watchAnimalsPerKg && 
-                                      s.maxAnimalsPerKg >= watchAnimalsPerKg
+                                      (s.minAnimalsPerKg ?? 0) <= watchAnimalsPerKg &&
+                                      (s.maxAnimalsPerKg ?? Number.MAX_SAFE_INTEGER) >= watchAnimalsPerKg
                                     );
                                     
                                     if (size) {
@@ -1999,7 +2056,7 @@ export default function OperationFormCompact({
                                       if (form.getValues('sizeId') !== size.id) {
                                         form.setValue('sizeId', size.id);
                                       }
-                                      return `${size.name} (${size.minAnimalsPerKg.toLocaleString('it-IT')}-${size.maxAnimalsPerKg.toLocaleString('it-IT')} animali/kg)`;
+                                      return `${size.name} (${(size.minAnimalsPerKg ?? 0).toLocaleString('it-IT')}-${(size.maxAnimalsPerKg ?? 0).toLocaleString('it-IT')} animali/kg)`;
                                     } else {
                                       return 'Nessuna taglia corrispondente';
                                     }
@@ -2302,8 +2359,8 @@ export default function OperationFormCompact({
                           value={(() => {
                             // Trova la taglia in base al valore di animalsPerKg
                             const size = sizes.find(s => 
-                              s.minAnimalsPerKg <= watchAnimalsPerKg && 
-                              s.maxAnimalsPerKg >= watchAnimalsPerKg
+                                      (s.minAnimalsPerKg ?? 0) <= watchAnimalsPerKg &&
+                                      (s.maxAnimalsPerKg ?? Number.MAX_SAFE_INTEGER) >= watchAnimalsPerKg
                             );
                             
                             if (size) {
@@ -2311,7 +2368,7 @@ export default function OperationFormCompact({
                               if (form.getValues('sizeId') !== size.id) {
                                 form.setValue('sizeId', size.id);
                               }
-                              return `${size.name} (${size.minAnimalsPerKg.toLocaleString('it-IT')}-${size.maxAnimalsPerKg.toLocaleString('it-IT')} animali/kg)`;
+                              return `${size.name} (${(size.minAnimalsPerKg ?? 0).toLocaleString('it-IT')}-${(size.maxAnimalsPerKg ?? 0).toLocaleString('it-IT')} animali/kg)`;
                             } else {
                               return 'Nessuna taglia corrispondente';
                             }
@@ -2642,6 +2699,7 @@ export default function OperationFormCompact({
                         placeholder="Inserisci eventuali note sull'operazione..."
                         className="resize-none h-20 text-sm"
                         {...field}
+                        value={field.value ?? ''}
                       />
                     </FormControl>
                     <FormMessage />

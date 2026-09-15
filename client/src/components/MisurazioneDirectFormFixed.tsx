@@ -37,6 +37,30 @@ interface MisurazioneDirectFormProps {
   onCancel: () => void;
 }
 
+interface FixedSizeOption {
+  id: number;
+  code: string;
+  name?: string;
+  minAnimalsPerKg: number | null;
+  maxAnimalsPerKg: number | null;
+}
+
+interface FixedSgrOption {
+  month: string;
+  percentage: number;
+}
+
+interface CycleOperation {
+  id?: number;
+  cycleId: number | null;
+  type: string;
+  date: string;
+  size?: { code?: string } | null;
+  averageWeight?: number | null;
+  animalsPerKg?: number | null;
+  animalCount?: number | null;
+}
+
 // Funzione per formattare le date in formato italiano
 const formatDate = (dateString: string) => {
   try {
@@ -63,7 +87,7 @@ export default function MisurazioneDirectFormFixed({
   onCancel
 }: MisurazioneDirectFormProps) {
   // Query per ottenere i dati dell'ultima operazione completa in questo ciclo
-  const { data: cycleOperations } = useQuery({
+  const { data: cycleOperations } = useQuery<CycleOperation[]>({
     queryKey: ['/api/operations', { cycleId }],
     enabled: !!cycleId
   });
@@ -93,12 +117,12 @@ export default function MisurazioneDirectFormFixed({
   const [calculatedTotalWeight, setCalculatedTotalWeight] = useState<number | null>(null);
   
   // Recupera gli SGR per il calcolo delle performance
-  const { data: sgrs } = useQuery({
+  const { data: sgrs = [] } = useQuery<FixedSgrOption[]>({
     queryKey: ['/api/sgr'],
   });
   
   // Recupera le taglie per mostrare quella calcolata automaticamente in base al peso medio
-  const { data: sizes } = useQuery({
+  const { data: sizes = [] } = useQuery<FixedSizeOption[]>({
     queryKey: ['/api/sizes'],
   });
   
@@ -151,7 +175,7 @@ export default function MisurazioneDirectFormFixed({
     
     // Ottieni il mese per SGR
     const month = format(lastDate, 'MMMM', { locale: it }).toLowerCase();
-    const sgrData = sgrs.find((sgr: any) => sgr.month.toLowerCase() === month);
+    const sgrData = sgrs.find((sgr) => sgr.month.toLowerCase() === month);
     
     if (!sgrData) return null;
     
@@ -174,7 +198,7 @@ export default function MisurazioneDirectFormFixed({
   
   // Calcola i valori basati sui dati del campione
   const calculateValues = () => {
-    if (sampleWeight && animalsCount && sampleWeight > 0 && animalsCount > 0) {
+    if (sampleWeight !== null && sampleWeight > 0 && animalsCount !== null && animalsCount > 0) {
       // Calcolo animali per kg
       const newAnimalsPerKg = Math.round((animalsCount / sampleWeight) * 1000);
       
@@ -361,7 +385,7 @@ export default function MisurazioneDirectFormFixed({
   
   // Effetto per il calcolo automatico al cambio dei valori
   useEffect(() => {
-    if (sampleWeight > 0 && animalsCount > 0) {
+    if (sampleWeight !== null && sampleWeight > 0 && animalsCount !== null && animalsCount > 0) {
       calculateValues();
     }
   }, [sampleWeight, animalsCount, samplePercentage, deadCount, totalWeight]);
@@ -496,7 +520,7 @@ export default function MisurazioneDirectFormFixed({
                 onChange={(e) => setSelectedSizeId(e.target.value ? parseInt(e.target.value) : null)}
               >
                 <option value="">Seleziona taglia</option>
-                {sizes && sizes.map((size: any) => (
+                {sizes.map((size) => (
                   <option key={size.id} value={size.id}>
                     {size.code} - {size.name}
                   </option>
@@ -634,10 +658,14 @@ export default function MisurazioneDirectFormFixed({
           {/* Indicatore di crescita */}
           {growthData && defaultAverageWeight && (
             <div className="mt-4">
-              <GrowthPerformanceIndicator 
-                data={growthData}
-                previousWeight={defaultAverageWeight}
-                currentWeight={averageWeight || 0}
+              <GrowthPerformanceIndicator
+                actualGrowthPercent={growthData.actualGrowth}
+                targetGrowthPercent={growthData.expectedGrowth}
+                daysBetweenMeasurements={growthData.days}
+                currentAverageWeight={averageWeight}
+                previousAverageWeight={defaultAverageWeight}
+                sgrMonth={growthData.month}
+                sgrDailyPercentage={growthData.sgrPercentage}
               />
             </div>
           )}

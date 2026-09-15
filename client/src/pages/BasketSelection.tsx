@@ -413,7 +413,7 @@ export default function BasketSelection() {
     return baskets.map(basket => {
       // Trova il ciclo corrente
       const currentCycle = basket.currentCycleId ? 
-        cycles.find(c => c.id === basket.currentCycleId) || null : null;
+        cycles.find((c: Cycle) => c.id === basket.currentCycleId) || null : null;
       
       // Filtra le operazioni per questa cesta
       const basketOperations = operations.filter(op => op.basketId === basket.id);
@@ -586,7 +586,7 @@ export default function BasketSelection() {
               className="w-4 h-4 rounded border flex-shrink-0"
               style={{ 
                 backgroundColor: group?.color || 'transparent',
-                borderColor: group ? group.color : '#d1d5db',
+                borderColor: group?.color || '#d1d5db',
                 borderWidth: '2px'
               }}
               title={group ? `Gruppo: ${group.name}` : 'Nessun gruppo'}
@@ -611,7 +611,7 @@ export default function BasketSelection() {
               <span className="font-medium">#{basket.physicalNumber}</span>
               {basket.currentCycle && (
                 <span className="text-xs text-muted-foreground truncate" style={{ maxWidth: '120px' }}>
-                  {basket.cycleCode}
+                  Ciclo #{basket.currentCycle.id}
                 </span>
               )}
             </div>

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { storage } from '../../../storage';
 import { insertTargetSizeAnnotationSchema } from '../../../../shared/schema';
 import { fromZodError } from 'zod-validation-error';
+import { z } from 'zod';
 
 const router = Router();
 

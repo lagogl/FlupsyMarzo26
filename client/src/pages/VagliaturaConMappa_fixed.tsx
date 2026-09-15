@@ -683,7 +683,7 @@ export default function VagliaturaConMappa() {
                       <Label htmlFor="notes">Note</Label>
                       <Input 
                         id="notes" 
-                        value={selection.notes} 
+                        value={selection.notes || ''}
                         onChange={(e) => setSelection({...selection, notes: e.target.value})}
                       />
                     </div>

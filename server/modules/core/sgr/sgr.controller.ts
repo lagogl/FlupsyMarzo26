@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { sgrService } from "./sgr.service";
-import { insertSgrSchema, insertSgrGiornalieriSchema } from "@shared/schema";
+import { insertSgrSchema, insertSgrGiornalieriSchema, type SgrGiornaliero } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { z } from "zod";
 import { sgrScheduler } from "./sgr-scheduler";
@@ -400,7 +400,7 @@ export class SgrController {
     try {
       const { siteFilter, dateFrom, dateTo } = req.body;
 
-      let data = await sgrService.getAllSgrGiornalieri();
+      let data = await sgrService.getAllSgrGiornalieri() as SgrGiornaliero[];
 
       // Apply filters
       if (siteFilter) {

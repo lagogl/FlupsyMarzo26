@@ -88,11 +88,11 @@ export default function FlupsyVisualizer() {
   });
   
   // Fetch cycles
-  const { data: cyclesData } = useQuery({
+  const { data: cyclesData } = useQuery<{ cycles: Cycle[] } | Cycle[]>({
     queryKey: ['/api/cycles'],
   });
   
-  const cycles = cyclesData?.cycles || [];
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles || [];
   
   // Select all FLUPSYs by default
   if (flupsys && flupsys.length > 0 && selectedFlupsyIds.length === 0) {
@@ -497,8 +497,8 @@ export default function FlupsyVisualizer() {
                                       <TooltipTrigger asChild>
                                         <div 
                                           onClick={basket ? () => handleBasketClick(basket) : undefined}
-                                          className={`${getBasketBorderClass(basket)} rounded-md p-2 text-center text-xs ${
-                                            basket ? getBasketColorClass(basket) : 'bg-gray-50 border-dashed'
+                                            className={`${getBasketBorderStyle(basket)} rounded-md p-2 text-center text-xs ${
+                                            basket ? getBasketColorStyle(basket) : 'bg-gray-50 border-dashed'
                                           } ${basket ? 'cursor-pointer hover:shadow-md transition-shadow' : 'min-h-[3.5rem]'}`}
                                         >
                                           <div>Pos. {position}</div>
@@ -547,8 +547,8 @@ export default function FlupsyVisualizer() {
                                       <TooltipTrigger asChild>
                                         <div 
                                           onClick={basket ? () => handleBasketClick(basket) : undefined}
-                                          className={`${getBasketBorderClass(basket)} rounded-md p-2 text-center text-xs ${
-                                            basket ? getBasketColorClass(basket) : 'bg-gray-50 border-dashed'
+                                            className={`${getBasketBorderStyle(basket)} rounded-md p-2 text-center text-xs ${
+                                            basket ? getBasketColorStyle(basket) : 'bg-gray-50 border-dashed'
                                           } ${basket ? 'cursor-pointer hover:shadow-md transition-shadow' : 'min-h-[3.5rem]'}`}
                                         >
                                           <div>Pos. {position}</div>
@@ -594,8 +594,8 @@ export default function FlupsyVisualizer() {
                                       <TooltipTrigger asChild>
                                         <div 
                                           onClick={() => handleBasketClick(basket)}
-                                          className={`${getBasketBorderClass(basket)} rounded-md p-2 text-center text-xs ${
-                                            getBasketColorClass(basket)
+                                            className={`${getBasketBorderStyle(basket)} rounded-md p-2 text-center text-xs ${
+                                            getBasketColorStyle(basket)
                                           } cursor-pointer hover:shadow-md transition-shadow`}
                                         >
                                           <div className="font-semibold">
@@ -694,8 +694,8 @@ export default function FlupsyVisualizer() {
                                       <TooltipTrigger asChild>
                                         <div 
                                           onClick={basket ? () => handleBasketClick(basket) : undefined}
-                                          className={`${getBasketBorderClass(basket)} rounded-md p-2 text-center text-xs ${
-                                            basket ? getBasketColorClass(basket) : 'bg-gray-50 border-dashed'
+                                            className={`${getBasketBorderStyle(basket)} rounded-md p-2 text-center text-xs ${
+                                            basket ? getBasketColorStyle(basket) : 'bg-gray-50 border-dashed'
                                           } ${basket ? 'cursor-pointer hover:shadow-md transition-shadow' : 'min-h-[3.5rem]'}`}
                                         >
                                           <div>Pos. {position}</div>
@@ -744,8 +744,8 @@ export default function FlupsyVisualizer() {
                                       <TooltipTrigger asChild>
                                         <div 
                                           onClick={basket ? () => handleBasketClick(basket) : undefined}
-                                          className={`${getBasketBorderClass(basket)} rounded-md p-2 text-center text-xs ${
-                                            basket ? getBasketColorClass(basket) : 'bg-gray-50 border-dashed'
+                                            className={`${getBasketBorderStyle(basket)} rounded-md p-2 text-center text-xs ${
+                                            basket ? getBasketColorStyle(basket) : 'bg-gray-50 border-dashed'
                                           } ${basket ? 'cursor-pointer hover:shadow-md transition-shadow' : 'min-h-[3.5rem]'}`}
                                         >
                                           <div>Pos. {position}</div>
@@ -791,8 +791,8 @@ export default function FlupsyVisualizer() {
                                       <TooltipTrigger asChild>
                                         <div 
                                           onClick={() => handleBasketClick(basket)}
-                                          className={`${getBasketBorderClass(basket)} rounded-md p-2 text-center text-xs ${
-                                            getBasketColorClass(basket)
+                                            className={`${getBasketBorderStyle(basket)} rounded-md p-2 text-center text-xs ${
+                                            getBasketColorStyle(basket)
                                           } cursor-pointer hover:shadow-md transition-shadow`}
                                         >
                                           <div className="font-semibold">

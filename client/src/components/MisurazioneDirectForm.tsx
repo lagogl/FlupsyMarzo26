@@ -27,6 +27,19 @@ interface MisurazioneDirectFormProps {
   onCancel: () => void;
 }
 
+interface SizeOption {
+  id: number;
+  code: string;
+  name?: string;
+  minAnimalsPerKg: number | null;
+  maxAnimalsPerKg: number | null;
+}
+
+interface SgrOption {
+  month: string;
+  percentage: number;
+}
+
 // Funzione per formattare le date in formato italiano
 const formatDate = (dateString: string) => {
   try {
@@ -61,15 +74,32 @@ export default function MisurazioneDirectForm({
   
   // Stato per la taglia selezionata manualmente dall'utente
   const [selectedSizeId, setSelectedSizeId] = useState<number | null>(sizeId);
+
+  // Valori calcolati
+  const [calculatedValues, setCalculatedValues] = useState<{
+    animalsPerKg: number | null;
+    averageWeight: number | null;
+    totalPopulation: number | null;
+    mortalityRate: number | null;
+    totalDeadCount: number | null;
+    totalWeight: number | null;
+  }>({
+    animalsPerKg: null,
+    averageWeight: null,
+    totalPopulation: null,
+    mortalityRate: null,
+    totalDeadCount: null,
+    totalWeight: null
+  });
   
   // Recupera i dati SGR per calcolare la crescita attesa
-  const { data: sgrs } = useQuery({
+  const { data: sgrs } = useQuery<SgrOption[]>({
     queryKey: ['/api/sgr'],
     enabled: !!lastOperationDate // Abilita la query solo se abbiamo la data dell'ultima operazione
   });
   
   // Recupera le taglie per mostrare quella calcolata automaticamente in base al peso medio
-  const { data: sizes } = useQuery({
+  const { data: sizes } = useQuery<SizeOption[]>({
     queryKey: ['/api/sizes'],
   });
   
@@ -77,7 +107,7 @@ export default function MisurazioneDirectForm({
   useEffect(() => {
     if (calculatedValues?.averageWeight && calculatedValues?.animalsPerKg && sizes && sizes.length > 0) {
       // Trova la taglia appropriata in base agli animali per kg
-      const matchingSize = sizes.find((size: any) => {
+      const matchingSize = sizes.find((size) => {
         const minAnimalsPerKg = size.minAnimalsPerKg || 0;
         const maxAnimalsPerKg = size.maxAnimalsPerKg || Infinity;
         const animalsPerKg = calculatedValues?.animalsPerKg || 0;
@@ -123,7 +153,7 @@ export default function MisurazioneDirectForm({
     
     // Ottieni il mese per SGR
     const month = format(lastDate, 'MMMM', { locale: it }).toLowerCase();
-    const sgrData = sgrs.find((sgr: any) => sgr.month.toLowerCase() === month);
+    const sgrData = sgrs.find((sgr) => sgr.month.toLowerCase() === month);
     
     if (!sgrData) return null;
     
@@ -182,23 +212,6 @@ export default function MisurazioneDirectForm({
       setDateValidationMessage("");
     }
   }, [operationDate, lastOperationDate]);
-  
-  // Valori calcolati
-  const [calculatedValues, setCalculatedValues] = useState<{
-    animalsPerKg: number | null;
-    averageWeight: number | null;
-    totalPopulation: number | null;
-    mortalityRate: number | null;
-    totalDeadCount: number | null;
-    totalWeight: number | null;
-  }>({
-    animalsPerKg: null,
-    averageWeight: null,
-    totalPopulation: null,
-    mortalityRate: null,
-    totalDeadCount: null,
-    totalWeight: null
-  });
   
   // Calcola i valori basati sui dati del campione
   const calculateValues = () => {
@@ -370,11 +383,11 @@ export default function MisurazioneDirectForm({
       // Lasciamo che il server calcoli la taglia appropriata in base a animalsPerKg
       // Questo assicura che la taglia venga sempre aggiornata correttamente
       const operationData = {
-        type: 'misura',
+        type: 'misura' as const,
         date: new Date(`${operationDate}T10:00:00.000Z`).toISOString(), // Impostiamo un orario fisso (mezzogiorno)
         basketId,
         cycleId,
-        // sizeId: omesso intenzionalmente per far calcolare la taglia al server
+        sizeId,
         lotId,  // Preserviamo il lotto
         sgrId: null,  // Opzionale
         animalsPerKg,
@@ -392,7 +405,7 @@ export default function MisurazioneDirectForm({
       
       // Invia al server usando la route diretta per bypassare i controlli di una operazione al giorno
       // Questo garantisce anche che il conteggio animali sia preservato correttamente
-      await createDirectOperation(operationData);
+      await createDirectOperation(operationData as Parameters<typeof createDirectOperation>[0]);
       
       // Mostra notifica
       toast({

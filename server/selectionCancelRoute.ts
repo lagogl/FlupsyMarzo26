@@ -3,7 +3,18 @@
  * Da includere in routes.ts
  */
 
-function implementSelectionCancelRoute(app, db, selections, selectionDestinationBaskets, eq) {
+import type { Express } from "express";
+import { db as applicationDb } from "./db";
+import { eq as drizzleEq } from "drizzle-orm";
+import { selections, selectionDestinationBaskets } from "../shared/schema";
+
+function implementSelectionCancelRoute(
+  app: Express,
+  db: typeof applicationDb,
+  selectionsTable: typeof selections,
+  selectionDestinationBasketsTable: typeof selectionDestinationBaskets,
+  equals: typeof drizzleEq
+) {
   // Annulla una selezione
   app.post("/api/selections/:id/cancel", async (req, res) => {
     try {
@@ -17,8 +28,8 @@ function implementSelectionCancelRoute(app, db, selections, selectionDestination
       }
       
       // Verifica che la selezione esista
-      const selection = await db.select().from(selections)
-        .where(eq(selections.id, Number(id)))
+      const selection = await db.select().from(selectionsTable)
+        .where(equals(selectionsTable.id, Number(id)))
         .limit(1);
         
       if (!selection || selection.length === 0) {
@@ -39,25 +50,25 @@ function implementSelectionCancelRoute(app, db, selections, selectionDestination
       // Esegui l'operazione in una transazione
       await db.transaction(async (tx) => {
         // 1. Aggiorna lo stato della selezione a 'cancelled'
-        await tx.update(selections)
+        await tx.update(selectionsTable)
           .set({ 
             status: 'cancelled',
             updatedAt: new Date()
           })
-          .where(eq(selections.id, Number(id)));
+          .where(equals(selectionsTable.id, Number(id)));
           
         // 2. Rimuovi tutti i cestelli di destinazione per questa selezione
         // Questo è fondamentale per evitare problemi se i cestelli origine sono stati
         // inseriti automaticamente come destinazione
-        await tx.delete(selectionDestinationBaskets)
-          .where(eq(selectionDestinationBaskets.selectionId, Number(id)));
+        await tx.delete(selectionDestinationBasketsTable)
+          .where(equals(selectionDestinationBasketsTable.selectionId, Number(id)));
           
         console.log(`Rimossi tutti i cestelli di destinazione per la selezione #${id} durante l'annullamento`);
       });
       
       // Recupera la selezione aggiornata
-      const updatedSelection = await db.select().from(selections)
-        .where(eq(selections.id, Number(id)))
+      const updatedSelection = await db.select().from(selectionsTable)
+        .where(equals(selectionsTable.id, Number(id)))
         .limit(1);
       
       // Notifica via WebSocket
@@ -97,8 +108,8 @@ function implementSelectionCancelRoute(app, db, selections, selectionDestination
       }
       
       // Verifica che la selezione esista
-      const selection = await db.select().from(selections)
-        .where(eq(selections.id, Number(id)))
+      const selection = await db.select().from(selectionsTable)
+        .where(equals(selectionsTable.id, Number(id)))
         .limit(1);
         
       if (!selection || selection.length === 0) {
@@ -117,16 +128,16 @@ function implementSelectionCancelRoute(app, db, selections, selectionDestination
       }
       
       // Aggiorna lo stato della selezione a 'completed'
-      await db.update(selections)
+      await db.update(selectionsTable)
         .set({ 
           status: 'completed',
           updatedAt: new Date()
         })
-        .where(eq(selections.id, Number(id)));
+        .where(equals(selectionsTable.id, Number(id)));
       
       // Recupera la selezione aggiornata
-      const updatedSelection = await db.select().from(selections)
-        .where(eq(selections.id, Number(id)))
+      const updatedSelection = await db.select().from(selectionsTable)
+        .where(equals(selectionsTable.id, Number(id)))
         .limit(1);
       
       // Notifica via WebSocket

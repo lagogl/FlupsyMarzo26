@@ -10,6 +10,52 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Fan } from 'lucide-react';
 import { getOperationTypeLabel, getSizeFromAnimalsPerKg } from '@/lib/utils';
 
+interface SimpleFlupsy {
+  id: number;
+  name: string;
+  location: string;
+  maxPosition?: number;
+  max_positions?: number;
+  maxPositions?: number;
+}
+
+interface SimpleBasket {
+  id: number;
+  physicalNumber: number;
+  flupsyId: number;
+  state: string;
+  currentCycleId: number | null;
+}
+
+interface SimpleOperation {
+  basketId: number;
+  date: string;
+  type: string;
+  animalsPerKg: number | null;
+  animalCount?: number | null;
+  sizeId?: number | null;
+  totalWeight?: number | null;
+  lastMortalityCount?: number | null;
+  lastMortalityRate?: number | null;
+  lastMortalityDate?: string | null;
+  lotId?: number | null;
+  notes?: string | null;
+}
+
+interface SimpleCycle {
+  id: number;
+  basketId: number;
+  startDate: string;
+  state: string;
+}
+
+interface SimpleSize {
+  id: number;
+  code: string;
+  minAnimalsPerKg: number;
+  maxAnimalsPerKg: number;
+}
+
 interface SimpleFlupsyVisualizerProps {
   selectedFlupsyIds?: number[];
 }
@@ -19,13 +65,13 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
   const [selectedTab, setSelectedTab] = useState<string>("all");
 
   // Fetch flupsys - aggiornamento real-time
-  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery({
+  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery<SimpleFlupsy[]>({
     queryKey: ['/api/flupsys', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
 
   // Fetch ALL baskets without any filters - aggiornamento real-time
-  const { data: allBaskets, isLoading: isLoadingBaskets } = useQuery({
+  const { data: allBaskets, isLoading: isLoadingBaskets } = useQuery<SimpleBasket[]>({
     queryKey: ['/api/baskets', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
@@ -44,27 +90,27 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
   }, [allBaskets, selectedFlupsyIds]);
 
   // ENDPOINT OTTIMIZZATO: Carica solo l'ultima operazione per ogni cesta attiva
-  const { data: latestOperationsMap, isLoading: isLoadingOperations } = useQuery<Record<number, any>>({
+  const { data: latestOperationsMap, isLoading: isLoadingOperations } = useQuery<Record<number, SimpleOperation>>({
     queryKey: ['/api/baskets/latest-operations'],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
 
   // Fetch cycles for tooltip data
-  const { data: cyclesData, isLoading: isLoadingCycles } = useQuery({
+  const { data: cyclesData, isLoading: isLoadingCycles } = useQuery<{ cycles: SimpleCycle[] } | SimpleCycle[]>({
     queryKey: ['/api/cycles', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
   
-  const cycles = cyclesData?.cycles || [];
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles || [];
 
   // Fetch lots for tooltip data
-  const { data: lots, isLoading: isLoadingLots } = useQuery({
+  const { data: lots, isLoading: isLoadingLots } = useQuery<Array<{ id: number; supplier?: string }>>({
     queryKey: ['/api/lots', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
   });
 
   // Fetch sizes for tooltip data
-  const { data: sizes } = useQuery({
+  const { data: sizes } = useQuery<SimpleSize[]>({
     queryKey: ['/api/sizes'],
     staleTime: 3600000, // 1 hour - le taglie cambiano raramente
   });

@@ -24,6 +24,11 @@ interface PesoOperationResultsProps {
   lastOperationDate?: string; // Data dell'ultima operazione
 }
 
+interface SgrResult {
+  month: string;
+  percentage: number;
+}
+
 export function PesoOperationResults({ 
   currentOperation, 
   previousOperationData,
@@ -43,7 +48,7 @@ export function PesoOperationResults({
     : null;
     
   // Recupera i dati SGR per calcolare la crescita attesa
-  const { data: sgrs } = useQuery({
+  const { data: sgrs = [] } = useQuery<SgrResult[]>({
     queryKey: ['/api/sgr'],
     enabled: !!lastOperationDate && !!operationDate // Abilita la query solo se abbiamo entrambe le date
   });

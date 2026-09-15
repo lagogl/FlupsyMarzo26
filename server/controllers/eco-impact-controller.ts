@@ -490,7 +490,7 @@ export class EcoImpactController {
       const flupsyId = req.query.flupsyId ? parseInt(req.query.flupsyId as string) : undefined;
       
       // Recupera i report
-      const reports = await ecoImpactService.getSustainabilityReports(flupsyId);
+      const reports = await ecoImpactService.getSustainabilityReports();
       
       return res.status(200).json({
         success: true,

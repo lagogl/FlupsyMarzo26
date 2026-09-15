@@ -12,18 +12,33 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 
+interface FlupsySummary {
+  name: string;
+  location: string;
+}
+
+interface BasketSummary {
+  id: number;
+  physicalNumber: number;
+  row: string | null;
+  position: number | null;
+  state: string;
+  currentCycleId: number | null;
+  cycleCode?: string | null;
+}
+
 export default function FlupsyBaskets() {
   const { id } = useParams();
   const flupsyId = id ? parseInt(id) : null;
   
   // Ottieni i dettagli del FLUPSY
-  const { data: flupsy, isLoading: flupsyLoading } = useQuery({
+  const { data: flupsy, isLoading: flupsyLoading } = useQuery<FlupsySummary>({
     queryKey: [`/api/flupsys/${flupsyId}`],
     enabled: !!flupsyId
   });
 
   // Ottieni i cestelli per questo FLUPSY
-  const { data: baskets, isLoading: basketsLoading } = useQuery({
+  const { data: baskets, isLoading: basketsLoading } = useQuery<BasketSummary[]>({
     queryKey: [`/api/flupsys/${flupsyId}/baskets`],
     enabled: !!flupsyId
   });

@@ -168,7 +168,7 @@ export async function getCycles(options: CyclesOptions = {}) {
     const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
     // Costruisce query con JOIN corrette secondo lo schema
-    let query = db
+    const query = db
       .select({
         id: cycles.id,
         basketId: cycles.basketId,
@@ -194,10 +194,10 @@ export async function getCycles(options: CyclesOptions = {}) {
     // Applica ordinamento
     const orderColumn = sortBy === 'startDate' ? cycles.startDate : cycles.id;
     const orderDirection = sortOrder === 'asc' ? asc(orderColumn) : desc(orderColumn);
-    query = query.orderBy(orderDirection);
+    const orderedQuery = query.orderBy(orderDirection);
 
     // Esegue query
-    const results = await query;
+    const results = await orderedQuery;
 
     let finalResults: any;
     let pagination: any = null;

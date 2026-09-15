@@ -62,6 +62,8 @@ interface OperationsLifecycleDependencies {
   ) => void | Promise<void>;
 }
 
+type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 const defaultDependencies: OperationsLifecycleDependencies = {
   handleCompositionDelete: handleBasketLotCompositionOnDelete,
   logDeleted: logOperationDeletedIfAvailable
@@ -100,7 +102,7 @@ export class OperationsLifecycleService {
       let committedOperation: typeof operations.$inferSelect | undefined;
       let cascadeNotification: { cycleId: number; basketId: number } | undefined;
 
-      await runAtomicDeletion(this.database, async (tx) => {
+      await runAtomicDeletion(this.database, async (tx: DatabaseTransaction) => {
         // Lettura e tutte le scritture condividono la stessa transazione.
         const [operation] = await tx
           .select()
@@ -238,6 +240,30 @@ export class OperationsLifecycleService {
    * Pulisce tutte le tabelle correlate a un ciclo
    */
   private async cleanupCycleRelatedTables(tx: any, cycleId: number, result: DeleteOperationResult): Promise<void> {
+      const protectedHistoryChecks = await Promise.all([
+        tx.select({ id: screeningSourceBaskets.id }).from(screeningSourceBaskets)
+          .where(eq(screeningSourceBaskets.cycleId, cycleId)),
+        tx.select({ id: screeningBasketHistory.id }).from(screeningBasketHistory)
+          .where(eq(screeningBasketHistory.sourceCycleId, cycleId)),
+        tx.select({ id: screeningBasketHistory.id }).from(screeningBasketHistory)
+          .where(eq(screeningBasketHistory.destinationCycleId, cycleId)),
+        tx.select({ id: screeningLotReferences.id }).from(screeningLotReferences)
+          .where(eq(screeningLotReferences.destinationCycleId, cycleId)),
+        tx.select({ id: selectionSourceBaskets.id }).from(selectionSourceBaskets)
+          .where(eq(selectionSourceBaskets.cycleId, cycleId)),
+        tx.select({ id: selectionBasketHistory.id }).from(selectionBasketHistory)
+          .where(eq(selectionBasketHistory.sourceCycleId, cycleId)),
+        tx.select({ id: selectionBasketHistory.id }).from(selectionBasketHistory)
+          .where(eq(selectionBasketHistory.destinationCycleId, cycleId)),
+        tx.select({ id: selectionLotReferences.id }).from(selectionLotReferences)
+          .where(eq(selectionLotReferences.destinationCycleId, cycleId)),
+      ]);
+
+      if (protectedHistoryChecks.some(rows => rows.length > 0)) {
+        throw new Error(
+          `Impossibile cancellare il ciclo ${cycleId}: esistono riferimenti storici di vagliatura o selezione che devono essere conservati.`,
+        );
+      }
     
     // 1. basket_lot_composition
       const deletedCompositions = await tx.delete(basketLotComposition)
@@ -256,63 +282,17 @@ export class OperationsLifecycleService {
         .where(eq(lotLedger.destCycleId, cycleId));
       result.cleanedTables.push('lot_ledger (nullified refs)');
 
-    // 5. screening_source_baskets
-      await tx.update(screeningSourceBaskets)
-        .set({ cycleId: null })
-        .where(eq(screeningSourceBaskets.cycleId, cycleId));
-      result.cleanedTables.push('screening_source_baskets');
-
     // 6. screening_destination_baskets
       await tx.update(screeningDestinationBaskets)
         .set({ cycleId: null })
         .where(eq(screeningDestinationBaskets.cycleId, cycleId));
       result.cleanedTables.push('screening_destination_baskets');
 
-    // 7. screening_basket_history
-      await tx.update(screeningBasketHistory)
-        .set({ sourceCycleId: null })
-        .where(eq(screeningBasketHistory.sourceCycleId, cycleId));
-      await tx.update(screeningBasketHistory)
-        .set({ destinationCycleId: null })
-        .where(eq(screeningBasketHistory.destinationCycleId, cycleId));
-      result.cleanedTables.push('screening_basket_history');
-
-    // 8. screening_lot_references
-      await tx.update(screeningLotReferences)
-        .set({ destinationCycleId: null })
-        .where(eq(screeningLotReferences.destinationCycleId, cycleId));
-      result.cleanedTables.push('screening_lot_references');
-
-    // 9. selection_source_baskets (cycle_id è NOT NULL → elimina le righe invece di nullificare)
-      const deletedSelectionSources = await tx.delete(selectionSourceBaskets)
-        .where(eq(selectionSourceBaskets.cycleId, cycleId))
-        .returning({ id: selectionSourceBaskets.id });
-      if (deletedSelectionSources.length > 0) {
-        result.cleanedTables.push(`selection_source_baskets (${deletedSelectionSources.length} eliminati)`);
-      } else {
-        result.cleanedTables.push('selection_source_baskets (nessun record)');
-      }
-
     // 10. selection_destination_baskets
       await tx.update(selectionDestinationBaskets)
         .set({ cycleId: null })
         .where(eq(selectionDestinationBaskets.cycleId, cycleId));
       result.cleanedTables.push('selection_destination_baskets');
-
-    // 11. selection_basket_history
-      await tx.update(selectionBasketHistory)
-        .set({ sourceCycleId: null })
-        .where(eq(selectionBasketHistory.sourceCycleId, cycleId));
-      await tx.update(selectionBasketHistory)
-        .set({ destinationCycleId: null })
-        .where(eq(selectionBasketHistory.destinationCycleId, cycleId));
-      result.cleanedTables.push('selection_basket_history');
-
-    // 12. selection_lot_references
-      await tx.update(selectionLotReferences)
-        .set({ destinationCycleId: null })
-        .where(eq(selectionLotReferences.destinationCycleId, cycleId));
-      result.cleanedTables.push('selection_lot_references');
 
     console.log(`🧹 [LIFECYCLE] Pulizia tabelle correlate completata per ciclo ${cycleId}`);
   }
@@ -574,7 +554,7 @@ export class OperationsLifecycleService {
         await this.setBasketCycleState({
           basketId,
           currentCycleId: cycle.id,
-          cycleCode: cycle.code,
+          cycleCode: null,
           state: 'active'
         });
         actions.push(`Sincronizzato con ciclo attivo ${cycle.id}`);

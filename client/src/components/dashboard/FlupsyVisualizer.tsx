@@ -156,11 +156,11 @@ export default function FlupsyVisualizer({ selectedFlupsyIds }: FlupsyVisualizer
   });
   
   // Fetch cycles con includeAll per avere tutti i dati
-  const { data: cyclesData } = useQuery({
+  const { data: cyclesData } = useQuery<{ cycles: Cycle[] } | Cycle[]>({
     queryKey: ['/api/cycles', { includeAll: true }],
   });
   
-  const cycles = cyclesData?.cycles || [];
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles || [];
   
   // Select all FLUPSYs by default
   if (flupsys && flupsys.length > 0 && effectiveSelectedFlupsyIds.length === 0) {

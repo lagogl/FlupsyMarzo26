@@ -159,7 +159,7 @@ export async function getActiveCyclesWithDetails() {
     `);
 
     // Mappa dei cestelli per ID
-    const basketsMap = basketsResult.reduce((map: any, basket: any) => {
+    const basketsMap = basketsResult.rows.reduce((map: any, basket: any) => {
       // Converti i nomi delle colonne da snake_case a camelCase
       map[basket.id] = {
         id: basket.id,
@@ -187,7 +187,7 @@ export async function getActiveCyclesWithDetails() {
 
     // Raggruppa le operazioni per ID ciclo
     const operationsByCycle: any = {};
-    for (const op of operationsResult) {
+    for (const op of operationsResult.rows) {
       // Converti i nomi delle colonne da snake_case a camelCase
       const operation = {
         id: op.id,
@@ -208,17 +208,18 @@ export async function getActiveCyclesWithDetails() {
         metadata: op.metadata
       };
 
-      if (!operationsByCycle[op.cycle_id]) {
-        operationsByCycle[op.cycle_id] = [];
+      const cycleId = Number(op.cycle_id);
+      if (!operationsByCycle[cycleId]) {
+        operationsByCycle[cycleId] = [];
       }
-      operationsByCycle[op.cycle_id].push(operation);
+      operationsByCycle[cycleId].push(operation);
     }
 
     // 6. Raccogli tutti gli ID delle taglie dalle operazioni
     const sizeIds = new Set<number>();
-    for (const op of operationsResult) {
+    for (const op of operationsResult.rows) {
       if (op.size_id) {
-        sizeIds.add(op.size_id);
+        sizeIds.add(Number(op.size_id));
       }
     }
 
@@ -230,7 +231,7 @@ export async function getActiveCyclesWithDetails() {
       `);
 
       // Mappa delle taglie per ID
-      sizesMap = sizesResult.reduce((map: any, size: any) => {
+      sizesMap = sizesResult.rows.reduce((map: any, size: any) => {
         // Converti i nomi delle colonne da snake_case a camelCase
         map[size.id] = {
           id: size.id,
@@ -248,9 +249,9 @@ export async function getActiveCyclesWithDetails() {
 
     // 8. Raccogli tutti gli ID dei FLUPSY dai cestelli
     const flupsyIds = new Set<number>();
-    for (const basket of basketsResult) {
+    for (const basket of basketsResult.rows) {
       if (basket.flupsy_id) {
-        flupsyIds.add(basket.flupsy_id);
+        flupsyIds.add(Number(basket.flupsy_id));
       }
     }
 
@@ -262,7 +263,7 @@ export async function getActiveCyclesWithDetails() {
       `);
 
       // Mappa dei FLUPSY per ID
-      flupsysMap = flupsysResult.reduce((map: any, flupsy: any) => {
+      flupsysMap = flupsysResult.rows.reduce((map: any, flupsy: any) => {
         // Converti i nomi delle colonne da snake_case a camelCase
         map[flupsy.id] = {
           id: flupsy.id,
@@ -279,9 +280,9 @@ export async function getActiveCyclesWithDetails() {
 
     // 10. Raccogli tutti gli ID dei lotti dalle operazioni
     const lotIds = new Set<number>();
-    for (const op of operationsResult) {
+    for (const op of operationsResult.rows) {
       if (op.lot_id) {
-        lotIds.add(op.lot_id);
+        lotIds.add(Number(op.lot_id));
       }
     }
 
@@ -293,7 +294,7 @@ export async function getActiveCyclesWithDetails() {
       `);
 
       // Mappa dei lotti per ID
-      lotsMap = lotsResult.reduce((map: any, lot: any) => {
+      lotsMap = lotsResult.rows.reduce((map: any, lot: any) => {
         // Converti i nomi delle colonne da snake_case a camelCase
         map[lot.id] = {
           id: lot.id,
@@ -313,9 +314,9 @@ export async function getActiveCyclesWithDetails() {
 
     // 12. Raccogli tutti gli ID degli SGR dalle operazioni
     const sgrIds = new Set<number>();
-    for (const op of operationsResult) {
+    for (const op of operationsResult.rows) {
       if (op.sgr_id) {
-        sgrIds.add(op.sgr_id);
+        sgrIds.add(Number(op.sgr_id));
       }
     }
 
@@ -327,7 +328,7 @@ export async function getActiveCyclesWithDetails() {
       `);
 
       // Mappa degli SGR per ID
-      sgrMap = sgrResult.reduce((map: any, sgrItem: any) => {
+      sgrMap = sgrResult.rows.reduce((map: any, sgrItem: any) => {
         // Converti i nomi delle colonne da snake_case a camelCase
         map[sgrItem.id] = {
           id: sgrItem.id,

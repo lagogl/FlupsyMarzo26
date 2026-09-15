@@ -527,7 +527,7 @@ class OperationsService {
           
           // Genera note leggibili
           const notesParts = composition.map(c => {
-            const lotName = c.lot?.supplier || `Lotto ${c.lotId}`;
+            const lotName = `Lotto ${c.lotId}`;
             const percentage = (c.percentage * 100).toFixed(1);
             return `${lotName} (${percentage}% - ${c.animalCount} animali)`;
           });

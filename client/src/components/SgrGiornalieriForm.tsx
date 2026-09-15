@@ -84,7 +84,7 @@ export default function SgrGiornalieriForm({
     }
   };
 
-  const NumField = ({ name, label, step = "0.1", placeholder }: { name: keyof FormValues; label: string; step?: string; placeholder?: string }) => (
+  const NumField = ({ name, label, step = "0.1", placeholder }: { name: Exclude<keyof FormValues, "recordDate">; label: string; step?: string; placeholder?: string }) => (
     <FormField
       control={form.control}
       name={name}
@@ -98,7 +98,7 @@ export default function SgrGiornalieriForm({
               placeholder={placeholder}
               className="h-8 text-sm"
               {...field}
-              value={field.value === null || field.value === undefined ? '' : field.value}
+              value={String(field.value ?? '')}
               onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
             />
           </FormControl>
@@ -108,7 +108,7 @@ export default function SgrGiornalieriForm({
     />
   );
 
-  const TextField = ({ name, label, placeholder }: { name: keyof FormValues; label: string; placeholder?: string }) => (
+  const TextField = ({ name, label, placeholder }: { name: Exclude<keyof FormValues, "recordDate">; label: string; placeholder?: string }) => (
     <FormField
       control={form.control}
       name={name}
@@ -120,7 +120,7 @@ export default function SgrGiornalieriForm({
               placeholder={placeholder}
               className="h-8 text-sm"
               {...field}
-              value={field.value || ''}
+              value={String(field.value ?? '')}
             />
           </FormControl>
           <FormMessage />

@@ -10,7 +10,11 @@ import type { InsertOperation } from '@shared/schema';
  * @param operationData I dati dell'operazione da inviare
  * @returns Promise con i dati dell'operazione creata
  */
-export async function createDirectOperation(operationData: InsertOperation) {
+type DirectOperationInput = Omit<InsertOperation, "sizeId"> & {
+  sizeId?: number | null;
+};
+
+export async function createDirectOperation(operationData: DirectOperationInput) {
   console.log("USANDO ROUTE DIRETTA PER OPERAZIONE:", operationData);
   
   // Usiamo la route diretta che bypassa i problemi con cycleId

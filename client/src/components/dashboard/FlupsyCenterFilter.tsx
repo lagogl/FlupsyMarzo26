@@ -17,6 +17,12 @@ interface FlupsyCenterFilterProps {
   hasExistingSelection?: boolean;
 }
 
+interface CenterFlupsy {
+  id: number;
+  productionCenter?: string | null;
+  name?: string;
+}
+
 export default function FlupsyCenterFilter({ onFilterChange, hasExistingSelection = false }: FlupsyCenterFilterProps) {
   // Stato per il centro di produzione selezionato
   const [selectedCenter, setSelectedCenter] = useState<string>("");
@@ -28,7 +34,7 @@ export default function FlupsyCenterFilter({ onFilterChange, hasExistingSelectio
   const [isOpen, setIsOpen] = useState(false);
 
   // Recupera i FLUPSY dal server
-  const { data: flupsys, isLoading } = useQuery({ 
+  const { data: flupsys, isLoading } = useQuery<CenterFlupsy[]>({
     queryKey: ['/api/flupsys'] 
   });
 

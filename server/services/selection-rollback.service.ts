@@ -537,7 +537,7 @@ class SelectionRollbackService {
   private invalidateAllCaches(): void {
     try {
       OperationsCache?.clear?.();
-      BasketsCache?.invalidateAll?.();
+      BasketsCache?.clear?.();
       console.log('🔄 [ROLLBACK] Cache invalidate');
     } catch (error) {
       console.log('⚠️ [ROLLBACK] Errore invalidazione cache:', error);

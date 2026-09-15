@@ -341,7 +341,17 @@ export class TasksService {
    * Esclude automaticamente i task cancellati e completati
    */
   async getTasksForOperator(operatorId: number, statusFilter?: string[]) {
-    let query = db.select({
+    type AssignmentStatus = typeof selectionTaskAssignments.$inferSelect.status;
+    const allowedStatuses: AssignmentStatus[] = ['assigned', 'accepted', 'in_progress', 'completed'];
+    const statusCondition = statusFilter && statusFilter.length > 0
+      ? inArray(
+        selectionTaskAssignments.status,
+        statusFilter.filter((status): status is AssignmentStatus =>
+          allowedStatuses.includes(status as AssignmentStatus)
+        )
+      )
+      : undefined;
+    const query = db.select({
       taskId: selectionTasks.id,
       taskType: selectionTasks.taskType,
       description: selectionTasks.description,
@@ -364,20 +374,10 @@ export class TasksService {
       and(
         eq(selectionTaskAssignments.operatorId, operatorId),
         ne(selectionTasks.status, 'cancelled'),
-        ne(selectionTasks.status, 'completed')
+        ne(selectionTasks.status, 'completed'),
+        ...(statusCondition ? [statusCondition] : [])
       )
     );
-
-    if (statusFilter && statusFilter.length > 0) {
-      query = query.where(
-        and(
-          eq(selectionTaskAssignments.operatorId, operatorId),
-          ne(selectionTasks.status, 'cancelled'),
-          ne(selectionTasks.status, 'completed'),
-          inArray(selectionTaskAssignments.status, statusFilter as any)
-        )
-      );
-    }
 
     return await query.orderBy(
       sql`

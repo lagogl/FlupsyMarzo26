@@ -28,6 +28,7 @@ interface ScreeningDetail {
     animalsPerKg: number | null;
     dismissed: boolean;
     flupsyName?: string | null;
+    notes?: string | null;
   }>;
   destinationBaskets: Array<{
     id: number;
@@ -45,6 +46,7 @@ interface ScreeningDetail {
     position: number | null;
     positionAssigned: boolean;
     size?: { id: number; code: string; name: string } | null;
+    notes?: string | null;
   }>;
 }
 

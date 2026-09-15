@@ -1116,7 +1116,7 @@ export default function AdvancedSales() {
     };
   }), [manualComponents, manualAllocations]);
   const manualPlanValid = !!manualSale && manualComponents.length > 0 && manualComponents.every((component: any) => {
-    const total = manualTotals.find(item => item.sizeCode === component.sizeCode);
+    const total = manualTotals.find((item: { sizeCode: string; assigned: number; required: number; residual: number }) => item.sizeCode === component.sizeCode);
     if (!total || total.assigned !== total.required) return false;
     return (component.candidates || []).every((candidate: any) => {
       const value = manualAllocations[`${component.sizeCode}:${candidate.orderId}`];
@@ -2252,7 +2252,7 @@ export default function AdvancedSales() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Taglie coperte</p>
-                  <p className="font-medium">{manualTotals.filter(item => item.residual === 0).length} / {manualTotals.length}</p>
+                  <p className="font-medium">{manualTotals.filter((item: { residual: number }) => item.residual === 0).length} / {manualTotals.length}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Stato piano</p>
@@ -2277,7 +2277,7 @@ export default function AdvancedSales() {
                   </TableHeader>
                   <TableBody>
                     {manualComponents.map((component: any) => {
-                      const total = manualTotals.find(item => item.sizeCode === component.sizeCode)!;
+                      const total = manualTotals.find((item: { sizeCode: string; assigned: number; required: number; residual: number }) => item.sizeCode === component.sizeCode)!;
                       return (
                         <Fragment key={component.sizeCode}>
                           <TableRow key={`${component.sizeCode}-summary`} className="bg-slate-50 font-semibold">
@@ -2364,7 +2364,7 @@ export default function AdvancedSales() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confermare il piano manuale?</AlertDialogTitle>
             <AlertDialogDescription>
-              Verranno registrate {manualTotals.reduce((sum, item) => sum + item.assigned, 0)} unità
+              Verranno registrate {manualTotals.reduce((sum: number, item: { assigned: number }) => sum + item.assigned, 0)} unità
               sulla vendita {manualSale?.saleNumber}, distribuite su {Object.values(manualAllocations).filter(Boolean).length} righe ordine.
               Il server ricontrollerà i residui prima di applicare una sola richiesta per l’intero piano.
             </AlertDialogDescription>

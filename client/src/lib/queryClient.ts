@@ -177,7 +177,10 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey, signal }) => {
     // Estrai l'URL base e gli eventuali parametri aggiuntivi
     const baseUrl = queryKey[0] as string;
-    const params = queryKey.length > 1 && typeof queryKey[1] === 'object' ? queryKey[1] : {};
+    const params: Record<string, unknown> =
+      queryKey.length > 1 && typeof queryKey[1] === 'object' && queryKey[1] !== null
+        ? queryKey[1] as Record<string, unknown>
+        : {};
     
     // Costruisci l'URL con i parametri di query
     let url = baseUrl;

@@ -167,7 +167,7 @@ export class LciExportService {
 
   async generateProductionSnapshots(referenceYear: number) {
     try {
-      const productionData = await productionAdapter.getProductionByYear(referenceYear);
+      const productionData = (await productionAdapter.getYearlyProduction(referenceYear)).bySize;
       
       const snapshots: any[] = [];
       for (const data of productionData) {
@@ -177,8 +177,8 @@ export class LciExportService {
           sizeCode: data.sizeCode,
           outputKg: data.outputKg?.toString() || '0',
           outputPieces: data.outputPieces || 0,
-          inputKg: data.inputKg?.toString() || '0',
-          inputPieces: data.inputPieces || 0,
+          inputKg: '0',
+          inputPieces: 0,
           dataSource: 'calculated',
           calculationNotes: `Auto-generated from production data for year ${referenceYear}`
         };

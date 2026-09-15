@@ -105,6 +105,8 @@ interface MortalityRate {
   percentage: number;
   sizeName?: string;
   sizeCode?: string;
+  notes: string | null;
+  calculatedFromReal: boolean | null;
 }
 
 export default function Inventory() {

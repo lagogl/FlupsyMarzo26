@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { notifications, type InsertNotification, operations, baskets, cycles, advancedSales } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { createSystemNotification } from "./controllers/notification-controller";
 
 /**
@@ -87,14 +87,16 @@ export async function createSaleNotification(operationId: number) {
  */
 export async function hasUnreadSaleNotifications(): Promise<boolean> {
   try {
-    const unreadNotifications = await db.select({ count: db.fn.count() })
+    const unreadNotifications = await db.select({ count: count() })
       .from(notifications)
       .where(
-        eq(notifications.type, 'vendita'),
-        eq(notifications.isRead, false)
+        and(
+          eq(notifications.type, 'vendita'),
+          eq(notifications.isRead, false)
+        )
       );
     
-    return unreadNotifications[0]?.count > 0;
+    return Number(unreadNotifications[0]?.count ?? 0) > 0;
   } catch (error) {
     console.error("Errore durante il controllo delle notifiche di vendita non lette:", error);
     return false;

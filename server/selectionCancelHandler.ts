@@ -2,11 +2,11 @@
  * Gestore delle route per la cancellazione e il completamento delle selezioni
  */
 import { Express, Request, Response } from "express";
-import { PgDatabase } from "drizzle-orm/pg-core";
+import { db as applicationDb } from "./db";
 import { eq } from "drizzle-orm";
 import { selections } from "../shared/schema";
 
-export function implementSelectionRoutes(app: Express, db: PgDatabase<any>) {
+export function implementSelectionRoutes(app: Express, db: typeof applicationDb) {
   // Annulla una selezione
   app.post("/api/selections/:id/cancel", async (req: Request, res: Response) => {
     try {

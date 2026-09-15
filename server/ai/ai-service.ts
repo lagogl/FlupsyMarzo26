@@ -4,6 +4,7 @@ import { AutonomousAIService } from "./autonomous-ai-service";
 // Configurazione OpenAI GPT-4o con API key personale dell'utente
 const AI_API_KEY = process.env.OPENAI_API_KEY;
 const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1'; // Configurabile via secret OPENAI_MODEL
+const AI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 
 console.log('🔧 OpenAI GPT-4o Config:', { 
   model: AI_MODEL,
@@ -13,6 +14,17 @@ console.log('🔧 OpenAI GPT-4o Config:', {
 
 // Client OpenAI configurato con ricaricamento dinamico
 let aiClient: OpenAI | null = null;
+
+function getAIClient(): OpenAI {
+  if (!aiClient) {
+    throw new Error('OpenAI client non configurato');
+  }
+  return aiClient;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 async function initializeAIClient() {
   const currentApiKey = process.env.OPENAI_API_KEY;
@@ -131,7 +143,7 @@ export class PredictiveGrowthAI {
         }
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -207,7 +219,7 @@ export class PredictiveGrowthAI {
         }
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -280,7 +292,7 @@ export class AnalyticsAI {
         }
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -348,7 +360,7 @@ export class AnalyticsAI {
         }
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -420,7 +432,7 @@ export class SustainabilityAI {
         }
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -489,7 +501,7 @@ export class SustainabilityAI {
         }
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -543,7 +555,7 @@ export class AIService {
       });
       
       const testResponse = await Promise.race([
-        aiClient.chat.completions.create({
+        getAIClient().chat.completions.create({
           model: AI_MODEL,
           messages: [
             { role: "system", content: "You are a helpful assistant." },
@@ -553,12 +565,16 @@ export class AIService {
           max_tokens: 10
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('DeepSeek API Timeout')), 8000))
-      ]);
+      ]) as {
+        model: string;
+        usage: unknown;
+        choices: Array<{ message: { content: string | null } }>;
+      };
 
       console.log('✅ DeepSeek CONNECTION SUCCESS:', { 
         model: testResponse.model,
         usage: testResponse.usage,
-        response: testResponse.choices[0].message.content.slice(0, 50) + '...'
+        response: (testResponse.choices[0].message.content || '').slice(0, 50) + '...'
       });
       
       return {
@@ -567,7 +583,7 @@ export class AIService {
         provider: 'deepseek'
       };
     } catch (error) {
-      console.log('⚠️ DeepSeek non disponibile, modalità autonoma attiva:', error.message);
+      console.log('⚠️ DeepSeek non disponibile, modalità autonoma attiva:', errorMessage(error));
       return AutonomousAIService.healthCheck();
     }
   }
@@ -586,34 +602,10 @@ export class AIService {
       console.log('🤖 Recupero predizioni con dati reali dal servizio autonomo...');
       return AutonomousAIService.predictiveGrowth(basketId, targetSizeId, days);
 
-      const response = await aiClient.chat.completions.create({
-        model: AI_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: "Sei un esperto in acquacoltura specializzato nell'analisi predittiva della crescita di molluschi. Fornisci analisi scientificamente accurate."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.3,
-        max_tokens: 2000
-      });
-
-      const result = JSON.parse(response.choices[0].message.content || '{}');
-      console.log('✅ DeepSeek AI: Predizioni generate con successo');
-      
-      return {
-        predictions: result.predictions || [],
-        insights: result.insights || ['Analisi generata da DeepSeek AI'],
-        recommendations: result.recommendations || ['Monitoraggio continuo raccomandato']
-      };
-
+      // Le predizioni usano deliberatamente il servizio autonomo, che interroga i dati reali.
+      // Il client AI viene riservato agli insight e ai moduli analitici.
     } catch (error) {
-      console.log('⚠️ DeepSeek fallback: utilizzo algoritmi autonomi -', error.message);
+      console.log('⚠️ DeepSeek fallback: utilizzo algoritmi autonomi -', errorMessage(error));
       return AutonomousAIService.predictiveGrowth(basketId, targetSizeId, days);
     }
   }
@@ -649,7 +641,7 @@ export class AIService {
         ]
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -672,7 +664,7 @@ export class AIService {
       return Array.isArray(result) ? result : result.anomalies || [];
 
     } catch (error) {
-      console.log('⚠️ DeepSeek fallback: rilevamento anomalie autonomo -', error.message);
+      console.log('⚠️ DeepSeek fallback: rilevamento anomalie autonomo -', errorMessage(error));
       return AutonomousAIService.anomalyDetection(flupsyId, days);
     }
   }
@@ -711,7 +703,7 @@ export class AIService {
         }
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -734,7 +726,7 @@ export class AIService {
       return result;
 
     } catch (error) {
-      console.log('⚠️ DeepSeek fallback: analisi sostenibilità autonoma -', error.message);
+      console.log('⚠️ DeepSeek fallback: analisi sostenibilità autonoma -', errorMessage(error));
       return AutonomousAIService.sustainabilityAnalysis(flupsyId, timeframe);
     }
   }
@@ -776,7 +768,7 @@ export class AIService {
         Basa i valori su parametri realistici per l'acquacoltura di molluschi.
       `;
 
-      const response = await aiClient.chat.completions.create({
+      const response = await getAIClient().chat.completions.create({
         model: AI_MODEL,
         messages: [
           {
@@ -809,7 +801,7 @@ export class AIService {
       };
 
     } catch (error) {
-      console.log('⚠️ DeepSeek fallback: business analytics autonomi -', error.message);
+      console.log('⚠️ DeepSeek fallback: business analytics autonomi -', errorMessage(error));
       return {
         totalBaskets: 22,
         activeOperations: 8,

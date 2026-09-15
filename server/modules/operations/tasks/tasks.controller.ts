@@ -88,7 +88,8 @@ export class TasksController {
       const task = await tasksService.createTask(validation.data);
 
       // Add baskets
-      const basketsData = req.body.basketIds.map((basketId: number) => ({
+      const basketIds = req.body.basketIds as number[];
+      const basketsData = basketIds.map((basketId: number) => ({
         taskId: task.id,
         basketId,
         role: req.body.basketRole || 'source'
@@ -96,7 +97,7 @@ export class TasksController {
       await tasksService.addBasketsToTask(task.id, basketsData);
 
       // Assign operators if provided
-      let assignments = [];
+      let assignments: unknown[] = [];
       if (req.body.operatorIds && Array.isArray(req.body.operatorIds)) {
         assignments = await tasksService.assignOperators(task.id, req.body.operatorIds);
       }

@@ -200,6 +200,9 @@ export async function executeScreeningOperation(req: Request, res: Response) {
     const safeAnimalsPerKg = safeInteger(animalsPerKg);
     const safeMortalityRate = safeNumber(mortalityRate);
     const safeSizeId = safeInteger(sizeId);
+    if (safeSizeId === null) {
+      throw new Error("Taglia obbligatoria per l'operazione di vagliatura");
+    }
     
     // Controlli di validazione
     if (!sourceBasketIds || !Array.isArray(sourceBasketIds) || sourceBasketIds.length === 0) {
@@ -324,9 +327,9 @@ export async function executeScreeningOperation(req: Request, res: Response) {
           basketId: sourceBasket.id,
           cycleId: sourceCycleId,
           deadCount: safeDeadCount,
-          animalsPerKg: safeAnimalsPerKg,
+          animalsPerKg: safeAnimalsPerKg ?? 0,
           sizeId: safeSizeId,
-          mortalityRate: safeMortalityRate,
+          mortalityRate: safeMortalityRate ?? 0,
           notes: notes || null,
           source: 'desktop_manager' // Operazione da gestionale desktop
         }).returning();
@@ -347,10 +350,10 @@ export async function executeScreeningOperation(req: Request, res: Response) {
           cycleId: sourceCycleId, // Usa lo stesso ciclo dei cestelli origine
           animalCount: safeAnimalCount,
           totalWeight: safeTotalWeight,
-          animalsPerKg: safeAnimalsPerKg,
+          animalsPerKg: safeAnimalsPerKg ?? 0,
           sizeId: safeSizeId,
           deadCount: safeDeadCount,
-          mortalityRate: safeMortalityRate,
+          mortalityRate: safeMortalityRate ?? 0,
           notes: destBasket.notes || notes || null,
           // Add sale fields support
           saleClient: destBasket.saleClient || null,

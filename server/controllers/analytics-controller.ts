@@ -210,7 +210,12 @@ export async function getLotsAnalytics(req: Request, res: Response) {
       const totalWeight = currentCount * averageWeight / 1000; // Convert to grams
       
       // Calcola indicatori specifici per lotti misti
-      const mixedLotIndicators = {
+      const mixedLotIndicators: {
+        isMixed: boolean;
+        distributionEfficiency: number;
+        fragmentationLevel: number;
+        riskLevel: 'basso' | 'medio' | 'alto';
+      } = {
         isMixed: distributionInfo.mixedBaskets > 0,
         distributionEfficiency: distributionInfo.averagePercentage,
         fragmentationLevel: basketsUsed > 0 ? (distributionInfo.mixedBaskets / basketsUsed) * 100 : 0,
@@ -697,7 +702,7 @@ export async function getLotTraceability(req: Request, res: Response) {
         currentActiveBasketsCount: currentDistribution.length,
         currentTotalAnimals: currentDistribution.reduce((sum, d) => sum + d.animalCount, 0),
         distributionEfficiency: currentDistribution.length > 0 ? 
-          (currentDistribution.reduce((sum, d) => sum + d.animalCount, 0) / lotInfo[0].initialAnimalCount) * 100 : 0
+          (currentDistribution.reduce((sum, d) => sum + d.animalCount, 0) / (lotInfo[0]?.initialAnimalCount || 1)) * 100 : 0
       }
     };
     

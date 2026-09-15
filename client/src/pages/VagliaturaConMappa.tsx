@@ -296,8 +296,8 @@ export default function VagliaturaConMappa() {
       
       // Usa i dati reali dalla tabella sizes
       const matchingSize = sizes.find((size: any) => {
-        const min = size.minAnimalsPerKg || size.min_animals_per_kg;
-        const max = size.maxAnimalsPerKg || size.max_animals_per_kg;
+        const min = size.minAnimalsPerKg;
+        const max = size.maxAnimalsPerKg;
         return min && max && animalsPerKg >= min && animalsPerKg <= max;
       });
       
@@ -305,8 +305,8 @@ export default function VagliaturaConMappa() {
         return {
           id: matchingSize.id,
           code: matchingSize.code,
-          min: matchingSize.minAnimalsPerKg || matchingSize.min_animals_per_kg,
-          max: matchingSize.maxAnimalsPerKg || matchingSize.max_animals_per_kg
+          min: matchingSize.minAnimalsPerKg,
+          max: matchingSize.maxAnimalsPerKg
         };
       }
       
@@ -719,7 +719,7 @@ export default function VagliaturaConMappa() {
       };
       
       // Apri il calcolatore draggable per posizionamento
-      setMeasurementData(initialMeasurementData);
+      setMeasurementData(prev => ({ ...prev, ...initialMeasurementData }));
       setIsCalculatorOpen(true);
     }
   };
@@ -818,6 +818,7 @@ export default function VagliaturaConMappa() {
       }
     };
     
+    let selectionId: number | undefined = selection.id;
     try {
       // Passo 1: Validazione
       updateStep('validate', 'in-progress', 0);
@@ -826,7 +827,7 @@ export default function VagliaturaConMappa() {
 
       // Passo 2: Creare la selezione (vagliatura) se non esiste già
       updateStep('create-selection', 'in-progress', 1);
-      let selectionId = selection.id;
+      selectionId = selection.id;
       
       // FIX BUG: Deriva originFlupsyId dai cestelli origine SELEZIONATI, non dallo stato UI
       // Lo stato originFlupsyId può essere sovrascritto navigando la mappa

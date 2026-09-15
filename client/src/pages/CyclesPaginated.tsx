@@ -31,6 +31,9 @@ interface Operation {
   animalCount?: number;
   totalWeight?: number;
   averageWeight?: number;
+  animalsPerKg?: number;
+  deadCount?: number;
+  notes?: string;
   size?: {
     id: number;
     code: string;

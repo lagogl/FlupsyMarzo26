@@ -13,8 +13,8 @@ import { formatNumberWithCommas } from '@/lib/utils';
 import { Calculator } from 'lucide-react';
 
 export interface SampleCalculatorResult {
-  animalsPerKg: number;
-  averageWeight: number;
+  animalsPerKg: number | null;
+  averageWeight: number | null;
   deadCount: number | null;
   mortalityRate: number | null;
 }

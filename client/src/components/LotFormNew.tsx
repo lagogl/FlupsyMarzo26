@@ -105,14 +105,14 @@ export default function LotFormNew({
     // Usa direttamente i dati dalla tabella sizes
     // I campi sono: minAnimalsPerKg, maxAnimalsPerKg (camelCase dal backend)
     const matchingSize = sizes.find(size => {
-      const min = size.minAnimalsPerKg || size.min_animals_per_kg;
-      const max = size.maxAnimalsPerKg || size.max_animals_per_kg;
+      const min = size.minAnimalsPerKg;
+      const max = size.maxAnimalsPerKg;
       return min && max && piecesPerKg >= min && piecesPerKg <= max;
     });
     
     if (matchingSize) {
-      const min = matchingSize.minAnimalsPerKg || matchingSize.min_animals_per_kg;
-      const max = matchingSize.maxAnimalsPerKg || matchingSize.max_animals_per_kg;
+      const min = matchingSize.minAnimalsPerKg;
+      const max = matchingSize.maxAnimalsPerKg;
       console.log(`Taglia trovata dal database: ${matchingSize.code} (${min}-${max})`);
       return matchingSize.id;
     }
@@ -122,10 +122,10 @@ export default function LotFormNew({
     
     // Ordina le taglie per valore minimo (crescente)
     const taglieOrdinate = [...sizes]
-      .filter(s => (s.minAnimalsPerKg || s.min_animals_per_kg) && (s.maxAnimalsPerKg || s.max_animals_per_kg))
+      .filter(s => s.minAnimalsPerKg && s.maxAnimalsPerKg)
       .sort((a, b) => {
-        const aMin = a.minAnimalsPerKg || a.min_animals_per_kg || 0;
-        const bMin = b.minAnimalsPerKg || b.min_animals_per_kg || 0;
+        const aMin = a.minAnimalsPerKg || 0;
+        const bMin = b.minAnimalsPerKg || 0;
         return aMin - bMin;
       });
     
@@ -136,8 +136,8 @@ export default function LotFormNew({
     
     const firstSize = taglieOrdinate[0];
     const lastSize = taglieOrdinate[taglieOrdinate.length - 1];
-    const firstMin = firstSize.minAnimalsPerKg || firstSize.min_animals_per_kg || 0;
-    const lastMax = lastSize.maxAnimalsPerKg || lastSize.max_animals_per_kg || 0;
+    const firstMin = firstSize.minAnimalsPerKg || 0;
+    const lastMax = lastSize.maxAnimalsPerKg || 0;
     
     // Se il valore è inferiore al minimo della taglia più piccola, usa quella
     if (piecesPerKg < firstMin) {

@@ -631,7 +631,7 @@ export default function Operations() {
   const searchParams = useSearch();
   
   // AGGIORNAMENTO REAL-TIME: staleTime=0 per refresh immediato via WebSocket
-  const { data: operations = [], isLoading: operationsLoading, error: operationsError } = useQuery({
+  const { data: operations = [], isLoading: operationsLoading, error: operationsError } = useQuery<Operation[]>({
     queryKey: ['/api/operations', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false, // Non rifare richieste quando torni nella pagina
@@ -639,7 +639,7 @@ export default function Operations() {
   });
 
   // Query leggere solo quando servono - real-time updates
-  const { data: baskets = [] } = useQuery({
+  const { data: baskets = [] } = useQuery<Basket[]>({
     queryKey: ['/api/baskets', { includeAll: true }],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false,
@@ -647,7 +647,7 @@ export default function Operations() {
     enabled: operations.length > 0, // Solo se abbiamo operazioni
   });
 
-  const { data: cyclesData } = useQuery({
+  const { data: cyclesData } = useQuery<{ cycles: Cycle[] }>({
     queryKey: ['/api/cycles', { includeAll: true }],
     staleTime: 30000,
     refetchOnWindowFocus: false,
@@ -656,7 +656,7 @@ export default function Operations() {
   const cycles = cyclesData?.cycles || [];
 
   // Query lotti - necessaria per il filtro lotti
-  const { data: lots = [] } = useQuery({
+  const { data: lots = [] } = useQuery<Lot[]>({
     queryKey: ['/api/lots'],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false,
@@ -664,7 +664,7 @@ export default function Operations() {
     enabled: true, // Necessaria per il filtro
   });
 
-  const { data: sizes = [] } = useQuery({
+  const { data: sizes = [] } = useQuery<Size[]>({
     queryKey: ['/api/sizes'],
     staleTime: 3600000, // 1 ora (le taglie cambiano raramente)
     refetchOnWindowFocus: false,
@@ -672,7 +672,7 @@ export default function Operations() {
     enabled: false, // Caricata solo quando serve
   });
 
-  const { data: flupsys = [] } = useQuery({
+  const { data: flupsys = [] } = useQuery<Flupsy[]>({
     queryKey: ['/api/flupsys'],
     staleTime: 0, // Aggiornamento immediato quando cache invalidata da WebSocket
     refetchOnWindowFocus: false,
@@ -702,10 +702,10 @@ export default function Operations() {
     }
   }, [lastUpdateData?.lastId, queryClient]);
 
-  const { data: sgrs = [] } = useQuery({
+  const { data: sgrs = [] } = useQuery<Sgr[]>({
     queryKey: ['/api/sgr'],
     staleTime: 3600000, // 1 ora (quasi statici)
-    cacheTime: 7200000, // 2 ore
+    gcTime: 7200000, // 2 ore
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     enabled: false, // Caricata solo quando serve
@@ -916,7 +916,7 @@ export default function Operations() {
       // 3. Operazioni normali
       else {
         // Mostra feedback per operazioni standard
-        const operationTypeNames = {
+        const operationTypeNames: Record<string, string> = {
           'misura': 'misurazione',
           'peso': 'pesatura', 
           'mortalita': 'registrazione mortalità',
@@ -948,7 +948,7 @@ export default function Operations() {
       setIsCreateDialogOpen(false);
       
       // Mostra notifica di successo
-      const operationTypeNames = {
+      const operationTypeNames: Record<string, string> = {
         'prima-attivazione': 'Prima Attivazione',
         'vendita': 'Vendita',
         'misura': 'Misurazione',
@@ -2155,7 +2155,7 @@ export default function Operations() {
                     // Trova l'ultima operazione per ogni cestello attivo
                     let totalWeight = 0;
                     let totalAnimals = 0;
-                    let lastOperationDate = null;
+                    let lastOperationDate: Date | null = null;
                     
                     activeBaskets.forEach((basket: any) => {
                       const basketOps = flupsyOperations.filter((op: any) => op.basketId === basket.id);
@@ -2163,8 +2163,8 @@ export default function Operations() {
                         // Prendi l'operazione più recente per questo cestello
                         const latestOp = basketOps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                         
-                        if (latestOp.totalWeight) totalWeight += parseFloat(latestOp.totalWeight);
-                        if (latestOp.animalCount) totalAnimals += parseInt(latestOp.animalCount);
+                        if (latestOp.totalWeight) totalWeight += Number(latestOp.totalWeight);
+                        if (latestOp.animalCount) totalAnimals += Number(latestOp.animalCount);
                         
                         // Aggiorna la data dell'ultima operazione
                         if (latestOp.date) {
@@ -2175,6 +2175,7 @@ export default function Operations() {
                         }
                       }
                     });
+                    const lastOperationDateDisplay = lastOperationDate;
                     
                     // Posizioni disponibili nel FLUPSY
                     const maxPositions = flupsy.maxPositions || 10; // default se non specificato
@@ -2216,9 +2217,9 @@ export default function Operations() {
                                   <span>📍 {freePositions} libere</span>
                                 )}
                               </div>
-                              {lastOperationDate && !isNaN(lastOperationDate.getTime()) && (
+                              {lastOperationDateDisplay && (
                                 <span className="text-gray-400">
-                                  {format(lastOperationDate, 'dd/MM', { locale: it })}
+                                  {format(lastOperationDateDisplay, 'dd/MM', { locale: it })}
                                 </span>
                               )}
                             </div>

@@ -943,10 +943,10 @@ export default function AnalisiScostamenti() {
             <CardContent>
               <ProductionRoadmap 
                 monthlyData={data.monthlyData}
-                ordersAbsoluteBySize={data.ordersAbsoluteBySize}
+                ordersAbsoluteBySize={data.ordersAbsoluteBySize || {}}
                 currentInventory={data.currentInventory}
                 seedingSchedule={data.seedingSchedule}
-                mortalityBySize={mortalityBySize}
+                mortalityBySize={mortalityBySize || {}}
               />
             </CardContent>
           </Card>

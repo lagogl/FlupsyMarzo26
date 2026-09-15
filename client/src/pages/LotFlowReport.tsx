@@ -118,8 +118,8 @@ export default function LotFlowReport() {
 
         <Card className="border-slate-200/80 bg-[#fbfdfc] shadow-sm">
           <CardContent className="flex flex-wrap items-end gap-4 p-4">
-            <div className="flex flex-col gap-1"><Label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Dal</Label><DatePicker date={from} setDate={(d) => d && setFrom(d)} /></div>
-            <div className="flex flex-col gap-1"><Label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Al</Label><DatePicker date={to} setDate={(d) => d && setTo(d)} /></div>
+            <div className="flex flex-col gap-1"><Label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Dal</Label><DatePicker date={from} setDate={(d: Date | undefined) => d && setFrom(d)} /></div>
+            <div className="flex flex-col gap-1"><Label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Al</Label><DatePicker date={to} setDate={(d: Date | undefined) => d && setTo(d)} /></div>
             <div className="flex flex-col gap-2"><Label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fornitori</Label><div className="flex items-center gap-4">
               <label className="flex cursor-pointer items-center gap-2 text-sm"><Checkbox checked={roem} onCheckedChange={(v) => setRoem(!!v)} />Roem</label>
               <label className="flex cursor-pointer items-center gap-2 text-sm"><Checkbox checked={ecotapes} onCheckedChange={(v) => setEcotapes(!!v)} />Ecotapes Zeeland</label>

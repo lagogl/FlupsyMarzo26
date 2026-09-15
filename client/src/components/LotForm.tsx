@@ -83,7 +83,6 @@ export default function LotForm({
   
   // Per gestire i valori temporanei e i calcoli automatici
   const [calculatedTotalAnimals, setCalculatedTotalAnimals] = useState<number | null>(null);
-  const [totalWeightGrams, setTotalWeightGrams] = useState<number | null>(null);
   
   // Monitoriamo i cambiamenti nei campi rilevanti per calcolare automaticamente
   useEffect(() => {
@@ -113,7 +112,7 @@ export default function LotForm({
     // Se ci sono valori calcolati, assicuriamoci di aggiornarli prima dell'invio
     if (form.getValues("weight") && totalWeightGrams) {
       const piecesPerKg = form.getValues("weight");
-      const totalAnimals = Math.round(totalWeightGrams * (piecesPerKg / 1000));
+      const totalAnimals = Math.round(totalWeightGrams * ((piecesPerKg ?? 0) / 1000));
       data.animalCount = totalAnimals;
     }
     
@@ -289,7 +288,7 @@ export default function LotForm({
                         form.setValue("weight", piecesPerKg);
                         
                         // Calcola il numero totale di animali se il peso totale è presente
-                        const totalWeight = form.getValues("totalWeightGrams");
+                        const totalWeight = totalWeightGrams;
                         if (totalWeight) {
                           const totalAnimals = Math.round(totalWeight * (piecesPerKg / 1000));
                           setCalculatedTotalAnimals(totalAnimals);
@@ -338,7 +337,7 @@ export default function LotForm({
                         form.setValue("weight", piecesPerKg);
                         
                         // Calcola il numero totale di animali se il peso totale è presente
-                        const totalWeight = form.getValues("totalWeightGrams");
+                        const totalWeight = totalWeightGrams;
                         if (totalWeight) {
                           const totalAnimals = Math.round(totalWeight * (piecesPerKg / 1000));
                           setCalculatedTotalAnimals(totalAnimals);

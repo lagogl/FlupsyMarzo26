@@ -2,7 +2,7 @@
  * Servizio per la generazione di PDF per le vendite avanzate
  * Utilizza Puppeteer per convertire HTML in PDF con layout professionale
  */
-import type handlebars from 'handlebars';
+import handlebars from 'handlebars';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import path from 'path';
@@ -453,15 +453,11 @@ export class PDFGeneratorService {
       const puppeteer = (await import('puppeteer')).default;
       const chromium = (await import('@sparticuz/chromium')).default;
 
-      // Configura chromium path e args per funzionare su Replit
-      chromium.setHeadlessMode = true;
-      chromium.setGraphicsMode = false;
-      
       this.browser = await puppeteer.launch({
-        headless: chromium.headless,
+        headless: true,
         executablePath: await chromium.executablePath() || undefined,
         args: chromium.args,
-        defaultViewport: chromium.defaultViewport
+        defaultViewport: { width: 1280, height: 720 }
       });
     }
   }

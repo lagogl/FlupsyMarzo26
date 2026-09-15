@@ -161,7 +161,7 @@ export class SizesService {
    * Delete size
    */
   async deleteSize(id: number) {
-    const result = await storage.deleteSize(id);
+    const [result] = await db.delete(sizes).where(eq(sizes.id, id)).returning();
     this.invalidateCache(); // Invalida DOPO il salvataggio
     return result;
   }

@@ -20,7 +20,6 @@ import {
   operations,
   cycles,
   baskets,
-  basketPositionHistory,
   flupsys,
   sizes,
   lots,
@@ -230,6 +229,18 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           .limit(1);
 
         if (basketInfo.length > 0 && basketInfo[0].currentCycleId) {
+          const latestSourceOperation = await tx.select({ sizeId: operations.sizeId })
+            .from(operations)
+            .where(and(
+              eq(operations.basketId, sourceBasket.basketId),
+              eq(operations.cycleId, basketInfo[0].currentCycleId)
+            ))
+            .orderBy(sql`${operations.date} DESC, ${operations.id} DESC`)
+            .limit(1);
+          const sourceSizeId = latestSourceOperation[0]?.sizeId;
+          if (sourceSizeId === undefined || sourceSizeId === null) {
+            throw new Error(`Taglia non disponibile per il cestello origine ${sourceBasket.basketId}`);
+          }
           
           // 1. OPERAZIONE CHIUSURA-CICLO-VAGLIATURA (specifica per tracciabilità)
           await tx.insert(operations).values({
@@ -237,7 +248,8 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             type: 'chiusura-ciclo-vagliatura',
             basketId: sourceBasket.basketId,
             cycleId: basketInfo[0].currentCycleId,
-            animalCount: sourceBasket.animalCount,
+            sizeId: sourceSizeId,
+            animalCount: sourceBasket.animalCount ?? 0,
             notes: `Chiusura per vagliatura #${selection[0].selectionNumber} del ${selection[0].date}. ` +
                    `Animali distribuiti: ${totalAnimalsDestination}. Mortalità: ${mortality}`,
             source: 'desktop_manager' // Operazione da gestionale desktop
@@ -523,6 +535,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             );
           }
         }
+        if (actualSizeId === null || actualSizeId === undefined) {
+          throw new Error(`Taglia non determinabile per il cestello ${destBasket.basketId}`);
+        }
 
         // 3. OPERAZIONE PRIMA-ATTIVAZIONE (APPROCCIO IBRIDO)
         // Parte automatica: provenienza
@@ -555,10 +570,10 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           type: 'prima-attivazione',
           basketId: destBasket.basketId,
           cycleId: newCycle.id,
-          lotId: primaryLotId, // ✅ LOTTO DOMINANTE per query veloci
-          animalCount: destBasket.animalCount,
-          totalWeight: destBasket.totalWeight,
-          animalsPerKg: destBasket.animalsPerKg,
+          lotId: primaryLotId ?? undefined, // ✅ LOTTO DOMINANTE per query veloci
+          animalCount: destBasket.animalCount ?? undefined,
+          totalWeight: destBasket.totalWeight ?? undefined,
+          animalsPerKg: destBasket.animalsPerKg ?? undefined,
           averageWeight: destBasket.totalWeight && destBasket.animalCount 
                         ? Math.round((destBasket.totalWeight / destBasket.animalCount) * 1000) 
                         : 0,
@@ -592,9 +607,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             type: 'vendita',
             basketId: destBasket.basketId,
             cycleId: newCycle.id,
-            animalCount: destBasket.animalCount,
-            totalWeight: destBasket.totalWeight,
-            animalsPerKg: destBasket.animalsPerKg,
+            animalCount: destBasket.animalCount ?? undefined,
+            totalWeight: destBasket.totalWeight ?? undefined,
+            animalsPerKg: destBasket.animalsPerKg ?? undefined,
             averageWeight: destBasket.totalWeight && destBasket.animalCount 
                           ? Math.round((destBasket.totalWeight / destBasket.animalCount) * 1000) 
                           : 0,
@@ -662,6 +677,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           if (match) {
             const row = match[1];
             const position = parseInt(match[2]);
+            if (destBasket.flupsyId === null) {
+              throw new Error(`FLUPSY mancante per il cestello destinazione ${destBasket.basketId}`);
+            }
             
             await tx.update(baskets)
               .set({

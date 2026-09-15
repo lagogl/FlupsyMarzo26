@@ -20,8 +20,8 @@ export async function handleBasketLotCompositionOnDelete(operation: any, executo
       WHERE basket_id = ${operation.basketId}
     `);
     
-    if (composition[0]?.count > 1) {
-      console.log(`🎯 Cestello ${operation.basketId} ha composizione mista (${composition[0].count} lotti)`);
+    if (Number(composition.rows[0]?.count || 0) > 1) {
+      console.log(`🎯 Cestello ${operation.basketId} ha composizione mista (${Number(composition.rows[0]?.count || 0)} lotti)`);
       
       // Se l'operazione cancellata era di tipo critico per i lotti misti
       if (operation.metadata && typeof operation.metadata === 'string') {
@@ -37,7 +37,7 @@ export async function handleBasketLotCompositionOnDelete(operation: any, executo
             AND (o.metadata::text LIKE '%mixed_lot%' OR o.metadata::text LIKE '%screening%')
           `);
           
-          if (otherMixedOps[0]?.count === 0) {
+          if (otherMixedOps.rows[0]?.count === 0) {
             console.log(`🎯 Nessun'altra operazione mantiene il lotto misto - eliminazione composizione`);
             await database.execute(sql`
               DELETE FROM basket_lot_composition WHERE basket_id = ${operation.basketId}
@@ -68,7 +68,7 @@ export async function handleBasketLotCompositionOnUpdate(operation: any, updateD
         WHERE basket_id = ${operation.basketId}
       `);
       
-      if (composition[0]?.count > 1) {
+        if (Number(composition.rows[0]?.count || 0) > 1) {
         console.log(`🎯 Cestello ${operation.basketId} ha composizione mista - aggiornamento necessario`);
         
         // Se cambia il lotto, potrebbe trasformare da misto a puro o viceversa
@@ -97,7 +97,8 @@ export async function handleBasketLotCompositionOnUpdate(operation: any, updateD
           `);
           
           // Calcola il nuovo totale
-          const totalAnimals = compositions.reduce((sum: number, comp: any) => {
+          const compositionRows = compositions.rows as any[];
+          const totalAnimals = compositionRows.reduce((sum: number, comp: any) => {
             if (comp.lot_id === operation.lotId) {
               return sum + (updateData.animalCount || 0);
             }
@@ -105,7 +106,7 @@ export async function handleBasketLotCompositionOnUpdate(operation: any, updateD
           }, 0);
           
           // Aggiorna le percentuali
-          for (const comp of compositions) {
+          for (const comp of compositionRows) {
             const animalCount = comp.lot_id === operation.lotId 
               ? (updateData.animalCount || 0) 
               : (comp.animal_count || 0);
@@ -142,7 +143,7 @@ export async function isBasketMixedLot(basketId: number): Promise<boolean> {
       WHERE basket_id = ${basketId}
     `);
     
-    return result[0]?.lot_count > 1;
+    return Number(result.rows[0]?.lot_count || 0) > 1;
   } catch (error) {
     console.error('❌ Errore verifica lotto misto:', error);
     return false;
@@ -158,16 +159,27 @@ export async function getBasketLotComposition(basketId: number, cycleId?: number
   try {
     const { db } = await import("../db");
     const { sql, and, eq } = await import("drizzle-orm");
-    const { basketLotComposition } = await import("../../shared/schema");
+     const { basketLotComposition, lots } = await import("../../shared/schema");
     
-    let query = db.select().from(basketLotComposition).where(eq(basketLotComposition.basketId, basketId));
-    
-    if (cycleId) {
-      query = query.where(and(
-        eq(basketLotComposition.basketId, basketId),
-        eq(basketLotComposition.cycleId, cycleId)
-      ));
-    }
+     const query = db.select({
+       id: basketLotComposition.id,
+       basketId: basketLotComposition.basketId,
+       cycleId: basketLotComposition.cycleId,
+       lotId: basketLotComposition.lotId,
+       animalCount: basketLotComposition.animalCount,
+       percentage: basketLotComposition.percentage,
+       sourceSelectionId: basketLotComposition.sourceSelectionId,
+       createdAt: basketLotComposition.createdAt,
+       notes: basketLotComposition.notes,
+       supplier: lots.supplier,
+       supplierLotNumber: lots.supplierLotNumber
+     }).from(basketLotComposition)
+       .leftJoin(lots, eq(basketLotComposition.lotId, lots.id))
+       .where(
+      cycleId
+        ? and(eq(basketLotComposition.basketId, basketId), eq(basketLotComposition.cycleId, cycleId))
+        : eq(basketLotComposition.basketId, basketId)
+     );
     
     return await query;
   } catch (error) {

@@ -32,7 +32,6 @@ import {
   operations,
   baskets,
   sizes,
-  flupsys,
   basketLotComposition,
   lots,
   externalCustomersSync,
@@ -52,7 +51,6 @@ import {
   , publicTraceabilityLinks
 } from "../../shared/schema";
 import { format } from "date-fns";
-import { getConfigValue } from "./fatture-in-cloud-controller";
 import { OperationsCache } from "../operations-cache-service.js";
 import { resolveFCloudCompanyId, sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
@@ -931,7 +929,7 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
         `);
 
         // Ricarica dettagli operazioni dentro la transazione
-        operationsData = await tx.select({
+        operationsData = (await tx.select({
           operationId: operations.id,
           basketId: operations.basketId,
           animalCount: operations.animalCount,
@@ -943,7 +941,12 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
         .from(operations)
         .leftJoin(baskets, eq(operations.basketId, baskets.id))
         .leftJoin(sizes, eq(operations.sizeId, sizes.id))
-        .where(inArray(operations.id, operationIds));
+        .where(inArray(operations.id, operationIds))).map(operation => ({
+          ...operation,
+          animalCount: operation.animalCount ?? 0,
+          totalWeight: operation.totalWeight ?? 0,
+          animalsPerKg: operation.animalsPerKg ?? 0
+        }));
 
         const operationMap = new Map<number, typeof operationsData[number]>();
         operationsData.forEach(op => operationMap.set(op.operationId, op));
@@ -1902,8 +1905,8 @@ export async function getAdvancedSales(req: Request, res: Response) {
 export async function getFicBillingStatuses(req: Request, res: Response) {
   const checkedAt = new Date().toISOString();
   try {
-    const requestedIds = Array.isArray(req.body?.saleIds) ? req.body.saleIds : [];
-    const saleIds = [...new Set(requestedIds.map(Number).filter(id => Number.isInteger(id) && id > 0))];
+    const requestedIds: unknown[] = Array.isArray(req.body?.saleIds) ? req.body.saleIds : [];
+    const saleIds = [...new Set(requestedIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0))];
     if (saleIds.length > 2000) return res.status(400).json({ success: false, error: "Troppe vendite richieste" });
     if (!saleIds.length) return res.json({ success: true, statuses: {} });
 
@@ -1983,8 +1986,9 @@ export async function getFicBillingStatuses(req: Request, res: Response) {
             }
           }
           ficInvoiceCache.set(cacheKey, { invoices, expiresAt: Date.now() + 60_000 });
-          setTimeout(() => {
-            if (ficInvoiceCache.get(cacheKey)?.expiresAt <= Date.now()) ficInvoiceCache.delete(cacheKey);
+           setTimeout(() => {
+             const cachedInvoiceSet = ficInvoiceCache.get(cacheKey);
+             if (cachedInvoiceSet && cachedInvoiceSet.expiresAt <= Date.now()) ficInvoiceCache.delete(cacheKey);
           }, 61_000).unref();
         }
         const relevantDates = [...new Set(groupRows.map(row => String(row.ddtDate)))];
@@ -2203,6 +2207,12 @@ export async function generateSalePDF(req: Request, res: Response) {
       },
       bags: bagsWithAllocations.map(bag => ({
         ...bag,
+         sizeCode: bag.sizeCode,
+         totalWeight: bag.totalWeight,
+         originalWeight: bag.originalWeight,
+         animalCount: bag.animalCount,
+         animalsPerKg: bag.animalsPerKg,
+         originalAnimalsPerKg: bag.originalAnimalsPerKg,
         weightLoss: bag.weightLoss || 0, // Coerce null to 0
         wastePercentage: bag.wastePercentage || 0, // Coerce null to 0
         notes: bag.notes || undefined, // Coerce null to undefined
@@ -2215,7 +2225,15 @@ export async function generateSalePDF(req: Request, res: Response) {
           flupsyName: alloc.flupsyName || undefined
         }))
       })),
-      operations: operationsRefs
+       operations: operationsRefs.map(operation => ({
+         ...operation,
+         originalAnimals: operation.originalAnimals ?? 0,
+         originalWeight: operation.originalWeight ?? 0,
+         originalAnimalsPerKg: operation.originalAnimalsPerKg ?? 0,
+         basketPhysicalNumber: operation.basketPhysicalNumber ?? 0,
+          date: operation.date ?? sale[0].saleDate,
+          flupsyName: operation.flupsyName ?? undefined
+       }))
     };
 
     // Usa Company ID dalla vendita (se specificato)
@@ -2285,7 +2303,7 @@ export async function downloadSalePDF(req: Request, res: Response) {
     const filePath = path.join(process.cwd(), sale[0].pdfPath);
     
     try {
-      await fs.access(filePath);
+      await fsPromises.access(filePath);
       res.download(filePath, `Vendita-${sale[0].saleNumber}.pdf`);
     } catch (fileError) {
       return res.status(404).json({

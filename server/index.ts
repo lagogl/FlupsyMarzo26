@@ -377,7 +377,9 @@ async function buildApp() {
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     // CRITICAL FIX: Isolate Vite on dedicated Router to prevent API interception
-    const ui = express.Router();
+    // Use an Express application here so it satisfies setupVite's typed contract;
+    // it is still mounted behind the API/method filters below.
+    const ui = express();
     await setupVite(ui, server);
 
     // Mount Vite router with filters: exclude /api requests and non-GET/HEAD methods

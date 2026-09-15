@@ -281,7 +281,13 @@ function MiniChart({ data, group }: { data: EnvironmentalLog[]; group: ChartGrou
 }
 
 // Struttura colonne tabella con raggruppamento per fonte
-const TABLE_GROUPS = [
+const TABLE_GROUPS: Array<{
+  label: string;
+  src: string;
+  bg: string;
+  cellBg: string;
+  cols: Array<{ key: string; head: string; fmt?: (value: any) => string }>;
+}> = [
   {
     label: 'Copernicus / Open-Meteo Marine',
     src: 'copernicus' as const,

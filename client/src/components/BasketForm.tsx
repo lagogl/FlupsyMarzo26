@@ -273,9 +273,9 @@ export default function BasketForm({
                   
                   // Reset position, row and basket number when changing FLUPSY
                   if (!basketId) {
-                    form.setValue('position', undefined);
+                    form.setValue('position', undefined as unknown as BasketFormValues['position']);
                     form.setValue('row', '');
-                    form.setValue('physicalNumber', undefined);
+                    form.setValue('physicalNumber', undefined as unknown as BasketFormValues['physicalNumber']);
                     setSelectedRow(null);
                   }
                 }}
@@ -387,8 +387,8 @@ export default function BasketForm({
                 if (row === '' && position === 0) {
                   // Annulla selezione - ripristina valori iniziali
                   form.setValue('row', '');
-                  form.setValue('position', undefined);
-                  form.setValue('physicalNumber', undefined);
+                  form.setValue('position', undefined as unknown as BasketFormValues['position']);
+                  form.setValue('physicalNumber', undefined as unknown as BasketFormValues['physicalNumber']);
                   setSelectedRow(null);
                 } else {
                   // Imposta nuova selezione dalla mini-mappa

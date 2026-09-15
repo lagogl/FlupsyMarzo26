@@ -55,6 +55,8 @@ export function DatePicker({ date, setDate, onSelect, mode, className, disabled,
     }
   };
   
+  const FlexibleCalendar = Calendar as React.ComponentType<Record<string, unknown>>;
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -73,7 +75,7 @@ export function DatePicker({ date, setDate, onSelect, mode, className, disabled,
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
+        <FlexibleCalendar
           mode={mode || "single"}
           selected={date}
           onSelect={handleDateChange}

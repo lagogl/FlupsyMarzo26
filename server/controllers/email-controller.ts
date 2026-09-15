@@ -276,7 +276,7 @@ async function getEmailConfig() {
       // Recupera i valori specifici dalla configurazione
       const getConfigValue = (key: string, defaultValue: string = '') => {
         const row = configRows.find(row => row.key === key);
-        return row ? row.value : defaultValue;
+        return row?.value ?? defaultValue;
       };
       
       // Gestisce conversione email recipients da JSON array a stringa separata da virgole
@@ -828,7 +828,8 @@ export async function generateEmailDiario(req: Request, res: Response) {
       ORDER BY o.id ASC
     `);
 
-    console.log("API operazioni per data - Risultati:", operations.length);
+    const operationRows = operations.rows;
+    console.log("API operazioni per data - Risultati:", operationRows.length);
     
     // 2. Ottieni i totali giornalieri
     console.log("API totali giornalieri - Data richiesta:", formattedDate);
@@ -843,7 +844,7 @@ export async function generateEmailDiario(req: Request, res: Response) {
       WHERE o.date = ${formattedDate}
     `);
     
-    console.log("API totali giornalieri - Risultati:", dailyTotals[0]);
+    console.log("API totali giornalieri - Risultati:", dailyTotals.rows[0]);
     
     // 3. Ottieni la giacenza
     console.log("API giacenza - Data richiesta:", formattedDate);
@@ -916,22 +917,22 @@ export async function generateEmailDiario(req: Request, res: Response) {
       ORDER BY COALESCE(s.code, 'ZZZZZ')
     `);
     
-    console.log("API statistiche per taglia - Risultati:", sizeStats.length);
+    console.log("API statistiche per taglia - Risultati:", sizeStats.rows.length);
     
     // Prepara i dati per la risposta
     const giacenza = {
-      totale_giacenza: parseInt(totaleGiacenza[0]?.totale_giacenza || '0'),
-      dettaglio_taglie: giacenzaPerTaglia.map(item => ({
+      totale_giacenza: parseInt(String(totaleGiacenza.rows[0]?.totale_giacenza ?? '0'), 10),
+      dettaglio_taglie: giacenzaPerTaglia.rows.map((item: Record<string, unknown>) => ({
         taglia: item.taglia,
-        quantita: parseInt(item.quantita)
+        quantita: parseInt(String(item.quantita), 10)
       }))
     };
     
     const diarioData = {
-      operations,
-      totals: dailyTotals[0],
+      operations: operationRows,
+      totals: dailyTotals.rows[0],
       giacenza,
-      sizeStats
+      sizeStats: sizeStats.rows
     };
     
     // Genera il testo email (plaintext e HTML)
@@ -983,7 +984,10 @@ export async function sendEmailDiario(req: Request, res: Response) {
     
     // Crea il trasportatore per l'invio email
     // Prima prova a creare un trasportatore reale, altrimenti usa la simulazione
-    const transporter = createRealTransporter() || nodemailer.createTransport({});
+    const transporter = createRealTransporter();
+    if (!transporter) {
+      throw new Error("Trasportatore email non configurato");
+    }
 
     // Salviamo la configurazione nel database
     if (typeof to === 'string') {
@@ -1128,7 +1132,7 @@ export async function initializeEmailScheduler() {
     
     if (config.auto_enabled === 'true') {
       // Converti il tempo nel formato cron (minuti, ore, *, *, *)
-      const timeParts = config.send_time.split(':');
+      const timeParts = (config.send_time ?? '00:00').split(':');
       const hours = parseInt(timeParts[0], 10);
       const minutes = parseInt(timeParts[1], 10);
       

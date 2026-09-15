@@ -19,6 +19,46 @@ import GrowthPredictionChart from '@/components/GrowthPredictionChart';
 import MultiSizeGrowthComparisonChart from '@/components/MultiSizeGrowthComparisonChart';
 import { useWebSocketMessage } from '@/lib/websocket';
 
+interface SgrRecord {
+  id: number;
+  month: string;
+  percentage: number;
+}
+
+interface DailySgrRecord {
+  id: number;
+  recordDate: string;
+  site?: string | null;
+  temperature?: number | null;
+  ammonia?: number | null;
+  waterTemperature?: number | null;
+  oxygen?: number | null;
+  salinity?: number | null;
+  pH?: number | null;
+  nh3?: number | null;
+  secchiDisk?: number | null;
+  microalgaeConcentration?: number | null;
+  temperatureAirMin?: number | null;
+  temperatureAirMax?: number | null;
+}
+
+interface SgrPerSizeRecord {
+  month: string;
+  sizeId: number;
+  calculatedSgr: number | null;
+  sampleCount: number | null;
+  lastCalculated?: string | null;
+  notes?: string | null;
+}
+
+interface SgrSize {
+  id: number;
+  name: string;
+  minAnimalsPerKg?: number | null;
+  maxAnimalsPerKg?: number | null;
+  color?: string | null;
+}
+
 export default function Sgr() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -74,22 +114,22 @@ export default function Sgr() {
   ];
   
   // Query SGRs
-  const { data: sgrs, isLoading } = useQuery({
+  const { data: sgrs = [], isLoading } = useQuery<SgrRecord[]>({
     queryKey: ['/api/sgr'],
   });
 
   // Query SGR Giornalieri
-  const { data: sgrGiornalieri, isLoading: isLoadingSgrGiornalieri } = useQuery({
+  const { data: sgrGiornalieri = [], isLoading: isLoadingSgrGiornalieri } = useQuery<DailySgrRecord[]>({
     queryKey: ['/api/sgr-giornalieri'],
   });
 
   // Query SGR Per Taglia
-  const { data: sgrPerTaglia, isLoading: isLoadingSgrPerTaglia } = useQuery({
+  const { data: sgrPerTaglia = [], isLoading: isLoadingSgrPerTaglia } = useQuery<SgrPerSizeRecord[]>({
     queryKey: ['/api/sgr-per-taglia'],
   });
 
   // Query Sizes
-  const { data: sizes } = useQuery({
+  const { data: sizes = [] } = useQuery<SgrSize[]>({
     queryKey: ['/api/sizes'],
   });
   
@@ -978,7 +1018,7 @@ export default function Sgr() {
                 
                 {(() => {
                   // Calcola max e min per ogni parametro
-                  const chartData = [...sortedSgrGiornalieri].reverse().map(item => ({
+                  const chartData: Array<Record<string, string | number | null | undefined>> = [...sortedSgrGiornalieri].reverse().map(item => ({
                     date: new Intl.DateTimeFormat('it-IT', {
                       day: '2-digit',
                       month: '2-digit'
@@ -994,8 +1034,8 @@ export default function Sgr() {
                   const getMinMax = (key: string) => {
                     const values = chartData.map(d => d[key]).filter(v => v !== null && v !== undefined);
                     return values.length > 0 ? {
-                      min: Math.min(...values),
-                      max: Math.max(...values)
+                       min: Math.min(...values.map(Number)),
+                       max: Math.max(...values.map(Number))
                     } : { min: null, max: null };
                   };
                   
@@ -1457,19 +1497,19 @@ export default function Sgr() {
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Temperatura media:</span>
                       <span className="font-medium">
-                        {calculateAverage(sortedSgrGiornalieri.slice(0, 7).map(s => s.temperature))}
+                        {calculateAverage(sortedSgrGiornalieri.slice(0, 7).map(s => s.temperature ?? null))}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">pH medio:</span>
                       <span className="font-medium">
-                        {calculateAverage(sortedSgrGiornalieri.slice(0, 7).map(s => s.pH))}
+                        {calculateAverage(sortedSgrGiornalieri.slice(0, 7).map(s => s.pH ?? null))}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Ossigeno medio:</span>
                       <span className="font-medium">
-                        {calculateAverage(sortedSgrGiornalieri.slice(0, 7).map(s => s.oxygen))}
+                        {calculateAverage(sortedSgrGiornalieri.slice(0, 7).map(s => s.oxygen ?? null))}
                       </span>
                     </div>
                   </div>

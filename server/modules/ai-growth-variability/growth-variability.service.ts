@@ -148,7 +148,7 @@ export class GrowthVariabilityService {
         dateTo: options.dateTo || null,
         status: 'failed',
         datasetSize: 0,
-        errorMessage: error.message
+        errorMessage: error instanceof Error ? error.message : String(error)
       });
       
       throw error;
@@ -553,7 +553,7 @@ export class GrowthVariabilityService {
       return result.insights || result.data || [];
       
     } catch (error) {
-      console.warn('⚠️ AI insights fallback a statistici:', error.message);
+      console.warn('⚠️ AI insights fallback a statistici:', error instanceof Error ? error.message : String(error));
       return this.generateStatisticalInsights(data);
     }
   }

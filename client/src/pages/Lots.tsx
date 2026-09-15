@@ -1088,10 +1088,10 @@ export default function Lots() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tutte</SelectItem>
-                  {lots && lots.length > 0 && [...new Set(lots.filter(lot => lot.size).map(lot => JSON.stringify(lot.size)))]
-                    .map(sizeStr => JSON.parse(sizeStr))
+                  {lots && lots.length > 0 && [...new Set(lots.filter((lot: { size?: unknown }) => lot.size).map((lot: { size?: unknown }) => JSON.stringify(lot.size)))]
+                    .map(sizeStr => JSON.parse(String(sizeStr)) as { id: number; code: string })
                     .sort((a, b) => a.code.localeCompare(b.code))
-                    .map(size => (
+                    .map((size: { id: number; code: string }) => (
                       <SelectItem key={size.id} value={size.id.toString()}>{size.code}</SelectItem>
                     ))
                   }

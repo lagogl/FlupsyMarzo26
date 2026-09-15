@@ -403,7 +403,7 @@ export class ExternalSyncService {
         console.log(`📥 Sincronizzati ${customers.length} clienti`);
       }
     } catch (error) {
-      console.error('❌ Errore sincronizzazione clienti:', error.message);
+      console.error('❌ Errore sincronizzazione clienti:', error instanceof Error ? error.message : String(error));
       // Non propagare l'errore per evitare crash dell'app
       return;
     }
@@ -430,7 +430,7 @@ export class ExternalSyncService {
         console.log(`📥 Sincronizzate ${sales.length} vendite`);
       }
     } catch (error) {
-      console.error('❌ Errore sincronizzazione vendite:', error.message);
+      console.error('❌ Errore sincronizzazione vendite:', error instanceof Error ? error.message : String(error));
       // Non propagare l'errore per evitare crash dell'app
       return;
     }
@@ -457,7 +457,7 @@ export class ExternalSyncService {
         console.log(`📥 Sincronizzate ${deliveries.length} consegne`);
       }
     } catch (error) {
-      console.error('❌ Errore sincronizzazione consegne:', error.message);
+      console.error('❌ Errore sincronizzazione consegne:', error instanceof Error ? error.message : String(error));
       // Non propagare l'errore per evitare crash dell'app
       return;
     }
@@ -484,7 +484,7 @@ export class ExternalSyncService {
         console.log(`📥 Sincronizzati ${deliveryDetails.length} dettagli consegne`);
       }
     } catch (error) {
-      console.error('❌ Errore sincronizzazione dettagli consegne:', error.message);
+      console.error('❌ Errore sincronizzazione dettagli consegne:', error instanceof Error ? error.message : String(error));
       // Non propagare l'errore per evitare crash dell'app
       return;
     }
@@ -558,7 +558,7 @@ export class ExternalSyncService {
         return dateValue.toISOString();
       }
     } catch (error) {
-      console.warn(`Impossibile convertire timestamp:`, typeof value, value, error?.message);
+      console.warn(`Impossibile convertire timestamp:`, typeof value, value, error instanceof Error ? error.message : String(error));
     }
     
     return null;
@@ -1020,19 +1020,20 @@ export class ExternalSyncService {
             last_modified_external = EXCLUDED.last_modified_external
         `;
         
+        const mappedRow = mappedData as unknown as Record<string, unknown>;
         await this.localPool.query(insertQuery, [
-          mappedData.externalId,
-          mappedData.departureTime || new Date().toISOString(),
-          mappedData.customerId,
+          mappedRow.externalId,
+          mappedRow.departureTime || new Date().toISOString(),
+          mappedRow.customerId,
           null, // ordine_id
-          mappedData.deliveryDate || new Date().toISOString().split('T')[0],
-          mappedData.deliveryStatus || 'completata',
+          mappedRow.deliveryDate || new Date().toISOString().split('T')[0],
+          mappedRow.deliveryStatus || 'completata',
           1, // numero_totale_ceste
-          mappedData.totalAmount || '0',
+          mappedRow.totalAmount || '0',
           100, // totale_animali
           'TP-3500', // taglia_media
           null, // qrcode_url
-          mappedData.deliveryNotes || '',
+          mappedRow.deliveryNotes || '',
           1 // numero_progressivo
         ]);
       }
@@ -1096,20 +1097,21 @@ export class ExternalSyncService {
             last_modified_external = EXCLUDED.last_modified_external
         `;
         
+        const mappedRow = mappedData as unknown as Record<string, unknown>;
         await this.localPool.query(insertQuery, [
-          mappedData.externalId,
-          mappedData.reportId,
+          mappedRow.externalId,
+          mappedRow.reportId,
           null, // misurazione_id
           null, // vasca_id
-          mappedData.sourceLot,
+          mappedRow.sourceLot,
           1, // numero_ceste
-          mappedData.lineTotal,
-          mappedData.productCode,
+          mappedRow.lineTotal,
+          mappedRow.productCode,
           '50', // animali_per_kg
           '0', // percentuale_scarto
           '0', // percentuale_mortalita
-          mappedData.quantity,
-          mappedData.productNotes
+          mappedRow.quantity,
+          mappedRow.productNotes
         ]);
       }
       

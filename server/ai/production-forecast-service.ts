@@ -52,6 +52,7 @@ interface ForecastSummary {
   year: number;
   totalBudget: number;
   totalOrders: number;
+  totalOrdersYearAllocated?: number;
   totalProductionForecast: number;
   overallVariance: number;
   monthlyData: MonthlyForecast[];
@@ -63,6 +64,7 @@ interface ForecastSummary {
   ordersBySpecificSize?: OrdersBySize[];
   budgetByCategory?: Record<string, number>;
   ordersByCategory?: Record<string, number>;
+  ordersAbsoluteBySize?: Record<string, number>;
 }
 
 interface InventoryBySize {
@@ -1096,6 +1098,10 @@ export class ProductionForecastService {
     const totalOrders = monthlyData.reduce((sum, m) => sum + m.ordersAnimals, 0);
     const totalProductionForecast = monthlyData.reduce((sum, m) => sum + m.productionForecast, 0);
     const totalSeedingT1Required = seedingSchedule.reduce((sum, s) => sum + s.seedT1Amount, 0);
+    const ordersByCategoryAgg: Record<string, number> = {};
+    for (const m of monthlyData) {
+      ordersByCategoryAgg[m.sizeCategory] = (ordersByCategoryAgg[m.sizeCategory] || 0) + m.ordersAnimals;
+    }
 
     // Ottieni totale assoluto ordini (non allocato per anno) per il KPI
     const ordersDiagnostic = await this.getOrdersDiagnostic();
@@ -1130,11 +1136,9 @@ export class ProductionForecastService {
     });
 
     const budgetByCategory: Record<string, number> = {};
-    const ordersByCategoryAgg: Record<string, number> = {};
     
     for (const m of monthlyData) {
       budgetByCategory[m.sizeCategory] = (budgetByCategory[m.sizeCategory] || 0) + m.budgetAnimals;
-      ordersByCategoryAgg[m.sizeCategory] = (ordersByCategoryAgg[m.sizeCategory] || 0) + m.ordersAnimals;
     }
 
     return {

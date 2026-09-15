@@ -163,6 +163,7 @@ export default function SizeForm({
                 <Textarea 
                   placeholder="Inserisci note aggiuntive" 
                   {...field}
+                  value={field.value ?? ""}
                 />
               </FormControl>
               <FormMessage />

@@ -103,7 +103,7 @@ export class LotAutoStatsService {
   private static async updateLotLedger(operation: any) {
     try {
       // Determina tipo di movimento lot ledger basato su tipo operazione
-      let ledgerType: string | null = null;
+      let ledgerType: typeof lotLedger.$inferInsert.type | null = null;
       let quantity = 0;
 
       switch (operation.type) {

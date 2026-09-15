@@ -142,7 +142,7 @@ export default function Manuale() {
     <div className="container mx-auto px-4 py-6">
       <PageHeader
         title={lang === "it" ? "Manuale FLUPSY Manager" : "FLUPSY Manager Manual"}
-        description={
+        subtitle={
           lang === "it"
             ? "Guida operativa completa, bilingue. Naviga i capitoli a sinistra, cerca con il filtro o scarica il PDF."
             : "Complete bilingual operational guide. Navigate chapters on the left, use the filter or download the PDF."

@@ -79,7 +79,7 @@ export async function sendGmailEmail(options: EmailOptions): Promise<void> {
     const recipients = Array.isArray(options.to) ? options.to : [options.to];
     
     // Costruisci il messaggio MIME
-    let message = [
+    let message: string = [
       `To: ${recipients.join(', ')}`,
       'Content-Type: text/html; charset=utf-8',
       'MIME-Version: 1.0',
@@ -92,7 +92,7 @@ export async function sendGmailEmail(options: EmailOptions): Promise<void> {
     if (options.attachments && options.attachments.length > 0) {
       const boundary = 'boundary_' + Date.now();
       
-      message = [
+      const multipartMessage = [
         `To: ${recipients.join(', ')}`,
         'MIME-Version: 1.0',
         `Subject: ${options.subject}`,
@@ -112,17 +112,17 @@ export async function sendGmailEmail(options: EmailOptions): Promise<void> {
           ? attachment.content.toString('base64')
           : Buffer.from(attachment.content).toString('base64');
         
-        message.push(`--${boundary}`);
-        message.push(`Content-Type: ${contentType}`);
-        message.push(`Content-Disposition: attachment; filename="${attachment.filename}"`);
-        message.push('Content-Transfer-Encoding: base64');
-        message.push('');
-        message.push(content);
-        message.push('');
+        multipartMessage.push(`--${boundary}`);
+        multipartMessage.push(`Content-Type: ${contentType}`);
+        multipartMessage.push(`Content-Disposition: attachment; filename="${attachment.filename}"`);
+        multipartMessage.push('Content-Transfer-Encoding: base64');
+        multipartMessage.push('');
+        multipartMessage.push(content);
+        multipartMessage.push('');
       }
       
-      message.push(`--${boundary}--`);
-      message = message.join('\n');
+      multipartMessage.push(`--${boundary}--`);
+      message = multipartMessage.join('\n');
     }
     
     // Codifica in base64url

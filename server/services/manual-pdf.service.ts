@@ -225,7 +225,7 @@ function renderCallout(doc: PDFKit.PDFDocument, label: string, text: string, bg:
 function renderCode(doc: PDFKit.PDFDocument, code: string, contentW: number) {
   ensureSpace(doc, 60);
   const startY = doc.y;
-  const textH = doc.heightOfString(code, { width: contentW - 20, font: "Courier", size: 9 });
+  const textH = doc.heightOfString(code, { width: contentW - 20 });
   const h = textH + 16;
   ensureSpace(doc, h + 8);
   doc.rect(55, startY, contentW, h).fillAndStroke("#0f172a", "#0f172a");
@@ -241,8 +241,8 @@ function renderKvTable(doc: PDFKit.PDFDocument, rows: NonNullable<ManualBlock["r
   rows.forEach((r) => {
     ensureSpace(doc, 50);
     const startY = doc.y;
-    const kH = doc.heightOfString(r.k[lang], { width: kW - 12, font: "Helvetica-Bold", size: 9.5 });
-    const vH = doc.heightOfString(r.v[lang], { width: vW - 12, font: "Helvetica", size: 9.5 });
+    const kH = doc.heightOfString(r.k[lang], { width: kW - 12 });
+    const vH = doc.heightOfString(r.v[lang], { width: vW - 12 });
     const h = Math.max(kH, vH) + 12;
     ensureSpace(doc, h + 4);
     // Cell key

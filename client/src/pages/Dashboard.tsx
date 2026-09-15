@@ -74,11 +74,11 @@ export default function Dashboard() {
     queryKey: ['/api/baskets', { includeAll: true }],
   });
 
-  const { data: cyclesData, isLoading: cyclesLoading, dataUpdatedAt: cyclesUpdatedAt } = useQuery({
+  const { data: cyclesData, isLoading: cyclesLoading, dataUpdatedAt: cyclesUpdatedAt } = useQuery<Cycle[] | { cycles: Cycle[] }>({
     queryKey: ['/api/cycles', { includeAll: true }],
   });
   
-  const cycles = cyclesData?.cycles || [];
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles || [];
 
   const { data: operations, isLoading: operationsLoading, dataUpdatedAt: operationsUpdatedAt } = useQuery<Operation[]>({
     queryKey: ['/api/operations', { includeAll: true, pageSize: 500 }],
@@ -252,7 +252,7 @@ export default function Dashboard() {
     if (basketOperations.length === 0) return total;
     
     // Prendi la più recente operazione con animalCount
-    return total + basketOperations[0].animalCount;
+    return total + (basketOperations[0].animalCount ?? 0);
   }, 0);
 
   // Previous month comparison for baskets - removed hardcoded values

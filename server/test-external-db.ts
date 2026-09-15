@@ -59,13 +59,13 @@ async function testExternalDatabase() {
           console.log('  (Tabella vuota)');
         }
       } catch (error) {
-        console.log(`  (Errore accesso dati: ${error.message})`);
+        console.log(`  (Errore accesso dati: ${error instanceof Error ? error.message : String(error)})`);
       }
     }
 
     client.release();
   } catch (error) {
-    console.error('❌ Errore connessione:', error.message);
+    console.error('❌ Errore connessione:', error instanceof Error ? error.message : String(error));
     return false;
   } finally {
     await pool.end();

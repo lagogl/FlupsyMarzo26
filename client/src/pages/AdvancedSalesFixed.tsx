@@ -127,7 +127,7 @@ export default function AdvancedSales() {
         return;
       }
 
-      const selectedCustomer = customersQuery.data.customers.find(c => {
+      const selectedCustomer = customersQuery.data.customers.find((c: { id?: number; name?: string }) => {
         return c && 
                typeof c === 'object' && 
                c.id === newSaleForm.customerId &&
@@ -306,7 +306,7 @@ export default function AdvancedSales() {
                       if (e.target.checked) {
                         setNewSaleForm(prev => ({
                           ...prev,
-                          operationIds: operationsQuery.data?.operations?.filter(op => op && op.operationId).map((op: Operation) => op.operationId) || []
+                          operationIds: operationsQuery.data?.operations?.filter((op: Operation) => op && op.operationId).map((op: Operation) => op.operationId) || []
                         }));
                       } else {
                         setNewSaleForm(prev => ({
@@ -387,7 +387,7 @@ export default function AdvancedSales() {
                       <SelectValue placeholder="Seleziona cliente..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {customersQuery.data?.customers?.filter(customer => {
+                      {customersQuery.data?.customers?.filter((customer: { id?: number; name?: string }) => {
                         return customer && 
                                typeof customer === 'object' && 
                                customer.id && 
@@ -415,7 +415,7 @@ export default function AdvancedSales() {
                     return <div className="text-sm text-yellow-600">Dati clienti non disponibili</div>;
                   }
 
-                  const selectedCustomer = customersQuery.data.customers.find(c => {
+                  const selectedCustomer = customersQuery.data.customers.find((c: { id?: number; name?: string }) => {
                     return c && 
                            typeof c === 'object' && 
                            c.id === newSaleForm.customerId;

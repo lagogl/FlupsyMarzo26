@@ -404,7 +404,12 @@ export class SalesPlanningMilpService {
     const t0 = Date.now();
     // @ts-ignore - javascript-lp-solver non ha tipi
     const solver = (await import("javascript-lp-solver")).default;
-    const solution = solver.Solve(model);
+    const solve = (solver as { Solve(model: unknown): unknown }).Solve;
+    const solution = solve(model) as Record<string, number> & {
+      feasible?: boolean;
+      bounded?: boolean;
+      result?: number;
+    };
     const elapsed = Date.now() - t0;
     console.log(`🧮 LP solver completato in ${elapsed}ms, feasible=${solution.feasible}, bounded=${solution.bounded}, obj=${solution.result?.toFixed(2)}`);
 

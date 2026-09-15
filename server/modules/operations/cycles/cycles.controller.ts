@@ -618,9 +618,9 @@ export class CyclesController {
           try {
             const sgrPesoData = await cyclesService.calculateSgrPeso(cycle.id);
             return {
+              ...sgrPesoData,
               cycleId: cycle.id,
-              basketId: cycle.basketId,
-              ...sgrPesoData
+              basketId: cycle.basketId
             };
           } catch (err) {
             return {

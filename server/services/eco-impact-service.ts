@@ -129,13 +129,13 @@ export class EcoImpactService {
         impactsToSave.push({
           operationId,
           categoryId: category.id,
-          impactValue: calculatedImpacts[categoryCode],
-          baselineValue: factor.value, // Usa il valore del fattore come baseline
-          improvementPercentage: 0, // Nessun miglioramento di default
+          factorId: factor.id,
+          value: calculatedImpacts[categoryCode],
           metadata: { 
             calculated: true,
             parameters,
-            factorId: factor.id // Salva l'ID del fattore nei metadata
+            baselineValue: factor.value,
+            improvementPercentage: 0
           }
         });
       }
@@ -220,7 +220,7 @@ export class EcoImpactService {
             .where(eq(impactCategories.id, impact.categoryId));
           
           if (category && category.code in totalImpacts) {
-            totalImpacts[category.code] += impact.impactValue || 0;
+             totalImpacts[category.code] += impact.value || 0;
           }
         }
       }

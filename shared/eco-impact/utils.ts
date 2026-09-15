@@ -142,8 +142,9 @@ export function calculateSustainabilityScore(impacts: Record<string, number>) {
   // Calcola il punteggio ponderato per ciascuna categoria
   for (const category in impacts) {
     if (category in weights && category in thresholds) {
+      const categoryKey = category as keyof typeof thresholds;
       // Normalizza il valore (0-1, dove 0 è ottimale)
-      const normalizedValue = Math.min(impacts[category] / thresholds[category], 1);
+      const normalizedValue = Math.min(impacts[categoryKey] / thresholds[categoryKey], 1);
       
       // Converti in punteggio (100-0, dove 100 è ottimale)
       const categoryScore = 100 * (1 - normalizedValue);

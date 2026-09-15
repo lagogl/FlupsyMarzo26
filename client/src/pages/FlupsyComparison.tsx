@@ -19,8 +19,60 @@ import { getFutureWeightAtDate, getSizeColor } from '@/lib/utils';
 import SizeGrowthTimeline from '@/components/SizeGrowthTimeline';
 import * as ExcelJS from 'exceljs';
 
+interface ComparisonFlupsy {
+  id: number;
+  name: string;
+  location?: string | null;
+}
+
+interface ComparisonBasket {
+  id: number;
+  physicalNumber: number;
+  flupsyId: number;
+  row: string | null;
+  position: number | null;
+}
+
+interface ComparisonOperation {
+  basketId: number;
+  date: string;
+  type: string;
+  animalsPerKg: number | null;
+  animalCount: number | null;
+  sizeId?: number | null;
+}
+
+interface ComparisonCycle {
+  id: number;
+  basketId: number;
+  startDate: string;
+  state: string;
+}
+
+interface ComparisonSize {
+  id: number;
+  code: string;
+  name: string;
+}
+
+interface SizeRange {
+  sizeId: number;
+  minAnimalsPerKg: number;
+  maxAnimalsPerKg: number;
+  validFrom: string;
+  validTo?: string | null;
+}
+
+interface SgrRecord {
+  id?: number;
+  month: string;
+  percentage: number;
+  calculatedSgr: number;
+  sizeId?: number;
+}
+
 // Componente personalizzato per il tooltip che garantisce alta leggibilità
-const HighContrastTooltip = ({ children, className = "" }) => (
+const HighContrastTooltip = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <TooltipContent className={`bg-white text-gray-900 border-2 border-gray-300 shadow-md ${className}`}>
     {children}
   </TooltipContent>
@@ -95,35 +147,35 @@ export default function FlupsyComparison() {
   const [zoomLevel, setZoomLevel] = useState<number>(1); // 1 = normale, 2 = medio, 3 = grande
 
   // Fetch dei dati necessari
-  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery({
+  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery<ComparisonFlupsy[]>({
     queryKey: ['/api/flupsys'],
   });
   
-  const { data: baskets, isLoading: isLoadingBaskets } = useQuery({
+  const { data: baskets, isLoading: isLoadingBaskets } = useQuery<ComparisonBasket[]>({
     queryKey: ['/api/baskets?includeAll=true'],
   });
   
-  const { data: operations } = useQuery({
+  const { data: operations } = useQuery<ComparisonOperation[]>({
     queryKey: ['/api/operations'],
   });
   
-  const { data: cyclesResponse } = useQuery({
+  const { data: cyclesResponse } = useQuery<ComparisonCycle[] | { cycles: ComparisonCycle[] }>({
     queryKey: ['/api/cycles'],
   });
 
-  const { data: sizes } = useQuery({
+  const { data: sizes } = useQuery<ComparisonSize[]>({
     queryKey: ['/api/sizes'],
   });
 
-  const { data: sizeRangeVersions } = useQuery({
+  const { data: sizeRangeVersions } = useQuery<SizeRange[]>({
     queryKey: ['/api/sizes/range-versions'],
   });
 
-  const { data: sgrs } = useQuery({
+  const { data: sgrs } = useQuery<SgrRecord[]>({
     queryKey: ['/api/sgr'],
   });
 
-  const { data: sgrPerTaglia } = useQuery({
+  const { data: sgrPerTaglia } = useQuery<SgrRecord[]>({
     queryKey: ['/api/sgr-per-taglia'],
   });
 
@@ -199,15 +251,17 @@ export default function FlupsyComparison() {
       : null;
   };
 
-  const getRecordedOrCalculatedSize = (operation) => {
+  const getRecordedOrCalculatedSize = (operation: ComparisonOperation | null) => {
     if (!operation) return null;
     const recorded = operation.sizeId
       ? sizes?.find(size => size.id === operation.sizeId)
       : null;
-    return recorded || getSizeForAnimalsPerKg(
-      operation.animalsPerKg,
-      operation.date ? new Date(operation.date) : new Date(),
-    );
+    return recorded || (operation.animalsPerKg !== null
+      ? getSizeForAnimalsPerKg(
+          operation.animalsPerKg,
+          operation.date ? new Date(operation.date) : new Date(),
+        )
+      : null);
   };
 
   // Helper function per convertire indice mese (0-11) a nome mese italiano
@@ -509,7 +563,7 @@ export default function FlupsyComparison() {
   };
 
   // Renderizza un cestello per la visualizzazione attuale
-  const renderCurrentBasket = (basket) => {
+  const renderCurrentBasket = (basket: ComparisonBasket | null | undefined) => {
     const cardSize = getBasketCardSize();
     
     if (!basket) return (
@@ -639,7 +693,7 @@ export default function FlupsyComparison() {
   };
 
   // Renderizza un cestello per la visualizzazione futura
-  const renderFutureBasket = (basket) => {
+  const renderFutureBasket = (basket: ComparisonBasket | null | undefined) => {
     const cardSize = getBasketCardSize();
     const width = cardSize.width;
     const height = cardSize.height;
@@ -798,7 +852,7 @@ export default function FlupsyComparison() {
   };
 
   // Renderizza un cestello per la visualizzazione di raggiungimento taglia
-  const renderTargetSizeBasket = (basket) => {
+  const renderTargetSizeBasket = (basket: ComparisonBasket | null | undefined) => {
     const cardSize = getBasketCardSize();
     const width = cardSize.width;
     const height = cardSize.height;

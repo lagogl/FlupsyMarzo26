@@ -7,11 +7,30 @@ import { Link } from 'wouter';
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, BarChart } from 'lucide-react';
 
+interface GrowthCycle {
+  id: number;
+}
+
+interface GrowthPoint {
+  daysFromStart: number;
+  averageWeight: number;
+}
+
+interface CycleGrowthData {
+  id: number;
+  growthData: GrowthPoint[];
+}
+
+interface ChartPoint {
+  day: number;
+  [key: string]: number;
+}
+
 export default function GrowthChart() {
   const [expanded, setExpanded] = useState(false);
   
   // Query active cycles for chart
-  const { data: cycles } = useQuery({
+  const { data: cycles } = useQuery<GrowthCycle[]>({
     queryKey: ['/api/cycles/active'],
   });
 
@@ -20,13 +39,13 @@ export default function GrowthChart() {
   
   // Fetch statistics for selected cycles
   const cycleIds = selectedCycles.map(cycle => cycle.id).join(',');
-  const { data: growthData, isLoading } = useQuery({
+  const { data: growthData, isLoading } = useQuery<CycleGrowthData[]>({
     queryKey: [`/api/statistics/cycles/comparison?cycleIds=${cycleIds}`],
     enabled: selectedCycles.length > 0,
   });
 
   // Prepare chart data by reformatting the API response
-  const chartData = [];
+  const chartData: ChartPoint[] = [];
   if (growthData) {
     // Find the max days to create consistent chart data
     const maxDays = Math.max(...growthData.flatMap(cycle => 
@@ -35,7 +54,7 @@ export default function GrowthChart() {
     
     // Create data points for each day
     for (let day = 0; day <= maxDays; day += 5) { // Show every 5 days
-      const point = { day };
+      const point: ChartPoint = { day };
       
       growthData.forEach((cycle, index) => {
         // Find the closest growth data point

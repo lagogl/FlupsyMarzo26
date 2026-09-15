@@ -283,7 +283,8 @@ export async function getSelections(req: Request, res: Response) {
       // Recupera tutte le taglie di riferimento in una singola query
       const sizeIds = selectionsData
         .filter(s => s.referenceSizeId)
-        .map(s => s.referenceSizeId);
+        .map(s => s.referenceSizeId)
+        .filter((sizeId): sizeId is number => sizeId !== null);
         
       let sizesMap: Record<number, any> = {};
       if (sizeIds.length > 0) {
@@ -743,7 +744,6 @@ export async function addSourceBaskets(req: Request, res: Response) {
         animalsPerKg: sourceBasket.animalsPerKg || null,
         sizeId: sourceBasket.sizeId || null,
         lotId: basketData.lotId, // ✅ Recuperato automaticamente dal ciclo
-        notes: sourceBasket.notes || null
       });
     }
     
@@ -1166,7 +1166,11 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         if (basketInfo.length > 0 && basketInfo[0].currentCycleId) {
           
           // Recupera l'ultima operazione del cestello per ottenere taglia e peso
-          const lastOp = await tx.select()
+          const lastOp = await tx.select({
+            totalWeight: operations.totalWeight,
+            sizeId: operations.sizeId,
+            animalsPerKg: operations.animalsPerKg
+          })
             .from(operations)
             .where(
               and(
@@ -1184,9 +1188,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             basketId: sourceBasket.basketId,
             cycleId: basketInfo[0].currentCycleId,
             animalCount: sourceBasket.animalCount,
-            totalWeight: sourceBasket.totalWeight || (lastOp.length > 0 ? lastOp[0].totalWeight : null),
-            sizeId: sourceBasket.sizeId || (lastOp.length > 0 ? lastOp[0].sizeId : null),
-            animalsPerKg: sourceBasket.animalsPerKg || (lastOp.length > 0 ? lastOp[0].animalsPerKg : null),
+            totalWeight: lastOp[0]?.totalWeight ?? undefined,
+            sizeId: lastOp[0]?.sizeId ?? undefined,
+            animalsPerKg: lastOp[0]?.animalsPerKg ?? undefined,
             notes: `Chiusura per vagliatura #${selection[0].selectionNumber} del ${selection[0].date}. ` +
                    `Animali distribuiti: ${totalAnimalsDestination}. Mortalità: ${mortality}`,
             source: 'desktop_manager' // Operazione da gestionale desktop
@@ -1480,6 +1484,9 @@ export async function completeSelectionFixed(req: Request, res: Response) {
             );
           }
         }
+        if (actualSizeId === null || actualSizeId === undefined) {
+          throw new Error(`Taglia non determinabile per il cestello ${destBasket.basketId}`);
+        }
 
         // 3. OPERAZIONE PRIMA-ATTIVAZIONE (APPROCCIO IBRIDO)
         let operationNotes = `Da vagliatura #${selection[0].selectionNumber} del ${selection[0].date}`;
@@ -1511,7 +1518,7 @@ export async function completeSelectionFixed(req: Request, res: Response) {
           type: 'prima-attivazione',
           basketId: destBasket.basketId,
           cycleId: newCycle.id,
-          lotId: primaryLotId, // ✅ LOTTO DOMINANTE per query veloci
+            lotId: primaryLotId ?? undefined, // ✅ LOTTO DOMINANTE per query veloci
           animalCount: destBasket.animalCount,
           totalWeight: destBasket.totalWeight,
           animalsPerKg: destBasket.animalsPerKg,
@@ -1520,7 +1527,6 @@ export async function completeSelectionFixed(req: Request, res: Response) {
                         : 0,
           deadCount: destBasket.deadCount || 0,
           mortalityRate: destBasket.mortalityRate || 0,
-          sampleCount: destBasket.sampleCount || null,
           sizeId: actualSizeId,
           metadata: operationMetadata,
           notes: operationNotes,
@@ -2057,11 +2063,11 @@ export async function completeSelectionFixed(req: Request, res: Response) {
         .reduce((sum, d) => sum + (d.animalCount || 0), 0);
       
       await sendScreeningConfirmationEmail({
-        date: selection[0].selectionDate || new Date(),
+         date: selection[0].date,
         flupsyName: basketInfo[0]?.flupsyName || 'N/A',
         flupsyLocation: basketInfo[0]?.flupsyLocation || 'N/A',
         basketNumber: basketInfo[0]?.basketNumber || 'N/A',
-        type: selection[0].type || 'normal',
+         type: selection[0].purpose,
         sourceBaskets: sourceBasketDetails,
         results: resultsWithSizes,
         totalSold,
@@ -2605,8 +2611,7 @@ export async function cancelSelection(req: Request, res: Response) {
     // Notifica via WebSocket
     try {
       const { broadcastMessage } = await import('../websocket');
-      broadcastMessage({
-        type: 'selection_cancelled',
+       broadcastMessage('selection_cancelled', {
         selectionId,
         restoredEntities: result.restoredEntities
       });

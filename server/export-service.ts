@@ -85,9 +85,9 @@ export async function generateExportGiacenze(
       // Calcola il peso medio della vongola in mg direttamente dall'operazione
       let mgVongola = 0;
       
-      // Usa average_weight se disponibile (campo corretto nella tabella operations)
-      if (lastOperation.average_weight && lastOperation.average_weight > 0) {
-        mgVongola = parseFloat(lastOperation.average_weight.toFixed(4));
+      // Usa averageWeight se disponibile (campo corretto nella tabella operations)
+      if (lastOperation.averageWeight && lastOperation.averageWeight > 0) {
+        mgVongola = parseFloat(lastOperation.averageWeight.toFixed(4));
       } 
       // Altrimenti calcola dal campo animalsPerKg ma con più precisione
       else if (lastOperation.animalsPerKg && lastOperation.animalsPerKg > 0) {

@@ -91,16 +91,27 @@ interface Size {
   color: string;
 }
 
+interface FlupsySummary {
+  id: number;
+  name: string;
+  active: boolean;
+  maxPositions: number;
+}
+
+interface PositionsResponse {
+  positions: Position[];
+}
+
 export default function FlupsyPositions() {
   const { id } = useParams();
   const flupsyId = id ? parseInt(id) : null;
   
-  const { data: flupsy, isLoading: flupsyLoading } = useQuery({
+  const { data: flupsy, isLoading: flupsyLoading } = useQuery<FlupsySummary>({
     queryKey: [`/api/flupsys/${flupsyId}`],
     enabled: !!flupsyId
   });
 
-  const { data: positionsData, isLoading: positionsLoading } = useQuery({
+  const { data: positionsData, isLoading: positionsLoading } = useQuery<PositionsResponse>({
     queryKey: [`/api/flupsys/${flupsyId}/positions`],
     enabled: !!flupsyId
   });
@@ -207,7 +218,7 @@ export default function FlupsyPositions() {
   
   // Se non abbiamo dati, creiamo un layout basato sul maxPositions
   if (positions.length === 0 && flupsy && typeof flupsy === 'object' && 'maxPositions' in flupsy) {
-    const maxPositions = (flupsy as any).maxPositions;
+    const maxPositions = flupsy.maxPositions;
     const positionsPerRow = Math.ceil(maxPositions / 2);
     
     ['DX', 'SX'].forEach(row => {

@@ -90,11 +90,11 @@ export default function FlupsyVisualizer() {
   });
   
   // Fetch cycles
-  const { data: cyclesData } = useQuery({
+  const { data: cyclesData } = useQuery<{ cycles: Cycle[] } | Cycle[]>({
     queryKey: ['/api/cycles'],
   });
   
-  const cycles = cyclesData?.cycles || [];
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles || [];
   
   // Select all FLUPSYs by default
   if (flupsys && flupsys.length > 0 && selectedFlupsyIds.length === 0) {

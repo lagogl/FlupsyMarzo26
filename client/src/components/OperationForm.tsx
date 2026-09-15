@@ -30,105 +30,149 @@ import {
 } from "@/components/ui/alert-dialog";
 import { operationSchema } from "@shared/schema";
 
+type ConditionalOperationFields = {
+  type?: string;
+  basketId?: number | null;
+  cycleId?: number | null;
+  lotId?: number | null;
+};
+
+function validateConditionalOperationFields(
+  data: ConditionalOperationFields,
+  ctx: z.RefinementCtx,
+  lotMessage: string,
+): void {
+  if (data.basketId === null || data.basketId === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["basketId"],
+      message: "Seleziona un cestello",
+    });
+  }
+  if (data.type !== "prima-attivazione" && (data.cycleId === null || data.cycleId === undefined)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["cycleId"],
+      message: "Seleziona un ciclo",
+    });
+  }
+  if (data.type === "prima-attivazione" && (data.lotId === null || data.lotId === undefined)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["lotId"],
+      message: lotMessage,
+    });
+  }
+}
+
 // Schema esteso per includere il campo FLUPSY e i nuovi campi standardizzati
 const formSchemaWithFlupsy = operationSchema.extend({
   // Override della data per assicurarci che funzioni correttamente con il form
   date: z.coerce.date(),
   animalsPerKg: z.coerce.number().optional().nullable(),
+  averageWeight: z.coerce.number().optional().nullable(),
   totalWeight: z.coerce.number().optional().nullable(),
   animalCount: z.coerce.number().optional().nullable(),
   notes: z.string().optional(),
   // Aggiunto campo FLUPSY per la selezione in due fasi
   flupsyId: z.number().nullable().optional(),
+  basketId: z.number().nullable().optional(),
+  sizeId: z.number().nullable().optional(),
+  cycleId: z.number().nullable().optional(),
+  lotId: z.number().nullable().optional(),
   // Nuovi campi standardizzati per tutte le operazioni
   sampleWeight: z.coerce.number().optional().nullable(), // Grammi sample
   liveAnimals: z.coerce.number().optional().nullable(), // Numero animali vivi
   deadCount: z.coerce.number().optional().nullable(), // Numero animali morti (già esistente nello schema)
   totalSample: z.coerce.number().optional().nullable(), // Totale sample (vivi + morti)
   manualCountAdjustment: z.boolean().optional().default(false), // Flag per abilitare la modifica manuale del conteggio
-  // Il campo cycleId è condizionalmente richiesto a seconda del tipo di operazione
-  cycleId: z.number().nullable().optional().superRefine((val, ctx) => {
-    // Otteniamo il tipo di operazione dalle data dell'oggetto ctx
-    // @ts-ignore - Ignoriamo l'errore TS perché sappiamo che data esiste e contiene type
-    const operationType = ctx.data?.type;
-    
-    // Se l'operazione è di tipo 'prima-attivazione', il ciclo non è richiesto
-    if (operationType === 'prima-attivazione') {
-      return; // Nessun errore, il campo può essere nullo o undefined
-    }
-    
-    // Per tutti gli altri tipi di operazione, verifichiamo che ci sia un ciclo selezionato
-    if (val === null || val === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Seleziona un ciclo",
-      });
-    }
-  }),
-  // Il campo lotId è condizionalmente richiesto per le operazioni di prima attivazione
-  lotId: z.number().nullable().optional().superRefine((val, ctx) => {
-    // Otteniamo il tipo di operazione dalle data dell'oggetto ctx
-    // @ts-ignore - Ignoriamo l'errore TS perché sappiamo che data esiste e contiene type
-    const operationType = ctx.data?.type;
-    
-    // Se l'operazione è di tipo 'prima-attivazione', il lotto è obbligatorio
-    if (operationType === 'prima-attivazione') {
-      if (val === null || val === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Seleziona un lotto",
-        });
-      }
-    }
-  }),
-});
+}).superRefine((data, ctx) => validateConditionalOperationFields(data, ctx, "Seleziona un lotto"));
 
 // Extend operation schema to include validation
 const formSchema = operationSchema.extend({
   // Override della data per assicurarci che funzioni correttamente con il form
   date: z.coerce.date(),
   animalsPerKg: z.coerce.number().optional().nullable(),
+  averageWeight: z.coerce.number().optional().nullable(),
   totalWeight: z.coerce.number().optional().nullable(),
   animalCount: z.coerce.number().optional().nullable(),
   notes: z.string().optional(),
-  // Il campo cycleId è condizionalmente richiesto a seconda del tipo di operazione
-  cycleId: z.number().nullable().optional().superRefine((val, ctx) => {
-    // Otteniamo il tipo di operazione dalle data dell'oggetto ctx
-    // @ts-ignore - Ignoriamo l'errore TS perché sappiamo che data esiste e contiene type
-    const operationType = ctx.data?.type;
-    
-    // Se l'operazione è di tipo 'prima-attivazione', il ciclo non è richiesto
-    if (operationType === 'prima-attivazione') {
-      return; // Nessun errore, il campo può essere nullo o undefined
-    }
-    
-    // Per tutti gli altri tipi di operazione, verifichiamo che ci sia un ciclo selezionato
-    if (val === null || val === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Seleziona un ciclo",
-      });
-    }
-  }),
-  // Il campo lotId è condizionalmente richiesto per le operazioni di prima attivazione
-  lotId: z.number().nullable().optional().superRefine((val, ctx) => {
-    // Otteniamo il tipo di operazione dalle data dell'oggetto ctx
-    // @ts-ignore - Ignoriamo l'errore TS perché sappiamo che data esiste e contiene type
-    const operationType = ctx.data?.type;
-    
-    // Se l'operazione è di tipo 'prima-attivazione', il lotto è obbligatorio
-    if (operationType === 'prima-attivazione') {
-      if (val === null || val === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Il lotto è obbligatorio per la Prima Attivazione",
-        });
-      }
-    }
-  }),
-});
+  basketId: z.number().nullable().optional(),
+  sizeId: z.number().nullable().optional(),
+  cycleId: z.number().nullable().optional(),
+  lotId: z.number().nullable().optional(),
+}).superRefine((data, ctx) =>
+  validateConditionalOperationFields(data, ctx, "Il lotto è obbligatorio per la Prima Attivazione"),
+);
 
 type FormValues = z.infer<typeof formSchemaWithFlupsy>;
+
+interface FormBasket {
+  id: number;
+  flupsyId: number;
+  state: string;
+  currentCycleId: number | null;
+  physicalNumber?: number;
+  row?: string | null;
+  position?: number | null;
+  cycleCode?: string | null;
+}
+
+interface FormCycle {
+  id: number;
+  basketId: number;
+  date?: string;
+  startDate?: string;
+  state?: string;
+  code?: string;
+}
+
+interface FormFlupsy {
+  id: number;
+  name: string;
+  location?: string | null;
+}
+
+interface FormSize {
+  id: number;
+  code: string;
+  name?: string;
+  minAnimalsPerKg?: number | null;
+  maxAnimalsPerKg?: number | null;
+  min_animals_per_kg?: number | null;
+  max_animals_per_kg?: number | null;
+}
+
+interface FormSgr {
+  id?: number;
+  month: string;
+  percentage: number;
+}
+
+interface FormLot {
+  id: number;
+  name?: string;
+  animalCount?: number | null;
+  arrivalDate?: string;
+  quality?: string | null;
+  supplierLotNumber?: string | null;
+  weight?: number | null;
+  supplier?: string;
+}
+
+interface FormOperation {
+  id?: number;
+  basketId: number;
+  cycleId: number | null;
+  date: string;
+  type: string;
+  animalCount?: number | null;
+  totalWeight?: number | null;
+  animalsPerKg?: number | null;
+  averageWeight?: number | null;
+  lotId?: number | null;
+  [key: string]: unknown;
+}
 
 interface OperationFormProps {
   onSubmit: (values: FormValues) => void;
@@ -229,27 +273,27 @@ export default function OperationForm({
   });
   
   // Fetch related data
-  const { data: baskets } = useQuery({
+  const { data: baskets } = useQuery<FormBasket[]>({
     queryKey: ['/api/baskets'],
   });
 
-  const { data: flupsys } = useQuery({
+  const { data: flupsys } = useQuery<FormFlupsy[]>({
     queryKey: ['/api/flupsys'],
   });
 
-  const { data: cycles } = useQuery({
+  const { data: cycles } = useQuery<FormCycle[]>({
     queryKey: ['/api/cycles/active'],
   });
 
-  const { data: sizes } = useQuery({
+  const { data: sizes } = useQuery<FormSize[]>({
     queryKey: ['/api/sizes'],
   });
   
-  const { data: sgrs } = useQuery({
+  const { data: sgrs } = useQuery<FormSgr[]>({
     queryKey: ['/api/sgr'],
   });
 
-  const { data: lots } = useQuery({
+  const { data: lots } = useQuery<FormLot[]>({
     queryKey: ['/api/lots/active'],
   });
 
@@ -280,7 +324,7 @@ export default function OperationForm({
   const averageWeight = watchAnimalsPerKg ? (1000000 / Number(watchAnimalsPerKg)) : 0;
   
   // Fetch operations for the selected basket
-  const { data: basketOperations } = useQuery({
+  const { data: basketOperations } = useQuery<FormOperation[]>({
     queryKey: ['/api/operations', 'basket', watchBasketId],
     queryFn: async () => {
       if (!watchBasketId) return [];
@@ -301,7 +345,7 @@ export default function OperationForm({
   });
   
   // Fetch baskets for the selected FLUPSY 
-  const { data: allFlupsyBaskets, isLoading: isLoadingFlupsyBaskets } = useQuery({
+  const { data: allFlupsyBaskets, isLoading: isLoadingFlupsyBaskets } = useQuery<FormBasket[]>({
     queryKey: ['/api/flupsys', watchFlupsyId, 'baskets'],
     queryFn: () => {
       if (!watchFlupsyId) return [];
@@ -341,7 +385,7 @@ export default function OperationForm({
       // Attendiamo che i cestelli siano caricati prima di impostare il cestello
       if (!isLoadingFlupsyBaskets && flupsyBaskets) {
         // Verifichiamo che il cestello esista nel FLUPSY selezionato
-        const basketExists = allFlupsyBaskets.some((b: any) => b.id === defaultValues.basketId);
+        const basketExists = allFlupsyBaskets?.some((b: FormBasket) => b.id === defaultValues.basketId);
         if (basketExists) {
           form.setValue('basketId', defaultValues.basketId);
           console.log('Cestello trovato e selezionato:', defaultValues.basketId);
@@ -555,7 +599,7 @@ export default function OperationForm({
           const lastOperationWithCount = cycleOperations[0];
           
           if (lastOperationWithCount) {
-            const previousAnimalCount = lastOperationWithCount.animalCount;
+      const previousAnimalCount = lastOperationWithCount.animalCount ?? 0;
             const liveCount = watchLiveAnimals || 0;
             const dCount = watchDeadCount || 0;
             const totalSample = liveCount + dCount;
@@ -720,7 +764,7 @@ export default function OperationForm({
   useEffect(() => {
     if (watchBasketId && selectedBasket?.state === 'active' && selectedBasket?.currentCycleId) {
       // Imposta automaticamente il ciclo attivo della cesta
-      form.setValue('cycleId', selectedBasket.currentCycleId);
+      form.setValue('cycleId', selectedBasket.currentCycleId as number);
       console.log('Ciclo impostato automaticamente al ciclo attivo della cesta:', selectedBasket.currentCycleId);
     }
   }, [watchBasketId, selectedBasket, form]);
@@ -945,7 +989,7 @@ export default function OperationForm({
     // per lasciare che il server calcoli la taglia appropriata in base a animalsPerKg
     if (values.type === 'misura' || values.type === 'peso') {
       console.log("Omesso sizeId per operazione", values.type, "- verrà calcolato dal server in base ad animalsPerKg:", values.animalsPerKg);
-      delete formattedValues.sizeId;
+      delete (formattedValues as Partial<typeof formattedValues>).sizeId;
     } else {
       // Per gli altri tipi di operazione manteniamo il sizeId se presente
       formattedValues.sizeId = values.sizeId ? Number(values.sizeId) : null;
@@ -1032,7 +1076,7 @@ export default function OperationForm({
                       const flupsyId = Number(value);
                       field.onChange(flupsyId);
                       // Reset basket when FLUPSY changes
-                      form.setValue('basketId', undefined);
+                      form.setValue('basketId', null);
                       form.setValue('cycleId', undefined);
                       
                       console.log('FLUPSY selezionato:', flupsyId);
@@ -1828,11 +1872,11 @@ export default function OperationForm({
                   );
                   
                   const previousOperation = sortedOperations.find(op => 
-                    op.animalsPerKg !== null && op.animalsPerKg > 0
+                    typeof op.animalsPerKg === 'number' && op.animalsPerKg > 0
                   );
                   
                   if (previousOperation && previousOperation.animalsPerKg) {
-                    const prevAnimalsPerKg = previousOperation.animalsPerKg;
+                    const prevAnimalsPerKg = previousOperation.animalsPerKg ?? 0;
                     const currentAnimalsPerKg = watchAnimalsPerKg;
                     
                     if (prevAnimalsPerKg > currentAnimalsPerKg) {
@@ -1964,7 +2008,7 @@ export default function OperationForm({
                       })
                       .map((lot) => {
                         // Formatta la data di arrivo in formato italiano
-                        const arrivalDate = new Date(lot.arrivalDate);
+                        const arrivalDate = new Date(lot.arrivalDate ?? '');
                         const formattedDate = `${arrivalDate.getDate().toString().padStart(2, '0')}/${(arrivalDate.getMonth() + 1).toString().padStart(2, '0')}/${arrivalDate.getFullYear()}`;
                         
                         // Informazioni aggiuntive da mostrare

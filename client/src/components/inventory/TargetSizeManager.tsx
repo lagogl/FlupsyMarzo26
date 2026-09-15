@@ -64,6 +64,11 @@ interface Basket {
   currentCycleId: number | null;
 }
 
+interface TargetSizeAnnotationListItem extends TargetSizeAnnotation {
+  basket?: TargetSizeAnnotation["basket"];
+  targetSize?: TargetSizeAnnotation["targetSize"];
+}
+
 // Schema per la creazione di una nuova annotazione
 const createAnnotationSchema = z.object({
   basketId: z.number({
@@ -87,13 +92,13 @@ export function TargetSizeManager() {
   const [activeTab, setActiveTab] = useState<string>("pending");
 
   // Recupera le annotazioni di taglia
-  const { data: annotations, isLoading } = useQuery({
+  const { data: annotations = [], isLoading } = useQuery<TargetSizeAnnotationListItem[]>({
     queryKey: ['/api/target-size-annotations'],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
   // Recupera le taglie
-  const { data: sizes } = useQuery({
+  const { data: sizes = [] } = useQuery<Size[]>({
     queryKey: ['/api/sizes'],
     queryFn: getQueryFn({ on401: "throw" }),
   });

@@ -727,8 +727,6 @@ export const insertBasketSchema = createInsertSchema(baskets).omit({
 
 export const insertOperationSchema = createInsertSchema(operations).omit({ 
   id: true,
-  averageWeight: true,
-  metadata: true
 });
 
 export const insertCycleSchema = createInsertSchema(cycles).omit({ 

@@ -21,6 +21,46 @@ import { Calendar, Clock, ArrowRight, Info, ZoomIn, ZoomOut, Maximize2, Minimize
 import { getTargetSizeForWeight, getFutureWeightAtDate, getSizeColor, monthlyToDaily } from '@/lib/utils';
 import SizeGrowthTimeline from '@/components/SizeGrowthTimeline';
 
+interface EnhancedFlupsy {
+  id: number;
+  name: string;
+}
+
+interface EnhancedBasket {
+  id: number;
+  physicalNumber: number;
+  flupsyId: number;
+  row: string | null;
+  position: number | null;
+}
+
+interface EnhancedOperation {
+  basketId: number;
+  date: string;
+  type: string;
+  animalsPerKg: number | null;
+}
+
+interface EnhancedCycle {
+  id: number;
+  basketId: number;
+  startDate: string;
+  state: string;
+}
+
+interface EnhancedSize {
+  id: number;
+  code: string;
+  name: string;
+  minAnimalsPerKg: number;
+  maxAnimalsPerKg: number;
+}
+
+interface EnhancedSgr {
+  month: string;
+  percentage: number;
+}
+
 // Componente personalizzato per il tooltip che garantisce alta leggibilità
 const HighContrastTooltip = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <TooltipContent className={`bg-white text-gray-900 border-2 border-gray-300 shadow-md ${className}`}>
@@ -83,28 +123,28 @@ export default function FlupsyComparison() {
   const [zoomLevel, setZoomLevel] = useState(1);
   
   // Dati dal server
-  const { data: flupsys } = useQuery({
+  const { data: flupsys } = useQuery<EnhancedFlupsy[]>({
     queryKey: ['/api/flupsys'],
   });
   
-  const { data: baskets } = useQuery({
+  const { data: baskets } = useQuery<EnhancedBasket[]>({
     queryKey: ['/api/baskets'],
   });
   
-  const { data: operations } = useQuery({
+  const { data: operations } = useQuery<EnhancedOperation[]>({
     queryKey: ['/api/operations'],
   });
   
-  const { data: cycles } = useQuery({
+  const { data: cycles } = useQuery<EnhancedCycle[] | { cycles: EnhancedCycle[] }>({
     queryKey: ['/api/cycles'],
   });
   
-  const { data: sizes } = useQuery({
+  const { data: sizes } = useQuery<EnhancedSize[]>({
     queryKey: ['/api/sizes'],
   });
   
-  const { data: sgrs } = useQuery({
-    queryKey: ['/api/sgrs'],
+  const { data: sgrs } = useQuery<EnhancedSgr[]>({
+    queryKey: ['/api/sgr'],
   });
 
   // Inizializza il FLUPSY selezionato se ce n'è solo uno disponibile
@@ -115,9 +155,10 @@ export default function FlupsyComparison() {
   }, [flupsys, selectedFlupsyId]);
 
   // Helper function per ottenere il ciclo di un cestello
+  const cycleList = Array.isArray(cycles) ? cycles : cycles?.cycles ?? [];
+
   const getCycleForBasket = (basketId: number) => {
-    if (!cycles) return null;
-    return cycles.find(c => c.basketId === basketId && c.state === 'active') || null;
+    return cycleList.find(c => c.basketId === basketId && c.state === 'active') || null;
   };
   
   // Helper function per ottenere le operazioni di un cestello
@@ -283,7 +324,7 @@ export default function FlupsyComparison() {
   };
 
   // Renderizza un cestello per la visualizzazione attuale
-  const renderCurrentBasket = (basket: any) => {
+  const renderCurrentBasket = (basket: EnhancedBasket | null | undefined) => {
     if (!basket) return (
       <TooltipProvider>
         <Tooltip>
@@ -399,7 +440,7 @@ export default function FlupsyComparison() {
   };
 
   // Renderizza un cestello per la visualizzazione futura (per data)
-  const renderFutureBasketByDate = (basket: any) => {
+  const renderFutureBasketByDate = (basket: EnhancedBasket | null | undefined) => {
     if (!basket) return (
       <TooltipProvider>
         <Tooltip>
@@ -526,7 +567,7 @@ export default function FlupsyComparison() {
   };
 
   // Renderizza un cestello per la visualizzazione futura (per taglia target)
-  const renderFutureBasketBySize = (basket: any) => {
+  const renderFutureBasketBySize = (basket: EnhancedBasket | null | undefined) => {
     if (!basket) return (
       <TooltipProvider>
         <Tooltip>

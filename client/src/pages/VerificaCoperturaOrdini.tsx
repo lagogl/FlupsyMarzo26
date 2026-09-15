@@ -197,7 +197,7 @@ export default function VerificaCoperturaOrdini() {
       const headerRow = wsDetail.addRow([t("vco_excel_col_mese"), ...sizesWithData]);
       headerRow.font = headerFont;
       headerRow.fill = headerFill;
-      headerRow.eachCell(cell => {
+      headerRow.eachCell((cell: ExcelJS.Cell) => {
         cell.border = borderStyle;
         cell.alignment = { horizontal: "center" };
       });
@@ -208,7 +208,7 @@ export default function VerificaCoperturaOrdini() {
           return cell ? (cell[metric] || 0) : 0;
         });
         const row = wsDetail.addRow([snap.monthName, ...vals]);
-        row.eachCell((cell, colNumber) => {
+        row.eachCell((cell: ExcelJS.Cell, colNumber: number) => {
           cell.border = borderStyle;
           if (colNumber > 1) {
             cell.numFmt = '#,##0';

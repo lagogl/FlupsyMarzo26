@@ -50,7 +50,7 @@ async function generateDDTPdf(saleId: number): Promise<Buffer> {
     
     try {
       // Logo aziendale
-      const logoPath = await getCompanyLogo();
+      const logoPath = getCompanyLogo(undefined);
       if (logoPath) {
         doc.image(logoPath, 40, 40, { width: 120 });
       }

@@ -36,7 +36,11 @@ class FakeTransaction {
   select() {
     return {
       from: (table: unknown) => ({
-        where: async () => table === operations ? this.state.operations : []
+        where: async () => {
+          if (table === operations) return this.state.operations;
+          if (table === selectionSourceBaskets) return this.state.selectionSources;
+          return [];
+        }
       })
     };
   }
@@ -93,7 +97,7 @@ test('deleteOperation annulla l’intero cascade se l’audit fallisce dopo il r
     cycles: [{ id: 2, basketId: 3, state: 'active' }],
     baskets: [{ id: 3, state: 'active', currentCycleId: 2, cycleCode: 'C-2' }],
     compositions: [{ id: 5, basketId: 3, cycleId: 2 }],
-    selectionSources: [{ id: 6, basketId: 3, cycleId: 2 }],
+    selectionSources: [],
     audit: []
   };
   const database = new FakeDatabase(structuredClone(original));
@@ -150,7 +154,7 @@ test('deleteOperation completa il cascade sullo schema corrente senza tabelle le
     cycles: [{ id: 2 }],
     baskets: [{ id: 3, state: 'active', currentCycleId: 2, cycleCode: 'C-2' }],
     compositions: [{ id: 5, cycleId: 2 }],
-    selectionSources: [{ id: 6, cycleId: 2 }],
+    selectionSources: [],
     audit: []
   });
   let afterCommitCalls = 0;
@@ -169,4 +173,31 @@ test('deleteOperation completa il cascade sullo schema corrente senza tabelle le
   assert.deepEqual(database.state.compositions, []);
   assert.deepEqual(database.state.selectionSources, []);
   assert.equal(afterCommitCalls, 1);
+});
+
+test('deleteOperation blocca il cascade e conserva lo storico collegato al ciclo', async () => {
+  const original: FakeState = {
+    operations: [
+      { id: 1, type: 'prima-attivazione', basketId: 3, cycleId: 2 },
+      { id: 4, type: 'misura', basketId: 3, cycleId: 2 }
+    ],
+    cycles: [{ id: 2 }],
+    baskets: [{ id: 3, state: 'active', currentCycleId: 2, cycleCode: 'C-2' }],
+    compositions: [{ id: 5, cycleId: 2 }],
+    selectionSources: [{ id: 6, cycleId: 2 }],
+    audit: []
+  };
+  const database = new FakeDatabase(structuredClone(original));
+  let afterCommitCalls = 0;
+  const service = new OperationsLifecycleService(database, {
+    handleCompositionDelete: async () => {},
+    afterCommit: () => { afterCommitCalls++; }
+  });
+
+  const result = await service.deleteOperation(1);
+
+  assert.equal(result.success, false);
+  assert.match(result.errors[0], /riferimenti storici/);
+  assert.deepEqual(database.state, original);
+  assert.equal(afterCommitCalls, 0);
 });

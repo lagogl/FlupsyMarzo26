@@ -121,7 +121,7 @@ export default function IntegratedSampleCalculator({
   
   // Effetto per inviare i risultati al genitore quando cambiano
   useEffect(() => {
-    const onMount = {
+    const onMount: SampleCalculatorResult = {
       animalsPerKg: defaultAnimalsPerKg || null,
       averageWeight: defaultAverageWeight || null,
       deadCount: defaultDeadCount || null,

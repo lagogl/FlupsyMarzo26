@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { DateRange } from "react-day-picker";
 // Il provider di impostazioni non è richiesto per ora
 
 // Default periodo ultimo mese
@@ -31,7 +32,7 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
   
   // Stato per filtri
   const [selectedFlupsy, setSelectedFlupsy] = useState<number | undefined>(defaultFlupsyId);
-  const [dateRange, setDateRange] = useState(defaultDateRange);
+  const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
   
   // Stato per form dei valori predefiniti
   const [selectedOperationType, setSelectedOperationType] = useState<string>("");
@@ -42,7 +43,7 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   
   // Query per ottenere tutti i FLUPSY disponibili
-  const { data: flupsys, isLoading: isLoadingFlupsys } = useQuery({
+  const { data: flupsys = [], isLoading: isLoadingFlupsys } = useQuery<Array<{ id: number; name: string }>>({
     queryKey: ["/api/flupsys"],
     staleTime: 60000, // 1 minuto
   });
@@ -80,8 +81,8 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
       }
     ],
     queryFn: async () => {
-      const startDateStr = format(dateRange.from, "yyyy-MM-dd");
-      const endDateStr = format(dateRange.to, "yyyy-MM-dd");
+      const startDateStr = format(dateRange.from ?? new Date(), "yyyy-MM-dd");
+      const endDateStr = format(dateRange.to ?? dateRange.from ?? new Date(), "yyyy-MM-dd");
       const url = `/api/eco-impact/flupsys/${selectedFlupsy || "all"}/sustainability?startDate=${startDateStr}&endDate=${endDateStr}`;
       const response = await fetch(url);
       if (!response.ok) {
@@ -219,8 +220,8 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
         },
         suggestions: sustainabilityData.suggestions || [],
         period: {
-          startDate: dateRange.from,
-          endDate: dateRange.to,
+          startDate: dateRange.from ?? new Date(),
+          endDate: dateRange.to ?? dateRange.from ?? new Date(),
         },
         loading: isLoadingSustainability,
       }
@@ -243,8 +244,8 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
         },
         suggestions: [],
         period: {
-          startDate: dateRange.from,
-          endDate: dateRange.to,
+          startDate: dateRange.from ?? new Date(),
+          endDate: dateRange.to ?? dateRange.from ?? new Date(),
         },
         loading: isLoadingSustainability,
       };
@@ -273,7 +274,7 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutti i FLUPSY</SelectItem>
-                    {flupsys?.map((flupsy: any) => (
+                    {flupsys.map((flupsy) => (
                       <SelectItem key={flupsy.id} value={flupsy.id.toString()}>
                         {flupsy.name}
                       </SelectItem>
@@ -287,7 +288,10 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
               <Label>Periodo</Label>
               <DateRangePicker
                 value={dateRange}
-                onChange={setDateRange}
+                onChange={(range) => setDateRange({
+                  from: range.from,
+                  to: range.to ?? range.from
+                })}
                 locale={it}
                 align="start"
                 className="w-full"
@@ -426,7 +430,7 @@ const EcoVisualizer: React.FC<EcoVisualizerProps> = ({ defaultFlupsyId }) => {
                             <h4 className="text-xs font-semibold">Highlights</h4>
                             <ul className="mt-1 text-xs list-disc pl-4 space-y-1">
                               {Array.isArray(report.highlights) ? 
-                                report.highlights.map((highlight, idx) => (
+                                report.highlights.map((highlight: string, idx: number) => (
                                   <li key={idx}>{highlight}</li>
                                 )) : 
                                 typeof report.highlights === 'object' && report.highlights.points ? 

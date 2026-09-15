@@ -487,7 +487,11 @@ class CyclesService {
    * Ottiene chiusure pendenti (animali in attesa di destinazione)
    */
   async getPendingClosures(flupsyId?: number) {
-    let query = db
+    const conditions = [
+      eq(pendingClosures.destination, 'pending'),
+      ...(flupsyId ? [eq(pendingClosures.flupsyId, flupsyId)] : [])
+    ];
+    const query = db
       .select({
         id: pendingClosures.id,
         cycleId: pendingClosures.cycleId,
@@ -507,15 +511,8 @@ class CyclesService {
       .leftJoin(baskets, eq(pendingClosures.basketId, baskets.id))
       .leftJoin(flupsys, eq(pendingClosures.flupsyId, flupsys.id))
       .leftJoin(lots, eq(pendingClosures.lotId, lots.id))
-      .where(eq(pendingClosures.destination, 'pending'))
+      .where(and(...conditions))
       .orderBy(desc(pendingClosures.createdAt));
-    
-    if (flupsyId) {
-      query = query.where(and(
-        eq(pendingClosures.destination, 'pending'),
-        eq(pendingClosures.flupsyId, flupsyId)
-      ));
-    }
     
     return await query;
   }

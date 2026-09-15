@@ -18,6 +18,41 @@ interface NewFlupsyVisualizerProps {
   selectedFlupsyIds?: number[];
 }
 
+interface NewFlupsy {
+  id: number;
+  name: string;
+  location: string;
+  maxPosition?: number;
+  max_positions?: number;
+  maxPositions?: number;
+}
+
+interface NewBasket {
+  id: number;
+  physicalNumber: number;
+  flupsyId: number;
+  row: string | null;
+  position: number | null;
+  state: string;
+  currentCycleId: number | null;
+  vagliatureNote?: string | null;
+}
+
+interface NewCycle {
+  id: number;
+  basketId: number;
+  startDate: string;
+  state: string;
+  qualityClass?: string | null;
+}
+
+interface NewSize {
+  id: number;
+  code: string;
+  minAnimalsPerKg: number;
+  maxAnimalsPerKg: number;
+}
+
 export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlupsyVisualizerProps) {
   const [, navigate] = useLocation();
   const [selectedTab, setSelectedTab] = useState<string>("all");
@@ -25,7 +60,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   const [showQualityView, setShowQualityView] = useState(false);
 
   // Fetch flupsys
-  const { data: allFlupsys, isLoading: isLoadingFlupsys } = useQuery({
+  const { data: allFlupsys, isLoading: isLoadingFlupsys } = useQuery<NewFlupsy[]>({
     queryKey: ['/api/flupsys', { includeAll: true }],
   });
   
@@ -48,7 +83,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   }, [allFlupsys, selectedFlupsyIds]);
 
   // Fetch ALL baskets without any filters
-  const { data: allBaskets, isLoading: isLoadingBaskets } = useQuery({
+  const { data: allBaskets, isLoading: isLoadingBaskets } = useQuery<NewBasket[]>({
     queryKey: ['/api/baskets', { includeAll: true }],
   });
 
@@ -73,21 +108,21 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   });
 
   // Fetch cycles for tooltip data
-  const { data: cyclesData, isLoading: isLoadingCycles } = useQuery({
+  const { data: cyclesData, isLoading: isLoadingCycles } = useQuery<{ cycles: NewCycle[] } | NewCycle[]>({
     queryKey: ['/api/cycles', { includeAll: true }],
     staleTime: 30000, // 30 seconds
   });
   
-  const cycles = cyclesData?.cycles || [];
+  const cycles = Array.isArray(cyclesData) ? cyclesData : cyclesData?.cycles || [];
 
   // Fetch lots for tooltip data
-  const { data: lots, isLoading: isLoadingLots } = useQuery({
+  const { data: lots, isLoading: isLoadingLots } = useQuery<Array<{ id: number; supplier?: string }>>({
     queryKey: ['/api/lots', { includeAll: true }],
     staleTime: 30000, // 30 seconds
   });
 
   // Fetch sizes for tooltip data
-  const { data: sizes } = useQuery({
+  const { data: sizes } = useQuery<NewSize[]>({
     queryKey: ['/api/sizes'],
     staleTime: 3600000, // 1 hour - le taglie cambiano raramente
   });

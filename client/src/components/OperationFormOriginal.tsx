@@ -73,6 +73,46 @@ const operationSchema = z.object({
   manualCountAdjustment: z.boolean().default(false).optional(),
 });
 
+interface OriginalBasket {
+  id: number;
+  flupsyId: number;
+  state: string;
+  currentCycleId: number | null;
+  physicalNumber?: number;
+}
+interface OriginalCycle {
+  id: number;
+  basketId: number;
+  state?: string;
+  startDate?: string;
+}
+interface OriginalSize {
+  id: number;
+  code: string;
+  name?: string;
+  minAnimalsPerKg: number | null;
+  maxAnimalsPerKg: number | null;
+}
+interface OriginalSgr {
+  id: number;
+  month: string;
+  percentage: number;
+}
+interface OriginalLot {
+  id: number;
+  name?: string;
+}
+interface OriginalOperation {
+  id?: number;
+  basketId: number;
+  cycleId: number | null;
+  date: string;
+  type: string;
+  animalCount?: number | null;
+  totalWeight?: number | null;
+  sizeId?: number | null;
+}
+
 // Tipo per le props del componente
 type OperationFormProps = {
   onSubmit: (data: any) => void;
@@ -131,49 +171,50 @@ export default function OperationForm({
   const watchCycleId = form.watch("cycleId");
   const watchDate = form.watch("date");
   const watchTotalWeight = form.watch("totalWeight");
-  const watchAnimalsPerKg = form.watch("animalsPerKg");
-  const watchSampleWeight = form.watch("sampleWeight");
-  const watchLiveAnimals = form.watch("liveAnimals");
-  const watchTotalSample = form.watch("totalSample");
+  const watchAnimalsPerKg = form.watch("animalsPerKg") ?? 0;
+  const watchSampleWeight = form.watch("sampleWeight") ?? 0;
+  const watchLiveAnimals = form.watch("liveAnimals") ?? 0;
+  const watchTotalSample = form.watch("totalSample") ?? 0;
   const deadCount = form.watch("deadCount") || 0;
   const watchManualCountAdjustment = form.watch("manualCountAdjustment");
 
   // Stati per validazione data
   const [isDateValid, setIsDateValid] = useState<boolean>(true);
   const [dateValidationMessage, setDateValidationMessage] = useState<string>("");
+  const [operationDateError] = useState<string | null>(null);
 
   // Query per ottenere dati da database
-  const { data: flupsys } = useQuery({ 
+  const { data: flupsys } = useQuery<Array<{ id: number; name: string }>>({
     queryKey: ['/api/flupsys'],
     enabled: !isLoading,
   });
   
-  const { data: sizes } = useQuery({ 
+  const { data: sizes } = useQuery<OriginalSize[]>({
     queryKey: ['/api/sizes'],
     enabled: !isLoading,
   });
   
-  const { data: sgrs } = useQuery({ 
+  const { data: sgrs } = useQuery<OriginalSgr[]>({
     queryKey: ['/api/sgr'],
     enabled: !isLoading,
   });
   
-  const { data: baskets } = useQuery({ 
+  const { data: baskets } = useQuery<OriginalBasket[]>({
     queryKey: ['/api/baskets'],
     enabled: !isLoading,
   });
   
-  const { data: cycles } = useQuery({ 
+  const { data: cycles } = useQuery<OriginalCycle[]>({
     queryKey: ['/api/cycles'],
     enabled: !isLoading,
   });
   
-  const { data: lots } = useQuery({ 
+  const { data: lots } = useQuery<OriginalLot[]>({
     queryKey: ['/api/lots/active'],
     enabled: !isLoading,
   });
   
-  const { data: operations } = useQuery({ 
+  const { data: operations } = useQuery<OriginalOperation[]>({
     queryKey: ['/api/operations'],
     enabled: !isLoading,
   });
@@ -609,7 +650,7 @@ export default function OperationForm({
                     <FormLabel className="text-xs font-medium">Data <span className="text-red-500">*</span></FormLabel>
                     <DatePicker
                       date={field.value as Date}
-                      setDate={(date) => {
+                       setDate={(date: Date | undefined) => {
                         field.onChange(date);
                         // La validazione della data è gestita dal useMemo validateOperationDate
                       }}
@@ -648,7 +689,7 @@ export default function OperationForm({
                       onValueChange={(value) => {
                         const flupsyId = Number(value);
                         field.onChange(flupsyId);
-                        form.setValue('basketId', null);
+                        form.resetField('basketId');
                       }}
                     >
                       <FormControl>
@@ -851,7 +892,7 @@ export default function OperationForm({
                       <FormItem className="mb-1">
                         <FormLabel className="text-xs font-medium">Tasso SGR</FormLabel>
                         <Select
-                          disabled={isLoading || !sgrs || sgrs.length === 0}
+                          disabled={isLoading || (sgrs?.length ?? 0) === 0}
                           value={field.value?.toString() || ''}
                           onValueChange={(value) => field.onChange(Number(value))}
                         >
@@ -861,7 +902,7 @@ export default function OperationForm({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {sgrs?.length > 0 ? sgrs.map((sgr: any) => (
+                            {(sgrs?.length ?? 0) > 0 ? (sgrs ?? []).map((sgr) => (
                               <SelectItem key={sgr.id} value={sgr.id.toString()}>
                                 {sgr.month} ({sgr.percentage}% giornaliero)
                               </SelectItem>
@@ -1054,8 +1095,8 @@ export default function OperationForm({
                             // Utilizziamo una IIFE per calcolare la taglia direttamente nell'attributo value
                             let selectedSize = null;
                             for (const size of sizes) {
-                              if (size.minAnimalsPerKg !== undefined && 
-                                  size.maxAnimalsPerKg !== undefined &&
+                              if (size.minAnimalsPerKg !== null &&
+                                  size.maxAnimalsPerKg !== null &&
                                   watchAnimalsPerKg >= size.minAnimalsPerKg && 
                                   watchAnimalsPerKg <= size.maxAnimalsPerKg) {
                                 selectedSize = size;
@@ -1328,8 +1369,8 @@ export default function OperationForm({
                             // Utilizziamo una IIFE per calcolare la taglia direttamente nell'attributo value
                             let selectedSize = null;
                             for (const size of sizes) {
-                              if (size.minAnimalsPerKg !== undefined && 
-                                  size.maxAnimalsPerKg !== undefined &&
+                              if (size.minAnimalsPerKg !== null &&
+                                  size.maxAnimalsPerKg !== null &&
                                   watchAnimalsPerKg >= size.minAnimalsPerKg && 
                                   watchAnimalsPerKg <= size.maxAnimalsPerKg) {
                                 selectedSize = size;
@@ -1425,6 +1466,7 @@ export default function OperationForm({
                         placeholder="Inserisci eventuali note sull'operazione..."
                         className="resize-none h-24 text-sm"
                         {...field}
+                        value={field.value ?? ''}
                       />
                     </FormControl>
                     <FormMessage />

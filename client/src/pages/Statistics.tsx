@@ -11,19 +11,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 
+interface CycleOptionData {
+  id: number;
+  basketId: number;
+  basket?: { physicalNumber?: number | null };
+}
+
+interface GrowthPoint {
+  daysFromStart: number;
+  averageWeight: number;
+}
+
+interface ComparisonCycle {
+  cycleId: number;
+  growthData: GrowthPoint[];
+  duration?: number | null;
+}
+
 export default function Statistics() {
   const [selectedTab, setSelectedTab] = useState('growth');
   const [selectedCycles, setSelectedCycles] = useState<string[]>([]);
   
   // Query cycles
-  const { data: cyclesData, isLoading: cyclesLoading } = useQuery({
+  const { data: cyclesData, isLoading: cyclesLoading } = useQuery<{ cycles: CycleOptionData[] }>({
     queryKey: ['/api/cycles'],
   });
   
-  const cycles = (cyclesData as any)?.cycles || [];
+  const cycles = cyclesData?.cycles || [];
 
   // Query sizes
-  const { data: sizes, isLoading: sizesLoading } = useQuery({
+  const { data: sizes = [], isLoading: sizesLoading } = useQuery<unknown[]>({
     queryKey: ['/api/sizes'],
   });
   
@@ -37,7 +54,7 @@ export default function Statistics() {
     })) || [];
   
   // Fetch comparison data when cycles are selected
-  const { data: comparisonData, isLoading: comparisonLoading } = useQuery({
+  const { data: comparisonData = [], isLoading: comparisonLoading } = useQuery<ComparisonCycle[]>({
     queryKey: [`/api/statistics/cycles/comparison?cycleIds=${selectedCycles.join(',')}`],
     enabled: selectedCycles.length > 0,
   });
@@ -51,7 +68,7 @@ export default function Statistics() {
     ), 0);
     
     for (let day = 0; day <= maxDays; day += 5) {
-      const point = { day };
+      const point: Record<string, number> = { day };
       
       comparisonData.forEach((cycle: any, index: number) => {
         const closestPoint = cycle.growthData.reduce((closest: any, current: any) => {

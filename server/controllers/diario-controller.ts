@@ -33,7 +33,7 @@ export async function getMonthDataForExport(db: any, month: string): Promise<Rec
       ORDER BY s.code
     `);
     
-    const taglieAttiveList = taglieAttiveResult.map((row: any) => row.code);
+    const taglieAttiveList = taglieAttiveResult.rows.map((row: any) => row.code);
     console.log(`Taglie attive trovate: ${taglieAttiveList.length}`);
     console.log(`Taglie attive: ${taglieAttiveList.join(', ')}`);
     
@@ -73,12 +73,12 @@ export async function getMonthDataForExport(db: any, month: string): Promise<Rec
       ORDER BY o.date, o.id
     `);
     
-    console.log(`Operazioni recuperate: ${allOperationsResult.length}`);
+    console.log(`Operazioni recuperate: ${allOperationsResult.rows.length}`);
     
     // Organizza le operazioni per data
     const operationsByDate: Record<string, any[]> = {};
     
-    allOperationsResult.forEach((op: any) => {
+    allOperationsResult.rows.forEach((op: any) => {
       const dateStr = op.date;
       // Converti i valori numerici in interi
       if (op.animal_count) {
@@ -149,20 +149,20 @@ export async function getMonthDataForExport(db: any, month: string): Promise<Rec
       ORDER BY d.day, s.code
     `);
     
-    console.log(`Dati giacenze totali recuperati: ${(giacenzeTotaliResult as any[]).length} righe`);
-    console.log(`Dati operazioni giornaliere recuperati: ${(operazioniGiornaliereResult as any[]).length} righe`);
+    console.log(`Dati giacenze totali recuperati: ${giacenzeTotaliResult.rows.length} righe`);
+    console.log(`Dati operazioni giornaliere recuperati: ${operazioniGiornaliereResult.rows.length} righe`);
     
     // Questo era usato in precedenza, impostiamo un valore per retrocompatibilità
-    const giacenzeResult = operazioniGiornaliereResult;
+    const giacenzeResult = operazioniGiornaliereResult.rows;
     
     // Organizza le giacenze totali per data
     const giacenzeTotaliByDate: Record<string, number> = {};
-    for (const row of giacenzeTotaliResult as any[]) {
+    for (const row of giacenzeTotaliResult.rows) {
       giacenzeTotaliByDate[row.date] = parseInt(row.totale_giacenza, 10);
     }
     
     const operazioniByDate: Record<string, any[]> = {};
-    for (const row of operazioniGiornaliereResult as any[]) {
+    for (const row of operazioniGiornaliereResult.rows) {
       if (!operazioniByDate[row.date]) {
         operazioniByDate[row.date] = [];
       }
@@ -312,7 +312,7 @@ export async function exportCalendarCsv(req: Request, res: Response) {
     
     // Converti il risultato in un array di taglie attive
     const taglieAttiveSet = new Set<string>();
-    (giacenzaResponse as any[]).forEach(row => {
+    giacenzaResponse.rows.forEach((row: any) => {
       taglieAttiveSet.add(row.taglia);
     });
     
@@ -326,7 +326,7 @@ export async function exportCalendarCsv(req: Request, res: Response) {
     `);
     
     // Aggiungi le taglie con operazioni
-    taglieOperazioniResult.forEach((row: any) => {
+    taglieOperazioniResult.rows.forEach((row: any) => {
       taglieAttiveSet.add(row.code);
     });
     
@@ -380,7 +380,7 @@ export async function exportCalendarCsv(req: Request, res: Response) {
       const operazioniGiornoMappa = new Map<string, number>();
       
       // Popola la mappa con i risultati della query
-      (operazioniGiorno as any[]).forEach(op => {
+      operazioniGiorno.rows.forEach((op: any) => {
         operazioniGiornoMappa.set(op.taglia, op.bilancio);
       });
       
@@ -463,7 +463,7 @@ export async function exportCalendarCsv(req: Request, res: Response) {
  * @returns {Promise<Array>} - Array dei cicli attivi
  */
 export async function getActiveCyclesAtDate(date: string) {
-  return await db.execute(sql`
+  const result = await db.execute(sql`
     SELECT c.id, c.basket_id, c.start_date, c.end_date
     FROM cycles c
     WHERE c.start_date <= ${date}
@@ -471,6 +471,7 @@ export async function getActiveCyclesAtDate(date: string) {
         ${cycles.endDate} IS NULL OR ${cycles.endDate} >= ${date}
     )
   `);
+  return result.rows;
 }
 
 /**
@@ -507,7 +508,7 @@ export async function calculateGiacenzaAtDate(date: string, activeCycles?: any[]
     `);
     
     // Estrai la giacenza totale dal risultato
-    const totaleGiacenza = result[0]?.totale_giacenza ? parseInt(result[0].totale_giacenza, 10) : 0;
+    const totaleGiacenza = result.rows[0]?.totale_giacenza ? parseInt(String(result.rows[0].totale_giacenza), 10) : 0;
     
     // Prepara l'array per il dettaglio delle taglie
     const dettaglioTaglie: { taglia: string, quantita: number }[] = [];
@@ -531,12 +532,12 @@ export async function calculateGiacenzaAtDate(date: string, activeCycles?: any[]
       ORDER BY taglia
     `);
     
-    if (dettaglioResult && dettaglioResult.length > 0) {
-      for (const row of dettaglioResult as any[]) {
+    if (dettaglioResult.rows.length > 0) {
+      for (const row of dettaglioResult.rows) {
         if (row && row.taglia) {
           dettaglioTaglie.push({
-            taglia: row.taglia,
-            quantita: parseInt(row.quantita, 10)
+             taglia: String(row.taglia),
+             quantita: parseInt(String(row.quantita), 10)
           });
         }
       }
@@ -569,12 +570,12 @@ export async function calculateDailyTotals(date: string) {
       WHERE o.date::text = ${date}
     `);
     
-    const row = result[0];
+    const row = result.rows[0];
     return {
-      totale_entrate: row?.totale_entrate ? parseInt(row.totale_entrate, 10) : 0,
-      totale_uscite: row?.totale_uscite ? parseInt(row.totale_uscite, 10) : 0,
-      numero_operazioni: row?.numero_operazioni ? parseInt(row.numero_operazioni, 10) : 0,
-      bilancio_netto: (row?.totale_entrate ? parseInt(row.totale_entrate, 10) : 0) - (row?.totale_uscite ? parseInt(row.totale_uscite, 10) : 0)
+      totale_entrate: row?.totale_entrate ? parseInt(String(row.totale_entrate), 10) : 0,
+      totale_uscite: row?.totale_uscite ? parseInt(String(row.totale_uscite), 10) : 0,
+      numero_operazioni: row?.numero_operazioni ? parseInt(String(row.numero_operazioni), 10) : 0,
+      bilancio_netto: (row?.totale_entrate ? parseInt(String(row.totale_entrate), 10) : 0) - (row?.totale_uscite ? parseInt(String(row.totale_uscite), 10) : 0)
     };
   } catch (error) {
     console.error(`Errore nel calcolo dei totali giornalieri per ${date}:`, error);
@@ -595,7 +596,7 @@ export async function calculateDailyTotals(date: string) {
 export async function calculateDailyTaglieStats(date: string) {
   try {
     // Calcola le statistiche per taglia per la data
-    return await db.execute(sql`
+    const result = await db.execute(sql`
       SELECT 
         s.code as taglia,
         SUM(CASE WHEN o.type IN ('prima-attivazione', 'prima-attivazione-da-vagliatura') THEN o.animal_count ELSE 0 END) as entrate,
@@ -612,6 +613,7 @@ export async function calculateDailyTaglieStats(date: string) {
                      ELSE 0 END) != 0
       ORDER BY s.code
     `);
+    return result.rows;
   } catch (error) {
     console.error(`Errore nel calcolo delle statistiche per taglia per ${date}:`, error);
     return [];

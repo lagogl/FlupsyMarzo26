@@ -202,13 +202,21 @@ const InventorySummary: React.FC<InventorySummaryProps> = ({
                 <Treemap
                   data={treemapData[0].children}
                   dataKey="size"
-                  ratio={4/3}
+                  aspectRatio={4/3}
                   stroke="#fff"
                   fill="#8884d8"
                   animationDuration={1000}
                 >
                   {
-                    (props) => {
+                    (props: {
+                      x: number;
+                      y: number;
+                      width: number;
+                      height: number;
+                      name: string;
+                      size: number;
+                      color: string;
+                    }) => {
                       const { x, y, width, height, name, size, color } = props;
                       return (
                         <g>

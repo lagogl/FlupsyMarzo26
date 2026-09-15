@@ -22,11 +22,11 @@ router.post("/analyze", async (req, res) => {
       success: true,
       ...results
     });
-  } catch (error) {
+    } catch (error: unknown) {
     console.error("Errore analisi variabilità:", error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -45,11 +45,11 @@ router.get("/runs", async (req, res) => {
       success: true,
       runs
     });
-  } catch (error) {
+    } catch (error: unknown) {
     console.error("Errore recupero runs:", error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -75,11 +75,11 @@ router.get("/runs/:id", async (req, res) => {
       success: true,
       run
     });
-  } catch (error) {
+    } catch (error: unknown) {
     console.error("Errore recupero run:", error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
