@@ -13,6 +13,7 @@ import { Fan, AlertTriangle, AlertCircle, CheckCircle, Clock, TrendingUp, Trendi
 import { getOperationTypeLabel } from '@/lib/utils';
 import * as ExcelJS from 'exceljs';
 import { AssignGroupDialog } from '@/components/AssignGroupDialog';
+import { getActiveSellableMax, isActiveSellableSize } from '@/lib/heatmapSellability';
 
 interface NewFlupsyVisualizerProps {
   selectedFlupsyIds?: number[];
@@ -469,11 +470,13 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   };
 
   const isActiveSellableAnimalsPerKg = (animalsPerKg: number | null | undefined): boolean => {
-    const matched = getActiveSizeForAnimalsPerKg(animalsPerKg);
-    const activeMaxima = sizes?.map(size => Number(size.maxAnimalsPerKg)).filter(Number.isFinite) || [];
-    const largestAnimalsMax = activeMaxima.length ? Math.min(...activeMaxima) : null;
-    return Boolean(matched && largestAnimalsMax != null && matched.maxAnimalsPerKg <= largestAnimalsMax);
+    return isActiveSellableSize(animalsPerKg, sizes || []);
   };
+
+  const sellableAnimalsPerKgMax = getActiveSellableMax(sizes || []);
+  const sellableRangeLabel = sellableAnimalsPerKgMax == null
+    ? 'range TP-3000 attivo'
+    : `≤${sellableAnimalsPerKgMax.toLocaleString('it-IT')} animali/kg`;
 
   // Helper function to check if a basket has the largest active size
   // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per allineamento con expected-sizes
@@ -1674,7 +1677,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
                   <TooltipTrigger asChild>
                     <TabsTrigger value="large" className={selectedTab === 'large' ? 'bg-green-500 text-white' : 'bg-green-100'}>Con taglie grandi</TabsTrigger>
                   </TooltipTrigger>
-                  <TooltipContent>Cestelli con taglia TP-3000 o superiore (≤29.000 animali/kg)</TooltipContent>
+                  <TooltipContent>Cestelli con taglia TP-3000 o superiore ({sellableRangeLabel})</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider>

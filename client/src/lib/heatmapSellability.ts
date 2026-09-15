@@ -6,6 +6,18 @@ export interface ActiveSizeRange {
   max_animals_per_kg?: number | string | null;
 }
 
+
+export function getActiveSellableMax(
+  sizes: ActiveSizeRange[],
+): number | null {
+  const sellableBoundary = sizes.find((size) => size.code === "TP-3000");
+  const sellableMax = Number(
+    sellableBoundary?.maxAnimalsPerKg ?? sellableBoundary?.max_animals_per_kg,
+  );
+
+  return Number.isFinite(sellableMax) ? sellableMax : null;
+}
+
 export function isActiveSellableSize(
   animalsPerKg: number | null | undefined,
   sizes: ActiveSizeRange[],
@@ -20,10 +32,7 @@ export function isActiveSellableSize(
   });
   if (!matched) return false;
 
-  const sellableBoundary = sizes.find((size) => size.code === "TP-3000");
-  const sellableMax = Number(
-    sellableBoundary?.maxAnimalsPerKg ?? sellableBoundary?.max_animals_per_kg,
-  );
+  const sellableMax = getActiveSellableMax(sizes);
 
-  return Number.isFinite(sellableMax) && animalsPerKg <= sellableMax;
+  return sellableMax != null && animalsPerKg <= sellableMax;
 }

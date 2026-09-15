@@ -22,6 +22,7 @@ import {
   getTargetSizeForWeight
 } from '@/lib/utils';
 import { Filter, Edit, RotateCcw } from 'lucide-react';
+import { getActiveSellableMax, isActiveSellableSize } from '@/lib/heatmapSellability';
 
 export default function FlupsyVisualizer() {
   const [, navigate] = useLocation();
@@ -89,16 +90,8 @@ export default function FlupsyVisualizer() {
   const averageWeight = showOriginalData ? operationDetail.averageWeight : customWeight;
   const animalsPerKg = showOriginalData ? operationDetail.animalsPerKg : (customWeight ? Math.round(1000000 / customWeight) : null);
   
-  // Determine if basket matches the largest active size.
-  const matchedSize = activeSizes.find(size => {
-    const min = Number(size.minAnimalsPerKg);
-    const max = Number(size.maxAnimalsPerKg);
-    return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
-      animalsPerKg != null && animalsPerKg >= min && animalsPerKg <= max;
-  });
-  const activeMaxima = activeSizes.map(size => Number(size.maxAnimalsPerKg)).filter(Number.isFinite);
-  const isLargeSize = Boolean(matchedSize && activeMaxima.length &&
-    matchedSize.maxAnimalsPerKg <= Math.min(...activeMaxima));
+  const isLargeSize = isActiveSellableSize(animalsPerKg, activeSizes);
+  const sellableAnimalsPerKgMax = getActiveSellableMax(activeSizes);
   
   // Get size properties
   const targetSize = getTargetSizeForWeight(averageWeight || 0, activeSizes);
@@ -227,7 +220,7 @@ export default function FlupsyVisualizer() {
                     <p>Animali per kg: {animalsPerKg}</p>
                     <p>Peso medio: {averageWeight} mg</p>
                     {isLargeSize && (
-                      <p className="font-bold text-red-500">Taglia Grande (≥ 3000mg)</p>
+                      <p className="font-bold text-red-500">Taglia TP-3000 o superiore</p>
                     )}
                   </div>
                 </TooltipContent>
@@ -235,7 +228,12 @@ export default function FlupsyVisualizer() {
             </TooltipProvider>
             
             <div className="mt-6 text-sm text-center text-gray-500">
-              <p>Il cestello mostra bordo rosso quando il numero di animali per kg è ≤ 32000 (taglia ≥ TP-3000).</p>
+              <p>
+                Il cestello mostra bordo rosso quando rientra nella taglia TP-3000 o superiore
+                {sellableAnimalsPerKgMax == null
+                  ? ' secondo i range attivi.'
+                  : ` (≤ ${sellableAnimalsPerKgMax.toLocaleString('it-IT')} animali/kg secondo il range attivo).`}
+              </p>
               <p>Modifica il peso per testare diverse visualizzazioni.</p>
             </div>
           </div>

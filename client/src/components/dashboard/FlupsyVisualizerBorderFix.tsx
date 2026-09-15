@@ -27,6 +27,7 @@ import {
   getBorderColorByAnimalsPerKg
 } from '@/lib/utils';
 import { CheckSquare, Square, Filter, Eye, Layers, TrendingUp } from 'lucide-react';
+import { isActiveSellableSize } from '@/lib/heatmapSellability';
 
 // Implementazione completamente nuova che mostra tutti i FLUPSY selezionati contemporaneamente
 export default function FlupsyVisualizer() {
@@ -149,7 +150,7 @@ export default function FlupsyVisualizer() {
     return operations.filter(op => op.basketId === basketId);
   };
   
-  // Helper function to check if a basket matches the largest active size
+  // Helper function to check if a basket is in TP-3000 or a larger commercial size
   const hasLargeSize = (basket: Basket | undefined): boolean => {
     if (!basket || basket.state !== 'active') return false;
     
@@ -161,14 +162,7 @@ export default function FlupsyVisualizer() {
     const latestOperation = sortedOperations.length > 0 ? sortedOperations[0] : null;
     if (!latestOperation?.animalsPerKg) return false;
     
-    const matched = activeSizes.find(size => {
-      const min = Number(size.minAnimalsPerKg);
-      const max = Number(size.maxAnimalsPerKg);
-      return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
-        latestOperation.animalsPerKg! >= min && latestOperation.animalsPerKg! <= max;
-    });
-    const maxValues = activeSizes.map(size => Number(size.maxAnimalsPerKg)).filter(Number.isFinite);
-    return Boolean(matched && maxValues.length && matched.maxAnimalsPerKg <= Math.min(...maxValues));
+    return isActiveSellableSize(latestOperation.animalsPerKg, activeSizes);
   };
   
   // Helper function per ottenere il numero di animali per kg dell'ultima operazione
