@@ -22,5 +22,10 @@ resets to 1). The data was recoverable only because daily SQL dumps existed in
 2. **`scripts/post-merge.sh` takes a `pg_dump` into `database_backups/pre_push_*.sql`
    BEFORE `db:push --force`, aborting the push if the dump fails.** This guarantees a fresh
    recovery point for any future destructive push. Keeps last 10 pre-push dumps.
-3. Recovery recipe: the COPY block in any `database_backups/*.sql` holds the rows; re-INSERT
+3. **Skip backup and `db:push` when the merged commit did not change a Drizzle schema input.**
+   Introspection of the operational Neon schema can hang even with `--force` and CI mode;
+   running it after controller-only merges adds risk and can make reconciliation time out.
+4. **Backup and Drizzle must select the same primary URL as the app (prefer Neon).** Pass
+   parsed PG parameters to `pg_dump` rather than putting the connection URL in process args.
+5. Recovery recipe: the COPY block in any `database_backups/*.sql` holds the rows; re-INSERT
    with explicit ids (the sequence is usually already past them, so no collision).
