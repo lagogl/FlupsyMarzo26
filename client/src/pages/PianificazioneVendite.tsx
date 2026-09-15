@@ -231,11 +231,25 @@ export default function PianificazioneVendite() {
   });
 
   // === Piano calcolato ===
-  const { data: plan, isLoading: planLoading, refetch: refetchPlan, isFetching } = useQuery<PlanResult & { engine?: Engine; solverStatus?: { feasible: boolean; bounded: boolean; objective?: number } }>({
+  const {
+    data: plan,
+    isLoading: planLoading,
+    refetch: refetchPlan,
+    isFetching,
+    isError: planIsError,
+    error: planError,
+  } = useQuery<PlanResult & { engine?: Engine; solverStatus?: { feasible: boolean; bounded: boolean; objective?: number } }>({
     queryKey: ['/api/pianificazione-vendite', year, startMonth, monthsHorizon, mode, engine],
     queryFn: async () => {
       const r = await fetch(`/api/pianificazione-vendite?year=${year}&startMonth=${startMonth}&monthsHorizon=${monthsHorizon}&mode=${mode}&engine=${engine}`);
-      return r.json();
+      const response = await r.json().catch(() => null);
+      if (!r.ok) {
+        throw new Error(response?.error || `Calcolo non riuscito (${r.status})`);
+      }
+      if (!Array.isArray(response?.monthlyPlan)) {
+        throw new Error("Il calcolo ha restituito un risultato non valido");
+      }
+      return response;
     },
     enabled: false,
   });
@@ -265,7 +279,7 @@ export default function PianificazioneVendite() {
   };
 
   const chartData = useMemo(() => {
-    if (!plan) return [];
+    if (!Array.isArray(plan?.monthlyPlan)) return [];
     return plan.monthlyPlan.map(m => {
       const totalSold = m.sales.reduce((a: number, s: any) => a + s.animalCount, 0);
       const fulfilled = m.ordersFulfilledBySize || {};
@@ -605,6 +619,17 @@ export default function PianificazioneVendite() {
                   )}
                 </div>
               </div>
+
+              {planIsError && (
+                <div
+                  className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  role="alert"
+                  data-testid="plan-error"
+                >
+                  <div className="font-semibold">Impossibile calcolare il piano</div>
+                  <div>{planError instanceof Error ? planError.message : "Errore imprevisto durante il calcolo"}</div>
+                </div>
+              )}
 
               {/* Guida espandibile ai parametri */}
               <Collapsible open={guideOpen} onOpenChange={setGuideOpen} className="mt-4">

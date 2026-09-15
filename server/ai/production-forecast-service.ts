@@ -376,9 +376,27 @@ export class ProductionForecastService {
     return 'T10';
   }
 
+  private findProjectionSize(animalsPerKg: number) {
+    const exact = findSizeInRanges(animalsPerKg, this.activeSizeCandidates);
+    if (exact || !Number.isFinite(animalsPerKg) || animalsPerKg <= 0) {
+      return exact;
+    }
+
+    const largestActiveSize = this.activeSizeCandidates.reduce(
+      (largest, candidate) =>
+        candidate.minAnimalsPerKg < largest.minAnimalsPerKg ? candidate : largest,
+    );
+
+    // Durante una proiezione gli animali possono crescere oltre il limite
+    // inferiore della scala configurata. Continuano a usare la taglia più grande.
+    return animalsPerKg < largestActiveSize.minAnimalsPerKg
+      ? largestActiveSize
+      : null;
+  }
+
   getSgrForAnimalsPerKg(sgrLookup: SgrByMonthSize, monthIndex: number, animalsPerKg: number): number {
     const monthName = MONTH_NAMES_LOWER[monthIndex];
-    const match = findSizeInRanges(animalsPerKg, this.activeSizeCandidates);
+    const match = this.findProjectionSize(animalsPerKg);
     if (!match) {
       throw new Error(`Nessuna taglia attiva per ${animalsPerKg} animali/kg`);
     }
@@ -497,7 +515,7 @@ export class ProductionForecastService {
   }
 
   mapAnimalsPerKgToSaleSize(animalsPerKg: number): string {
-    const match = findSizeInRanges(animalsPerKg, this.activeSizeCandidates);
+    const match = this.findProjectionSize(animalsPerKg);
     if (!match) {
       throw new Error(`Nessuna taglia attiva per ${animalsPerKg} animali/kg`);
     }
