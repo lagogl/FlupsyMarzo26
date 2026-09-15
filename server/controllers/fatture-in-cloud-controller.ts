@@ -163,6 +163,29 @@ async function setConfigValue(chiave: string, valore: string, descrizione?: stri
   }
 }
 
+const FIC_MIN_REQUEST_INTERVAL_MS = 300;
+const FIC_MAX_RATE_LIMIT_RETRIES = 3;
+let nextFicRequestAt = 0;
+
+async function waitForFicRequestSlot(): Promise<void> {
+  const now = Date.now();
+  const scheduledAt = Math.max(now, nextFicRequestAt);
+  nextFicRequestAt = scheduledAt + FIC_MIN_REQUEST_INTERVAL_MS;
+  const delayMs = scheduledAt - now;
+  if (delayMs > 0) {
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+}
+
+function getRateLimitDelayMs(error: any, attempt: number): number {
+  const retryAfter = error.response?.headers?.['retry-after'];
+  const retryAfterSeconds = Number(retryAfter);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return Math.min(retryAfterSeconds * 1000, 60_000);
+  }
+  return Math.min(2_000 * (2 ** attempt), 30_000);
+}
+
 // Helper per richieste autenticate a Fatture in Cloud
 export async function apiRequest(method: string, endpoint: string, data?: any) {
   const accessToken = await getConfigValue('fatture_in_cloud_access_token');
@@ -185,17 +208,34 @@ export async function apiRequest(method: string, endpoint: string, data?: any) {
     url = `${FATTURE_IN_CLOUD_API_BASE}/c/${companyId}${endpoint}`;
   }
   
-  console.log(`🔗 API Request: ${method} ${url}`);
-  
-  return await (await getAxios())({
-    method,
-    url,
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    data
-  });
+  const axios = await getAxios();
+  for (let attempt = 0; attempt <= FIC_MAX_RATE_LIMIT_RETRIES; attempt++) {
+    await waitForFicRequestSlot();
+    console.log(`🔗 API Request: ${method} ${url}`);
+
+    try {
+      return await axios({
+        method,
+        url,
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        data
+      });
+    } catch (error: any) {
+      if (error.response?.status !== 429 || attempt === FIC_MAX_RATE_LIMIT_RETRIES) {
+        throw error;
+      }
+
+      const delayMs = getRateLimitDelayMs(error, attempt);
+      console.warn(`Limite richieste Fatture in Cloud raggiunto; nuovo tentativo tra ${Math.ceil(delayMs / 1000)} secondi`);
+      nextFicRequestAt = Math.max(nextFicRequestAt, Date.now() + delayMs);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error('Richiesta Fatture in Cloud non completata');
 }
 
 // Refresh token automatico
@@ -649,7 +689,13 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
       // L'elenco FIC può omettere dati presenti nella scheda completa (in particolare la via).
       // Recupera il dettaglio prima di aggiornare il cliente locale, altrimenti una sync
       // successiva cancellerebbe nuovamente l'indirizzo completo.
-      if (clienteFIC.id && !String(clienteFIC.address_street || '').trim()) {
+      if (
+        clienteFIC.id &&
+        (
+          !String(clienteFIC.address_street || '').trim() ||
+          !String(clienteFIC.address_postal_code || '').trim()
+        )
+      ) {
         try {
           const dettagliResponse = await withRetry(() =>
             apiRequest('GET', `/entities/clients/${clienteFIC.id}`)
@@ -698,21 +744,6 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
         if (capMatch) {
           cap = capMatch[1];
           comune = capMatch[2]; // Rimuovi CAP dalla città
-        }
-      }
-      
-      // Se il CAP è ancora vuoto, prova a recuperarlo con una chiamata dedicata
-      if (!cap && clienteFIC.id) {
-        try {
-          const dettagliResponse = await apiRequest('GET', `/entities/clients/${clienteFIC.id}`);
-          const dettagli = dettagliResponse.data.data;
-          
-          if (dettagli?.address_postal_code) {
-            cap = dettagli.address_postal_code;
-            console.log(`✅ CAP recuperato per ${clienteFIC.name}: ${cap}`);
-          }
-        } catch (error) {
-          console.log(`⚠️  Impossibile recuperare CAP dettagliato per ${clienteFIC.name}`);
         }
       }
       
