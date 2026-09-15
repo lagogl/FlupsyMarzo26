@@ -461,6 +461,7 @@ router.patch('/:id/delivery-range', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { dataInizioConsegna, dataFineConsegna } = req.body;
+    const ordineId = Number.parseInt(id, 10);
     
     if (!dataInizioConsegna || !dataFineConsegna) {
       return res.status(400).json({
@@ -472,20 +473,55 @@ router.patch('/:id/delivery-range', async (req: Request, res: Response) => {
     if (!dbEsterno) {
       return res.status(503).json({ error: 'Database esterno non disponibile' });
     }
+
+    if (!Number.isInteger(ordineId) || ordineId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Identificativo ordine non valido'
+      });
+    }
+
+    const dataInizio = new Date(dataInizioConsegna);
+    const dataFine = new Date(dataFineConsegna);
+    if (Number.isNaN(dataInizio.getTime()) || Number.isNaN(dataFine.getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: 'Date di consegna non valide'
+      });
+    }
+    if (dataFine < dataInizio) {
+      return res.status(400).json({
+        success: false,
+        error: 'La data finale non può precedere la data iniziale'
+      });
+    }
     
     // Aggiorna range
-    await dbEsterno
+    const ordiniAggiornati = await dbEsterno
       .update(ordiniCondivisi)
       .set({
-        dataInizioConsegna: new Date(dataInizioConsegna).toISOString().split('T')[0],
-        dataFineConsegna: new Date(dataFineConsegna).toISOString().split('T')[0],
+        dataInizioConsegna: dataInizio.toISOString().split('T')[0],
+        dataFineConsegna: dataFine.toISOString().split('T')[0],
         updatedAt: sql`NOW()`
       })
-      .where(eq(ordiniCondivisi.id, parseInt(id)));
+      .where(eq(ordiniCondivisi.id, ordineId))
+      .returning({
+        id: ordiniCondivisi.id,
+        dataInizioConsegna: ordiniCondivisi.dataInizioConsegna,
+        dataFineConsegna: ordiniCondivisi.dataFineConsegna
+      });
+
+    if (ordiniAggiornati.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Ordine non trovato'
+      });
+    }
     
     res.json({
       success: true,
-      message: 'Range di consegna aggiornato'
+      message: 'Range di consegna aggiornato',
+      ordine: ordiniAggiornati[0]
     });
   } catch (error: any) {
     console.error('Errore aggiornamento range consegna:', error);

@@ -124,6 +124,7 @@ interface SpreadsheetRow {
   subRowSize?: string;
   groupKey?: string;
   showForecastCoverage?: boolean;
+  excelNumberFormat?: string;
 }
 
 const MONTH_SHORT_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
@@ -383,6 +384,31 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     const excelRows: SpreadsheetRow[] = [];
     for (const row of rows) {
       excelRows.push(row);
+      if (row.rowKey === "forecast_evadibile") {
+        excelRows.push({
+          rowKey: "forecast_evadibile_coverage",
+          label: `  ↳ ${t("pc_row_forecast_evadibile_coverage")}`,
+          tooltip: t("pc_row_forecast_evadibile_coverage_tip"),
+          color: "#0d9488",
+          bgClass: "bg-teal-50/50",
+          textClass: "text-gray-600",
+          values: mc.map(m =>
+            m.budgetProduzione > 0
+              ? Math.min(1, (m.forecastEvadibileTarget || 0) / m.budgetProduzione)
+              : 0
+          ),
+          isSubRow: true,
+          excelNumberFormat: "0%",
+          isSuccess: (colIdx: number) => {
+            const m = mc[colIdx];
+            return Boolean(m && m.budgetProduzione > 0 && m.forecastEvadibileTarget >= m.budgetProduzione);
+          },
+          isWarning: (colIdx: number) => {
+            const m = mc[colIdx];
+            return Boolean(m && m.budgetProduzione > 0 && m.forecastEvadibileTarget < m.budgetProduzione);
+          },
+        });
+      }
       if (row.isExpandable && row.groupKey === "ordini" && !ordersExpanded) {
         for (const sz of allOrderSizes) {
           excelRows.push({
@@ -415,7 +441,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: isSubRowExcel ? "FFFFF7ED" : stripeBg } };
         } else {
           const colIdx = colNumber - 2;
-          cell.numFmt = "#,##0";
+          cell.numFmt = row.excelNumberFormat || "#,##0";
           cell.alignment = { horizontal: "right", vertical: "middle" };
 
           const warn = row.isWarning ? row.isWarning(colIdx) : false;

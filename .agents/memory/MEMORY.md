@@ -43,3 +43,4 @@
 - [Pulizia TypeScript senza regressioni](typescript-cleanup-guardrails.md) — correggere i tipi non autorizza sentinelle, cancellazioni o fallback nuovi; revisionare sempre la semantica del diff.
 - [Sostituzione taglie negli ordini](sales-planning-size-substitution.md) — il codice TP non equivale agli animali/kg; per gli ordini usare i range attivi e accettare solo taglia esatta o fisicamente più grande.
 - [Forecast produttivo evadibile](production-forecast-fulfillment.md) — è un indicatore di capacità separato dagli ordini: min(forecast, giacenza target con schiuditoio), senza consumare stock.
+- [Date consegna ordini FIC](fic-order-delivery-dates.md) — le date inserite manualmente sono autoritative; la sincronizzazione FIC può riempire date mancanti ma non cancellare o sostituire quelle presenti.

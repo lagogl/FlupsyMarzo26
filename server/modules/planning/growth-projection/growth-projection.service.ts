@@ -3,7 +3,10 @@ import { db } from "../../../db";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
-import { calculateFulfillableProductionForecast } from "./forecast-fulfillment";
+import {
+  calculateFulfillableProductionForecast,
+  getProductionTargetCategory,
+} from "./forecast-fulfillment";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -130,6 +133,7 @@ export class GrowthProjectionService {
       : null;
     if (!targetRange) throw new Error(`Taglia target ${targetSize} senza range valido alla data di proiezione`);
     const targetMaxAnimalsPerKg = targetRange.maxAnimalsPerKg;
+    const targetBudgetCategory = getProductionTargetCategory(targetMaxAnimalsPerKg);
 
     const [budgetRows, hatcheryRows] = await Promise.all([
       yearsNeeded.length > 0
@@ -150,6 +154,7 @@ export class GrowthProjectionService {
 
     const budgetByYearMonth: Record<string, number> = {};
     for (const row of budgetRows) {
+      if (row.sizeCategory !== targetBudgetCategory) continue;
       const key = `${row.year}-${row.month}`;
       if (!budgetByYearMonth[key]) budgetByYearMonth[key] = 0;
       budgetByYearMonth[key] += row.targetAnimals;

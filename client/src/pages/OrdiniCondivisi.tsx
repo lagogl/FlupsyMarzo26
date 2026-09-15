@@ -478,10 +478,9 @@ export default function OrdiniCondivisi() {
 
   const openDatePicker = (ordineId: number, dataInizio: string | null, dataFine: string | null) => {
     setDatePickerOrdineId(ordineId);
-    // Resetta sempre il range quando si apre il picker
     setSelectedDateRange({
-      from: undefined,
-      to: undefined
+      from: dataInizio ? parseISO(dataInizio) : undefined,
+      to: dataFine ? parseISO(dataFine) : undefined
     });
   };
 
@@ -1467,7 +1466,11 @@ export default function OrdiniCondivisi() {
                                 <div className="p-3 border-b bg-muted/50">
                                   <p className="text-sm font-medium">Periodo di consegna</p>
                                   <p className="text-xs text-muted-foreground">
-                                    {salvaDateConsegnaMutation.isPending ? 'Salvataggio in corso...' : 'Seleziona data inizio e data fine'}
+                                    {salvaDateConsegnaMutation.isPending
+                                      ? 'Salvataggio in corso...'
+                                      : selectedDateRange.from && !selectedDateRange.to
+                                        ? 'Seleziona anche la data finale per salvare'
+                                        : 'Seleziona data inizio e data fine'}
                                   </p>
                                 </div>
                                 <CalendarComponent

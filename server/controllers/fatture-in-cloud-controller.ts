@@ -911,6 +911,7 @@ router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) =>
       
       // === SYNC DB ESTERNO (unica destinazione) ===
       let ordineIdEsterno: number | null = null;
+      let hasRangeConsegnaEsistente = false;
       
       // Verifica che abbiamo un cliente valido (richiesto da FK)
       if (!clienteLocale?.id) {
@@ -932,6 +933,10 @@ router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) =>
           .where(eq(ordiniCondivisi.fattureInCloudId, ordineFIC.id));
         
         const ordineEsternoEsistente = ordiniEsterni.length > 0 ? ordiniEsterni[0] : null;
+        hasRangeConsegnaEsistente = Boolean(
+          ordineEsternoEsistente?.dataInizioConsegna &&
+          ordineEsternoEsistente?.dataFineConsegna
+        );
         
         // Normalizza lo stato da Fatture in Cloud
         let statoNormalizzato = ordineFIC.status || 'Aperto';
@@ -1107,6 +1112,17 @@ router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) =>
             if (dataInizio && dataFine) {
               console.log(`📅 Date consegna estratte da oggetto: ${dataInizio} - ${dataFine}`);
             }
+
+            // Le date inserite manualmente nel gestionale sono prioritarie.
+            // Una sincronizzazione FIC non deve cancellarle o sostituirle.
+            const rangeConsegnaDaSincronizzare = hasRangeConsegnaEsistente
+              ? {}
+              : dataInizio && dataFine
+                ? {
+                    dataInizioConsegna: dataInizio,
+                    dataFineConsegna: dataFine
+                  }
+                : {};
             
             await dbEsterno
               .update(ordiniCondivisi)
@@ -1115,8 +1131,7 @@ router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) =>
                 quantitaTotale: Math.round(quantitaTotale),
                 tagliaRichiesta,
                 note: oggetto ? oggetto : null, // Importa OGGETTO da FIC (subject o visible_subject)
-                dataInizioConsegna: dataInizio, // Primo giorno del mese di inizio
-                dataFineConsegna: dataFine, // Ultimo giorno del mese di fine
+                ...rangeConsegnaDaSincronizzare,
                 syncStatus: 'sincronizzato' as const, // Ora è completamente sincronizzato
                 updatedAt: new Date()
               })
