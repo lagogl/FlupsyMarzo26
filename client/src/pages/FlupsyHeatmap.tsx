@@ -41,12 +41,11 @@ function isActiveSellableSize(animalsPerKg: number | null | undefined, sizes: an
       animalsPerKg >= min && animalsPerKg <= max;
   });
   if (!matched) return false;
-  const activeMaxima = sizes
-    .map((size: any) => Number(size.maxAnimalsPerKg ?? size.max_animals_per_kg))
-    .filter(Number.isFinite);
-  const largestAnimalsSizeMax = activeMaxima.length ? Math.min(...activeMaxima) : null;
-  return largestAnimalsSizeMax != null &&
-    Number(matched.maxAnimalsPerKg ?? matched.max_animals_per_kg) <= largestAnimalsSizeMax;
+  const sellableBoundary = sizes.find((size: any) => size.code === "TP-3000");
+  const sellableMax = Number(
+    sellableBoundary?.maxAnimalsPerKg ?? sellableBoundary?.max_animals_per_kg,
+  );
+  return Number.isFinite(sellableMax) && animalsPerKg <= sellableMax;
 }
 
 // Calcola la taglia "stimata dal peso" quando l'ultima op è peso
@@ -453,7 +452,8 @@ export default function FlupsyHeatmap() {
         }
       }
 
-      // 5. Pronta per la vendita: usa solo la taglia attiva più grande.
+      // 5. Pronta per la vendita: TP-3000 o una taglia più grande,
+      // usando il limite del range attivo corrente.
       const apkForSell = op.measurementAnimalsPerKg ?? op.animalsPerKg;
       if (isActiveSellableSize(Number(apkForSell), sizes)) {
         alerts.push("readyToSell");
