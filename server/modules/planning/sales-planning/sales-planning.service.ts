@@ -7,6 +7,7 @@ import {
   salesCashTargets,
 } from "../../../../shared/schema";
 import { inArray } from "drizzle-orm";
+import { canFulfillOrderWithSize } from "./size-substitution";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -115,7 +116,7 @@ export class SalesPlanningService {
     return productionForecastService.mapAnimalsPerKgToSaleSize(this.apkOf(b));
   }
 
-  /** Indice taglia nel catalogo attivo (più alto = più piccolo / più giovane). */
+  /** Indice taglia nel catalogo attivo (più alto = più grande / più maturo). */
   private sizeRank(size: string): number {
     return this.activeSizeOrder.indexOf(size);
   }
@@ -308,17 +309,17 @@ export class SalesPlanningService {
       // 1) Soddisfare ordini (vincolo)
       for (const [sizeCode, qtyNeeded] of Object.entries(ordersBySize)) {
         let remaining = qtyNeeded;
-        // Prendi baskets della stessa taglia O più piccola/grande che si avvicina (preferisci match esatto, poi taglie più grandi vicino - vendiamo il più "pronto")
+        // Prendi cestelli della stessa taglia o fisicamente più grandi.
         const candidates = baskets
           .filter(b => b.animalCount > 0)
           .map(b => ({ b, sz: this.sizeOf(b), rank: this.sizeRank(this.sizeOf(b)) }))
-          .filter(x => x.sz === sizeCode || x.rank < this.sizeRank(sizeCode)) // match esatto o taglia più grande (rank minore = più grande)
+          .filter(x => canFulfillOrderWithSize(x.sz, sizeCode, this.activeSizeOrder))
           .sort((a, b) => {
-            // Prima match esatto, poi taglie più grandi più vicine
+            // Prima il match esatto, poi le taglie più grandi più vicine.
             const aExact = a.sz === sizeCode ? 0 : 1;
             const bExact = b.sz === sizeCode ? 0 : 1;
             if (aExact !== bExact) return aExact - bExact;
-            return b.rank - a.rank; // più vicino al target (rank più alto = più piccolo)
+            return a.rank - b.rank;
           });
         for (const c of candidates) {
           if (remaining <= 0) break;

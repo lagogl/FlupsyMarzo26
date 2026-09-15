@@ -41,3 +41,4 @@
 - [Alias route e autorizzazione](auth-route-alias-audit.md) — proteggere il router principale non basta: cercare ed eliminare alias e route legacy che invocano la stessa operazione.
 - [Consegna accessi iniziali](initial-access-delivery.md) — password temporanee solo via canale autorizzato; mai chat/log/file, e provisioning annullato se la consegna fallisce.
 - [Pulizia TypeScript senza regressioni](typescript-cleanup-guardrails.md) — correggere i tipi non autorizza sentinelle, cancellazioni o fallback nuovi; revisionare sempre la semantica del diff.
+- [Sostituzione taglie negli ordini](sales-planning-size-substitution.md) — il codice TP non equivale agli animali/kg; per gli ordini usare i range attivi e accettare solo taglia esatta o fisicamente più grande.

@@ -16,6 +16,7 @@ import {
   salesCashTargets,
 } from "../../../../shared/schema";
 import { inArray } from "drizzle-orm";
+import { canFulfillOrderWithSize } from "./size-substitution";
 
 const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 const MONTH_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
@@ -550,12 +551,7 @@ export class SalesPlanningMilpService {
   }
 
   private sizeIsAtLeast(actual: string, required: string): boolean {
-    const idxA = this.activeSizeOrder.indexOf(actual);
-    const idxR = this.activeSizeOrder.indexOf(required);
-    if (idxA < 0 || idxR < 0) return false;
-    // La lista è ordinata dal più grande al più piccolo.
-    // "at least" significa stesso o più grande → indice <= indice richiesto.
-    return idxA <= idxR;
+    return canFulfillOrderWithSize(actual, required, this.activeSizeOrder);
   }
 }
 
