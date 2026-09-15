@@ -11,6 +11,7 @@ import {
 import { format } from "date-fns";
 import { AlertTriangle, LayoutGrid, TrendingUp, TrendingDown, Minus, Scale, Clock, Tag, Settings2, ChevronDown, ChevronUp } from "lucide-react";
 import { useFlupsyPreferences } from "@/hooks/use-flupsy-preferences";
+import { isActiveSellableSize } from "@/lib/heatmapSellability";
 
 // --- Helpers ---
 
@@ -30,22 +31,6 @@ function getSizeCodeFromAnimalsPerKg(animalsPerKg: number, sizes: any[]): string
     return animalsPerKg >= Number(min) && animalsPerKg <= Number(max);
   });
   return match?.code ?? "N/D";
-}
-
-function isActiveSellableSize(animalsPerKg: number | null | undefined, sizes: any[]): boolean {
-  if (animalsPerKg == null || !sizes?.length) return false;
-  const matched = sizes.find((size: any) => {
-    const min = Number(size.minAnimalsPerKg ?? size.min_animals_per_kg);
-    const max = Number(size.maxAnimalsPerKg ?? size.max_animals_per_kg);
-    return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
-      animalsPerKg >= min && animalsPerKg <= max;
-  });
-  if (!matched) return false;
-  const sellableBoundary = sizes.find((size: any) => size.code === "TP-3000");
-  const sellableMax = Number(
-    sellableBoundary?.maxAnimalsPerKg ?? sellableBoundary?.max_animals_per_kg,
-  );
-  return Number.isFinite(sellableMax) && animalsPerKg <= sellableMax;
 }
 
 // Calcola la taglia "stimata dal peso" quando l'ultima op è peso
