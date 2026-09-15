@@ -113,6 +113,30 @@ function estraiDateConsegna(oggetto: string | null): { dataInizio: string | null
   return { dataInizio, dataFine };
 }
 
+type PeriodoConsegnaEsistente = {
+  dataInizioConsegna?: string | null;
+  dataFineConsegna?: string | null;
+};
+
+export function buildFicDeliveryRangeUpdate(
+  periodoEsistente: PeriodoConsegnaEsistente | null,
+  oggettoFic: string | null
+): Partial<PeriodoConsegnaEsistente> {
+  const hasRangeConsegnaEsistente = Boolean(
+    periodoEsistente?.dataInizioConsegna &&
+    periodoEsistente?.dataFineConsegna
+  );
+  if (hasRangeConsegnaEsistente) return {};
+
+  const { dataInizio, dataFine } = estraiDateConsegna(oggettoFic);
+  return dataInizio && dataFine
+    ? {
+        dataInizioConsegna: dataInizio,
+        dataFineConsegna: dataFine
+      }
+    : {};
+}
+
 // Helper per recuperare valori di configurazione
 export async function getConfigValue(chiave: string): Promise<string | null> {
   try {
@@ -911,7 +935,7 @@ router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) =>
       
       // === SYNC DB ESTERNO (unica destinazione) ===
       let ordineIdEsterno: number | null = null;
-      let hasRangeConsegnaEsistente = false;
+      let ordineEsternoEsistente: typeof ordiniCondivisi.$inferSelect | null = null;
       
       // Verifica che abbiamo un cliente valido (richiesto da FK)
       if (!clienteLocale?.id) {
@@ -932,11 +956,7 @@ router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) =>
           .from(ordiniCondivisi)
           .where(eq(ordiniCondivisi.fattureInCloudId, ordineFIC.id));
         
-        const ordineEsternoEsistente = ordiniEsterni.length > 0 ? ordiniEsterni[0] : null;
-        hasRangeConsegnaEsistente = Boolean(
-          ordineEsternoEsistente?.dataInizioConsegna &&
-          ordineEsternoEsistente?.dataFineConsegna
-        );
+        ordineEsternoEsistente = ordiniEsterni.length > 0 ? ordiniEsterni[0] : null;
         
         // Normalizza lo stato da Fatture in Cloud
         let statoNormalizzato = ordineFIC.status || 'Aperto';
@@ -1115,14 +1135,10 @@ router.post('/orders/sync', requireAdmin, async (req: Request, res: Response) =>
 
             // Le date inserite manualmente nel gestionale sono prioritarie.
             // Una sincronizzazione FIC non deve cancellarle o sostituirle.
-            const rangeConsegnaDaSincronizzare = hasRangeConsegnaEsistente
-              ? {}
-              : dataInizio && dataFine
-                ? {
-                    dataInizioConsegna: dataInizio,
-                    dataFineConsegna: dataFine
-                  }
-                : {};
+            const rangeConsegnaDaSincronizzare = buildFicDeliveryRangeUpdate(
+              ordineEsternoEsistente,
+              oggetto
+            );
             
             await dbEsterno
               .update(ordiniCondivisi)
