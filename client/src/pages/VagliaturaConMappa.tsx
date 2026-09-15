@@ -268,6 +268,7 @@ export default function VagliaturaConMappa() {
             animalsPerKg: operation.animalsPerKg,
             date: operation.date,
             sizeId: operation.sizeId,
+            size: operation.size,
             operationId: operation.id
           };
         } else {
@@ -283,6 +284,7 @@ export default function VagliaturaConMappa() {
               animalsPerKg: operation.animalsPerKg,
               date: operation.date,
               sizeId: operation.sizeId,
+              size: operation.size,
               operationId: operation.id
             };
           }
@@ -325,8 +327,12 @@ export default function VagliaturaConMappa() {
       let size;
       
       if (lastOperation?.sizeId) {
-        // Se l'operazione ha un ID taglia, usiamo quello
-        size = sizesMap[lastOperation.sizeId] || sizes.find((s: any) => s.id === lastOperation.sizeId);
+        // Per la visualizzazione conserva la taglia registrata nell'operazione,
+        // anche quando non è più presente nel catalogo attivo corrente.
+        size =
+          sizesMap[lastOperation.sizeId] ||
+          lastOperation.size ||
+          basket.size;
       } else if (lastOperation?.animalsPerKg) {
         // Altrimenti proviamo a determinare la taglia dagli animali per kg
         size = findSizeByAnimalsPerKg(lastOperation.animalsPerKg);
