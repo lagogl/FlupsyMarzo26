@@ -1,4 +1,4 @@
-import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
+import { productionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import {
   hatcheryArrivals,
@@ -70,6 +70,7 @@ export interface SalesPlanningResult {
 interface MonthStep { monthIndex: number; year: number; month1Based: number; }
 
 export class SalesPlanningService {
+  private activeSizeOrder: string[] = [];
 
   private buildMonthSteps(startMonth0: number, startYear: number, count: number): MonthStep[] {
     const steps: MonthStep[] = [];
@@ -114,9 +115,9 @@ export class SalesPlanningService {
     return productionForecastService.mapAnimalsPerKgToSaleSize(this.apkOf(b));
   }
 
-  /** Indice taglia in SALE_SIZES (più alto = più piccolo / più giovane) */
+  /** Indice taglia nel catalogo attivo (più alto = più piccolo / più giovane). */
   private sizeRank(size: string): number {
-    return ProductionForecastService.SALE_SIZES.indexOf(size);
+    return this.activeSizeOrder.indexOf(size);
   }
 
   /** Vende parte (o tutto) di un basket, ritorna allocazione */
@@ -174,6 +175,11 @@ export class SalesPlanningService {
         productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders }))
       ),
     ]);
+    const activeSizeCandidates = await productionForecastService.getActiveSizeCandidates();
+    this.activeSizeOrder = activeSizeCandidates
+      .slice()
+      .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg)
+      .map(candidate => candidate.code);
 
     // Cash targets per (year, month)
     const cashByYearMonth: Record<string, number> = {};
@@ -222,8 +228,11 @@ export class SalesPlanningService {
     const useCustomMortality = opts.mortalityPercent !== undefined && opts.mortalityPercent !== null;
     const customMonthlyRate = useCustomMortality ? opts.mortalityPercent! / 100 : 0;
 
-    const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
-    const startApkHatchery = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
+    const tp300Threshold = activeSizeCandidates.find((candidate) => candidate.code === 'TP-300');
+    if (!tp300Threshold) {
+      throw new Error("TP-300 senza range attivo alla business date");
+    }
+    const startApkHatchery = tp300Threshold.maxAnimalsPerKg;
 
     const monthlyPlan: MonthlyPlan[] = [];
     const crossesYear = yearsNeeded.length > 1;

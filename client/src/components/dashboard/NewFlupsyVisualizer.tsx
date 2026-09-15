@@ -216,7 +216,7 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return growth < 2 && growth >= 0; // Less than 2% weight increase
   };
 
-  // Helper to check if basket is ready for harvest (large size only - TP-3000 or higher)
+  // Helper to check if basket is ready for harvest (largest active size)
   const isReadyForHarvest = (basket: any): boolean => {
     return hasLargeSize(basket);
   };
@@ -458,7 +458,24 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     return latestOp ? [latestOp] : [];
   };
   
-  // Helper function to check if a basket has a large size (TP-3000 or higher = sellable)
+  const getActiveSizeForAnimalsPerKg = (animalsPerKg: number | null | undefined): NewSize | null => {
+    if (animalsPerKg == null || !sizes?.length) return null;
+    return sizes.find(size => {
+      const min = Number(size.minAnimalsPerKg);
+      const max = Number(size.maxAnimalsPerKg);
+      return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+        animalsPerKg >= min && animalsPerKg <= max;
+    }) || null;
+  };
+
+  const isActiveSellableAnimalsPerKg = (animalsPerKg: number | null | undefined): boolean => {
+    const matched = getActiveSizeForAnimalsPerKg(animalsPerKg);
+    const activeMaxima = sizes?.map(size => Number(size.maxAnimalsPerKg)).filter(Number.isFinite) || [];
+    const largestAnimalsMax = activeMaxima.length ? Math.min(...activeMaxima) : null;
+    return Boolean(matched && largestAnimalsMax != null && matched.maxAnimalsPerKg <= largestAnimalsMax);
+  };
+
+  // Helper function to check if a basket has the largest active size
   // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per allineamento con expected-sizes
   const hasLargeSize = (basket: any): boolean => {
     if (!basket || (basket.state !== 'active' && basket.state !== 'occupied')) return false;
@@ -468,12 +485,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     const animalsPerKg = latestOperation?.measurementAnimalsPerKg || latestOperation?.animalsPerKg;
     if (!animalsPerKg) return false;
     
-    // SOGLIA VENDITA: TP-3000 = max 29000 animali/kg
-    // animalsPerKg <= 29000 significa taglia vendibile (animali grandi)
-    return animalsPerKg <= 29000;
+    return isActiveSellableAnimalsPerKg(animalsPerKg);
   };
 
-  // Helper: la cesta NON è registrata come pronta, ma una pesata ≤5gg implica taglia ≥ TP-3000
+  // Helper: la cesta NON è registrata come pronta, ma una pesata recente implica la taglia attiva più grande
   // Cerca la pesata più recente tra TUTTE le operazioni del cestello (non solo l'ultima),
   // così non si perde il caso in cui dopo la pesata sia stata registrata una nota o altra op.
   const isReadyByPeso = (basket: any): boolean => {
@@ -498,18 +513,18 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       }
     }
     if (!latestPeso) return false;
-    return latestPeso.animalsPerKg <= 29000;
+    return isActiveSellableAnimalsPerKg(latestPeso.animalsPerKg);
   };
 
   // Helper: la cesta NON è pronta né per registrazione né per peso recente,
-  // ma la proiezione SGR (basata sui giorni trascorsi dall'ultima misura) la stima ≥ TP-3000
+  // ma la proiezione SGR la stima nella taglia attiva più grande
   const isReadyBySgr = (basket: any): boolean => {
     if (!basket || (basket.state !== 'active' && basket.state !== 'occupied')) return false;
     if (hasLargeSize(basket)) return false;
     if (isReadyByPeso(basket)) return false;
     const exp = getExpectedSizeInfo(basket.id);
     if (!exp || !exp.expectedAnimalsPerKg) return false;
-    return exp.expectedAnimalsPerKg <= 29000;
+    return isActiveSellableAnimalsPerKg(exp.expectedAnimalsPerKg);
   };
 
   // Unione delle tre categorie: usata dal filtro "Pronte raccolta"
@@ -521,13 +536,12 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
   const getSizeCodeFromAnimalsPerKg = (animalsPerKg: number): string => {
     if (!sizes || !Array.isArray(sizes)) return 'N/D';
     
-    // Trova la taglia corrispondente in base al range min_animals_per_kg e max_animals_per_kg
+    // Trova la taglia corrispondente esclusivamente nel range attivo.
     const matchingSize = sizes.find((size: any) => {
-      // Se il numero di animali per kg rientra nel range di questa taglia
-      return (
-        (!size.minAnimalsPerKg || animalsPerKg >= size.minAnimalsPerKg) &&
-        (!size.maxAnimalsPerKg || animalsPerKg <= size.maxAnimalsPerKg)
-      );
+      const min = Number(size.minAnimalsPerKg);
+      const max = Number(size.maxAnimalsPerKg);
+      return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+        animalsPerKg >= min && animalsPerKg <= max;
     });
     
     // Se troviamo una taglia corrispondente, restituisci il suo codice
@@ -535,14 +549,10 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       return matchingSize.code;
     }
     
-    // Fallback se non troviamo una taglia corrispondente
-    return `TP-${Math.round(animalsPerKg/1000)*1000}`;
+    return 'N/D';
   };
 
-  // Helper function to get basket color class based on size
-  // LOGICA COLORI: Verde = vendibili (TP-3000+), Rosso = non vendibili (sotto TP-3000)
-  // Animali GRANDI = meno animali/kg = vendibili (VERDE)
-  // Animali PICCOLI = più animali/kg = non vendibili (ROSSO)
+  // Il colore è presentazionale e segue l'indice della taglia attiva.
   const getBasketColorClass = (basket: any) => {
     if (!basket) return 'bg-gray-100 border-dashed border-gray-300';
     
@@ -564,67 +574,19 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
       return 'bg-blue-50 border-blue-300';
     }
     
-    // SOGLIA VENDITA: TP-3000 = max 29000 animali/kg
-    // animalsPerKg <= 29000 = VERDE (vendibili, animali grandi)
-    // animalsPerKg > 29000 = ROSSO (non vendibili, animali piccoli)
-    
-    if (animalsPerKg <= 29000) {
-      // VERDE - Vendibili (TP-3000 e superiori = animali grandi)
-      // Intensità aumenta con animali più grandi (meno per kg)
-      if (animalsPerKg <= 1200) {
-        // TP-10000: 801-1200 - Verde più intenso
-        return 'bg-green-600 border-green-800 text-white';
-      } else if (animalsPerKg <= 1800) {
-        // TP-9000: 1201-1800
-        return 'bg-green-500 border-green-700 text-white';
-      } else if (animalsPerKg <= 2300) {
-        // TP-8000: 1801-2300
-        return 'bg-green-400 border-green-600';
-      } else if (animalsPerKg <= 3000) {
-        // TP-7000: 2301-3000
-        return 'bg-green-300 border-green-500';
-      } else if (animalsPerKg <= 6000) {
-        // TP-6000, TP-5500: 3001-6000
-        return 'bg-green-200 border-green-400';
-      } else if (animalsPerKg <= 9000) {
-        // TP-5000: 6001-9000
-        return 'bg-green-100 border-green-300';
-      } else if (animalsPerKg <= 15000) {
-        // TP-4500, TP-4000: 9001-15000
-        return 'bg-emerald-100 border-emerald-300';
-      } else if (animalsPerKg <= 20000) {
-        // TP-3500: 15001-20000
-        return 'bg-lime-100 border-lime-300';
-      } else {
-        // TP-3000: 20001-29000 - Verde più chiaro (soglia vendita)
-        return 'bg-lime-50 border-lime-200';
-      }
-    } else {
-      // ROSSO - Non vendibili (sotto TP-3000 = animali piccoli)
-      // Intensità aumenta con animali più piccoli (più per kg)
-      if (animalsPerKg <= 40000) {
-        // TP-2800: 29001-40000 - Rosso più chiaro
-        return 'bg-red-50 border-red-200';
-      } else if (animalsPerKg <= 97000) {
-        // TP-2500, TP-2000: 40001-97000
-        return 'bg-red-100 border-red-300';
-      } else if (animalsPerKg <= 190000) {
-        // TP-1900, TP-1800: 97001-190000
-        return 'bg-red-200 border-red-400';
-      } else if (animalsPerKg <= 350000) {
-        // TP-1500, TP-1260: 190001-350000
-        return 'bg-red-300 border-red-500';
-      } else if (animalsPerKg <= 880000) {
-        // TP-1140, TP-1000: 350001-880000
-        return 'bg-red-400 border-red-600';
-      } else if (animalsPerKg <= 1000000) {
-        // TP-800: 880001-1000000
-        return 'bg-red-500 border-red-700 text-white';
-      } else {
-        // TP-700 e inferiori: > 1M animali/kg - Rosso più intenso
-        return 'bg-red-600 border-red-800 text-white';
-      }
-    }
+    const matched = getActiveSizeForAnimalsPerKg(animalsPerKg);
+    if (!matched || !sizes?.length) return 'bg-gray-100 border-gray-300';
+    const sizeIndex = sizes.findIndex(size => size.id === matched.id);
+    const palette = [
+      'bg-green-100 border-green-300',
+      'bg-green-200 border-green-400',
+      'bg-emerald-100 border-emerald-300',
+      'bg-lime-100 border-lime-300',
+      'bg-red-100 border-red-300',
+      'bg-red-200 border-red-400',
+      'bg-red-300 border-red-500',
+    ];
+    return `${palette[Math.max(0, sizeIndex) % palette.length]} border-2`;
   };
 
   // Recupera il quality_class del ciclo corrente di una cesta
@@ -785,8 +747,8 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     // IMPORTANTE: usa measurementAnimalsPerKg (da misura/prima-attivazione) per taglia
     const measurementAnimalsPerKg = latestOperation?.measurementAnimalsPerKg || latestOperation?.animalsPerKg;
     
-    // Check if this basket has a sellable size (TP-3000+)
-    const isSellableSize = measurementAnimalsPerKg && measurementAnimalsPerKg <= 29000;
+    // Check if this basket has the largest active size.
+    const isSellableSize = isActiveSellableAnimalsPerKg(measurementAnimalsPerKg);
     
     // Check if basket has expected size change
     const expectedSizeInfo = getExpectedSizeInfo(basket.id);
@@ -807,9 +769,9 @@ export default function NewFlupsyVisualizer({ selectedFlupsyIds = [] }: NewFlups
     }
 
     // "Pronte raccolta" mode: 3 categorie con stili distinti
-    // Reale (registrata TP-3000+) → aureola dorata pulsante
-    // Da peso (peso ≤5gg implica TP-3000+) → bordo ambra
-    // Da SGR (proiezione SGR TP-3000+) → bordo blu
+    // Reale (taglia attiva registrata) → aureola dorata pulsante
+    // Da peso (peso recente) → bordo ambra
+    // Da SGR (proiezione di crescita) → bordo blu
     const harvestRealReady = harvestHighlight && hasLargeSize(basket);
     const harvestPesoReady = harvestHighlight && !harvestRealReady && isReadyByPeso(basket);
     const harvestSgrReady = harvestHighlight && !harvestRealReady && !harvestPesoReady && isReadyBySgr(basket);

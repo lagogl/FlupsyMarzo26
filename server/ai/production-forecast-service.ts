@@ -3,6 +3,11 @@ import { dbEsterno, isDbEsternoAvailable } from "../db-esterno";
 import { ordiniCondivisi, ordiniDettagli } from "../schema-esterno";
 import { productionTargets, sizes, operations, baskets, cycles, sgrPerTaglia } from "@shared/schema";
 import { eq, and, gte, lte, desc, sql, isNull, not } from "drizzle-orm";
+import {
+  findSizeInRanges,
+  getSizeRangeCandidates,
+  toBusinessIsoDate,
+} from "../utils/size-determination";
 
 interface SgrByMonthSize {
   [key: string]: number; // key = "month_sizeId" e.g., "gennaio_3"
@@ -94,6 +99,19 @@ const MONTH_NAMES_LOWER = [
 export class ProductionForecastService {
   
   private sgrFallback: Record<string, number> = {};
+  private activeSizeCandidates: Awaited<ReturnType<typeof getSizeRangeCandidates>> = [];
+
+  private async refreshActiveSizeCandidates() {
+    this.activeSizeCandidates = await getSizeRangeCandidates(new Date());
+    if (this.activeSizeCandidates.length === 0) {
+      throw new Error("Nessuna taglia con range attivo alla business date");
+    }
+    return this.activeSizeCandidates;
+  }
+
+  async getActiveSizeCandidates() {
+    return this.refreshActiveSizeCandidates();
+  }
 
   private formatNumber(num: number): string {
     if (Math.abs(num) >= 1000000) {
@@ -135,17 +153,18 @@ export class ProductionForecastService {
 
   getSgrForMonthAndSize(sgrLookup: SgrByMonthSize, monthIndex: number, fromCategory: string, toCategory: string): number {
     const monthName = MONTH_NAMES_LOWER[monthIndex];
-    
-    let sizeId: number;
-    if (fromCategory === 'T1' && toCategory === 'T3') {
-      sizeId = 3;
-    } else if (fromCategory === 'T3' && toCategory === 'T10') {
-      sizeId = 21;
-    } else {
-      sizeId = 3;
+
+    // Scegli una taglia rappresentativa dal catalogo corrente, non da un
+    // codice/ID statico che potrebbe non avere più una versione attiva.
+    const representativeAnimalsPerKg = fromCategory === 'T3' && toCategory === 'T10'
+      ? 5000
+      : 18000;
+    const candidate = findSizeInRanges(representativeAnimalsPerKg, this.activeSizeCandidates);
+    if (!candidate) {
+      throw new Error(`Nessun range attivo per la fase ${fromCategory}->${toCategory}`);
     }
     
-    return this.getSgrWithFallback(sgrLookup, monthName, sizeId);
+    return this.getSgrWithFallback(sgrLookup, monthName, candidate.sizeId);
   }
 
   calculateGrowthDaysBackward(
@@ -221,10 +240,14 @@ export class ProductionForecastService {
   }
 
   async getSgrRates(): Promise<SgrRate[]> {
+    const businessDate = toBusinessIsoDate(new Date());
     const sgrData = await db.execute(sql`
       SELECT spt.month, spt.size_id, spt.calculated_sgr, s.name as size_name
       FROM sgr_per_taglia spt
       JOIN sizes s ON s.id = spt.size_id
+      JOIN size_range_versions srv ON srv.size_id = s.id
+        AND srv.valid_from <= ${businessDate}::date
+        AND (srv.valid_to IS NULL OR srv.valid_to >= ${businessDate}::date)
       ORDER BY spt.size_id, spt.month
     `);
     
@@ -237,6 +260,7 @@ export class ProductionForecastService {
   }
 
   async getCurrentInventoryBySize(): Promise<InventoryBySize[]> {
+    const activeCandidates = await this.refreshActiveSizeCandidates();
     const inventory = await db.execute(sql`
       WITH latest_ops AS (
         SELECT DISTINCT ON (o.basket_id) 
@@ -244,63 +268,94 @@ export class ProductionForecastService {
           o.animals_per_kg,
           o.animal_count,
           o.size_id,
-          s.name as size_name,
-          s.min_animals_per_kg,
-          s.max_animals_per_kg
+          s.code as size_code,
+          s.name as size_name
         FROM operations o
         JOIN baskets b ON b.id = o.basket_id
-        JOIN sizes s ON s.id = o.size_id
+        LEFT JOIN sizes s ON s.id = o.size_id
         WHERE b.state = 'active'
           AND o.type IN ('misura', 'peso', 'prima-attivazione')
           AND o.animal_count > 0
         ORDER BY o.basket_id, o.date DESC, o.id DESC
       )
-      SELECT 
-        size_name as size_category,
-        size_name,
-        SUM(animal_count) as total_animals,
-        MIN(min_animals_per_kg) || '-' || MAX(max_animals_per_kg) as animals_per_kg_range
+      SELECT *
       FROM latest_ops
-      GROUP BY size_name
-      ORDER BY MIN(min_animals_per_kg) DESC
     `);
 
-    return (inventory.rows as any[]).map(row => ({
-      sizeCategory: row.size_category,
-      sizeName: row.size_name,
-      totalAnimals: parseInt(row.total_animals) || 0,
-      animalsPerKgRange: row.animals_per_kg_range
-    }));
+    type InventoryBucket = {
+      sizeCategory: string;
+      sizeName: string;
+      totalAnimals: number;
+      minAnimalsPerKg: number;
+      maxAnimalsPerKg: number;
+    };
+    const buckets = new Map<string, InventoryBucket>();
+    for (const row of inventory.rows as any[]) {
+      const historicalName = row.size_name || row.size_code || `SIZE-${row.size_id ?? "unknown"}`;
+      const animalsPerKg = Number(row.animals_per_kg);
+      const validAnimalsPerKg = Number.isFinite(animalsPerKg) && animalsPerKg > 0
+        ? animalsPerKg
+        : null;
+      const activeMatch = validAnimalsPerKg === null
+        ? null
+        : findSizeInRanges(validAnimalsPerKg, activeCandidates);
+      const sizeCategory = activeMatch?.code || historicalName;
+      // Keep historical size identity in sizeName while exposing the current
+      // category separately when the saved sizeId is no longer active.
+      const key = `${historicalName}|${sizeCategory}`;
+      const bucket = buckets.get(key) || {
+        sizeCategory,
+        sizeName: historicalName,
+        totalAnimals: 0,
+        minAnimalsPerKg: activeMatch?.minAnimalsPerKg ?? validAnimalsPerKg ?? 0,
+        maxAnimalsPerKg: activeMatch?.maxAnimalsPerKg ?? validAnimalsPerKg ?? 0,
+      };
+      bucket.totalAnimals += Number(row.animal_count) || 0;
+      buckets.set(key, bucket);
+    }
+
+    return [...buckets.values()]
+      .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg)
+      .map(bucket => ({
+        sizeCategory: bucket.sizeCategory,
+        sizeName: bucket.sizeName,
+        totalAnimals: bucket.totalAnimals,
+        animalsPerKgRange: `${bucket.minAnimalsPerKg}-${bucket.maxAnimalsPerKg}`,
+      }));
   }
 
   async getTotalInventoryByCategory(): Promise<Record<string, number>> {
+    const activeCandidates = await this.refreshActiveSizeCandidates();
     const result = await db.execute(sql`
       WITH latest_ops AS (
         SELECT DISTINCT ON (o.basket_id) 
           o.basket_id,
           o.animal_count,
+          o.animals_per_kg,
+          o.size_id,
+          s.code as size_code,
           s.name as size_name
         FROM operations o
         JOIN baskets b ON b.id = o.basket_id
-        JOIN sizes s ON s.id = o.size_id
+        LEFT JOIN sizes s ON s.id = o.size_id
         WHERE b.state = 'active'
           AND o.type IN ('misura', 'peso', 'prima-attivazione')
           AND o.animal_count > 0
         ORDER BY o.basket_id, o.date DESC, o.id DESC
       )
-      SELECT 
-        size_name as size_category,
-        SUM(animal_count) as total_animals
+      SELECT *
       FROM latest_ops
-      GROUP BY size_name
     `);
 
     const inventory: Record<string, number> = {};
-    for (const size of ProductionForecastService.SALE_SIZES) {
+    for (const size of activeCandidates.map((candidate) => candidate.code)) {
       inventory[size] = 0;
     }
     for (const row of result.rows as any[]) {
-      inventory[row.size_category] = parseInt(row.total_animals) || 0;
+      const activeMatch = findSizeInRanges(Number(row.animals_per_kg), activeCandidates);
+      const historicalName = row.size_name || row.size_code || `SIZE-${row.size_id ?? "unknown"}`;
+      const category = activeMatch?.code || historicalName;
+      inventory[category] = (inventory[category] || 0) + (Number(row.animal_count) || 0);
     }
     return inventory;
   }
@@ -323,41 +378,15 @@ export class ProductionForecastService {
 
   getSgrForAnimalsPerKg(sgrLookup: SgrByMonthSize, monthIndex: number, animalsPerKg: number): number {
     const monthName = MONTH_NAMES_LOWER[monthIndex];
-    let sizeId: number;
-    if (animalsPerKg > 70000000) sizeId = 2;
-    else if (animalsPerKg > 30000000) sizeId = 3;
-    else if (animalsPerKg > 20000000) sizeId = 4;
-    else if (animalsPerKg > 15000000) sizeId = 4;
-    else if (animalsPerKg > 8000000) sizeId = 5;
-    else if (animalsPerKg > 2000000) sizeId = 1;
-    else if (animalsPerKg > 1900000) sizeId = 6;
-    else if (animalsPerKg > 1000000) sizeId = 7;
-    else if (animalsPerKg > 880000) sizeId = 8;
-    else if (animalsPerKg > 600000) sizeId = 9;
-    else if (animalsPerKg > 350000) sizeId = 10;
-    else if (animalsPerKg > 300000) sizeId = 11;
-    else if (animalsPerKg > 190000) sizeId = 12;
-    else if (animalsPerKg > 120000) sizeId = 13;
-    else if (animalsPerKg > 97000) sizeId = 14;
-    else if (animalsPerKg > 70000) sizeId = 15;
-    else if (animalsPerKg > 40000) sizeId = 16;
-    else if (animalsPerKg > 29000) sizeId = 28;
-    else if (animalsPerKg > 20000) sizeId = 17;
-    else if (animalsPerKg > 15000) sizeId = 18;
-    else if (animalsPerKg > 13000) sizeId = 19;
-    else if (animalsPerKg > 9000) sizeId = 20;
-    else if (animalsPerKg > 6000) sizeId = 21;
-    else if (animalsPerKg > 3900) sizeId = 22;
-    else if (animalsPerKg > 3000) sizeId = 23;
-    else if (animalsPerKg > 2300) sizeId = 24;
-    else if (animalsPerKg > 1800) sizeId = 25;
-    else if (animalsPerKg > 1200) sizeId = 26;
-    else sizeId = 27;
-    
-    return this.getSgrWithFallback(sgrLookup, monthName, sizeId);
+    const match = findSizeInRanges(animalsPerKg, this.activeSizeCandidates);
+    if (!match) {
+      throw new Error(`Nessuna taglia attiva per ${animalsPerKg} animali/kg`);
+    }
+    return this.getSgrWithFallback(sgrLookup, monthName, match.sizeId);
   }
 
   async getBasketLevelInventory(): Promise<Array<{basketId: number, animalsPerKg: number, animalCount: number}>> {
+    await this.refreshActiveSizeCandidates();
     const result = await db.execute(sql`
       SELECT DISTINCT ON (o.basket_id)
         o.basket_id,
@@ -436,7 +465,7 @@ export class ProductionForecastService {
 
   aggregateBySaleSize(baskets: Array<{basketId: number, animalsPerKg: number, animalCount: number}>): Record<string, number> {
     const result: Record<string, number> = {};
-    for (const size of ProductionForecastService.SALE_SIZES) {
+    for (const size of this.activeSizeCandidates.map((candidate) => candidate.code)) {
       result[size] = 0;
     }
     for (const basket of baskets) {
@@ -467,65 +496,26 @@ export class ProductionForecastService {
     }).filter(b => b.animalCount > 0);
   }
 
-  static SALE_SIZES = [
-    'TP-10000', 'TP-9000', 'TP-8000', 'TP-7000', 'TP-6000', 'TP-5500',
-    'TP-5000', 'TP-4500', 'TP-4000', 'TP-3500', 'TP-3000', 'TP-2800',
-    'TP-2500', 'TP-2000', 'TP-1900', 'TP-1800', 'TP-1500', 'TP-1260',
-    'TP-1140', 'TP-1000', 'TP-800', 'TP-700', 'TP-600', 'TP-500',
-    'TP-450', 'TP-350', 'TP-300', 'TP-250', 'TP-180'
-  ];
-
-  static SALE_SIZE_THRESHOLDS = [
-    { size: 'TP-10000', maxAnimalsPerKg: 1200 },
-    { size: 'TP-9000', maxAnimalsPerKg: 1800 },
-    { size: 'TP-8000', maxAnimalsPerKg: 2300 },
-    { size: 'TP-7000', maxAnimalsPerKg: 3000 },
-    { size: 'TP-6000', maxAnimalsPerKg: 3900 },
-    { size: 'TP-5500', maxAnimalsPerKg: 6000 },
-    { size: 'TP-5000', maxAnimalsPerKg: 9000 },
-    { size: 'TP-4500', maxAnimalsPerKg: 13000 },
-    { size: 'TP-4000', maxAnimalsPerKg: 15000 },
-    { size: 'TP-3500', maxAnimalsPerKg: 20000 },
-    { size: 'TP-3000', maxAnimalsPerKg: 29000 },
-    { size: 'TP-2800', maxAnimalsPerKg: 40000 },
-    { size: 'TP-2500', maxAnimalsPerKg: 70000 },
-    { size: 'TP-2000', maxAnimalsPerKg: 97000 },
-    { size: 'TP-1900', maxAnimalsPerKg: 120000 },
-    { size: 'TP-1800', maxAnimalsPerKg: 190000 },
-    { size: 'TP-1500', maxAnimalsPerKg: 300000 },
-    { size: 'TP-1260', maxAnimalsPerKg: 350000 },
-    { size: 'TP-1140', maxAnimalsPerKg: 600000 },
-    { size: 'TP-1000', maxAnimalsPerKg: 880000 },
-    { size: 'TP-800', maxAnimalsPerKg: 1000000 },
-    { size: 'TP-700', maxAnimalsPerKg: 1900000 },
-    { size: 'TP-600', maxAnimalsPerKg: 2000000 },
-    { size: 'TP-500', maxAnimalsPerKg: 8000000 },
-    { size: 'TP-450', maxAnimalsPerKg: 15000000 },
-    { size: 'TP-350', maxAnimalsPerKg: 20000000 },
-    { size: 'TP-300', maxAnimalsPerKg: 30000000 },
-    { size: 'TP-250', maxAnimalsPerKg: 70000000 },
-    { size: 'TP-180', maxAnimalsPerKg: Infinity },
-  ];
-
   mapAnimalsPerKgToSaleSize(animalsPerKg: number): string {
-    for (const t of ProductionForecastService.SALE_SIZE_THRESHOLDS) {
-      if (animalsPerKg <= t.maxAnimalsPerKg) return t.size;
+    const match = findSizeInRanges(animalsPerKg, this.activeSizeCandidates);
+    if (!match) {
+      throw new Error(`Nessuna taglia attiva per ${animalsPerKg} animali/kg`);
     }
-    return 'TP-1000';
+    return match.code;
   }
 
   mapOrderSizeToSaleSize(tagliaCode: string): string | null {
     if (!tagliaCode) return null;
     const normalized = tagliaCode.toUpperCase().trim().replace(/\s+/g, '').replace(/\./g, '').replace(/,/g, '');
-    if (ProductionForecastService.SALE_SIZES.includes(normalized)) return normalized;
+    if (this.activeSizeCandidates.some((candidate) => candidate.code === normalized)) return normalized;
     if (!normalized.startsWith('TP-') && normalized.startsWith('TP')) {
       const withDash = 'TP-' + normalized.substring(2);
-      if (ProductionForecastService.SALE_SIZES.includes(withDash)) return withDash;
+      if (this.activeSizeCandidates.some((candidate) => candidate.code === withDash)) return withDash;
     }
     const num = parseInt(tagliaCode.replace(/\D/g, '')) || 0;
     if (num > 0) {
       const tpName = `TP-${num}`;
-      if (ProductionForecastService.SALE_SIZES.includes(tpName)) return tpName;
+      if (this.activeSizeCandidates.some((candidate) => candidate.code === tpName)) return tpName;
     }
     return null;
   }
@@ -674,11 +664,13 @@ export class ProductionForecastService {
 
   // Recupera ordini aggregati per mese e taglia specifica dall'anno specificato
   async getOrdersByMonthAndSize(year: number): Promise<Record<string, Record<string, number>>> {
+    await this.refreshActiveSizeCandidates();
+    const activeSaleSizes = this.activeSizeCandidates.map((candidate) => candidate.code);
     // Struttura: { "1": { "TP-2000": 1000000, "TP-3000": 500000, ... }, "2": {...} }
     const result: Record<string, Record<string, number>> = {};
     for (let m = 1; m <= 12; m++) {
       result[m.toString()] = {};
-      for (const size of ProductionForecastService.SALE_SIZES) {
+      for (const size of activeSaleSizes) {
         result[m.toString()][size] = 0;
       }
     }
@@ -890,6 +882,7 @@ export class ProductionForecastService {
       this.getOrdersByMonthAndSize(year),
       this.getBasketLevelInventory()
     ]);
+    const activeSaleSizes = this.activeSizeCandidates.map((candidate) => candidate.code);
     
     let basketInventoryMutable = [...basketInventory];
     
@@ -901,9 +894,13 @@ export class ProductionForecastService {
     
     let stockBySaleSize = this.aggregateBySaleSize(basketInventoryMutable);
 
-    const T3_SIZES = ['TP-2000', 'TP-2500', 'TP-2800', 'TP-3000', 'TP-3500'];
-    const T10_SIZES = ['TP-4000', 'TP-4500', 'TP-5000', 'TP-5500', 'TP-6000', 'TP-7000', 'TP-8000', 'TP-9000', 'TP-10000'];
-    const T1_SIZES = ProductionForecastService.SALE_SIZES.filter(s => !T3_SIZES.includes(s) && !T10_SIZES.includes(s));
+    // Le categorie sono whitelist di business, ma il catalogo operativo è
+    // sempre l'intersezione con i range attivi alla data corrente.
+    const T3_CODES = new Set(['TP-2000', 'TP-2500', 'TP-3000', 'TP-3500']);
+    const T10_CODES = new Set(['TP-4000', 'TP-4500', 'TP-5000', 'TP-6000', 'TP-7000', 'TP-8000', 'TP-9000', 'TP-10000']);
+    const T3_SIZES = activeSaleSizes.filter(size => T3_CODES.has(size));
+    const T10_SIZES = activeSaleSizes.filter(size => T10_CODES.has(size));
+    const T1_SIZES = activeSaleSizes.filter(s => !T3_CODES.has(s) && !T10_CODES.has(s));
 
     const mapBudgetToSaleSize = (category: string): string[] => {
       if (category === 'T3') return T3_SIZES;
@@ -939,7 +936,7 @@ export class ProductionForecastService {
       const monthTargets = targets.filter(t => t.month === month);
       
       const saleSizesToProcess = new Set<string>();
-      for (const saleSize of ProductionForecastService.SALE_SIZES) {
+      for (const saleSize of activeSaleSizes) {
         if ((monthOrders[saleSize] || 0) > 0) saleSizesToProcess.add(saleSize);
         if ((stockBySaleSize[saleSize] || 0) > 0 && !isPastMonth) saleSizesToProcess.add(saleSize);
       }

@@ -24,3 +24,31 @@ test("validTo remains inclusive through the end of the Italian day", () => {
   const beforeItalianMidnight = new Date("2026-09-09T21:59:59.999Z");
   assert.equal(findProjectedSize(1_000_000 / 150, beforeItalianMidnight, versions)?.sizeId, 1);
 });
+
+test("sizes without an active version are never eligible", () => {
+  const inactiveOnly = [
+    {
+      sizeId: 99,
+      code: "INACTIVE",
+      minAnimalsPerKg: 100,
+      maxAnimalsPerKg: 200,
+      validFrom: "2025-01-01",
+      validTo: "2026-09-09",
+    },
+  ];
+  assert.equal(
+    findProjectedSize(1_000_000 / 150, new Date("2026-09-10T12:00:00Z"), inactiveOnly),
+    null,
+  );
+});
+
+test("new version boundaries are inclusive", () => {
+  assert.equal(
+    findProjectedSize(1_000_000 / 100, new Date("2026-09-10T12:00:00Z"), versions)?.sizeId,
+    2,
+  );
+  assert.equal(
+    findProjectedSize(1_000_000 / 200, new Date("2026-09-10T12:00:00Z"), versions)?.sizeId,
+    2,
+  );
+});

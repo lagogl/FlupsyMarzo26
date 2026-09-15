@@ -7,7 +7,7 @@
  * - vincolo cassa minima (con slack penalizzato)
  * - obiettivo: max ricavo - λ_ordini × shortfall - λ_cassa × cash_gap
  */
-import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
+import { productionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import {
   hatcheryArrivals,
@@ -56,6 +56,7 @@ interface MilpResult {
 }
 
 export class SalesPlanningMilpService {
+  private activeSizeOrder: string[] = [];
 
   private buildMonthSteps(startMonth0: number, startYear: number, count: number): MonthStep[] {
     const steps: MonthStep[] = [];
@@ -203,6 +204,11 @@ export class SalesPlanningMilpService {
         productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders }))
       ),
     ]);
+    const activeSizeCandidates = await productionForecastService.getActiveSizeCandidates();
+    this.activeSizeOrder = activeSizeCandidates
+      .slice()
+      .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg)
+      .map(candidate => candidate.code);
 
     // Hatchery
     const hatcheryRows = yearsNeeded.length > 0
@@ -226,8 +232,11 @@ export class SalesPlanningMilpService {
     }
 
     // Costruisci lista cestelli iniziali + arrivi schiuditoio futuri come "cestelli virtuali"
-    const tp300Threshold = ProductionForecastService.SALE_SIZE_THRESHOLDS.find(t => t.size === 'TP-300');
-    const startApkHatchery = tp300Threshold ? tp300Threshold.maxAnimalsPerKg : 30000000;
+    const tp300Threshold = activeSizeCandidates.find((candidate) => candidate.code === 'TP-300');
+    if (!tp300Threshold) {
+      throw new Error("TP-300 senza range attivo alla business date");
+    }
+    const startApkHatchery = tp300Threshold.maxAnimalsPerKg;
 
     const initialBaskets: Array<{ basketId: number; weightMg: number; animalCount: number; isHatchery: boolean; arrivalMonthIndex: number; }> = [];
     for (const b of basketInventory) {
@@ -541,10 +550,10 @@ export class SalesPlanningMilpService {
   }
 
   private sizeIsAtLeast(actual: string, required: string): boolean {
-    const idxA = ProductionForecastService.SALE_SIZES.indexOf(actual);
-    const idxR = ProductionForecastService.SALE_SIZES.indexOf(required);
+    const idxA = this.activeSizeOrder.indexOf(actual);
+    const idxR = this.activeSizeOrder.indexOf(required);
     if (idxA < 0 || idxR < 0) return false;
-    // SALE_SIZES è ordinato dal più grande (TP-10000, idx 0) al più piccolo (TP-180, idx N).
+    // La lista è ordinata dal più grande al più piccolo.
     // "at least" significa stesso o più grande → indice <= indice richiesto.
     return idxA <= idxR;
   }

@@ -122,8 +122,6 @@ const getVarianceColor = (variance: number) => {
   return 'text-red-600';
 };
 
-const SALE_SIZES_DEFAULT = ['TP-2000', 'TP-2500', 'TP-2800', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-4500', 'TP-5000'] as const;
-
 export default function AnalisiScostamenti() {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -140,14 +138,7 @@ export default function AnalisiScostamenti() {
   const [appliedMortalityT10, setAppliedMortalityT10] = useState<number>(2);
 
   const [mortalityBySize, setMortalityBySize] = useState<Record<string, number>>({
-    'TP-2000': 8,
-    'TP-2500': 10,
-    'TP-2800': 11,
-    'TP-3000': 12,
-    'TP-3500': 15,
-    'TP-4000': 18,
-    'TP-4500': 19,
-    'TP-5000': 20
+    // Valori iniziali solo per le taglie restituite dall'API.
   });
 
   // Query per caricare le aspettative di mortalità dal database
@@ -383,16 +374,16 @@ export default function AnalisiScostamenti() {
         <CardHeader className="py-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
-            Mortalità Attesa (%) - Da TP-1000 a Taglia Vendita
+             Mortalità Attesa (%) - Dalla semina alla Taglia Vendita
           </CardTitle>
           <CardDescription className="text-xs">
-            Imposta la mortalità totale attesa dalla semina (TP-1000) fino a ciascuna taglia di vendita. Il sistema distribuirà automaticamente questa mortalità settimanalmente.
+             Imposta la mortalità totale attesa dalla semina fino a ciascuna taglia di vendita. Il sistema distribuirà automaticamente questa mortalità settimanalmente.
           </CardDescription>
         </CardHeader>
         <CardContent className="py-2">
           <div className="flex flex-wrap items-center gap-4">
             {(() => {
-              // Usa taglie dinamiche dagli ordini, fallback a SALE_SIZES
+               // Usa esclusivamente le taglie presenti nei dati attivi restituiti dall'API.
               const dynamicSizes = data?.ordersAbsoluteBySize 
                 ? Object.keys(data.ordersAbsoluteBySize)
                     .filter(s => (data.ordersAbsoluteBySize?.[s] || 0) > 0)
@@ -401,10 +392,10 @@ export default function AnalisiScostamenti() {
                       const numB = parseInt(b.replace(/\D/g, '')) || 0;
                       return numA - numB;
                     })
-                : [...SALE_SIZES_DEFAULT];
+                 : [];
               
               return dynamicSizes.map(size => {
-                const isT3 = size.includes('2000') || size.includes('3000') || size.includes('3500');
+                const isT3 = dynamicSizes.indexOf(size) % 2 === 0;
                 return (
                   <div key={size} className="flex items-center gap-1.5">
                     <Label 

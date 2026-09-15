@@ -94,6 +94,13 @@ interface EditableRow extends OrdineCondiviso {
   editedQuantita: string;
 }
 
+interface ActiveSize {
+  id: number;
+  code: string;
+  name: string;
+  color?: string | null;
+}
+
 type SortField = 'data' | 'dataConsegna' | 'cliente' | 'quantita' | 'taglia' | 'stato' | 'sync' | 'numero';
 type SortDirection = 'asc' | 'desc' | null;
 
@@ -136,6 +143,10 @@ export default function OrdiniCondivisi() {
   const { data: consegneResponse } = useQuery<{ success: boolean; consegne: Consegna[]; count: number }>({
     queryKey: ['/api/ordini-condivisi/consegne'],
     enabled: true
+  });
+
+  const { data: activeSizes = [] } = useQuery<ActiveSize[]>({
+    queryKey: ['/api/sizes'],
   });
 
   const ordini = ordiniResponse?.ordini || [];
@@ -217,14 +228,17 @@ export default function OrdiniCondivisi() {
 
   // Mappa colori per taglie (dal più chiaro al più scuro)
   const getTagliaColor = (taglia: string): { bg: string; border: string; text: string } => {
-    const colors: Record<string, { bg: string; border: string; text: string }> = {
-      'TP-3000': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' },
-      'TP-5000': { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-900' },
-      'TP-7000': { bg: 'bg-blue-200', border: 'border-blue-400', text: 'text-blue-900' },
-      'TP-9000': { bg: 'bg-blue-300', border: 'border-blue-500', text: 'text-blue-950' },
-      'TP-10000': { bg: 'bg-blue-400', border: 'border-blue-600', text: 'text-blue-950' },
-    };
-    return colors[taglia] || { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-900' };
+    const palette = [
+      { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' },
+      { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-900' },
+      { bg: 'bg-blue-200', border: 'border-blue-400', text: 'text-blue-900' },
+      { bg: 'bg-blue-300', border: 'border-blue-500', text: 'text-blue-950' },
+      { bg: 'bg-blue-400', border: 'border-blue-600', text: 'text-blue-950' },
+    ];
+    const activeIndex = activeSizes.findIndex(size => size.code === taglia);
+    return activeIndex >= 0
+      ? palette[activeIndex % palette.length]
+      : { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-900' };
   };
 
   // Filtra e ordina
@@ -293,16 +307,6 @@ export default function OrdiniCondivisi() {
     return acc;
   }, {});
   
-  // Raggruppamento in categorie T3 e T10
-  const totaleT3 = Object.entries(totaliTagliaFiltrati)
-    .filter(([taglia]) => ['TP-2000', 'TP-3000', 'TP-3500'].includes(taglia))
-    .reduce((sum, [, qty]) => sum + qty, 0);
-  const totaleT10 = Object.entries(totaliTagliaFiltrati)
-    .filter(([taglia]) => ['TP-4000', 'TP-5000'].includes(taglia))
-    .reduce((sum, [, qty]) => sum + qty, 0);
-  const totaleAltro = Object.entries(totaliTagliaFiltrati)
-    .filter(([taglia]) => !['TP-2000', 'TP-3000', 'TP-3500', 'TP-4000', 'TP-5000'].includes(taglia))
-    .reduce((sum, [, qty]) => sum + qty, 0);
   const totaleFiltrati = ordiniFiltrati.reduce((sum, o) => sum + (o.quantitaTotale || 0), 0);
 
   // Statistiche basate su TUTTI gli ordini (non filtrati)
@@ -1253,33 +1257,17 @@ export default function OrdiniCondivisi() {
                   <span className="text-blue-900 font-bold">{(totaleFiltrati / 1_000_000).toFixed(1)}M</span>
                 </div>
                 <div className="border-l pl-2 flex items-center gap-1.5">
-                  {['TP-2000', 'TP-3000', 'TP-3500'].map(taglia => {
+                  {taglie.map(taglia => {
                     const qty = totaliTagliaFiltrati[taglia] || 0;
                     if (qty === 0) return null;
                     return (
-                      <div key={taglia} className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs">
-                        <span className="text-green-700 font-medium">{taglia}:</span>
-                        <span className="text-green-900 font-semibold">{(qty / 1_000_000).toFixed(1)}M</span>
-                      </div>
-                    );
-                  })}
-                  {['TP-4000', 'TP-5000'].map(taglia => {
-                    const qty = totaliTagliaFiltrati[taglia] || 0;
-                    if (qty === 0) return null;
-                    return (
-                      <div key={taglia} className="flex items-center gap-1 px-2 py-1 bg-purple-50 border border-purple-200 rounded text-xs">
-                        <span className="text-purple-700 font-medium">{taglia}:</span>
-                        <span className="text-purple-900 font-semibold">{(qty / 1_000_000).toFixed(1)}M</span>
+                      <div key={taglia} className="flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
+                        <span className="text-blue-700 font-medium">{taglia}:</span>
+                        <span className="text-blue-900 font-semibold">{(qty / 1_000_000).toFixed(1)}M</span>
                       </div>
                     );
                   })}
                 </div>
-                {totaleAltro > 0 && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-md">
-                    <span className="text-gray-700 text-xs font-medium">Altro:</span>
-                    <span className="text-gray-900 font-semibold text-xs">{(totaleAltro / 1_000_000).toFixed(1)}M</span>
-                  </div>
-                )}
               </div>
             </div>
             <Button

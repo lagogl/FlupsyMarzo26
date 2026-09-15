@@ -86,6 +86,9 @@ export default function FlupsyVisualizer() {
   const { data: operations } = useQuery<Operation[]>({
     queryKey: ['/api/operations'],
   });
+  const { data: activeSizes = [] } = useQuery<any[]>({
+    queryKey: ['/api/sizes'],
+  });
   
   // Fetch cycles
   const { data: cyclesData } = useQuery<{ cycles: Cycle[] } | Cycle[]>({
@@ -146,7 +149,7 @@ export default function FlupsyVisualizer() {
     return operations.filter(op => op.basketId === basketId);
   };
   
-  // Helper function to check if a basket has a large size (TP-3000 or higher)
+  // Helper function to check if a basket matches the largest active size
   const hasLargeSize = (basket: Basket | undefined): boolean => {
     if (!basket || basket.state !== 'active') return false;
     
@@ -158,9 +161,14 @@ export default function FlupsyVisualizer() {
     const latestOperation = sortedOperations.length > 0 ? sortedOperations[0] : null;
     if (!latestOperation?.animalsPerKg) return false;
     
-    // Determina se è una taglia grande basandosi sul numero di animali per kg
-    // La taglia TP-3000 o superiore ha animalsPerKg <= 32000
-    return latestOperation.animalsPerKg <= 32000;
+    const matched = activeSizes.find(size => {
+      const min = Number(size.minAnimalsPerKg);
+      const max = Number(size.maxAnimalsPerKg);
+      return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+        latestOperation.animalsPerKg! >= min && latestOperation.animalsPerKg! <= max;
+    });
+    const maxValues = activeSizes.map(size => Number(size.maxAnimalsPerKg)).filter(Number.isFinite);
+    return Boolean(matched && maxValues.length && matched.maxAnimalsPerKg <= Math.min(...maxValues));
   };
   
   // Helper function per ottenere il numero di animali per kg dell'ultima operazione
@@ -223,7 +231,7 @@ export default function FlupsyVisualizer() {
     const averageWeight = latestOperation?.animalsPerKg ? 1000000 / latestOperation.animalsPerKg : null;
     
     // Determine target size based on weight
-    const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight) : null;
+    const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight, activeSizes) : null;
     
     // If we have a target size, use its color
     if (targetSize) {
@@ -253,7 +261,7 @@ export default function FlupsyVisualizer() {
     const averageWeight = latestOperation?.animalsPerKg ? Math.round(1000000 / latestOperation.animalsPerKg) : null;
     
     // Determine target size based on weight
-    const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight) : null;
+    const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight, activeSizes) : null;
     
     // Ottieni i dati di mortalità
     const hasMortalityData = latestOperation?.deadCount !== null && latestOperation?.deadCount !== undefined;

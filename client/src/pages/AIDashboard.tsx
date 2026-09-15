@@ -97,6 +97,9 @@ export default function AIDashboard() {
   const { data: flupsys } = useQuery({
     queryKey: ['/api/flupsys']
   });
+  const { data: activeSizes = [] } = useQuery<Array<{ id: number; code: string }>>({
+    queryKey: ['/api/sizes'],
+  });
 
   // Mutation per analisi predittiva
   const predictiveAnalysisMutation = useMutation({
@@ -132,12 +135,17 @@ export default function AIDashboard() {
   const handlePredictiveAnalysis = () => {
     console.log('Analisi predittiva avviata con:', { selectedFlupsy, timeframe });
     if (selectedFlupsy) {
+      const targetSizeId = activeSizes[0]?.id;
+      if (targetSizeId == null) {
+        console.error('Nessuna taglia attiva disponibile per l’analisi predittiva');
+        return;
+      }
       // Analisi per FLUPSY intera (tutti i cestelli)
       // Nota: Il backend caricherà automaticamente tutti i cestelli del FLUPSY
       const payload = { 
         flupsyId: selectedFlupsy,
         basketIds: [], // Il backend caricherà automaticamente tutti i cestelli
-        targetSizeId: 22, // TP-2800 (taglia commerciale standard)
+        targetSizeId,
         days: parseInt(timeframe) || 30 
       };
       

@@ -1,4 +1,4 @@
-import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
+import { productionForecastService } from "../../../ai/production-forecast-service";
 import { dbEsterno, isDbEsternoAvailable } from "../../../db-esterno";
 import { ordiniCondivisi } from "../../../schema-esterno";
 import { and, not, eq } from "drizzle-orm";
@@ -92,7 +92,10 @@ export class OrderCoverageService {
     const currentMonth = today.getMonth() + 1;
 
     const timeline: MonthlySnapshot[] = [];
-    const SALE_SIZES = ProductionForecastService.SALE_SIZES;
+    const SALE_SIZES = (await productionForecastService.getActiveSizeCandidates())
+      .slice()
+      .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg)
+      .map(candidate => candidate.code);
 
     const startMonth = currentMonth;
     const endMonth = Math.min(12, startMonth + months - 1);

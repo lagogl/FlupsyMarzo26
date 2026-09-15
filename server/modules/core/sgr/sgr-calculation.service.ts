@@ -153,6 +153,21 @@ export class SgrCalculationService {
       storage.getAllSizes(),
     ]);
     const sizeMap = new Map(sizes.map((size) => [size.id, size]));
+    // getAllSizes intentionally returns only currently eligible candidates.
+    // Historical SGR attribution still honours a saved size_id, including
+    // sizes whose range has since expired; only legacy rows without size_id
+    // use determineSizeByAnimalsPerKg(atDate).
+    const historicalSizeIds = [...new Set(
+      allOperations
+        .map((operation) => operation.sizeId)
+        .filter((sizeId): sizeId is number => sizeId != null),
+    )].filter((sizeId) => !sizeMap.has(sizeId));
+    const historicalSizes = await Promise.all(
+      historicalSizeIds.map((sizeId) => storage.getSize(sizeId)),
+    );
+    for (const size of historicalSizes) {
+      if (size) sizeMap.set(size.id, size);
+    }
     
     // Filter weighing operations in the target month
     const targetOperations = allOperations.filter(op => {

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useLocation } from 'wouter';
-import { calculateAverageWeight, getSizeFromAnimalsPerKg, TARGET_SIZES, getOperationTypeLabel } from '@/lib/utils';
+import { calculateAverageWeight, getSizeFromAnimalsPerKg, getOperationTypeLabel } from '@/lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { TrendingUp, TrendingDown, ArrowUp, ArrowDown, Minus, Fan } from 'lucide-react';
@@ -60,36 +60,6 @@ interface BasicSize {
   id: number;
   code: string;
   name?: string;
-}
-
-// Importa esplicitamente la funzione getDefaultColorForSize per usarla nel componente
-function getDefaultColorForSize(code: string): string {
-  // TP-XXXX dove XXXX è il numero di animali per kg
-  if (code.startsWith('TP-')) {
-    const numStr = code.substring(3);
-    const num = parseInt(numStr);
-    
-    if (num >= 6000) {
-      return 'bg-red-50 border-red-600 border-4';
-    } else if (num >= 4000) {
-      return 'bg-red-50 border-red-500 border-3';
-    } else if (num >= 3000) {
-      return 'bg-orange-50 border-orange-500 border-2';
-    } else if (num >= 2000) {
-      return 'bg-yellow-50 border-yellow-500 border-2';
-    } else if (num >= 1500) {
-      return 'bg-green-50 border-green-600 border-2';
-    } else if (num >= 1000) {
-      return 'bg-sky-50 border-sky-500 border-2';
-    } else if (num >= 500) {
-      return 'bg-sky-50 border-sky-400 border-2';
-    } else {
-      return 'bg-indigo-50 border-indigo-400 border-2';
-    }
-  }
-  
-  // Se non è una taglia TP-XXX, usa il blu di default
-  return 'bg-blue-50 border-blue-500 border-2';
 }
 
 interface BasicFlupsyVisualizerProps {
@@ -296,87 +266,19 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
         // Prioritize the database size value from the relation
         const sizeCode = latestOperation.size?.code;
         
-        // Make active baskets with weight data stand out based on size
-        if (sizeCode) {
-          // Determine style based on TP- codes from database
-          if (sizeCode.startsWith('TP-')) {
-            const num = parseInt(sizeCode.replace('TP-', ''));
-            
-            // NUOVA LOGICA: Verde = vendibili (TP-3000+), Rosso = non vendibili
-            if (num >= 10000) {
-              // TP-10000 - Vendibile grande (verde intenso)
-              borderClass = 'border-green-800 border-4';
-              bgClass = 'bg-green-600 text-white';
-            } else if (num >= 7000 && num < 10000) {
-              // TP-7000-9000 - Vendibile
-              borderClass = 'border-green-600 border-3';
-              bgClass = 'bg-green-400';
-            } else if (num >= 5000 && num < 7000) {
-              // TP-5000, TP-6000 - Vendibile
-              borderClass = 'border-green-500 border-2';
-              bgClass = 'bg-green-200';
-            } else if (num >= 4000 && num < 5000) {
-              // TP-4000 - Vendibile
-              borderClass = 'border-emerald-400 border-2';
-              bgClass = 'bg-emerald-100';
-            } else if (num >= 3500 && num < 4000) {
-              // TP-3500 - Vendibile
-              borderClass = 'border-lime-400 border-2';
-              bgClass = 'bg-lime-100';
-            } else if (num >= 3000 && num < 3500) {
-              // TP-3000 - Soglia vendita (verde chiaro)
-              borderClass = 'border-lime-300 border-2';
-              bgClass = 'bg-lime-50';
-            } else if (num >= 2500 && num < 3000) {
-              // TP-2800, TP-2500 - Non vendibile (rosso chiaro)
-              borderClass = 'border-red-200 border-2';
-              bgClass = 'bg-red-50';
-            } else if (num >= 1800 && num < 2500) {
-              // TP-2000, TP-1900, TP-1800 - Non vendibile
-              borderClass = 'border-red-400 border-2';
-              bgClass = 'bg-red-200';
-            } else if (num >= 1200 && num < 1800) {
-              // TP-1500, TP-1260 - Non vendibile
-              borderClass = 'border-red-500 border-2';
-              bgClass = 'bg-red-300';
-            } else if (num >= 800 && num < 1200) {
-              // TP-1000, TP-1140, TP-800 - Non vendibile
-              borderClass = 'border-red-600 border-2';
-              bgClass = 'bg-red-400';
-            } else {
-              // TP-700 e inferiori - Non vendibile (rosso intenso)
-              borderClass = 'border-red-800 border-3';
-              bgClass = 'bg-red-600 text-white';
-            }
-          } else {
-            // Fallback se non è un codice TP-
-            borderClass = 'border-blue-400 border-2';
-            bgClass = 'bg-white';
-          }
-        } else if (latestOperation.animalsPerKg) {
-          // Fallback utilizzando animalsPerKg se non c'è size
-          const targetSize = getSizeFromAnimalsPerKg(latestOperation.animalsPerKg, allSizes);
-          
-          if (targetSize) {
-            // Usa il colore assegnato alla taglia
-            const fallbackSizeCode = targetSize.code;
-            
-            // Imposta le classi in base al codice TP-XXX
-            if (fallbackSizeCode.startsWith('TP-')) {
-              const classes = getDefaultColorForSize(fallbackSizeCode).split(' ');
-              // Estrai la classe del bordo
-              const borderColorClass = classes.find(c => c.startsWith('border-'));
-              // Estrai la classe di sfondo
-              const bgColorClass = classes.find(c => c.startsWith('bg-'));
-              
-              if (borderColorClass) {
-                borderClass = `${borderColorClass} border-2`;
-              }
-              if (bgColorClass) {
-                bgClass = bgColorClass;
-              }
-            }
-          }
+        const activeSizeIndex = sizeCode && allSizes
+          ? allSizes.findIndex(size => size.code === sizeCode)
+          : -1;
+        if (activeSizeIndex >= 0) {
+          const palette = [
+            ['border-green-600 border-2', 'bg-green-100'],
+            ['border-green-500 border-2', 'bg-green-200'],
+            ['border-emerald-400 border-2', 'bg-emerald-100'],
+            ['border-lime-400 border-2', 'bg-lime-100'],
+            ['border-red-300 border-2', 'bg-red-100'],
+            ['border-red-400 border-2', 'bg-red-200'],
+          ];
+          [borderClass, bgClass] = palette[activeSizeIndex % palette.length];
         }
       }
     }
@@ -460,7 +362,7 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
             <div className="flex justify-between items-center bg-slate-50 px-1 py-0.5 rounded-md">
               <div className={`${zoomLevel >= 2 ? 'text-[12px]' : 'text-[10px]'} font-medium text-slate-500`}>Taglia:</div>
               <div className={`${zoomLevel >= 2 ? 'text-[14px]' : 'text-[12px]'} font-bold whitespace-nowrap overflow-hidden text-ellipsis`}>
-                {latestOperation.size?.code || getSizeFromAnimalsPerKg(latestOperation.animalsPerKg)?.code || 'N/D'}
+                {latestOperation.size?.code || getSizeFromAnimalsPerKg(latestOperation.animalsPerKg, allSizes)?.code || 'N/D'}
               </div>
             </div>
             
@@ -623,7 +525,7 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
             <div className="flex justify-between">
               <span className="font-medium">Taglia:</span>
               <span>{latestOperation.size?.code || (latestOperation.animalsPerKg !== null
-                ? getSizeFromAnimalsPerKg(latestOperation.animalsPerKg)?.code
+                ? getSizeFromAnimalsPerKg(latestOperation.animalsPerKg, allSizes)?.code
                 : null) || 'N/D'}</span>
             </div>
           )}
@@ -1013,58 +915,27 @@ export default function BasicFlupsyVisualizer({ selectedFlupsyIds = [] }: BasicF
           </div>
         </div>
         
-        {/* Legenda taglie - VENDIBILI (VERDE) */}
+        {/* Legenda costruita dall'array delle taglie attive */}
         <div className="mt-3 mb-1">
-          <span className="text-xs font-semibold text-green-700">VENDIBILI (TP-3000 e superiori)</span>
+          <span className="text-xs font-semibold text-slate-700">TAGLIE ATTIVE</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-4 border-green-800 bg-green-600"></div>
-            <span>TP-10000, TP-9000 (Grandi)</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-green-600 bg-green-400"></div>
-            <span>TP-8000, TP-7000</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-green-500 bg-green-200"></div>
-            <span>TP-6000, TP-5000</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-emerald-400 bg-emerald-100"></div>
-            <span>TP-4000</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-lime-300 bg-lime-50"></div>
-            <span>TP-3000 (Soglia vendita)</span>
-          </div>
-        </div>
-        
-        {/* Legenda taglie - NON VENDIBILI (ROSSO) */}
-        <div className="mt-2 mb-1">
-          <span className="text-xs font-semibold text-red-700">NON VENDIBILI (sotto TP-3000)</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-red-200 bg-red-50"></div>
-            <span>TP-2800</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-red-400 bg-red-200"></div>
-            <span>TP-2000, TP-1900</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-red-500 bg-red-300"></div>
-            <span>TP-1500, TP-1260</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-2 border-red-600 bg-red-400"></div>
-            <span>TP-1000, TP-800</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <div className="w-3 h-3 rounded-sm border-3 border-red-800 bg-red-600"></div>
-            <span>TP-700 e inferiori (Piccoli)</span>
-          </div>
+          {allSizes?.map((size, index) => {
+            const palette = [
+              ['border-green-600', 'bg-green-100'],
+              ['border-green-500', 'bg-green-200'],
+              ['border-emerald-400', 'bg-emerald-100'],
+              ['border-lime-400', 'bg-lime-100'],
+              ['border-red-300', 'bg-red-100'],
+              ['border-red-400', 'bg-red-200'],
+            ][index % 6];
+            return (
+              <div key={size.id} className="flex items-center gap-1 text-xs">
+                <div className={`w-3 h-3 rounded-sm border-2 ${palette[0]} ${palette[1]}`}></div>
+                <span>{size.code}</span>
+              </div>
+            );
+          })}
           <div className="flex items-center gap-1 text-xs">
             <div className="w-3 h-3 rounded-sm border-2 border-dashed border-slate-400 bg-slate-100/50"></div>
             <span>Cesta non attiva (in deposito)</span>

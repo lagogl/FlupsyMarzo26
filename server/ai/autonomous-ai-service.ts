@@ -3,6 +3,7 @@ import { db } from '../db';
 import { sizes, operations, sgrPerTaglia, sgr } from '../../shared/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { storage } from '../storage';
+import { getSizeRangeCandidates } from '../utils/size-determination';
 
 /**
  * Sistema AI Autonomo FLUPSY - Algoritmi interni di analisi intelligente
@@ -123,8 +124,16 @@ export class AutonomousAIService {
     recommendations: string[];
   }> {
     try {
-      // Recupera le taglie dal database per la mappatura
-      const allSizes = await db.select().from(sizes).orderBy(sizes.minAnimalsPerKg);
+      // I calcoli correnti devono usare esclusivamente la versione di range attiva.
+      // La tabella sizes viene mantenuta solo per visualizzare un target storico
+      // eventualmente già salvato con il suo sizeId.
+      const [allSizes, activeSizeCandidates] = await Promise.all([
+        db.select().from(sizes).orderBy(sizes.minAnimalsPerKg),
+        getSizeRangeCandidates(new Date()),
+      ]);
+      if (activeSizeCandidates.length === 0) {
+        throw new Error('Nessuna taglia con range attivo alla business date');
+      }
       
       // Recupera l'ultima operazione del cestello per avere dati reali
       const lastOperation = await db.select()
@@ -163,19 +172,24 @@ export class AutonomousAIService {
       const baseMortalityRate = 0.5;
       
       // Determine current size
-      let currentSize = this.findSizeForAnimalsPerKg(currentAnimalsPerKg, allSizes);
-      let currentSgr = await this.getSgrForMonthAndSize(currentMonth, currentSize?.id || 1);
+      let currentSize = this.findSizeForAnimalsPerKg(currentAnimalsPerKg, activeSizeCandidates);
+      if (!currentSize) {
+        throw new Error(
+          `Nessuna taglia attiva per ${currentAnimalsPerKg} animali/kg`,
+        );
+      }
+      let currentSgr = await this.getSgrForMonthAndSize(currentMonth, currentSize.sizeId);
       
-      console.log(`🎯 Starting prediction for basket ${basketId} - Current size: ${currentSize?.name || 'Unknown'}, SGR: ${currentSgr}%`);
+      console.log(`🎯 Starting prediction for basket ${basketId} - Current size: ${currentSize.code || 'Unknown'}, SGR: ${currentSgr}%`);
       
       for (let day = 1; day <= days; day++) {
         // Get SGR for current size (with transiti on detection)
-        const newSize = this.findSizeForAnimalsPerKg(currentAnimalsPerKg, allSizes);
-        if (newSize && newSize.id !== currentSize?.id) {
+        const newSize = this.findSizeForAnimalsPerKg(currentAnimalsPerKg, activeSizeCandidates);
+        if (newSize && newSize.sizeId !== currentSize?.sizeId) {
           // Size transition detected!
           currentSize = newSize;
-          currentSgr = await this.getSgrForMonthAndSize(currentMonth, currentSize.id);
-          console.log(`🔄 Day ${day}: Size transition to ${currentSize.name}, new SGR: ${currentSgr}%`);
+          currentSgr = await this.getSgrForMonthAndSize(currentMonth, currentSize.sizeId);
+          console.log(`🔄 Day ${day}: Size transition to ${currentSize.code}, new SGR: ${currentSgr}%`);
         }
         
         // Apply daily growth using real SGR
@@ -194,7 +208,7 @@ export class AutonomousAIService {
         currentAnimalsPerKg = Math.max(50, currentAnimalsPerKg / animalGrowthFactor * (1 - dailyMortalityRate / 100));
         
         // Determina la taglia in base agli animalsPerKg
-        const predictedSizeObj = this.findSizeForAnimalsPerKg(currentAnimalsPerKg, allSizes);
+        const predictedSizeObj = this.findSizeForAnimalsPerKg(currentAnimalsPerKg, activeSizeCandidates);
         
         // Usa il numero di animali aggiornato
         const totalAnimals = Math.round(currentAnimalCount);
@@ -206,7 +220,7 @@ export class AutonomousAIService {
           predictedSize: predictedSizeObj?.code || 'N/A',
           predictedAnimalCount: totalAnimals,
           confidence: this.calculateConfidence(10, day),
-          targetSize: targetSizeId ? this.getTargetSizeName(targetSizeId) : undefined
+          targetSize: targetSizeId ? this.getTargetSizeName(targetSizeId, allSizes) : undefined
         });
       }
 
@@ -325,10 +339,11 @@ export class AutonomousAIService {
     return Math.round(baseConfidence * timeDecay * 100) / 100;
   }
 
-  private static getTargetSizeName(sizeId: number): string {
-    // Simulazione nomi taglie standard
-    const sizeNames = ['TP-10000', 'TP-5000', 'TP-3000', 'TP-2800', 'TP-2000', 'TP-1500'];
-    return sizeNames[sizeId % sizeNames.length] || 'Taglia standard';
+  private static getTargetSizeName(sizeId: number, allSizes: Array<{ id: number; code: string; name: string }>): string {
+    // Un target già salvato può riferirsi a una taglia storica: in tal caso
+    // mostriamo il codice identitario senza usarlo nei calcoli correnti.
+    const target = allSizes.find(size => size.id === sizeId);
+    return target?.code || target?.name || 'Taglia standard';
   }
 
   private static generateInsights(growthRate: number, mortalityRate: number, predictions: any[]): string[] {

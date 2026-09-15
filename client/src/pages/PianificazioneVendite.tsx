@@ -16,14 +16,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Bar, ComposedChart } from "recharts";
 import { usePlanningLang, MONTHS_EN } from "@/lib/planningI18n";
 
-const SALE_SIZES = [
-  'TP-10000', 'TP-9000', 'TP-8000', 'TP-7000', 'TP-6000', 'TP-5500',
-  'TP-5000', 'TP-4500', 'TP-4000', 'TP-3500', 'TP-3000', 'TP-2800',
-  'TP-2500', 'TP-2000', 'TP-1900', 'TP-1800', 'TP-1500', 'TP-1260',
-  'TP-1140', 'TP-1000', 'TP-800', 'TP-700', 'TP-600', 'TP-500',
-  'TP-450', 'TP-350', 'TP-300', 'TP-250', 'TP-180'
-];
-
 const MONTHS_IT = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
 type Mode = 'cassa' | 'ricavo' | 'bilanciato' | 'ordini';
@@ -191,6 +183,10 @@ export default function PianificazioneVendite() {
     },
     staleTime: 60_000,
   });
+  const { data: activeSizes = [] } = useQuery<Array<{ id: number; code: string; name: string }>>({
+    queryKey: ['/api/sizes'],
+  });
+  const saleSizes = useMemo(() => activeSizes.map(size => size.code), [activeSizes]);
 
   // === Listino Prezzi ===
   const { data: priceList = [], isLoading: priceLoading } = useQuery<PriceListEntry[]>({
@@ -903,8 +899,8 @@ export default function PianificazioneVendite() {
                     <TableBody>
                       {Object.entries(inputData.inventory.bySize)
                         .sort((a, b) => {
-                          const ia = SALE_SIZES.indexOf(a[0]);
-                          const ib = SALE_SIZES.indexOf(b[0]);
+                          const ia = saleSizes.indexOf(a[0]);
+                          const ib = saleSizes.indexOf(b[0]);
                           return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
                         })
                         .map(([size, data]) => {
@@ -1110,7 +1106,7 @@ export default function PianificazioneVendite() {
             <CardContent>
               {priceLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {SALE_SIZES.map(sz => {
+                  {saleSizes.map(sz => {
                     const current = priceMap[sz];
                     const editing = priceEdits[sz];
                     const display = editing !== undefined ? editing : (current !== undefined ? String(current) : '');

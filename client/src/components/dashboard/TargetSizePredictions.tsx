@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { getQueryFn } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,7 +71,7 @@ const maxDateStr = format(addDays(today, 365), "yyyy-MM-dd");
 
 export function TargetSizePredictions() {
   const [days, setDays] = useState(14);
-  const [targetSize, setTargetSize] = useState("TP-3000");
+  const [targetSize, setTargetSize] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("days");
   const [customDate, setCustomDate] = useState(format(addDays(today, 30), "yyyy-MM-dd"));
   const [animalTarget, setAnimalTarget] = useState<string>("1000000");
@@ -92,6 +92,16 @@ export function TargetSizePredictions() {
     queryFn: getQueryFn<Size[]>({ on401: "throw" }),
   });
 
+  // La prima taglia target è sempre una taglia attiva dell'API. Non usare
+  // codici predefiniti: se l'array è vuoto le query restano disabilitate.
+  useEffect(() => {
+    if (!targetSize && sizes?.length) {
+      setTargetSize(sizes[0].code);
+    } else if (targetSize && sizes?.length && !sizes.some(size => size.code === targetSize)) {
+      setTargetSize(sizes[0].code);
+    }
+  }, [sizes, targetSize]);
+
   const { data: flupsys } = useQuery({
     queryKey: ['/api/flupsys'],
     queryFn: getQueryFn<Flupsy[]>({ on401: "throw" }),
@@ -105,6 +115,7 @@ export function TargetSizePredictions() {
   const { data: allPredictions, isLoading, isError } = useQuery({
     queryKey: [`/api/size-predictions?size=${targetSize}&days=${effectiveDays}`, targetSize, effectiveDays],
     queryFn: getQueryFn<TargetSizePrediction[]>({ on401: "throw" }),
+    enabled: Boolean(targetSize && sizes?.some(size => size.code === targetSize)),
   });
 
   // Stock cumulativo @data: simula TUTTE le ceste attive a (oggi + days) e somma
@@ -121,6 +132,7 @@ export function TargetSizePredictions() {
   }>({
     queryKey: [`/api/size-predictions/stock-at-date?size=${targetSize}&days=${effectiveDays}`, targetSize, effectiveDays],
     queryFn: getQueryFn({ on401: "throw" }),
+    enabled: Boolean(targetSize && sizes?.some(size => size.code === targetSize)),
   });
 
   // For animal mode: walk through sorted predictions until target is met

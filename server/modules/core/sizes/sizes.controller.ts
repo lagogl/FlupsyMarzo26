@@ -43,6 +43,8 @@ export class SizesController {
    */
   async getAll(req: Request, res: Response) {
     try {
+      // The public catalog is intentionally current-only. Historical ranges
+      // are exposed through /range-versions and identity lookups by ID.
       const sizes = await sizesService.getAllSizes() as Size[];
       res.json(sizes);
     } catch (error) {

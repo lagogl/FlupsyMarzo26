@@ -247,17 +247,15 @@ export async function checkCyclesForTargetSizes(): Promise<number> {
     // Se non ci sono taglie configurate, usa TP-3000 come default
     let targetSizeIds: number[];
     if (!configuredSizeIds || configuredSizeIds.length === 0) {
-      // Recupera ID di TP-3000 come default
-      const defaultSize = await db.execute(sql`
-        SELECT id FROM sizes WHERE name = 'TP-3000'
-      `);
-      
-      if (!defaultSize.rows || defaultSize.rows.length === 0) {
+      // Il default è utilizzabile solo se ha un range attivo oggi.
+      const defaultSize = (await getSizeRangeCandidates(new Date()))
+        .find((candidate) => candidate.code === "TP-3000");
+      if (!defaultSize) {
         console.log("Nessuna taglia configurata e TP-3000 non trovata");
         return 0;
       }
       
-      targetSizeIds = [Number(defaultSize.rows[0].id)];
+      targetSizeIds = [defaultSize.sizeId];
       console.log("Usando TP-3000 come taglia default per le notifiche");
     } else {
       targetSizeIds = configuredSizeIds;
@@ -424,16 +422,14 @@ export async function checkOperationForTargetSize(operationId: number): Promise<
     let targetSizeIds: number[];
     
     if (!configuredSizeIds || configuredSizeIds.length === 0) {
-      // Usa TP-3000 come default
-      const defaultSize = await db.execute(sql`
-        SELECT id FROM sizes WHERE name = 'TP-3000'
-      `);
-      
-      if (!defaultSize.rows || defaultSize.rows.length === 0) {
+      // Il default è utilizzabile solo se ha un range attivo oggi.
+      const defaultSize = (await getSizeRangeCandidates(new Date()))
+        .find((candidate) => candidate.code === "TP-3000");
+      if (!defaultSize) {
         return false;
       }
       
-      targetSizeIds = [Number(defaultSize.rows[0].id)];
+      targetSizeIds = [defaultSize.sizeId];
     } else {
       targetSizeIds = configuredSizeIds;
     }

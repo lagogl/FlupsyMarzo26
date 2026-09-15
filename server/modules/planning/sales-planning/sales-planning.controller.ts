@@ -4,7 +4,7 @@ import { salesPlanningMilpService } from "./sales-planning.milp";
 import { db } from "../../../db";
 import { salesPriceList, salesCashTargets, hatcheryArrivals, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, and, gte } from "drizzle-orm";
-import { productionForecastService, ProductionForecastService } from "../../../ai/production-forecast-service";
+import { productionForecastService } from "../../../ai/production-forecast-service";
 
 const router = Router();
 
@@ -145,6 +145,7 @@ router.get("/input-data", async (req: Request, res: Response) => {
   try {
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
     const now = new Date();
+    const activeSizeCandidates = await productionForecastService.getActiveSizeCandidates();
 
     const [basketInventory, sgrLookup, mortalityRows, priceRows, cashRows, hatcheryRows, orders] = await Promise.all([
       productionForecastService.getBasketLevelInventory(),
@@ -173,16 +174,9 @@ router.get("/input-data", async (req: Request, res: Response) => {
       bySize[b.sizeCode].animals += b.animalCount;
     }
 
-    // SGR: la chiave è "{mese_italiano}_{sizeId}" e il valore è già % giornaliero
-    // Mappa sizeId → nome TP (da tabella sizes)
-    const SIZE_ID_TO_TP: Record<number, string> = {
-      27:'TP-10000', 26:'TP-9000', 25:'TP-8000', 24:'TP-7000', 23:'TP-6000',
-      22:'TP-5500',  21:'TP-5000', 20:'TP-4500', 19:'TP-4000', 18:'TP-3500',
-      17:'TP-3000',  28:'TP-2800', 16:'TP-2500', 15:'TP-2000', 14:'TP-1900',
-      13:'TP-1800',  12:'TP-1500', 11:'TP-1260', 10:'TP-1140',  9:'TP-1000',
-       8:'TP-800',    7:'TP-700',   6:'TP-600',   1:'TP-500',   5:'TP-450',
-      29:'TP-350',    4:'TP-300',   3:'TP-250',   2:'TP-180',
-    };
+    // SGR: la chiave è "{mese_italiano}_{sizeId}" e il valore è già % giornaliero.
+    // Il catalogo deve seguire i range attivi: gli ID presenti solo in dati storici
+    // non possono ricomparire come taglie selezionabili nella pianificazione.
     const MONTHS_LOWER = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
                           'luglio','agosto','settembre','ottobre','novembre','dicembre'];
     const MONTHS_SHORT  = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
@@ -194,10 +188,12 @@ router.get("/input-data", async (req: Request, res: Response) => {
       const sizeId = parseInt(parts[parts.length - 1]);
       if (!isNaN(sizeId)) sizeIdsInData.add(sizeId);
     }
-    // Ordine canonico SALE_SIZES (indice più basso = più grande)
-    const canonicalOrder = [27,26,25,24,23,22,21,20,19,18,17,28,16,15,14,13,12,11,10,9,8,7,6,1,5,29,4,3,2];
-    const sgrSizeIds = canonicalOrder.filter(id => sizeIdsInData.has(id));
-    const sgrSizes = sgrSizeIds.map(id => SIZE_ID_TO_TP[id] || `ID-${id}`);
+    // Ordine dal range più grande al più piccolo, indipendente dagli ID storici.
+    const sgrSizeCandidates = activeSizeCandidates
+      .filter(candidate => sizeIdsInData.has(candidate.sizeId))
+      .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg);
+    const sgrSizeIds = sgrSizeCandidates.map(candidate => candidate.sizeId);
+    const sgrSizes = sgrSizeCandidates.map(candidate => candidate.code);
 
     const sgrTable: Array<{ month: string; [key: string]: string | number }> = [];
     for (let m = 0; m < 12; m++) {
@@ -218,7 +214,10 @@ router.get("/input-data", async (req: Request, res: Response) => {
     }
 
     // Ordini raggruppati — ordinati per mese numerico, poi per taglia
-    const SALE_SIZES_ORDER = ProductionForecastService.SALE_SIZES;
+    const SALE_SIZES_ORDER = activeSizeCandidates
+      .slice()
+      .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg)
+      .map(candidate => candidate.code);
     const orderSummary: Array<{ monthNum: number; month: string; size: string; animals: number }> = [];
     for (const [monthStr, sizeMap] of Object.entries(orders)) {
       for (const [size, animals] of Object.entries(sizeMap as Record<string, number>)) {

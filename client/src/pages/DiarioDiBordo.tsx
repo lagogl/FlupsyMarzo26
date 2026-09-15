@@ -426,9 +426,12 @@ export default function DiarioDiBordo() {
   const isDataLoading = isLoadingOperations || isLoadingSizeStats || isLoadingTotals || isLoadingGiacenza || isLoadingSizes || isCalendarLoading;
   
   // Estrai i codici delle taglie dai dati disponibili e ordinali
-  const sizeCodes = availableSizes ? 
-    availableSizes.map((size: {id: number, code: string, name: string}) => size.code).sort() : 
-    ['TP-315', 'TP-500', 'TP-450', 'TP-200', 'TP-800']; // Fallback in caso di errore
+  // Le taglie visualizzabili arrivano esclusivamente dall'array attivo dell'API.
+  // In caso di errore/assenza dati non reintroduciamo una tassonomia locale.
+  const sizeCodes = (availableSizes || [])
+    .map((size: {id: number, code: string, name: string}) => size.code)
+    .filter(Boolean)
+    .sort();
   
   // Dati mortalità mensile per il grafico (calcolati da monthlyData già in memoria)
   const mortalitaChartData = useMemo(() => {

@@ -2,8 +2,11 @@ import { storage } from "../../../storage";
 import NodeCache from "node-cache";
 import { db } from "../../../db";
 import { sizeRangeVersions, sizes } from "../../../../shared/schema";
-import { asc, eq, sql } from "drizzle-orm";
-import { toBusinessIsoDate } from "../../../utils/size-determination";
+import { asc, eq, inArray, sql } from "drizzle-orm";
+import {
+  getSizeRangeCandidates,
+  toBusinessIsoDate,
+} from "../../../utils/size-determination";
 
 // Cache per sizes (TTL: 300 secondi = 5 minuti, raramente cambiano)
 const sizesCache = new NodeCache({ stdTTL: 300 });
@@ -19,17 +22,47 @@ export class SizesService {
   /**
    * Get all sizes
    */
-  async getAllSizes() {
-    const cacheKey = "all-sizes";
+  async getAllSizes(atDate?: string | Date) {
+    const effectiveDate = toBusinessIsoDate(atDate ?? new Date());
+    const cacheKey = `all-sizes-${effectiveDate}`;
     const cached = sizesCache.get(cacheKey);
     if (cached) {
       console.log("📦 SIZES SERVICE: Returning cached sizes");
       return cached;
     }
 
-    const sizes = await storage.getSizes();
-    sizesCache.set(cacheKey, sizes);
-    return sizes;
+    // A size is eligible for forms/classification only when it has a range
+    // version active on the business date.  Do not use sizes.min/max here:
+    // those columns are the mutable identity snapshot, not the temporal
+    // source of truth.
+    const candidates = await getSizeRangeCandidates(effectiveDate);
+    if (candidates.length === 0) {
+      sizesCache.set(cacheKey, []);
+      return [];
+    }
+
+    const ids = [...new Set(candidates.map((candidate) => candidate.sizeId))];
+    const storedSizes = await db
+      .select()
+      .from(sizes)
+      .where(inArray(sizes.id, ids));
+    const rangeById = new Map(candidates.map((candidate) => [candidate.sizeId, candidate]));
+    const activeSizes = storedSizes
+      .map((size) => {
+        const range = rangeById.get(size.id);
+        return range
+          ? {
+              ...size,
+              minAnimalsPerKg: range.minAnimalsPerKg,
+              maxAnimalsPerKg: range.maxAnimalsPerKg,
+            }
+          : null;
+      })
+      .filter((size): size is NonNullable<typeof size> => size !== null)
+      .sort((a, b) => a.minAnimalsPerKg - b.minAnimalsPerKg);
+
+    sizesCache.set(cacheKey, activeSizes);
+    return activeSizes;
   }
 
   /**

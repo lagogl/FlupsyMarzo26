@@ -131,9 +131,11 @@ export default function MisurazioneDirectFormFixed({
     if (averageWeight && animalsPerKg && sizes && sizes.length > 0) {
       // Trova la taglia appropriata in base agli animali per kg
       const matchingSize = sizes.find((size: any) => {
-        const minAnimalsPerKg = size.minAnimalsPerKg || 0;
-        const maxAnimalsPerKg = size.maxAnimalsPerKg || Infinity;
-        return animalsPerKg >= minAnimalsPerKg && animalsPerKg <= maxAnimalsPerKg;
+        const minAnimalsPerKg = Number(size.minAnimalsPerKg);
+        const maxAnimalsPerKg = Number(size.maxAnimalsPerKg);
+        return Number.isFinite(minAnimalsPerKg) && Number.isFinite(maxAnimalsPerKg) &&
+          minAnimalsPerKg <= maxAnimalsPerKg &&
+          animalsPerKg >= minAnimalsPerKg && animalsPerKg <= maxAnimalsPerKg;
       });
       
       if (matchingSize) {
@@ -617,10 +619,10 @@ export default function MisurazioneDirectFormFixed({
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs text-gray-500">Animali/kg</label>
-              <div className={`font-semibold text-md ${animalsPerKg && animalsPerKg > 32000 ? 'text-green-600 flex items-center' : ''}`}>
+              <div className={`font-semibold text-md ${calculatedSize ? 'text-green-600 flex items-center' : ''}`}>
                 {animalsPerKg ? formatNumberWithCommas(animalsPerKg) : '-'}
-                {animalsPerKg && animalsPerKg > 32000 && 
-                 <span className="ml-1 text-xs">(ottimale)</span>}
+                {calculatedSize &&
+                 <span className="ml-1 text-xs">(taglia attiva trovata)</span>}
               </div>
             </div>
             

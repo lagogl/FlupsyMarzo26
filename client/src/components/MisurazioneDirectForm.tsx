@@ -108,10 +108,12 @@ export default function MisurazioneDirectForm({
     if (calculatedValues?.averageWeight && calculatedValues?.animalsPerKg && sizes && sizes.length > 0) {
       // Trova la taglia appropriata in base agli animali per kg
       const matchingSize = sizes.find((size) => {
-        const minAnimalsPerKg = size.minAnimalsPerKg || 0;
-        const maxAnimalsPerKg = size.maxAnimalsPerKg || Infinity;
+        const minAnimalsPerKg = Number(size.minAnimalsPerKg);
+        const maxAnimalsPerKg = Number(size.maxAnimalsPerKg);
         const animalsPerKg = calculatedValues?.animalsPerKg || 0;
-        return animalsPerKg >= minAnimalsPerKg && animalsPerKg <= maxAnimalsPerKg;
+        return Number.isFinite(minAnimalsPerKg) && Number.isFinite(maxAnimalsPerKg) &&
+          minAnimalsPerKg <= maxAnimalsPerKg &&
+          animalsPerKg >= minAnimalsPerKg && animalsPerKg <= maxAnimalsPerKg;
       });
       
       if (matchingSize) {
@@ -461,6 +463,15 @@ export default function MisurazioneDirectForm({
     }
   };
   
+  const recordedSizeCode = defaultAnimalsPerKg && sizes?.length
+    ? sizes.find(size => {
+        const min = Number(size.minAnimalsPerKg);
+        const max = Number(size.maxAnimalsPerKg);
+        return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+          defaultAnimalsPerKg >= min && defaultAnimalsPerKg <= max;
+      })?.code || 'N/D'
+    : 'N/D';
+
   return (
     <div className="space-y-6">
       <div className="space-y-4 p-4 rounded-lg border bg-card">
@@ -517,16 +528,8 @@ export default function MisurazioneDirectForm({
                 {defaultAverageWeight && defaultAnimalsPerKg && (
                   <div className="flex flex-col">
                     <span className="text-blue-600 font-medium text-xs">Taglia approssimativa:</span>
-                    <span className={`font-semibold ${defaultAnimalsPerKg > 32000 ? 'text-green-600' : ''}`}>
-                      {defaultAnimalsPerKg > 32000 ? 'TP-3000' : 
-                       defaultAnimalsPerKg > 19000 ? 'TP-3000' :
-                       defaultAnimalsPerKg > 12000 ? 'TP-2000' :
-                       defaultAnimalsPerKg > 8000 ? 'TP-1500' :
-                       defaultAnimalsPerKg > 5000 ? 'TP-1000' :
-                       defaultAnimalsPerKg > 3000 ? 'TP-750' :
-                       defaultAnimalsPerKg > 2000 ? 'TP-500' : 'N/D'}
-                      {defaultAnimalsPerKg > 32000 && 
-                        <span className="ml-1 text-green-600 font-medium">(e superata)</span>}
+                    <span className="font-semibold">
+                      {recordedSizeCode}
                     </span>
                   </div>
                 )}
@@ -782,10 +785,10 @@ export default function MisurazioneDirectForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-muted-foreground">Animali/kg:</label>
-              <div className={`font-semibold text-md ${calculatedValues.animalsPerKg && calculatedValues.animalsPerKg > 32000 ? 'text-green-600 flex items-center' : ''}`}>
+              <div className={`font-semibold text-md ${calculatedSize ? 'text-green-600 flex items-center' : ''}`}>
                 {calculatedValues.animalsPerKg ? formatNumberWithCommas(calculatedValues.animalsPerKg) : '-'}
-                {calculatedValues.animalsPerKg && calculatedValues.animalsPerKg > 32000 && 
-                  <span className="ml-2 text-sm font-medium">(TP-3000 superata)</span>}
+                {calculatedSize &&
+                  <span className="ml-2 text-sm font-medium">(taglia attiva trovata)</span>}
               </div>
             </div>
             <div>

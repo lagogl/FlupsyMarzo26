@@ -156,133 +156,77 @@ export const TARGET_SIZES: TargetSize[] = [];
 export function getTargetSizeForWeight(weight: number, availableSizes?: any[]): TargetSize | null {
   if (!weight || weight <= 0) return null;
   
-  // Se abbiamo taglie disponibili dal database, le usiamo
-  if (availableSizes && availableSizes.length > 0) {
-    // Converti peso in animali per kg per utilizzare i range del database
-    const estimatedAnimalsPerKg = weight > 0 ? Math.round(1000000 / weight) : 0;
-    
-    const matchingSize = availableSizes.find(size => {
-      // Gestisci sia camelCase che snake_case (dal database)
-      const minValue = size.minAnimalsPerKg !== undefined ? size.minAnimalsPerKg : size.min_animals_per_kg;
-      const maxValue = size.maxAnimalsPerKg !== undefined ? size.maxAnimalsPerKg : size.max_animals_per_kg;
-      
-      // Verifica se l'animalsPerKg rientra nel range
-      return estimatedAnimalsPerKg >= minValue && estimatedAnimalsPerKg <= maxValue;
-    });
-    
-    if (matchingSize) {
-      // Crea un oggetto TargetSize dal formato database
-      const minValue = matchingSize.minAnimalsPerKg !== undefined ? matchingSize.minAnimalsPerKg : matchingSize.min_animals_per_kg;
-      const maxValue = matchingSize.maxAnimalsPerKg !== undefined ? matchingSize.maxAnimalsPerKg : matchingSize.max_animals_per_kg;
-      
-      return {
-        code: matchingSize.code,
-        name: matchingSize.name,
-        minWeight: 1000000 / maxValue,
-        maxWeight: 1000000 / minValue,
-        color: getDefaultColorForSize(matchingSize.code)
-      };
-    }
-  }
-  
-  // Fallback alle taglie predefinite se non troviamo corrispondenze nel database
-  return TARGET_SIZES.find(
-    size => weight >= size.minWeight && weight <= size.maxWeight
-  ) || null;
+  // La classificazione è valida solo contro l'array attivo dell'API.
+  if (!availableSizes?.length) return null;
+  const estimatedAnimalsPerKg = Math.round(1000000 / weight);
+  const matchingSize = availableSizes.find(size => {
+    const minValue = Number(size.minAnimalsPerKg ?? size.min_animals_per_kg);
+    const maxValue = Number(size.maxAnimalsPerKg ?? size.max_animals_per_kg);
+    return Number.isFinite(minValue) && Number.isFinite(maxValue) &&
+      minValue <= maxValue &&
+      estimatedAnimalsPerKg >= minValue && estimatedAnimalsPerKg <= maxValue;
+  });
+  if (!matchingSize) return null;
+  const minValue = Number(matchingSize.minAnimalsPerKg ?? matchingSize.min_animals_per_kg);
+  const maxValue = Number(matchingSize.maxAnimalsPerKg ?? matchingSize.max_animals_per_kg);
+  return {
+    code: matchingSize.code,
+    name: matchingSize.name,
+    minWeight: 1000000 / maxValue,
+    maxWeight: 1000000 / minValue,
+     color: getDefaultColorForSize(matchingSize.code, availableSizes)
+  };
 }
 
 // Funzione helper per ottenere il colore default per una taglia basata sul codice
-function getDefaultColorForSize(code: string): string {
-  // TP-XXXX dove XXXX è il numero di animali per kg
-  if (code.startsWith('TP-')) {
-    const numStr = code.substring(3);
-    const num = parseInt(numStr);
-    
-    if (num >= 6000) {
-      return 'bg-red-50 border-red-600 border-4';
-    } else if (num >= 4000) {
-      return 'bg-red-50 border-red-500 border-3';
-    } else if (num >= 3000) {
-      return 'bg-orange-50 border-orange-500 border-2';
-    } else if (num >= 2000) {
-      return 'bg-yellow-50 border-yellow-500 border-2';
-    } else if (num >= 1500) {
-      return 'bg-green-50 border-green-600 border-2';
-    } else if (num >= 1000) {
-      return 'bg-sky-50 border-sky-500 border-2';
-    } else {
-      return 'bg-sky-50 border-sky-400 border-2';
-    }
-  }
-  
-  // Fallback per altri formati di codice
-  return 'bg-blue-100 border-blue-300';
+function getDefaultColorForSize(code: string, activeSizes: any[] = []): string {
+  const index = activeSizes.findIndex(size => size.code === code);
+  if (index < 0) return 'bg-gray-100 border-gray-300';
+  return [
+    'bg-green-100 border-green-300',
+    'bg-green-200 border-green-400',
+    'bg-emerald-100 border-emerald-300',
+    'bg-lime-100 border-lime-300',
+    'bg-red-100 border-red-300',
+    'bg-red-200 border-red-400',
+  ][index % 6];
 }
 
 export function getSizeFromAnimalsPerKg(animalsPerKg: number, availableSizes?: any[]): TargetSize | null {
   if (!animalsPerKg || animalsPerKg <= 0) return null;
   
-  // Se abbiamo taglie disponibili dal database, le usiamo
-  if (availableSizes && availableSizes.length > 0) {
-    const matchingSize = availableSizes.find(size => {
-      // Gestisci sia camelCase che snake_case (dal database)
-      const minValue = size.minAnimalsPerKg !== undefined ? size.minAnimalsPerKg : size.min_animals_per_kg;
-      const maxValue = size.maxAnimalsPerKg !== undefined ? size.maxAnimalsPerKg : size.max_animals_per_kg;
-      
-      // Verifica se l'animalsPerKg rientra nel range
-      return animalsPerKg >= minValue && animalsPerKg <= maxValue;
-    });
-    
-    if (matchingSize) {
-      // Crea un oggetto TargetSize dal formato database
-      const minValue = matchingSize.minAnimalsPerKg !== undefined ? matchingSize.minAnimalsPerKg : matchingSize.min_animals_per_kg;
-      const maxValue = matchingSize.maxAnimalsPerKg !== undefined ? matchingSize.maxAnimalsPerKg : matchingSize.max_animals_per_kg;
-      
-      return {
-        code: matchingSize.code,
-        name: matchingSize.name,
-        minWeight: 1000000 / maxValue,
-        maxWeight: 1000000 / minValue,
-        color: getDefaultColorForSize(matchingSize.code)
-      };
-    }
-  }
-  
-  // Fallback alle taglie predefinite se non troviamo corrispondenze nel database
-  const weight = 1000000 / animalsPerKg;
-  return getTargetSizeForWeight(weight);
+  if (!availableSizes?.length) return null;
+  const matchingSize = availableSizes.find(size => {
+    const minValue = Number(size.minAnimalsPerKg ?? size.min_animals_per_kg);
+    const maxValue = Number(size.maxAnimalsPerKg ?? size.max_animals_per_kg);
+    return Number.isFinite(minValue) && Number.isFinite(maxValue) &&
+      minValue <= maxValue &&
+      animalsPerKg >= minValue && animalsPerKg <= maxValue;
+  });
+  if (!matchingSize) return null;
+  const minValue = Number(matchingSize.minAnimalsPerKg ?? matchingSize.min_animals_per_kg);
+  const maxValue = Number(matchingSize.maxAnimalsPerKg ?? matchingSize.max_animals_per_kg);
+  return {
+    code: matchingSize.code,
+    name: matchingSize.name,
+    minWeight: 1000000 / maxValue,
+    maxWeight: 1000000 / minValue,
+     color: getDefaultColorForSize(matchingSize.code, availableSizes)
+  };
 }
 
-export function getSizeColor(sizeCode: string): string {
+export function getSizeColor(sizeCode: string, activeSizes: any[] = []): string {
   if (!sizeCode) return 'bg-gray-100 text-gray-800';
-  
-  // Colore per le taglie TP-XXXX
-  if (sizeCode.startsWith('TP-')) {
-    // Verifica il numero presente nel codice
-    const numStr = sizeCode.substring(3);
-    const num = parseInt(numStr);
-    
-    if (num <= 500) {
-      return 'bg-red-600 text-white';
-    } else if (num <= 1000) {
-      return 'bg-red-500 text-white';
-    } else if (num <= 2000) {
-      return 'bg-amber-500 text-white';
-    } else if (num <= 3000) {
-      return 'bg-yellow-500 text-white';
-    } else if (num <= 6000) {
-      return 'bg-green-500 text-white';
-    } else if (num <= 10000) {
-      return 'bg-blue-500 text-white';
-    } else {
-      // Per +TP-10000
-      return 'bg-black text-white';
-    }
-  } else if (sizeCode.startsWith('M')) {
-    return 'bg-green-500 text-white';
-  }
-  
-  return 'bg-blue-500 text-white';
+  const index = activeSizes.findIndex(size => size.code === sizeCode);
+  if (index < 0) return 'bg-gray-100 text-gray-800';
+  return [
+    'bg-green-600 text-white',
+    'bg-green-400',
+    'bg-emerald-100',
+    'bg-lime-100',
+    'bg-red-100',
+    'bg-red-200',
+  ][index % 6];
 }
 
 /**
@@ -291,36 +235,18 @@ export function getSizeColor(sizeCode: string): string {
  * @param sizeCode - Codice della taglia (es. TP-1000)
  * @returns Classe CSS per lo stile del badge
  */
-export function getSizeColorClass(sizeCode: string): string {
+export function getSizeColorClass(sizeCode: string, activeSizes: any[] = []): string {
   if (!sizeCode) return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-  
-  // Colore per le taglie TP-XXXX
-  if (sizeCode.startsWith('TP-')) {
-    // Verifica il numero presente nel codice
-    const numStr = sizeCode.substring(3);
-    const num = parseInt(numStr);
-    
-    if (num <= 500) {
-      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100';
-    } else if (num <= 1000) {
-      return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200';
-    } else if (num <= 2000) {
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100';
-    } else if (num <= 3000) {
-      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100';
-    } else if (num <= 6000) {
-      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100';
-    } else if (num <= 10000) {
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100';
-    } else {
-      // Per +TP-10000
-      return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-100';
-    }
-  } else if (sizeCode.startsWith('M')) {
-    return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100';
-  }
-  
-  return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100';
+  const index = activeSizes.findIndex(size => size.code === sizeCode);
+  if (index < 0) return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
+  return [
+    'bg-green-100 text-green-800 border-green-300',
+    'bg-lime-100 text-lime-800 border-lime-300',
+    'bg-emerald-100 text-emerald-800 border-emerald-300',
+    'bg-amber-100 text-amber-800 border-amber-300',
+    'bg-red-100 text-red-800 border-red-300',
+    'bg-red-100 text-red-900 border-red-400',
+  ][index % 6];
 }
 
 /**
@@ -343,23 +269,16 @@ export function getBorderThicknessByWeight(weight: number | null): string {
  * @param animalsPerKg - Numero di animali per kg
  * @returns Classe CSS per il colore del bordo
  */
-export function getBorderColorByAnimalsPerKg(animalsPerKg: number | null): string {
-  if (!animalsPerKg || animalsPerKg <= 0) return 'border-slate-200';
-  
-  // Colorazione progressiva in base alla taglia
-  if (animalsPerKg <= 19000) {
-    return 'border-red-600'; // TP-1000 e inferiori - rosso intenso
-  } else if (animalsPerKg <= 32000) {
-    return 'border-red-500'; // TP-3000 - rosso standard
-  } else if (animalsPerKg <= 45000) {
-    return 'border-amber-500'; // TP-4000 - ambra/arancio
-  } else if (animalsPerKg <= 60000) {
-    return 'border-yellow-500'; // TP-5000 - giallo
-  } else if (animalsPerKg <= 80000) {
-    return 'border-green-500'; // TP-6000 - verde
-  }
-  
-  return 'border-slate-200'; // Taglie più piccole (seme)
+export function getBorderColorByAnimalsPerKg(animalsPerKg: number | null, availableSizes?: any[]): string {
+  if (!animalsPerKg || animalsPerKg <= 0 || !availableSizes?.length) return 'border-slate-200';
+  const index = availableSizes.findIndex(size => {
+    const min = Number(size.minAnimalsPerKg ?? size.min_animals_per_kg);
+    const max = Number(size.maxAnimalsPerKg ?? size.max_animals_per_kg);
+    return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+      animalsPerKg >= min && animalsPerKg <= max;
+  });
+  if (index < 0) return 'border-slate-200';
+  return ['border-red-600', 'border-red-500', 'border-amber-500', 'border-yellow-500', 'border-green-500'][index % 5];
 }
 
 /**
@@ -368,29 +287,10 @@ export function getBorderColorByAnimalsPerKg(animalsPerKg: number | null): strin
  * @param animalsPerKg - Numero di animali per kg
  * @returns Classe CSS completa per lo stile del bordo
  */
-export function getBasketBorderClass(animalsPerKg: number | null): string {
-  if (!animalsPerKg || animalsPerKg <= 0) return 'border';
-  
-  // Stile del bordo progressivo in base alla taglia
-  if (animalsPerKg <= 19000) {
-    // TP-1000 e inferiori - bordo rosso intenso, spesso, con ring per evidenziare
-    return 'border-red-600 border-[5px] ring-2 ring-red-500 ring-offset-1 shadow-md';
-  } else if (animalsPerKg <= 32000) {
-    // TP-3000 - bordo rosso, con ring
-    return 'border-red-600 border-[4px] ring-2 ring-red-500 ring-offset-1';
-  } else if (animalsPerKg <= 45000) {
-    // TP-4000 - bordo ambra/arancio più spesso
-    return 'border-amber-500 border-[3px]';
-  } else if (animalsPerKg <= 60000) {
-    // TP-5000 - bordo giallo medio
-    return 'border-yellow-500 border-2';
-  } else if (animalsPerKg <= 80000) {
-    // TP-6000 - bordo verde
-    return 'border-green-500 border-2';
-  }
-  
-  // Per taglie più piccole (seme), bordo normale
-  return 'border';
+export function getBasketBorderClass(animalsPerKg: number | null, availableSizes?: any[]): string {
+  if (!animalsPerKg || animalsPerKg <= 0 || !availableSizes?.length) return 'border';
+  const color = getBorderColorByAnimalsPerKg(animalsPerKg, availableSizes);
+  return `${color} border-2`;
 }
 
 /**

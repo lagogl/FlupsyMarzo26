@@ -32,6 +32,23 @@ function getSizeCodeFromAnimalsPerKg(animalsPerKg: number, sizes: any[]): string
   return match?.code ?? "N/D";
 }
 
+function isActiveSellableSize(animalsPerKg: number | null | undefined, sizes: any[]): boolean {
+  if (animalsPerKg == null || !sizes?.length) return false;
+  const matched = sizes.find((size: any) => {
+    const min = Number(size.minAnimalsPerKg ?? size.min_animals_per_kg);
+    const max = Number(size.maxAnimalsPerKg ?? size.max_animals_per_kg);
+    return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+      animalsPerKg >= min && animalsPerKg <= max;
+  });
+  if (!matched) return false;
+  const activeMaxima = sizes
+    .map((size: any) => Number(size.maxAnimalsPerKg ?? size.max_animals_per_kg))
+    .filter(Number.isFinite);
+  const largestAnimalsSizeMax = activeMaxima.length ? Math.min(...activeMaxima) : null;
+  return largestAnimalsSizeMax != null &&
+    Number(matched.maxAnimalsPerKg ?? matched.max_animals_per_kg) <= largestAnimalsSizeMax;
+}
+
 // Calcola la taglia "stimata dal peso" quando l'ultima op è peso
 // e differisce dalla taglia ufficiale registrata (da ultima misura/prima-attivazione)
 function getWeightedSizeInfo(
@@ -52,47 +69,11 @@ function getWeightedSizeInfo(
   };
 }
 
-// Returns { bg, text } hex colors for a TP-XXXX code
-// TP-3000 e oltre = vendibili → tutte tonalità di verde
-// Sotto TP-3000 = non vendibili → rosso/ambra/giallo
 function getSizeHexColor(sizeCode: string): { bg: string; text: string } {
-  if (!sizeCode || !sizeCode.startsWith("TP-")) return { bg: "#f1f5f9", text: "#64748b" };
-  const num = parseInt(sizeCode.substring(3));
-  if (num <= 500)   return { bg: "#dc2626", text: "#fff" };   // red-600
-  if (num <= 1000)  return { bg: "#ef4444", text: "#fff" };   // red-500
-  if (num <= 2000)  return { bg: "#f59e0b", text: "#fff" };   // amber-500
-  // TP-2500 — vicina alla taglia di vendita (non ancora vendibile)
-  if (num <= 2500)  return { bg: "#a3e635", text: "#1a2e05" }; // lime-400
-  // === Soglia vendibilità ===
-  if (num <= 3000)  return { bg: "#4ade80", text: "#fff" };   // green-400 (TP-3000 — soglia)
-  if (num <= 6000)  return { bg: "#22c55e", text: "#fff" };   // green-500
-  if (num <= 10000) return { bg: "#15803d", text: "#fff" };   // green-700
-  return { bg: "#064e3b", text: "#fff" };                      // green-900
-}
-
-// Readable name for legend
-const LEGEND_ENTRIES = [
-  { code: "TP-500",   label: "Seme" },
-  { code: "TP-1000",  label: "Piccolo" },
-  { code: "TP-2000",  label: "Pre-crescita" },
-  { code: "TP-2500",  label: "Vicina alla vendita" },
-  { code: "TP-3000",  label: "Quasi vendibile" },
-  { code: "TP-6000",  label: "Accrescimento" },
-  { code: "TP-10000", label: "Grande" },
-];
-
-// Mappa un codice taglia reale (es. TP-2200) alla "fascia" di legenda che lo contiene.
-// Le soglie corrispondono a quelle di getSizeHexColor.
-function getLegendCodeForSizeCode(sizeCode: string): string | null {
-  if (!sizeCode || !sizeCode.startsWith("TP-")) return null;
-  const num = parseInt(sizeCode.substring(3));
-  if (num <= 500)  return "TP-500";
-  if (num <= 1000) return "TP-1000";
-  if (num <= 2000) return "TP-2000";
-  if (num <= 2500) return "TP-2500";
-  if (num <= 3000) return "TP-3000";
-  if (num <= 6000) return "TP-6000";
-  return "TP-10000";
+  if (!sizeCode) return { bg: "#f1f5f9", text: "#64748b" };
+  const palette = ["#dc2626", "#ef4444", "#f59e0b", "#84cc16", "#22c55e", "#15803d", "#064e3b"];
+  const hash = Array.from(sizeCode).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return { bg: palette[hash % palette.length], text: "#fff" };
 }
 
 // --- Alert metadata ---
@@ -291,14 +272,11 @@ export default function FlupsyHeatmap() {
           .sort((a: any, b: any) => a.position - b.position);
 
         let totalAnimals = 0;
-        let totalSellableAnimals = 0;       // taglia ufficiale registrata <= TP-3000
+        let totalSellableAnimals = 0;       // taglia ufficiale registrata nella fascia vendibile attiva
         let totalSellableWeighted = 0;       // EXTRA: solo da stima peso (ultima op peso) quando registrata non vendibile
         let activeCount = 0;
         let totalInitialAnimals = 0;
         let totalDeadCount = 0;
-
-        // Soglia vendibilità: <= 29000 animali/kg (taglia grande, TP-3000 o superiore)
-        const VENDIBILE_THRESHOLD = 29000;
 
         baskets.forEach((b: any) => {
           if (b.currentCycleId) {
@@ -311,8 +289,8 @@ export default function FlupsyHeatmap() {
 
               const registeredApk = op.measurementAnimalsPerKg;
               const latestApk = op.animalsPerKg;
-              const isSellableRegistered = registeredApk != null && registeredApk <= VENDIBILE_THRESHOLD;
-              const isSellableLatest = latestApk != null && latestApk <= VENDIBILE_THRESHOLD;
+              const isSellableRegistered = isActiveSellableSize(registeredApk, sizes ?? []);
+              const isSellableLatest = isActiveSellableSize(latestApk, sizes ?? []);
 
               if (isSellableRegistered) {
                 totalSellableAnimals += current;
@@ -373,7 +351,7 @@ export default function FlupsyHeatmap() {
       const apk = op.measurementAnimalsPerKg || op.animalsPerKg;
       if (!apk) continue;
       const sizeCode = getSizeCodeFromAnimalsPerKg(apk, sizes);
-      const legendCode = getLegendCodeForSizeCode(sizeCode);
+      const legendCode = sizes.some((size: any) => size.code === sizeCode) ? sizeCode : null;
       if (!legendCode) continue;
       if (!totals[legendCode]) totals[legendCode] = { animals: 0, baskets: 0 };
       totals[legendCode].animals += op.animalCount || 0;
@@ -419,8 +397,6 @@ export default function FlupsyHeatmap() {
   const alertBaskets = useMemo(() => {
     if (!visibleBaskets || !latestOpsMap || !sizes || !visibleFlupsys) return [];
     const today = new Date();
-    const VENDIBILE_THRESHOLD = 29000;
-
     const results: Array<{
       basket: any;
       flupsy: any;
@@ -477,9 +453,9 @@ export default function FlupsyHeatmap() {
         }
       }
 
-      // 5. Pronta per la vendita (taglia ufficiale ≤ TP-3000 → animali/kg ≤ 29.000)
+      // 5. Pronta per la vendita: usa solo la taglia attiva più grande.
       const apkForSell = op.measurementAnimalsPerKg ?? op.animalsPerKg;
-      if (apkForSell != null && Number(apkForSell) <= VENDIBILE_THRESHOLD) {
+      if (isActiveSellableSize(Number(apkForSell), sizes)) {
         alerts.push("readyToSell");
       }
 
@@ -606,24 +582,24 @@ export default function FlupsyHeatmap() {
           </div>
 
           <div className="flex flex-wrap gap-2 items-center">
-            {LEGEND_ENTRIES.map((l) => {
-              const { bg, text } = getSizeHexColor(l.code);
-              const stat = animalsByLegend[l.code];
+            {(sizes ?? []).map((size: any) => {
+              const { bg, text } = getSizeHexColor(size.code);
+              const stat = animalsByLegend[size.code];
               const animals = stat?.animals ?? 0;
               const baskets = stat?.baskets ?? 0;
               return (
-                <Tooltip key={l.code}>
+                <Tooltip key={size.code}>
                   <TooltipTrigger asChild>
                     <span
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm cursor-help"
                       style={{ backgroundColor: bg, color: text }}
                     >
-                      {l.code}
-                      <span className="opacity-70 font-normal">{l.label}</span>
+                      {size.code}
+                      <span className="opacity-70 font-normal">{size.name}</span>
                     </span>
                   </TooltipTrigger>
                   <TooltipContent className="text-xs max-w-xs">
-                    <p className="font-semibold mb-1">{l.code} — {l.label}</p>
+                    <p className="font-semibold mb-1">{size.code} — {size.name}</p>
                     {baskets > 0 ? (
                       <p className="font-normal leading-snug">
                         {fmtAnimals(animals)} animali in {baskets} {baskets === 1 ? "cesta" : "ceste"}
@@ -669,7 +645,7 @@ export default function FlupsyHeatmap() {
                   </TooltipTrigger>
                   <TooltipContent className="text-xs max-w-xs">
                     Animali aggiuntivi <span className="font-bold">potenzialmente vendibili</span> in base
-                    all'ultima pesata: la taglia stimata dal peso ≤ TP-3000, ma la taglia ufficiale registrata non è ancora vendibile.
+                    all'ultima pesata: la taglia stimata dal peso è vendibile, ma la taglia ufficiale registrata non lo è ancora.
                     Serve un'operazione di <span className="font-bold">misura</span> per confermare.
                   </TooltipContent>
                 </Tooltip>
@@ -1134,7 +1110,7 @@ function FlupsyCard({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="text-xs max-w-xs">
-                  Animali in ceste dove l'ultima pesata indica una taglia ≤ TP-3000
+                  Animali in ceste dove l'ultima pesata indica una taglia vendibile
                   (vendibile), ma la taglia ufficiale registrata non è ancora vendibile.
                   Serve una <span className="font-bold">misura</span> per confermare.
                 </TooltipContent>

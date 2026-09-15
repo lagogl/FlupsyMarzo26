@@ -237,7 +237,7 @@ export default function AIEnhanced() {
 
   const exampleQuestions = [
     "Quali cestelli crescono più lentamente del previsto?",
-    "Quanto posso vendere di taglia TP-2800 il mese prossimo?",
+    "Quanto posso vendere della taglia attiva selezionata il mese prossimo?",
     "Quali FLUPSY hanno la mortalità più alta?",
     "Mostrami i lotti con maggiore utilizzo",
     "Quale operatore è più efficiente?",

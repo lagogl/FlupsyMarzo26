@@ -81,6 +81,9 @@ export default function FlupsyVisualizer() {
   const { data: operations } = useQuery<Operation[]>({
     queryKey: ['/api/operations'],
   });
+  const { data: activeSizes = [] } = useQuery<any[]>({
+    queryKey: ['/api/sizes'],
+  });
   
   // Fetch cycles
   const { data: cyclesData } = useQuery<{ cycles: Cycle[] } | Cycle[]>({
@@ -176,7 +179,7 @@ export default function FlupsyVisualizer() {
     const averageWeight = latestOperation?.animalsPerKg ? calculateAverageWeight(latestOperation.animalsPerKg) : null;
     
     // Determine target size based on weight
-    const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight) : null;
+    const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight, activeSizes) : null;
     
     return (
       <div className="w-60 p-2">

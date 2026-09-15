@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Fan } from 'lucide-react';
-import { getOperationTypeLabel, getSizeFromAnimalsPerKg } from '@/lib/utils';
+import { getOperationTypeLabel } from '@/lib/utils';
 
 interface SimpleFlupsy {
   id: number;
@@ -129,16 +129,29 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
     return latestOp ? [latestOp] : [];
   };
   
-  // Helper function to check if a basket has a large size (TP-3000 or higher)
+  const getActiveSizeForAnimalsPerKg = (animalsPerKg: number | null | undefined): SimpleSize | null => {
+    if (animalsPerKg == null || !sizes?.length) return null;
+    return sizes.find(size =>
+      Number.isFinite(size.minAnimalsPerKg) &&
+      Number.isFinite(size.maxAnimalsPerKg) &&
+      size.minAnimalsPerKg <= size.maxAnimalsPerKg &&
+      animalsPerKg >= size.minAnimalsPerKg &&
+      animalsPerKg <= size.maxAnimalsPerKg
+    ) || null;
+  };
+
+  // La classificazione usa il limite dell'ultima taglia attiva, mai una soglia locale.
   const hasLargeSize = (basket: any): boolean => {
     if (!basket || basket.state !== 'active') return false;
     
     const latestOperation = getLatestOperation(basket.id);
     if (!latestOperation?.animalsPerKg) return false;
     
-    // Determina se è una taglia grande basandosi sul numero di animali per kg
-    // La taglia TP-3000 o superiore ha animalsPerKg <= 3000
-    return latestOperation.animalsPerKg <= 3000;
+    const matched = getActiveSizeForAnimalsPerKg(latestOperation.animalsPerKg);
+    const largestAnimalsMax = sizes?.length
+      ? Math.min(...sizes.map(size => size.maxAnimalsPerKg).filter(Number.isFinite))
+      : null;
+    return Boolean(matched && largestAnimalsMax != null && matched.maxAnimalsPerKg <= largestAnimalsMax);
   };
   
   // Helper function to get size code from the sizes table based on animalsPerKg
@@ -147,11 +160,10 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
     
     // Trova la taglia corrispondente in base al range min_animals_per_kg e max_animals_per_kg
     const matchingSize = sizes.find((size: any) => {
-      // Se il numero di animali per kg rientra nel range di questa taglia
-      return (
-        (!size.minAnimalsPerKg || animalsPerKg >= size.minAnimalsPerKg) &&
-        (!size.maxAnimalsPerKg || animalsPerKg <= size.maxAnimalsPerKg)
-      );
+      const min = Number(size.minAnimalsPerKg);
+      const max = Number(size.maxAnimalsPerKg);
+      return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+        animalsPerKg >= min && animalsPerKg <= max;
     });
     
     // Se troviamo una taglia corrispondente, restituisci il suo codice
@@ -159,14 +171,11 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
       return matchingSize.code;
     }
     
-    // Fallback se non troviamo una taglia corrispondente
-    return `TP-${Math.round(animalsPerKg/1000)*1000}`;
+    // Fuori dai range attivi non assegnare una taglia.
+    return 'N/D';
   };
 
-  // Helper function to get basket color class based on size
-  // LOGICA COLORI: Verde = vendibili (TP-3000+), Rosso = non vendibili (sotto TP-3000)
-  // Animali GRANDI = meno animali/kg = vendibili (VERDE)
-  // Animali PICCOLI = più animali/kg = non vendibili (ROSSO)
+  // Il colore è presentazionale e segue solo l'indice della taglia attiva.
   const getBasketColorClass = (basket: any) => {
     if (!basket) return 'bg-gray-50 border-dashed';
     
@@ -194,85 +203,19 @@ export default function SimpleFlupsyVisualizer({ selectedFlupsyIds = [] }: Simpl
       return 'bg-blue-50 border-blue-300';
     }
     
-    // SOGLIA VENDITA: TP-3000 = max 29000 animali/kg
-    // animalsPerKg <= 29000 = VERDE (vendibili, animali grandi)
-    // animalsPerKg > 29000 = ROSSO (non vendibili, animali piccoli)
-    
-    if (animalsPerKg <= 29000) {
-      // VERDE - Vendibili (TP-3000 e superiori = animali grandi)
-      // Intensità aumenta con animali più grandi (meno per kg)
-      if (animalsPerKg <= 1200) {
-        // TP-10000: 801-1200 - Verde più intenso
-        return 'bg-green-600 border-green-800 border-2 text-white';
-      } else if (animalsPerKg <= 1800) {
-        // TP-9000: 1201-1800
-        return 'bg-green-500 border-green-700 border-2 text-white';
-      } else if (animalsPerKg <= 2300) {
-        // TP-8000: 1801-2300
-        return 'bg-green-400 border-green-600 border-2';
-      } else if (animalsPerKg <= 3000) {
-        // TP-7000: 2301-3000
-        return 'bg-green-300 border-green-500 border-2';
-      } else if (animalsPerKg <= 3900) {
-        // TP-6000: 3001-3900
-        return 'bg-green-200 border-green-400 border-2';
-      } else if (animalsPerKg <= 6000) {
-        // TP-5500: 3901-6000
-        return 'bg-green-200 border-green-400 border-2';
-      } else if (animalsPerKg <= 9000) {
-        // TP-5000: 6001-9000
-        return 'bg-green-100 border-green-300 border-2';
-      } else if (animalsPerKg <= 13000) {
-        // TP-4500: 9001-13000
-        return 'bg-emerald-100 border-emerald-300 border-2';
-      } else if (animalsPerKg <= 15000) {
-        // TP-4000: 13001-15000
-        return 'bg-emerald-100 border-emerald-300 border-2';
-      } else if (animalsPerKg <= 20000) {
-        // TP-3500: 15001-20000
-        return 'bg-lime-100 border-lime-300 border-2';
-      } else {
-        // TP-3000: 20001-29000 - Verde più chiaro (soglia vendita)
-        return 'bg-lime-50 border-lime-200 border-2';
-      }
-    } else {
-      // ROSSO - Non vendibili (sotto TP-3000 = animali piccoli)
-      // Intensità aumenta con animali più piccoli (più per kg)
-      if (animalsPerKg <= 40000) {
-        // TP-2800: 29001-40000 - Rosso più chiaro
-        return 'bg-red-50 border-red-200 border-2';
-      } else if (animalsPerKg <= 70000) {
-        // TP-2500: 40001-70000
-        return 'bg-red-100 border-red-300 border-2';
-      } else if (animalsPerKg <= 97000) {
-        // TP-2000: 70001-97000
-        return 'bg-red-100 border-red-300 border-2';
-      } else if (animalsPerKg <= 120000) {
-        // TP-1900: 97001-120000
-        return 'bg-red-200 border-red-400 border-2';
-      } else if (animalsPerKg <= 190000) {
-        // TP-1800: 120001-190000
-        return 'bg-red-200 border-red-400 border-2';
-      } else if (animalsPerKg <= 300000) {
-        // TP-1500: 190001-300000
-        return 'bg-red-300 border-red-500 border-2';
-      } else if (animalsPerKg <= 350000) {
-        // TP-1260: 300001-350000
-        return 'bg-red-300 border-red-500 border-2';
-      } else if (animalsPerKg <= 600000) {
-        // TP-1140: 350001-600000
-        return 'bg-red-400 border-red-600 border-2';
-      } else if (animalsPerKg <= 880000) {
-        // TP-1000: 600001-880000
-        return 'bg-red-400 border-red-600 border-2';
-      } else if (animalsPerKg <= 1000000) {
-        // TP-800: 880001-1000000
-        return 'bg-red-500 border-red-700 border-2 text-white';
-      } else {
-        // TP-700 e inferiori: > 1M animali/kg - Rosso più intenso
-        return 'bg-red-600 border-red-800 border-2 text-white';
-      }
-    }
+    const matched = getActiveSizeForAnimalsPerKg(animalsPerKg);
+    if (!matched || !sizes?.length) return 'bg-gray-100 border-gray-300';
+    const sizeIndex = sizes.findIndex(size => size.id === matched.id);
+    const palette = [
+      'bg-green-100 border-green-300',
+      'bg-green-200 border-green-400',
+      'bg-emerald-100 border-emerald-300',
+      'bg-lime-100 border-lime-300',
+      'bg-red-100 border-red-300',
+      'bg-red-200 border-red-400',
+      'bg-red-300 border-red-500',
+    ];
+    return `${palette[Math.max(0, sizeIndex) % palette.length]} border-2`;
   };
 
   // Handle basket click to navigate to basket detail

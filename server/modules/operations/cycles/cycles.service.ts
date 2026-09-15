@@ -404,6 +404,12 @@ class CyclesService {
     const totalWeight = lastOp?.totalWeight || null;
     const sizeId = lastOp?.sizeId || null; // Mantieni null se non disponibile
     const lotId = lastOp?.lotId || cycle.lotId;
+
+    if (sizeId == null) {
+      throw new Error(
+        `Impossibile chiudere il ciclo ${id}: l'ultima operazione non ha una taglia classificata`,
+      );
+    }
     
     console.log(`📊 Ultima operazione: ${animalCount} animali, ${totalWeight}g, sizeId=${sizeId}`);
     
@@ -417,7 +423,7 @@ class CyclesService {
           type: 'chiusura-ciclo',
           basketId: cycle.basketId,
           cycleId: id,
-          sizeId: sizeId || 1, // Default size 1 solo se necessario (schema richiede NOT NULL)
+          sizeId,
           lotId: lotId,
           animalCount: animalCount,
           totalWeight: totalWeight,

@@ -88,8 +88,26 @@ export class SgrMatrixService {
         sgrService.getSgrPerTaglia(),
       ]);
 
+    // The active-size list is correct for current forms, but historical
+    // matrix segments must retain their recorded size identity even after a
+    // range expires. Load those identities separately; missing sizeIds still
+    // follow the dated range fallback below.
+    const knownSizeIds = new Set(sizes.map((size) => size.id));
+    const historicalSizeIds = [...new Set(
+      allOperations
+        .map((operation) => operation.sizeId)
+        .filter((sizeId): sizeId is number => sizeId != null),
+    )].filter((sizeId) => !knownSizeIds.has(sizeId));
+    const historicalSizes = await Promise.all(
+      historicalSizeIds.map((sizeId) => storage.getSize(sizeId)),
+    );
+    const allMatrixSizes = [
+      ...sizes,
+      ...historicalSizes.filter((size): size is NonNullable<typeof size> => !!size),
+    ];
+
     // Taglie ordinate per min_animals_per_kg ASC (animali più grandi = posizione 1)
-    const orderedSizes = [...sizes].sort(
+    const orderedSizes = [...allMatrixSizes].sort(
       (a, b) => (a.minAnimalsPerKg ?? 0) - (b.minAnimalsPerKg ?? 0)
     );
     const sizeMap = new Map(orderedSizes.map((size) => [size.id, size]));
@@ -173,7 +191,13 @@ export class SgrMatrixService {
           const fallbackSizeId = await determineSizeByAnimalsPerKg(apk1, {
             atDate: String(op1.date).substring(0, 10),
           });
-          size = fallbackSizeId ? sizeMap.get(fallbackSizeId) : undefined;
+          if (fallbackSizeId) {
+            size = sizeMap.get(fallbackSizeId);
+            if (!size) {
+              size = await storage.getSize(fallbackSizeId);
+              if (size) sizeMap.set(size.id, size);
+            }
+          }
         }
         if (!size) continue;
 

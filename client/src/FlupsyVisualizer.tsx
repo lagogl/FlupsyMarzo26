@@ -37,6 +37,9 @@ export default function FlupsyVisualizer() {
   const { data: operations, isLoading: isLoadingOperations } = useQuery<any[]>({
     queryKey: ['/api/operations'],
   });
+  const { data: activeSizes = [] } = useQuery<any[]>({
+    queryKey: ['/api/sizes'],
+  });
   
   // Fetch cycles
   const { data: cycles, isLoading: isLoadingCycles } = useQuery<any[]>({
@@ -86,15 +89,23 @@ export default function FlupsyVisualizer() {
   const averageWeight = showOriginalData ? operationDetail.averageWeight : customWeight;
   const animalsPerKg = showOriginalData ? operationDetail.animalsPerKg : (customWeight ? Math.round(1000000 / customWeight) : null);
   
-  // Determine if basket has large animal size (TP-3000 or higher) based on animalsPerKg
-  const isLargeSize = animalsPerKg !== null && animalsPerKg <= 32000;
+  // Determine if basket matches the largest active size.
+  const matchedSize = activeSizes.find(size => {
+    const min = Number(size.minAnimalsPerKg);
+    const max = Number(size.maxAnimalsPerKg);
+    return Number.isFinite(min) && Number.isFinite(max) && min <= max &&
+      animalsPerKg != null && animalsPerKg >= min && animalsPerKg <= max;
+  });
+  const activeMaxima = activeSizes.map(size => Number(size.maxAnimalsPerKg)).filter(Number.isFinite);
+  const isLargeSize = Boolean(matchedSize && activeMaxima.length &&
+    matchedSize.maxAnimalsPerKg <= Math.min(...activeMaxima));
   
   // Get size properties
-  const targetSize = getTargetSizeForWeight(averageWeight || 0);
+  const targetSize = getTargetSizeForWeight(averageWeight || 0, activeSizes);
   const sizeCode = targetSize?.code || null;
   const borderThickness = getBorderThicknessByWeight(averageWeight);
   // Determina il colore del bordo in base al numero di animali per kg
-  const borderColor = animalsPerKg !== null && animalsPerKg <= 32000 ? 'border-red-500' : 'border-slate-200';
+  const borderColor = isLargeSize ? 'border-red-500' : 'border-slate-200';
   const bgColor = getBasketColorBySize(sizeCode);
   
   return (

@@ -1197,9 +1197,17 @@ export class DbStorage implements IStorage {
   // Cache per sizes (cambiano raramente)
   private sizesCache: Size[] | null = null;
   private sizesCacheTimestamp = 0;
+  private sizesCacheDate: string | null = null;
   private SIZES_CACHE_TTL = 300000; // 5 minuti
 
-  private async overlayCurrentSizeRanges(baseSizes: Size[]): Promise<Size[]> {
+  private async overlayCurrentSizeRanges(
+    baseSizes: Size[],
+    atDate?: string | Date,
+    includeInactive = false,
+  ): Promise<Size[]> {
+    const { toBusinessIsoDate } = await import("./utils/size-determination");
+    const effectiveDate = toBusinessIsoDate(atDate ?? new Date());
+    const dateExpression = sql`${effectiveDate}::date`;
     const currentRanges = await db
       .select({
         sizeId: sizeRangeVersions.sizeId,
@@ -1209,10 +1217,10 @@ export class DbStorage implements IStorage {
       .from(sizeRangeVersions)
       .where(
         and(
-          lte(sizeRangeVersions.validFrom, sql`CURRENT_DATE`),
+          lte(sizeRangeVersions.validFrom, dateExpression),
           or(
             isNull(sizeRangeVersions.validTo),
-            gte(sizeRangeVersions.validTo, sql`CURRENT_DATE`),
+            gte(sizeRangeVersions.validTo, dateExpression),
           ),
         ),
       );
@@ -1221,20 +1229,28 @@ export class DbStorage implements IStorage {
       currentRanges.map(range => [range.sizeId, range]),
     );
 
-    return baseSizes.map(size => {
+    return baseSizes.flatMap((size): Size[] => {
       const range = rangeBySizeId.get(size.id);
-      return {
-        ...size,
-        minAnimalsPerKg: range?.minAnimalsPerKg ?? null,
-        maxAnimalsPerKg: range?.maxAnimalsPerKg ?? null,
-      };
+      return range
+        ? [{
+            ...size,
+            minAnimalsPerKg: range.minAnimalsPerKg,
+            maxAnimalsPerKg: range.maxAnimalsPerKg,
+          }]
+        : includeInactive ? [size] : [];
     });
   }
 
   async getSizes(): Promise<Size[]> {
+    const { toBusinessIsoDate } = await import("./utils/size-determination");
+    const businessDate = toBusinessIsoDate(new Date());
     // 🚀 OTTIMIZZAZIONE: Cache per sizes
     const now = Date.now();
-    if (this.sizesCache && (now - this.sizesCacheTimestamp) < this.SIZES_CACHE_TTL) {
+    if (
+      this.sizesCache &&
+      this.sizesCacheDate === businessDate &&
+      (now - this.sizesCacheTimestamp) < this.SIZES_CACHE_TTL
+    ) {
       return this.sizesCache;
     }
 
@@ -1247,6 +1263,7 @@ export class DbStorage implements IStorage {
     // Salva in cache
     this.sizesCache = allSizes;
     this.sizesCacheTimestamp = now;
+    this.sizesCacheDate = businessDate;
     
     return allSizes;
   }
@@ -1257,13 +1274,15 @@ export class DbStorage implements IStorage {
   invalidateSizesCache() {
     this.sizesCache = null;
     this.sizesCacheTimestamp = 0;
+    this.sizesCacheDate = null;
     console.log("🧹 DB-STORAGE: Sizes cache invalidated");
   }
   
   // Added this method to support FLUPSY units view with main sizes data
   async getAllSizes(): Promise<Size[]> {
-    // Ordina per minAnimalsPerKg crescente (meno animali per kg = animali più grandi)
-    return await db.select().from(sizes).orderBy(sizes.minAnimalsPerKg);
+    // Keep this alias on the same active-range path as getSizes.  This used
+    // to bypass temporal versions and expose inactive/historical sizes.
+    return this.getSizes();
   }
 
   async getAllSgr(): Promise<Sgr[]> {
@@ -1272,12 +1291,15 @@ export class DbStorage implements IStorage {
 
   async getSize(id: number): Promise<Size | undefined> {
     const results = await db.select().from(sizes).where(eq(sizes.id, id));
-    return (await this.overlayCurrentSizeRanges(results))[0];
+    // Identity lookups remain available for historical operations.  They do
+    // not make an inactive size eligible because list/classification paths
+    // use getSizes(), which keeps the active-range filter.
+    return (await this.overlayCurrentSizeRanges(results, undefined, true))[0];
   }
 
   async getSizeByCode(code: string): Promise<Size | undefined> {
     const results = await db.select().from(sizes).where(eq(sizes.code, code));
-    return (await this.overlayCurrentSizeRanges(results))[0];
+    return (await this.overlayCurrentSizeRanges(results, undefined, true))[0];
   }
 
   async createSize(size: InsertSize): Promise<Size> {

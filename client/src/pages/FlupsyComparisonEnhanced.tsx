@@ -70,41 +70,20 @@ const HighContrastTooltip = ({ children, className = "" }: { children: React.Rea
 
 // Helper function per ottenere il colore di una taglia
 const getSizeColorWithBorder = (sizeCode: string): string => {
-  // Funzione locale che restituisce colori con contrasto adeguato per la visualizzazione
-  
-  // Verifica se il codice della taglia è TP-10000 o superiore
-  if (sizeCode.startsWith('TP-') && parseInt(sizeCode.replace('TP-', '')) >= 10000) {
-    return 'bg-black text-white border-gray-800';
-  }
-  
-  // Per le altre taglie TP, determina il colore in base al numero
-  if (sizeCode.startsWith('TP-')) {
-    // Estrai il numero dalla taglia
-    const sizeNum = parseInt(sizeCode.replace('TP-', ''));
-    
-    if (sizeNum <= 500) {
-      return 'bg-purple-500 text-white border-purple-700'; // TP-500 e inferiori
-    } else if (sizeNum <= 1000) {
-      return 'bg-pink-500 text-white border-pink-700';     // TP-1000 e similari
-    } else if (sizeNum <= 2000) {  
-      return 'bg-rose-500 text-white border-rose-700';     // TP-2000 e similari
-    } else if (sizeNum <= 3000) {
-      return 'bg-red-500 text-white border-red-700';       // TP-3000 e similari
-    } else if (sizeNum <= 4000) {
-      return 'bg-orange-500 text-white border-orange-700'; // TP-4000 e similari
-    } else if (sizeNum <= 6000) {
-      return 'bg-amber-500 text-white border-amber-700';   // TP-5000/6000
-    } else if (sizeNum <= 7000) {
-      return 'bg-lime-500 text-white border-lime-700';     // TP-7000
-    } else if (sizeNum <= 8000) {
-      return 'bg-green-500 text-white border-green-700';   // TP-8000
-    } else if (sizeNum <= 9000) {
-      return 'bg-teal-500 text-white border-teal-700';     // TP-9000
-    }
-  }
-  
-  // Default per taglie non riconosciute
-  return 'bg-gray-100 text-gray-800 border-gray-300';
+  // Il colore è solo presentazionale: non deduce più fasce/range dal codice.
+  if (!sizeCode) return 'bg-gray-100 text-gray-800 border-gray-300';
+  const palette = [
+    'bg-purple-500 text-white border-purple-700',
+    'bg-pink-500 text-white border-pink-700',
+    'bg-rose-500 text-white border-rose-700',
+    'bg-orange-500 text-white border-orange-700',
+    'bg-amber-500 text-white border-amber-700',
+    'bg-lime-500 text-white border-lime-700',
+    'bg-green-500 text-white border-green-700',
+    'bg-teal-500 text-white border-teal-700',
+  ];
+  const hash = Array.from(sizeCode).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return palette[hash % palette.length];
 };
 
 // Questo componente visualizza il confronto tra lo stato attuale e futuro del FLUPSY
@@ -116,7 +95,7 @@ export default function FlupsyComparison() {
   // State per modalità di confronto e data target
   const [comparisonType, setComparisonType] = useState<'date' | 'target-size'>('date');
   const [targetDate, setTargetDate] = useState<Date>(addDays(new Date(), 30));
-  const [targetSize, setTargetSize] = useState<string>('TP-3000');
+  const [targetSize, setTargetSize] = useState<string>('');
   
   // State per lo zoom delle ceste
   const [zoomEnabled, setZoomEnabled] = useState(false);
@@ -142,6 +121,13 @@ export default function FlupsyComparison() {
   const { data: sizes } = useQuery<EnhancedSize[]>({
     queryKey: ['/api/sizes'],
   });
+
+  useEffect(() => {
+    if (!sizes?.length) return;
+    if (!targetSize || !sizes.some(size => size.code === targetSize)) {
+      setTargetSize(sizes[0].code);
+    }
+  }, [sizes, targetSize]);
   
   const { data: sgrs } = useQuery<EnhancedSgr[]>({
     queryKey: ['/api/sgr'],
@@ -674,7 +660,7 @@ export default function FlupsyComparison() {
           <Tooltip>
             <TooltipTrigger asChild>
               <div 
-                className={`basket-card p-2 rounded border-2 ${getSizeColorWithBorder('default')} flex flex-col justify-between opacity-40 cursor-pointer transition-all duration-200`}
+                className={`basket-card p-2 rounded border-2 ${getSizeColorWithBorder('')} flex flex-col justify-between opacity-40 cursor-pointer transition-all duration-200`}
                 style={getBasketCardStyle()}
               >
                 <div className="flex justify-between items-start w-full">

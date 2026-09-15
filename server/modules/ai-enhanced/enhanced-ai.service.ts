@@ -123,10 +123,10 @@ Domanda: "Quali cestelli crescono più lentamente del previsto?"
 - Identifica cestelli con crescita < 80% del previsto
 - Raccomanda controllo condizioni ambientali o lotti
 
-Domanda: "Quanto posso vendere di taglia TP-2800 il mese prossimo?"
+Domanda: "Quanto posso vendere di taglia TP-3000 il mese prossimo?"
 - Tabelle: baskets, cycles, operations, sizes, sgrPerTaglia
 - Query: cestelli attivi + taglia attuale + SGR previsto
-- Calcola giorni per raggiungere TP-2800
+- Calcola giorni per raggiungere TP-3000
 - Stima quantità disponibile per la data target
 - Raccomanda pianificazione vendite
 

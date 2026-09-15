@@ -61,7 +61,11 @@ import { checkDatabaseIntegrityHandler } from "./controllers/database-integrity-
 import ordiniCondivisiRouter from "./controllers/ordini-condivisi-controller";
 import basketTransferRouter from "./modules/operations/transfer/basket-transfer.routes";
 import whatsappRouter from "./modules/whatsapp/whatsapp.routes";
-import { determineSizeByAnimalsPerKg, toBusinessIsoDate } from "./utils/size-determination";
+import {
+  determineSizeByAnimalsPerKg,
+  getSizeRangeCandidates,
+  toBusinessIsoDate,
+} from "./utils/size-determination";
 import { computeMisuraAnimalCount, recomputeCycleMisure } from "./utils/misura-mortality";
 import { operationsLifecycleService } from "./services/operations-lifecycle.service";
 
@@ -2377,15 +2381,24 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
       `);
 
       // Carica tabella taglie per classificazione e target TP-3000
+      const dashboardDate = toBusinessIsoDate(new Date());
       const sizesResult = await db.execute(sql`
-        SELECT id, code, min_animals_per_kg, max_animals_per_kg, color
-        FROM sizes ORDER BY min_animals_per_kg ASC
+        SELECT s.id, s.code, srv.min_animals_per_kg, srv.max_animals_per_kg, s.color
+        FROM sizes s
+        JOIN size_range_versions srv ON srv.size_id = s.id
+        WHERE srv.valid_from <= ${dashboardDate}::date
+          AND (srv.valid_to IS NULL OR srv.valid_to >= ${dashboardDate}::date)
+        ORDER BY srv.min_animals_per_kg ASC
       `);
       const sizes = ((sizesResult as any).rows || sizesResult) as any[];
-      // TP-3000: 20.001–29.000 pz/kg (da tabella sizes)
       const tp3000 = sizes.find((s: any) => s.code === 'TP-3000');
-      const TARGET_MIN_APK = tp3000 ? parseInt(tp3000.min_animals_per_kg) : 20001;
-      const TARGET_MAX_APK = tp3000 ? parseInt(tp3000.max_animals_per_kg) : 29000;
+      if (!tp3000) {
+        return res.status(422).json({
+          message: "Nessun range attivo per la taglia TP-3000 alla data corrente",
+        });
+      }
+      const TARGET_MIN_APK = parseInt(tp3000.min_animals_per_kg);
+      const TARGET_MAX_APK = parseInt(tp3000.max_animals_per_kg);
 
       const classifySize = (apk: number) => {
         if (!apk) return null;
@@ -6899,8 +6912,12 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
     try {
       // Trova l'ID della taglia TP-3000
       const tp3000 = await storage.getSizeByCode("TP-3000");
-      if (!tp3000) {
-        return res.status(404).json({ message: "Taglia TP-3000 non trovata nel database" });
+      const tp3000Range = (await getSizeRangeCandidates(new Date()))
+        .find((candidate) => candidate.code === "TP-3000");
+      if (!tp3000 || !tp3000Range) {
+        return res.status(422).json({
+          message: "Nessun range attivo per la taglia TP-3000 alla data corrente",
+        });
       }
       
       // Parametro per il numero di giorni, default 14 (2 settimane)
@@ -7000,7 +7017,9 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
             if (currentWeight <= 0) return null;
             
             // Calcola il peso di TP-3000 in mg
-            const tp3000Weight = tp3000.minAnimalsPerKg ? 1000000 / tp3000.minAnimalsPerKg : 0;
+            const tp3000Weight = tp3000Range.maxAnimalsPerKg > 0
+              ? 1000000 / tp3000Range.maxAnimalsPerKg
+              : 0;
             if (tp3000Weight <= 0) return null;
             
             // Se il peso è già uguale o superiore a TP-3000, includi subito

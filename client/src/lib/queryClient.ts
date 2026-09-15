@@ -243,3 +243,99 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Le taglie possono essere versionate per data di business. Un unico timer
+// condiviso viene armato alla prossima mezzanotte Europe/Rome, evitando polling
+// continuo o logica duplicata a ogni componente che usa /api/sizes.
+let sizesBusinessDateTimer: ReturnType<typeof setTimeout> | null = null;
+let sizesBusinessDateListenersInstalled = false;
+
+const romeDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Rome",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const romeOffsetFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Rome",
+  timeZoneName: "shortOffset",
+});
+
+let sizesBusinessDateKey = getEuropeRomeDateKey();
+
+function getEuropeRomeDateKey(): string {
+  const parts = romeDateFormatter.formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function getEuropeRomeOffsetMinutes(date: Date): number {
+  const timeZoneName = romeOffsetFormatter
+    .formatToParts(date)
+    .find(part => part.type === "timeZoneName")?.value ?? "GMT";
+  const match = timeZoneName.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  if (!match) return 0;
+  const minutes = Number(match[2]) * 60 + Number(match[3] ?? 0);
+  return match[1] === "-" ? -minutes : minutes;
+}
+
+function getMillisecondsUntilNextEuropeRomeMidnight(): number {
+  const now = new Date();
+  const parts = romeDateFormatter.formatToParts(now);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  const nextUtcMidnight = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day) + 1,
+  );
+  const initialOffset = getEuropeRomeOffsetMinutes(new Date(nextUtcMidnight));
+  let target = nextUtcMidnight - initialOffset * 60 * 1000;
+  // Re-evaluate once at the target to handle a DST transition at midnight.
+  const targetOffset = getEuropeRomeOffsetMinutes(new Date(target));
+  target = nextUtcMidnight - targetOffset * 60 * 1000;
+  return Math.max(1000, target - now.getTime());
+}
+
+function checkEuropeRomeBusinessDate(): void {
+  const nextKey = getEuropeRomeDateKey();
+  if (nextKey === sizesBusinessDateKey) return;
+  sizesBusinessDateKey = nextKey;
+  void queryClient.invalidateQueries({ queryKey: ["/api/sizes"] });
+}
+
+const handleSizesVisibilityChange = (): void => {
+  if (document.visibilityState === "visible") checkEuropeRomeBusinessDate();
+};
+
+function scheduleSizesBusinessDateRefresh(): void {
+  if (typeof window === "undefined") return;
+  if (sizesBusinessDateTimer) clearTimeout(sizesBusinessDateTimer);
+  sizesBusinessDateTimer = setTimeout(() => {
+    sizesBusinessDateTimer = null;
+    checkEuropeRomeBusinessDate();
+    scheduleSizesBusinessDateRefresh();
+  }, getMillisecondsUntilNextEuropeRomeMidnight());
+}
+
+export function cleanupSizesBusinessDateRefresh(): void {
+  if (sizesBusinessDateTimer) {
+    clearTimeout(sizesBusinessDateTimer);
+    sizesBusinessDateTimer = null;
+  }
+  if (typeof window !== "undefined" && sizesBusinessDateListenersInstalled) {
+    window.removeEventListener("focus", checkEuropeRomeBusinessDate);
+    document.removeEventListener("visibilitychange", handleSizesVisibilityChange);
+    sizesBusinessDateListenersInstalled = false;
+  }
+}
+
+function installSizesBusinessDateRefresh(): void {
+  if (typeof window === "undefined" || sizesBusinessDateListenersInstalled) return;
+  window.addEventListener("focus", checkEuropeRomeBusinessDate);
+  document.addEventListener("visibilitychange", handleSizesVisibilityChange);
+  sizesBusinessDateListenersInstalled = true;
+  scheduleSizesBusinessDateRefresh();
+}
+
+installSizesBusinessDateRefresh();

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -82,11 +82,6 @@ type HistoryPoint = {
 
 type HistoryResponse = { success: boolean; data: HistoryPoint[] };
 
-const TARGET_OPTIONS = [
-  'TP-2000', 'TP-2500', 'TP-2800', 'TP-3000', 'TP-3500',
-  'TP-4000', 'TP-4500', 'TP-5000', 'TP-5500', 'TP-6000',
-];
-
 function immColor(imm: number): string {
   if (imm >= 75) return 'text-green-600';
   if (imm >= 50) return 'text-lime-600';
@@ -114,22 +109,32 @@ function qualityBadge(q: string | null): string {
 }
 
 export default function IMM() {
-  const [targetSizeCode, setTargetSizeCode] = useState('TP-3000');
+  const [targetSizeCode, setTargetSizeCode] = useState('');
   const [horizonDays, setHorizonDays] = useState(180);
   const { toast } = useToast();
+  const { data: activeSizes = [] } = useQuery<Array<{ id: number; code: string; name: string }>>({
+    queryKey: ['/api/sizes'],
+  });
+
+  useEffect(() => {
+    if (!activeSizes.length) return;
+    if (!targetSizeCode || !activeSizes.some(size => size.code === targetSizeCode)) {
+      setTargetSizeCode(activeSizes[0].code);
+    }
+  }, [activeSizes, targetSizeCode]);
 
   const queryKey = ['/api/imm/inventory', { targetSizeCode, horizonDays }];
-  const { data, isLoading } = useQuery<IMMResponse>({ queryKey });
+  const { data, isLoading } = useQuery<IMMResponse>({ queryKey, enabled: Boolean(targetSizeCode) });
   const d = data?.data;
 
   // History
   const fromDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
   const toDate = new Date().toISOString().slice(0, 10);
   const historyKey = ['/api/imm/history', { scope: 'global', targetSizeCode, fromDate, toDate }];
-  const { data: history } = useQuery<HistoryResponse>({ queryKey: historyKey });
+  const { data: history } = useQuery<HistoryResponse>({ queryKey: historyKey, enabled: Boolean(targetSizeCode) });
 
   const coverageKey = ['/api/imm/orders-coverage', { targetSizeCode, horizonDays }];
-  const { data: coverage } = useQuery<CoverageResponse>({ queryKey: coverageKey });
+  const { data: coverage } = useQuery<CoverageResponse>({ queryKey: coverageKey, enabled: Boolean(targetSizeCode) });
   const cov = coverage?.data;
 
   // Config persistita
@@ -228,7 +233,7 @@ export default function IMM() {
               <Select value={targetSizeCode} onValueChange={setTargetSizeCode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TARGET_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {activeSizes.map((size) => <SelectItem key={size.id} value={size.code}>{size.code}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -306,7 +311,7 @@ export default function IMM() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {TARGET_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      {activeSizes.map((size) => <SelectItem key={size.id} value={size.code}>{size.code}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

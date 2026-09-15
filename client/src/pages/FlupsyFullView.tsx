@@ -68,6 +68,9 @@ export default function FlupsyFullView() {
   const { data: operations, isLoading: isLoadingOperations } = useQuery<OperationSummary[]>({
     queryKey: ['/api/operations'],
   });
+  const { data: activeSizes = [] } = useQuery<any[]>({
+    queryKey: ['/api/sizes'],
+  });
   
   // Fetch cycles
   const { data: cyclesData, isLoading: isLoadingCycles } = useQuery<CycleSummary[] | { cycles: CycleSummary[] }>({
@@ -288,6 +291,7 @@ export default function FlupsyFullView() {
                             operations={basketOperations}
                             cycle={cycle}
                             cycles={cycles}
+                            activeSizes={activeSizes}
                             viewMode={viewMode}
                           />
                         );
@@ -317,6 +321,7 @@ export default function FlupsyFullView() {
                             operations={basketOperations}
                             cycle={cycle}
                             cycles={cycles}
+                            activeSizes={activeSizes}
                             viewMode={viewMode}
                           />
                         );
@@ -344,6 +349,7 @@ export default function FlupsyFullView() {
                           operations={basketOperations}
                           cycle={cycle}
                           cycles={cycles}
+                          activeSizes={activeSizes}
                           viewMode={viewMode}
                         />
                       );
@@ -366,10 +372,11 @@ interface BasketPositionCardProps {
   operations?: any[];
   cycle?: any;
   cycles?: CycleSummary[];
+  activeSizes: any[];
   viewMode: ViewMode;
 }
 
-function BasketPositionCard({ position, basket, operations = [], cycle, cycles = [], viewMode }: BasketPositionCardProps) {
+function BasketPositionCard({ position, basket, operations = [], cycle, cycles = [], activeSizes, viewMode }: BasketPositionCardProps) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   
@@ -385,7 +392,7 @@ function BasketPositionCard({ position, basket, operations = [], cycle, cycles =
   const averageWeight = latestOperation?.animalsPerKg ? 1000000 / latestOperation.animalsPerKg : null;
   
   // Determina la taglia target in base al peso
-  const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight) : null;
+  const targetSize = averageWeight ? getTargetSizeForWeight(averageWeight, activeSizes) : null;
   
   // Determine the class based on basket state and target size
   const getCardClass = () => {

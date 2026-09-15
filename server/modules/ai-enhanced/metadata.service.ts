@@ -188,12 +188,12 @@ export const DATABASE_METADATA: TableMetadata[] = [
 
   {
     name: 'sizes',
-    description: 'Taglie dei molluschi - categorie dimensionali (es. T0, TP-2800)',
+    description: 'Taglie dei molluschi - categorie dimensionali (es. T0, TP-3000)',
     primaryKey: 'id',
     category: 'Core',
     fields: [
       { name: 'id', type: 'integer', description: 'ID univoco taglia', required: true },
-      { name: 'code', type: 'text', description: 'Codice taglia (es. T0, M1, TP-2800)', required: true },
+      { name: 'code', type: 'text', description: 'Codice taglia (es. T0, M1, TP-3000)', required: true },
       { name: 'name', type: 'text', description: 'Nome descrittivo taglia', required: true },
       { name: 'sizeMm', type: 'real', description: 'Dimensione in millimetri', required: false },
       { name: 'minAnimalsPerKg', type: 'integer', description: 'Min animali per kg per questa taglia', required: false },

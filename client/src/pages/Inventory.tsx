@@ -307,8 +307,25 @@ export default function Inventory() {
       // Procediamo solo se possiamo determinare la taglia
       if (animalsPerKg === null) return;
       
-      const matchingSize = findSizeFromAnimalsPerKg(animalsPerKg);
+      // Un'operazione già registrata mantiene la sua classificazione storica.
+      // La riclassificazione dai range attivi vale solo per dati privi di sizeId/code.
+      const recordedSize = getRecordedSizeIdentity(lastOperation, sizeMap);
+      const hasRecordedSize = recordedSize !== undefined;
+      const matchingSize = recordedSize || (hasRecordedSize ? undefined : findSizeFromAnimalsPerKg(animalsPerKg));
       if (!matchingSize) return;
+      if (!sizeDistribution[matchingSize.code]) {
+        sizeDistribution[matchingSize.code] = {
+          sizeCode: matchingSize.code,
+          sizeName: matchingSize.name || matchingSize.code,
+          color: getColorForSize(matchingSize),
+          count: 0,
+          totalAnimals: 0,
+          averageAnimalsPerKg: 0,
+          averageWeight: 0,
+          minAnimalsPerKg: matchingSize.minAnimalsPerKg ?? null,
+          maxAnimalsPerKg: matchingSize.maxAnimalsPerKg ?? null,
+        };
+      }
       
       // Calcola il numero totale di animali nella cesta
       const animalCount = lastOperation.animalCount || calculateAnimalCount(lastOperation);
@@ -427,7 +444,10 @@ export default function Inventory() {
       const animalsPerKg = lastOperation.animalsPerKg || 
                          (lastOperation.averageWeight ? 1000000 / lastOperation.averageWeight : 0);
                          
-      const matchingSize = findSizeFromAnimalsPerKg(animalsPerKg);
+      // Non riclassificare operazioni storiche già associate a una taglia.
+      const recordedSize = getRecordedSizeIdentity(lastOperation, sizeMap);
+      const hasRecordedSize = recordedSize !== undefined;
+      const matchingSize = recordedSize || (hasRecordedSize ? undefined : findSizeFromAnimalsPerKg(animalsPerKg));
       
       // Calcola la durata del ciclo in giorni
       const cycleDuration = differenceInDays(
@@ -575,11 +595,12 @@ export default function Inventory() {
           // growthRateToUse deve essere convertito da percentuale a coefficiente
           // se è maggiore di 0.1 (10%), è probabilmente una percentuale e va divisa per 100
           const sgrCoefficient = growthRateToUse > 0.1 ? growthRateToUse / 100 : growthRateToUse;
-          const result = getTargetSizeReachDate(
+            const result = getTargetSizeReachDate(
             basket.averageWeight,
             new Date(basket.lastOperationDate || new Date()),
             sgrCoefficient,
-            targetSizeObj.code
+              targetSizeObj.code,
+              sizes as Size[]
           );
           
           if (result) {
@@ -627,6 +648,53 @@ export default function Inventory() {
       animalsPerKg <= size.maxAnimalsPerKg
     );
   };
+
+  // Le taglie attive sono il solo catalogo per nuove classificazioni. Un record
+  // storico, invece, conserva la propria identità anche se la taglia è stata
+  // disattivata e quindi non compare più nella query /api/sizes.
+  const getRecordedSizeIdentity = (operation: any, sizeMap: Map<number, Size>): Size | undefined => {
+    const relatedSize = operation?.size && typeof operation.size === 'object' && operation.size.code
+      ? operation.size
+      : undefined;
+    const raw = relatedSize ?? operation?.sizeCode ?? operation?.size_code ??
+      (operation?.sizeId != null ? sizeMap.get(Number(operation.sizeId)) : undefined);
+    if (!raw && operation?.sizeId == null) return undefined;
+    if (typeof raw === 'string') {
+      return {
+        id: Number(operation?.sizeId) || 0,
+        code: raw,
+        name: raw,
+        sizeMm: null,
+        minAnimalsPerKg: null,
+        maxAnimalsPerKg: null,
+        notes: null,
+      };
+    }
+    if (raw && typeof raw === 'object' && raw.code) {
+      return {
+        id: Number(raw.id ?? operation?.sizeId) || 0,
+        code: String(raw.code),
+        name: raw.name || String(raw.code),
+        sizeMm: raw.sizeMm ?? null,
+        minAnimalsPerKg: raw.minAnimalsPerKg ?? raw.min_animals_per_kg ?? null,
+        maxAnimalsPerKg: raw.maxAnimalsPerKg ?? raw.max_animals_per_kg ?? null,
+        notes: raw.notes ?? null,
+      };
+    }
+    if (operation?.sizeId != null) {
+      const id = Number(operation.sizeId);
+      return {
+        id,
+        code: `ID-${id}`,
+        name: `Taglia ID ${id}`,
+        sizeMm: null,
+        minAnimalsPerKg: null,
+        maxAnimalsPerKg: null,
+        notes: null,
+      };
+    }
+    return undefined;
+  };
   
   // Funzione per calcolare il numero di animali da animalsPerKg e totalWeight
   const calculateAnimalCount = (operation: any): number => {
@@ -664,27 +732,9 @@ export default function Inventory() {
       }
     }
     
-    // Caso 4: Se abbiamo solo animalsPerKg e averageWeight, possiamo calcolare precisamente
-    if (operation.animalsPerKg && operation.averageWeight) {
-      // Se averageWeight è in mg, dobbiamo convertirlo in kg (dividendo per 1,000,000)
-      // e poi moltiplicare per il numero di animali nella cesta (che è almeno 500 per default)
-      const numAnimals = Math.round(500 * (operation.animalsPerKg / 5000));
-      console.log("Calcolo da animalsPerKg e averageWeight:", numAnimals);
-      return numAnimals;
-    }
-    
-    // Se abbiamo solo animalsPerKg, usiamo un valore da stimare in base alla densità di animali
-    if (operation.animalsPerKg) {
-      // Usiamo una formula basata sugli animali per kg
-      // Più alto è il valore di animalsPerKg, più piccoli sono gli animali, quindi ne servono di più per kg
-      const densityFactor = operation.animalsPerKg / 1000; // più alto = più animali
-      const baseCount = 500; // valore base per ceste medie
-      const estimatedCount = Math.round(baseCount * densityFactor);
-      console.log("Calcolo da solo animalsPerKg:", estimatedCount);
-      return Math.max(estimatedCount, 100); // almeno 100 animali
-    }
-    
-    console.log("Nessun dato sufficiente, restituisco 0");
+    // Senza un peso netto non è possibile ricavare il conteggio senza
+    // introdurre una stima arbitraria. Mostra quindi il dato come assente.
+    console.log("Nessun dato sufficiente per il conteggio animali");
     return 0;
   };
   
@@ -1381,7 +1431,7 @@ export default function Inventory() {
                     sgrRates={sgrs as any[]}
                     mortalityRates={mortalityRates as MortalityRate[]}
                     projectionMonths={projectionMonths}
-                    targetSizes={['TP-1500', 'TP-2000', 'TP-3000', 'TP-5000']}
+                    targetSizes={(sizes as Size[] || []).map(size => size.code)}
                     formatNumberEU={formatNumberEU}
                     formatDecimalEU={formatDecimalEU}
                     formatDateIT={formatDateIT}

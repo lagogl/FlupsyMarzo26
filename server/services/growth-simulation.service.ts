@@ -19,6 +19,7 @@
  */
 
 import { db } from "../db";
+import { sql } from "drizzle-orm";
 import * as schema from "../../shared/schema";
 import { storage } from "../storage";
 import {
@@ -32,43 +33,11 @@ const MONTH_NAMES_IT = [
   "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
 ];
 
-export const SALE_SIZE_THRESHOLDS: Array<{ size: string; maxAnimalsPerKg: number }> = [
-  { size: "TP-10000", maxAnimalsPerKg: 1200 },
-  { size: "TP-9000", maxAnimalsPerKg: 1800 },
-  { size: "TP-8000", maxAnimalsPerKg: 2300 },
-  { size: "TP-7000", maxAnimalsPerKg: 3000 },
-  { size: "TP-6000", maxAnimalsPerKg: 3900 },
-  { size: "TP-5500", maxAnimalsPerKg: 6000 },
-  { size: "TP-5000", maxAnimalsPerKg: 9000 },
-  { size: "TP-4500", maxAnimalsPerKg: 13000 },
-  { size: "TP-4000", maxAnimalsPerKg: 15000 },
-  { size: "TP-3500", maxAnimalsPerKg: 20000 },
-  { size: "TP-3000", maxAnimalsPerKg: 29000 },
-  { size: "TP-2800", maxAnimalsPerKg: 40000 },
-  { size: "TP-2500", maxAnimalsPerKg: 70000 },
-  { size: "TP-2000", maxAnimalsPerKg: 97000 },
-  { size: "TP-1900", maxAnimalsPerKg: 120000 },
-  { size: "TP-1800", maxAnimalsPerKg: 190000 },
-  { size: "TP-1500", maxAnimalsPerKg: 300000 },
-  { size: "TP-1260", maxAnimalsPerKg: 350000 },
-  { size: "TP-1140", maxAnimalsPerKg: 600000 },
-  { size: "TP-1000", maxAnimalsPerKg: 880000 },
-  { size: "TP-800", maxAnimalsPerKg: 1_000_000 },
-  { size: "TP-700", maxAnimalsPerKg: 1_900_000 },
-  { size: "TP-600", maxAnimalsPerKg: 2_000_000 },
-  { size: "TP-500", maxAnimalsPerKg: 8_000_000 },
-  { size: "TP-450", maxAnimalsPerKg: 15_000_000 },
-  { size: "TP-350", maxAnimalsPerKg: 20_000_000 },
-  { size: "TP-300", maxAnimalsPerKg: 30_000_000 },
-  { size: "TP-250", maxAnimalsPerKg: 70_000_000 },
-  { size: "TP-180", maxAnimalsPerKg: Number.POSITIVE_INFINITY },
-];
-
-export function mapAnimalsPerKgToSizeCode(animalsPerKg: number): string {
-  for (const t of SALE_SIZE_THRESHOLDS) {
-    if (animalsPerKg <= t.maxAnimalsPerKg) return t.size;
-  }
-  return "TP-180";
+export function mapAnimalsPerKgToSizeCode(
+  animalsPerKg: number,
+  candidates: SizeRangeCandidate[] = [],
+): string | null {
+  return findSizeInRanges(animalsPerKg, candidates)?.code ?? null;
 }
 
 export const FALLBACK_MONTHLY_MORTALITY = 0.03; // 3 %/mese
@@ -114,11 +83,13 @@ export async function loadGrowthSimulationContext(): Promise<GrowthSimulationCon
     storage.getSizes(),
     db.select({
       sizeId: schema.sizeRangeVersions.sizeId,
+      code: schema.sizes.code,
       minAnimalsPerKg: schema.sizeRangeVersions.minAnimalsPerKg,
       maxAnimalsPerKg: schema.sizeRangeVersions.maxAnimalsPerKg,
       validFrom: schema.sizeRangeVersions.validFrom,
       validTo: schema.sizeRangeVersions.validTo,
-    }).from(schema.sizeRangeVersions),
+    }).from(schema.sizeRangeVersions)
+      .innerJoin(schema.sizes, sql`${schema.sizes.id} = ${schema.sizeRangeVersions.sizeId}`),
     storage.getSgrs(),
     storage.getSgrPerTaglia(),
     db.select().from(schema.projectionMortalityRates),
@@ -151,7 +122,7 @@ export async function loadGrowthSimulationContext(): Promise<GrowthSimulationCon
 
   const normalizedRangeVersions = rangeVersions.map((range) => ({
     ...range,
-    code: String((allSizes as any[]).find((size) => size.id === range.sizeId)?.code ?? range.sizeId),
+    code: String(range.code),
     validFrom: String(range.validFrom),
     validTo: range.validTo ? String(range.validTo) : null,
   }));

@@ -71,6 +71,9 @@ export default function LotFormNew({
   const { data: sizes = [] } = useQuery<Size[]>({
     queryKey: ['/api/sizes'],
   });
+  // In modifica il codice già registrato è storico: non va riclassificato
+  // quando cambiano i range attivi.
+  const hasRecordedSize = isEditing && defaultValues?.sizeId != null;
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -107,7 +110,8 @@ export default function LotFormNew({
     const matchingSize = sizes.find(size => {
       const min = size.minAnimalsPerKg;
       const max = size.maxAnimalsPerKg;
-      return min && max && piecesPerKg >= min && piecesPerKg <= max;
+      return min != null && max != null && min <= max &&
+        piecesPerKg >= min && piecesPerKg <= max;
     });
     
     if (matchingSize) {
@@ -117,44 +121,9 @@ export default function LotFormNew({
       return matchingSize.id;
     }
     
-    // Se nessuna taglia corrisponde esattamente, usiamo una logica fallback
-    console.log("Nessuna taglia trovata nel range esatto, usando logica fallback");
-    
-    // Ordina le taglie per valore minimo (crescente)
-    const taglieOrdinate = [...sizes]
-      .filter(s => s.minAnimalsPerKg && s.maxAnimalsPerKg)
-      .sort((a, b) => {
-        const aMin = a.minAnimalsPerKg || 0;
-        const bMin = b.minAnimalsPerKg || 0;
-        return aMin - bMin;
-      });
-    
-    if (taglieOrdinate.length === 0) {
-      console.log("Nessuna taglia valida trovata nel database");
-      return null;
-    }
-    
-    const firstSize = taglieOrdinate[0];
-    const lastSize = taglieOrdinate[taglieOrdinate.length - 1];
-    const firstMin = firstSize.minAnimalsPerKg || 0;
-    const lastMax = lastSize.maxAnimalsPerKg || 0;
-    
-    // Se il valore è inferiore al minimo della taglia più piccola, usa quella
-    if (piecesPerKg < firstMin) {
-      console.log(`Valore troppo piccolo (${piecesPerKg} < ${firstMin}), usando la taglia più piccola: ${firstSize.code}`);
-      return firstSize.id;
-    }
-    
-    // Se il valore è maggiore del massimo della taglia più grande, usa quella
-    if (piecesPerKg > lastMax) {
-      console.log(`Valore troppo grande (${piecesPerKg} > ${lastMax}), usando la taglia più grande: ${lastSize.code}`);
-      return lastSize.id;
-    }
-    
-    // Fallback finale - usa TP-1000 se tutto fallisce
-    const fallbackSize = sizes.find(s => s.code === "TP-1000");
-    console.log(`Impossibile determinare la taglia, usando fallback: TP-1000`);
-    return fallbackSize?.id || null;
+    // Fuori da ogni intervallo attivo la taglia è indeterminata.
+    console.log("Nessuna taglia attiva corrisponde al valore");
+    return null;
   };
   
   // Monitorare i cambiamenti nei campi e aggiornare i calcoli
@@ -175,8 +144,10 @@ export default function LotFormNew({
             // Determina la taglia in base ai pezzi per kg e aggiorna il campo
             const autoSizeId = determineSizeId(piecesPerKg);
             setSuggestedSizeId(autoSizeId);
-            if (autoSizeId) {
+            if (autoSizeId && !hasRecordedSize) {
               form.setValue("sizeId", autoSizeId);
+            } else if (!hasRecordedSize) {
+              form.setValue("sizeId", null);
             }
             
             // Se è presente anche il peso totale, calcola gli animali totali
@@ -198,8 +169,10 @@ export default function LotFormNew({
           if (piecesPerKg) {
             const autoSizeId = determineSizeId(piecesPerKg);
             setSuggestedSizeId(autoSizeId);
-            if (autoSizeId) {
+            if (autoSizeId && !hasRecordedSize) {
               form.setValue("sizeId", autoSizeId);
+            } else if (!hasRecordedSize) {
+              form.setValue("sizeId", null);
             }
           }
         }
@@ -215,8 +188,10 @@ export default function LotFormNew({
       // Calcola taglia automaticamente
       const autoSizeId = determineSizeId(manualPiecesPerKg);
       setSuggestedSizeId(autoSizeId);
-      if (autoSizeId) {
+       if (autoSizeId && !hasRecordedSize) {
         form.setValue("sizeId", autoSizeId);
+       } else if (!hasRecordedSize) {
+         form.setValue("sizeId", null);
       }
       
       // Calcola numero totale animali
