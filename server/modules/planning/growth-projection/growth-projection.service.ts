@@ -3,6 +3,7 @@ import { db } from "../../../db";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
+import { calculateFulfillableProductionForecast } from "./forecast-fulfillment";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -46,6 +47,7 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
+  forecastEvadibileTarget: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
   arrivalTooLate: boolean;
@@ -320,6 +322,10 @@ export class GrowthProjectionService {
         }
       }
       const budgetMese = budgetByYearMonth[ymKey] || 0;
+      const forecastEvadibileTarget = calculateFulfillableProductionForecast(
+        budgetMese,
+        giacenzaLordaConSchiuditoio,
+      );
       const domandaEffettiva = ordiniTarget;
       const ordiniArretrati = carryOver;
 
@@ -381,7 +387,8 @@ export class GrowthProjectionService {
         ordiniEvasiBySize,
         ordiniArretrati,
         ordiniEvasi,
-        budgetProduzione: budgetByYearMonth[ymKey] || 0,
+        budgetProduzione: budgetMese,
+        forecastEvadibileTarget,
         domandaEffettiva,
         arriviSchiuditoio: hatcheryThisMonth,
         arrivalTooLate: false,

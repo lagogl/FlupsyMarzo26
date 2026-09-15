@@ -46,6 +46,7 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
+  forecastEvadibileTarget: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
   arrivalTooLate?: boolean;
@@ -227,6 +228,23 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.budgetProduzione),
+    },
+    {
+      rowKey: "forecast_evadibile",
+      label: `${t("pc_row_forecast_evadibile")} ${data.targetSize}`,
+      tooltip: t("pc_row_forecast_evadibile_tip"),
+      color: "#0d9488",
+      bgClass: "",
+      textClass: "text-gray-800",
+      values: mc.map(m => m.forecastEvadibileTarget || 0),
+      isSuccess: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m ? m.budgetProduzione > 0 && m.forecastEvadibileTarget >= m.budgetProduzione : false;
+      },
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m ? m.budgetProduzione > 0 && m.forecastEvadibileTarget < m.budgetProduzione : false;
+      },
     },
     {
       rowKey: "domanda",
