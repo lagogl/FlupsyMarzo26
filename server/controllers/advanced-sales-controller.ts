@@ -9,6 +9,9 @@ import { pdfGenerator } from "../services/pdf-generator";
 import {
   generateAdvancedSaleDocument as buildAdvancedSaleDocument,
   abbreviateFlupsyName,
+  buildAdvancedDdtSubject,
+  buildFicDdtCustomerEntity,
+  buildFicDdtHeader,
   mergeSaleCustomerData,
   normalizeSaleCustomerSnapshot,
   formatFlupsyBasketIdentifier,
@@ -98,7 +101,16 @@ function ensureAdvancedSaleDocumentSchema() {
       `));
       await db.execute(sql.raw(`
         ALTER TABLE clienti ADD COLUMN IF NOT EXISTS codice_allevamento text;
-        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_allevamento text
+        ALTER TABLE clienti ADD COLUMN IF NOT EXISTS pec text;
+        ALTER TABLE clienti ADD COLUMN IF NOT EXISTS codice_destinatario text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_allevamento text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_email text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_pec text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_telefono text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_codice_destinatario text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS cliente_fatture_in_cloud_id integer;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS oggetto text;
+        ALTER TABLE ddt ADD COLUMN IF NOT EXISTS causale_trasporto text DEFAULT 'Vendita'
       `));
       await db.execute(sql.raw(`
         ALTER TABLE bag_allocations
@@ -191,10 +203,7 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
   const preliminary = mergeSaleCustomerData(saleSnapshot, localCustomer);
   let ficDetail: any = null;
 
-  if (
-    companyId &&
-    (!preliminary.address || !preliminary.farmCode || !preliminary.postalCode)
-  ) {
+  if (companyId) {
     try {
       const accessToken = await getConfigValue('fatture_in_cloud_access_token');
       if (accessToken) {
@@ -239,14 +248,24 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
           accessToken,
           `/entities/clients/${ficClientId}`
         );
-        ficDetail = response.data?.data || null;
+        const responseDetail = response.data?.data || null;
+        ficDetail = responseDetail
+          ? { ...responseDetail, ficClientId: responseDetail.id }
+          : null;
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (localCustomer?.fattureInCloudId) {
+        const detailError = new Error(
+          `Impossibile recuperare l'anagrafica completa del cliente da Fatture in Cloud: ${error?.message || 'servizio non disponibile'}`
+        );
+        (detailError as any).statusCode = 502;
+        throw detailError;
+      }
       console.warn(`Dettaglio FIC non disponibile per il cliente ${localCustomer?.id || sale?.customerName}; uso lo snapshot locale`);
     }
   }
 
-  return mergeSaleCustomerData(saleSnapshot, localCustomer, ficDetail);
+  return mergeSaleCustomerData(ficDetail, saleSnapshot, localCustomer);
 }
 
 /**
@@ -3447,6 +3466,7 @@ export async function applyOrderReconciliation(req: Request, res: Response) {
  */
 export async function generateDDT(req: Request, res: Response) {
   try {
+    await ensureAdvancedSaleDocumentSchema();
     const { id } = req.params;
     
     if (!id) {
@@ -3667,7 +3687,12 @@ export async function generateDDT(req: Request, res: Response) {
     // DDT, righe e collegamento vendita diventano visibili con un solo commit.
     const { numeroDDT, ddtCreato, righeCreate } = await db.transaction(async tx => {
       const [claimedSale] = await tx.update(advancedSales)
-        .set({ ddtStatus: 'generazione', updatedAt: new Date() })
+        .set({
+          ddtStatus: 'generazione',
+          customerName: completeCustomer.name,
+          customerDetails: completeCustomer,
+          updatedAt: new Date()
+        })
         .where(and(
           eq(advancedSales.id, parseInt(id)),
           eq(advancedSales.status, 'confirmed'),
@@ -3707,6 +3732,13 @@ export async function generateDDT(req: Request, res: Response) {
         clienteCodiceFiscale: completeCustomer.taxCode,
         clienteCodiceAllevamento: completeCustomer.farmCode,
         clientePaese: completeCustomer.country,
+        clienteEmail: completeCustomer.email,
+        clientePec: completeCustomer.certifiedEmail,
+        clienteTelefono: completeCustomer.phone,
+        clienteCodiceDestinatario: completeCustomer.eInvoiceCode,
+        clienteFattureInCloudId: Number(completeCustomer.ficClientId) || null,
+        oggetto: buildAdvancedDdtSubject(saleData.saleNumber),
+        causaleTrasporto: 'Vendita',
         companyId,
         mittenteRagioneSociale: fiscalData?.ragioneSociale || null,
         mittenteIndirizzo: fiscalData?.indirizzo || null,
@@ -3932,24 +3964,24 @@ export async function generatePDFReport(req: Request, res: Response) {
 
     if (cliente) {
       doc.fontSize(10).fillColor('#000').font('Helvetica-Bold');
-      doc.text(`${cliente.denominazione}`, boxRightX + 10, boxY, { width: boxWidth - 20 });
+      doc.text(`${cliente.name}`, boxRightX + 10, boxY, { width: boxWidth - 20 });
       boxY += 15;
       doc.font('Helvetica');
       
-      if (cliente.indirizzo && cliente.indirizzo !== 'N/A') {
-        doc.text(cliente.indirizzo, boxRightX + 10, boxY, { width: boxWidth - 20 });
+      if (cliente.address && cliente.address !== 'N/A') {
+        doc.text(cliente.address, boxRightX + 10, boxY, { width: boxWidth - 20 });
         boxY += 12;
       }
-      if (cliente.cap || cliente.comune) {
-        doc.text(`${cliente.cap || ''} ${cliente.comune || ''} (${cliente.provincia || ''})`, boxRightX + 10, boxY, { width: boxWidth - 20 });
+      if (cliente.postalCode || cliente.city) {
+        doc.text(`${cliente.postalCode || ''} ${cliente.city || ''} (${cliente.province || ''})`, boxRightX + 10, boxY, { width: boxWidth - 20 });
         boxY += 12;
       }
-      if (cliente.piva !== 'N/A') {
-        doc.text(`P.IVA: ${cliente.piva}`, boxRightX + 10, boxY, { width: boxWidth - 20 });
+      if (cliente.vatNumber && cliente.vatNumber !== 'N/A') {
+        doc.text(`P.IVA: ${cliente.vatNumber}`, boxRightX + 10, boxY, { width: boxWidth - 20 });
         boxY += 12;
       }
-      if (cliente.codiceFiscale !== 'N/A' && cliente.codiceFiscale !== cliente.piva) {
-        doc.text(`C.F.: ${cliente.codiceFiscale}`, boxRightX + 10, boxY, { width: boxWidth - 20 });
+      if (cliente.taxCode && cliente.taxCode !== 'N/A' && cliente.taxCode !== cliente.vatNumber) {
+        doc.text(`C.F.: ${cliente.taxCode}`, boxRightX + 10, boxY, { width: boxWidth - 20 });
       }
     }
 
@@ -4390,6 +4422,7 @@ async function ficApiRequest(method: string, companyId: string, accessToken: str
  */
 export async function sendDDTToFIC(req: Request, res: Response) {
   try {
+    await ensureAdvancedSaleDocumentSchema();
     const { ddtId } = req.params;
     
     console.log(`📤 Richiesta invio DDT a FIC - DDT ID: ${ddtId}`);
@@ -4468,21 +4501,14 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     const ddtPayload = {
       data: {
         type: 'delivery_note',
-        entity: {
-          name: ddtData.clienteNome,
-          address_street: ddtData.clienteIndirizzo || '',
-          address_city: ddtData.clienteCitta || '',
-          address_postal_code: ddtData.clienteCap || '',
-          address_province: ddtData.clienteProvincia || '',
-          country: ddtData.clientePaese || 'Italia',
-          vat_number: ddtData.clientePiva || '',
-          tax_code: ddtData.clienteCodiceFiscale || ''
-        },
+        entity: buildFicDdtCustomerEntity(ddtData),
+        ...buildFicDdtHeader(ddtData),
         date: ddtData.data,
         number: ddtData.numero,
         numeration: '/ddt',
         dn_ai_packages_number: ddtData.totaleColli ? ddtData.totaleColli.toString() : null,
         dn_ai_weight: ddtData.pesoTotale || null,
+        dn_ai_notes: ddtData.note || null,
         items_list: buildAggregatedFicDdtItems(righe)
       }
     };
@@ -4515,7 +4541,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       dn_ai_weight: ddtPayload.data.dn_ai_weight,
       items_count: ddtPayload.data.items_list.length
     }, null, 2));
-    const ficResponse = await ficApiRequest('POST', companyId, accessToken, '/issued_documents', ddtPayload);
+    const ficResponse = await ficApiRequest('POST', String(companyId), accessToken, '/issued_documents', ddtPayload);
     
     console.log(`✅ FIC: DDT inviato con successo! ID: ${ficResponse.data.data.id}`);
     console.log(`📊 Risposta FIC DN_AI:`, JSON.stringify({

@@ -78,6 +78,15 @@ export function normalizeSaleCustomerSnapshot(
     taxCode: meaningful(snapshot.taxCode || snapshot.tax_code || snapshot.codiceFiscale),
     phone: meaningful(snapshot.phone || snapshot.telefono),
     email: meaningful(snapshot.email),
+    certifiedEmail: meaningful(
+      snapshot.certifiedEmail || snapshot.certified_email || snapshot.pec
+    ),
+    eInvoiceCode: meaningful(
+      snapshot.eInvoiceCode || snapshot.ei_code || snapshot.codiceDestinatario
+    ),
+    ficClientId: meaningful(
+      snapshot.ficClientId || snapshot.fattureInCloudId || snapshot.externalId
+    ),
     farmCode: meaningful(snapshot.farmCode || snapshot.codiceAllevamento || snapshot.code),
     productionZone: meaningful(snapshot.productionZone || snapshot.zonaProduzione)
   };
@@ -98,8 +107,51 @@ export function mergeSaleCustomerData(...sources: unknown[]) {
     taxCode: field('taxCode'),
     phone: field('phone'),
     email: field('email'),
+    certifiedEmail: field('certifiedEmail'),
+    eInvoiceCode: field('eInvoiceCode'),
+    ficClientId: field('ficClientId'),
     farmCode: field('farmCode'),
     productionZone: field('productionZone')
+  };
+}
+
+export function buildAdvancedDdtSubject(saleNumber: unknown) {
+  const reference = meaningful(saleNumber);
+  return reference
+    ? `Fornitura molluschi - vendita ${reference}`
+    : 'Fornitura molluschi';
+}
+
+export function buildFicDdtCustomerEntity(ddtSnapshot: any) {
+  const entity: Record<string, string | number | boolean> = {
+    name: meaningful(ddtSnapshot?.clienteNome),
+    address_street: meaningful(ddtSnapshot?.clienteIndirizzo),
+    address_city: meaningful(ddtSnapshot?.clienteCitta),
+    address_postal_code: meaningful(ddtSnapshot?.clienteCap),
+    address_province: meaningful(ddtSnapshot?.clienteProvincia),
+    country: meaningful(ddtSnapshot?.clientePaese) || 'Italia',
+    vat_number: meaningful(ddtSnapshot?.clientePiva),
+    tax_code: meaningful(ddtSnapshot?.clienteCodiceFiscale),
+    email: meaningful(ddtSnapshot?.clienteEmail),
+    certified_email: meaningful(ddtSnapshot?.clientePec),
+    phone: meaningful(ddtSnapshot?.clienteTelefono),
+    ei_code: meaningful(ddtSnapshot?.clienteCodiceDestinatario)
+  };
+  const ficClientId = Number(ddtSnapshot?.clienteFattureInCloudId);
+  if (Number.isSafeInteger(ficClientId) && ficClientId > 0) {
+    entity.id = ficClientId;
+  }
+  return Object.fromEntries(
+    Object.entries(entity).filter(([, value]) => value !== '')
+  );
+}
+
+export function buildFicDdtHeader(ddtSnapshot: any) {
+  const subject = meaningful(ddtSnapshot?.oggetto) || 'Fornitura molluschi';
+  return {
+    subject,
+    visible_subject: subject,
+    dn_ai_causal: meaningful(ddtSnapshot?.causaleTrasporto) || 'Vendita'
   };
 }
 
@@ -113,8 +165,11 @@ function buildBuyer(data: AdvancedSaleDocumentData) {
       country: data.ddt.clientePaese,
       vatNumber: data.ddt.clientePiva,
       taxCode: data.ddt.clienteCodiceFiscale,
-      phone: '',
-      email: '',
+      phone: data.ddt.clienteTelefono || '',
+      email: data.ddt.clienteEmail || '',
+      certifiedEmail: data.ddt.clientePec || '',
+      eInvoiceCode: data.ddt.clienteCodiceDestinatario || '',
+      ficClientId: data.ddt.clienteFattureInCloudId || '',
       farmCode: data.ddt.clienteCodiceAllevamento || '',
       productionZone: ''
     } : null;

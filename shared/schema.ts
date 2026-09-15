@@ -1570,6 +1570,8 @@ export const clienti = pgTable("clienti", {
   provincia: text("provincia").notNull().default("N/A"),
   paese: text("paese").notNull().default("Italia"),
   email: text("email").notNull().default("N/A"),
+  pec: text("pec"),
+  codiceDestinatario: text("codice_destinatario"),
   telefono: text("telefono").notNull().default("N/A"),
   piva: text("piva").notNull().default("N/A"),
   codiceFiscale: text("codice_fiscale").notNull().default("N/A"),
@@ -1596,6 +1598,13 @@ export const ddt = pgTable("ddt", {
   clienteCodiceFiscale: text("cliente_codice_fiscale"),
   clienteCodiceAllevamento: text("cliente_codice_allevamento"),
   clientePaese: text("cliente_paese").default("Italia"),
+  clienteEmail: text("cliente_email"),
+  clientePec: text("cliente_pec"),
+  clienteTelefono: text("cliente_telefono"),
+  clienteCodiceDestinatario: text("cliente_codice_destinatario"),
+  clienteFattureInCloudId: integer("cliente_fatture_in_cloud_id"),
+  oggetto: text("oggetto"),
+  causaleTrasporto: text("causale_trasporto").default("Vendita"),
   // Collegamento all'azienda e snapshot dati fiscali mittente
   companyId: integer("company_id").notNull(),
   numberingYear: integer("numbering_year")

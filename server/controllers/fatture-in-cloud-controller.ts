@@ -700,6 +700,8 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
         provincia: clienteFIC.address_province || '',
         paese: clienteFIC.country || 'Italia',
         email: clienteFIC.email || '',
+        pec: clienteFIC.certified_email || '',
+        codiceDestinatario: clienteFIC.ei_code || '',
         telefono: clienteFIC.phone || '',
         piva: clienteFIC.vat_number || '',
         codiceFiscale: clienteFIC.tax_code || clienteFIC.vat_number || '',

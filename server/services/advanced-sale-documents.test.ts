@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   abbreviateFlupsyName,
+  buildAdvancedDdtSubject,
+  buildFicDdtCustomerEntity,
+  buildFicDdtHeader,
   formatFlupsyBasketIdentifier,
   logoFromDdt,
   mergeSaleCustomerData,
@@ -59,6 +62,9 @@ test('normalizza lo snapshot di un cliente inserito manualmente per DDT e docume
       taxCode: 'RSSMRA80A01C638X',
       phone: '',
       email: '',
+      certifiedEmail: '',
+      eInvoiceCode: '',
+      ficClientId: '',
       farmCode: 'AL-42',
       productionZone: ''
     }
@@ -81,6 +87,63 @@ test('mantiene compatibili gli alias anagrafici esistenti', () => {
   assert.equal(snapshot.address, 'Via Roma 1');
   assert.equal(snapshot.postalCode, '30100');
   assert.equal(snapshot.vatNumber, '01234567890');
+});
+
+test('normalizza i contatti fiscali completi restituiti da FIC', () => {
+  const snapshot = normalizeSaleCustomerSnapshot({
+    ficClientId: 321,
+    email: 'amministrazione@example.it',
+    certified_email: 'cliente@pec.example.it',
+    ei_code: 'ABC1234',
+    phone: '+39 041 0000000'
+  });
+
+  assert.equal(snapshot.ficClientId, '321');
+  assert.equal(snapshot.email, 'amministrazione@example.it');
+  assert.equal(snapshot.certifiedEmail, 'cliente@pec.example.it');
+  assert.equal(snapshot.eInvoiceCode, 'ABC1234');
+  assert.equal(snapshot.phone, '+39 041 0000000');
+});
+
+test('costruisce oggetto, causale e anagrafica completa per il payload DDT FIC', () => {
+  const oggetto = buildAdvancedDdtSubject('VAV-000114');
+  const header = buildFicDdtHeader({ oggetto, causaleTrasporto: 'Vendita' });
+  const entity = buildFicDdtCustomerEntity({
+    clienteFattureInCloudId: 321,
+    clienteNome: 'Cliente S.r.l.',
+    clienteIndirizzo: 'Via Laguna 10',
+    clienteCitta: 'Chioggia',
+    clienteCap: '30015',
+    clienteProvincia: 'VE',
+    clientePaese: 'Italia',
+    clientePiva: '01234567890',
+    clienteCodiceFiscale: '01234567890',
+    clienteEmail: 'amministrazione@example.it',
+    clientePec: 'cliente@pec.example.it',
+    clienteTelefono: '+39 041 0000000',
+    clienteCodiceDestinatario: 'ABC1234'
+  });
+
+  assert.deepEqual(header, {
+    subject: 'Fornitura molluschi - vendita VAV-000114',
+    visible_subject: 'Fornitura molluschi - vendita VAV-000114',
+    dn_ai_causal: 'Vendita'
+  });
+  assert.deepEqual(entity, {
+    name: 'Cliente S.r.l.',
+    address_street: 'Via Laguna 10',
+    address_city: 'Chioggia',
+    address_postal_code: '30015',
+    address_province: 'VE',
+    country: 'Italia',
+    vat_number: '01234567890',
+    tax_code: '01234567890',
+    email: 'amministrazione@example.it',
+    certified_email: 'cliente@pec.example.it',
+    phone: '+39 041 0000000',
+    ei_code: 'ABC1234',
+    id: 321
+  });
 });
 
 test('gestisce uno snapshot storico non JSON senza causare errore', () => {
