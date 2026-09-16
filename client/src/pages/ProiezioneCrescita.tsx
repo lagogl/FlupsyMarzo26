@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1444,17 +1444,16 @@ export default function ProiezioneCrescita() {
 
   const allHatcheryData = [...(hatcheryData || []), ...(hatcheryData2 || [])];
 
-  const { data: budgetData } = useQuery<ProductionTarget[]>({
-    queryKey: ["/api/proiezione-crescita/production-targets", { year: hatcheryYears[0] }],
-    enabled: !!data,
+  const budgetQueries = useQueries({
+    queries: hatcheryYears.map(year => ({
+      queryKey: ["/api/proiezione-crescita/production-targets", { year }],
+      enabled: !!data,
+    })),
   });
 
-  const { data: budgetData2 } = useQuery<ProductionTarget[]>({
-    queryKey: ["/api/proiezione-crescita/production-targets", { year: hatcheryYears[1] }],
-    enabled: !!data && hatcheryYears.length > 1,
-  });
-
-  const allBudgetData = [...(budgetData || []), ...(budgetData2 || [])];
+  const allBudgetData = budgetQueries.flatMap(query =>
+    (query.data as ProductionTarget[] | undefined) || []
+  );
 
   const saveBudget = useMutation({
     mutationFn: async (payload: { year: number; month: number; sizeCategory: string; targetAnimals: number }) => {
