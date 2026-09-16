@@ -335,7 +335,7 @@ export default function GestioneMortalita() {
               <div>
                 Questi tassi di mortalità mensile (%) vengono utilizzati nel modulo <strong>Proiezione Crescita</strong> per simulare
                 la riduzione degli animali mese per mese per ogni taglia.
-                La mortalità <strong>non</strong> viene applicata alla giacenza già pronta (animali già a taglia target).
+                La mortalità viene applicata a tutti gli animali simulati, compresa la giacenza già pronta e gli arrivi dello schiuditoio.
               </div>
             </div>
           </div>
