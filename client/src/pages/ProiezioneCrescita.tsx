@@ -1224,6 +1224,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         )}
       </CardHeader>
       <div className="px-3 pb-1">
+        <div className="mb-2 flex items-start gap-2 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-[11px] leading-relaxed text-sky-900">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{t("pc_paths_note")}</span>
+        </div>
         <p className="text-[10px] text-gray-400 italic">{t("pc_ctrl_hint")}</p>
         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-blue-500" />{t("pc_legend_gross")}</span>
