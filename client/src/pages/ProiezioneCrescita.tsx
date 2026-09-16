@@ -7,7 +7,7 @@ import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, P
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePlanningLang, translateMonthLabel } from "@/lib/planningI18n";
@@ -147,6 +147,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   const [selectedCol, setSelectedCol] = useState<number | null>(null);
   const [ordersExpanded, setOrdersExpanded] = useState(false);
   const [hiddenRows, setHiddenRows] = useState<Set<string>>(new Set());
+  const [calculationTraceEnabled, setCalculationTraceEnabled] = useState(false);
+  const [hoveredCell, setHoveredCell] = useState<{ rowKey: string; col: number } | null>(null);
 
   const cellKey = (r: number, c: number) => `${r},${c}`;
   const parseKey = (k: string) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; };
@@ -363,6 +365,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   const rowKey = (row: SpreadsheetRow) => row.rowKey || `ordini_size_${row.subRowSize || row.label}`;
   const visibleRows = rows.filter(row => !hiddenRows.has(rowKey(row)));
   const hiddenCount = rows.length - visibleRows.length;
+  useEffect(() => {
+    if (hoveredCell && !visibleRows.some(row => rowKey(row) === hoveredCell.rowKey)) {
+      setHoveredCell(null);
+    }
+  }, [hoveredCell, hiddenRows, ordersExpanded]);
   const hideRow = (row: SpreadsheetRow) => {
     const key = rowKey(row);
     setHiddenRows(previous => new Set(previous).add(key));
@@ -370,6 +377,14 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     setSelectedRow(null);
     setSelectedCol(null);
     setAnchorCell(null);
+  };
+  const getTraceSourceKeys = (resultKey: string) => {
+    if (resultKey === "sand_nursery_available" || resultKey === "forecast_evadibile") return ["giac_schiu", "budget"];
+    if (resultKey === "evadibili") return ["domanda", "arretrato", "giac_schiu"];
+    if (resultKey === "giac_res") return ["giac_schiu", "evadibili"];
+    if (resultKey === "giac_schiu") return ["giac_inv"];
+    if (resultKey === "ordini") return visibleRows.filter(row => row.isSubRow && row.groupKey === "ordini").map(rowKey);
+    return [];
   };
 
   const excelColLetter = (idx: number) => String.fromCharCode(65 + idx);
@@ -991,8 +1006,14 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     return "";
   };
 
-  const cellFormula = selectedCell ? getCellFormula(selectedCell.row, selectedCell.col) : "";
-  const cellValue = selectedCell ? visibleRows[selectedCell.row]?.values[selectedCell.col] : "";
+  const traceHoveredCell = calculationTraceEnabled && hoveredCell
+    ? (() => {
+        const row = visibleRows.findIndex(candidate => rowKey(candidate) === hoveredCell.rowKey);
+        return row >= 0 ? { row, col: hoveredCell.col } : null;
+      })()
+    : null;
+  const formulaCell = traceHoveredCell || (selectedCell && !multiCellStats ? selectedCell : null);
+  const cellFormula = formulaCell ? getCellFormula(formulaCell.row, formulaCell.col) : "";
 
   return (
     <Card className="border-gray-300 shadow-sm">
@@ -1043,6 +1064,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                  </div>
                </PopoverContent>
              </Popover>
+              <Button
+                variant={calculationTraceEnabled ? "secondary" : "ghost"}
+                size="sm"
+                className={`h-7 shrink-0 gap-1 text-xs ${calculationTraceEnabled ? "bg-amber-100 text-amber-900 hover:bg-amber-200" : ""}`}
+                onClick={() => {
+                  setCalculationTraceEnabled(enabled => !enabled);
+                  setHoveredCell(null);
+                }}
+                title={t("pc_trace_toggle_tip")}
+              >
+                <Info className="h-3 w-3" /> {t("pc_trace_toggle")}
+              </Button>
              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleCopyTable}>
               <Copy className="h-3 w-3" /> {t("pc_copy")}
             </Button>
@@ -1051,7 +1084,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
             </Button>
           </div>
         </div>
-        {selectedCell && !multiCellStats && (
+        {formulaCell && (
           <div className="flex flex-col gap-1 mt-1">
             <div className="flex items-center gap-2 bg-gray-100 rounded px-2 py-1.5 text-xs border">
               <span className="font-mono font-bold text-green-700 min-w-[24px]">fx</span>
@@ -1059,6 +1092,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
               <span className="font-mono text-gray-700 flex-1 text-[11px] leading-relaxed">
                 {cellFormula}
               </span>
+              {traceHoveredCell && (
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-700">{t("pc_trace_active")}</span>
+              )}
             </div>
           </div>
         )}
@@ -1159,6 +1195,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                               className="flex-shrink-0 rounded-sm hover:bg-orange-100"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                 setHoveredCell(null);
                                 setOrdersExpanded(!ordersExpanded);
                               }}
                               aria-label={ordersExpanded ? "Comprimi dettaglio ordini" : "Espandi dettaglio ordini"}
@@ -1191,6 +1228,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                   </td>
                   {row.values.map((val, colIdx) => {
                     const isSelected = isCellSelected(rowIdx, colIdx);
+                    const traceSources = traceHoveredCell
+                      ? getTraceSourceKeys(rowKey(visibleRows[traceHoveredCell.row]))
+                      : [];
+                    const isTraceResult = Boolean(traceHoveredCell && traceHoveredCell.row === rowIdx && traceHoveredCell.col === colIdx);
+                    const isTraceSource = Boolean(traceHoveredCell && traceHoveredCell.col === colIdx && traceSources.includes(rowKey(row)) && !isTraceResult);
                     const numVal = typeof val === 'number' ? val : null;
                     const isNeg = numVal !== null && numVal < 0;
                     const isEmpty = numVal === 0 && !row.isNegative;
@@ -1203,14 +1245,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                         ? (row.isNegative ? '-' : '-')
                         : formatNumber(numVal!);
 
-                    const cellBg = isSelected ? '' : warn ? 'bg-red-50' : success ? 'bg-green-50' : info ? 'bg-amber-50' : '';
+                    const cellBg = isSelected ? '' : isTraceResult ? 'bg-amber-100' : isTraceSource ? 'bg-cyan-50' : warn ? 'bg-red-50' : success ? 'bg-green-50' : info ? 'bg-amber-50' : '';
                     const textColor = isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : success ? 'text-green-700 font-bold' : info ? 'text-amber-700 font-semibold' : isNeg ? 'text-red-600' : row.textClass;
 
                     return (
                       <td
                         key={colIdx}
-                        className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
+                        className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isTraceResult ? 'ring-2 ring-amber-500 ring-inset z-10 relative' : isTraceSource ? 'ring-1 ring-cyan-400 ring-inset' : ''} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
                         onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
+                        onMouseEnter={() => calculationTraceEnabled && setHoveredCell({ rowKey: rowKey(row), col: colIdx })}
+                        onMouseLeave={() => calculationTraceEnabled && setHoveredCell(current => current?.rowKey === rowKey(row) && current.col === colIdx ? null : current)}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
                           handleRowHeaderClick(rowIdx);
