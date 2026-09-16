@@ -50,7 +50,7 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
-  forecastImpegnatoPrecedente: number;
+  forecastImpegnatoOSeminatoPrecedente: number;
   disponibilitaForecastInizioMese: number;
   forecastEvadibileTarget: number;
   forecastNonCoperto: number;
@@ -346,7 +346,7 @@ export class GrowthProjectionService {
       const giacenzaDisponibileForecast = forecastBaskets
         .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
         .reduce((sum, b) => sum + b.animalCount, 0);
-      const forecastImpegnatoPrecedente = Math.max(
+      const forecastImpegnatoOSeminatoPrecedente = Math.max(
         0,
         giacenzaLordaConSchiuditoio - giacenzaDisponibileForecast,
       );
@@ -368,6 +368,13 @@ export class GrowthProjectionService {
         const reserved = Math.min(basket.animalCount, forecastDaPrenotare);
         basket.animalCount -= reserved;
         forecastDaPrenotare -= reserved;
+      }
+      // Il residuo a taglia target viene seminato in Sand Nursery nello stesso mese:
+      // non può quindi tornare disponibile nel percorso Forecast dei mesi successivi.
+      for (const basket of forecastEligibleBaskets) {
+        if (basket.animalCount > 0) {
+          basket.animalCount = 0;
+        }
       }
       const domandaEffettiva = ordiniTarget;
       const ordiniArretrati = carryOver;
@@ -431,7 +438,7 @@ export class GrowthProjectionService {
         ordiniArretrati,
         ordiniEvasi,
         budgetProduzione: budgetMese,
-        forecastImpegnatoPrecedente,
+        forecastImpegnatoOSeminatoPrecedente,
         disponibilitaForecastInizioMese: giacenzaDisponibileForecast,
         forecastEvadibileTarget,
         forecastNonCoperto,

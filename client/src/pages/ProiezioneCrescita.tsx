@@ -48,7 +48,7 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
-  forecastImpegnatoPrecedente: number;
+  forecastImpegnatoOSeminatoPrecedente: number;
   disponibilitaForecastInizioMese: number;
   forecastEvadibileTarget: number;
   forecastNonCoperto: number;
@@ -241,13 +241,13 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       values: mc.map(m => m.budgetProduzione),
     },
     {
-      rowKey: "forecast_committed_previous",
-      label: t("pc_row_forecast_committed_previous"),
-      tooltip: t("pc_row_forecast_committed_previous_tip"),
+      rowKey: "forecast_committed_or_seeded_previous",
+      label: t("pc_row_forecast_committed_or_seeded_previous"),
+      tooltip: t("pc_row_forecast_committed_or_seeded_previous_tip"),
       color: "#d97706",
       bgClass: "",
       textClass: "text-amber-800",
-      values: mc.map(m => m.forecastImpegnatoPrecedente || 0),
+      values: mc.map(m => m.forecastImpegnatoOSeminatoPrecedente || 0),
     },
     {
       rowKey: "forecast_available_start",
@@ -405,8 +405,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     setAnchorCell(null);
   };
   const getTraceSourceKeys = (resultKey: string) => {
-    if (resultKey === "forecast_committed_previous") return ["giac_schiu", "forecast_available_start"];
-    if (resultKey === "forecast_available_start") return ["forecast_committed_previous", "giac_schiu"];
+    if (resultKey === "forecast_committed_or_seeded_previous") return ["giac_schiu", "forecast_available_start"];
+    if (resultKey === "forecast_available_start") return ["forecast_committed_or_seeded_previous", "giac_schiu"];
     if (resultKey === "sand_nursery_available") return ["forecast_available_start", "forecast_evadibile"];
     if (resultKey === "forecast_evadibile") return ["budget"];
     if (resultKey === "forecast_uncovered") return ["budget", "forecast_evadibile"];
@@ -982,8 +982,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         ? `${t("pc_cf_budget_a_pre")} ${m.monthName}: ${fn(m.budgetProduzione)} ${t("pc_cf_budget_a_suf")}`
         : `${t("pc_cf_budget_b")} ${m.monthName}`;
     }
-    if (rk === "forecast_committed_previous") {
-      return `${t("pc_cf_forecast_committed_previous_pre")} ${fn(m.forecastImpegnatoPrecedente || 0)} ${t("pc_cf_forecast_committed_previous_suf")}`;
+    if (rk === "forecast_committed_or_seeded_previous") {
+      return `${t("pc_cf_forecast_committed_or_seeded_previous_pre")} ${fn(m.forecastImpegnatoOSeminatoPrecedente || 0)} ${t("pc_cf_forecast_committed_or_seeded_previous_suf")}`;
     }
     if (rk === "forecast_available_start") {
       return `${t("pc_cf_forecast_available_start_pre")} ${fn(m.disponibilitaForecastInizioMese || 0)} ${t("pc_cf_forecast_available_start_suf")}`;
