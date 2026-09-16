@@ -54,8 +54,6 @@ interface MonthlyContext {
   arrivalTooLate?: boolean;
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
-  giacenzaDisponibileForecast: number;
-  giacenzaResiduaForecast: number;
   giacenzaNetTarget: number;
   schiuditoioNecessario: number;
   perditeMortalita: number;
@@ -245,15 +243,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       color: "#0891b2",
       bgClass: "",
       textClass: "text-cyan-900",
-      values: mc.map(m => m.giacenzaResiduaForecast || 0),
+      values: mc.map(m => Math.max(0, m.giacenzaLordaConSchiuditoio - m.forecastEvadibileTarget)),
       isBold: true,
       isSuccess: (colIdx: number) => {
         const m = mc[colIdx];
-        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaDisponibileForecast >= m.budgetProduzione);
+        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaLordaConSchiuditoio >= m.forecastEvadibileTarget);
       },
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
-        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaDisponibileForecast < m.budgetProduzione);
+        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaLordaConSchiuditoio < m.forecastEvadibileTarget);
       },
     },
     {
@@ -381,7 +379,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     setAnchorCell(null);
   };
   const getTraceSourceKeys = (resultKey: string) => {
-    if (resultKey === "sand_nursery_available" || resultKey === "forecast_evadibile") return ["budget"];
+    if (resultKey === "sand_nursery_available") return ["giac_schiu", "forecast_evadibile"];
+    if (resultKey === "forecast_evadibile") return ["budget"];
     if (resultKey === "evadibili") return ["domanda", "arretrato", "giac_schiu"];
     if (resultKey === "giac_res") return ["giac_schiu", "evadibili"];
     if (resultKey === "giac_schiu") return ["giac_inv"];
@@ -955,7 +954,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         : `${t("pc_cf_budget_b")} ${m.monthName}`;
     }
     if (rk === "sand_nursery_available") {
-      return `${t("pc_cf_sand_nursery_available_pre")} ${fn(m.giacenzaDisponibileForecast)} ${t("pc_cf_sand_nursery_available_mid")} ${fn(m.forecastEvadibileTarget)} = ${fn(m.giacenzaResiduaForecast)} ${t("pc_cf_sand_nursery_available_suf")}`;
+      const available = Math.max(0, m.giacenzaLordaConSchiuditoio - m.forecastEvadibileTarget);
+      return `${t("pc_cf_sand_nursery_available_pre")} ${fn(m.giacenzaLordaConSchiuditoio)} ${t("pc_cf_sand_nursery_available_mid")} ${fn(m.forecastEvadibileTarget)} = ${fn(available)} ${t("pc_cf_sand_nursery_available_suf")}`;
     }
     if (rk === "domanda") {
       const budgetRef = m.budgetProduzione > 0 ? ` ${t("pc_cf_domanda_bref")} ${fn(m.budgetProduzione)})` : '';

@@ -56,8 +56,6 @@ interface MonthlyContext {
   arrivalTooLate: boolean;
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
-  giacenzaDisponibileForecast: number;
-  giacenzaResiduaForecast: number;
   giacenzaNetTarget: number;
   schiuditoioNecessario: number;
   perditeMortalita: number;
@@ -358,7 +356,6 @@ export class GrowthProjectionService {
         basket.animalCount -= reserved;
         forecastDaPrenotare -= reserved;
       }
-      const giacenzaResiduaForecast = giacenzaDisponibileForecast - forecastEvadibileTarget;
       const domandaEffettiva = ordiniTarget;
       const ordiniArretrati = carryOver;
 
@@ -427,8 +424,6 @@ export class GrowthProjectionService {
         arrivalTooLate: false,
         giacenzaLordaInventario,
         giacenzaLordaConSchiuditoio,
-        giacenzaDisponibileForecast,
-        giacenzaResiduaForecast,
         giacenzaNetTarget,
         schiuditoioNecessario: 0,
         perditeMortalita
