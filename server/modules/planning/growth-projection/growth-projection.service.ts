@@ -56,6 +56,8 @@ interface MonthlyContext {
   arrivalTooLate: boolean;
   giacenzaLordaInventario: number;
   giacenzaLordaConSchiuditoio: number;
+  giacenzaDisponibileForecast: number;
+  giacenzaResiduaForecast: number;
   giacenzaNetTarget: number;
   schiuditoioNecessario: number;
   perditeMortalita: number;
@@ -225,6 +227,7 @@ export class GrowthProjectionService {
         });
       }
     }
+    let forecastBaskets = globalBaskets.map(basket => ({ ...basket }));
 
     const useCustomMortality = mortalityPercent !== undefined && mortalityPercent !== null;
     const customMonthlyRate = useCustomMortality ? mortalityPercent! / 100 : 0;
@@ -269,13 +272,15 @@ export class GrowthProjectionService {
           : null;
         if (!hatcheryRange) throw new Error("TP-300 senza range valido per l'arrivo schiuditoio");
         const hatcheryApk = hatcheryRange.maxAnimalsPerKg;
-        globalBaskets.push({
+        const hatcheryBasket = {
           basketId: hatcheryBasketCounter++,
           weightMg: 1000000 / hatcheryApk,
           animalCount: hatcheryThisMonth,
           isHatchery: true,
           alreadyAtTarget: false
-        });
+        };
+        globalBaskets.push(hatcheryBasket);
+        forecastBaskets.push({ ...hatcheryBasket });
       }
 
       const totalBeforeMortality = globalBaskets.reduce((s, b) => s + b.animalCount, 0);
@@ -290,6 +295,15 @@ export class GrowthProjectionService {
           // Il valore esatto del giorno non influisce: stepOneDay legge solo m0 e daysInMonth.
           const cursorDate = new Date(y, m0, (i === 0 ? currentDay : 0) + day + 1);
           globalBaskets = globalBaskets.map(b => {
+            const next = stepOneDay(
+              simCtx,
+              { weightMg: b.weightMg, count: b.animalCount },
+              cursorDate,
+              overrideMortality
+            );
+            return { ...b, weightMg: next.weightMg, animalCount: Math.round(next.count) };
+          });
+          forecastBaskets = forecastBaskets.map(b => {
             const next = stepOneDay(
               simCtx,
               { weightMg: b.weightMg, count: b.animalCount },
@@ -327,10 +341,24 @@ export class GrowthProjectionService {
         }
       }
       const budgetMese = budgetByYearMonth[ymKey] || 0;
+      const giacenzaDisponibileForecast = forecastBaskets
+        .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
+        .reduce((sum, b) => sum + b.animalCount, 0);
       const forecastEvadibileTarget = calculateFulfillableProductionForecast(
         budgetMese,
-        giacenzaLordaConSchiuditoio,
+        giacenzaDisponibileForecast,
       );
+      let forecastDaPrenotare = forecastEvadibileTarget;
+      const forecastEligibleBaskets = forecastBaskets
+        .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
+        .sort((a, b) => (1000000 / a.weightMg) - (1000000 / b.weightMg));
+      for (const basket of forecastEligibleBaskets) {
+        if (forecastDaPrenotare <= 0) break;
+        const reserved = Math.min(basket.animalCount, forecastDaPrenotare);
+        basket.animalCount -= reserved;
+        forecastDaPrenotare -= reserved;
+      }
+      const giacenzaResiduaForecast = giacenzaDisponibileForecast - forecastEvadibileTarget;
       const domandaEffettiva = ordiniTarget;
       const ordiniArretrati = carryOver;
 
@@ -399,6 +427,8 @@ export class GrowthProjectionService {
         arrivalTooLate: false,
         giacenzaLordaInventario,
         giacenzaLordaConSchiuditoio,
+        giacenzaDisponibileForecast,
+        giacenzaResiduaForecast,
         giacenzaNetTarget,
         schiuditoioNecessario: 0,
         perditeMortalita
