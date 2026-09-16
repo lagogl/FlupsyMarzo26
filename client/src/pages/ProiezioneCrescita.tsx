@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays, RefreshCw, AlertTriangle, Info, ShieldCheck, EyeOff, Eye, ListFilter } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays, RefreshCw, AlertTriangle, Info, ShieldCheck, EyeOff, Eye, ListFilter, ArrowRightLeft } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -153,9 +153,13 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   const [hiddenRows, setHiddenRows] = useState<Set<string>>(new Set());
   const [calculationTraceEnabled, setCalculationTraceEnabled] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<{ rowKey: string; col: number } | null>(null);
+  const [tableOrientation, setTableOrientation] = useState<"indicators-rows" | "months-rows">("indicators-rows");
 
   const cellKey = (r: number, c: number) => `${r},${c}`;
   const parseKey = (k: string) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; };
+  const toCanonicalCell = (row: number, col: number) => tableOrientation === "indicators-rows"
+    ? { row, col }
+    : { row: col, col: row };
 
   const selectedCell = useMemo(() => {
     if (selectedCells.size === 1) {
@@ -852,16 +856,19 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   const multiCellStats = useMemo(() => {
     const allKeys = new Set(selectedCells);
     if (selectedRow !== null) {
-      for (let c = 0; c < mc.length; c++) allKeys.add(cellKey(selectedRow, c));
+      const columnCount = tableOrientation === "indicators-rows" ? mc.length : visibleRows.length;
+      for (let c = 0; c < columnCount; c++) allKeys.add(cellKey(selectedRow, c));
     }
     if (selectedCol !== null) {
-      for (let r = 0; r < visibleRows.length; r++) allKeys.add(cellKey(r, selectedCol));
+      const rowCount = tableOrientation === "indicators-rows" ? visibleRows.length : mc.length;
+      for (let r = 0; r < rowCount; r++) allKeys.add(cellKey(r, selectedCol));
     }
     if (allKeys.size < 2) return null;
     const nums: number[] = [];
     for (const k of allKeys) {
-      const { row: r, col: c } = parseKey(k);
-       const v = visibleRows[r]?.values[c];
+      const displayCell = parseKey(k);
+      const { row: r, col: c } = toCanonicalCell(displayCell.row, displayCell.col);
+      const v = visibleRows[r]?.values[c];
       if (typeof v === 'number' && v !== 0) nums.push(v);
     }
     if (nums.length === 0) return null;
@@ -874,7 +881,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       massimo: Math.max(...nums),
       celle: allKeys.size,
     };
-  }, [selectedCells, selectedRow, selectedCol, visibleRows, mc]);
+  }, [selectedCells, selectedRow, selectedCol, visibleRows, mc, tableOrientation]);
 
   const handleCellClick = (rowIdx: number, colIdx: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1050,18 +1057,52 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         return row >= 0 ? { row, col: hoveredCell.col } : null;
       })()
     : null;
-  const formulaCell = traceHoveredCell || (selectedCell && !multiCellStats ? selectedCell : null);
+  const formulaCell = traceHoveredCell || (
+    selectedCell && !multiCellStats
+      ? toCanonicalCell(selectedCell.row, selectedCell.col)
+      : null
+  );
   const cellFormula = formulaCell ? getCellFormula(formulaCell.row, formulaCell.col) : "";
+
+  const changeOrientation = (orientation: "indicators-rows" | "months-rows") => {
+    setTableOrientation(orientation);
+    setSelectedCells(new Set());
+    setSelectedRow(null);
+    setSelectedCol(null);
+    setAnchorCell(null);
+    setHoveredCell(null);
+  };
 
   return (
     <Card className="border-gray-300 shadow-sm">
       <CardHeader className="pb-1 pt-3 px-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Grid3X3 className="h-4 w-4 text-green-700" />
             <CardTitle className="text-sm font-semibold text-green-800">{t("pc_table_title")}</CardTitle>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-1">
+             <div className="flex h-7 shrink-0 items-center rounded-md border border-gray-300 bg-white p-0.5" aria-label={t("pc_orientation")}>
+               <Button
+                 variant="ghost"
+                 size="sm"
+                 className={`h-6 rounded px-2 text-[11px] ${tableOrientation === "indicators-rows" ? "bg-gray-100 font-semibold text-gray-900 shadow-sm" : "text-gray-500"}`}
+                 onClick={() => changeOrientation("indicators-rows")}
+                 title={t("pc_months_columns_tip")}
+               >
+                 {t("pc_months_columns")}
+               </Button>
+               <Button
+                 variant="ghost"
+                 size="sm"
+                 className={`h-6 rounded px-2 text-[11px] ${tableOrientation === "months-rows" ? "bg-gray-100 font-semibold text-gray-900 shadow-sm" : "text-gray-500"}`}
+                 onClick={() => changeOrientation("months-rows")}
+                 title={t("pc_months_rows_tip")}
+               >
+                 <ArrowRightLeft className="mr-1 h-3 w-3" />
+                 {t("pc_months_rows")}
+               </Button>
+             </div>
              <Popover>
                <PopoverTrigger asChild>
                  <Button variant="outline" size="sm" className="h-7 shrink-0 gap-1 border-gray-300 px-2 text-xs">
@@ -1190,6 +1231,132 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
             style={{ fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}
             onClick={() => { setSelectedCells(new Set()); setSelectedRow(null); setSelectedCol(null); setAnchorCell(null); }}
           >
+            {tableOrientation === "months-rows" ? (
+              <>
+                <thead>
+                  <tr>
+                    <th
+                      className="sticky left-0 z-30 min-w-[105px] border-b border-r-2 border-gray-300 bg-gradient-to-b from-gray-100 to-gray-200 p-0"
+                      style={{ boxShadow: '6px 0 8px -8px rgba(15, 23, 42, 0.7)' }}
+                    >
+                      <div className="px-2 py-2 text-left text-[12px] font-semibold uppercase tracking-wide text-gray-600">
+                        {t("pc_month")}
+                      </div>
+                    </th>
+                    {visibleRows.map((row, rowIdx) => (
+                      <th
+                        key={rowKey(row)}
+                        className={`min-w-[145px] max-w-[190px] border-b border-r border-gray-300 p-0 align-bottom cursor-pointer transition-colors ${selectedCol === rowIdx ? 'bg-blue-200' : 'bg-gradient-to-b from-gray-100 to-gray-200'}`}
+                        onClick={(e) => { e.stopPropagation(); handleColHeaderClick(rowIdx); }}
+                      >
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex min-h-[72px] items-end gap-1.5 px-2 py-2 text-left">
+                              {row.isExpandable ? (
+                                <button
+                                  type="button"
+                                  className="mb-0.5 shrink-0 rounded-sm hover:bg-orange-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setHoveredCell(null);
+                                    setOrdersExpanded(!ordersExpanded);
+                                  }}
+                                  aria-label={ordersExpanded ? "Comprimi dettaglio ordini" : "Espandi dettaglio ordini"}
+                                >
+                                  {ordersExpanded
+                                    ? <ChevronDown className="h-3.5 w-3.5 text-orange-600" />
+                                    : <ChevronRight className="h-3.5 w-3.5 text-orange-600" />}
+                                </button>
+                              ) : (
+                                <span className="mb-1 h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: row.color }} />
+                              )}
+                              <span className={`text-[12px] font-semibold leading-tight ${row.textClass}`}>{row.label}</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs border border-gray-700 bg-gray-900 p-3 text-sm leading-relaxed text-white">
+                            {row.tooltip}
+                          </TooltipContent>
+                        </Tooltip>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {mc.map((month, monthIdx) => (
+                    <tr key={`${month.year}-${month.month}`}>
+                      <td
+                        className="sticky left-0 z-20 cursor-pointer border-b border-r-2 border-gray-300 bg-white p-0 transition-colors"
+                        style={{
+                          backgroundColor: selectedRow === monthIdx ? '#dbeafe' : '#ffffff',
+                          boxShadow: '6px 0 8px -8px rgba(15, 23, 42, 0.7)',
+                        }}
+                        onClick={(e) => { e.stopPropagation(); handleRowHeaderClick(monthIdx); }}
+                      >
+                        <div className="px-2 py-2 text-[13px] font-semibold text-gray-700">{month.monthLabel}</div>
+                      </td>
+                      {visibleRows.map((row, rowIdx) => {
+                        const val = row.values[monthIdx];
+                        const isSelected = isCellSelected(monthIdx, rowIdx);
+                        const traceSources = traceHoveredCell
+                          ? getTraceSourceKeys(rowKey(visibleRows[traceHoveredCell.row]))
+                          : [];
+                        const isTraceResult = Boolean(traceHoveredCell && traceHoveredCell.row === rowIdx && traceHoveredCell.col === monthIdx);
+                        const isTraceSource = Boolean(traceHoveredCell && traceHoveredCell.col === monthIdx && traceSources.includes(rowKey(row)) && !isTraceResult);
+                        const numVal = typeof val === 'number' ? val : null;
+                        const isNeg = numVal !== null && numVal < 0;
+                        const isEmpty = numVal === 0 && !row.isNegative;
+                        const warn = row.isWarning ? row.isWarning(monthIdx) : false;
+                        const success = row.isSuccess ? row.isSuccess(monthIdx) : false;
+                        const info = row.isInfo ? row.isInfo(monthIdx) : false;
+                        const displayVal = typeof val === 'string' ? val : numVal === 0 ? '-' : formatNumber(numVal!);
+                        const cellBg = isSelected ? '' : isTraceResult ? 'bg-amber-100' : isTraceSource ? 'bg-cyan-50' : warn ? 'bg-red-50' : success ? 'bg-green-50' : info ? 'bg-amber-50' : '';
+                        const textColor = isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : success ? 'text-green-700 font-bold' : info ? 'text-amber-700 font-semibold' : isNeg ? 'text-red-600' : row.textClass;
+
+                        return (
+                          <td
+                            key={rowKey(row)}
+                            className={`cursor-cell border-b border-r border-gray-200 p-0 transition-all ${cellBg} ${isTraceResult ? 'relative z-10 ring-2 ring-amber-500 ring-inset' : isTraceSource ? 'ring-1 ring-cyan-400 ring-inset' : ''} ${isSelected ? 'relative z-10 bg-blue-50 ring-2 ring-blue-500 ring-inset' : ''}`}
+                            onClick={(e) => handleCellClick(monthIdx, rowIdx, e)}
+                            onMouseEnter={() => calculationTraceEnabled && setHoveredCell({ rowKey: rowKey(row), col: monthIdx })}
+                            onMouseLeave={() => calculationTraceEnabled && setHoveredCell(current => current?.rowKey === rowKey(row) && current.col === monthIdx ? null : current)}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              handleColHeaderClick(rowIdx);
+                            }}
+                          >
+                            <div className={`flex flex-col items-end px-2 text-right text-[14px] tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} ${textColor} ${
+                              (row.isSubRow && row.subRowSize && (month.ordiniBySize?.[row.subRowSize] || 0) > 0) ||
+                              (row.isExpandable && row.groupKey === 'ordini' && (month.ordiniTotali || 0) > 0) ||
+                              (row.showForecastCoverage && (month.budgetProduzione || 0) > 0)
+                                ? 'gap-0.5 py-1' : 'py-2'
+                            }`}>
+                              <div className="flex items-center justify-end gap-1">
+                                {info && <span className="cursor-help text-[11px] text-amber-600" title={row.infoTooltip || t("pc_late_arrivals_tip")}>⏱</span>}
+                                <span>{displayVal}</span>
+                              </div>
+                              {row.showForecastCoverage && month.budgetProduzione > 0 && (() => {
+                                const pct = Math.min(100, Math.round((month.forecastEvadibileTarget || 0) / month.budgetProduzione * 100));
+                                const barFill = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                                const textPct = pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
+                                return <div className="flex w-full items-center gap-1"><div className="h-[3px] flex-1 overflow-hidden rounded-full bg-gray-200"><div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barFill }} /></div><span className={`min-w-[30px] text-right text-[10px] font-bold leading-none ${textPct}`}>{pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗'} {pct}%</span></div>;
+                              })()}
+                              {row.isSubRow && row.subRowSize && (month.ordiniBySize?.[row.subRowSize] || 0) > 0 && (() => {
+                                const ordered = month.ordiniBySize[row.subRowSize] || 0;
+                                const pct = Math.min(100, Math.round((month.ordiniEvasiBySize?.[row.subRowSize] || 0) / ordered * 100));
+                                const barFill = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                                const textPct = pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
+                                return <div className="flex w-full items-center gap-1"><div className="h-[3px] flex-1 overflow-hidden rounded-full bg-gray-200"><div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barFill }} /></div><span className={`min-w-[30px] text-right text-[10px] font-bold leading-none ${textPct}`}>{pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗'} {pct}%</span></div>;
+                              })()}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </>
+            ) : (
+            <>
             <thead>
               <tr>
                 <th
@@ -1385,6 +1552,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                 </tr>
               ))}
             </tbody>
+            </>
+            )}
           </table>
           </TooltipProvider>
         </div>
