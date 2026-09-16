@@ -4,6 +4,7 @@ import { hatcheryArrivals, productionTargets, projectionMortalityRates } from ".
 import { eq, inArray, sql } from "drizzle-orm";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 import {
+  addForecastAllocationToLedger,
   calculateFulfillableProductionForecast,
   getProductionTargetCategory,
 } from "./forecast-fulfillment";
@@ -236,6 +237,7 @@ export class GrowthProjectionService {
 
     const monthlyContext: MonthlyContext[] = [];
     let carryOver = 0;
+    let forecastCommittedOrSeededLedger = 0;
     const crossesYear = yearsNeeded.length > 1;
 
     for (let i = 0; i < monthSteps.length; i++) {
@@ -346,10 +348,9 @@ export class GrowthProjectionService {
       const giacenzaDisponibileForecast = forecastBaskets
         .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
         .reduce((sum, b) => sum + b.animalCount, 0);
-      const forecastImpegnatoOSeminatoPrecedente = Math.max(
-        0,
-        giacenzaLordaConSchiuditoio - giacenzaDisponibileForecast,
-      );
+      // Snapshot del solo percorso Forecast prima delle allocazioni del mese.
+      // Non confrontare questo valore con globalBaskets: quel percorso appartiene agli ordini.
+      const forecastImpegnatoOSeminatoPrecedente = forecastCommittedOrSeededLedger;
       const forecastEvadibileTarget = calculateFulfillableProductionForecast(
         budgetMese,
         giacenzaDisponibileForecast,
@@ -376,6 +377,11 @@ export class GrowthProjectionService {
           basket.animalCount = 0;
         }
       }
+      forecastCommittedOrSeededLedger = addForecastAllocationToLedger(
+        forecastCommittedOrSeededLedger,
+        forecastEvadibileTarget,
+        disponibilitaSandNursery,
+      );
       const domandaEffettiva = ordiniTarget;
       const ordiniArretrati = carryOver;
 

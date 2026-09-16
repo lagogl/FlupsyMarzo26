@@ -8,6 +8,16 @@ export function calculateFulfillableProductionForecast(
   );
 }
 
+export function addForecastAllocationToLedger(
+  previousCommittedOrSeeded: number,
+  fulfillableForecast: number,
+  sandNurserySeeding: number,
+): number {
+  return Math.max(0, previousCommittedOrSeeded)
+    + Math.max(0, fulfillableForecast)
+    + Math.max(0, sandNurserySeeding);
+}
+
 export function getProductionTargetCategory(
   targetMaxAnimalsPerKg: number,
 ): "T3" | "T10" {
