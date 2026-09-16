@@ -408,16 +408,27 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     setSelectedCol(null);
     setAnchorCell(null);
   };
-  const getTraceSourceKeys = (resultKey: string) => {
-    if (resultKey === "forecast_committed_or_seeded_previous") return ["giac_schiu", "forecast_available_start"];
-    if (resultKey === "forecast_available_start") return ["forecast_committed_or_seeded_previous", "giac_schiu"];
-    if (resultKey === "sand_nursery_available") return ["forecast_available_start", "forecast_evadibile"];
-    if (resultKey === "forecast_evadibile") return ["budget"];
-    if (resultKey === "forecast_uncovered") return ["budget", "forecast_evadibile"];
-    if (resultKey === "evadibili") return ["domanda", "arretrato", "giac_schiu"];
-    if (resultKey === "giac_res") return ["giac_schiu", "evadibili"];
-    if (resultKey === "giac_schiu") return ["giac_inv"];
-    if (resultKey === "ordini") return visibleRows.filter(row => row.isSubRow && row.groupKey === "ordini").map(rowKey);
+  const getTraceSourceCells = (resultKey: string, monthIndex: number): Array<{ rowKey: string; col: number }> => {
+    const inCurrentMonth = (sourceKeys: string[]) => sourceKeys.map(sourceKey => ({ rowKey: sourceKey, col: monthIndex }));
+
+    if (resultKey === "forecast_committed_or_seeded_previous") {
+      if (monthIndex === 0) return [];
+      return [
+        { rowKey: "forecast_committed_or_seeded_previous", col: monthIndex - 1 },
+        { rowKey: "forecast_evadibile", col: monthIndex - 1 },
+        { rowKey: "sand_nursery_available", col: monthIndex - 1 },
+      ];
+    }
+    if (resultKey === "forecast_available_start") return [];
+    if (resultKey === "sand_nursery_available") return inCurrentMonth(["forecast_available_start", "forecast_evadibile"]);
+    if (resultKey === "forecast_evadibile") return inCurrentMonth(["budget", "forecast_available_start"]);
+    if (resultKey === "forecast_uncovered") return inCurrentMonth(["budget", "forecast_evadibile"]);
+    if (resultKey === "evadibili") return inCurrentMonth(["domanda", "arretrato", "giac_schiu"]);
+    if (resultKey === "giac_res") return inCurrentMonth(["giac_schiu", "evadibili"]);
+    if (resultKey === "giac_schiu") return inCurrentMonth(["giac_inv"]);
+    if (resultKey === "ordini") {
+      return inCurrentMonth(visibleRows.filter(row => row.isSubRow && row.groupKey === "ordini").map(rowKey));
+    }
     return [];
   };
 
@@ -1051,17 +1062,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     return "";
   };
 
-  const traceHoveredCell = calculationTraceEnabled && hoveredCell
-    ? (() => {
+  const selectedCanonicalCell = selectedCell && !multiCellStats
+    ? toCanonicalCell(selectedCell.row, selectedCell.col)
+    : null;
+  const traceTargetCell = calculationTraceEnabled
+    ? hoveredCell
+      ? (() => {
         const row = visibleRows.findIndex(candidate => rowKey(candidate) === hoveredCell.rowKey);
         return row >= 0 ? { row, col: hoveredCell.col } : null;
       })()
+      : selectedCanonicalCell
     : null;
-  const formulaCell = traceHoveredCell || (
-    selectedCell && !multiCellStats
-      ? toCanonicalCell(selectedCell.row, selectedCell.col)
-      : null
-  );
+  const formulaCell = traceTargetCell || selectedCanonicalCell;
   const cellFormula = formulaCell ? getCellFormula(formulaCell.row, formulaCell.col) : "";
 
   const changeOrientation = (orientation: "indicators-rows" | "months-rows") => {
@@ -1171,7 +1183,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
               <span className="font-mono text-gray-700 flex-1 text-[11px] leading-relaxed">
                 {cellFormula}
               </span>
-              {traceHoveredCell && (
+               {traceTargetCell && (
                 <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-700">{t("pc_trace_active")}</span>
               )}
             </div>
@@ -1297,11 +1309,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                       {visibleRows.map((row, rowIdx) => {
                         const val = row.values[monthIdx];
                         const isSelected = isCellSelected(monthIdx, rowIdx);
-                        const traceSources = traceHoveredCell
-                          ? getTraceSourceKeys(rowKey(visibleRows[traceHoveredCell.row]))
+                        const traceSources = traceTargetCell
+                          ? getTraceSourceCells(rowKey(visibleRows[traceTargetCell.row]), traceTargetCell.col)
                           : [];
-                        const isTraceResult = Boolean(traceHoveredCell && traceHoveredCell.row === rowIdx && traceHoveredCell.col === monthIdx);
-                        const isTraceSource = Boolean(traceHoveredCell && traceHoveredCell.col === monthIdx && traceSources.includes(rowKey(row)) && !isTraceResult);
+                        const isTraceResult = Boolean(traceTargetCell && traceTargetCell.row === rowIdx && traceTargetCell.col === monthIdx);
+                        const isTraceSource = Boolean(
+                          traceTargetCell
+                          && traceSources.some(source => source.rowKey === rowKey(row) && source.col === monthIdx)
+                          && !isTraceResult
+                        );
                         const numVal = typeof val === 'number' ? val : null;
                         const isNeg = numVal !== null && numVal < 0;
                         const isEmpty = numVal === 0 && !row.isNegative;
@@ -1441,11 +1457,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                   </td>
                   {row.values.map((val, colIdx) => {
                     const isSelected = isCellSelected(rowIdx, colIdx);
-                    const traceSources = traceHoveredCell
-                      ? getTraceSourceKeys(rowKey(visibleRows[traceHoveredCell.row]))
+                    const traceSources = traceTargetCell
+                      ? getTraceSourceCells(rowKey(visibleRows[traceTargetCell.row]), traceTargetCell.col)
                       : [];
-                    const isTraceResult = Boolean(traceHoveredCell && traceHoveredCell.row === rowIdx && traceHoveredCell.col === colIdx);
-                    const isTraceSource = Boolean(traceHoveredCell && traceHoveredCell.col === colIdx && traceSources.includes(rowKey(row)) && !isTraceResult);
+                    const isTraceResult = Boolean(traceTargetCell && traceTargetCell.row === rowIdx && traceTargetCell.col === colIdx);
+                    const isTraceSource = Boolean(
+                      traceTargetCell
+                      && traceSources.some(source => source.rowKey === rowKey(row) && source.col === colIdx)
+                      && !isTraceResult
+                    );
                     const numVal = typeof val === 'number' ? val : null;
                     const isNeg = numVal !== null && numVal < 0;
                     const isEmpty = numVal === 0 && !row.isNegative;
