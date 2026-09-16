@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays, RefreshCw, AlertTriangle, Info, ShieldCheck } from "lucide-react";
+import { Loader2, TrendingUp, CheckCircle2, Clock, Target, Plus, Trash2, Save, Percent, Download, Copy, Grid3X3, DollarSign, Edit3, ChevronDown, ChevronRight, CalendarDays, RefreshCw, AlertTriangle, Info, ShieldCheck, EyeOff, Eye, ListFilter } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useCallback, useRef, useMemo } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -144,6 +146,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [selectedCol, setSelectedCol] = useState<number | null>(null);
   const [ordersExpanded, setOrdersExpanded] = useState(false);
+  const [hiddenRows, setHiddenRows] = useState<Set<string>>(new Set());
 
   const cellKey = (r: number, c: number) => `${r},${c}`;
   const parseKey = (k: string) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; };
@@ -230,6 +233,24 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       bgClass: "",
       textClass: "text-gray-800",
       values: mc.map(m => m.budgetProduzione),
+    },
+    {
+      rowKey: "sand_nursery_available",
+      label: t("pc_row_sand_nursery_available"),
+      tooltip: t("pc_row_sand_nursery_available_tip"),
+      color: "#0891b2",
+      bgClass: "",
+      textClass: "text-cyan-900",
+      values: mc.map(m => Math.max(0, m.giacenzaLordaConSchiuditoio - m.budgetProduzione)),
+      isBold: true,
+      isSuccess: (colIdx: number) => {
+        const m = mc[colIdx];
+        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaLordaConSchiuditoio >= m.budgetProduzione);
+      },
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaLordaConSchiuditoio < m.budgetProduzione);
+      },
     },
     {
       rowKey: "forecast_evadibile",
@@ -339,6 +360,17 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       infoTooltip: t("pc_row_arrivi_schiu_late"),
     },
   ];
+  const rowKey = (row: SpreadsheetRow) => row.rowKey || `ordini_size_${row.subRowSize || row.label}`;
+  const visibleRows = rows.filter(row => !hiddenRows.has(rowKey(row)));
+  const hiddenCount = rows.length - visibleRows.length;
+  const hideRow = (row: SpreadsheetRow) => {
+    const key = rowKey(row);
+    setHiddenRows(previous => new Set(previous).add(key));
+    setSelectedCells(new Set());
+    setSelectedRow(null);
+    setSelectedCol(null);
+    setAnchorCell(null);
+  };
 
   const excelColLetter = (idx: number) => String.fromCharCode(65 + idx);
 
@@ -729,14 +761,48 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
 
   const handleCopyTable = useCallback(() => {
     const headers = [t("pc_col_indicatore"), ...mc.map(m => m.monthLabel)].join("\t");
-    const dataRows = rows.map(row =>
-      [row.label, ...row.values.map(v => typeof v === 'number' ? v : String(v))].join("\t")
-    );
+    const copyRows: SpreadsheetRow[] = [];
+    for (const row of rows) {
+      copyRows.push(row);
+      if (row.rowKey === "forecast_evadibile") {
+        copyRows.push({
+          rowKey: "forecast_evadibile_coverage",
+          label: `  ↳ ${t("pc_row_forecast_evadibile_coverage")}`,
+          tooltip: t("pc_row_forecast_evadibile_coverage_tip"),
+          color: "#0d9488",
+          bgClass: "bg-teal-50/50",
+          textClass: "text-gray-600",
+          values: mc.map(m => m.budgetProduzione > 0 ? Math.min(1, (m.forecastEvadibileTarget || 0) / m.budgetProduzione) : 0),
+          isSubRow: true,
+          excelNumberFormat: "0%",
+        });
+      }
+      if (row.isExpandable && row.groupKey === "ordini") {
+        const hasDetails = rows.some(candidate => candidate.isSubRow && candidate.groupKey === "ordini");
+        if (!hasDetails) {
+          for (const sz of allOrderSizes) {
+            copyRows.push({
+              rowKey: `ordini_size_${sz}`,
+              label: `  ↳ ${sz}`,
+              tooltip: t("pc_row_ordini_size_tip"),
+              color: "#fb923c",
+              bgClass: "bg-orange-50/50",
+              textClass: "text-gray-600",
+              values: mc.map(m => (m.ordiniBySize?.[sz]) || 0),
+              isSubRow: true,
+              subRowSize: sz,
+              groupKey: "ordini",
+            });
+          }
+        }
+      }
+    }
+    const dataRows = copyRows.map(row => [row.label, ...row.values.map(v => typeof v === 'number' ? v : String(v))].join("\t"));
     const text = [headers, ...dataRows].join("\n");
     navigator.clipboard.writeText(text).then(() => {
       toast({ title: t("pc_toast_copied_title"), description: t("pc_toast_copied_desc") });
     });
-  }, [mc, rows]);
+  }, [mc, rows, allOrderSizes, t]);
 
   const multiCellStats = useMemo(() => {
     const allKeys = new Set(selectedCells);
@@ -744,13 +810,13 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       for (let c = 0; c < mc.length; c++) allKeys.add(cellKey(selectedRow, c));
     }
     if (selectedCol !== null) {
-      for (let r = 0; r < rows.length; r++) allKeys.add(cellKey(r, selectedCol));
+      for (let r = 0; r < visibleRows.length; r++) allKeys.add(cellKey(r, selectedCol));
     }
     if (allKeys.size < 2) return null;
     const nums: number[] = [];
     for (const k of allKeys) {
       const { row: r, col: c } = parseKey(k);
-      const v = rows[r]?.values[c];
+       const v = visibleRows[r]?.values[c];
       if (typeof v === 'number' && v !== 0) nums.push(v);
     }
     if (nums.length === 0) return null;
@@ -763,7 +829,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       massimo: Math.max(...nums),
       celle: allKeys.size,
     };
-  }, [selectedCells, selectedRow, selectedCol, rows, mc]);
+  }, [selectedCells, selectedRow, selectedCol, visibleRows, mc]);
 
   const handleCellClick = (rowIdx: number, colIdx: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -827,7 +893,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     const m = mc[colIdx];
     if (!m) return "";
     const fn = formatNumber;
-    const row = rows[rowIdx];
+    const row = visibleRows[rowIdx];
     if (!row) return "";
 
     if (row.isSubRow && row.subRowSize) {
@@ -870,6 +936,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return m.budgetProduzione > 0
         ? `${t("pc_cf_budget_a_pre")} ${m.monthName}: ${fn(m.budgetProduzione)} ${t("pc_cf_budget_a_suf")}`
         : `${t("pc_cf_budget_b")} ${m.monthName}`;
+    }
+    if (rk === "sand_nursery_available") {
+      const available = Math.max(0, m.giacenzaLordaConSchiuditoio - m.budgetProduzione);
+      return `${t("pc_cf_sand_nursery_available_pre")} ${fn(m.giacenzaLordaConSchiuditoio)} ${t("pc_cf_sand_nursery_available_mid")} ${fn(m.budgetProduzione)} = ${fn(available)} ${t("pc_cf_sand_nursery_available_suf")}`;
     }
     if (rk === "domanda") {
       const budgetRef = m.budgetProduzione > 0 ? ` ${t("pc_cf_domanda_bref")} ${fn(m.budgetProduzione)})` : '';
@@ -922,7 +992,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   };
 
   const cellFormula = selectedCell ? getCellFormula(selectedCell.row, selectedCell.col) : "";
-  const cellValue = selectedCell ? rows[selectedCell.row]?.values[selectedCell.col] : "";
+  const cellValue = selectedCell ? visibleRows[selectedCell.row]?.values[selectedCell.col] : "";
 
   return (
     <Card className="border-gray-300 shadow-sm">
@@ -933,11 +1003,51 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
             <CardTitle className="text-sm font-semibold text-green-800">{t("pc_table_title")}</CardTitle>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleCopyTable}>
+             <Popover>
+               <PopoverTrigger asChild>
+                 <Button variant="outline" size="sm" className="h-7 shrink-0 gap-1 border-gray-300 px-2 text-xs">
+                   <ListFilter className="h-3 w-3" />
+                   <span>{t("pc_rows_visibility")}</span>
+                   <span className="font-mono text-[10px] text-gray-500">{visibleRows.length}/{rows.length}</span>
+                 </Button>
+               </PopoverTrigger>
+               <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0">
+                 <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
+                   <div>
+                     <p className="text-xs font-semibold text-gray-800">{t("pc_rows_visibility")}</p>
+                     <p className="text-[11px] text-gray-500">{visibleRows.length} {t("pc_rows_visible")} / {rows.length}</p>
+                   </div>
+                   <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" disabled={hiddenCount === 0} onClick={() => setHiddenRows(new Set())}>
+                     <Eye className="mr-1 h-3 w-3" /> {t("pc_restore_all")}
+                   </Button>
+                 </div>
+                 <div className="max-h-[min(60vh,20rem)] overflow-y-auto p-2">
+                   {rows.map(row => {
+                     const key = rowKey(row);
+                     const isVisible = !hiddenRows.has(key);
+                     return (
+                       <label key={key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-gray-50">
+                         <Checkbox checked={isVisible} onCheckedChange={(checked) => {
+                           setHiddenRows(previous => {
+                             const next = new Set(previous);
+                             if (checked) next.delete(key);
+                             else next.add(key);
+                             return next;
+                           });
+                         }} />
+                         <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: row.color }} />
+                         <span className={`min-w-0 flex-1 truncate ${isVisible ? "text-gray-700" : "text-gray-400 line-through"}`}>{row.label.trim()}</span>
+                       </label>
+                     );
+                   })}
+                 </div>
+               </PopoverContent>
+             </Popover>
+             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleCopyTable}>
               <Copy className="h-3 w-3" /> {t("pc_copy")}
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-green-700" onClick={handleExportExcel}>
-              <Download className="h-3 w-3" /> Excel
+             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-green-700" onClick={handleExportExcel}>
+               <Download className="h-3 w-3" /> {t("pc_excel")}
             </Button>
           </div>
         </div>
@@ -1008,7 +1118,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                   }}
                 >
                   <div className="px-2 py-1.5 text-left text-[13px] font-semibold text-gray-600 tracking-wide uppercase">
-                    Indicatore
+                     {t("pc_indicator")}
                   </div>
                 </th>
                 {mc.map((m, i) => (
@@ -1025,8 +1135,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, rowIdx) => (
-                <tr key={rowIdx} className="group">
+              {visibleRows.map((row, rowIdx) => (
+                <tr key={rowKey(row)} className="group">
                   <td
                     className="sticky left-0 z-20 border-b border-gray-200 p-0 cursor-pointer transition-colors"
                     style={{
@@ -1062,7 +1172,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                           ) : (
                             <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: row.color }}></span>
                           )}
-                          <span className={`font-semibold text-[13px] ${row.textClass} ${row.isSubRow ? 'text-[12px] font-normal' : ''}`}>{row.label}</span>
+                           <span className={`font-semibold text-[13px] ${row.textClass} ${row.isSubRow ? 'text-[12px] font-normal' : ''}`}>{row.label}</span>
+                           <button
+                             type="button"
+                             className="ml-auto rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-200 hover:text-gray-700 group-hover:opacity-100 focus:opacity-100"
+                             aria-label={`${t("pc_hide_row")}: ${row.label}`}
+                             title={t("pc_hide_row")}
+                             onClick={(e) => { e.stopPropagation(); hideRow(row); }}
+                           >
+                             <EyeOff className="h-3.5 w-3.5" />
+                           </button>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs text-sm p-3 leading-relaxed bg-gray-900 text-white border border-gray-700 shadow-lg">
