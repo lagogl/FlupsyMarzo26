@@ -48,7 +48,11 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
+  forecastImpegnatoPrecedente: number;
+  disponibilitaForecastInizioMese: number;
   forecastEvadibileTarget: number;
+  forecastNonCoperto: number;
+  disponibilitaSandNursery: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
   arrivalTooLate?: boolean;
@@ -237,22 +241,23 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       values: mc.map(m => m.budgetProduzione),
     },
     {
-      rowKey: "sand_nursery_available",
-      label: t("pc_row_sand_nursery_available"),
-      tooltip: t("pc_row_sand_nursery_available_tip"),
-      color: "#0891b2",
+      rowKey: "forecast_committed_previous",
+      label: t("pc_row_forecast_committed_previous"),
+      tooltip: t("pc_row_forecast_committed_previous_tip"),
+      color: "#d97706",
       bgClass: "",
-      textClass: "text-cyan-900",
-      values: mc.map(m => Math.max(0, m.giacenzaLordaConSchiuditoio - m.forecastEvadibileTarget)),
+      textClass: "text-amber-800",
+      values: mc.map(m => m.forecastImpegnatoPrecedente || 0),
+    },
+    {
+      rowKey: "forecast_available_start",
+      label: t("pc_row_forecast_available_start"),
+      tooltip: t("pc_row_forecast_available_start_tip"),
+      color: "#0284c7",
+      bgClass: "",
+      textClass: "text-sky-800",
+      values: mc.map(m => m.disponibilitaForecastInizioMese || 0),
       isBold: true,
-      isSuccess: (colIdx: number) => {
-        const m = mc[colIdx];
-        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaLordaConSchiuditoio >= m.forecastEvadibileTarget);
-      },
-      isWarning: (colIdx: number) => {
-        const m = mc[colIdx];
-        return Boolean(m && m.budgetProduzione > 0 && m.giacenzaLordaConSchiuditoio < m.forecastEvadibileTarget);
-      },
     },
     {
       rowKey: "forecast_evadibile",
@@ -271,6 +276,27 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         const m = mc[colIdx];
         return m ? m.budgetProduzione > 0 && m.forecastEvadibileTarget < m.budgetProduzione : false;
       },
+    },
+    {
+      rowKey: "forecast_uncovered",
+      label: t("pc_row_forecast_uncovered"),
+      tooltip: t("pc_row_forecast_uncovered_tip"),
+      color: "#dc2626",
+      bgClass: "",
+      textClass: "text-red-700",
+      values: mc.map(m => m.forecastNonCoperto || 0),
+      isWarning: (colIdx: number) => (mc[colIdx]?.forecastNonCoperto || 0) > 0,
+    },
+    {
+      rowKey: "sand_nursery_available",
+      label: t("pc_row_sand_nursery_available"),
+      tooltip: t("pc_row_sand_nursery_available_tip"),
+      color: "#16a34a",
+      bgClass: "",
+      textClass: "text-green-800",
+      values: mc.map(m => m.disponibilitaSandNursery || 0),
+      isBold: true,
+      isSuccess: (colIdx: number) => (mc[colIdx]?.disponibilitaSandNursery || 0) > 0,
     },
     {
       rowKey: "domanda",
@@ -379,8 +405,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     setAnchorCell(null);
   };
   const getTraceSourceKeys = (resultKey: string) => {
-    if (resultKey === "sand_nursery_available") return ["giac_schiu", "forecast_evadibile"];
+    if (resultKey === "forecast_committed_previous") return ["giac_schiu", "forecast_available_start"];
+    if (resultKey === "forecast_available_start") return ["forecast_committed_previous", "giac_schiu"];
+    if (resultKey === "sand_nursery_available") return ["forecast_available_start", "forecast_evadibile"];
     if (resultKey === "forecast_evadibile") return ["budget"];
+    if (resultKey === "forecast_uncovered") return ["budget", "forecast_evadibile"];
     if (resultKey === "evadibili") return ["domanda", "arretrato", "giac_schiu"];
     if (resultKey === "giac_res") return ["giac_schiu", "evadibili"];
     if (resultKey === "giac_schiu") return ["giac_inv"];
@@ -953,9 +982,17 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         ? `${t("pc_cf_budget_a_pre")} ${m.monthName}: ${fn(m.budgetProduzione)} ${t("pc_cf_budget_a_suf")}`
         : `${t("pc_cf_budget_b")} ${m.monthName}`;
     }
+    if (rk === "forecast_committed_previous") {
+      return `${t("pc_cf_forecast_committed_previous_pre")} ${fn(m.forecastImpegnatoPrecedente || 0)} ${t("pc_cf_forecast_committed_previous_suf")}`;
+    }
+    if (rk === "forecast_available_start") {
+      return `${t("pc_cf_forecast_available_start_pre")} ${fn(m.disponibilitaForecastInizioMese || 0)} ${t("pc_cf_forecast_available_start_suf")}`;
+    }
+    if (rk === "forecast_uncovered") {
+      return `${fn(m.budgetProduzione)} − ${fn(m.forecastEvadibileTarget)} = ${fn(m.forecastNonCoperto || 0)} ${t("pc_cf_forecast_uncovered_suf")}`;
+    }
     if (rk === "sand_nursery_available") {
-      const available = Math.max(0, m.giacenzaLordaConSchiuditoio - m.forecastEvadibileTarget);
-      return `${t("pc_cf_sand_nursery_available_pre")} ${fn(m.giacenzaLordaConSchiuditoio)} ${t("pc_cf_sand_nursery_available_mid")} ${fn(m.forecastEvadibileTarget)} = ${fn(available)} ${t("pc_cf_sand_nursery_available_suf")}`;
+      return `${t("pc_cf_sand_nursery_available_pre")} ${fn(m.disponibilitaForecastInizioMese || 0)} ${t("pc_cf_sand_nursery_available_mid")} ${fn(m.forecastEvadibileTarget)} = ${fn(m.disponibilitaSandNursery || 0)} ${t("pc_cf_sand_nursery_available_suf")}`;
     }
     if (rk === "domanda") {
       const budgetRef = m.budgetProduzione > 0 ? ` ${t("pc_cf_domanda_bref")} ${fn(m.budgetProduzione)})` : '';
@@ -1135,6 +1172,14 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       </CardHeader>
       <div className="px-3 pb-1">
         <p className="text-[10px] text-gray-400 italic">{t("pc_ctrl_hint")}</p>
+        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-blue-500" />{t("pc_legend_gross")}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500" />{t("pc_legend_committed")}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-sky-500" />{t("pc_legend_available")}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />{t("pc_legend_covered")}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-orange-500" />{t("pc_legend_partial")}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-red-500" />{t("pc_legend_gap")}</span>
+        </div>
       </div>
       <CardContent className="p-0">
         <div className="overflow-x-auto border-t border-gray-300">

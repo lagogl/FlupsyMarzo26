@@ -50,7 +50,11 @@ interface MonthlyContext {
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
+  forecastImpegnatoPrecedente: number;
+  disponibilitaForecastInizioMese: number;
   forecastEvadibileTarget: number;
+  forecastNonCoperto: number;
+  disponibilitaSandNursery: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
   arrivalTooLate: boolean;
@@ -342,9 +346,18 @@ export class GrowthProjectionService {
       const giacenzaDisponibileForecast = forecastBaskets
         .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
         .reduce((sum, b) => sum + b.animalCount, 0);
+      const forecastImpegnatoPrecedente = Math.max(
+        0,
+        giacenzaLordaConSchiuditoio - giacenzaDisponibileForecast,
+      );
       const forecastEvadibileTarget = calculateFulfillableProductionForecast(
         budgetMese,
         giacenzaDisponibileForecast,
+      );
+      const forecastNonCoperto = Math.max(0, budgetMese - forecastEvadibileTarget);
+      const disponibilitaSandNursery = Math.max(
+        0,
+        giacenzaDisponibileForecast - forecastEvadibileTarget,
       );
       let forecastDaPrenotare = forecastEvadibileTarget;
       const forecastEligibleBaskets = forecastBaskets
@@ -418,7 +431,11 @@ export class GrowthProjectionService {
         ordiniArretrati,
         ordiniEvasi,
         budgetProduzione: budgetMese,
+        forecastImpegnatoPrecedente,
+        disponibilitaForecastInizioMese: giacenzaDisponibileForecast,
         forecastEvadibileTarget,
+        forecastNonCoperto,
+        disponibilitaSandNursery,
         domandaEffettiva,
         arriviSchiuditoio: hatcheryThisMonth,
         arrivalTooLate: false,
