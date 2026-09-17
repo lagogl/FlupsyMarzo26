@@ -2720,64 +2720,93 @@ async function registerSaleDeliveriesOnOrders(
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1, $2)", [73151, saleId]);
     const existing = await client.query(
-      `SELECT id FROM consegne_condivise WHERE advanced_sale_id = $1 LIMIT 1`,
+      `SELECT ordine_id, sale_size_code, COALESCE(SUM(quantita_consegnata), 0)::integer AS quantity
+       FROM consegne_condivise
+       WHERE advanced_sale_id = $1
+       GROUP BY ordine_id, sale_size_code`,
       [saleId]
     );
     if (existing.rowCount) {
+      const expectedSizes = new Set(context.components.map(component => component.sizeCode));
+      const linkedOrderIds = new Set(existing.rows.map(row => Number(row.ordine_id)));
+      const deliveredBySize = new Map<string, number>();
+      let hasUnexpectedSize = false;
+      for (const row of existing.rows) {
+        const sizeCode = String(row.sale_size_code || "");
+        if (!expectedSizes.has(sizeCode)) hasUnexpectedSize = true;
+        deliveredBySize.set(sizeCode, (deliveredBySize.get(sizeCode) || 0) + Number(row.quantity || 0));
+      }
+      const analyticallyComplete = linkedOrderIds.size === 1
+        && !hasUnexpectedSize
+        && context.components.every(component =>
+          (deliveredBySize.get(component.sizeCode) || 0) === component.animalCount
+        );
+      if (!analyticallyComplete) {
+        const error: any = new Error(
+          `La riconciliazione della vendita ${context.sale.saleNumber} è già iniziata e deve essere completata manualmente sullo stesso ordine`
+        );
+        error.code = "ORDER_RECONCILIATION_REQUIRED";
+        throw error;
+      }
       await client.query("COMMIT");
       return { alreadyRegistered: true, allocations: [] };
     }
 
-    const allocations: OrderAllocation[] = [];
-    for (const component of context.components) {
-      let remaining = component.animalCount;
-      const ordersResult = await client.query(
-        `SELECT o.id, o.numero, o.data, o.data_inizio_consegna, o.data_fine_consegna,
-                o.quantita, c.piva AS customer_vat,
-                COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
-                COALESCE((SELECT SUM(cc.quantita_consegnata)
-                          FROM consegne_condivise cc WHERE cc.ordine_id = o.id), 0)::integer AS delivered
-         FROM ordini o
-         LEFT JOIN clienti c ON c.id = o.cliente_id
-         WHERE o.cancellato = false
-           AND o.stato IN ('Aperto', 'Parziale', 'In Lavorazione')
-           AND o.taglia_richiesta = $1
-           AND o.data <= $2
-         ORDER BY COALESCE(o.data_inizio_consegna, o.data), o.data, o.id
-         FOR UPDATE OF o`,
-        [component.sizeCode, context.sale.saleDate]
+    if (context.components.length !== 1) {
+      const error: any = new Error(
+        `La vendita ${context.sale.saleNumber} contiene più taglie: selezionare manualmente un solo ordine`
       );
-
-      for (const order of ordersResult.rows.filter(order =>
-        sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name)
-      )) {
-        if (remaining <= 0) break;
-        const residualBefore = Math.max(0, Number(order.quantita || 0) - Number(order.delivered || 0));
-        if (residualBefore <= 0) continue;
-        const quantity = Math.min(remaining, residualBefore);
-        remaining -= quantity;
-        allocations.push({
-          orderId: Number(order.id),
-          orderNumber: order.numero === null ? null : Number(order.numero),
-            orderDate: toDateKey(order.data),
-            deliveryStartDate: order.data_inizio_consegna ? toDateKey(order.data_inizio_consegna) : null,
-            deliveryEndDate: order.data_fine_consegna ? toDateKey(order.data_fine_consegna) : null,
-          sizeCode: component.sizeCode,
-          quantity,
-          residualBefore,
-          residualAfter: residualBefore - quantity
-        });
-      }
-
-      if (remaining > 0) {
-        const error: any = new Error(
-          `Ordini insufficienti per ${component.sizeCode}: mancano ${remaining.toLocaleString("it-IT")} animali`
-        );
-        error.code = "ORDER_RECONCILIATION_REQUIRED";
-        error.details = { sizeCode: component.sizeCode, missingAnimals: remaining };
-        throw error;
-      }
+      error.code = "ORDER_RECONCILIATION_REQUIRED";
+      throw error;
     }
+    const component = context.components[0];
+    const ordersResult = await client.query(
+      `SELECT o.id, o.numero, o.data, o.data_inizio_consegna, o.data_fine_consegna,
+              o.quantita, o.company_id, c.piva AS customer_vat,
+              COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
+              COALESCE((SELECT SUM(cc.quantita_consegnata)
+                        FROM consegne_condivise cc WHERE cc.ordine_id = o.id), 0)::integer AS delivered
+       FROM ordini o
+       LEFT JOIN clienti c ON c.id = o.cliente_id
+       WHERE o.cancellato = false
+         AND o.stato IN ('Aperto', 'Parziale', 'In Lavorazione')
+         AND o.taglia_richiesta = $1
+         AND o.data <= $2
+       ORDER BY COALESCE(o.data_inizio_consegna, o.data), o.data, o.id
+       FOR UPDATE OF o`,
+      [component.sizeCode, context.sale.saleDate]
+    );
+    const order = ordersResult.rows.find(candidate => {
+      const residual = Math.max(0, Number(candidate.quantita || 0) - Number(candidate.delivered || 0));
+      return residual >= component.animalCount
+        && (context.sale.companyId == null || Number(candidate.company_id) === Number(context.sale.companyId))
+        && sameCustomerIdentity(
+          context.customerVat,
+          context.customerName,
+          candidate.customer_vat,
+          candidate.customer_name
+        );
+    });
+    if (!order) {
+      const error: any = new Error(
+        `Nessun singolo ordine compatibile contiene l'intera vendita ${context.sale.saleNumber}`
+      );
+      error.code = "ORDER_RECONCILIATION_REQUIRED";
+      error.details = { sizeCode: component.sizeCode, requiredAnimals: component.animalCount };
+      throw error;
+    }
+    const residualBefore = Math.max(0, Number(order.quantita || 0) - Number(order.delivered || 0));
+    const allocations: OrderAllocation[] = [{
+      orderId: Number(order.id),
+      orderNumber: order.numero === null ? null : Number(order.numero),
+      orderDate: toDateKey(order.data),
+      deliveryStartDate: order.data_inizio_consegna ? toDateKey(order.data_inizio_consegna) : null,
+      deliveryEndDate: order.data_fine_consegna ? toDateKey(order.data_fine_consegna) : null,
+      sizeCode: component.sizeCode,
+      quantity: component.animalCount,
+      residualBefore,
+      residualAfter: residualBefore - component.animalCount
+    }];
 
     for (const allocation of allocations) {
       const sourceReference = `advanced-sale:${saleId}:order:${allocation.orderId}:size:${allocation.sizeCode}`;
@@ -2840,7 +2869,7 @@ async function buildHistoricalOrderReconciliationPreview() {
     .orderBy(advancedSales.saleDate, advancedSales.id);
 
   const externalOrders = await queryEsterno(
-    `SELECT o.id, o.numero, o.data, o.data_inizio_consegna, o.data_fine_consegna,
+    `SELECT o.id, o.numero, o.data, o.data_inizio_consegna, o.data_fine_consegna, o.company_id,
             o.quantita, o.taglia_richiesta, c.piva AS customer_vat,
             COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
             COALESCE(SUM(cc.quantita_consegnata), 0)::integer AS delivered,
@@ -2854,13 +2883,16 @@ async function buildHistoricalOrderReconciliationPreview() {
      ORDER BY COALESCE(o.data_inizio_consegna,o.data),o.data,o.id`
   );
   const linkedRows = await queryEsterno(
-    `SELECT DISTINCT advanced_sale_id FROM consegne_condivise WHERE advanced_sale_id IS NOT NULL`
+    `SELECT advanced_sale_id, sale_size_code, ordine_id,
+            COALESCE(SUM(quantita_consegnata), 0)::integer AS quantity
+     FROM consegne_condivise
+     WHERE advanced_sale_id IS NOT NULL
+     GROUP BY advanced_sale_id, sale_size_code, ordine_id`
   );
-  const linkedIds = new Set(linkedRows.map(row => Number(row.advanced_sale_id)));
-  const unlinkedSales = sales.filter(sale => !linkedIds.has(sale.id));
+  const linkedSaleIds = new Set(linkedRows.map(row => Number(row.advanced_sale_id)));
   const contextsBySaleId = new Map<number, Awaited<ReturnType<typeof getSaleDeliveryContext>>>();
-  for (let offset = 0; offset < unlinkedSales.length; offset += 10) {
-    const chunk = unlinkedSales.slice(offset, offset + 10);
+  for (let offset = 0; offset < sales.length; offset += 10) {
+    const chunk = sales.slice(offset, offset + 10);
     const contexts = await Promise.all(chunk.map(sale =>
       getSaleDeliveryContext(sale.id).catch(() => null)
     ));
@@ -2868,25 +2900,61 @@ async function buildHistoricalOrderReconciliationPreview() {
       if (context) contextsBySaleId.set(chunk[index].id, context);
     });
   }
+  const registeredBySaleSize = new Map<string, number>();
+  for (const row of linkedRows) {
+    const key = `${Number(row.advanced_sale_id)}:${String(row.sale_size_code || "")}`;
+    registeredBySaleSize.set(key, Number(row.quantity || 0));
+  }
+  const completedSaleIds = new Set<number>();
+  for (const sale of sales) {
+    const context = contextsBySaleId.get(sale.id);
+    if (!context) continue;
+    const expectedSizes = new Set(context.components.map(component => component.sizeCode));
+    const saleLinkedRows = linkedRows.filter(row => Number(row.advanced_sale_id) === sale.id);
+    const linkedOrderIds = new Set(saleLinkedRows.map(row => Number(row.ordine_id)));
+    const hasUnexpectedSize = saleLinkedRows.some(row => !expectedSizes.has(String(row.sale_size_code || "")));
+    if (linkedOrderIds.size === 1 && !hasUnexpectedSize && context.components.every(component =>
+      (registeredBySaleSize.get(`${sale.id}:${component.sizeCode}`) || 0) === component.animalCount
+    )) {
+      completedSaleIds.add(sale.id);
+    }
+  }
   const virtualResidual = new Map<number, number>(
     externalOrders.map(order => [Number(order.id), Math.max(0, Number(order.residual || 0))])
   );
 
   const proposals: any[] = [];
   for (const sale of sales) {
-    if (linkedIds.has(sale.id)) continue;
+    if (completedSaleIds.has(sale.id)) continue;
     const context = contextsBySaleId.get(sale.id);
     if (!context) continue;
+    const hasExistingLinks = linkedSaleIds.has(sale.id);
     const allocations: OrderAllocation[] = [];
     const reasons = new Set<string>();
     const componentIssues: any[] = [];
     let missingAnimals = 0;
 
     for (const component of context.components) {
-      let remaining = component.animalCount;
+      const alreadyRegistered = registeredBySaleSize.get(`${sale.id}:${component.sizeCode}`) || 0;
+      let remaining = Math.max(0, component.animalCount - alreadyRegistered);
+      if (hasExistingLinks) {
+        if (remaining > 0) {
+          missingAnimals += remaining;
+          componentIssues.push({
+            sizeCode: component.sizeCode,
+            requiredAnimals: component.animalCount,
+            proposedAnimals: alreadyRegistered,
+            missingAnimals: remaining,
+            matchingOrders: []
+          });
+        }
+        reasons.add("Riconciliazione già iniziata: completarla manualmente sullo stesso ordine");
+        continue;
+      }
       const customerAndSizeOrders = externalOrders.filter(order =>
         sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name) &&
-        order.taglia_richiesta === component.sizeCode
+        order.taglia_richiesta === component.sizeCode &&
+        (context.sale.companyId == null || Number(order.company_id) === Number(context.sale.companyId))
       );
       const eligibleOrders = customerAndSizeOrders.filter(order => {
         const saleDate = toDateKey(sale.saleDate);
@@ -2944,8 +3012,27 @@ async function buildHistoricalOrderReconciliationPreview() {
       }
     }
 
+    const distinctOrderIds = new Set(allocations.map(item => item.orderId));
+    if (distinctOrderIds.size > 1) {
+      for (const allocation of allocations) {
+        virtualResidual.set(
+          allocation.orderId,
+          (virtualResidual.get(allocation.orderId) || 0) + allocation.quantity
+        );
+      }
+      allocations.length = 0;
+      missingAnimals = context.components.reduce((sum, component) => sum + component.animalCount, 0);
+      reasons.add("La vendita richiederebbe più ordini: selezionare manualmente un solo ordine");
+    } else if (missingAnimals > 0) {
+      for (const allocation of allocations) {
+        virtualResidual.set(
+          allocation.orderId,
+          (virtualResidual.get(allocation.orderId) || 0) + allocation.quantity
+        );
+      }
+    }
     const proposedAnimals = allocations.reduce((sum, item) => sum + item.quantity, 0);
-    const status = missingAnimals === 0
+    const status = missingAnimals === 0 && distinctOrderIds.size === 1
       ? "automatic"
       : proposedAnimals > 0 ? "partial" : "manual";
     const proposal = {
@@ -3024,7 +3111,7 @@ async function applyHistoricalOrderReconciliation(
       [orderIds]
     );
     const ordersResult = await client.query(
-      `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.cancellato, o.stato,
+      `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.company_id, o.cancellato, o.stato,
               c.piva AS customer_vat,
               COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
               COALESCE((SELECT SUM(cc.quantita_consegnata)
@@ -3039,6 +3126,14 @@ async function applyHistoricalOrderReconciliation(
 
     for (const sale of orderedSales) {
       const context = contexts.get(sale.saleId)!;
+      const saleOrderIds = new Set(
+        (sale.allocations as OrderAllocation[]).map(allocation => Number(allocation.orderId))
+      );
+      if (saleOrderIds.size !== 1) {
+        const error: any = new Error(`La vendita ${context.sale.saleNumber} deve essere associata a un solo ordine`);
+        error.code = "ORDER_RECONCILIATION_REQUIRED";
+        throw error;
+      }
       const plannedBySize = new Map<string, number>();
       for (const allocation of sale.allocations as OrderAllocation[]) {
         const order = ordersById.get(Number(allocation.orderId));
@@ -3046,6 +3141,7 @@ async function applyHistoricalOrderReconciliation(
             !["Aperto", "Parziale", "In Lavorazione"].includes(order.stato) ||
             order.taglia_richiesta !== allocation.sizeCode ||
             toDateKey(order.data) > toDateKey(context.sale.saleDate) ||
+             (context.sale.companyId != null && Number(order.company_id) !== Number(context.sale.companyId)) ||
             !sameCustomerIdentity(
               context.customerVat,
               context.customerName,
@@ -3161,8 +3257,9 @@ function reconciliationError(message: string, details?: unknown): never {
   throw error;
 }
 
-function manualSourceReference(allocation: ManualOrderAllocation) {
-  return `advanced-sale:${allocation.saleId}:order:${allocation.orderId}:size:${allocation.sizeCode}`;
+function manualSourceReference(allocation: ManualOrderAllocation, idempotencyKey: string) {
+  const keyHash = crypto.createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 24);
+  return `advanced-sale:${allocation.saleId}:order:${allocation.orderId}:size:${allocation.sizeCode}:manual:${keyHash}`;
 }
 
 function assertSaleCanBeReconciled(context: Awaited<ReturnType<typeof getSaleDeliveryContext>>) {
@@ -3181,47 +3278,60 @@ export async function getManualOrderReconciliation(req: Request, res: Response) 
     const context = await getSaleDeliveryContext(saleId);
     assertSaleCanBeReconciled(context);
     const registered = await queryEsterno(
-      `SELECT sale_size_code, COALESCE(SUM(quantita_consegnata), 0)::integer AS quantity
+      `SELECT sale_size_code, ordine_id, COALESCE(SUM(quantita_consegnata), 0)::integer AS quantity
        FROM consegne_condivise WHERE advanced_sale_id = $1
-       GROUP BY sale_size_code`,
+       GROUP BY sale_size_code, ordine_id`,
       [saleId]
     );
-    const registeredBySize = new Map(registered.map(row => [String(row.sale_size_code || ""), Number(row.quantity)]));
+    const registeredBySize = new Map<string, number>();
+    const registeredOrderIds = new Set<number>();
+    for (const row of registered) {
+      const sizeCode = String(row.sale_size_code || "");
+      registeredBySize.set(sizeCode, (registeredBySize.get(sizeCode) || 0) + Number(row.quantity || 0));
+      registeredOrderIds.add(Number(row.ordine_id));
+    }
+    if (registeredOrderIds.size > 1) {
+      reconciliationError("La vendita contiene associazioni storiche verso più ordini e richiede una verifica amministrativa");
+    }
     if (context.components.every(component => registeredBySize.get(component.sizeCode) === component.animalCount)) {
       return res.status(409).json({ success: false, error: "La vendita risulta già riconciliata analiticamente" });
     }
 
-    const sizeCodes = context.components.map(component => component.sizeCode);
     const rows = await queryEsterno(
-      `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.cancellato, o.stato,
+      `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.company_id, o.cancellato, o.stato,
               c.piva AS customer_vat, COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
               COALESCE(SUM(cc.quantita_consegnata), 0)::integer AS delivered
        FROM ordini o
        LEFT JOIN clienti c ON c.id=o.cliente_id
        LEFT JOIN consegne_condivise cc ON cc.ordine_id=o.id
-       WHERE o.taglia_richiesta = ANY($1::text[])
        GROUP BY o.id, c.piva, c.denominazione
        ORDER BY o.data, o.id`,
-      [sizeCodes]
+      []
     );
     const saleDate = toDateKey(context.sale.saleDate);
-    const ordersBySize = new Map<string, any[]>();
+    const requiredAnimals = context.components.reduce((sum, component) => {
+      const alreadyRegistered = registeredBySize.get(component.sizeCode) || 0;
+      return sum + Math.max(0, component.animalCount - alreadyRegistered);
+    }, 0);
+    const fixedOrderId = registeredOrderIds.size === 1 ? [...registeredOrderIds][0] : null;
+    const candidates: any[] = [];
     for (const order of rows) {
       if (!sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name)) continue;
       const ordered = Number(order.quantita || 0);
       const delivered = Number(order.delivered || 0);
       const residual = Math.max(0, ordered - delivered);
       let issue: string | null = null;
-      if (toDateKey(order.data) > saleDate) issue = "Ordine successivo alla vendita";
+      if (fixedOrderId !== null && Number(order.id) !== fixedOrderId) issue = "La vendita è già parzialmente associata a un altro ordine";
+      else if (context.sale.companyId != null && Number(order.company_id) !== Number(context.sale.companyId)) issue = "Ordine di un'altra azienda";
+      else if (toDateKey(order.data) > saleDate) issue = "Ordine successivo alla vendita";
       else if (order.cancellato || !["Aperto", "Parziale", "In Lavorazione"].includes(order.stato)) issue = "Ordine non disponibile";
       else if (residual <= 0) issue = "Ordine senza residuo";
-      const size = String(order.taglia_richiesta);
-      const items = ordersBySize.get(size) || [];
-      items.push({
+      else if (residual < requiredAnimals) issue = "Residuo insufficiente per l'intera vendita";
+      candidates.push({
         orderId: Number(order.id), orderNumber: order.numero === null ? null : Number(order.numero),
-        orderDate: toDateKey(order.data), ordered, delivered, residual, eligible: issue === null, issue
+        orderDate: toDateKey(order.data), orderSizeCode: String(order.taglia_richiesta || ""),
+        ordered, delivered, residual, eligible: issue === null, issue
       });
-      ordersBySize.set(size, items);
     }
     res.json({
       success: true,
@@ -3230,6 +3340,10 @@ export async function getManualOrderReconciliation(req: Request, res: Response) 
         saleNumber: context.sale.saleNumber,
         saleDate: context.sale.saleDate,
         customerName: context.customerName,
+        companyId: context.sale.companyId,
+        fixedOrderId,
+        requiredAnimals,
+        candidates,
         components: context.components
           .map(component => {
             const alreadyRegistered = registeredBySize.get(component.sizeCode) || 0;
@@ -3237,8 +3351,7 @@ export async function getManualOrderReconciliation(req: Request, res: Response) 
               sizeCode: component.sizeCode,
               totalAnimals: component.animalCount,
               alreadyRegistered,
-              requiredAnimals: Math.max(0, component.animalCount - alreadyRegistered),
-              candidates: ordersBySize.get(component.sizeCode) || []
+              requiredAnimals: Math.max(0, component.animalCount - alreadyRegistered)
             };
           })
           .filter(component => component.requiredAnimals > 0)
@@ -3289,7 +3402,7 @@ export async function applyManualOrderReconciliation(req: Request, res: Response
       const existingBySource = new Map(existing.rows.map(row => [String(row.source_reference || ""), row]));
       let replayedRows = 0;
       for (const allocation of request.allocations) {
-        const row = existingBySource.get(manualSourceReference(allocation));
+        const row = existingBySource.get(manualSourceReference(allocation, request.idempotencyKey));
         if (!row) continue;
         if (Number(row.quantita_consegnata) !== allocation.quantity ||
             Number(row.ordine_id) !== allocation.orderId ||
@@ -3312,11 +3425,30 @@ export async function applyManualOrderReconciliation(req: Request, res: Response
       }
 
       const existingBySaleSize = new Map<string, number>();
+      const existingOrderBySale = new Map<number, number>();
       for (const row of existing.rows) {
+        const saleId = Number(row.advanced_sale_id);
+        const orderId = Number(row.ordine_id);
+        const existingOrderId = existingOrderBySale.get(saleId);
+        if (existingOrderId !== undefined && existingOrderId !== orderId) {
+          reconciliationError("La vendita contiene associazioni storiche verso più ordini");
+        }
+        existingOrderBySale.set(saleId, orderId);
         const key = `${Number(row.advanced_sale_id)}:${String(row.sale_size_code || "")}`;
         existingBySaleSize.set(key, (existingBySaleSize.get(key) || 0) + Number(row.quantita_consegnata || 0));
       }
       for (const [saleId, context] of contexts) {
+        const requestedOrderIds = new Set(
+          request.allocations.filter(item => item.saleId === saleId).map(item => item.orderId)
+        );
+        if (requestedOrderIds.size !== 1) {
+          reconciliationError(`La vendita ${context.sale.saleNumber} deve essere associata a un solo ordine`);
+        }
+        const requestedOrderId = [...requestedOrderIds][0];
+        const existingOrderId = existingOrderBySale.get(saleId);
+        if (existingOrderId !== undefined && existingOrderId !== requestedOrderId) {
+          reconciliationError(`La vendita ${context.sale.saleNumber} è già associata a un altro ordine`);
+        }
         const expectedSizes = new Set(context.components.map(component => component.sizeCode));
         for (const row of existing.rows.filter(item => Number(item.advanced_sale_id) === saleId)) {
           if (!expectedSizes.has(String(row.sale_size_code || ""))) {
@@ -3344,7 +3476,7 @@ export async function applyManualOrderReconciliation(req: Request, res: Response
         [orderIds]
       );
       const ordersResult = await client.query(
-        `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.cancellato, o.stato,
+        `SELECT o.id, o.numero, o.data, o.quantita, o.taglia_richiesta, o.company_id, o.cancellato, o.stato,
                 c.piva AS customer_vat, COALESCE(c.denominazione, o.cliente_nome) AS customer_name,
                 COALESCE(SUM(cc.quantita_consegnata), 0)::integer AS delivered
          FROM ordini o LEFT JOIN clienti c ON c.id=o.cliente_id
@@ -3360,7 +3492,8 @@ export async function applyManualOrderReconciliation(req: Request, res: Response
         const order = orders.get(allocation.orderId);
         const context = contexts.get(allocation.saleId)!;
         if (!order || order.cancellato || !["Aperto", "Parziale", "In Lavorazione"].includes(order.stato) ||
-            order.taglia_richiesta !== allocation.sizeCode || toDateKey(order.data) > toDateKey(context.sale.saleDate) ||
+            toDateKey(order.data) > toDateKey(context.sale.saleDate) ||
+            (context.sale.companyId != null && Number(order.company_id) !== Number(context.sale.companyId)) ||
             !sameCustomerIdentity(context.customerVat, context.customerName, order.customer_vat, order.customer_name)) {
           reconciliationError(`L'ordine ${allocation.orderId} non è compatibile con la vendita ${context.sale.saleNumber}`);
         }
@@ -3380,7 +3513,7 @@ export async function applyManualOrderReconciliation(req: Request, res: Response
            VALUES ($1,$2,$3,'delta_futuro',$4,$5,$6,$7,NULL,$8)`,
           [allocation.orderId, context.sale.saleDate, allocation.quantity,
             `Riconciliazione manuale della vendita ${context.sale.saleNumber}`, allocation.saleId,
-            context.sale.saleNumber, allocation.sizeCode, manualSourceReference(allocation)]
+            context.sale.saleNumber, allocation.sizeCode, manualSourceReference(allocation, request.idempotencyKey)]
         );
       }
       for (const orderId of orderIds) await client.query(

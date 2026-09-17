@@ -145,7 +145,7 @@ export default function AdvancedSales() {
   const [selectedReconciliationSaleIds, setSelectedReconciliationSaleIds] = useState<number[]>([]);
   const [guidedReconciliationSale, setGuidedReconciliationSale] = useState<any | null>(null);
   const [manualConfirmOpen, setManualConfirmOpen] = useState(false);
-  const [manualAllocations, setManualAllocations] = useState<Record<string, string>>({});
+  const [manualSelectedOrderId, setManualSelectedOrderId] = useState<number | null>(null);
   const [manualIdempotencyKey, setManualIdempotencyKey] = useState("");
   const ddrYear = new Date().getFullYear();
 
@@ -1092,65 +1092,61 @@ export default function AdvancedSales() {
 
   const openManualReconciliation = (sale: any) => {
     setGuidedReconciliationSale(sale);
-    setManualAllocations({});
+    setManualSelectedOrderId(null);
     setManualIdempotencyKey(crypto.randomUUID());
   };
 
   const closeManualReconciliation = () => {
     setGuidedReconciliationSale(null);
-    setManualAllocations({});
+    setManualSelectedOrderId(null);
     setManualConfirmOpen(false);
   };
 
   const manualSale = manualReconciliationData?.sale;
   const manualComponents = manualSale?.components || [];
+  const manualCandidates = manualSale?.candidates || [];
+  const manualSelectedOrder = manualCandidates.find(
+    (candidate: any) => candidate.orderId === manualSelectedOrderId
+  );
   const manualTotals = useMemo(() => manualComponents.map((component: any) => {
-    const assigned = (component.candidates || []).filter((candidate: any) => candidate.eligible).reduce(
-      (sum: number, candidate: any) => sum + (Number(manualAllocations[`${component.sizeCode}:${candidate.orderId}`]) || 0), 0
-    );
+    const assigned = manualSelectedOrderId ? Number(component.requiredAnimals) || 0 : 0;
     return {
       sizeCode: component.sizeCode,
       required: Number(component.requiredAnimals) || 0,
       assigned,
       residual: (Number(component.requiredAnimals) || 0) - assigned
     };
-  }), [manualComponents, manualAllocations]);
-  const manualPlanValid = !!manualSale && manualComponents.length > 0 && manualComponents.every((component: any) => {
-    const total = manualTotals.find((item: { sizeCode: string; assigned: number; required: number; residual: number }) => item.sizeCode === component.sizeCode);
-    if (!total || total.assigned !== total.required) return false;
-    return (component.candidates || []).every((candidate: any) => {
-      const value = manualAllocations[`${component.sizeCode}:${candidate.orderId}`];
-      if (!value) return true;
-      const quantity = Number(value);
-      return Number.isInteger(quantity) && quantity > 0 && quantity <= Number(candidate.residual);
-    });
-  });
+  }), [manualComponents, manualSelectedOrderId]);
+  const manualPlanValid = !!manualSale
+    && manualComponents.length > 0
+    && !!manualSelectedOrder
+    && manualSelectedOrder.eligible
+    && Number(manualSelectedOrder.residual) >= Number(manualSale.requiredAnimals || 0);
 
   useEffect(() => {
     if (!manualReconciliationData?.sale || !guidedReconciliationSale) return;
-    if (Object.keys(manualAllocations).length > 0) return;
-    const initial: Record<string, string> = {};
-    (guidedReconciliationSale.allocations || []).forEach((allocation: any) => {
-      if (Number(allocation.quantity) > 0) {
-        initial[`${allocation.sizeCode}:${allocation.orderId}`] = String(allocation.quantity);
-      }
-    });
-    if (Object.keys(initial).length > 0) setManualAllocations(initial);
-  }, [manualReconciliationData, guidedReconciliationSale, manualAllocations]);
+    if (manualSelectedOrderId !== null) return;
+    const proposedOrderIds = new Set<number>(
+      (guidedReconciliationSale.allocations || []).map((allocation: any) => Number(allocation.orderId))
+    );
+    const initialOrderId = manualReconciliationData.sale.fixedOrderId
+      || (proposedOrderIds.size === 1 ? [...proposedOrderIds][0] : null);
+    if (initialOrderId && manualCandidates.some((candidate: any) => candidate.orderId === initialOrderId && candidate.eligible)) {
+      setManualSelectedOrderId(initialOrderId);
+    }
+  }, [manualReconciliationData, guidedReconciliationSale, manualSelectedOrderId, manualCandidates]);
 
   const manualApplyMutation = useMutation({
     mutationFn: () => apiRequest('/api/advanced-sales/order-reconciliation/manual/apply', {
       method: 'POST',
       body: JSON.stringify({
         idempotencyKey: manualIdempotencyKey,
-        allocations: manualComponents.flatMap((component: any) =>
-          (component.candidates || []).filter((candidate: any) => candidate.eligible).flatMap((candidate: any) => {
-            const quantity = Number(manualAllocations[`${component.sizeCode}:${candidate.orderId}`]) || 0;
-            return quantity > 0
-              ? [{ saleId: manualSale.saleId, sizeCode: component.sizeCode, orderId: candidate.orderId, quantity }]
-              : [];
-          })
-        )
+        allocations: manualComponents.map((component: any) => ({
+          saleId: manualSale.saleId,
+          sizeCode: component.sizeCode,
+          orderId: manualSelectedOrderId,
+          quantity: Number(component.requiredAnimals)
+        }))
       })
     }),
     onSuccess: (data: any) => {
@@ -2175,16 +2171,14 @@ export default function AdvancedSales() {
                                   ? "Associabile"
                                   : sale.status === "partial" ? "Parziale" : "Manuale"}
                               </Badge>
-                              {!selectable && (
-                                <Button
-                                  variant="link"
-                                  size="sm"
-                                  className="h-auto p-0 text-xs"
-                                   onClick={() => openManualReconciliation(sale)}
-                                >
-                                  Come risolvere
-                                </Button>
-                              )}
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="h-auto p-0 text-xs"
+                                onClick={() => openManualReconciliation(sale)}
+                              >
+                                Riconcilia manualmente
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -2223,7 +2217,7 @@ export default function AdvancedSales() {
               Riconciliazione manuale · {manualSale?.saleNumber || guidedReconciliationSale?.saleNumber}
             </DialogTitle>
             <DialogDescription>
-              Assegna la vendita agli ordini riga per riga. Le quantità proposte automaticamente sono modificabili.
+              Seleziona un solo ordine per l’intera vendita. Lo stesso ordine potrà essere completato da altre vendite successive.
             </DialogDescription>
           </DialogHeader>
 
@@ -2262,87 +2256,91 @@ export default function AdvancedSales() {
                 </div>
               </div>
 
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <p className="text-sm font-semibold">Quantità della vendita da riconciliare</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {manualComponents.map((component: any) => (
+                    <div key={component.sizeCode} className="rounded-md border bg-white p-2">
+                      <p className="font-medium">{component.sizeCode}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Venduti {formatSaleNumber(component.totalAnimals)}
+                        {component.alreadyRegistered > 0 && <> · già associati {formatSaleNumber(component.alreadyRegistered)}</>}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold">
+                        Da associare: {formatSaleNumber(component.requiredAnimals)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="overflow-x-auto rounded-lg border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Taglia / ordine</TableHead>
+                      <TableHead className="w-28">Scelta</TableHead>
                       <TableHead>Ordine</TableHead>
+                      <TableHead>Taglia richiesta</TableHead>
                       <TableHead className="text-right">Ordinati</TableHead>
                       <TableHead className="text-right">Consegnati</TableHead>
                       <TableHead className="text-right">Residuo</TableHead>
-                      <TableHead className="w-32 text-right">Assegna</TableHead>
                       <TableHead>Esito</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {manualComponents.map((component: any) => {
-                      const total = manualTotals.find((item: { sizeCode: string; assigned: number; required: number; residual: number }) => item.sizeCode === component.sizeCode)!;
+                    {manualCandidates.map((candidate: any) => {
+                      const disabled = !candidate.eligible;
+                      const selected = candidate.orderId === manualSelectedOrderId;
                       return (
-                        <Fragment key={component.sizeCode}>
-                          <TableRow key={`${component.sizeCode}-summary`} className="bg-slate-50 font-semibold">
-                            <TableCell colSpan={2}>Taglia {component.sizeCode}</TableCell>
-                            <TableCell colSpan={3} className="text-right">
-                              Richiesto {formatSaleNumber(total.required)} · Assegnato {formatSaleNumber(total.assigned)} · Residuo {formatSaleNumber(total.residual)}
-                            </TableCell>
-                            <TableCell colSpan={2} className={total.residual === 0 ? "text-right text-green-700" : "text-right text-amber-700"}>
-                              {total.residual === 0 ? "Coperta" : "Da coprire"}
-                            </TableCell>
-                          </TableRow>
-                          {(component.candidates || []).map((candidate: any) => {
-                            const key = `${component.sizeCode}:${candidate.orderId}`;
-                            const disabled = !candidate.eligible;
-                            return (
-                              <TableRow key={key} className={disabled ? "bg-slate-50 text-muted-foreground" : undefined}>
-                                <TableCell className="pl-6 text-xs text-muted-foreground">{component.sizeCode}</TableCell>
-                                <TableCell className="whitespace-nowrap">
-                                  <p className="font-medium">n. {candidate.orderNumber || candidate.orderId}</p>
-                                  <p className="text-xs text-muted-foreground">{formatSaleDate(candidate.orderDate)}</p>
-                                </TableCell>
-                                <TableCell className="text-right">{formatSaleNumber(candidate.ordered)}</TableCell>
-                                <TableCell className="text-right">{formatSaleNumber(candidate.delivered)}</TableCell>
-                                <TableCell className="text-right font-medium">{formatSaleNumber(candidate.residual)}</TableCell>
-                                <TableCell>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    inputMode="numeric"
-                                    disabled={disabled}
-                                    value={manualAllocations[key] || ""}
-                                    onChange={(event) => setManualAllocations(current => ({ ...current, [key]: event.target.value }))}
-                                    className="h-8 text-right"
-                                    aria-label={`Quantità ${candidate.orderNumber || candidate.orderId}`}
-                                  />
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {disabled
-                                    ? <span className="text-red-700">{candidate.issue || "Ordine non compatibile"}</span>
-                                    : <span className="text-green-700">Eleggibile</span>}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                          {!component.candidates?.length && (
-                            <TableRow key={`${component.sizeCode}-empty`}>
-                              <TableCell colSpan={7} className="py-3 text-sm text-muted-foreground">
-                                Nessun candidato per questa taglia.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </Fragment>
+                        <TableRow
+                          key={candidate.orderId}
+                          className={disabled ? "bg-slate-50 text-muted-foreground" : selected ? "bg-green-50" : undefined}
+                        >
+                          <TableCell>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={selected ? "default" : "outline"}
+                              disabled={disabled}
+                              onClick={() => setManualSelectedOrderId(candidate.orderId)}
+                            >
+                              {selected ? "Selezionato" : "Seleziona"}
+                            </Button>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <p className="font-medium">n. {candidate.orderNumber || candidate.orderId}</p>
+                            <p className="text-xs text-muted-foreground">{formatSaleDate(candidate.orderDate)}</p>
+                          </TableCell>
+                          <TableCell>{candidate.orderSizeCode || "—"}</TableCell>
+                          <TableCell className="text-right">{formatSaleNumber(candidate.ordered)}</TableCell>
+                          <TableCell className="text-right">{formatSaleNumber(candidate.delivered)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatSaleNumber(candidate.residual)}</TableCell>
+                          <TableCell className="text-xs">
+                            {disabled
+                              ? <span className="text-red-700">{candidate.issue || "Ordine non compatibile"}</span>
+                              : <span className="text-green-700">Può contenere l’intera vendita</span>}
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
+                    {!manualCandidates.length && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-3 text-sm text-muted-foreground">
+                          Nessun ordine del cliente disponibile.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
-              {!manualComponents.some((component: any) => component.candidates?.length) && (
+              {!manualCandidates.some((candidate: any) => candidate.eligible) && (
                 <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  Non esistono candidati compatibili. Aggiorna gli ordini condivisi prima di riprovare.
+                  Non esiste un singolo ordine compatibile con residuo sufficiente per l’intera vendita.
+                  Aggiorna o crea l’ordine in Gestione ordini condivisi prima di riprovare.
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                Gli ordini incompatibili restano visibili per controllo. Inserisci solo quantità intere positive entro il residuo indicato.
+                Gli ordini incompatibili restano visibili per controllo. La riconciliazione associa tutte le taglie della vendita al solo ordine selezionato.
               </p>
             </div>
           )}
@@ -2365,7 +2363,7 @@ export default function AdvancedSales() {
             <AlertDialogTitle>Confermare il piano manuale?</AlertDialogTitle>
             <AlertDialogDescription>
               Verranno registrate {manualTotals.reduce((sum: number, item: { assigned: number }) => sum + item.assigned, 0)} unità
-              sulla vendita {manualSale?.saleNumber}, distribuite su {Object.values(manualAllocations).filter(Boolean).length} righe ordine.
+              della vendita {manualSale?.saleNumber} sul solo ordine n. {manualSelectedOrder?.orderNumber || manualSelectedOrder?.orderId}.
               Il server ricontrollerà i residui prima di applicare una sola richiesta per l’intero piano.
             </AlertDialogDescription>
           </AlertDialogHeader>

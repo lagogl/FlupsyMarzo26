@@ -22,11 +22,15 @@ export function parseManualOrderReconciliationRequest(value: unknown): ManualOrd
   if (!body || typeof body.idempotencyKey !== "string" || !body.idempotencyKey.trim()) {
     requestError("Chiave di idempotenza obbligatoria");
   }
+  if (body.idempotencyKey.trim().length > 200) {
+    requestError("Chiave di idempotenza troppo lunga");
+  }
   if (!Array.isArray(body.allocations) || body.allocations.length === 0 || body.allocations.length > 500) {
     requestError("Indicare da 1 a 500 allocazioni");
   }
 
   const grouped = new Map<string, ManualOrderAllocation>();
+  const orderBySale = new Map<number, number>();
   for (const item of body.allocations) {
     const saleId = Number(item?.saleId);
     const orderId = Number(item?.orderId);
@@ -37,6 +41,11 @@ export function parseManualOrderReconciliationRequest(value: unknown): ManualOrd
         !sizeCode || !Number.isInteger(quantity) || quantity <= 0) {
       requestError("Ogni allocazione richiede saleId, orderId, sizeCode e quantità intera positiva");
     }
+    const selectedOrderId = orderBySale.get(saleId);
+    if (selectedOrderId !== undefined && selectedOrderId !== orderId) {
+      requestError("Ogni vendita può essere riconciliata con un solo ordine");
+    }
+    orderBySale.set(saleId, orderId);
     const key = `${saleId}:${sizeCode}:${orderId}`;
     const current = grouped.get(key);
     grouped.set(key, current ? { ...current, quantity: current.quantity + quantity } : {
