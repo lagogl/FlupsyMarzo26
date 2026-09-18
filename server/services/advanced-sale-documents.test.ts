@@ -201,6 +201,75 @@ test('la ristampa DDT usa identità, numero e logo congelati nello snapshot', as
   assert.doesNotMatch(html, /Cliente corrente modificato|Via Corrente 99/);
 });
 
+test('la ristampa DDT preferisce il numero definitivo assegnato da FIC', async () => {
+  const html = await renderAdvancedSaleDocumentHtml('ddt', {
+    sale: {
+      saleNumber: 'VEN-FIC',
+      saleDate: '2026-09-18',
+      companyId: 1052922
+    },
+    bags: [],
+    operations: [],
+    ddt: {
+      numero: 417,
+      fattureInCloudNumero: '421',
+      ddtStato: 'inviato',
+      data: '2026-09-18',
+      mittenteRagioneSociale: 'Venditore',
+      clienteNome: 'Cliente'
+    }
+  });
+
+  assert.match(html, /N\. 421/);
+  assert.doesNotMatch(html, /N\. 417/);
+});
+
+test('la ristampa ignora il vecchio sezionale FIC salvato come numero', async () => {
+  const html = await renderAdvancedSaleDocumentHtml('ddt', {
+    sale: {
+      saleNumber: 'VEN-LEGACY-FIC',
+      saleDate: '2026-09-18',
+      companyId: 1052922
+    },
+    bags: [],
+    operations: [],
+    ddt: {
+      numero: 417,
+      fattureInCloudNumero: '/ddt',
+      ddtStato: 'inviato',
+      data: '2026-09-18',
+      mittenteRagioneSociale: 'Venditore',
+      clienteNome: 'Cliente'
+    }
+  });
+
+  assert.match(html, /N\. 417/);
+  assert.doesNotMatch(html, /N\. \/ddt/);
+});
+
+test('prima dell’invio il DDT mostra sempre il numero locale prenotato', async () => {
+  const html = await renderAdvancedSaleDocumentHtml('ddt', {
+    sale: {
+      saleNumber: 'VEN-LOCALE',
+      saleDate: '2026-09-18',
+      companyId: 1052922
+    },
+    bags: [],
+    operations: [],
+    ddt: {
+      numero: 417,
+      fattureInCloudNumero: '421',
+      ddtStato: 'locale',
+      data: '2026-09-18',
+      mittenteRagioneSociale: 'Venditore',
+      clienteNome: 'Cliente'
+    }
+  });
+
+  assert.match(html, /N\. 417/);
+  assert.doesNotMatch(html, /N\. 421/);
+});
+
 test('un percorso logo DDT esterno agli asset consentiti viene ignorato', () => {
   assert.match(logoFromDdt({ mittenteLogoPath: '/etc/passwd', companyId: 1052922 }), /^data:image\/png;base64,/);
   assert.match(logoFromDdt({ mittenteLogoPath: '../package.json', companyId: 1017299 }), /^data:image\/png;base64,/);

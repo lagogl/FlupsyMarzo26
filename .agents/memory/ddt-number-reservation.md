@@ -5,6 +5,8 @@ description: Regola per assegnare numeri DDT senza duplicati tra preparazione lo
 
 Il progressivo DDT è separato per azienda e anno e viene prenotato quando si crea il DDT locale. FIC è la fonte primaria: usare il massimo del campo numerico `number` fra tutti i DDT restituiti per l’azienda/anno, senza filtrare per `numeration`. Il locale conta solo per DDT ancora `locale` o `invio`.
 
+Anche nella risposta di creazione FIC il numero assegnato è `number`; `numeration` è il sezionale (per esempio `/ddt`) e non va mai salvato o mostrato come numero. Prima dell’invio il PDF usa il numero locale prenotato; solo un DDT in stato `inviato` può preferire il numero FIC validato.
+
 La testata, le righe e il collegamento alla vendita devono essere un unico commit. Anche il claim di generazione o invio appartiene alla stessa transazione locale: una sola richiesta lo acquisisce, le concorrenti falliscono e un errore non lascia documenti parziali. Un invio remoto dall’esito incerto resta bloccato per verifica, non viene ripetuto alla cieca.
 
 La riconciliazione automatica di un DDT già presente su FIC è distinta dal calcolo del massimo: richiede azienda, numero, data, serie e cliente verificabili e coincidenti. Se manca una di queste prove, non adottare il documento remoto.

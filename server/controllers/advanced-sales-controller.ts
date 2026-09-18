@@ -85,6 +85,7 @@ import {
   getProductSnapshotsBySizeCodes,
   hydrateDdtProductSnapshots
 } from "../services/external-product-catalog";
+import { getAssignedFicDdtNumber, normalizeFicDdtNumber } from "../services/fic-ddt-response";
 
 let documentSchemaReady: Promise<void> | null = null;
 const ficInvoiceCache = new Map<string, { expiresAt: number; invoices: any[] }>();
@@ -4281,6 +4282,9 @@ export async function generateDDTPDF(req: Request, res: Response) {
     }
 
     const ddtData = ddtResult[0];
+    const displayedDdtNumber = ddtData.ddtStato === 'inviato'
+      ? normalizeFicDdtNumber(ddtData.fattureInCloudNumero) || String(ddtData.numero)
+      : String(ddtData.numero);
 
     // Recupera righe DDT
     const righe = await db.select().from(ddtRighe).where(eq(ddtRighe.ddtId, parseInt(ddtId))).orderBy(ddtRighe.id);
@@ -4298,7 +4302,7 @@ export async function generateDDTPDF(req: Request, res: Response) {
     doc.on('end', () => {
       const pdfBuffer = Buffer.concat(chunks);
       res.contentType('application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="DDT_${ddtData.numero}_${ddtData.data}.pdf"`);
+      res.setHeader('Content-Disposition', `inline; filename="DDT_${displayedDdtNumber}_${ddtData.data}.pdf"`);
       res.send(pdfBuffer);
     });
 
@@ -4329,7 +4333,7 @@ export async function generateDDTPDF(req: Request, res: Response) {
        .text('DOCUMENTO DI TRASPORTO', margin + 170, headerY, { width: tableWidth - 170 });
     headerY += 28;
     doc.fontSize(18).fillColor('#1e40af')
-       .text(`N. ${ddtData.numero}`, margin + 170, headerY, { width: tableWidth - 170 });
+       .text(`N. ${displayedDdtNumber}`, margin + 170, headerY, { width: tableWidth - 170 });
     headerY += 24;
     doc.fontSize(10).fillColor('#64748b').font('Helvetica')
        .text(`Data: ${new Date(ddtData.data).toLocaleDateString('it-IT')}`, margin + 170, headerY, { width: tableWidth - 170 });
@@ -4685,7 +4689,8 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     }, null, 2));
     const ficResponse = await ficApiRequest('POST', String(companyId), accessToken, '/issued_documents', ddtPayload);
     
-    console.log(`✅ FIC: DDT inviato con successo! ID: ${ficResponse.data.data.id}`);
+    const assignedFicNumber = getAssignedFicDdtNumber(ficResponse.data.data);
+    console.log(`✅ FIC: DDT inviato con successo! ID: ${ficResponse.data.data.id}, numero: ${assignedFicNumber}`);
     console.log(`📊 Risposta FIC DN_AI:`, JSON.stringify({
       dn_ai_packages_number: ficResponse.data.data.dn_ai_packages_number,
       dn_ai_weight: ficResponse.data.data.dn_ai_weight
@@ -4693,7 +4698,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     
     await db.update(ddt).set({
       fattureInCloudId: ficResponse.data.data.id?.toString(),
-      fattureInCloudNumero: ficResponse.data.data.numeration || ddtData.numero,
+      fattureInCloudNumero: assignedFicNumber,
       ddtStato: 'inviato',
       updatedAt: new Date()
     }).where(eq(ddt.id, parseInt(ddtId)));
@@ -4748,7 +4753,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       success: true,
       ddtId: parseInt(ddtId),
       fattureInCloudId: ficResponse.data.data.id,
-      numero: ficResponse.data.data.numeration || ddtData.numero,
+      numero: assignedFicNumber,
       orderReconciliation,
       message: orderReconciliation?.status === "registered"
         ? "DDT inviato a Fatture in Cloud e ordini aggiornati"

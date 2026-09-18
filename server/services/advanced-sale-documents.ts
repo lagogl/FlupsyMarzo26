@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import { getCompanyFiscalData, getCompanyLogoBase64, hasCompanyLogo } from './logo-service';
 import { pdfGenerator } from './pdf-generator';
 import { formatFlupsyBasketIdentifier } from './sale-document-identifiers';
+import { normalizeFicDdtNumber } from './fic-ddt-response';
 
 export type AdvancedSaleDocumentKind = 'delivery-report' | 'sale-conditions' | 'bivalve-transfer' | 'ddt';
 
@@ -312,7 +313,15 @@ export async function renderAdvancedSaleDocumentHtml(
   const buyer = buildBuyer(data);
   const companyFarmCode = farmCodeForCompany(data.sale.companyId);
   const reference = data.sale.saleNumber;
-  const ddtNumber = data.ddt?.numero ? `N. ${data.ddt.numero}` : `Bozza · Rif. ${reference}`;
+  const officialDdtNumber = data.ddt?.ddtStato === 'inviato'
+    ? normalizeFicDdtNumber(data.ddt?.fattureInCloudNumero)
+    : null;
+  const localDdtNumber = meaningful(data.ddt?.numero);
+  const ddtNumber = officialDdtNumber
+    ? `N. ${esc(officialDdtNumber)}`
+    : localDdtNumber
+      ? `N. ${esc(localDdtNumber)}`
+      : `Bozza · Rif. ${reference}`;
   const seller = partyBlock('Cedente / produttore', company, companyFarmCode);
   const recipient = partyBlock('Acquirente / destinatario', buyer, buyer.farmCode,
     buyer.productionZone ? `<div>Zona di produzione: ${esc(buyer.productionZone)}</div>` : '');
