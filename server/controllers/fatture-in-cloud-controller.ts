@@ -42,6 +42,10 @@ import {
   DDT_NUMBER_CONFLICT_MESSAGE,
   isDdtNumberConflict,
 } from '../services/ddt-number-conflict';
+import {
+  getAssignedFicDdtNumber,
+  getOfficialFicDdtNumber
+} from '../services/fic-ddt-response';
 
 const router = express.Router();
 
@@ -1687,6 +1691,13 @@ router.post('/ddt', async (req: Request, res: Response) => {
           existingResult.document.ddtStato === 'inviato'
           && existingResult.document.fattureInCloudId
         ) {
+          if (!getOfficialFicDdtNumber(existingResult.document)) {
+            const invalidOfficialNumber = new Error(
+              'Il DDT risulta inviato ma non contiene un numero ufficiale FIC valido'
+            );
+            (invalidOfficialNumber as any).statusCode = 409;
+            throw invalidOfficialNumber;
+          }
           return {
             nuovoDdt: existingResult.document,
             righe: existingRows,
@@ -1746,7 +1757,7 @@ router.post('/ddt', async (req: Request, res: Response) => {
         success: true,
         ddt_id: nuovoDdt.id,
         fatture_in_cloud_id: nuovoDdt.fattureInCloudId,
-        numero: nuovoDdt.numero,
+          numero: getOfficialFicDdtNumber(nuovoDdt),
         message: 'DDT già inviato a Fatture in Cloud'
       });
     }
@@ -1844,6 +1855,9 @@ router.post('/ddt', async (req: Request, res: Response) => {
       && Number(documento.entity?.id) === Number(cliente.fattureInCloudId)
     );
     let ficDocumentId = nuovoDdt.fattureInCloudId || existingFicDocument?.id || null;
+    let assignedFicNumber = existingFicDocument
+      ? getAssignedFicDdtNumber(existingFicDocument)
+      : null;
     if (!ficDocumentId) {
       const ficResponse = await withRetry(() => apiRequest(
         'POST',
@@ -1851,11 +1865,20 @@ router.post('/ddt', async (req: Request, res: Response) => {
         ddtPayload
       ));
       ficDocumentId = ficResponse.data.data.id;
+      assignedFicNumber = getAssignedFicDdtNumber(ficResponse.data.data);
+    }
+    if (!assignedFicNumber) {
+      const missingOfficialNumber = new Error(
+        'Fatture in Cloud non ha restituito un numero DDT ufficiale verificabile'
+      );
+      (missingOfficialNumber as any).statusCode = 409;
+      throw missingOfficialNumber;
     }
     
     // Aggiorna DDT con ID esterno
     await db.update(ddt).set({
       fattureInCloudId: ficDocumentId,
+      fattureInCloudNumero: assignedFicNumber,
       ddtStato: 'inviato',
       updatedAt: new Date()
     }).where(eq(ddt.id, nuovoDdt.id));
@@ -1864,7 +1887,7 @@ router.post('/ddt', async (req: Request, res: Response) => {
       success: true,
       ddt_id: nuovoDdt.id,
       fatture_in_cloud_id: ficDocumentId,
-      numero: nuovoDdt.numero,
+      numero: assignedFicNumber,
       message: 'DDT creato e inviato con successo a Fatture in Cloud'
     });
     
@@ -2311,6 +2334,15 @@ router.get('/ddt/:id/pdf', async (req: Request, res: Response) => {
     }
     
     const ddtData = ddtResult[0];
+    const officialDdtNumber = getOfficialFicDdtNumber(ddtData);
+    if (!officialDdtNumber) {
+      return res.status(409).json({
+        success: false,
+        error: ddtData.ddtStato === 'inviato'
+          ? 'Numero ufficiale FIC non disponibile: verificare il documento prima della stampa'
+          : 'Il PDF ufficiale è disponibile solo dopo l’invio a Fatture in Cloud'
+      });
+    }
     
     // Recupera righe DDT
     const righe = await db.select()
@@ -2328,7 +2360,7 @@ router.get('/ddt/:id/pdf', async (req: Request, res: Response) => {
     
     // Set headers per download
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=DDT-${ddtData.numero}-${ddtData.data}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=DDT-${officialDdtNumber}-${ddtData.data}.pdf`);
     
     // Pipe PDF al response
     doc.pipe(res);
@@ -2359,7 +2391,7 @@ router.get('/ddt/:id/pdf', async (req: Request, res: Response) => {
     
     yPosition += 30;
     doc.fontSize(16).font('Helvetica')
-       .text(`DDT N. ${ddtData.numero} del ${new Date(ddtData.data).toLocaleDateString('it-IT')}`, 
+       .text(`DDT N. ${officialDdtNumber} del ${new Date(ddtData.data).toLocaleDateString('it-IT')}`,
              margin + 120, yPosition, { align: 'center', width: contentWidth - 120 });
     
     yPosition += 40;

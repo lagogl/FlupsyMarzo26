@@ -175,6 +175,8 @@ test('la ristampa DDT usa identità, numero e logo congelati nello snapshot', as
     },
     ddt: {
       numero: 417,
+      fattureInCloudNumero: '417',
+      ddtStato: 'inviato',
       data: '2026-08-20',
       companyId: 1017299,
       mittenteRagioneSociale: 'Emittente storico S.r.l.',
@@ -224,7 +226,7 @@ test('la ristampa DDT preferisce il numero definitivo assegnato da FIC', async (
   assert.doesNotMatch(html, /N\. 417/);
 });
 
-test('la ristampa ignora il vecchio sezionale FIC salvato come numero', async () => {
+test('un vecchio sezionale FIC salvato come numero non produce un DDT ufficiale', async () => {
   const html = await renderAdvancedSaleDocumentHtml('ddt', {
     sale: {
       saleNumber: 'VEN-LEGACY-FIC',
@@ -243,11 +245,13 @@ test('la ristampa ignora il vecchio sezionale FIC salvato come numero', async ()
     }
   });
 
-  assert.match(html, /N\. 417/);
+  assert.match(html, /Bozza — non valida per la consegna al cliente/i);
+  assert.match(html, /nessun numero ufficiale/i);
+  assert.doesNotMatch(html, /N\. 417/);
   assert.doesNotMatch(html, /N\. \/ddt/);
 });
 
-test('prima dell’invio il DDT mostra sempre il numero locale prenotato', async () => {
+test('prima dell’invio il DDT è una bozza e non espone il numero locale prenotato', async () => {
   const html = await renderAdvancedSaleDocumentHtml('ddt', {
     sale: {
       saleNumber: 'VEN-LOCALE',
@@ -266,7 +270,9 @@ test('prima dell’invio il DDT mostra sempre il numero locale prenotato', async
     }
   });
 
-  assert.match(html, /N\. 417/);
+  assert.match(html, /Bozza — non valida per la consegna al cliente/i);
+  assert.match(html, /nessun numero ufficiale/i);
+  assert.doesNotMatch(html, /N\. 417/);
   assert.doesNotMatch(html, /N\. 421/);
 });
 

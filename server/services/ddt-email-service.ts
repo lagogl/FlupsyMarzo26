@@ -4,6 +4,7 @@ import { sendGmailEmail, getEmailRecipients } from './gmail-service';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';
 import { advancedSales, ddtRighe, ddt, saleBags } from '@shared/schema';
+import { getOfficialFicDdtNumber } from './fic-ddt-response';
 
 /**
  * Genera PDF DDT (riutilizza logica esistente)
@@ -26,6 +27,10 @@ async function generateDDTPdf(saleId: number): Promise<Buffer> {
   
   if (!ddtData) {
     throw new Error(`DDT ${sale.ddtId} non trovato`);
+  }
+  const officialDdtNumber = getOfficialFicDdtNumber(ddtData);
+  if (!officialDdtNumber) {
+    throw new Error(`DDT ${sale.ddtId} privo di numero ufficiale FIC`);
   }
   
   // Recupera righe DDT
@@ -57,7 +62,7 @@ async function generateDDTPdf(saleId: number): Promise<Buffer> {
       
       // Intestazione DDT
       doc.fontSize(20).font('Helvetica-Bold').text('DOCUMENTO DI TRASPORTO', 200, 50);
-      doc.fontSize(12).font('Helvetica').text(`N° ${ddtData.numero}`, 200, 75);
+      doc.fontSize(12).font('Helvetica').text(`N° ${officialDdtNumber}`, 200, 75);
       doc.text(`Data: ${format(new Date(ddtData.data), 'dd/MM/yyyy', { locale: it })}`, 200, 90);
       
       // Dati cliente (snapshot immutabile dal DDT)
@@ -163,6 +168,10 @@ export async function sendDDTConfirmationEmail(saleId: number): Promise<void> {
     if (!ddtData) {
       throw new Error(`DDT ${sale.ddtId} non trovato`);
     }
+    const officialDdtNumber = getOfficialFicDdtNumber(ddtData);
+    if (!officialDdtNumber) {
+      throw new Error(`DDT ${sale.ddtId} privo di numero ufficiale FIC`);
+    }
     
     // Recupera righe DDT
     const lines = await db.query.ddtRighe.findMany({
@@ -193,7 +202,7 @@ export async function sendDDTConfirmationEmail(saleId: number): Promise<void> {
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="padding: 8px; border-bottom: 1px solid #bbf7d0;"><strong>Numero DDT:</strong></td>
-              <td style="padding: 8px; border-bottom: 1px solid #bbf7d0;">${ddtData.numero}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #bbf7d0;">${officialDdtNumber}</td>
             </tr>
             <tr>
               <td style="padding: 8px; border-bottom: 1px solid #bbf7d0;"><strong>Data:</strong></td>
@@ -315,10 +324,10 @@ export async function sendDDTConfirmationEmail(saleId: number): Promise<void> {
     // Invia email con allegato
     await sendGmailEmail({
       to: recipients.join(', '), // Converti array in stringa separata da virgole
-      subject: `✅ DDT Inviato - ${ddtData.clienteNome || 'Cliente'} - N° ${ddtData.numero} - ${dateFormatted}`,
+      subject: `✅ DDT Inviato - ${ddtData.clienteNome || 'Cliente'} - N° ${officialDdtNumber} - ${dateFormatted}`,
       html,
       attachments: [{
-        filename: `DDT_${ddtData.numero}_${format(new Date(sale.saleDate), 'yyyy-MM-dd')}.pdf`,
+        filename: `DDT_${officialDdtNumber}_${format(new Date(sale.saleDate), 'yyyy-MM-dd')}.pdf`,
         content: pdfBuffer,
         contentType: 'application/pdf'
       }]

@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAssignedFicDdtNumber, normalizeFicDdtNumber } from "./fic-ddt-response";
+import {
+  getAssignedFicDdtNumber,
+  getOfficialFicDdtNumber,
+  normalizeFicDdtNumber
+} from "./fic-ddt-response";
 
 test("legge il numero assegnato e non il sezionale FIC", () => {
   assert.equal(getAssignedFicDdtNumber({ number: 128, numeration: "/ddt" }), "128");
@@ -26,4 +30,11 @@ test("accetta solo interi decimali positivi canonici e sicuri", () => {
   }
   assert.equal(normalizeFicDdtNumber(Number.MAX_SAFE_INTEGER + 1), null);
   assert.equal(normalizeFicDdtNumber(421), "421");
+});
+
+test("un DDT è ufficiale solo se inviato e dotato di numero FIC valido", () => {
+  assert.equal(getOfficialFicDdtNumber({ ddtStato: "inviato", fattureInCloudNumero: "421" }), "421");
+  assert.equal(getOfficialFicDdtNumber({ ddtStato: "locale", fattureInCloudNumero: "421" }), null);
+  assert.equal(getOfficialFicDdtNumber({ ddtStato: "inviato", fattureInCloudNumero: "/ddt" }), null);
+  assert.equal(getOfficialFicDdtNumber({ ddtStato: "inviato", fattureInCloudNumero: null }), null);
 });

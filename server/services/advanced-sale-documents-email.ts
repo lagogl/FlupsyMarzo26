@@ -27,8 +27,9 @@ export async function sendAdvancedSaleDocumentsReadyEmail(params: {
   customer: any;
   companyName: string;
   attachments: Array<{ filename: string; content: Buffer }>;
+  ddtIsDraft: boolean;
 }) {
-  const { sale, customer, companyName, attachments } = params;
+  const { sale, customer, companyName, attachments, ddtIsDraft } = params;
   const customerName = customer?.denominazione || sale.customerName || 'Cliente non indicato';
   const saleDate = sale.saleDate
     ? format(new Date(`${sale.saleDate}T12:00:00`), 'dd/MM/yyyy')
@@ -39,7 +40,7 @@ export async function sendAdvancedSaleDocumentsReadyEmail(params: {
 
   await sendGmailEmail({
     to: RECIPIENTS,
-    subject: `Documenti vendita ${sale.saleNumber} pronti per Fatture in Cloud`,
+    subject: `Documenti vendita ${sale.saleNumber}${ddtIsDraft ? ' — DDT in bozza' : ' — DDT ufficiale'}`,
     html: `
       <div style="max-width:640px;font-family:Arial,sans-serif;color:#1f2937">
         <div style="background:#166534;color:#ffffff;padding:20px 24px;border-radius:8px 8px 0 0">
@@ -50,7 +51,9 @@ export async function sendAdvancedSaleDocumentsReadyEmail(params: {
           <p style="margin:0 0 16px">Buongiorno,</p>
           <div style="background:#dcfce7;border-left:5px solid #16a34a;color:#14532d;padding:14px 16px;margin-bottom:20px">
             <strong style="font-size:16px">Vendita completata con successo</strong><br>
-            <span style="font-size:14px">I documenti sono stati generati e sono pronti per la successiva esportazione a Fatture in Cloud.</span>
+            <span style="font-size:14px">${ddtIsDraft
+              ? 'Il fascicolo contiene un’anteprima DDT in bozza, non valida per la consegna. Il DDT ufficiale sarà disponibile dopo l’invio a Fatture in Cloud.'
+              : 'Il fascicolo contiene il DDT ufficiale con il numero definitivo assegnato da Fatture in Cloud.'}</span>
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:14px">
             <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Azienda</strong></td><td style="padding:9px 12px">${esc(companyName)}</td></tr>
@@ -62,7 +65,7 @@ export async function sendAdvancedSaleDocumentsReadyEmail(params: {
             <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Progressivo DDR</strong></td><td style="padding:9px 12px">${esc(ddr)}</td></tr>
           </table>
           <p style="margin:20px 0 0;padding:12px 14px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:6px">
-            <strong>Documenti allegati:</strong> il fascicolo della vendita è disponibile nei PDF inclusi in questa email.
+            <strong>Documenti allegati:</strong> il fascicolo della vendita è disponibile nei PDF inclusi in questa email.${ddtIsDraft ? ' L’allegato ANTEPRIMA-DDT-NON-VALIDA non deve essere consegnato al cliente.' : ''}
           </p>
           <p style="margin:20px 0 0;color:#6b7280;font-size:12px">Messaggio generato automaticamente dal sistema di gestione vendite.</p>
         </div>

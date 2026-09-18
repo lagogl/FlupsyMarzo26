@@ -85,7 +85,7 @@ import {
   getProductSnapshotsBySizeCodes,
   hydrateDdtProductSnapshots
 } from "../services/external-product-catalog";
-import { getAssignedFicDdtNumber, normalizeFicDdtNumber } from "../services/fic-ddt-response";
+import { getAssignedFicDdtNumber, getOfficialFicDdtNumber } from "../services/fic-ddt-response";
 
 let documentSchemaReady: Promise<void> | null = null;
 const ficInvoiceCache = new Map<string, { expiresAt: number; invoices: any[] }>();
@@ -1678,6 +1678,8 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       ddt: existingDdt,
       traceabilityUrl
     };
+    const officialDdtNumber = getOfficialFicDdtNumber(existingDdt);
+    const bundleHasDraftDdt = !officialDdtNumber;
     let pdf: Buffer;
     if (kind === 'all') {
       const merged = await PDFDocument.create();
@@ -1694,8 +1696,9 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       for (const documentKind of bundleKinds) {
         const generated = await buildAdvancedSaleDocument(documentKind, documentData);
         const documentBuffer = Buffer.isBuffer(generated) ? generated : Buffer.from(generated);
+        const isDraftDdt = documentKind === 'ddt' && bundleHasDraftDdt;
         emailAttachments.push({
-          filename: `${attachmentLabels[documentKind]}-${sale.saleNumber}.pdf`,
+          filename: `${isDraftDdt ? 'ANTEPRIMA-DDT-NON-VALIDA' : attachmentLabels[documentKind]}-${sale.saleNumber}.pdf`,
           content: documentBuffer
         });
         const source = await PDFDocument.load(documentBuffer);
@@ -1719,7 +1722,8 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
         customer,
         companyName: existingDdt?.mittenteRagioneSociale
           || (isDeltaFuturo ? 'Delta Futuro Soc. Agr. Srl' : 'Ecotapes'),
-        attachments: emailAttachments
+        attachments: emailAttachments,
+        ddtIsDraft: bundleHasDraftDdt
       };
     } else {
       const generated = await buildAdvancedSaleDocument(kind, documentData);
@@ -1744,7 +1748,10 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       'bivalve-transfer': 'Registro-trasferimento-molluschi',
       ddt: 'DDT'
     };
-    const filename = kind === 'all' ? `Documenti-vendita-${sale.saleNumber}` : `${labels[kind]}-${sale.saleNumber}`;
+    const isDraftDdt = kind === 'ddt' && bundleHasDraftDdt;
+    const filename = kind === 'all'
+      ? `Documenti-vendita-${sale.saleNumber}${bundleHasDraftDdt ? '-CON-DDT-BOZZA' : ''}`
+      : `${isDraftDdt ? 'ANTEPRIMA-DDT-NON-VALIDA' : labels[kind]}-${sale.saleNumber}`;
     sendPdfBinaryResponse(res, pdf, filename);
     if (emailNotification) {
       // Il download è già stato consegnato: Gmail è un effetto secondario e
@@ -1879,6 +1886,25 @@ export async function getAdvancedSales(req: Request, res: Response) {
       .orderBy(desc(advancedSales.createdAt))
       .limit(parseInt(pageSize as string))
       .offset(offset);
+    const ddtIds = sales
+      .map(sale => sale.ddtId)
+      .filter((id): id is number => Number.isInteger(id));
+    const ddtStates = ddtIds.length
+      ? await db.select({
+          id: ddt.id,
+          ddtStato: ddt.ddtStato,
+          fattureInCloudNumero: ddt.fattureInCloudNumero
+        }).from(ddt).where(inArray(ddt.id, ddtIds))
+      : [];
+    const officialDdtNumberById = new Map(
+      ddtStates.map(document => [document.id, getOfficialFicDdtNumber(document)])
+    );
+    const salesWithOfficialDdt = sales.map(sale => ({
+      ...sale,
+      officialDdtNumber: sale.ddtId
+        ? officialDdtNumberById.get(sale.ddtId) || null
+        : null
+    }));
 
     const totalCount = await db.select({ count: sql`count(*)` })
       .from(advancedSales)
@@ -1886,7 +1912,7 @@ export async function getAdvancedSales(req: Request, res: Response) {
 
     res.json({
       success: true,
-      sales,
+      sales: salesWithOfficialDdt,
       pagination: {
         page: parseInt(page as string),
         pageSize: parseInt(pageSize as string),
@@ -4282,9 +4308,15 @@ export async function generateDDTPDF(req: Request, res: Response) {
     }
 
     const ddtData = ddtResult[0];
-    const displayedDdtNumber = ddtData.ddtStato === 'inviato'
-      ? normalizeFicDdtNumber(ddtData.fattureInCloudNumero) || String(ddtData.numero)
-      : String(ddtData.numero);
+    const displayedDdtNumber = getOfficialFicDdtNumber(ddtData);
+    if (!displayedDdtNumber) {
+      return res.status(409).json({
+        success: false,
+        error: ddtData.ddtStato === 'inviato'
+          ? "Numero ufficiale FIC non disponibile: verificare il documento prima della stampa"
+          : "Il PDF ufficiale è disponibile solo dopo l'invio a Fatture in Cloud"
+      });
+    }
 
     // Recupera righe DDT
     const righe = await db.select().from(ddtRighe).where(eq(ddtRighe.ddtId, parseInt(ddtId))).orderBy(ddtRighe.id);

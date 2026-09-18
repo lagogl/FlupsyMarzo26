@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import { getCompanyFiscalData, getCompanyLogoBase64, hasCompanyLogo } from './logo-service';
 import { pdfGenerator } from './pdf-generator';
 import { formatFlupsyBasketIdentifier } from './sale-document-identifiers';
-import { normalizeFicDdtNumber } from './fic-ddt-response';
+import { getOfficialFicDdtNumber } from './fic-ddt-response';
 
 export type AdvancedSaleDocumentKind = 'delivery-report' | 'sale-conditions' | 'bivalve-transfer' | 'ddt';
 
@@ -274,7 +274,15 @@ function partyBlock(title: string, party: any, farmCode = '', extra = '') {
     <div>Codice allevamento: ${farmCode ? esc(farmCode) : '________________'}</div>${extra}</div>`;
 }
 
-function page(title: string, subtitle: string, company: any, logo: string, body: string, reference: string) {
+function page(
+  title: string,
+  subtitle: string,
+  company: any,
+  logo: string,
+  body: string,
+  reference: string,
+  draft = false
+) {
   const companyAddress = [company.indirizzo, company.cap, company.citta, company.provincia ? `(${company.provincia})` : '']
     .filter(Boolean).join(' ');
   return `<!doctype html><html lang="it"><head><meta charset="utf-8"><style>
@@ -288,8 +296,10 @@ function page(title: string, subtitle: string, company: any, logo: string, body:
     .signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:17px;break-inside:avoid}.signature{padding-top:55px;border-bottom:1px solid #405b67;text-align:center}.signature-note{text-align:center;color:#60717a;font-size:6.8pt;margin-top:2px}
     .traceability{border:1px solid #79aaa9;background:#eef8f6;border-radius:5px;padding:6px;display:flex;align-items:center;gap:8px;min-height:72px}.traceability img{width:62px;height:62px;background:white}.traceability strong{display:block;font-size:7.2pt;line-height:1.25;margin:2px 0}.traceability small{display:block;color:#597078;font-size:6.4pt}
     footer{display:flex;justify-content:space-between;border-top:1px solid #b6c1c5;color:#677982;font-size:6.4pt;margin-top:9px;padding-top:4px}.avoid{break-inside:avoid}
+    .draft-notice{border:3px solid #b91c1c;background:#fff1f2;color:#991b1b;padding:8px 10px;margin:0 0 9px;text-align:center;font-size:11pt;font-weight:800;letter-spacing:.035em;text-transform:uppercase}
+    body.draft:before{content:"BOZZA";position:fixed;z-index:999;pointer-events:none;left:18%;top:43%;transform:rotate(-31deg);font-size:88pt;font-weight:900;color:rgba(185,28,28,.075);letter-spacing:.08em}
     @media print{header,.document-title,th,.box-title,.total td{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  </style></head><body><header><div>${logo ? `<img class="logo" src="${logo}" alt="Logo">` : ''}</div>
+  </style></head><body class="${draft ? 'draft' : ''}">${draft ? '<div class="draft-notice">Bozza — non valida per la consegna al cliente</div>' : ''}<header><div>${logo ? `<img class="logo" src="${logo}" alt="Logo">` : ''}</div>
   <div class="issuer"><strong>${present(company.ragioneSociale || company.name)}</strong>${present(companyAddress)}<br>P. IVA ${present(company.partitaIva)}${company.codiceFiscale ? ` · C.F. ${present(company.codiceFiscale)}` : ''}<br>${company.email ? present(company.email) : ''}${company.telefono ? ` · ${present(company.telefono)}` : ''}</div></header>
   <section class="document-title"><h1>${title}</h1><p>${subtitle}</p></section>${body}
   <footer><span>${PRODUCT_NAME} · <em>${SCIENTIFIC_NAME}</em></span><span>Rif. ${esc(reference)} · Generato ${format(new Date(), 'dd/MM/yyyy HH:mm')}</span></footer></body></html>`;
@@ -313,15 +323,11 @@ export async function renderAdvancedSaleDocumentHtml(
   const buyer = buildBuyer(data);
   const companyFarmCode = farmCodeForCompany(data.sale.companyId);
   const reference = data.sale.saleNumber;
-  const officialDdtNumber = data.ddt?.ddtStato === 'inviato'
-    ? normalizeFicDdtNumber(data.ddt?.fattureInCloudNumero)
-    : null;
-  const localDdtNumber = meaningful(data.ddt?.numero);
+  const officialDdtNumber = getOfficialFicDdtNumber(data.ddt);
   const ddtNumber = officialDdtNumber
     ? `N. ${esc(officialDdtNumber)}`
-    : localDdtNumber
-      ? `N. ${esc(localDdtNumber)}`
-      : `Bozza · Rif. ${reference}`;
+    : `Bozza · nessun numero ufficiale · Rif. ${reference}`;
+  const isDdtDraft = kind === 'ddt' && !officialDdtNumber;
   const seller = partyBlock('Cedente / produttore', company, companyFarmCode);
   const recipient = partyBlock('Acquirente / destinatario', buyer, buyer.farmCode,
     buyer.productionZone ? `<div>Zona di produzione: ${esc(buyer.productionZone)}</div>` : '');
@@ -410,7 +416,7 @@ export async function renderAdvancedSaleDocumentHtml(
       <div><div class="signature">Firma del cessionario per ricevuta</div></div></div>`;
   }
 
-  return page(title, subtitle, company, logo, body, reference);
+  return page(title, subtitle, company, logo, body, reference, isDdtDraft);
 }
 
 export async function generateAdvancedSaleDocument(

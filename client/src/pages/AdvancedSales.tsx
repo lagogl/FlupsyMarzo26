@@ -1011,8 +1011,8 @@ export default function AdvancedSales() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
       toast({
-        title: "Successo",
-        description: "DDT generato con successo",
+        title: "Bozza DDT preparata",
+        description: "Invia il DDT a Fatture in Cloud per ottenere il numero e il PDF ufficiali.",
       });
     },
     onError: (error: any) => {
@@ -1815,11 +1815,13 @@ export default function AdvancedSales() {
                                   size="sm"
                                   className="rounded-r-none border-teal-600 bg-teal-600 text-white hover:bg-teal-700 hover:text-white"
                                   onClick={() => handleDownloadAllSaleDocuments(sale)}
-                                  title="Genera i documenti, invia l'email e apre il fascicolo PDF"
+                                  title={sale.officialDdtNumber
+                                    ? "Genera il fascicolo con il DDT ufficiale, invia l'email e apre il PDF"
+                                    : "Genera il fascicolo con un'anteprima DDT in bozza non valida"}
                                   data-testid={`button-all-sale-documents-${sale.id}`}
                                 >
                                   <FileText className="h-4 w-4 mr-1" />
-                                  Stampa documenti
+                                  {sale.officialDdtNumber ? "Stampa documenti" : "Stampa fascicolo (DDT in bozza)"}
                                   <span className="ml-2 text-xs">
                                     {Object.keys({ ...(sale.generatedDocuments || {}), ...(generatedDocumentOverrides[sale.id] || {}) }).filter(kind =>
                                       (["13263", "1052922"].includes(String(sale.companyId))
@@ -1850,7 +1852,9 @@ export default function AdvancedSales() {
                                     ["delivery-report", "Rapporto di consegna"],
                                     ["sale-conditions", "Dichiarazione di vendita e condizioni"],
                                     ["bivalve-transfer", "Registrazione trasferimento molluschi"],
-                                    ["ddt", "Documento di trasporto (DDT)"]
+                                    ["ddt", sale.officialDdtNumber
+                                      ? "Documento di trasporto ufficiale (DDT)"
+                                      : "Anteprima DDT — BOZZA non valida"]
                                   ] as const)
                                     .filter(([kind]) => kind !== "bivalve-transfer" || ["13263", "1052922"].includes(String(sale.companyId)))
                                     .map(([kind, label]) => {

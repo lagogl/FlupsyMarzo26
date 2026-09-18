@@ -24,3 +24,10 @@ export function getAssignedFicDdtNumber(responseData: unknown): string {
 
   return normalized;
 }
+
+export function getOfficialFicDdtNumber(ddtData: unknown): string | null {
+  const document = ddtData as any;
+  return document?.ddtStato === "inviato"
+    ? normalizeFicDdtNumber(document?.fattureInCloudNumero)
+    : null;
+}
