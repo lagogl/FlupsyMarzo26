@@ -74,6 +74,10 @@ import {
   parseManualOrderReconciliationRequest,
   type ManualOrderAllocation
 } from "../services/manual-order-reconciliation";
+import {
+  findSizeInRanges,
+  getSizeRangeCandidates
+} from "../utils/size-determination";
 import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
 import { getNextDdtNumber } from "../services/ddt-numbering-fic";
 import {
@@ -1044,7 +1048,10 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
           const newAnimalsPerKg = finalWeightKg > 0
             ? bag.animalCount / finalWeightKg
             : bag.originalAnimalsPerKg;
-          const calculatedSizeCode = await calculateSizeCode(Math.round(newAnimalsPerKg));
+          const calculatedSizeCode = await calculateSizeCode(
+            Math.round(newAnimalsPerKg),
+            saleDate
+          );
           const finalSizeCode = calculatedSizeCode || bag.sizeCode || '';
 
           const [newBag] = await tx.insert(saleBags).values({
@@ -1145,9 +1152,19 @@ export async function createMultiCustomerSale(req: Request, res: Response) {
 }
 
 /**
- * Helper: Calcola sizeCode in base agli animali/kg
+ * Helper: calcola sizeCode usando i range validi alla data della vendita.
+ * Usa i campi legacy di `sizes` soltanto se non esiste alcuna versione
+ * temporale per quella data.
  */
-async function calculateSizeCode(animalsPerKg: number): Promise<string> {
+async function calculateSizeCode(
+  animalsPerKg: number,
+  saleDate: string | Date
+): Promise<string> {
+  const temporalRanges = await getSizeRangeCandidates(saleDate);
+  if (temporalRanges.length > 0) {
+    return findSizeInRanges(animalsPerKg, temporalRanges)?.code || '';
+  }
+
   const allSizes = await db.select({
     code: sizes.code,
     minAnimalsPerKg: sizes.minAnimalsPerKg,
@@ -1280,7 +1297,10 @@ export async function configureBags(req: Request, res: Response) {
         const newAnimalsPerKg = finalWeightKg > 0 ? bag.animalCount / finalWeightKg : bag.originalAnimalsPerKg;
 
         // Calcola automaticamente la taglia in base agli animali/kg
-        const calculatedSizeCode = await calculateSizeCode(Math.round(newAnimalsPerKg));
+        const calculatedSizeCode = await calculateSizeCode(
+          Math.round(newAnimalsPerKg),
+          sale[0].saleDate
+        );
         const finalSizeCode = calculatedSizeCode || bag.sizeCode || '';
 
         const [newBag] = await tx.insert(saleBags).values({

@@ -9677,7 +9677,7 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // Download PDF DDT - Mantenuti qui per base path diverso
   const AdvancedSalesController = await import('./controllers/advanced-sales-controller');
   app.get("/api/ddt/:ddtId/pdf", authModule.requireAuth, AdvancedSalesController.generateDDTPDF);
-  app.post("/api/ddt/:ddtId/send-to-fic", authModule.requireAdmin, AdvancedSalesController.sendDDTToFIC);
+  app.post("/api/ddt/:ddtId/send-to-fic", authModule.requireAuth, AdvancedSalesController.sendDDTToFIC);
 
   // Guida operatori PDF
   const { generateOperatorGuidePDF } = await import('./services/operator-guide-pdf.service');
