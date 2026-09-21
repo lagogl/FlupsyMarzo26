@@ -52,7 +52,11 @@ import {
 } from "../../shared/schema";
 import { format } from "date-fns";
 import { OperationsCache } from "../operations-cache-service.js";
-import { resolveFCloudCompanyId, sendDDTToFCloud } from "../services/fcloud-ddt-service.js";
+import {
+  canContinueToFicAfterFCloudDateError,
+  resolveFCloudCompanyId,
+  sendDDTToFCloud
+} from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
 import { sendAdvancedSaleDocumentsReadyEmail } from "../services/advanced-sale-documents-email";
 import { getCompanyLogo } from "../services/logo-service";
@@ -4714,8 +4718,14 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     // ── CANALE FCLOUD: l'esito viene persistito prima di procedere con FIC.
     // Se FCloud accetta e FIC fallisce, il DDT resta in stato non reversibile
     // per evitare duplicazioni o ripristini inventariali incoerenti.
-    const fcloudResult = await sendDDTToFCloud(parseInt(ddtId));
-    if (fcloudResult.success && fcloudResult.fcloudDdtId) {
+    try {
+      const fcloudResult = await sendDDTToFCloud(parseInt(ddtId));
+      if (!fcloudResult.success || !fcloudResult.fcloudDdtId) {
+        throw new Error(
+          fcloudResult.error || 'FCloud non ha restituito un identificativo DDT valido'
+        );
+      }
+
       await db.update(ddt).set({
         fcloudDdtId: fcloudResult.fcloudDdtId,
         fcloudDdtNumero: fcloudResult.fcloudNumero,
@@ -4723,11 +4733,37 @@ export async function sendDDTToFIC(req: Request, res: Response) {
         updatedAt: new Date()
       }).where(eq(ddt.id, parseInt(ddtId)));
       console.log(`✅ FCloud: DDT ${ddtId} sincronizzato → ID ${fcloudResult.fcloudDdtId}, N. ${fcloudResult.fcloudNumero}`);
-    } else {
+    } catch (fcloudError) {
+      const numberingYear = new Date(ddtData.data).getFullYear();
+      const latestReservedNumber = await db.transaction(async tx => {
+        const numberingKey = `advanced-ddt:${companyId}:${numberingYear}`;
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
+        const latestLocalResult = await tx.execute(sql`
+          SELECT COALESCE(MAX(${ddt.numero}), 0)::integer AS latest_number
+          FROM ${ddt}
+          WHERE ${ddt.companyId} = ${companyId}
+            AND EXTRACT(YEAR FROM ${ddt.data})::integer = ${numberingYear}
+            AND ${ddt.id} <> ${parseInt(ddtId)}
+        `);
+        return Number((latestLocalResult as any).rows?.[0]?.latest_number || 0);
+      });
+      const canContinueToFic = canContinueToFicAfterFCloudDateError({
+        error: fcloudError,
+        reservedNumber: ddtData.numero,
+        latestReservedNumber
+      });
+
       await db.update(ddt)
         .set({ fcloudStato: 'errore', updatedAt: new Date() })
         .where(eq(ddt.id, parseInt(ddtId)));
-      console.warn(`⚠️ FCloud: DDT ${ddtId} non sincronizzato — ${fcloudResult.error}`);
+
+      if (!canContinueToFic) {
+        throw fcloudError;
+      }
+
+      console.warn(
+        `⚠️ FCloud ha rifiutato la data del DDT ${ddtData.numero}; invio FIC consentito perché il numero è anteriore al DDT ${latestReservedNumber}`
+      );
     }
     // ── FINE CANALE FCLOUD ───────────────────────────────────────────────────
 

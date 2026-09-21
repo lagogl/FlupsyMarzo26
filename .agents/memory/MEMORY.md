@@ -45,3 +45,4 @@
 - [Forecast produttivo evadibile](production-forecast-fulfillment.md) — è un indicatore di capacità separato dagli ordini: min(forecast, giacenza target con schiuditoio), senza consumare stock.
 - [Date consegna ordini FIC](fic-order-delivery-dates.md) — le date inserite manualmente sono autoritative; la sincronizzazione FIC può riempire date mancanti ma non cancellare o sostituire quelle presenti.
 - [Limiti richieste FIC](fic-api-rate-limits.md) — sincronizzazioni consecutive possono esaurire il limite; tutte le chiamate devono essere cadenzate e rispettare Retry-After sui 429.
+- [DDT arretrati FCloud/FIC](backdated-ddt-fcloud-fic.md) — un rifiuto FCloud per data può non bloccare FIC solo se il numero locale era già anteriore nella stessa sequenza.

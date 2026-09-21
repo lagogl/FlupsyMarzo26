@@ -109,6 +109,25 @@ export interface FCloudDdtResult {
   error?: string;
 }
 
+export function canContinueToFicAfterFCloudDateError(input: {
+  error: unknown;
+  reservedNumber: number;
+  latestReservedNumber: number;
+}): boolean {
+  const message = input.error instanceof Error
+    ? input.error.message
+    : String(input.error || '');
+  const isBackdatedDateRejection =
+    /FCloud DDT create error 400:/i.test(message)
+    && /data DDT .* non pu[oò] essere anteriore all['’]ultimo DDT emesso/i.test(message);
+
+  return isBackdatedDateRejection
+    && Number.isSafeInteger(input.reservedNumber)
+    && Number.isSafeInteger(input.latestReservedNumber)
+    && input.reservedNumber > 0
+    && input.reservedNumber < input.latestReservedNumber;
+}
+
 /**
  * Crea il DDT in FCloud e restituisce l'ID + deep-link per aprirlo nel browser.
  * Usato sia in background (dopo invio FIC) sia dall'endpoint "Apri in FCloud".
