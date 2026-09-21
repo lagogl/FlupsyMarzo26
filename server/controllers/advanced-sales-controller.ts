@@ -7,6 +7,10 @@ import { db } from "../db";
 import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzle-orm";
 import { pdfGenerator } from "../services/pdf-generator";
 import {
+  resolveFicFarmCode,
+  shouldFetchFicClientDetail
+} from "../services/fic-customer-farm-code";
+import {
   generateAdvancedSaleDocument as buildAdvancedSaleDocument,
   abbreviateFlupsyName,
   buildAdvancedDdtSubject,
@@ -201,6 +205,14 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
   const saleSnapshot = normalizeSaleCustomerSnapshot(sale?.customerDetails, sale?.customerName);
   const preliminary = mergeSaleCustomerData(saleSnapshot, localCustomer);
   let ficDetail: any = null;
+  let resolvedFicClientId: number | null = null;
+
+  const needsFicDetail = shouldFetchFicClientDetail({
+    address_street: preliminary.address,
+    address_postal_code: preliminary.postalCode,
+    code: preliminary.farmCode
+  }, preliminary.farmCode);
+  if (!needsFicDetail) return preliminary;
 
   if (companyId) {
     try {
@@ -241,6 +253,7 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
           }
         }
         if (!ficClientId) return preliminary;
+        resolvedFicClientId = Number(ficClientId) || null;
         const response = await ficApiRequest(
           'GET',
           String(companyId),
@@ -261,6 +274,25 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
         throw detailError;
       }
       console.warn(`Dettaglio FIC non disponibile per il cliente ${localCustomer?.id || sale?.customerName}; uso lo snapshot locale`);
+    }
+  }
+
+  if (ficDetail && localCustomer?.id) {
+    const farmCode = resolveFicFarmCode(
+      ficDetail.code,
+      localCustomer.codiceAllevamento
+    );
+    const updates: Record<string, unknown> = {};
+    if (farmCode && farmCode !== localCustomer.codiceAllevamento) {
+      updates.codiceAllevamento = farmCode;
+    }
+    if (resolvedFicClientId && resolvedFicClientId !== localCustomer.fattureInCloudId) {
+      updates.fattureInCloudId = resolvedFicClientId;
+    }
+    if (Object.keys(updates).length) {
+      await db.update(clienti)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(clienti.id, localCustomer.id));
     }
   }
 
@@ -2161,7 +2193,8 @@ export async function getCustomers(req: Request, res: Response) {
       province: customer.provincia || '',
       postalCode: customer.cap || '',
       phone: customer.telefono || '',
-      email: customer.email || ''
+      email: customer.email || '',
+      farmCode: customer.codiceAllevamento || ''
     }));
 
     res.json({

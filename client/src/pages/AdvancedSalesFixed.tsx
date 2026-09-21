@@ -23,6 +23,7 @@ interface Customer {
   city?: string;
   phone?: string;
   email?: string;
+  farmCode?: string;
 }
 
 interface Operation {
@@ -150,7 +151,8 @@ export default function AdvancedSales() {
         vatNumber: selectedCustomer.vatNumber || '',
         city: selectedCustomer.city || '',
         phone: selectedCustomer.phone || '',
-        email: selectedCustomer.email || ''
+        email: selectedCustomer.email || '',
+        farmCode: selectedCustomer.farmCode || ''
       };
 
       createSaleMutation.mutate({
@@ -400,6 +402,9 @@ export default function AdvancedSales() {
                             {customer.city && customer.city.trim() !== '' && (
                               <span className="text-xs text-gray-500">{customer.city}</span>
                             )}
+                             {customer.farmCode && (
+                               <span className="text-xs text-gray-500">Cod. allevamento {customer.farmCode}</span>
+                             )}
                           </div>
                         </SelectItem>
                       ))}
@@ -441,6 +446,12 @@ export default function AdvancedSales() {
                             <div>{selectedCustomer.city}</div>
                           </div>
                         )}
+                         {selectedCustomer.farmCode && selectedCustomer.farmCode.trim() !== '' && (
+                           <div>
+                             <span className="font-medium">Codice allevamento:</span>
+                             <div>{selectedCustomer.farmCode}</div>
+                           </div>
+                         )}
                         {selectedCustomer.email && selectedCustomer.email !== '.' && selectedCustomer.email.trim() !== '' && (
                           <div>
                             <span className="font-medium">Email:</span>

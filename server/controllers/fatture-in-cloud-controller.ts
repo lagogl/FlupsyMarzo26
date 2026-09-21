@@ -43,6 +43,10 @@ import {
   isDdtNumberConflict,
 } from '../services/ddt-number-conflict';
 import {
+  resolveFicFarmCode,
+  shouldFetchFicClientDetail
+} from '../services/fic-customer-farm-code';
+import {
   getAssignedFicDdtNumber,
   getOfficialFicDdtNumber
 } from '../services/fic-ddt-response';
@@ -690,15 +694,30 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
     
     for (let i = 0; i < allClienti.length; i++) {
       let clienteFIC = allClienti[i];
+      // Cerca cliente esistente: prima per fattureInCloudId (più affidabile), poi P.IVA, poi denominazione
+      let clienteEsistente = null;
+
+      if (clienteFIC.id) {
+        const clientiConFicId = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, clienteFIC.id));
+        if (clientiConFicId.length > 0) clienteEsistente = clientiConFicId[0];
+      }
+
+      if (!clienteEsistente && clienteFIC.vat_number) {
+        const clientiConPiva = await db.select().from(clienti).where(eq(clienti.piva, clienteFIC.vat_number));
+        if (clientiConPiva.length > 0) clienteEsistente = clientiConPiva[0];
+      }
+
+      if (!clienteEsistente && clienteFIC.name) {
+        const clientiConNome = await db.select().from(clienti).where(eq(clienti.denominazione, clienteFIC.name));
+        if (clientiConNome.length > 0) clienteEsistente = clientiConNome[0];
+      }
+
       // L'elenco FIC può omettere dati presenti nella scheda completa (in particolare la via).
-      // Recupera il dettaglio prima di aggiornare il cliente locale, altrimenti una sync
-      // successiva cancellerebbe nuovamente l'indirizzo completo.
+      // Recupera il dettaglio anche quando manca il codice cliente interno e non è già
+      // disponibile localmente, evitando una chiamata per ogni cliente a ogni sync.
       if (
         clienteFIC.id &&
-        (
-          !String(clienteFIC.address_street || '').trim() ||
-          !String(clienteFIC.address_postal_code || '').trim()
-        )
+        shouldFetchFicClientDetail(clienteFIC, clienteEsistente?.codiceAllevamento)
       ) {
         try {
           const dettagliResponse = await withRetry(() =>
@@ -707,33 +726,7 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
           const dettagli = dettagliResponse.data.data;
           if (dettagli) clienteFIC = { ...clienteFIC, ...dettagli };
         } catch (error) {
-          console.warn(`⚠️ Impossibile recuperare il dettaglio indirizzo per ${clienteFIC.name || clienteFIC.id}`);
-        }
-      }
-      // Cerca cliente esistente: prima per fattureInCloudId (più affidabile), poi P.IVA, poi denominazione
-      let clienteEsistente = null;
-      
-      // Prima cerca per ID Fatture in Cloud (più affidabile)
-      if (clienteFIC.id) {
-        const clientiConFicId = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, clienteFIC.id));
-        if (clientiConFicId.length > 0) {
-          clienteEsistente = clientiConFicId[0];
-        }
-      }
-      
-      // Se non trovato, cerca per P.IVA
-      if (!clienteEsistente && clienteFIC.vat_number) {
-        const clientiConPiva = await db.select().from(clienti).where(eq(clienti.piva, clienteFIC.vat_number));
-        if (clientiConPiva.length > 0) {
-          clienteEsistente = clientiConPiva[0];
-        }
-      }
-      
-      // Se ancora non trovato, cerca per nome esatto
-      if (!clienteEsistente && clienteFIC.name) {
-        const clientiConNome = await db.select().from(clienti).where(eq(clienti.denominazione, clienteFIC.name));
-        if (clientiConNome.length > 0) {
-          clienteEsistente = clientiConNome[0];
+          console.warn(`⚠️ Impossibile recuperare il dettaglio cliente per ${clienteFIC.name || clienteFIC.id}`);
         }
       }
       
@@ -764,7 +757,10 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
         telefono: clienteFIC.phone || '',
         piva: clienteFIC.vat_number || '',
         codiceFiscale: clienteFIC.tax_code || clienteFIC.vat_number || '',
-        codiceAllevamento: clienteFIC.code || '',
+        codiceAllevamento: resolveFicFarmCode(
+          clienteFIC.code,
+          clienteEsistente?.codiceAllevamento
+        ),
         fattureInCloudId: clienteFIC.id
       };
       

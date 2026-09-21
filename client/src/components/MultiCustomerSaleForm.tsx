@@ -26,6 +26,7 @@ interface Customer {
   postalCode?: string;
   phone?: string;
   email?: string;
+  farmCode?: string;
 }
 
 interface SaleOperation {
@@ -472,7 +473,7 @@ export default function MultiCustomerSaleForm({
                           {customersData?.customers?.map((c) => (
                             <CommandItem
                               key={c.id}
-                              value={`${c.name} ${c.vatNumber || ''}`.toLowerCase()}
+                              value={`${c.name} ${c.vatNumber || ''} ${c.farmCode || ''}`.toLowerCase()}
                               onSelect={() => updateSlot(slot.id, { customer: c, customerComboboxOpen: false })}
                             >
                               <Check className={`mr-2 h-4 w-4 ${slot.customer?.id === c.id ? 'opacity-100' : 'opacity-0'}`} />
@@ -480,6 +481,7 @@ export default function MultiCustomerSaleForm({
                                 <span className="font-medium">{c.name}</span>
                                 <span className="text-xs text-muted-foreground">
                                   {c.vatNumber ? `P.IVA ${c.vatNumber}` : 'Nessuna P.IVA'}
+                                   {c.farmCode ? ` · Cod. allevamento ${c.farmCode}` : ''}
                                 </span>
                               </div>
                             </CommandItem>

@@ -48,6 +48,7 @@ interface Customer {
   postalCode: string;
   phone: string;
   email: string;
+  farmCode: string;
 }
 
 interface BagConfiguration {
@@ -1540,7 +1541,7 @@ export default function AdvancedSales() {
                             {customers?.customers?.map((customer: Customer) => (
                               <CommandItem
                                 key={customer.id}
-                                value={`${customer.name} ${customer.vatNumber || ''}`.toLowerCase()}
+                                value={`${customer.name} ${customer.vatNumber || ''} ${customer.farmCode || ''}`.toLowerCase()}
                                 onSelect={() => {
                                   setSelectedCustomer(customer);
                                   setOpenCustomerCombobox(false);
@@ -1556,6 +1557,7 @@ export default function AdvancedSales() {
                                   <span className="font-medium">{customer.name}</span>
                                   <span className="text-sm text-muted-foreground">
                                     {customer.vatNumber ? `P.IVA ${customer.vatNumber}` : 'Nessuna P.IVA'}
+                                   {customer.farmCode ? ` · Cod. allevamento ${customer.farmCode}` : ''}
                                   </span>
                                 </div>
                               </CommandItem>
