@@ -301,7 +301,7 @@ function page(
     .field{border:1px solid #aab7bd;padding:5px 6px;min-height:38px}.label{display:block;color:#60727c;font-size:6.6pt;font-weight:bold;text-transform:uppercase;letter-spacing:.035em}.value{display:block;margin-top:2px;font-weight:bold;font-size:8.4pt}.write-line{display:inline-block;min-width:105px;height:11px;border-bottom:1px solid #526771;vertical-align:bottom}
     table{width:100%;border-collapse:collapse;margin:7px 0}th{padding:4px 3px;background:#184f63;color:white;font-size:6.3pt;text-transform:uppercase;text-align:right}th.left,td.left{text-align:left}td{border:1px solid #a9b8be;padding:4px 3px;text-align:right;font-size:7.2pt}.total td{font-weight:bold;background:#eef4f4}
     .legal{border:1px solid #91a1a8;padding:7px 9px;margin-top:6px}.legal ol{margin:3px 0 0;padding-left:17px}.legal li{margin:4px 0}.legal strong{color:#174f62}.intro{margin:6px 0}.checks{letter-spacing:.02em;word-spacing:3px}
-    .signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:17px;break-inside:avoid}.signature{padding-top:55px;border-bottom:1px solid #405b67;text-align:center}.signature-note{text-align:center;color:#60717a;font-size:6.8pt;margin-top:2px}
+    .signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:17px;break-inside:avoid}.signatures.recipient-only{grid-template-columns:1fr;width:calc(50% - 14px);margin-left:auto}.signature{padding-top:55px;border-bottom:1px solid #405b67;text-align:center}.signature-note{text-align:center;color:#60717a;font-size:6.8pt;margin-top:2px}
     .traceability{border:1px solid #79aaa9;background:#eef8f6;border-radius:5px;padding:6px;display:flex;align-items:center;gap:8px;min-height:72px}.traceability img{width:62px;height:62px;background:white}.traceability strong{display:block;font-size:7.2pt;line-height:1.25;margin:2px 0}.traceability small{display:block;color:#597078;font-size:6.4pt}
     footer{display:flex;justify-content:space-between;border-top:1px solid #b6c1c5;color:#677982;font-size:6.4pt;margin-top:9px;padding-top:4px}.avoid{break-inside:avoid}
     .draft-notice{border:3px solid #b91c1c;background:#fff1f2;color:#991b1b;padding:8px 10px;margin:0 0 9px;text-align:center;font-size:11pt;font-weight:800;letter-spacing:.035em;text-transform:uppercase}
@@ -361,8 +361,7 @@ export async function renderAdvancedSaleDocumentHtml(
       <div class="two avoid"><div><div class="field"><span class="label">Luogo e ora della consegna</span><span class="value">${blank} · ore ${blank}</span></div>
       <div class="field"><span class="label">Osservazioni alla consegna</span><span class="value">${present(data.sale.notes)}</span></div></div>
       ${traceabilityQr ? `<div class="traceability"><img src="${traceabilityQr}" alt="QR tracciabilità"><div><span class="label">Scopri la storia del lotto</span><strong>Scansiona il QR per consultare il percorso di crescita e i controlli del seme vivo consegnato.</strong><small>Codice tracciabilità: ${esc(reference)}</small></div></div>` : ''}</div>
-      <div class="signatures"><div><div class="signature">Firma del cedente</div><div class="signature-note">Nome leggibile e firma</div></div>
-      <div><div class="signature">Firma per ricevuta dell'acquirente</div><div class="signature-note">Il cliente conferma quantità e stato apparente alla consegna</div></div></div>`;
+      <div class="signatures recipient-only"><div><div class="signature">Firma per ricevuta dell'acquirente</div><div class="signature-note">Il cliente conferma quantità e stato apparente alla consegna</div></div></div>`;
   } else if (kind === 'sale-conditions') {
     title = 'Dichiarazione di vendita e condizioni contrattuali';
     subtitle = `${PRODUCT_NAME} · ${SCIENTIFIC_NAME}`;
@@ -407,8 +406,7 @@ export async function renderAdvancedSaleDocumentHtml(
       <div class="field"><span class="label">Numero di registro del destinatario</span><span class="value">${blank}</span></div>
       <div class="field"><span class="label">Identificazione vettore / targa</span><span class="value">${blank}</span></div>
       <div class="field"><span class="label">Punto di sbarco / scarico</span><span class="value">${blank}</span></div></div></div>
-      <div class="signatures"><div><div class="signature">Firma del responsabile alla consegna</div></div>
-      <div><div class="signature">Firma del destinatario / registro</div></div></div>`;
+      <div class="signatures recipient-only"><div><div class="signature">Firma del destinatario / registro</div></div></div>`;
   } else {
     title = 'Documento di trasporto (D.D.T.)';
     subtitle = `${ddtNumber} · del ${displayDate(data.ddt?.data || data.sale.saleDate)}`;

@@ -160,6 +160,46 @@ test('gestisce uno snapshot storico non JSON senza causare errore', () => {
   assert.equal(snapshot.address, 'Via del Porto 5');
 });
 
+test('il rapporto di consegna richiede solo la firma per ricevuta dell’acquirente', async () => {
+  const html = await renderAdvancedSaleDocumentHtml('delivery-report', {
+    sale: {
+      saleNumber: 'VEN-FIRMA',
+      saleDate: '2026-09-21',
+      companyId: 1052922
+    },
+    bags: [],
+    operations: [],
+    ddt: {
+      mittenteRagioneSociale: 'Venditore',
+      clienteNome: 'Cliente'
+    }
+  });
+
+  assert.doesNotMatch(html, /Firma del cedente/i);
+  assert.match(html, /Firma per ricevuta dell'acquirente/i);
+  assert.match(html, /signatures recipient-only/);
+});
+
+test('il documento di trasferimento richiede solo la firma del destinatario', async () => {
+  const html = await renderAdvancedSaleDocumentHtml('bivalve-transfer', {
+    sale: {
+      saleNumber: 'VEN-TRASFERIMENTO',
+      saleDate: '2026-09-21',
+      companyId: 1052922
+    },
+    bags: [],
+    operations: [],
+    ddt: {
+      mittenteRagioneSociale: 'Venditore',
+      clienteNome: 'Destinatario'
+    }
+  });
+
+  assert.doesNotMatch(html, /Firma del responsabile alla consegna/i);
+  assert.match(html, /Firma del destinatario \/ registro/i);
+  assert.match(html, /signatures recipient-only/);
+});
+
 test('la ristampa DDT usa identità, numero e logo congelati nello snapshot', async (t) => {
   const logoRelativePath = 'attached_assets/test-ddt-snapshot-logo.png';
   const logoAbsolutePath = path.resolve(process.cwd(), logoRelativePath);
