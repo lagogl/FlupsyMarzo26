@@ -365,7 +365,7 @@ export async function renderAdvancedSaleDocumentHtml(
   } else if (kind === 'sale-conditions') {
     title = 'Dichiarazione di vendita e condizioni contrattuali';
     subtitle = `${PRODUCT_NAME} · ${SCIENTIFIC_NAME}`;
-    body = `<div class="parties">${seller}${recipient}</div>${meta}<p class="intro">Il venditore dichiara di cedere il prodotto descritto, costituito da organismi biologicamente vivi e soggetto a naturale variabilità e a fattori ambientali e gestionali successivi alla consegna.</p>${products}
+    body = `<div class="parties">${seller}${recipient}</div>${meta}<p class="intro">Il venditore dichiara di cedere il prodotto descritto, costituito da organismi biologicamente vivi e soggetto a naturale variabilità e a fattori ambientali e gestionali successivi alla consegna.</p>
       <section class="legal avoid"><span class="label">Condizioni contrattuali</span><ol>
       <li><strong>Accettazione del prodotto.</strong> La vendita è effettuata con accettazione da parte dell'acquirente del prodotto nello stato di fatto in cui si trova al momento della consegna.</li>
       <li><strong>Trasferimento del rischio.</strong> Il rischio relativo al deperimento, alla mortalità, alla perdita di vitalità e alle alterazioni biologiche si trasferisce all'acquirente dal momento della consegna.</li>
@@ -376,8 +376,7 @@ export async function renderAdvancedSaleDocumentHtml(
       </ol></section><div class="three avoid"><div class="field"><span class="label">Luogo</span><span class="value">${blank}</span></div>
       <div class="field"><span class="label">Data</span><span class="value">${displayDate(data.sale.saleDate)}</span></div>
       <div class="field"><span class="label">Riferimento documento</span><span class="value">${esc(reference)}</span></div></div>
-      <div class="signatures"><div><div class="signature">Il venditore</div><div class="signature-note">Nome leggibile e firma</div></div>
-      <div><div class="signature">L'acquirente per integrale accettazione</div><div class="signature-note">Nome leggibile e firma</div></div></div>`;
+      <div class="signatures recipient-only"><div><div class="signature">L'acquirente per integrale accettazione</div><div class="signature-note">Nome leggibile e firma</div></div></div>`;
   } else if (kind === 'bivalve-transfer') {
     title = 'Documento di registrazione per il trasferimento di molluschi bivalvi vivi';
     const ddrReference = data.sale.ddrNumber && data.sale.ddrYear

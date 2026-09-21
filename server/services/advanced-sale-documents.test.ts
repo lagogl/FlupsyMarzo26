@@ -200,6 +200,37 @@ test('il documento di trasferimento richiede solo la firma del destinatario', as
   assert.match(html, /signatures recipient-only/);
 });
 
+test('la dichiarazione di vendita non mostra sacchi, totale o firma del venditore', async () => {
+  const html = await renderAdvancedSaleDocumentHtml('sale-conditions', {
+    sale: {
+      saleNumber: 'VEN-CONDIZIONI',
+      saleDate: '2026-09-21',
+      companyId: 1052922
+    },
+    bags: [{
+      bagNumber: 1,
+      basketId: 10,
+      basketPhysicalNumber: 4,
+      flupsyName: 'Flupsy prova',
+      totalWeight: 18,
+      animalCount: 360000,
+      animalsPerKg: 20000,
+      sizeCode: 'TP-3000'
+    }],
+    operations: [],
+    ddt: {
+      mittenteRagioneSociale: 'Venditore',
+      clienteNome: 'Acquirente'
+    }
+  });
+
+  assert.doesNotMatch(html, /<table class="products">/);
+  assert.doesNotMatch(html, /Totale · 1 colli/);
+  assert.doesNotMatch(html, /<div class="signature">Il venditore<\/div>/);
+  assert.match(html, /L'acquirente per integrale accettazione/);
+  assert.match(html, /signatures recipient-only/);
+});
+
 test('la ristampa DDT usa identità, numero e logo congelati nello snapshot', async (t) => {
   const logoRelativePath = 'attached_assets/test-ddt-snapshot-logo.png';
   const logoAbsolutePath = path.resolve(process.cwd(), logoRelativePath);
