@@ -156,6 +156,14 @@ export function buildFicDdtHeader(ddtSnapshot: any) {
   };
 }
 
+export function formatFicDdtWeightKg(weightInGrams: unknown): string | null {
+  const grams = typeof weightInGrams === 'number'
+    ? weightInGrams
+    : Number.parseFloat(String(weightInGrams ?? ''));
+  if (!Number.isFinite(grams) || grams <= 0) return null;
+  return (grams / 1000).toFixed(2);
+}
+
 function buildBuyer(data: AdvancedSaleDocumentData) {
   const ddtSnapshot = data.ddt ? {
       name: data.ddt.clienteNome,

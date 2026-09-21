@@ -12,6 +12,7 @@ import {
   buildAdvancedDdtSubject,
   buildFicDdtCustomerEntity,
   buildFicDdtHeader,
+  formatFicDdtWeightKg,
   mergeSaleCustomerData,
   normalizeSaleCustomerSnapshot,
   formatFlupsyBasketIdentifier,
@@ -4709,7 +4710,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
         number: ddtData.numero,
         numeration: '/ddt',
         dn_ai_packages_number: ddtData.totaleColli ? ddtData.totaleColli.toString() : null,
-        dn_ai_weight: ddtData.pesoTotale || null,
+        dn_ai_weight: formatFicDdtWeightKg(ddtData.pesoTotale),
         dn_ai_notes: ddtData.note || null,
         items_list: buildAggregatedFicDdtItems(righe)
       }

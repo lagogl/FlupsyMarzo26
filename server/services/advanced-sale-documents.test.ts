@@ -7,6 +7,7 @@ import {
   buildAdvancedDdtSubject,
   buildFicDdtCustomerEntity,
   buildFicDdtHeader,
+  formatFicDdtWeightKg,
   formatFlupsyBasketIdentifier,
   logoFromDdt,
   mergeSaleCustomerData,
@@ -144,6 +145,13 @@ test('costruisce oggetto, causale e anagrafica completa per il payload DDT FIC',
     ei_code: 'ABC1234',
     id: 321
   });
+});
+
+test('converte in chilogrammi il peso totale inviato nel DDT FIC', () => {
+  assert.equal(formatFicDdtWeightKg('251600.00'), '251.60');
+  assert.equal(formatFicDdtWeightKg(18000), '18.00');
+  assert.equal(formatFicDdtWeightKg(null), null);
+  assert.equal(formatFicDdtWeightKg('peso non valido'), null);
 });
 
 test('gestisce uno snapshot storico non JSON senza causare errore', () => {
