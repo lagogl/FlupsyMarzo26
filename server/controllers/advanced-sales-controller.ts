@@ -4653,6 +4653,76 @@ async function ficApiRequest(method: string, companyId: string, accessToken: str
   }
 }
 
+export interface DdtExternalDeliveryDependencies {
+  sendToFCloud: () => Promise<{
+    success: boolean;
+    fcloudDdtId?: string;
+    fcloudNumero?: string;
+    error?: string;
+  }>;
+  getLatestReservedNumber: () => Promise<number>;
+  markFCloudSent: (result: {
+    fcloudDdtId: string;
+    fcloudNumero?: string;
+  }) => Promise<void>;
+  markFCloudError: () => Promise<void>;
+  sendToFic: () => Promise<any>;
+  markFicSent: (result: {
+    fattureInCloudId: number;
+    fattureInCloudNumero: string;
+  }) => Promise<void>;
+}
+
+export async function deliverDdtToExternalChannels(input: {
+  reservedNumber: number;
+  dependencies: DdtExternalDeliveryDependencies;
+}): Promise<{
+  ficResponse: any;
+  assignedFicNumber: string;
+}> {
+  const { dependencies } = input;
+
+  try {
+    const fcloudResult = await dependencies.sendToFCloud();
+    if (!fcloudResult.success || !fcloudResult.fcloudDdtId) {
+      throw new Error(
+        fcloudResult.error || "FCloud non ha restituito un identificativo DDT valido"
+      );
+    }
+    await dependencies.markFCloudSent({
+      fcloudDdtId: fcloudResult.fcloudDdtId,
+      fcloudNumero: fcloudResult.fcloudNumero
+    });
+  } catch (fcloudError) {
+    const latestReservedNumber = await dependencies.getLatestReservedNumber();
+    const canContinueToFic = canContinueToFicAfterFCloudDateError({
+      error: fcloudError,
+      reservedNumber: input.reservedNumber,
+      latestReservedNumber
+    });
+
+    await dependencies.markFCloudError();
+    if (!canContinueToFic) throw fcloudError;
+  }
+
+  const ficResponse = await dependencies.sendToFic();
+  const ficDocument = ficResponse?.data?.data;
+  const assignedFicNumber = getAssignedFicDdtNumber(ficDocument);
+  const fattureInCloudId = Number(ficDocument?.id);
+  if (!Number.isSafeInteger(fattureInCloudId) || fattureInCloudId <= 0) {
+    const error: any = new Error("Fatture in Cloud non ha restituito un identificativo DDT valido");
+    error.code = "FIC_DDT_ID_MISSING";
+    throw error;
+  }
+
+  await dependencies.markFicSent({
+    fattureInCloudId,
+    fattureInCloudNumero: assignedFicNumber
+  });
+
+  return { ficResponse, assignedFicNumber };
+}
+
 /**
  * Invia DDT a Fatture in Cloud
  */
@@ -4752,78 +4822,54 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     // ── CANALE FCLOUD: l'esito viene persistito prima di procedere con FIC.
     // Se FCloud accetta e FIC fallisce, il DDT resta in stato non reversibile
     // per evitare duplicazioni o ripristini inventariali incoerenti.
-    try {
-      const fcloudResult = await sendDDTToFCloud(parseInt(ddtId));
-      if (!fcloudResult.success || !fcloudResult.fcloudDdtId) {
-        throw new Error(
-          fcloudResult.error || 'FCloud non ha restituito un identificativo DDT valido'
-        );
+    const numberingYear = new Date(ddtData.data).getFullYear();
+    const { ficResponse, assignedFicNumber } = await deliverDdtToExternalChannels({
+      reservedNumber: ddtData.numero,
+      dependencies: {
+        sendToFCloud: () => sendDDTToFCloud(parseInt(ddtId)),
+        getLatestReservedNumber: () => db.transaction(async tx => {
+          const numberingKey = `advanced-ddt:${companyId}:${numberingYear}`;
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
+          const latestLocalResult = await tx.execute(sql`
+            SELECT COALESCE(MAX(${ddt.numero}), 0)::integer AS latest_number
+            FROM ${ddt}
+            WHERE ${ddt.companyId} = ${companyId}
+              AND EXTRACT(YEAR FROM ${ddt.data})::integer = ${numberingYear}
+              AND ${ddt.id} <> ${parseInt(ddtId)}
+          `);
+          return Number((latestLocalResult as any).rows?.[0]?.latest_number || 0);
+        }),
+        markFCloudSent: async result => {
+          await db.update(ddt).set({
+            fcloudDdtId: result.fcloudDdtId,
+            fcloudDdtNumero: result.fcloudNumero,
+            fcloudStato: 'inviato',
+            updatedAt: new Date()
+          }).where(eq(ddt.id, parseInt(ddtId)));
+        },
+        markFCloudError: async () => {
+          await db.update(ddt)
+            .set({ fcloudStato: 'errore', updatedAt: new Date() })
+            .where(eq(ddt.id, parseInt(ddtId)));
+        },
+        sendToFic: () => ficApiRequest('POST', String(companyId), accessToken, '/issued_documents', ddtPayload),
+        markFicSent: async result => {
+          await db.update(ddt).set({
+            fattureInCloudId: result.fattureInCloudId,
+            fattureInCloudNumero: result.fattureInCloudNumero,
+            ddtStato: 'inviato',
+            updatedAt: new Date()
+          }).where(eq(ddt.id, parseInt(ddtId)));
+        }
       }
+    });
 
-      await db.update(ddt).set({
-        fcloudDdtId: fcloudResult.fcloudDdtId,
-        fcloudDdtNumero: fcloudResult.fcloudNumero,
-        fcloudStato: 'inviato',
-        updatedAt: new Date()
-      }).where(eq(ddt.id, parseInt(ddtId)));
-      console.log(`✅ FCloud: DDT ${ddtId} sincronizzato → ID ${fcloudResult.fcloudDdtId}, N. ${fcloudResult.fcloudNumero}`);
-    } catch (fcloudError) {
-      const numberingYear = new Date(ddtData.data).getFullYear();
-      const latestReservedNumber = await db.transaction(async tx => {
-        const numberingKey = `advanced-ddt:${companyId}:${numberingYear}`;
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
-        const latestLocalResult = await tx.execute(sql`
-          SELECT COALESCE(MAX(${ddt.numero}), 0)::integer AS latest_number
-          FROM ${ddt}
-          WHERE ${ddt.companyId} = ${companyId}
-            AND EXTRACT(YEAR FROM ${ddt.data})::integer = ${numberingYear}
-            AND ${ddt.id} <> ${parseInt(ddtId)}
-        `);
-        return Number((latestLocalResult as any).rows?.[0]?.latest_number || 0);
-      });
-      const canContinueToFic = canContinueToFicAfterFCloudDateError({
-        error: fcloudError,
-        reservedNumber: ddtData.numero,
-        latestReservedNumber
-      });
-
-      await db.update(ddt)
-        .set({ fcloudStato: 'errore', updatedAt: new Date() })
-        .where(eq(ddt.id, parseInt(ddtId)));
-
-      if (!canContinueToFic) {
-        throw fcloudError;
-      }
-
-      console.warn(
-        `⚠️ FCloud ha rifiutato la data del DDT ${ddtData.numero}; invio FIC consentito perché il numero è anteriore al DDT ${latestReservedNumber}`
-      );
-    }
-    // ── FINE CANALE FCLOUD ───────────────────────────────────────────────────
-
-    // ── CANALE FIC (Fatture in Cloud): indipendente da FCloud ────────────────
-    // Quando non sarà più necessario, basterà rimuovere questo blocco.
-    console.log(`🚀 Invio DDT ${ddtData.numero} a Fatture in Cloud...`);
-    console.log(`📦 Payload FIC DN_AI:`, JSON.stringify({
-      dn_ai_packages_number: ddtPayload.data.dn_ai_packages_number,
-      dn_ai_weight: ddtPayload.data.dn_ai_weight,
-      items_count: ddtPayload.data.items_list.length
-    }, null, 2));
-    const ficResponse = await ficApiRequest('POST', String(companyId), accessToken, '/issued_documents', ddtPayload);
-    
-    const assignedFicNumber = getAssignedFicDdtNumber(ficResponse.data.data);
     console.log(`✅ FIC: DDT inviato con successo! ID: ${ficResponse.data.data.id}, numero: ${assignedFicNumber}`);
     console.log(`📊 Risposta FIC DN_AI:`, JSON.stringify({
       dn_ai_packages_number: ficResponse.data.data.dn_ai_packages_number,
       dn_ai_weight: ficResponse.data.data.dn_ai_weight
     }, null, 2));
     
-    await db.update(ddt).set({
-      fattureInCloudId: ficResponse.data.data.id?.toString(),
-      fattureInCloudNumero: assignedFicNumber,
-      ddtStato: 'inviato',
-      updatedAt: new Date()
-    }).where(eq(ddt.id, parseInt(ddtId)));
     // ── FINE CANALE FIC ──────────────────────────────────────────────────────
 
     // Recupera advancedSaleId dalla prima riga DDT per aggiornare anche la vendita
