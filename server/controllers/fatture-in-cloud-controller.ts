@@ -628,6 +628,82 @@ router.delete('/product-mappings/:sizeId', requireAdmin, async (req: Request, re
 
 // ===== ENDPOINTS CLIENTI =====
 
+export type FicClientRecordSyncDependencies = {
+  findByFicId: (id: number) => Promise<any | null>;
+  findByVatNumber: (vatNumber: string) => Promise<any | null>;
+  findByName: (name: string) => Promise<any | null>;
+  fetchDetail: (id: number) => Promise<any>;
+  update: (id: number, values: Record<string, unknown>) => Promise<void>;
+  insert: (values: Record<string, unknown>) => Promise<void>;
+};
+
+export async function synchronizeFicClientRecord(
+  listClient: any,
+  dependencies: FicClientRecordSyncDependencies
+): Promise<'created' | 'updated'> {
+  let clienteFIC = listClient;
+  let clienteEsistente = clienteFIC.id
+    ? await dependencies.findByFicId(clienteFIC.id)
+    : null;
+
+  if (!clienteEsistente && clienteFIC.vat_number) {
+    clienteEsistente = await dependencies.findByVatNumber(clienteFIC.vat_number);
+  }
+  if (!clienteEsistente && clienteFIC.name) {
+    clienteEsistente = await dependencies.findByName(clienteFIC.name);
+  }
+
+  if (
+    clienteFIC.id
+    && shouldFetchFicClientDetail(clienteFIC, clienteEsistente?.codiceAllevamento)
+  ) {
+    try {
+      const dettagli = await dependencies.fetchDetail(clienteFIC.id);
+      if (dettagli) clienteFIC = { ...clienteFIC, ...dettagli };
+    } catch {
+      console.warn(`⚠️ Impossibile recuperare il dettaglio cliente per ${clienteFIC.name || clienteFIC.id}`);
+    }
+  }
+
+  let cap = clienteFIC.address_postal_code || '';
+  let comune = clienteFIC.address_city || '';
+  if (!cap && comune) {
+    const capMatch = comune.match(/^(\d{5})\s+(.+)/);
+    if (capMatch) {
+      cap = capMatch[1];
+      comune = capMatch[2];
+    }
+  }
+
+  const datiCliente = {
+    denominazione: clienteFIC.name || 'N/A',
+    indirizzo: clienteFIC.address_street || '',
+    comune,
+    cap,
+    provincia: clienteFIC.address_province || '',
+    paese: clienteFIC.country || 'Italia',
+    email: clienteFIC.email || '',
+    pec: clienteFIC.certified_email || '',
+    codiceDestinatario: clienteFIC.ei_code || '',
+    telefono: clienteFIC.phone || '',
+    piva: clienteFIC.vat_number || '',
+    codiceFiscale: clienteFIC.tax_code || clienteFIC.vat_number || '',
+    codiceAllevamento: resolveFicFarmCode(
+      clienteFIC.code,
+      clienteEsistente?.codiceAllevamento
+    ),
+    fattureInCloudId: clienteFIC.id
+  };
+
+  if (clienteEsistente) {
+    await dependencies.update(clienteEsistente.id, datiCliente);
+    return 'updated';
+  }
+
+  await dependencies.insert(datiCliente);
+  return 'created';
+}
+
 // Sincronizzazione clienti da Fatture in Cloud
 router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) => {
   try {
@@ -693,86 +769,34 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
     let clientiCreati = 0;
     
     for (let i = 0; i < allClienti.length; i++) {
-      let clienteFIC = allClienti[i];
-      // Cerca cliente esistente: prima per fattureInCloudId (più affidabile), poi P.IVA, poi denominazione
-      let clienteEsistente = null;
-
-      if (clienteFIC.id) {
-        const clientiConFicId = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, clienteFIC.id));
-        if (clientiConFicId.length > 0) clienteEsistente = clientiConFicId[0];
-      }
-
-      if (!clienteEsistente && clienteFIC.vat_number) {
-        const clientiConPiva = await db.select().from(clienti).where(eq(clienti.piva, clienteFIC.vat_number));
-        if (clientiConPiva.length > 0) clienteEsistente = clientiConPiva[0];
-      }
-
-      if (!clienteEsistente && clienteFIC.name) {
-        const clientiConNome = await db.select().from(clienti).where(eq(clienti.denominazione, clienteFIC.name));
-        if (clientiConNome.length > 0) clienteEsistente = clientiConNome[0];
-      }
-
-      // L'elenco FIC può omettere dati presenti nella scheda completa (in particolare la via).
-      // Recupera il dettaglio anche quando manca il codice cliente interno e non è già
-      // disponibile localmente, evitando una chiamata per ogni cliente a ogni sync.
-      if (
-        clienteFIC.id &&
-        shouldFetchFicClientDetail(clienteFIC, clienteEsistente?.codiceAllevamento)
-      ) {
-        try {
-          const dettagliResponse = await withRetry(() =>
-            apiRequest('GET', `/entities/clients/${clienteFIC.id}`)
-          );
-          const dettagli = dettagliResponse.data.data;
-          if (dettagli) clienteFIC = { ...clienteFIC, ...dettagli };
-        } catch (error) {
-          console.warn(`⚠️ Impossibile recuperare il dettaglio cliente per ${clienteFIC.name || clienteFIC.id}`);
+      const result = await synchronizeFicClientRecord(allClienti[i], {
+        async findByFicId(id) {
+          const rows = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, id));
+          return rows[0] ?? null;
+        },
+        async findByVatNumber(vatNumber) {
+          const rows = await db.select().from(clienti).where(eq(clienti.piva, vatNumber));
+          return rows[0] ?? null;
+        },
+        async findByName(name) {
+          const rows = await db.select().from(clienti).where(eq(clienti.denominazione, name));
+          return rows[0] ?? null;
+        },
+        async fetchDetail(id) {
+          const response = await withRetry(() => apiRequest('GET', `/entities/clients/${id}`));
+          return response.data.data;
+        },
+        async update(id, values) {
+          await db.update(clienti)
+            .set({ ...values, updatedAt: new Date() })
+            .where(eq(clienti.id, id));
+        },
+        async insert(values) {
+          await db.insert(clienti).values(values as any);
         }
-      }
-      
-      // Estrai CAP e Città dal campo address_city
-      // Fatture in Cloud spesso include il CAP nella città (es: "45010 Rosolina RO, Italia")
-      let cap = clienteFIC.address_postal_code || '';
-      let comune = clienteFIC.address_city || '';
-      
-      if (!cap && comune) {
-        // Cerca CAP all'inizio della stringa città (5 cifre)
-        const capMatch = comune.match(/^(\d{5})\s+(.+)/);
-        if (capMatch) {
-          cap = capMatch[1];
-          comune = capMatch[2]; // Rimuovi CAP dalla città
-        }
-      }
-      
-      const datiCliente = {
-        denominazione: clienteFIC.name || 'N/A',
-        indirizzo: clienteFIC.address_street || '',
-        comune: comune,
-        cap: cap,
-        provincia: clienteFIC.address_province || '',
-        paese: clienteFIC.country || 'Italia',
-        email: clienteFIC.email || '',
-        pec: clienteFIC.certified_email || '',
-        codiceDestinatario: clienteFIC.ei_code || '',
-        telefono: clienteFIC.phone || '',
-        piva: clienteFIC.vat_number || '',
-        codiceFiscale: clienteFIC.tax_code || clienteFIC.vat_number || '',
-        codiceAllevamento: resolveFicFarmCode(
-          clienteFIC.code,
-          clienteEsistente?.codiceAllevamento
-        ),
-        fattureInCloudId: clienteFIC.id
-      };
-      
-      if (clienteEsistente) {
-        await db.update(clienti)
-          .set({ ...datiCliente, updatedAt: new Date() })
-          .where(eq(clienti.id, clienteEsistente.id));
-        clientiAggiornati++;
-      } else {
-        await db.insert(clienti).values(datiCliente);
-        clientiCreati++;
-      }
+      });
+      if (result === 'updated') clientiAggiornati++;
+      else clientiCreati++;
       
       // Notifica progresso ogni 5 clienti o all'ultimo
       if ((i + 1) % 5 === 0 || i === allClienti.length - 1) {
