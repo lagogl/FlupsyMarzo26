@@ -394,7 +394,7 @@ export async function renderAdvancedSaleDocumentHtml(
       <div class="two"><div class="field"><span class="label">Persona delegata alla firma</span><span class="value">${blank}</span></div>
       <div class="field"><span class="label">Data di raccolta / preparazione</span><span class="value">${displayDate(data.sale.saleDate)}</span></div></div>
       <div class="box"><div class="box-title">Origine dei molluschi bivalvi vivi (novellame)</div><div class="two">
-      <div class="field"><span class="label">Zona classificata — tipo</span><span class="value checks">□ A &nbsp; □ B &nbsp; □ C &nbsp; □ Non classificata</span></div>
+      <div class="field"><span class="label">Zona classificata — tipo</span><span class="value checks">□ A &nbsp; □ B &nbsp; □ C &nbsp; ☒ Non classificata</span></div>
       <div class="field"><span class="label">Provenienza novellame</span><span class="value checks">□ Schiuditoio &nbsp; ☒ Preingrasso</span></div>
       <div class="field"><span class="label">Codice allevamento origine</span><span class="value">${companyFarmCode || blank}</span></div>
       <div class="field"><span class="label">Tracciabilità interna origine</span><span class="value">${esc(origin)}</span></div></div></div>

@@ -198,6 +198,7 @@ test('il documento di trasferimento richiede solo la firma del destinatario', as
   assert.doesNotMatch(html, /Firma del responsabile alla consegna/i);
   assert.match(html, /Firma del destinatario \/ registro/i);
   assert.match(html, /signatures recipient-only/);
+  assert.match(html, /□ A &nbsp; □ B &nbsp; □ C &nbsp; ☒ Non classificata/);
 });
 
 test('la dichiarazione di vendita non mostra sacchi, totale o firma del venditore', async () => {
