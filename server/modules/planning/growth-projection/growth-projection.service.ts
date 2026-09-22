@@ -1,10 +1,11 @@
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
-import { hatcheryArrivals, productionTargets, projectionMortalityRates } from "../../../../shared/schema";
+import { hatcheryArrivals, productionTargets, projectionMortalityRates, sandNurserySeedings } from "../../../../shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 import {
   addForecastAllocationToLedger,
+  allocateForecastAndSandNursery,
   calculateFulfillableProductionForecast,
   getProductionTargetCategory,
 } from "./forecast-fulfillment";
@@ -55,6 +56,7 @@ interface MonthlyContext {
   disponibilitaForecastInizioMese: number;
   forecastEvadibileTarget: number;
   forecastNonCoperto: number;
+  seminaSandNurseryPianificata: number;
   disponibilitaSandNursery: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
@@ -140,12 +142,15 @@ export class GrowthProjectionService {
     const targetMaxAnimalsPerKg = targetRange.maxAnimalsPerKg;
     const targetBudgetCategory = getProductionTargetCategory(targetMaxAnimalsPerKg);
 
-    const [budgetRows, hatcheryRows] = await Promise.all([
+    const [budgetRows, hatcheryRows, sandNurseryRows] = await Promise.all([
       yearsNeeded.length > 0
         ? db.select().from(productionTargets).where(inArray(productionTargets.year, yearsNeeded))
         : Promise.resolve([]),
       yearsNeeded.length > 0
         ? db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, yearsNeeded))
+        : Promise.resolve([]),
+      yearsNeeded.length > 0
+        ? db.select().from(sandNurserySeedings).where(inArray(sandNurserySeedings.year, yearsNeeded))
         : Promise.resolve([])
     ]);
 
@@ -163,6 +168,11 @@ export class GrowthProjectionService {
       const key = `${row.year}-${row.month}`;
       if (!budgetByYearMonth[key]) budgetByYearMonth[key] = 0;
       budgetByYearMonth[key] += row.targetAnimals;
+    }
+
+    const sandNurseryByYearMonth: Record<string, number> = {};
+    for (const row of sandNurseryRows) {
+      sandNurseryByYearMonth[`${row.year}-${row.month}`] = Math.max(0, row.quantity);
     }
 
     // Tracciamo SEPARATAMENTE reale e previsione per ogni mese:
@@ -356,27 +366,18 @@ export class GrowthProjectionService {
         giacenzaDisponibileForecast,
       );
       const forecastNonCoperto = Math.max(0, budgetMese - forecastEvadibileTarget);
-      const disponibilitaSandNursery = Math.max(
-        0,
-        giacenzaDisponibileForecast - forecastEvadibileTarget,
-      );
-      let forecastDaPrenotare = forecastEvadibileTarget;
+      const seminaSandNurseryPianificata = sandNurseryByYearMonth[ymKey] || 0;
       const forecastEligibleBaskets = forecastBaskets
         .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
         .sort((a, b) => (1000000 / a.weightMg) - (1000000 / b.weightMg));
-      for (const basket of forecastEligibleBaskets) {
-        if (forecastDaPrenotare <= 0) break;
-        const reserved = Math.min(basket.animalCount, forecastDaPrenotare);
-        basket.animalCount -= reserved;
-        forecastDaPrenotare -= reserved;
-      }
-      // Il residuo a taglia target viene seminato in Sand Nursery nello stesso mese:
-      // non può quindi tornare disponibile nel percorso Forecast dei mesi successivi.
-      for (const basket of forecastEligibleBaskets) {
-        if (basket.animalCount > 0) {
-          basket.animalCount = 0;
-        }
-      }
+      // Solo la quantità pianificata manualmente viene seminata in Sand Nursery.
+      // Il residuo non assegnato resta nel pool Forecast per i mesi successivi.
+      const { seedingApplied: disponibilitaSandNursery } =
+        allocateForecastAndSandNursery(
+          forecastEligibleBaskets,
+          forecastEvadibileTarget,
+          seminaSandNurseryPianificata,
+        );
       forecastCommittedOrSeededLedger = addForecastAllocationToLedger(
         forecastCommittedOrSeededLedger,
         forecastEvadibileTarget,
@@ -448,6 +449,7 @@ export class GrowthProjectionService {
         disponibilitaForecastInizioMese: giacenzaDisponibileForecast,
         forecastEvadibileTarget,
         forecastNonCoperto,
+        seminaSandNurseryPianificata,
         disponibilitaSandNursery,
         domandaEffettiva,
         arriviSchiuditoio: hatcheryThisMonth,

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { growthProjectionService } from "./growth-projection.service";
 import { db } from "../../../db";
-import { hatcheryArrivals, projectionMortalityRates, productionTargets, lots } from "../../../../shared/schema";
+import { hatcheryArrivals, projectionMortalityRates, productionTargets, sandNurserySeedingPayloadSchema, sandNurserySeedings, lots } from "../../../../shared/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 
 const router = Router();
@@ -344,6 +344,38 @@ router.post("/production-targets", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Errore salvataggio production target:", error);
     res.status(500).json({ error: "Errore nel salvataggio del target" });
+  }
+});
+
+router.post("/sand-nursery-seedings", async (req: Request, res: Response) => {
+  try {
+    const parsed = sandNurserySeedingPayloadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Anno, mese o quantità non validi",
+      });
+    }
+    const { year, month, quantity } = parsed.data;
+
+    if (quantity === 0) {
+      await db.delete(sandNurserySeedings).where(and(
+        eq(sandNurserySeedings.year, year),
+        eq(sandNurserySeedings.month, month),
+      ));
+      return res.json({ year, month, quantity: 0 });
+    }
+
+    const [saved] = await db.insert(sandNurserySeedings)
+      .values({ year, month, quantity })
+      .onConflictDoUpdate({
+        target: [sandNurserySeedings.year, sandNurserySeedings.month],
+        set: { quantity, updatedAt: new Date() },
+      })
+      .returning();
+    res.json(saved);
+  } catch (error) {
+    console.error("Errore salvataggio semina Sand Nursery:", error);
+    res.status(500).json({ error: "Errore nel salvataggio della semina Sand Nursery" });
   }
 });
 

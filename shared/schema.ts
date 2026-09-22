@@ -1866,6 +1866,45 @@ export const insertProductionTargetSchema = createInsertSchema(productionTargets
 export type ProductionTarget = typeof productionTargets.$inferSelect;
 export type InsertProductionTarget = z.infer<typeof insertProductionTargetSchema>;
 
+// Semine mensili pianificate verso Sand Nursery.
+// Se non esiste una riga per il mese, la quantità pianificata è zero.
+export const sandNurserySeedings = pgTable("sand_nursery_seedings", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  quantity: integer("quantity").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  yearMonthUnique: uniqueIndex("sand_nursery_seedings_year_month_unique")
+    .on(table.year, table.month),
+  yearCheck: check(
+    "sand_nursery_seedings_year_check",
+    sql`${table.year} BETWEEN 2000 AND 2200`,
+  ),
+  monthCheck: check(
+    "sand_nursery_seedings_month_check",
+    sql`${table.month} BETWEEN 1 AND 12`,
+  ),
+  quantityCheck: check(
+    "sand_nursery_seedings_quantity_check",
+    sql`${table.quantity} >= 0`,
+  ),
+}));
+
+export const insertSandNurserySeedingSchema = createInsertSchema(sandNurserySeedings)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+
+export const sandNurserySeedingPayloadSchema = z.object({
+  year: z.number().int().min(2000).max(2200),
+  month: z.number().int().min(1).max(12),
+  quantity: z.number().int().min(0).max(2_147_483_647),
+});
+
+export type SandNurserySeeding = typeof sandNurserySeedings.$inferSelect;
+export type InsertSandNurserySeeding = z.infer<typeof insertSandNurserySeedingSchema>;
+
 // ===== MODULO DATI MARINI (Copernicus/Open-Meteo) =====
 
 // Storico dati marini per la zona Delta Po/Adriatico

@@ -52,6 +52,7 @@ interface MonthlyContext {
   disponibilitaForecastInizioMese: number;
   forecastEvadibileTarget: number;
   forecastNonCoperto: number;
+  seminaSandNurseryPianificata: number;
   disponibilitaSandNursery: number;
   domandaEffettiva: number;
   arriviSchiuditoio: number;
@@ -1010,7 +1011,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return `${fn(m.budgetProduzione)} − ${fn(m.forecastEvadibileTarget)} = ${fn(m.forecastNonCoperto || 0)} ${t("pc_cf_forecast_uncovered_suf")}`;
     }
     if (rk === "sand_nursery_available") {
-      return `${t("pc_cf_sand_nursery_available_pre")} ${fn(m.disponibilitaForecastInizioMese || 0)} ${t("pc_cf_sand_nursery_available_mid")} ${fn(m.forecastEvadibileTarget)} = ${fn(m.disponibilitaSandNursery || 0)} ${t("pc_cf_sand_nursery_available_suf")}`;
+      const residuo = Math.max(0, (m.disponibilitaForecastInizioMese || 0) - m.forecastEvadibileTarget);
+      return `${t("pc_cf_sand_nursery_available_pre")} min(${fn(m.seminaSandNurseryPianificata || 0)}, ${fn(residuo)}) = ${fn(m.disponibilitaSandNursery || 0)} ${t("pc_cf_sand_nursery_available_suf")}`;
     }
     if (rk === "domanda") {
       const budgetRef = m.budgetProduzione > 0 ? ` ${t("pc_cf_domanda_bref")} ${fn(m.budgetProduzione)})` : '';
@@ -1594,8 +1596,10 @@ export default function ProiezioneCrescita() {
     : ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const [showHatcheryForm, setShowHatcheryForm] = useState(false);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
+  const [showSandNurseryForm, setShowSandNurseryForm] = useState(false);
   const [hatcheryInputs, setHatcheryInputs] = useState<Record<string, string>>({});
   const [budgetInputs, setBudgetInputs] = useState<Record<string, string>>({});
+  const [sandNurseryInputs, setSandNurseryInputs] = useState<Record<string, string>>({});
   const [mortalityInput, setMortalityInput] = useState<string>("");
   const [activeMortality, setActiveMortality] = useState<number | undefined>(undefined);
   const [startMonth, setStartMonth] = useState<number>(new Date().getMonth() + 1);
@@ -1672,6 +1676,23 @@ export default function ProiezioneCrescita() {
       queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
       toast({ title: "Salvato", description: "Arrivo schiuditoio salvato" });
     }
+  });
+
+  const saveSandNursery = useMutation({
+    mutationFn: async (payload: { year: number; month: number; quantity: number }) => {
+      return apiRequest("/api/proiezione-crescita/sand-nursery-seedings", "POST", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/proiezione-crescita"] });
+      toast({ title: t("pc_sand_nursery_saved_title"), description: t("pc_sand_nursery_saved_description") });
+    },
+    onError: () => {
+      toast({
+        title: t("pc_sand_nursery_error_title"),
+        description: t("pc_sand_nursery_error_description"),
+        variant: "destructive",
+      });
+    },
   });
 
   const deleteHatchery = useMutation({
@@ -2010,6 +2031,15 @@ export default function ProiezioneCrescita() {
           <Plus className="h-3.5 w-3.5" />
           {t("pc_btn_schiu")}
         </Button>
+        <Button
+          variant={showSandNurseryForm ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs gap-1"
+          onClick={() => setShowSandNurseryForm(!showSandNurseryForm)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t("pc_btn_sand_nursery")}
+        </Button>
       </div>
 
       {showBudgetForm && (
@@ -2074,6 +2104,78 @@ export default function ProiezioneCrescita() {
                 </div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {showSandNurseryForm && (
+        <Card className="border-green-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg text-green-700 flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              {t("pc_sand_nursery_title")}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("pc_sand_nursery_description")}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {mc.map(({ year, month, monthLabel, seminaSandNurseryPianificata }) => {
+                const inputKey = `${year}-${month}`;
+                const savedValue = seminaSandNurseryPianificata || 0;
+                const displayedValue = sandNurseryInputs[inputKey] ?? String(savedValue);
+                return (
+                  <div key={inputKey} className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-muted-foreground">{monthLabel}</label>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        className={`h-8 text-sm ${savedValue > 0 ? "font-semibold text-green-700" : ""}`}
+                        value={displayedValue}
+                        onChange={e => setSandNurseryInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-green-700"
+                        onClick={() => {
+                          const quantity = Number(displayedValue);
+                          if (Number.isSafeInteger(quantity) && quantity >= 0 && quantity <= 2_147_483_647) {
+                            saveSandNursery.mutate(
+                              { year, month, quantity },
+                              {
+                                onSuccess: () => {
+                                  setSandNurseryInputs(prev => {
+                                    const next = { ...prev };
+                                    delete next[inputKey];
+                                    return next;
+                                  });
+                                },
+                              },
+                            );
+                          } else {
+                            toast({
+                              title: t("pc_sand_nursery_invalid_title"),
+                              description: t("pc_sand_nursery_invalid_description"),
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        disabled={
+                          saveSandNursery.isPending
+                          || displayedValue === String(savedValue)
+                        }
+                      >
+                        <Save className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       )}
