@@ -6,6 +6,30 @@ import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 
 const router = Router();
 
+async function ensureSandNurserySeedingsTable(): Promise<void> {
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS sand_nursery_seedings (
+      id serial PRIMARY KEY,
+      year integer NOT NULL,
+      month integer NOT NULL,
+      quantity integer NOT NULL DEFAULT 0,
+      notes text,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp,
+      CONSTRAINT sand_nursery_seedings_year_check
+        CHECK (year BETWEEN 2000 AND 2200),
+      CONSTRAINT sand_nursery_seedings_month_check
+        CHECK (month BETWEEN 1 AND 12),
+      CONSTRAINT sand_nursery_seedings_quantity_check
+        CHECK (quantity >= 0)
+    )
+  `));
+  await db.execute(sql.raw(`
+    CREATE UNIQUE INDEX IF NOT EXISTS sand_nursery_seedings_year_month_unique
+    ON sand_nursery_seedings (year, month)
+  `));
+}
+
 router.get("/", async (req: Request, res: Response) => {
   try {
     const targetSize = (req.query.targetSize as string) || 'TP-3000';
@@ -348,21 +372,21 @@ router.post("/production-targets", async (req: Request, res: Response) => {
 });
 
 router.post("/sand-nursery-seedings", async (req: Request, res: Response) => {
-  try {
-    const parsed = sandNurserySeedingPayloadSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({
-        error: "Anno, mese o quantità non validi",
-      });
-    }
-    const { year, month, quantity } = parsed.data;
+  const parsed = sandNurserySeedingPayloadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Anno, mese o quantità non validi",
+    });
+  }
+  const { year, month, quantity } = parsed.data;
 
+  const persist = async () => {
     if (quantity === 0) {
       await db.delete(sandNurserySeedings).where(and(
         eq(sandNurserySeedings.year, year),
         eq(sandNurserySeedings.month, month),
       ));
-      return res.json({ year, month, quantity: 0 });
+      return { year, month, quantity: 0 };
     }
 
     const [saved] = await db.insert(sandNurserySeedings)
@@ -372,8 +396,23 @@ router.post("/sand-nursery-seedings", async (req: Request, res: Response) => {
         set: { quantity, updatedAt: new Date() },
       })
       .returning();
-    res.json(saved);
+    return saved;
+  };
+
+  try {
+    res.json(await persist());
   } catch (error) {
+    if ((error as any)?.code === "42P01") {
+      try {
+        await ensureSandNurserySeedingsTable();
+        return res.json(await persist());
+      } catch (migrationError) {
+        console.error(
+          "Errore creazione o salvataggio tabella Sand Nursery:",
+          migrationError,
+        );
+      }
+    }
     console.error("Errore salvataggio semina Sand Nursery:", error);
     res.status(500).json({ error: "Errore nel salvataggio della semina Sand Nursery" });
   }
