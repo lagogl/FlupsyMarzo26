@@ -299,9 +299,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       color: "#16a34a",
       bgClass: "",
       textClass: "text-green-800",
-      values: mc.map(m => m.disponibilitaSandNursery || 0),
+      values: mc.map(m => m.seminaSandNurseryPianificata || 0),
       isBold: true,
       isSuccess: (colIdx: number) => (mc[colIdx]?.disponibilitaSandNursery || 0) > 0,
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        return m
+          ? (m.seminaSandNurseryPianificata || 0) > (m.disponibilitaSandNursery || 0)
+          : false;
+      },
     },
     {
       rowKey: "domanda",
