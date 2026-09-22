@@ -90,6 +90,26 @@ interface MonthStep {
 }
 
 export class GrowthProjectionService {
+  private async getSandNurseryRows(yearsNeeded: number[]) {
+    if (yearsNeeded.length === 0) return [];
+    try {
+      return await db.select()
+        .from(sandNurserySeedings)
+        .where(inArray(sandNurserySeedings.year, yearsNeeded));
+    } catch (error: any) {
+      // Compatibilità temporanea per ambienti esterni non ancora migrati:
+      // il default funzionale della semina manuale è zero, quindi la
+      // proiezione può continuare senza consumare il residuo Forecast.
+      if (error?.code === "42P01") {
+        console.warn(
+          "Tabella sand_nursery_seedings non presente: uso semina mensile predefinita a 0",
+        );
+        return [];
+      }
+      throw error;
+    }
+  }
+
 
   private buildMonthSteps(startMonth0: number, startYear: number, count: number): MonthStep[] {
     const steps: MonthStep[] = [];
@@ -150,7 +170,7 @@ export class GrowthProjectionService {
         ? db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, yearsNeeded))
         : Promise.resolve([]),
       yearsNeeded.length > 0
-        ? db.select().from(sandNurserySeedings).where(inArray(sandNurserySeedings.year, yearsNeeded))
+        ? this.getSandNurseryRows(yearsNeeded)
         : Promise.resolve([])
     ]);
 
