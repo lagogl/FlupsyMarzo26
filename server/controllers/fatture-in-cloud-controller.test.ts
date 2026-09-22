@@ -1,9 +1,40 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import express from "express";
+import type { AddressInfo } from "node:net";
+import { requireAdmin } from "../modules/system/auth";
 import {
   buildFicDeliveryRangeUpdate,
+  createFicClientSyncHandler,
   synchronizeFicClientRecord
 } from "./fatture-in-cloud-controller";
+import fattureInCloudRouter from "./fatture-in-cloud-controller";
+
+async function withHttpServer(
+  sessionUser: { id: number; username: string; role: string },
+  register: (app: express.Express) => void,
+  run: (baseUrl: string) => Promise<void>
+) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    (req as any).session = { user: sessionUser };
+    next();
+  });
+  register(app);
+
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    await run(`http://127.0.0.1:${port}`);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close(error => error ? reject(error) : resolve())
+    );
+  }
+}
 
 test("la sincronizzazione FIC senza date conserva il periodo inserito manualmente", () => {
   const ordine = {
@@ -97,4 +128,99 @@ test("la sincronizzazione clienti conserva, recupera e non richiede inutilmente 
   assert.equal(records.get(2).codiceAllevamento, "025FE999");
   assert.equal(records.get(3).codiceAllevamento, "025FE777");
   assert.deepEqual(detailCalls, [102]);
+});
+
+test("la route di sincronizzazione clienti rifiuta un utente non amministratore", async () => {
+  await withHttpServer(
+    { id: 7, username: "operatore", role: "user" },
+    app => app.use("/api/fatture-in-cloud", fattureInCloudRouter),
+    async baseUrl => {
+      const response = await fetch(`${baseUrl}/api/fatture-in-cloud/clients/sync`, {
+        method: "POST"
+      });
+      assert.equal(response.status, 403);
+    }
+  );
+});
+
+test("la sincronizzazione amministrativa restituisce le statistiche e termina il progresso con complete", async () => {
+  const notifications: Array<{ type: string; data: any }> = [];
+  const clients = [{ id: 101 }, { id: 102 }, { id: 103 }];
+  const handler = createFicClientSyncHandler({
+    async refreshToken() {},
+    async fetchClientsPage(page, perPage) {
+      assert.equal(page, 1);
+      assert.equal(perPage, 100);
+      return { data: { data: clients, current_page: 1, last_page: 1, total: 3 } };
+    },
+    async syncClient(client) {
+      return client.id === 102 ? "updated" : "created";
+    },
+    broadcast(type, data) {
+      notifications.push({ type, data });
+      return 1;
+    }
+  });
+
+  await withHttpServer(
+    { id: 1, username: "admin", role: "admin" },
+    app => app.post("/api/fatture-in-cloud/clients/sync", requireAdmin, handler),
+    async baseUrl => {
+      const response = await fetch(`${baseUrl}/api/fatture-in-cloud/clients/sync`, {
+        method: "POST"
+      });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        success: true,
+        message: "Sincronizzazione completata: 2 nuovi, 1 aggiornati",
+        stats: { creati: 2, aggiornati: 1, totale: 3 }
+      });
+    }
+  );
+
+  assert.ok(notifications.length > 0);
+  assert.deepEqual(notifications.at(-1), {
+    type: "fic_sync_progress",
+    data: {
+      message: "✅ Sincronizzazione completata: 2 nuovi, 1 aggiornati",
+      step: "complete",
+      progress: 100,
+      created: 2,
+      updated: 1,
+      total: 3
+    }
+  });
+});
+
+test("un errore FIC restituisce una risposta controllata senza dettagli sensibili", async () => {
+  const sensitiveDetail = "Bearer segreto-token database.internal";
+  const handler = createFicClientSyncHandler({
+    async refreshToken() {},
+    async fetchClientsPage() {
+      throw new Error(sensitiveDetail);
+    },
+    async syncClient() {
+      assert.fail("non deve sincronizzare clienti dopo un errore FIC");
+    },
+    broadcast() {
+      return 0;
+    }
+  });
+
+  await withHttpServer(
+    { id: 1, username: "admin", role: "admin" },
+    app => app.post("/api/fatture-in-cloud/clients/sync", requireAdmin, handler),
+    async baseUrl => {
+      const response = await fetch(`${baseUrl}/api/fatture-in-cloud/clients/sync`, {
+        method: "POST"
+      });
+      const body = await response.text();
+      assert.equal(response.status, 500);
+      assert.doesNotMatch(body, /segreto-token|database\.internal|Bearer/);
+      assert.deepEqual(JSON.parse(body), {
+        success: false,
+        message: "Errore durante la sincronizzazione dei clienti con Fatture in Cloud"
+      });
+    }
+  );
 });

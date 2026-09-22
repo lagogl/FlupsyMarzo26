@@ -50,6 +50,7 @@ import {
   getAssignedFicDdtNumber,
   getOfficialFicDdtNumber
 } from '../services/fic-ddt-response';
+import { broadcastMessage } from '../websocket';
 
 const router = express.Router();
 
@@ -704,72 +705,115 @@ export async function synchronizeFicClientRecord(
   return 'created';
 }
 
-// Sincronizzazione clienti da Fatture in Cloud
-router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    await refreshTokenIfNeeded();
-    
-    // Importa la funzione di broadcast WebSocket
-    const { broadcastMessage } = await import("../websocket");
-    
-    // Recupera tutti i clienti gestendo la paginazione
-    let allClienti: any[] = [];
-    let currentPage = 1;
-    let hasMorePages = true;
-    const perPage = 100;
-    
-    console.log('🔄 Inizio sincronizzazione clienti con paginazione...');
-    broadcastMessage("fic_sync_progress", { 
-      message: "Recupero clienti da Fatture in Cloud...", 
-      step: "fetch", 
-      progress: 0 
-    });
-    
-    while (hasMorePages) {
-      const response = await withRetry(() => 
-        apiRequest('GET', `/entities/clients?page=${currentPage}&per_page=${perPage}`)
-      );
-      
-      const pageData = response.data.data || [];
-      allClienti = allClienti.concat(pageData);
-      
-      // Estrai metadati paginazione dalla risposta con fallback robusti
-      const meta = response.data;
-      const lastPage = meta.last_page ?? ((meta.current_page && meta.total) ? Math.ceil(meta.total / perPage) : 1);
-      const total = meta.total ?? 0;
-      
-      console.log(`📄 Pagina ${currentPage}/${lastPage} - Recuperati ${pageData.length} clienti (Totale finora: ${allClienti.length}${total ? `/${total}` : ''})`);
-      
-      // Notifica progresso recupero
-      broadcastMessage("fic_sync_progress", { 
-        message: `Recupero pagina ${currentPage}/${lastPage} - ${allClienti.length} clienti finora...`, 
-        step: "fetch", 
-        progress: Math.round((currentPage / lastPage) * 30) // 0-30% per il fetch
+export type FicClientSyncRouteDependencies = {
+  refreshToken: () => Promise<unknown>;
+  fetchClientsPage: (page: number, perPage: number) => Promise<any>;
+  syncClient: (client: any) => Promise<'created' | 'updated'>;
+  broadcast: (type: string, data: any) => number;
+};
+
+export function createFicClientSyncHandler(
+  dependencies: FicClientSyncRouteDependencies
+) {
+  return async (_req: Request, res: Response) => {
+    try {
+      await dependencies.refreshToken();
+
+      let allClienti: any[] = [];
+      let currentPage = 1;
+      let hasMorePages = true;
+      const perPage = 100;
+
+      console.log('🔄 Inizio sincronizzazione clienti con paginazione...');
+      dependencies.broadcast("fic_sync_progress", {
+        message: "Recupero clienti da Fatture in Cloud...",
+        step: "fetch",
+        progress: 0
       });
-      
-      // Condizioni di stop: ultima pagina raggiunta o meno risultati di per_page
-      hasMorePages = currentPage < lastPage && pageData.length === perPage;
-      currentPage++;
-      
-      // Protezione contro loop infiniti
-      if (currentPage > 1000) {
-        console.warn('⚠️ Raggiunto limite di sicurezza (1000 pagine) - interruzione sincronizzazione');
-        break;
+
+      while (hasMorePages) {
+        const response = await dependencies.fetchClientsPage(currentPage, perPage);
+        const pageData = response.data.data || [];
+        allClienti = allClienti.concat(pageData);
+
+        const meta = response.data;
+        const lastPage = meta.last_page ?? ((meta.current_page && meta.total) ? Math.ceil(meta.total / perPage) : 1);
+        const total = meta.total ?? 0;
+
+        console.log(`📄 Pagina ${currentPage}/${lastPage} - Recuperati ${pageData.length} clienti (Totale finora: ${allClienti.length}${total ? `/${total}` : ''})`);
+        dependencies.broadcast("fic_sync_progress", {
+          message: `Recupero pagina ${currentPage}/${lastPage} - ${allClienti.length} clienti finora...`,
+          step: "fetch",
+          progress: Math.round((currentPage / lastPage) * 30)
+        });
+
+        hasMorePages = currentPage < lastPage && pageData.length === perPage;
+        currentPage++;
+        if (currentPage > 1000) {
+          console.warn('⚠️ Raggiunto limite di sicurezza (1000 pagine) - interruzione sincronizzazione');
+          break;
+        }
       }
+
+      console.log(`✅ Recuperati ${allClienti.length} clienti totali da Fatture in Cloud`);
+      dependencies.broadcast("fic_sync_progress", {
+        message: `Recuperati ${allClienti.length} clienti. Inizio sincronizzazione...`,
+        step: "sync",
+        progress: 30
+      });
+
+      let clientiAggiornati = 0;
+      let clientiCreati = 0;
+      for (let i = 0; i < allClienti.length; i++) {
+        const result = await dependencies.syncClient(allClienti[i]);
+        if (result === 'updated') clientiAggiornati++;
+        else clientiCreati++;
+
+        if ((i + 1) % 5 === 0 || i === allClienti.length - 1) {
+          const syncProgress = 30 + Math.round(((i + 1) / allClienti.length) * 70);
+          dependencies.broadcast("fic_sync_progress", {
+            message: `Sincronizzazione: ${i + 1}/${allClienti.length} clienti (${clientiCreati} nuovi, ${clientiAggiornati} aggiornati)`,
+            step: "sync",
+            progress: syncProgress,
+            current: i + 1,
+            total: allClienti.length,
+            created: clientiCreati,
+            updated: clientiAggiornati
+          });
+        }
+      }
+
+      dependencies.broadcast("fic_sync_progress", {
+        message: `✅ Sincronizzazione completata: ${clientiCreati} nuovi, ${clientiAggiornati} aggiornati`,
+        step: "complete",
+        progress: 100,
+        created: clientiCreati,
+        updated: clientiAggiornati,
+        total: allClienti.length
+      });
+
+      res.json({
+        success: true,
+        message: `Sincronizzazione completata: ${clientiCreati} nuovi, ${clientiAggiornati} aggiornati`,
+        stats: { creati: clientiCreati, aggiornati: clientiAggiornati, totale: allClienti.length }
+      });
+    } catch (error: any) {
+      console.error('Errore nella sincronizzazione clienti:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Errore durante la sincronizzazione dei clienti con Fatture in Cloud'
+      });
     }
-    
-    console.log(`✅ Recuperati ${allClienti.length} clienti totali da Fatture in Cloud`);
-    broadcastMessage("fic_sync_progress", { 
-      message: `Recuperati ${allClienti.length} clienti. Inizio sincronizzazione...`, 
-      step: "sync", 
-      progress: 30 
-    });
-    
-    let clientiAggiornati = 0;
-    let clientiCreati = 0;
-    
-    for (let i = 0; i < allClienti.length; i++) {
-      const result = await synchronizeFicClientRecord(allClienti[i], {
+  };
+}
+
+// Sincronizzazione clienti da Fatture in Cloud
+router.post('/clients/sync', requireAdmin, createFicClientSyncHandler({
+  refreshToken: refreshTokenIfNeeded,
+  fetchClientsPage: (page, perPage) => withRetry(() =>
+    apiRequest('GET', `/entities/clients?page=${page}&per_page=${perPage}`)
+  ),
+  syncClient: (client) => synchronizeFicClientRecord(client, {
         async findByFicId(id) {
           const rows = await db.select().from(clienti).where(eq(clienti.fattureInCloudId, id));
           return rows[0] ?? null;
@@ -794,48 +838,9 @@ router.post('/clients/sync', requireAdmin, async (req: Request, res: Response) =
         async insert(values) {
           await db.insert(clienti).values(values as any);
         }
-      });
-      if (result === 'updated') clientiAggiornati++;
-      else clientiCreati++;
-      
-      // Notifica progresso ogni 5 clienti o all'ultimo
-      if ((i + 1) % 5 === 0 || i === allClienti.length - 1) {
-        const syncProgress = 30 + Math.round(((i + 1) / allClienti.length) * 70); // 30-100%
-        broadcastMessage("fic_sync_progress", { 
-          message: `Sincronizzazione: ${i + 1}/${allClienti.length} clienti (${clientiCreati} nuovi, ${clientiAggiornati} aggiornati)`, 
-          step: "sync", 
-          progress: syncProgress,
-          current: i + 1,
-          total: allClienti.length,
-          created: clientiCreati,
-          updated: clientiAggiornati
-        });
-      }
-    }
-    
-    // Notifica completamento
-    broadcastMessage("fic_sync_progress", { 
-      message: `✅ Sincronizzazione completata: ${clientiCreati} nuovi, ${clientiAggiornati} aggiornati`, 
-      step: "complete", 
-      progress: 100,
-      created: clientiCreati,
-      updated: clientiAggiornati,
-      total: allClienti.length
-    });
-    
-    res.json({
-      success: true,
-      message: `Sincronizzazione completata: ${clientiCreati} nuovi, ${clientiAggiornati} aggiornati`,
-      stats: { creati: clientiCreati, aggiornati: clientiAggiornati, totale: allClienti.length }
-    });
-  } catch (error: any) {
-    console.error('Errore nella sincronizzazione clienti:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: `Errore nella sincronizzazione: ${error.message}` 
-    });
-  }
-});
+      }),
+  broadcast: broadcastMessage
+}));
 
 // Ottenere lista clienti locali
 router.get('/clients', async (req: Request, res: Response) => {
