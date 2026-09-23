@@ -21,6 +21,7 @@ export interface World {
   startDay?: number;
   deadlineMs?: number;
 }
+export interface ProposalTimings { allocationMs: number; candidateReplayMs: number; receiptReplayMs: number }
 interface Allocation extends ScenarioSale { nursery?: boolean; day?: number }
 interface Replay {
   months: Map<number, ScenarioMonth>;
@@ -28,6 +29,7 @@ interface Replay {
   applied: Record<string, number>;
   dayStock?: Record<number, number>;
   nurseryStock?: number;
+  stocksByDay?: Map<number, { dayStock: Record<number, number>; nurseryStock: number }>;
 }
 
 const eventCache = new WeakMap<World, Map<number, number[]>>();
@@ -52,7 +54,7 @@ function eventDays(world: World, n: number, firstDay: number, finalDay: number) 
 }
 
 /** Replay on event dates; daily survival ratios cover skipped days. Never changes inputs. */
-export function replay(world: World, allocations: Allocation[], stockAt?: { n: number; day: number }): Replay {
+export function replay(world: World, allocations: Allocation[], stockAt?: { n: number; day: number; days?: number[] }, fulfillmentOnly = false): Replay {
   if (world.deadlineMs && Date.now() > world.deadlineMs) throw new Error("Scenario troppo complesso: ridurre orizzonte, taglie o righe di vendita e riprovare");
   const counts = world.cohorts.map(() => 0);
   const months = new Map<number, ScenarioMonth>();
@@ -60,6 +62,7 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
   const applied: Record<string, number> = {};
   let dayStock: Record<number, number> | undefined;
   let nurseryStock: number | undefined;
+  const stocksByDay = stockAt?.days ? new Map<number, { dayStock: Record<number, number>; nurseryStock: number }>() : undefined;
   const receipts: Record<number, number> = {};
   const ordersByDate = new Map<number, Map<number, Order[]>>();
   const salesByDate = new Map<number, Map<number, Allocation[]>>();
@@ -90,10 +93,10 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
       const previousSnapshot = previous?.days?.[previousLastDay]?.survival;
       counts[i] *= (cohort.path[n]?.survival ?? 0) / (previousSnapshot || 1);
       const size = cohort.path[n]?.sizeId;
-      if (size != null) row.stockBeforeOrdersBySize![size] =
+      if (!fulfillmentOnly && size != null) row.stockBeforeOrdersBySize![size] =
         (row.stockBeforeOrdersBySize![size] ?? 0) + Math.floor(counts[i]);
       const p = cohort.path[n];
-      if (p) for (const id of world.sizes) {
+      if (!fulfillmentOnly && p) for (const id of world.sizes) {
         if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
           row.eligibleAtStartBySize![id] = (row.eligibleAtStartBySize![id] ?? 0) + Math.floor(counts[i]);
       }
@@ -122,7 +125,10 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
     const monthSales = salesByDate.get(n);
     for (const day of monthOrders?.keys() ?? []) dates.add(day);
     for (const day of monthSales?.keys() ?? []) dates.add(day);
-    if (stockAt?.n === n) dates.add(stockAt.day);
+    if (stockAt?.n === n) {
+      dates.add(stockAt.day);
+      for (const day of stockAt.days ?? []) dates.add(day);
+    }
     let previousDay = firstDay;
     for (const day of [...dates].sort((a, b) => a - b)) {
       if (world.deadlineMs && Date.now() > world.deadlineMs) throw new Error("Scenario troppo complesso: ridurre orizzonte, taglie o righe di vendita e riprovare");
@@ -144,50 +150,57 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
         else {
           row.salesRequested += sale.quantity;
           row.salesApplied += used;
-          const revenue = used * (sale.pricePerThousand ?? 0) / 1000;
-          row.revenue += revenue;
-          receipts[n + sale.paymentDelayMonths] = (receipts[n + sale.paymentDelayMonths] ?? 0) + revenue;
+          if (!fulfillmentOnly) {
+            const revenue = used * (sale.pricePerThousand ?? 0) / 1000;
+            row.revenue += revenue;
+            receipts[n + sale.paymentDelayMonths] = (receipts[n + sale.paymentDelayMonths] ?? 0) + revenue;
+          }
         }
       }
-      if (stockAt?.n === n && stockAt.day === day) {
-        dayStock = {};
-        nurseryStock = 0;
+      if (stockAt?.n === n && (stockAt.day === day || stockAt.days?.includes(day))) {
+        const stock: Record<number, number> = {};
+        let nursery = 0;
         world.cohorts.forEach((c, i) => {
           const p = c.path[n]?.days?.[day] ?? c.path[n];
-          if (p && p.animalsPerKg <= 29_999) nurseryStock! += Math.floor(counts[i]);
+          if (p && p.animalsPerKg <= 29_999) nursery += Math.floor(counts[i]);
           if (p) for (const id of world.sizes) {
             if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
-              dayStock![id] = (dayStock![id] ?? 0) + Math.floor(counts[i]);
+              stock[id] = (stock[id] ?? 0) + Math.floor(counts[i]);
           }
         });
+        if (stockAt.day === day) { dayStock = stock; nurseryStock = nursery; }
+        stocksByDay?.set(day, { dayStock: stock, nurseryStock: nursery });
       }
       previousDay = day;
     }
     row.orderShortfall = row.ordersRequested - row.ordersFulfilled;
-    for (const id of world.sizes) row.availableBySize[id] = world.cohorts.reduce((total, c, i) => {
-      const p = c.path[n]?.days?.[finalDay] ?? c.path[n];
-      return total + (p && p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1) ? Math.floor(counts[i]) : 0);
-    }, 0);
-    row.receipts = receipts[n] ?? 0;
-    row.remainingAnimals = Math.floor(counts.reduce((a, b) => a + b, 0));
-    months.set(n, row);
+    if (!fulfillmentOnly) {
+      for (const id of world.sizes) row.availableBySize[id] = world.cohorts.reduce((total, c, i) => {
+        const p = c.path[n]?.days?.[finalDay] ?? c.path[n];
+        return total + (p && p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1) ? Math.floor(counts[i]) : 0);
+      }, 0);
+      row.receipts = receipts[n] ?? 0;
+      row.remainingAnimals = Math.floor(counts.reduce((a, b) => a + b, 0));
+      months.set(n, row);
+    }
   }
-  return { months, orders, applied, dayStock, nurseryStock };
+  return { months, orders, applied, dayStock, nurseryStock, stocksByDay };
 }
 
 /** Protect EACH future order and EACH already accepted allocation, not just totals. */
-export function safeCapacity(world: World, accepted: Allocation[], candidate: Allocation, upper: number): number {
+export function safeCapacity(world: World, accepted: Allocation[], candidate: Allocation, upper: number, baseline?: Replay): number {
   const n = monthNumber(candidate.year, candidate.month);
   const day = candidate.day ?? (n === world.first ? world.startDay ?? 1 : 1);
-  const reference = replay(world, accepted, { n, day });
+  const reference = baseline ?? replay(world, accepted, { n, day }, true);
   const feasible = (q: number) => {
-    const trial = replay(world, [...accepted, { ...candidate, quantity: q }]);
+    const trial = replay(world, [...accepted, { ...candidate, quantity: q }], undefined, true);
     return (trial.applied[candidate.id] ?? 0) >= q
       && Object.entries(reference.orders).every(([id, fulfilled]) => (trial.orders[id] ?? 0) >= fulfilled)
       && Object.entries(reference.applied).every(([id, fulfilled]) => (trial.applied[id] ?? 0) >= fulfilled);
   };
-  const stock = candidate.nursery ? reference.nurseryStock ?? 0
-    : reference.dayStock?.[candidate.sizeId] ?? 0;
+  const snapshot = reference.stocksByDay?.get(day);
+  const stock = candidate.nursery ? snapshot?.nurseryStock ?? reference.nurseryStock ?? 0
+    : snapshot?.dayStock[candidate.sizeId] ?? reference.dayStock?.[candidate.sizeId] ?? 0;
   let lo = 0;
   let hi = Math.max(0, Math.floor(Math.min(upper, stock)));
   if (hi === 0 || feasible(hi)) return hi;
@@ -216,8 +229,10 @@ function bestCapacity(world: World, accepted: Allocation[], candidate: Allocatio
     }
   }
   let best = { quantity: 0, day: firstDay };
-  for (const day of [...days].sort((a, b) => a - b)) {
-    const quantity = safeCapacity(world, accepted, { ...candidate, day }, upper);
+  const orderedDays = [...days].sort((a, b) => a - b);
+  const reference = replay(world, accepted, { n, day: firstDay, days: orderedDays }, true);
+  for (const day of orderedDays) {
+    const quantity = safeCapacity(world, accepted, { ...candidate, day }, upper, reference);
     if (quantity > best.quantity) best = { quantity, day };
   }
   return best;
@@ -279,7 +294,13 @@ export function projectWorld(world: World, input: ScenarioInput, availability = 
   };
 }
 
-export function proposeSales(expected: World, prudent: World, input: ScenarioInput): ScenarioSale[] {
+export function proposeSales(expected: World, prudent: World, input: ScenarioInput, timings?: ProposalTimings): ScenarioSale[] {
+  const measure = <T>(phase: keyof ProposalTimings, operation: () => T): T => {
+    if (!timings) return operation();
+    const start = performance.now();
+    try { return operation(); }
+    finally { timings[phase] += performance.now() - start; }
+  };
   const proposed: ScenarioSale[] = [];
   const first = monthNumber(input.startYear, input.startMonth);
   const deadline = monthNumber(input.cashDeadline.year, input.cashDeadline.month);
@@ -288,11 +309,11 @@ export function proposeSales(expected: World, prudent: World, input: ScenarioInp
     .sort((a, b) => b.pricePerThousand - a.pricePerThousand || a.sizeId - b.sizeId);
   let next: ScenarioInput = { ...input, sales: input.sales.slice() };
   if (next.sales.length >= 100) return proposed;
-  let prudentAccepted = allocateScenario(prudent, next);
-  let expectedAccepted = allocateScenario(expected, next);
+  let prudentAccepted = measure("allocationMs", () => allocateScenario(prudent, next));
+  let expectedAccepted = measure("allocationMs", () => allocateScenario(expected, next));
   const receiptsByDeadline = (accepted: Allocation[]) =>
-    [...replay(prudent, accepted).months].reduce((total, [n, month]) =>
-      total + (n >= first && n <= deadline ? month.receipts : 0), 0);
+    measure("receiptReplayMs", () => [...replay(prudent, accepted).months].reduce((total, [n, month]) =>
+      total + (n >= first && n <= deadline ? month.receipts : 0), 0));
   let currentReceipts = receiptsByDeadline(prudentAccepted);
   // Earliest receipt first, best €/1000 within the month. A heuristic, not an optimum.
   for (let receipt = first; receipt <= deadline; receipt++) {
@@ -304,15 +325,15 @@ export function proposeSales(expected: World, prudent: World, input: ScenarioInp
       const candidate: ScenarioSale = { ...price, ...monthParts(at), id: `auto-${at}-${price.sizeId}-${proposed.length}`, quantity: Math.ceil(gap * 1000 / price.pricePerThousand) };
       while (next.sales.some(s => s.id === candidate.id)) candidate.id += "-n";
       const wanted = Math.min(2_000_000_000, candidate.quantity);
-      candidate.quantity = Math.min(
+      candidate.quantity = measure("candidateReplayMs", () => Math.min(
         bestCapacity(prudent, prudentAccepted, candidate, wanted).quantity,
         bestCapacity(expected, expectedAccepted, candidate, wanted).quantity,
-      );
+      ));
       if (candidate.quantity > 0) {
         proposed.push(candidate);
         next = { ...next, sales: [...next.sales, candidate] };
-        prudentAccepted = allocateScenario(prudent, next);
-        expectedAccepted = allocateScenario(expected, next);
+        prudentAccepted = measure("allocationMs", () => allocateScenario(prudent, next));
+        expectedAccepted = measure("allocationMs", () => allocateScenario(expected, next));
         currentReceipts = receiptsByDeadline(prudentAccepted);
       }
       if (next.sales.length >= 100) return proposed;

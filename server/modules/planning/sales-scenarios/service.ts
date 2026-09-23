@@ -8,7 +8,7 @@ import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepO
 import { inArray } from "drizzle-orm";
 import { activeOrdersCondition, hatcherySizeCode, scenarioOrderDeliveryMonth, scenarioOrderDeliveryDay } from "./source-data";
 import { isScenarioSaleSize, selectedScenarioSizeIds, validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
-import { monthNumber, monthParts, projectWorld, proposeSales, type World, type Cohort, type Order } from "./engine";
+import { monthNumber, monthParts, projectWorld, proposeSales, type ProposalTimings, type World, type Cohort, type Order } from "./engine";
 import { aggregateOrderCommitments, type CommitmentOrderInput } from "./order-commitment";
 
 export function businessToday() {
@@ -191,10 +191,18 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
 export async function simulate(input: ScenarioInput, automatic = false): Promise<ScenarioResult | ScenarioProposal> {
   const worlds = await loadWorlds(input, automatic);
   if (automatic && input.proposalPrices.length === 0) throw new Error("Inserire almeno un prezzo positivo in €/1.000 animali per la proposta automatica");
-  const proposedSales = automatic ? proposeSales(worlds.expected, worlds.prudent, input) : [];
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const proposedSales = automatic ? proposeSales(worlds.expected, worlds.prudent, input, timings) : [];
   const combined = { ...input, sales: [...input.sales, ...proposedSales] };
+  const projectionStart = performance.now();
   const expected = projectWorld(worlds.expected, combined);
   const prudent = projectWorld(worlds.prudent, combined);
+  if (automatic) console.info("[sales-scenarios] proposal timings (ms)", {
+    allocation: Math.round(timings.allocationMs),
+    candidateReplay: Math.round(timings.candidateReplayMs),
+    receiptReplay: Math.round(timings.receiptReplayMs),
+    finalProjections: Math.round(performance.now() - projectionStart),
+  });
   if (combined.sales.some(s => s.pricePerThousand == null)) worlds.warnings.push("Vendite senza prezzo: quantità simulate ma ricavo non valorizzato (non significa prezzo zero).");
   if (expected.totalOrderShortfall || prudent.totalOrderShortfall) worlds.warnings.push("Esistono ordini già scoperti nello scenario di base: le nuove vendite non ne peggiorano la copertura, ma non possono essere presentate come garanzia di consegna.");
   if (expected.unfulfilledSales || prudent.unfulfilledSales) worlds.warnings.push("Alcune vendite richieste sono state limitate per disponibilità o per proteggere gli ordini futuri.");
