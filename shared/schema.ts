@@ -2074,3 +2074,4 @@ export type ImmConfigRow = typeof immConfig.$inferSelect;
 // rimuove più come tabelle "fuori schema". La propagazione in produzione avviene
 // poi tramite il normale flusso di Publish (diff dev → prod).
 export * from "./lci-schema";
+export { salesScenarios } from "./sales-scenarios";

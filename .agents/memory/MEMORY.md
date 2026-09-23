@@ -47,3 +47,4 @@
 - [Limiti richieste FIC](fic-api-rate-limits.md) — sincronizzazioni consecutive possono esaurire il limite; tutte le chiamate devono essere cadenzate e rispettare Retry-After sui 429.
 - [DDT arretrati FCloud/FIC](backdated-ddt-fcloud-fic.md) — un rifiuto FCloud per data può non bloccare FIC solo se il numero locale era già anteriore nella stessa sequenza.
 - [Semina manuale Sand Nursery](sand-nursery-manual-seeding.md) — il residuo T3 Forecast resta disponibile; solo la quantità mensile inserita manualmente viene rimossa.
+- [Scenari commerciali isolati](sales-scenarios-isolation.md) — pool unico nei nuovi scenari, senza cambiare Scostamenti; disponibilità alternative e ordini futuri protetti.

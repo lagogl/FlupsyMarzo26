@@ -1,8 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  .sales-scenarios {
+    --background: 192 28% 96%; --foreground: 204 42% 15%;
+    --card: 0 0% 100%; --card-foreground: 204 42% 15%;
+    --popover: 0 0% 100%; --popover-foreground: 204 42% 15%;
+    --primary: 188 65% 26%; --primary-foreground: 0 0% 100%;
+    --secondary: 187 26% 91%; --secondary-foreground: 204 42% 15%;
+    --muted: 190 19% 93%; --muted-foreground: 202 16% 42%;
+    --accent: 39 92% 89%; --accent-foreground: 29 65% 24%;
+    --destructive: 0 66% 43%; --destructive-foreground: 0 0% 100%;
+    --border: 190 19% 82%; --input: 190 19% 82%; --ring: 188 65% 26%;
+    --radius: .65rem;
+  }
   * {
     @apply border-border;
   }
@@ -10,6 +23,14 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+}
+
+@layer components {
+  .sales-scenarios { font-family: 'Manrope', sans-serif; }
+  .sales-scenarios .mono { font-family: 'DM Mono', monospace; }
+  .sales-scenarios .table-sticky th:first-child, .sales-scenarios .table-sticky td:first-child { position: sticky; left: 0; z-index: 1; background: inherit; }
+  .sales-scenarios .table-sticky thead th { position: sticky; top: 0; z-index: 2; }
+  .sales-scenarios .table-sticky thead th:first-child { z-index: 3; }
 }
 
 /* Stili specifici per il drag and drop */

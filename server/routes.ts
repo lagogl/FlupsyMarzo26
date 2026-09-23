@@ -364,6 +364,10 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   app.use('/api/pianificazione-vendite', authModule.requireAuth, salesPlanningModule.default);
   console.log('✅ Modulo PIANIFICAZIONE VENDITE registrato su /api/pianificazione-vendite/*');
 
+  // Isolated what-if planning; no writes to orders, inventory or existing forecasts.
+  const salesScenariosModule = await import('./modules/planning/sales-scenarios');
+  app.use('/api/sales-scenarios', authModule.requireAuth, salesScenariosModule.default);
+
   // Registra il modulo SCREENING
   app.use('/api/screening', authModule.requireAuth);
   app.use('/api/screenings', authModule.requireAuth);
