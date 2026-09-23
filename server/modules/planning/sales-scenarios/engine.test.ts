@@ -10,6 +10,26 @@ const input = (sales: ScenarioSale[] = []): ScenarioInput => scenarioInputSchema
 const sale = (quantity: number, month = 1, sizeId = 1): ScenarioSale => ({
   id: `sale-${month}-${sizeId}`, year: 2027, month, sizeId, quantity, pricePerThousand: 100, paymentDelayMonths: 0,
 });
+test("restricted sale catalog keeps non-sale cohorts growing and acquired orders protected", () => {
+  const w = world();
+  w.sizes = [2];
+  w.orders = [{ key: "excluded-size-order", at: first, sizeId: 1, quantity: 100 }];
+  const result = projectWorld(w, input());
+  assert.deepEqual(Object.keys(result.months[0].availableBySize), ["2"]);
+  assert.equal(result.months[0].ordersFulfilled, 100);
+  assert.equal(result.months[1].remainingAnimals, 810);
+  assert.equal(result.months[1].availableBySize["2"], 810);
+  const automatic = input();
+  automatic.cashGoal = 100;
+  automatic.proposalPrices = [
+    { sizeId: 1, pricePerThousand: 10000, paymentDelayMonths: 0 },
+    { sizeId: 2, pricePerThousand: 100, paymentDelayMonths: 0 },
+  ];
+  const proposed = proposeSales(w, w, automatic);
+  assert.ok(proposed.length > 0);
+  assert.ok(proposed.every(s => s.sizeId === 2));
+  assert.equal(projectWorld(w, { ...automatic, sales: proposed }).totalOrderShortfall, 0);
+});
 function world(): World {
   return { first, last: first + 2, sizes: [1, 2], maxApk: { [`${first}|1`]: 30_000, [`${first + 1}|2`]: 10_000, [`${first + 2}|2`]: 10_000 },
     cohorts: [{ quantity: 1000, entry: first, path: {

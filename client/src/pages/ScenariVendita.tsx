@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSalesScenarioActions, useSalesScenarioInputs, useSalesScenarios } from "@/hooks/use-sales-scenarios";
 import { ScenarioHelp } from "@/components/ScenariVenditaHelp";
+import { SALES_SCENARIO_SIZE_CODES } from "@shared/sales-scenario-size-policy";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { SavedScenario, ScenarioInput, ScenarioMonth, ScenarioProposal, ScenarioResult, ScenarioSale } from "@shared/sales-scenarios";
 import { AlertTriangle, Check, Copy, FileDown, Loader2, Plus, RefreshCw, Save, Sparkles, Trash2, X } from "lucide-react";
@@ -23,7 +24,7 @@ const help = {
   prudentMortality: "Moltiplicatore della mortalità prudente. Per esempio 1,25 trasforma una mortalità del 3% in 3,75%: non significa mortalità del 25%.",
   prudentHatchery: "Quota prudente della produzione futura di schiuditoio: 0,8 considera disponibile l'80%.",
   saleMonth: "Mese di inizio della vendita nello scenario, secondo la convenzione del mese iniziale della proiezione.",
-  size: "Taglia scelta dal catalogo effettivo. Il codice non viene dedotto o inventato dalla simulazione.",
+  size: "Taglie di vendita ammesse: TP-2000, TP-3000, TP-4000, TP-5000, TP-6000, TP-7000, TP-8000, TP-9000 e TP-10000. Le taglie intermedie sono escluse dalle nuove vendite, ma restano nella simulazione di crescita e negli ordini acquisiti.",
   quantity: "Numero intero totale di animali, per esempio 1000000. Non sono kg e non vanno reinseriti gli ordini già acquisiti.",
   price: "Prezzo in euro per 1.000 animali. Esempio: 8 € × 1.000.000 / 1.000 = 8.000 €. Se il prezzo manuale resta vuoto, la riga non viene valorizzata.",
   delay: "Ritardo intero dell'incasso in mesi: 0 indica lo stesso mese, 1 il mese successivo.",
@@ -59,6 +60,9 @@ export default function ScenariVendita() {
   useEffect(() => { if (inputs.data && !draft) setDraft(structuredClone(inputs.data.defaults)); }, [inputs.data, draft]);
   useEffect(() => { serializedDraft.current = draft ? JSON.stringify(draft) : ""; }, [draft]);
   const sizes = inputs.data?.sizes ?? [];
+  const allowedSaleIds = new Set(sizes.map(s => s.id));
+  const excludedSales = draft?.sales.filter(s => !allowedSaleIds.has(s.sizeId)) ?? [];
+  const excludedPrices = draft?.proposalPrices.filter(s => !allowedSaleIds.has(s.sizeId)) ?? [];
   const saved = scenarios.data ?? [];
   const update = (fn: (v: ScenarioInput) => ScenarioInput) => { setDraft(current => current ? fn(current) : current); setDirty(true); setResult(null); setProposal(null); };
   const editField = <K extends keyof ScenarioInput>(key: K, value: ScenarioInput[K]) => update(v => ({ ...v, [key]: value }));
@@ -77,6 +81,15 @@ export default function ScenariVendita() {
   if (inputs.isError || !draft) return <div className="sales-scenarios m-4 rounded-xl border border-red-200 bg-red-50 p-6 text-red-800"><b>Impossibile caricare gli input commerciali.</b><button className="ml-3 underline" onClick={() => inputs.refetch()}>Riprova</button></div>;
 
   return <TooltipProvider delayDuration={200}><section className="sales-scenarios mx-auto max-w-[1650px] space-y-3 p-2 md:p-3">
+    {(excludedSales.length > 0 || excludedPrices.length > 0) && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+      <b>Lo scenario contiene taglie non più vendibili.</b>
+      <p>Sono consentite esclusivamente {SALES_SCENARIO_SIZE_CODES.join(", ")}. Nessuna riga è stata modificata automaticamente.</p>
+      {excludedSales.length > 0 && <p>Modifica la taglia o elimina le righe del piano vendite: {excludedSales.map(s => `${monthLabel(s)} (taglia ID ${s.sizeId})`).join("; ")}. Il salvataggio e il calcolo saranno rifiutati finché queste righe non saranno corrette.</p>}
+      {excludedPrices.length > 0 && <div className="mt-2">
+        <p>{excludedPrices.length} prezzi automatici riguardano taglie escluse e non possono essere utilizzati.</p>
+        <button type="button" className="mt-1 rounded border border-red-400 px-3 py-1 font-bold" onClick={() => update(v => ({ ...v, proposalPrices: v.proposalPrices.filter(p => allowedSaleIds.has(p.sizeId)) }))}>Rimuovi dalla bozza i prezzi delle taglie escluse</button>
+      </div>}
+    </div>}
     <header className="rounded-xl border border-teal-900 bg-[#123b47] px-4 py-4 text-stone-50 shadow-sm md:px-6">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-teal-200">Pianificazione commerciale</p><h1 className="mt-1 text-2xl font-extrabold tracking-tight">Scenari di vendita</h1><p className="mt-1 max-w-2xl text-sm text-teal-100">Simula incassi e copertura senza generare ordini. Le disponibilità sono alternative, non additive.</p></div><div className="flex flex-wrap gap-2"><button onClick={newScenario} className="rounded-md border border-teal-200/40 px-3 py-2 text-sm font-bold hover:bg-white/10"><Plus className="mr-1 inline h-4 w-4" />Nuovo</button><button onClick={duplicate} disabled={!draft} className="rounded-md border border-teal-200/40 px-3 py-2 text-sm font-bold hover:bg-white/10"><Copy className="mr-1 inline h-4 w-4" />Duplica</button><ScenarioHelp text={help.save}><button onClick={saveDraft} disabled={!draft || save.isPending} className="rounded-md bg-[#e8b75d] px-3 py-2 text-sm font-extrabold text-slate-900 hover:bg-[#f0c773] disabled:opacity-50"><Save className="mr-1 inline h-4 w-4" />Salva</button></ScenarioHelp></div></div>
     </header>

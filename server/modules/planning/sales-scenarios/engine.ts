@@ -136,6 +136,11 @@ export function projectWorld(world: World, input: ScenarioInput, availability = 
         }, upper) : 0;
       }
     }
+    // Replay retains every biological size for orders and growth. Only the
+    // commercial projection is restricted to the explicit sale catalog.
+    row.availableBySize = Object.fromEntries(
+      Object.entries(row.availableBySize).filter(([id]) => world.sizes.includes(Number(id))),
+    );
     months.push(row);
   }
   const receiptsByDeadline = [...result.months.entries()].filter(([n]) => n >= first && n <= deadline).reduce((s, [, m]) => s + m.receipts, 0);
@@ -153,7 +158,9 @@ export function proposeSales(expected: World, prudent: World, input: ScenarioInp
   const proposed: ScenarioSale[] = [];
   const first = monthNumber(input.startYear, input.startMonth);
   const deadline = monthNumber(input.cashDeadline.year, input.cashDeadline.month);
-  const prices = input.proposalPrices.slice().sort((a, b) => b.pricePerThousand - a.pricePerThousand || a.sizeId - b.sizeId);
+  const prices = input.proposalPrices
+    .filter(p => expected.sizes.includes(p.sizeId) && prudent.sizes.includes(p.sizeId))
+    .sort((a, b) => b.pricePerThousand - a.pricePerThousand || a.sizeId - b.sizeId);
   let next: ScenarioInput = { ...input, sales: input.sales.slice() };
   if (next.sales.length >= 100) return proposed;
   let current = projectWorld(prudent, next, false);

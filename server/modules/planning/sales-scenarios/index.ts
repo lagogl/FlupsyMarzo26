@@ -3,6 +3,8 @@ import { eq, desc } from "drizzle-orm";
 import { db } from "../../../db";
 import { salesScenarios, scenarioInputSchema } from "../../../../shared/sales-scenarios";
 import { getInputs, simulate } from "./service";
+import { loadGrowthSimulationContext } from "../../../services/growth-simulation.service";
+import { validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
 
 const router = Router();
 let calculating = false;
@@ -37,6 +39,7 @@ router.post("/", async (req, res) => {
   const parsed = scenarioInputSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Parametri scenario non validi", errors: parsed.error.flatten() });
   try {
+    validateScenarioSaleSizes(parsed.data, (await loadGrowthSimulationContext()).allSizes);
     const [row] = await db.insert(salesScenarios).values({ name: parsed.data.name, input: parsed.data }).returning();
     res.status(201).json(row);
   } catch (e) { errorResponse(res, e); }
@@ -46,6 +49,7 @@ router.put("/:id", async (req, res) => {
   const parsed = scenarioInputSchema.safeParse(req.body);
   if (!Number.isSafeInteger(id) || id <= 0 || !parsed.success) return res.status(400).json({ message: "ID o parametri scenario non validi" });
   try {
+    validateScenarioSaleSizes(parsed.data, (await loadGrowthSimulationContext()).allSizes);
     const [row] = await db.update(salesScenarios).set({ name: parsed.data.name, input: parsed.data, updatedAt: new Date() }).where(eq(salesScenarios.id, id)).returning();
     if (!row) return res.status(404).json({ message: "Scenario non trovato" });
     res.json(row);
