@@ -23,8 +23,8 @@ export function aggregateOrderCommitments(
   }>();
 
   for (const order of orders) {
-    if (!(order.quantity > 0)) continue;
-    const month = Math.max(firstMonth, order.deliveryMonth);
+    if (!(order.quantity > 0) || order.deliveryMonth < firstMonth) continue;
+    const month = order.deliveryMonth;
     const currency = String(order.currency ?? "").trim().toUpperCase();
     const total = Number(order.total);
     const validEuroValue = currency === "EUR" && Number.isFinite(total) && total > 0;

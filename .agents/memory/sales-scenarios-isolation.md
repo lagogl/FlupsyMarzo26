@@ -9,6 +9,12 @@ Gli scenari commerciali devono restare separati da Scostamenti e non registrare 
 
 **How to apply:** Riutilizzare soltanto fonti e kernel di crescita in lettura; verificare ogni vendita contro gli ordini futuri anche oltre l'orizzonte visibile, senza peggiorare gli scoperti preesistenti. Le disponibilità per mese/taglia sono alternative, non sommabili. La proposta automatica è una ricerca deterministica fattibile, non una promessa di ottimo economico; distinguere incassi da ricavi e dichiarare l'esclusione dei costi.
 
+Nel perimetro commerciale considerare solo ordini il cui primo mese di consegna cade nel mese iniziale dello scenario o dopo. Ordini precedenti ancora aperti/parziali non vanno spostati nel primo mese né mostrati fra gli impegni.
+
+**Why:** L'utente ha chiarito che gli arretrati precedenti non devono gravare sullo scenario avviato dalla giacenza reale corrente.
+
+**How to apply:** Applicare la stessa soglia temporale alla protezione degli ordini, agli importi/quantità mostrati e al file Excel; continuare a proteggere tutti gli ordini pertinenti oltre l'orizzonte visibile.
+
 Nel contesto commerciale degli scenari, “T2–T10” indica le sole taglie TP a migliaia intere: T3 significa TP-3000, T4 significa TP-4000 e così via. Non indica tutte le classi comprese tra gli estremi né le categorie aggregate del vecchio Forecast.
 
 **Why:** L'utente ha chiarito esplicitamente di escludere le taglie intermedie e poi confermato l'equivalenza commerciale T3=TP-3000, T4=TP-4000; i nomi aggregati T3/T10 nel codice storico non identificano questa scelta commerciale.

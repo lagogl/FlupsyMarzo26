@@ -6,7 +6,7 @@ import type { ScenarioInput, ScenarioInputs, ScenarioResult, ScenarioProposal } 
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 import { inArray } from "drizzle-orm";
-import { activeOrdersCondition, hatcherySizeCode } from "./source-data";
+import { activeOrdersCondition, hatcherySizeCode, scenarioOrderDeliveryMonth } from "./source-data";
 import { isScenarioSaleSize, selectedScenarioSizeIds, validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
 import { monthNumber, monthParts, projectWorld, proposeSales, type World, type Cohort, type Order } from "./engine";
 import { aggregateOrderCommitments, type CommitmentOrderInput } from "./order-commitment";
@@ -19,7 +19,7 @@ export function businessToday() {
 const commonWarnings = [
   "Simulazione separata: non modifica giacenze, ordini, Forecast o semine operative.",
   "Quantità commerciali alternative, NON sommabili tra mesi e taglie. Ogni vendita viene verificata contro tutti gli ordini futuri caricati.",
-  "Vendite e consegne sono valutate sulla disponibilità all'inizio del mese (oggi per il mese corrente). Gli ordini sono riservati integralmente al primo mese di consegna: ipotesi cautelativa.",
+  "Vendite e consegne sono valutate sulla disponibilità all'inizio del mese (oggi per il mese corrente). Solo gli ordini con primo mese di consegna dal mese iniziale dello scenario in poi sono riservati; gli ordini precedenti aperti o parziali non sono riportati in avanti.",
   "Gli arrivi futuri entrano a inizio mese; gli arrivi già avvenuti sono compresi nell'inventario e non vengono aggiunti nuovamente.",
   "Incassi e ricavi riguardano solo le vendite dello scenario; nessun margine, costo o incasso degli ordini acquisiti è inventato. Incassi oltre l'orizzonte non inclusi nei totali.",
   "Le ipotesi prudenziali sono coefficienti espliciti, non una garanzia statistica. Le semine di questo scenario sono indipendenti da quelle operative.",
@@ -54,25 +54,30 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
   ]);
   const orders: Order[] = [];
   const commitmentInputs: CommitmentOrderInput[] = [];
+  let excludedEarlierOrders = 0;
+  let hasPartialFutureOrders = false;
   validateScenarioSaleSizes(input, ctx.allSizes);
   const warnings = [...commonWarnings];
   warnings.push("SGR: coefficienti giornalieri configurati per mese/taglia, con ripiego sul valore mensile o sulla media disponibile dove manca il dato specifico.");
   for (const order of rawOrders) {
     const quantity = order.quantitaTotale || order.quantita || 0;
     if (quantity <= 0) continue;
+    const date = order.dataInizioConsegna || order.dataConsegna || order.dataFineConsegna;
+    let at: number | null;
+    try { at = scenarioOrderDeliveryMonth(date, first); }
+    catch { throw new Error(`Ordine ${order.id}: data consegna assente/non valida. Correggere l'ordine prima di simulare`); }
+    if (at === null) { excludedEarlierOrders++; continue; }
     const code = productionForecastService.normalizeTagliaCode(order.tagliaRichiesta);
     const size = ctx.allSizes.find(s => s.code === code);
-    const date = order.dataInizioConsegna || order.dataConsegna || order.dataFineConsegna;
-    if (!size || !date) throw new Error(`Ordine ${order.id}: taglia o data consegna assente/non riconosciuta. Correggere l'ordine prima di simulare`);
-    const [year, month] = String(date).split("-").map(Number);
-    const at = Math.max(first, monthNumber(year, month));
-    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12 || !Number.isFinite(at)) throw new Error(`Data non valida nell'ordine ${order.id}`);
+    if (!size) throw new Error(`Ordine ${order.id}: taglia non riconosciuta. Correggere l'ordine prima di simulare`);
     if (at > first + 59) throw new Error("Esistono ordini oltre 60 mesi: impossibile garantire la protezione completa con questo orizzonte di calcolo");
     orders.push({ key: String(order.id), at, sizeId: size.id, quantity });
-    commitmentInputs.push({ quantity, deliveryMonth: monthNumber(year, month), total: order.totale, currency: order.valuta });
+    commitmentInputs.push({ quantity, deliveryMonth: at, total: order.totale, currency: order.valuta });
+    if (order.stato === "Parziale") hasPartialFutureOrders = true;
   }
   const orderCommitments = aggregateOrderCommitments(commitmentInputs, first);
-  if (rawOrders.some(o => o.stato === "Parziale")) warnings.push("Gli ordini parziali sono riservati per l'intera quantità registrata, in via cautelativa (nessuna deduzione di consegne non certificate).");
+  if (excludedEarlierOrders) warnings.push(`${excludedEarlierOrders} ordini con prima consegna antecedente al mese iniziale esclusi anche se ancora aperti o parziali.`);
+  if (hasPartialFutureOrders) warnings.push("Gli ordini parziali futuri sono riservati per l'intera quantità registrata, in via cautelativa (nessuna deduzione di consegne non certificate).");
   const last = Math.max(first + input.horizon - 1, ...orders.map(o => o.at));
   const years = [...new Set(Array.from({ length: last - first + 1 }, (_, i) => monthParts(first + i).year))];
   const arrivals = await db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, years));

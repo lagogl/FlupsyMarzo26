@@ -26,13 +26,12 @@ test("missing or non-EUR value nulls the whole month without partial value", () 
   });
 });
 
-test("aggregates months, skips empty orders, and clamps delivery before scenario start", () => {
+test("aggregates months and excludes orders before scenario start rather than moving them", () => {
   assert.deepEqual(aggregateOrderCommitments([
     order(10, first - 3, 5),
     order(20, first + 1, 0),
     order(0, first + 1, 99),
   ], first), {
-    [first]: { animals: 10, valueEuro: 5, valuedAnimals: 10, missingValueAnimals: 0 },
     [first + 1]: { animals: 20, valueEuro: null, valuedAnimals: 0, missingValueAnimals: 20 },
   });
 });
