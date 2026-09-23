@@ -47,7 +47,7 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
     <header className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
         <h2 className="text-lg font-extrabold text-slate-900">Disponibilità commerciale</h2>
-        <p className="mt-1 max-w-3xl text-sm text-slate-600">Per ogni taglia, la ripartizione a inizio mese distingue taglia esatta e animali fisicamente più grandi, anche se non selezionati. <b className="text-[#0d5b58]">Vendibile: taglia o superiore</b> è un'unica capacità protetta nel mese, con il giorno in cui è raggiunta. Non sommare cifre, celle o mesi.</p>
+        <p className="mt-1 max-w-3xl text-sm text-slate-600">Per ogni taglia, lo stock a inizio mese distingue taglia esatta e animali fisicamente più grandi, anche se non selezionati. <b className="text-[#0d5b58]">Ancora vendibile per nuove vendite</b> indica quanti animali della taglia richiesta o superiore si possono vendere in più nel mese, senza lasciare scoperti gli ordini acquisiti (anche futuri) o le vendite già previste. Non sommare cifre, celle o mesi.</p>
         <p className="mt-1 max-w-3xl text-xs text-amber-800">Gli ordini acquisiti mostrano quantità ordinate e valore totale degli ordini nel primo mese di consegna, anche per taglie non selezionate. Non indicano animali già disponibili, né nuovi incassi. Valori IVA inclusa/esclusa non determinati.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -62,7 +62,7 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
       <div className="grid gap-2 border-b border-slate-100 bg-[#f7faf8] p-3 md:grid-cols-3">
         <Summary label="Modalità" value={mode === "prudent" ? "Prudente" : "Atteso"} detail="Le quantità seguono questa ipotesi." />
         <Summary label="Mesi disponibili" value={amount.format(availableMonths)} detail={`su ${amount.format(projection.months.length)} mesi di scenario`} />
-        <Summary label="Massima quantità in una singola cella" value={peak ? `${amount.format(peak.animals)} animali` : "—"} detail={peak ? `${peak.size.code} · ${monthLabel(peak.month)}${peak.value === null ? " · non valorizzato" : ` · ${money.format(peak.value)} stimati`}` : "Nessuna disponibilità"} />
+        <Summary label="Massima nuova vendita in una cella" value={peak ? `${amount.format(peak.animals)} animali` : "—"} detail={peak ? `${peak.size.code} · ${monthLabel(peak.month)}${peak.value === null ? " · non valorizzato" : ` · ${money.format(peak.value)} stimati`}` : "Nessuna nuova vendita disponibile"} />
       </div>
       <div className="border-b border-slate-100 bg-slate-50 p-3 sm:p-4">
         <CommercialScenarioOverview projection={projection} sizes={commercialSizes} draft={draft} />
@@ -74,11 +74,11 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
       </div>
       <div className="overflow-x-auto">
           <table className="w-full min-w-[1440px] border-separate border-spacing-0 text-left text-sm">
-          <caption className="sr-only">Matrice disponibilità commerciale {mode}: taglia esatta e più grandi a inizio mese, capacità protetta della taglia o superiore e giorno di vendita, con ordini acquisiti.</caption>
+          <caption className="sr-only">Matrice disponibilità commerciale {mode}: taglia esatta e più grandi a inizio mese, animali ancora vendibili per nuove vendite della taglia o superiore e giorno di vendita, con ordini acquisiti.</caption>
           <thead className="sticky top-0 z-20 bg-[#eaf1ee] text-xs uppercase tracking-wide text-slate-600">
             <tr>
               <th scope="col" className="sticky left-0 z-30 min-w-36 border-b border-r border-slate-200 bg-[#eaf1ee] px-3 py-3">Mese</th>
-               {commercialSizes.map((size) => <th key={size.id} scope="col" className="min-w-56 border-b border-r border-slate-200 px-3 py-3 text-center"><span className="block font-extrabold text-[#123b47]">{size.code}</span><span className="normal-case font-medium text-slate-500">taglia o superiore · vendibile nel mese</span></th>)}
+               {commercialSizes.map((size) => <th key={size.id} scope="col" className="min-w-56 border-b border-r border-slate-200 px-3 py-3 text-center"><span className="block font-extrabold text-[#123b47]">{size.code}</span><span className="normal-case font-medium text-slate-500">taglia o superiore · nuove vendite</span></th>)}
               <th scope="col" className="min-w-32 border-b border-r border-slate-200 bg-[#fff8e8] px-3 py-3 text-center"><span className="block font-extrabold text-amber-900">Ordini acquisiti</span><span className="normal-case font-medium text-amber-800">animali</span></th>
               <th scope="col" className="min-w-36 border-b border-r border-slate-200 bg-[#fff8e8] px-3 py-3 text-center"><span className="block font-extrabold text-amber-900">Ordini acquisiti</span><span className="normal-case font-medium text-amber-800">valore €</span></th>
               <th scope="col" className="min-w-32 border-b border-slate-200 px-3 py-3">Scoperto ordini</th>
@@ -95,7 +95,7 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
           </tbody>
         </table>
       </div>
-        <footer className="border-t border-slate-100 px-4 py-3 text-xs text-slate-600">A inizio mese: taglia esatta e animali fisicamente più grandi, prima degli ordini del mese (oggi per il mese corrente). Vendibile nel mese: taglia richiesta o superiore al giorno indicato, protetta rispetto agli ordini alle rispettive date. Le celle sono alternative: gli stessi animali possono coprire più taglie, quindi non sommarle né calcolare lo scoperto sottraendo una colonna. Il valore usa il prezzo della taglia richiesta, non una quotazione della taglia effettiva superiore. Senza prezzo: non valorizzato.</footer>
+        <footer className="border-t border-slate-100 px-4 py-3 text-xs text-slate-600">A inizio mese: taglia esatta e animali fisicamente più grandi, prima degli ordini del mese (oggi per il mese corrente). Ancora vendibile: quantità aggiuntiva per nuove vendite della taglia richiesta o superiore al giorno indicato, mantenendo coperti gli ordini acquisiti alle rispettive date e le vendite dello scenario. Non è tutto lo stock iniziale. Le celle sono alternative: gli stessi animali possono coprire più taglie, quindi non sommarle né calcolare lo scoperto sottraendo una colonna. Il valore usa il prezzo della taglia richiesta, non una quotazione della taglia effettiva superiore. Senza prezzo: non valorizzato.</footer>
     </>}
   </section>;
 }
@@ -108,12 +108,12 @@ function AvailabilityCell({ stock, eligible, animals, day, price, size, month }:
   const value = estimatedSalesValue(animals, price);
   const bigger = stock === null || eligible === null ? null : Math.max(0, eligible - stock);
   const timing = animals > 0 ? day === null ? "ricalcolare per la data" : `il giorno ${day}` : "";
-  const exact = `a inizio mese ${bigger === null ? "ricalcolare lo scenario" : `${exactAmount.format(stock!)} della taglia, ${exactAmount.format(bigger)} più grandi`}; vendibile taglia o superiore ${exactAmount.format(animals)} animali ${timing}${value === null ? "; valore stimato non valorizzato: prezzo non disponibile" : `; valore stimato ${exactMoney.format(value)}`}`;
+  const exact = `a inizio mese ${bigger === null ? "ricalcolare lo scenario" : `${exactAmount.format(stock!)} della taglia, ${exactAmount.format(bigger)} più grandi`}; ancora vendibili per nuove vendite della taglia o superiore ${exactAmount.format(animals)} animali ${timing}${value === null ? "; valore stimato non valorizzato: prezzo non disponibile" : `; valore stimato ${exactMoney.format(value)}`}`;
   return <td className="border-b border-r border-slate-200 px-3 py-2.5 text-right align-middle" title={exact}>
     <span className="sr-only">{month}, {size}: {exact}</span>
     <div aria-hidden="true" className="flex items-baseline justify-between gap-2 text-xs text-slate-600"><span>Taglia esatta · inizio</span><span className="font-mono font-semibold text-slate-800">{stock === null ? "ricalcolare" : amount.format(stock)}</span></div>
     <div aria-hidden="true" className="flex items-baseline justify-between gap-2 text-xs text-violet-800"><span>Più grandi · inizio</span><span className="font-mono font-semibold">{bigger === null ? "ricalcolare" : amount.format(bigger)}</span></div>
-    <div aria-hidden="true" className="mt-1 flex items-baseline justify-between gap-2 border-t border-slate-100 pt-1 text-xs text-[#0d5b58]"><span>Vendibile (≥ taglia)</span><span className={`font-mono text-sm font-extrabold ${animals > 0 ? "text-[#0d5b58]" : "text-slate-500"}`}>{amount.format(animals)}</span></div>
+    <div aria-hidden="true" className="mt-1 flex items-baseline justify-between gap-2 border-t border-slate-100 pt-1 text-xs text-[#0d5b58]"><span>Nuove vendite (≥ taglia)</span><span className={`font-mono text-sm font-extrabold ${animals > 0 ? "text-[#0d5b58]" : "text-slate-500"}`}>{amount.format(animals)}</span></div>
     {animals > 0 && <div aria-hidden="true" className="text-xs text-[#0d5b58]">{timing}</div>}
     <div aria-hidden="true" className={`mt-0.5 text-xs font-semibold ${value === null ? "text-amber-800" : "text-slate-500"}`}>{value === null ? "non valorizzato" : money.format(value)} stimati</div>
   </td>;

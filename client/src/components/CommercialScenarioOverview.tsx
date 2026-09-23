@@ -52,9 +52,9 @@ export function CommercialScenarioOverview({ projection, sizes, draft }: Props) 
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="commercial-overview-title">
       <header className="border-b border-slate-100 bg-[#f7faf8] px-4 py-4 sm:px-5">
         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0d5b58]">Vista operatore · {projection.months.length} mesi</p>
-        <h2 id="commercial-overview-title" className="mt-1 text-lg font-extrabold text-[#123b47]">Copertura ordini e capacità protetta</h2>
+        <h2 id="commercial-overview-title" className="mt-1 text-lg font-extrabold text-[#123b47]">Ordini acquisiti e nuove vendite possibili</h2>
         <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">
-          Seleziona un mese per leggere stock biologico e vendita possibile per ogni taglia. Le taglie sono alternative: le quantità tra schede diverse descrivono gli stessi animali possibili e non vanno sommate.
+          Seleziona un mese: lo stock biologico a inizio mese è distinto dagli animali ancora vendibili. «Ancora vendibile» indica quanto puoi aggiungere come nuova vendita, mantenendo coperti gli ordini acquisiti (anche futuri) e le vendite già inserite nello scenario. Le taglie sono alternative: non sommare le quantità tra schede.
         </p>
       </header>
 
@@ -88,7 +88,7 @@ export function CommercialScenarioOverview({ projection, sizes, draft }: Props) 
                   {month.orderShortfall > 0 ? `Scoperto ${integer.format(month.orderShortfall)}` : month.ordersRequested > 0 ? "Ordini coperti" : "Nessun ordine"}
                 </span>
                 <span className={`mt-1 block text-[11px] font-semibold ${hasCapacity ? "text-[#0d5b58]" : hasStock ? "text-amber-800" : "text-slate-500"}`}>
-                  {hasCapacity ? "Nuove vendite: sì" : hasStock ? "Stock, vendibile: 0" : "Nuove vendite: 0"}
+                  {hasCapacity ? "Nuove vendite: sì" : hasStock ? "Stock presente · nuove vendite: 0" : "Nuove vendite: 0"}
                 </span>
               </button>
             );
@@ -111,7 +111,7 @@ export function CommercialScenarioOverview({ projection, sizes, draft }: Props) 
         <OrderSummary month={selectedMonth} />
         <div className="mt-5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-sm font-extrabold text-[#123b47]">Capacità per taglia richiesta</h3>
+            <h3 className="text-sm font-extrabold text-[#123b47]">Stock e nuove vendite per taglia richiesta</h3>
             <p className="text-xs text-slate-500">Ogni scheda è un'alternativa, non una quota da sommare</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -179,9 +179,9 @@ function SizeCard({ month, size, draft }: { month: ScenarioMonth; size: Commerci
         <div><span className="block text-slate-500">Fisicamente più grandi</span><strong className="font-mono text-slate-800">{larger === null ? "ricalcolare" : integer.format(larger)}</strong></div>
       </div>
       <div className="mt-3 rounded-md border border-[#b7d9c9] bg-[#f0f8f3] p-2.5">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-[#0d5b58]">Capacità protetta per nuova vendita</p>
+        <p className="text-[10px] font-bold uppercase tracking-wide text-[#0d5b58]">Ancora vendibile per nuove vendite</p>
         <p className="mt-0.5 font-mono text-xl font-extrabold text-[#0d5b58]">{integer.format(sellable)} <span className="font-sans text-xs font-bold">animali · taglia o superiore</span></p>
-        <p className="text-xs text-[#27695e]">{sellable > 0 ? day === null ? "Giorno: da ricalcolare" : `Primo giorno ottenibile: ${day}` : "Nessuna capacità protetta nel mese"}</p>
+        <p className="text-xs text-[#27695e]">{sellable > 0 ? day === null ? "Giorno: da ricalcolare" : `Primo giorno ottenibile: ${day}` : "Nessun animale in più vendibile nel mese"}</p>
       </div>
       <p className="mt-2 text-xs text-slate-500">Valore nuove vendite: {value === null ? "non valorizzato" : `${euro.format(value)} stimati`} · prezzo della taglia richiesta, non della taglia effettiva superiore.</p>
     </article>

@@ -34,7 +34,9 @@ test("operator overview separates order coverage, biological stock, and protecte
   for (const value of ["29.000.000", "10.000.000", "19.000.000", "3.034.227", "2.669.609", "1.816.008", "210.400"]) {
     assert.ok(html.includes(value), `missing ${value}`);
   }
-  assert.match(html, /Stock, vendibile: 0/);
-  assert.match(html, /Nessuna capacità protetta nel mese/);
-  assert.match(html, /le quantità tra schede diverse.*non vanno sommate/);
+  assert.match(html, /Stock presente · nuove vendite: 0/);
+  assert.match(html, /Nessun animale in più vendibile nel mese/);
+  assert.match(html, /Ancora vendibile per nuove vendite/);
+  assert.match(html, /ordini acquisiti \(anche futuri\)/);
+  assert.match(html, /Le taglie sono alternative: non sommare le quantità tra schede/);
 });
