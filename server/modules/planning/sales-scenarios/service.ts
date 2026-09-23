@@ -6,7 +6,7 @@ import type { ScenarioInput, ScenarioInputs, ScenarioResult, ScenarioProposal } 
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 import { inArray } from "drizzle-orm";
-import { activeOrdersCondition, hatcherySizeCode, scenarioOrderDeliveryMonth } from "./source-data";
+import { activeOrdersCondition, hatcherySizeCode, scenarioOrderDeliveryMonth, scenarioOrderDeliveryDay } from "./source-data";
 import { isScenarioSaleSize, selectedScenarioSizeIds, validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
 import { monthNumber, monthParts, projectWorld, proposeSales, type World, type Cohort, type Order } from "./engine";
 import { aggregateOrderCommitments, type CommitmentOrderInput } from "./order-commitment";
@@ -19,7 +19,7 @@ export function businessToday() {
 const commonWarnings = [
   "Simulazione separata: non modifica giacenze, ordini, Forecast o semine operative.",
   "Quantità commerciali alternative, NON sommabili tra mesi e taglie. Ogni vendita viene verificata contro tutti gli ordini futuri caricati.",
-  "Vendite e consegne sono valutate sulla disponibilità all'inizio del mese (oggi per il mese corrente). Solo gli ordini con primo mese di consegna dal mese iniziale dello scenario in poi sono riservati; gli ordini precedenti aperti o parziali non sono riportati in avanti.",
+  "Le consegne sono valutate alla data prevista; le vendite mensili sono collocate al giorno con massima capacità protetta nella taglia. Lo stock a inizio mese resta distinto dalle opportunità maturate dopo. Solo gli ordini con primo mese di consegna dal mese iniziale dello scenario in poi sono riservati.",
   "Gli arrivi futuri entrano a inizio mese; gli arrivi già avvenuti sono compresi nell'inventario e non vengono aggiunti nuovamente.",
   "Incassi e ricavi riguardano solo le vendite dello scenario; nessun margine, costo o incasso degli ordini acquisiti è inventato. Incassi oltre l'orizzonte non inclusi nei totali.",
   "Le ipotesi prudenziali sono coefficienti espliciti, non una garanzia statistica. Le semine di questo scenario sono indipendenti da quelle operative.",
@@ -71,7 +71,7 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
     const size = ctx.allSizes.find(s => s.code === code);
     if (!size) throw new Error(`Ordine ${order.id}: taglia non riconosciuta. Correggere l'ordine prima di simulare`);
     if (at > first + 59) throw new Error("Esistono ordini oltre 60 mesi: impossibile garantire la protezione completa con questo orizzonte di calcolo");
-    orders.push({ key: String(order.id), at, sizeId: size.id, quantity });
+    orders.push({ key: String(order.id), at, day: Math.max(at === first ? today.day : 1, scenarioOrderDeliveryDay(date!)), sizeId: size.id, quantity });
     commitmentInputs.push({ quantity, deliveryMonth: at, total: order.totale, currency: order.valuta });
     if (order.stato === "Parziale") hasPartialFutureOrders = true;
   }
@@ -93,7 +93,12 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
       if (range) ranges[`${n}|${s.id}`] = range.maxAnimalsPerKg;
     }
   }
-  for (const order of orders) if (!ranges[`${order.at}|${order.sizeId}`]) throw new Error(`Ordine ${order.key}: range taglia non valido alla consegna`);
+  for (const order of orders) {
+    const { year, month } = monthParts(order.at);
+    const range = findRangeForSize(order.sizeId, new Date(year, month - 1, order.day!, 12), ctx.sizeRangeVersions);
+    if (!range) throw new Error(`Ordine ${order.key}: range taglia non valido alla consegna`);
+    ranges[`${order.at}|${order.day}|${order.sizeId}`] = range.maxAnimalsPerKg;
+  }
   for (const sale of input.sales) if (!ranges[`${monthNumber(sale.year, sale.month)}|${sale.sizeId}`]) throw new Error(`Vendita ${sale.id}: range taglia non valido nel mese`);
   const buildDeadline = Date.now() + 20_000;
   const build = (prudent: boolean): World => {
@@ -138,11 +143,14 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
         const day = n === first ? today.day : 1;
         const date = new Date(year, month - 1, day, 12);
         const size = findProjectedSize(weight, date, ctx.sizeRangeVersions);
-        path[n] = { survival, sizeId: size?.sizeId ?? null, animalsPerKg: 1_000_000 / weight };
+        const monthPath: Cohort["path"][number] = { survival, sizeId: size?.sizeId ?? null, animalsPerKg: 1_000_000 / weight, days: {} };
+        path[n] = monthPath;
         survival = 1;
         const days = new Date(year, month, 0).getDate();
         for (let d = day; d <= days; d++) {
           const dayDate = new Date(year, month - 1, d, 12);
+          const dailySize = findProjectedSize(weight, dayDate, ctx.sizeRangeVersions);
+          monthPath.days![d] = { survival, sizeId: dailySize?.sizeId ?? null, animalsPerKg: 1_000_000 / weight };
           const growthSize = findProjectedSize(weight, dayDate, ctx.sizeRangeVersions);
           const monthName = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"][month - 1];
           if (!Object.keys(ctx.sgrFallbackByMonth).length
@@ -166,7 +174,7 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
     if (fallbackMortality && !warnings.some(w => w.startsWith("Mortalità"))) warnings.push("Mortalità non configurata per alcune combinazioni mese/taglia: applicato fallback esplicito 3% mensile, moltiplicato per il coefficiente dello scenario.");
     if (!Object.keys(ctx.sgrByMonthAndSize).length && !Object.keys(ctx.sgrFallbackByMonth).length) throw new Error("SGR non configurati: impossibile produrre una previsione attendibile");
     return {
-      first, last, cohorts, orders,
+      first, last, startDay: today.day, cohorts, orders,
       orderCommitments,
       maxApk: ranges, sizes: selectedScenarioSizeIds(input, ctx.allSizes),
     };

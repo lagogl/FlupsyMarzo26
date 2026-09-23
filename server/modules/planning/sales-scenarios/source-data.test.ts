@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { activeOrdersCondition, hatcherySizeCode, scenarioOrderDeliveryMonth } from "./source-data";
+import { activeOrdersCondition, hatcherySizeCode, scenarioOrderDeliveryMonth, scenarioOrderDeliveryDay } from "./source-data";
 
 test("legacy T1 arrivals use TP-300 without guessing other aggregate sizes", () => {
   assert.equal(hatcherySizeCode("T1"), "TP-300");
@@ -23,7 +23,9 @@ test("only orders due in the starting month or later are included, irrespective 
   assert.equal(scenarioOrderDeliveryMonth("2026-08-31", first), null);
   assert.equal(scenarioOrderDeliveryMonth("2026-09-01", first), first);
   assert.equal(scenarioOrderDeliveryMonth("2026-09-30", first), first);
+  assert.equal(scenarioOrderDeliveryDay("2026-09-30"), 30);
   assert.equal(scenarioOrderDeliveryMonth("2027-01-01", first), 2027 * 12);
   assert.throws(() => scenarioOrderDeliveryMonth(null, first), /mancante/);
   assert.throws(() => scenarioOrderDeliveryMonth("not-a-date", first), /non valida/);
+  assert.throws(() => scenarioOrderDeliveryMonth("2026-09-31", first), /non valida/);
 });

@@ -46,9 +46,11 @@ export interface ScenarioMonth {
   /** Biological stock by exact size at month start, after growth and earlier
    * months' allocations, but before this month's orders and sales. */
   stockBeforeOrdersBySize?: Record<string, number>;
-  /** All stock eligible to fulfil the chosen size (exact or physically larger)
-   * at month start, before this month's orders and sales. */
+  /** All stock eligible for the requested size or larger at month start. */
   eligibleAtStartBySize?: Record<string, number>;
+  /** Best protected alternative for a new sale in the month; day is the
+   * first day attaining that capacity. Absent on legacy projections. */
+  availabilityDayBySize?: Record<string, number>;
   ordersRequested: number; ordersFulfilled: number; orderShortfall: number;
   orderCommitment?: {
     animals: number;

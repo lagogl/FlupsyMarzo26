@@ -29,6 +29,9 @@ export function availabilityForSize(month: ScenarioMonth, size: CommercialSize):
   return month.availableBySize[String(size.id)] ?? month.availableBySize[size.code] ?? 0;
 }
 
+export function availabilityDayForSize(month: ScenarioMonth, size: CommercialSize): number | null {
+  return month.availabilityDayBySize?.[String(size.id)] ?? null;
+}
 /** Null means the result predates this calculation; a missing size in a
  * current result means zero stock, not missing data. */
 export function stockBeforeOrdersForSize(month: ScenarioMonth, size: CommercialSize): number | null {

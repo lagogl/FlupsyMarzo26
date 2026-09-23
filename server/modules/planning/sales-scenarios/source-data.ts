@@ -15,13 +15,19 @@ export function hatcherySizeCode(category: string): string {
 export function scenarioOrderDeliveryMonth(date: string | Date | null, firstMonth: number): number | null {
   if (!date) throw new Error("Data consegna ordine mancante");
   const text = date instanceof Date ? date.toISOString() : String(date);
-  const match = /^(\d{4})-(\d{2})-\d{2}/.exec(text);
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:$|T| )/.exec(text);
   if (!match) throw new Error("Data consegna ordine non valida");
   const year = Number(match[1]);
   const month = Number(match[2]);
-  if (year < 2020 || year > 2200 || month < 1 || month > 12) throw new Error("Data consegna ordine non valida");
+  const day = Number(match[3]);
+  if (year < 2020 || year > 2200 || month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) throw new Error("Data consegna ordine non valida");
   const at = monthNumber(year, month);
   return at < firstMonth ? null : at;
+}
+
+export function scenarioOrderDeliveryDay(date: string | Date): number {
+  const text = date instanceof Date ? date.toISOString() : String(date);
+  return Number(/^(\d{4})-(\d{2})-(\d{2})/.exec(text)![3]);
 }
 
 // NULL cancellation is not a cancellation. Unknown/null states remain reserved

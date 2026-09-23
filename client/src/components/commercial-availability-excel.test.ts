@@ -11,6 +11,7 @@ test("xlsx keeps beginning-of-month stock separate from new-sale capacity and or
       stockBeforeOrdersBySize: { "7": 250_000 },
       eligibleAtStartBySize: { "7": 325_000 },
       availableBySize: { "7": 30_000 },
+      availabilityDayBySize: { "7": 18 },
       ordersRequested: 200_000, ordersFulfilled: 180_000, orderShortfall: 20_000,
       orderCommitment: { animals: 200_000, valueEuro: 4000, valuedAnimals: 200_000, missingValueAnimals: 0 },
       salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0,
@@ -32,8 +33,9 @@ test("xlsx keeps beginning-of-month stock separate from new-sale capacity and or
   assert.equal(sheet.getCell("B2").value, 250_000);
   assert.equal(sheet.getCell("C2").value, 75_000);
   assert.equal(sheet.getCell("D2").value, 30_000);
-  assert.equal(sheet.getCell("E2").value, 300);
-  assert.equal(sheet.getCell("F2").value, 200_000);
-  assert.equal(sheet.getCell("G2").value, 4000);
-  assert.equal(sheet.getCell("H2").value, 20_000);
+  assert.equal(sheet.getCell("E2").value, 18);
+  assert.equal(sheet.getCell("F2").value, 300);
+  assert.equal(sheet.getCell("G2").value, 200_000);
+  assert.equal(sheet.getCell("H2").value, 4000);
+  assert.equal(sheet.getCell("I2").value, 20_000);
 });

@@ -127,6 +127,20 @@ test("nursery uses same stock pool and protects future orders", () => {
   assert.equal(result.months[0].sandNurseryApplied, 100);
   assert.equal(result.totalOrderShortfall, 0);
 });
+
+test("nursery can use eligible unclassified cohorts without losing them from its capacity bound", () => {
+  const w = world();
+  w.cohorts = [{ quantity: 1000, entry: first, path: {
+    [first]: { survival: 1, sizeId: null, animalsPerKg: 20_000 },
+    [first + 1]: { survival: 1, sizeId: null, animalsPerKg: 20_000 },
+    [first + 2]: { survival: 1, sizeId: null, animalsPerKg: 20_000 },
+  } }];
+  const v = input();
+  v.sandNursery = [{ year: 2027, month: 1, quantity: 500 }];
+  const result = projectWorld(w, v);
+  assert.equal(result.months[0].sandNurseryApplied, 500);
+  assert.equal(result.months[0].remainingAnimals, 500);
+});
 test("availability is a protected alternative and sales cannot be counted twice", () => {
   const w = world();
   assert.equal(safeCapacity(w, [sale(900)], { ...sale(0), id: "extra" }, 1000), 100);
@@ -252,4 +266,79 @@ test("each future order keeps its baseline allocation despite an existing shortf
   const trial = replay(w, [{ ...candidate, quantity }]);
   assert.deepEqual(trial.orders, baseline.orders);
   assert.equal(quantity, 0);
+});
+
+test("a size crossed between monthly snapshots is sellable on its crossing day, without duplicating the cohort", () => {
+  const w = world();
+  w.cohorts = [{ quantity: 1000, entry: first, path: {
+    [first]: { survival: 1, sizeId: 1, animalsPerKg: 4000, days: Object.fromEntries(
+      Array.from({ length: 31 }, (_, i) => [i + 1, {
+        survival: 1, sizeId: i < 14 ? 1 : i < 24 ? 2 : 3,
+        animalsPerKg: i < 14 ? 4000 : i < 24 ? 3000 : 2000,
+      }]),
+    ) },
+    [first + 1]: { survival: 1, sizeId: 3, animalsPerKg: 2000 },
+    [first + 2]: { survival: 1, sizeId: 3, animalsPerKg: 2000 },
+  } }];
+  w.sizes = [2, 3];
+  w.maxApk[`${first}|2`] = 3500;
+  w.maxApk[`${first}|3`] = 2500;
+  const baseline = projectWorld(w, input());
+  assert.equal(baseline.months[0].stockBeforeOrdersBySize?.[2] ?? 0, 0);
+  assert.equal(baseline.months[0].availableBySize[2], 1000);
+  assert.equal(baseline.months[0].availabilityDayBySize?.[2], 15);
+  assert.equal(baseline.months[0].availableBySize[3], 1000); // alternatives, not a sum
+  const sold = projectWorld(w, input([sale(600, 1, 2)]));
+  assert.equal(sold.months[0].salesApplied, 600);
+  assert.equal(sold.months[1].remainingAnimals, 400);
+  assert.equal(sold.months[0].availableBySize[3], 400);
+});
+
+test("an order due before growth cannot use later maturity, and a sale cannot worsen a later order", () => {
+  const w = world();
+  w.cohorts[0].path[first] = {
+    survival: 1, sizeId: 1, animalsPerKg: 4000,
+    days: Object.fromEntries(Array.from({ length: 31 }, (_, i) =>
+      [i + 1, { survival: 1, sizeId: i < 14 ? 1 : 2, animalsPerKg: i < 14 ? 4000 : 3000 }])),
+  };
+  w.maxApk[`${first}|2`] = 3500;
+  w.orders = [{ key: "early", at: first, day: 10, sizeId: 2, quantity: 300 },
+    { key: "late", at: first, day: 20, sizeId: 2, quantity: 800 }];
+  const baseline = projectWorld(w, input());
+  assert.equal(baseline.months[0].orderShortfall, 300);
+  assert.equal(baseline.months[0].availableBySize[2], 200);
+  assert.equal(baseline.months[0].availabilityDayBySize?.[2], 15);
+  const sold = projectWorld(w, input([sale(500, 1, 2)]));
+  assert.equal(sold.months[0].salesApplied, 200);
+  assert.equal(sold.months[0].orderShortfall, 300);
+});
+
+test("daily mortality is applied once across the month boundary and current-month orders before today are due today", () => {
+  const w = world();
+  w.startDay = 10;
+  w.cohorts[0].path[first] = {
+    survival: 1, sizeId: 1, animalsPerKg: 20_000,
+    days: Object.fromEntries(Array.from({ length: 22 }, (_, i) =>
+      [i + 10, { survival: i === 0 ? 1 : 0.9, sizeId: 1, animalsPerKg: 20_000 }])),
+  };
+  w.cohorts[0].path[first + 1].survival = 0.8;
+  w.orders = [{ key: "overdue-this-month", at: first, day: 10, sizeId: 1, quantity: 100 }];
+  const result = replay(w, []);
+  assert.equal(result.orders["overdue-this-month"], 100);
+  assert.equal(result.months.get(first)!.remainingAnimals, 810);
+  assert.equal(result.months.get(first + 1)!.stockBeforeOrdersBySize?.[2], 720);
+});
+
+test("nursery may consume unclassified but eligible animals", () => {
+  const w = world();
+  w.cohorts = [{ quantity: 1000, entry: first, path: {
+    [first]: { survival: 1, sizeId: null, animalsPerKg: 20_000 },
+    [first + 1]: { survival: 1, sizeId: null, animalsPerKg: 20_000 },
+    [first + 2]: { survival: 1, sizeId: null, animalsPerKg: 20_000 },
+  } }];
+  const v = input();
+  v.sandNursery = [{ year: 2027, month: 1, quantity: 500 }];
+  const result = projectWorld(w, v);
+  assert.equal(result.months[0].sandNurseryApplied, 500);
+  assert.equal(result.months[0].remainingAnimals, 500);
 });

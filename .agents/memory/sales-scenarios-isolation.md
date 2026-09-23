@@ -38,3 +38,9 @@ Per ogni taglia commerciale selezionata, il vendibile è UNA capacità protetta 
 **Why:** L'utente ha chiarito che la precedente matrice per sola taglia esatta faceva sembrare scomparsi animali cresciuti oltre le taglie selezionate; vuole un quadro semplice di quanti può contare di vendere come taglia richiesta o superiore.
 
 **How to apply:** Proteggere ordini futuri e altre vendite accettate sulla capacità inclusiva, mantenendo alternative non additive tra celle. Esplicitare che l'eventuale valore usa il prezzo della taglia richiesta, non una quotazione certa delle taglie effettive superiori.
+
+Negli scenari, una vendita inserita per mese senza giorno esplicito si colloca nel primo giorno che massimizza la capacità protetta di quella taglia durante il mese; gli ordini acquisiti si consumano alla data di prima consegna (se già trascorsa nel mese corrente, oggi). Le opportunità esposte per taglia sono alternative, non una somma di stock cumulativi.
+
+**Why:** Una coorte può attraversare una taglia commerciale tra due primi del mese senza mai comparire nei soli snapshot mensili. Vendere sempre al primo giorno la perde; aggregare i passaggi giornalieri la conterebbe più volte o peggiorerebbe la copertura di ordini con scadenze precedenti.
+
+**How to apply:** Conservare distinta la giacenza biologica di inizio mese dalla capacità vendibile datata; usare lo stesso calendario per allocazione, proposta e protezione degli scoperti, inclusi gli ordini oltre l'orizzonte visibile. Non interpretare il giorno di massima capacità come promessa di disponibilità continua dopo quel giorno.
