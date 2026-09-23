@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createAvailabilityWorkbook } from "./commercial-availability-excel";
@@ -68,8 +68,11 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
         <CommercialScenarioOverview projection={projection} sizes={commercialSizes} draft={draft} />
         <a href="#commercial-availability-detail" className="mt-3 inline-block text-sm font-bold text-[#0d5b58] underline underline-offset-2 hover:text-[#123b47]">Vai ai dati dettagliati ↓</a>
       </div>
-      <h3 id="commercial-availability-detail" className="scroll-mt-4 border-b border-slate-100 px-4 py-3 text-sm font-extrabold text-[#123b47]">Dati dettagliati · tabella completa</h3>
-      <div className="max-h-[600px] overflow-auto">
+      <div id="commercial-availability-detail" className="flex scroll-mt-24 flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <h3 className="text-sm font-extrabold text-[#123b47]">Dati dettagliati · tabella completa</h3>
+        <a href="#sales-scenario-top" className="text-sm font-bold text-[#0d5b58] underline underline-offset-2 hover:text-[#123b47]">Torna alla testata ↑</a>
+      </div>
+      <div className="overflow-x-auto">
           <table className="w-full min-w-[1440px] border-separate border-spacing-0 text-left text-sm">
           <caption className="sr-only">Matrice disponibilità commerciale {mode}: taglia esatta e più grandi a inizio mese, capacità protetta della taglia o superiore e giorno di vendita, con ordini acquisiti.</caption>
           <thead className="sticky top-0 z-20 bg-[#eaf1ee] text-xs uppercase tracking-wide text-slate-600">
