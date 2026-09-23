@@ -30,6 +30,19 @@ test("restricted sale catalog keeps non-sale cohorts growing and acquired orders
   assert.ok(proposed.every(s => s.sizeId === 2));
   assert.equal(projectWorld(w, { ...automatic, sales: proposed }).totalOrderShortfall, 0);
 });
+test("subset availability and proposals expose only selected world sizes", () => {
+  const w = world();
+  w.sizes = [2];
+  const result = projectWorld(w, input());
+  assert.deepEqual(Object.keys(result.months[0].availableBySize), ["2"]);
+  const automatic = input();
+  automatic.cashGoal = 50;
+  automatic.proposalPrices = [
+    { sizeId: 1, pricePerThousand: 10_000, paymentDelayMonths: 0 },
+    { sizeId: 2, pricePerThousand: 100, paymentDelayMonths: 0 },
+  ];
+  assert.ok(proposeSales(w, w, automatic).every(row => row.sizeId === 2));
+});
 function world(): World {
   return { first, last: first + 2, sizes: [1, 2], maxApk: { [`${first}|1`]: 30_000, [`${first + 1}|2`]: 10_000, [`${first + 2}|2`]: 10_000 },
     cohorts: [{ quantity: 1000, entry: first, path: {

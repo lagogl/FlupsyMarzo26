@@ -7,7 +7,7 @@ import { productionForecastService } from "../../../ai/production-forecast-servi
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 import { inArray } from "drizzle-orm";
 import { activeOrdersCondition, hatcherySizeCode } from "./source-data";
-import { isScenarioSaleSize, validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
+import { isScenarioSaleSize, selectedScenarioSizeIds, validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
 import { monthNumber, monthParts, projectWorld, proposeSales, type World, type Cohort, type Order } from "./engine";
 
 export function businessToday() {
@@ -27,8 +27,7 @@ const commonWarnings = [
 export async function getInputs(): Promise<ScenarioInputs> {
   const [ctx, prices] = await Promise.all([loadGrowthSimulationContext(), db.select().from(salesPriceList)]);
   const today = businessToday();
-  const date = new Date(today.year, today.month - 1, today.day, 12);
-  const sizes = ctx.allSizes.filter(s => isScenarioSaleSize(s.code) && findRangeForSize(s.id, date, ctx.sizeRangeVersions)).map(s => {
+  const sizes = ctx.allSizes.filter(s => isScenarioSaleSize(s.code)).map(s => {
     const p = prices.find(p => p.sizeCode === s.code);
     return { id: s.id, code: s.code, name: s.name || s.code, pricePerThousand: p && Number.isFinite(p.pricePerAnimal) && p.pricePerAnimal > 0 ? p.pricePerAnimal * 1000 : null };
   });
@@ -36,6 +35,7 @@ export async function getInputs(): Promise<ScenarioInputs> {
     name: "Nuovo scenario", startYear: today.year, startMonth: today.month, horizon: 12,
     growthFactor: 1, prudentGrowthFactor: 0.8, mortalityMultiplier: 1,
     prudentMortalityMultiplier: 1.25, prudentHatcheryFactor: 0.8,
+    selectedSizeIds: sizes.map(s => s.id),
     sales: [], sandNursery: [], cashGoal: 0, cashDeadline: monthParts(monthNumber(today.year, today.month) + 11),
     proposalPrices: sizes.filter(s => s.pricePerThousand != null).map(s => ({ sizeId: s.id, pricePerThousand: s.pricePerThousand!, paymentDelayMonths: 0 })),
   } };
@@ -156,7 +156,7 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
     }
     if (fallbackMortality && !warnings.some(w => w.startsWith("Mortalità"))) warnings.push("Mortalità non configurata per alcune combinazioni mese/taglia: applicato fallback esplicito 3% mensile, moltiplicato per il coefficiente dello scenario.");
     if (!Object.keys(ctx.sgrByMonthAndSize).length && !Object.keys(ctx.sgrFallbackByMonth).length) throw new Error("SGR non configurati: impossibile produrre una previsione attendibile");
-    return { first, last, cohorts, orders, maxApk: ranges, sizes: ctx.allSizes.filter(s => isScenarioSaleSize(s.code)).map(s => s.id) };
+    return { first, last, cohorts, orders, maxApk: ranges, sizes: selectedScenarioSizeIds(input, ctx.allSizes) };
   };
   const expected = build(false);
   const prudent = build(true);

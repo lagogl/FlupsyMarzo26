@@ -10,17 +10,30 @@ export function isScenarioSaleSize(code: string): boolean {
 }
 
 export function validateScenarioSaleSizes(
-  input: { sales: { sizeId: number }[]; proposalPrices: { sizeId: number }[] },
+  input: { selectedSizeIds?: number[]; sales: { sizeId: number }[]; proposalPrices: { sizeId: number }[] },
   catalog: { id: number; code: string }[],
 ): void {
   const describe = (id: number) => catalog.find(s => s.id === id)?.code ?? `ID ${id}`;
   const allowed = new Set(catalog.filter(s => isScenarioSaleSize(s.code)).map(s => s.id));
-  const invalidSales = input.sales.filter(s => !allowed.has(s.sizeId));
+  if (input.selectedSizeIds?.length === 0) throw new Error("Selezionare almeno una taglia commerciale");
+  const invalidSelected = (input.selectedSizeIds ?? []).filter(id => !allowed.has(id));
+  if (invalidSelected.length) {
+    throw new Error(`Taglie commerciali selezionate non ammesse: ${[...new Set(invalidSelected.map(describe))].join(", ")}. Sono consentite esclusivamente ${SALES_SCENARIO_SIZE_CODES.join(", ")}.`);
+  }
+  const selected = input.selectedSizeIds ? new Set(input.selectedSizeIds) : allowed;
+  const invalidSales = input.sales.filter(s => !selected.has(s.sizeId));
   if (invalidSales.length) {
-    throw new Error(`Taglie vendita non ammesse: ${[...new Set(invalidSales.map(s => describe(s.sizeId)))].join(", ")}. Modificare o eliminare le relative righe del piano vendite. Sono consentite esclusivamente ${SALES_SCENARIO_SIZE_CODES.join(", ")}.`);
+    throw new Error(`Taglie vendita non selezionate o non ammesse: ${[...new Set(invalidSales.map(s => describe(s.sizeId)))].join(", ")}. Modificare o eliminare le relative righe del piano vendite.`);
   }
-  const invalidPrices = input.proposalPrices.filter(s => !allowed.has(s.sizeId));
+  const invalidPrices = input.proposalPrices.filter(s => !selected.has(s.sizeId));
   if (invalidPrices.length) {
-    throw new Error(`Prezzi automatici per taglie non ammesse: ${[...new Set(invalidPrices.map(s => describe(s.sizeId)))].join(", ")}. Rimuovere i prezzi esclusi dalla bozza prima di salvare o ricalcolare. Sono consentite esclusivamente ${SALES_SCENARIO_SIZE_CODES.join(", ")}.`);
+    throw new Error(`Prezzi automatici per taglie non selezionate o non ammesse: ${[...new Set(invalidPrices.map(s => describe(s.sizeId)))].join(", ")}. Rimuovere i prezzi esclusi dalla bozza prima di salvare o ricalcolare.`);
   }
+}
+
+export function selectedScenarioSizeIds(
+  input: { selectedSizeIds?: number[] },
+  catalog: { id: number; code: string }[],
+): number[] {
+  return input.selectedSizeIds ?? catalog.filter(s => isScenarioSaleSize(s.code)).map(s => s.id);
 }

@@ -19,6 +19,9 @@ export const scenarioInputSchema = z.object({
   mortalityMultiplier: z.number().min(0).max(5).default(1),
   prudentMortalityMultiplier: z.number().min(0).max(5).default(1.25),
   prudentHatcheryFactor: z.number().min(0).max(1).default(0.8),
+  // Optional for backward compatibility: absence means every allowed
+  // commercial size. An explicit selection must never be empty.
+  selectedSizeIds: z.array(z.number().int().positive()).min(1, "Selezionare almeno una taglia commerciale").max(9).optional(),
   sales: z.array(scenarioSaleSchema).max(100).default([]),
   sandNursery: z.array(month.extend({ quantity: z.number().int().min(0).max(2_000_000_000) })).max(24).default([]),
   cashGoal: z.number().min(0).max(1_000_000_000).default(0),
@@ -31,6 +34,7 @@ export const scenarioInputSchema = z.object({
     if (n < first || n >= first + v.horizon) ctx.addIssue({ code: "custom", message: "Date fuori dall'orizzonte dello scenario" });
   }
   if (new Set(v.sales.map(s => s.id)).size !== v.sales.length) ctx.addIssue({ code: "custom", message: "Identificativi vendite duplicati" });
+  if (v.selectedSizeIds && new Set(v.selectedSizeIds).size !== v.selectedSizeIds.length) ctx.addIssue({ code: "custom", message: "Taglie commerciali selezionate duplicate" });
   if (new Set(v.proposalPrices.map(s => s.sizeId)).size !== v.proposalPrices.length) ctx.addIssue({ code: "custom", message: "Prezzi proposta duplicati per la stessa taglia" });
   if (v.prudentGrowthFactor > v.growthFactor || v.prudentMortalityMultiplier < v.mortalityMultiplier) ctx.addIssue({ code: "custom", message: "Le ipotesi prudenziali devono essere più cautelative di quelle attese" });
 });

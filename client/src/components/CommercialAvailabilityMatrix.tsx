@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { FileDown } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { createAvailabilityWorkbook } from "./commercial-availability-excel";
 import type { ScenarioInput, ScenarioProjection, ScenarioResult } from "@shared/sales-scenarios";
-import { SALES_SCENARIO_SIZE_CODES } from "@shared/sales-scenario-size-policy";
 import { availabilityForSize, estimatedSalesValue, peakAlternativeOpportunity, priceForSize, type CommercialSize } from "@/components/commercial-availability-utils";
 
 const monthNames = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
@@ -13,10 +14,32 @@ const monthLabel = (month: { year: number; month: number }) => `${monthNames[mon
 
 export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result: ScenarioResult | null; sizes: CommercialSize[]; draft: Pick<ScenarioInput, "proposalPrices"> }) {
   const [mode, setMode] = useState<"prudent" | "expected">("prudent");
-  const commercialSizes = useMemo(() => SALES_SCENARIO_SIZE_CODES.map((code) => sizes.find((size) => size.code === code)).filter((size): size is CommercialSize => Boolean(size)), [sizes]);
+  const [exporting, setExporting] = useState(false);
+  const { toast } = useToast();
+  const commercialSizes = useMemo(() => sizes, [sizes]);
   const projection: ScenarioProjection | null = result ? result[mode] : null;
   const peak = projection ? peakAlternativeOpportunity(projection.months, commercialSizes, draft) : null;
   const availableMonths = projection?.months.filter((month) => commercialSizes.some((size) => availabilityForSize(month, size) > 0)).length ?? 0;
+  const exportExcel = async () => {
+    if (!projection || exporting) return;
+    setExporting(true);
+    try {
+      const workbook = await createAvailabilityWorkbook(projection, commercialSizes, draft, mode, result?.generatedAt ?? "");
+      const buffer = await workbook.xlsx.writeBuffer();
+      const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `disponibilita-commerciale-${mode}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      toast({ title: "Esportazione Excel non riuscita", description: "Impossibile generare il file. Riprova.", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
     <header className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
@@ -29,7 +52,7 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
           <button type="button" onClick={() => setMode("prudent")} aria-pressed={mode === "prudent"} className={`rounded px-3 py-1.5 text-xs font-bold ${mode === "prudent" ? "bg-[#123b47] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>Prudente</button>
           <button type="button" onClick={() => setMode("expected")} aria-pressed={mode === "expected"} className={`rounded px-3 py-1.5 text-xs font-bold ${mode === "expected" ? "bg-[#123b47] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>Atteso</button>
         </div>
-        <button onClick={() => projection && exportCsv(projection, commercialSizes, draft, mode, result?.generatedAt ?? "")} disabled={!projection} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"><FileDown className="mr-1 inline h-4 w-4" />CSV</button>
+        <button onClick={exportExcel} disabled={!projection || exporting} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"><FileDown className="mr-1 inline h-4 w-4" />{exporting ? "Esportazione…" : "Excel (.xlsx)"}</button>
       </div>
     </header>
     {!projection ? <div className="m-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">Ricalcola uno scenario per visualizzare la matrice commerciale.</div> : <>
@@ -74,19 +97,4 @@ function AvailabilityCell({ animals, price, size, month }: { animals: number; pr
     <div aria-hidden="true" className={`font-mono font-extrabold ${animals > 0 ? "text-[#0d5b58]" : "text-slate-400"}`}>{amount.format(animals)}</div>
     <div aria-hidden="true" className={`mt-0.5 text-xs font-semibold ${value === null ? "text-amber-800" : "text-slate-500"}`}>{value === null ? "non valorizzato" : money.format(value)}</div>
   </td>;
-}
-
-function exportCsv(projection: ScenarioProjection, sizes: CommercialSize[], draft: Pick<ScenarioInput, "proposalPrices">, mode: "prudent" | "expected", generatedAt: string) {
-  const lines = [`# Generato il;${generatedAt}`, `# Modalità;${mode === "prudent" ? "Prudente" : "Atteso"}`, "# AVVISO;Disponibilità alternative, non additive", "Mese;Codice taglia;Nome taglia;Modalità;Quantità animali;Prezzo €/1.000;Valore stimato vendite;Stato valore;Scoperto ordini mensile"];
-  projection.months.forEach((month) => sizes.forEach((size) => {
-    const animals = availabilityForSize(month, size);
-    const price = priceForSize(size, draft);
-    const value = estimatedSalesValue(animals, price);
-    lines.push([monthLabel(month), size.code, size.name, mode === "prudent" ? "Prudente" : "Atteso", animals, price ?? "", value ?? "", value === null ? "Non valorizzato: prezzo assente" : "Stimato", month.orderShortfall].join(";"));
-  }));
-  const anchor = document.createElement("a");
-  anchor.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" }));
-  anchor.download = `disponibilita-commerciale-${mode}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(anchor.href);
 }
