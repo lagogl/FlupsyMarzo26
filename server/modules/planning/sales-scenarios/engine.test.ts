@@ -112,6 +112,22 @@ test("automatic proposal respects prices, payment lag and insufficient supply", 
   v.proposalPrices[0].paymentDelayMonths = 3;
   assert.deepEqual(proposeSales(world(), world(), v), []);
 });
+test("proposal recalculates receipts after multiple accepted rows without counting an allocation twice", () => {
+  const w = world();
+  w.maxApk[`${first + 1}|1`] = 30_000;
+  w.cohorts.push({ quantity: 500, entry: first + 1, path: {
+    [first + 1]: { survival: 1, sizeId: 2, animalsPerKg: 8_000 },
+    [first + 2]: { survival: 1, sizeId: 2, animalsPerKg: 7_000 },
+  } });
+  const v = input();
+  v.cashGoal = 150;
+  v.proposalPrices = [{ sizeId: 1, pricePerThousand: 100, paymentDelayMonths: 0 }];
+  const proposed = proposeSales(w, w, v);
+  assert.equal(proposed.length, 2);
+  const result = projectWorld(w, { ...v, sales: proposed });
+  assert.equal(result.receiptsByDeadline, 150);
+  assert.equal(result.unfulfilledSales, 0);
+});
 test("automatic proposal protects future orders in expected AND prudent worlds", () => {
   const expected = world(), prudent = world();
   expected.orders = prudent.orders = [{ key: "future", at: first + 2, sizeId: 2, quantity: 729 }];

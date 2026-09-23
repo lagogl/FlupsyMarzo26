@@ -61,6 +61,25 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
   let dayStock: Record<number, number> | undefined;
   let nurseryStock: number | undefined;
   const receipts: Record<number, number> = {};
+  const ordersByDate = new Map<number, Map<number, Order[]>>();
+  const salesByDate = new Map<number, Map<number, Allocation[]>>();
+  for (const order of world.orders) {
+    const day = order.day ?? (order.at === world.first ? world.startDay ?? 1 : 1);
+    let days = ordersByDate.get(order.at);
+    if (!days) { days = new Map(); ordersByDate.set(order.at, days); }
+    const entries = days.get(day) ?? [];
+    entries.push(order);
+    days.set(day, entries);
+  }
+  for (const sale of allocations) {
+    const n = monthNumber(sale.year, sale.month);
+    const day = sale.day ?? (n === world.first ? world.startDay ?? 1 : 1);
+    let days = salesByDate.get(n);
+    if (!days) { days = new Map(); salesByDate.set(n, days); }
+    const entries = days.get(day) ?? [];
+    entries.push(sale);
+    days.set(day, entries);
+  }
   for (let n = world.first; n <= world.last; n++) {
     if (world.deadlineMs && Date.now() > world.deadlineMs) throw new Error("Scenario troppo complesso: ridurre orizzonte, taglie o righe di vendita e riprovare");
     const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, stockBeforeOrdersBySize: {}, eligibleAtStartBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
@@ -99,8 +118,10 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
     const { year, month } = monthParts(n);
     const finalDay = new Date(year, month, 0).getDate();
     const dates = new Set(eventDays(world, n, firstDay, finalDay));
-    for (const order of world.orders) if (order.at === n) dates.add(order.day ?? firstDay);
-    for (const sale of allocations) if (monthNumber(sale.year, sale.month) === n) dates.add(sale.day ?? firstDay);
+    const monthOrders = ordersByDate.get(n);
+    const monthSales = salesByDate.get(n);
+    for (const day of monthOrders?.keys() ?? []) dates.add(day);
+    for (const day of monthSales?.keys() ?? []) dates.add(day);
     if (stockAt?.n === n) dates.add(stockAt.day);
     let previousDay = firstDay;
     for (const day of [...dates].sort((a, b) => a - b)) {
@@ -110,13 +131,13 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
         const current = c.path[n]?.days?.[day];
         if (previous && current) counts[i] *= previous.survival > 0 ? current.survival / previous.survival : 0;
       });
-      for (const order of world.orders.filter(o => o.at === n && (o.day ?? firstDay) === day)) {
+      for (const order of monthOrders?.get(day) ?? []) {
         const used = consume(order.quantity, order.sizeId, day, false, true);
         orders[order.key] = used;
         row.ordersRequested += order.quantity;
         row.ordersFulfilled += used;
       }
-      for (const sale of allocations.filter(a => monthNumber(a.year, a.month) === n && (a.day ?? firstDay) === day)) {
+      for (const sale of monthSales?.get(day) ?? []) {
         const used = consume(sale.quantity, sale.sizeId, day, sale.nursery);
         applied[sale.id] = used;
         if (sale.nursery) row.sandNurseryApplied += used;
@@ -267,13 +288,16 @@ export function proposeSales(expected: World, prudent: World, input: ScenarioInp
     .sort((a, b) => b.pricePerThousand - a.pricePerThousand || a.sizeId - b.sizeId);
   let next: ScenarioInput = { ...input, sales: input.sales.slice() };
   if (next.sales.length >= 100) return proposed;
-  let current = projectWorld(prudent, next, false);
   let prudentAccepted = allocateScenario(prudent, next);
   let expectedAccepted = allocateScenario(expected, next);
+  const receiptsByDeadline = (accepted: Allocation[]) =>
+    [...replay(prudent, accepted).months].reduce((total, [n, month]) =>
+      total + (n >= first && n <= deadline ? month.receipts : 0), 0);
+  let currentReceipts = receiptsByDeadline(prudentAccepted);
   // Earliest receipt first, best €/1000 within the month. A heuristic, not an optimum.
   for (let receipt = first; receipt <= deadline; receipt++) {
     for (const price of prices) {
-      const gap = input.cashGoal - current.receiptsByDeadline;
+      const gap = input.cashGoal - currentReceipts;
       if (gap <= 0) return proposed;
       const at = receipt - price.paymentDelayMonths;
       if (at < first || at >= first + input.horizon) continue;
@@ -287,9 +311,9 @@ export function proposeSales(expected: World, prudent: World, input: ScenarioInp
       if (candidate.quantity > 0) {
         proposed.push(candidate);
         next = { ...next, sales: [...next.sales, candidate] };
-        current = projectWorld(prudent, next, false);
         prudentAccepted = allocateScenario(prudent, next);
         expectedAccepted = allocateScenario(expected, next);
+        currentReceipts = receiptsByDeadline(prudentAccepted);
       }
       if (next.sales.length >= 100) return proposed;
     }

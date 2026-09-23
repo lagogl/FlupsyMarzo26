@@ -42,7 +42,7 @@ export async function getInputs(): Promise<ScenarioInputs> {
   } };
 }
 
-async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prudent: World; warnings: string[] }> {
+async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ expected: World; prudent: World; warnings: string[] }> {
   const today = businessToday();
   if (input.startYear !== today.year || input.startMonth !== today.month) throw new Error("Lo scenario deve iniziare nel mese corrente: le giacenze disponibili sono quelle di oggi");
   if (!isDbEsternoAvailable() || !dbEsterno) throw new Error("Database ordini non disponibile: impossibile proteggere gli ordini acquisiti");
@@ -181,12 +181,14 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
   };
   const expected = build(false);
   const prudent = build(true);
-  expected.deadlineMs = prudent.deadlineMs = Date.now() + 20_000;
+  // A proposal tests both worlds for every candidate sale and then computes
+  // two full projections. Give that bounded operation its own budget.
+  expected.deadlineMs = prudent.deadlineMs = Date.now() + (automatic ? 90_000 : 20_000);
   return { expected, prudent, warnings };
 }
 
 export async function simulate(input: ScenarioInput, automatic = false): Promise<ScenarioResult | ScenarioProposal> {
-  const worlds = await loadWorlds(input);
+  const worlds = await loadWorlds(input, automatic);
   if (automatic && input.proposalPrices.length === 0) throw new Error("Inserire almeno un prezzo positivo in €/1.000 animali per la proposta automatica");
   const proposedSales = automatic ? proposeSales(worlds.expected, worlds.prudent, input) : [];
   const combined = { ...input, sales: [...input.sales, ...proposedSales] };
