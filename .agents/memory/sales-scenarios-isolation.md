@@ -9,9 +9,9 @@ Gli scenari commerciali devono restare separati da Scostamenti e non registrare 
 
 **How to apply:** Riutilizzare soltanto fonti e kernel di crescita in lettura; verificare ogni vendita contro gli ordini futuri anche oltre l'orizzonte visibile, senza peggiorare gli scoperti preesistenti. Le disponibilità per mese/taglia sono alternative, non sommabili. La proposta automatica è una ricerca deterministica fattibile, non una promessa di ottimo economico; distinguere incassi da ricavi e dichiarare l'esclusione dei costi.
 
-Nel contesto commerciale degli scenari, “T2–T10” indica le sole taglie TP a migliaia intere, non tutte le classi comprese tra gli estremi e non le categorie aggregate del vecchio Forecast.
+Nel contesto commerciale degli scenari, “T2–T10” indica le sole taglie TP a migliaia intere: T3 significa TP-3000, T4 significa TP-4000 e così via. Non indica tutte le classi comprese tra gli estremi né le categorie aggregate del vecchio Forecast.
 
-**Why:** L'utente ha chiarito esplicitamente di escludere le taglie intermedie; i nomi aggregati T3/T10 nel codice storico non identificano questa scelta commerciale.
+**Why:** L'utente ha chiarito esplicitamente di escludere le taglie intermedie e poi confermato l'equivalenza commerciale T3=TP-3000, T4=TP-4000; i nomi aggregati T3/T10 nel codice storico non identificano questa scelta commerciale.
 
 **How to apply:** Mantenere la selezione commerciale distinta dal catalogo biologico completo: l'esclusione dalla vendita non deve eliminare animali in crescita né obblighi verso ordini già acquisiti.
 
