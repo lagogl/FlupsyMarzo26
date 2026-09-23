@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createAvailabilityWorkbook } from "./commercial-availability-excel";
+import { CommercialScenarioOverview } from "./CommercialScenarioOverview";
 import type { ScenarioInput, ScenarioProjection, ScenarioResult } from "@shared/sales-scenarios";
 import { availabilityDayForSize, availabilityForSize, eligibleAtStartForSize, estimatedSalesValue, orderCommitmentForMonth, peakAlternativeOpportunity, priceForSize, stockBeforeOrdersForSize, type CommercialSize } from "@/components/commercial-availability-utils";
 
@@ -63,6 +64,11 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
         <Summary label="Mesi disponibili" value={amount.format(availableMonths)} detail={`su ${amount.format(projection.months.length)} mesi di scenario`} />
         <Summary label="Massima quantità in una singola cella" value={peak ? `${amount.format(peak.animals)} animali` : "—"} detail={peak ? `${peak.size.code} · ${monthLabel(peak.month)}${peak.value === null ? " · non valorizzato" : ` · ${money.format(peak.value)} stimati`}` : "Nessuna disponibilità"} />
       </div>
+      <div className="border-b border-slate-100 bg-slate-50 p-3 sm:p-4">
+        <CommercialScenarioOverview projection={projection} sizes={commercialSizes} draft={draft} />
+        <a href="#commercial-availability-detail" className="mt-3 inline-block text-sm font-bold text-[#0d5b58] underline underline-offset-2 hover:text-[#123b47]">Vai ai dati dettagliati ↓</a>
+      </div>
+      <h3 id="commercial-availability-detail" className="scroll-mt-4 border-b border-slate-100 px-4 py-3 text-sm font-extrabold text-[#123b47]">Dati dettagliati · tabella completa</h3>
       <div className="max-h-[600px] overflow-auto">
           <table className="w-full min-w-[1440px] border-separate border-spacing-0 text-left text-sm">
           <caption className="sr-only">Matrice disponibilità commerciale {mode}: taglia esatta e più grandi a inizio mese, capacità protetta della taglia o superiore e giorno di vendita, con ordini acquisiti.</caption>
