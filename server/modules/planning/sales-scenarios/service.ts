@@ -181,9 +181,10 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
   };
   const expected = build(false);
   const prudent = build(true);
-  // A proposal tests both worlds for every candidate sale and then computes
-  // two full projections. Give that bounded operation its own budget.
-  expected.deadlineMs = prudent.deadlineMs = Date.now() + (automatic ? 90_000 : 20_000);
+  // Both projections now evaluate protected availability on daily crossing
+  // dates. Production can take longer than the old 20s simulation budget;
+  // proposals test further candidate sales and retain a separate higher cap.
+  expected.deadlineMs = prudent.deadlineMs = Date.now() + (automatic ? 90_000 : 60_000);
   return { expected, prudent, warnings };
 }
 
