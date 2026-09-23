@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { ScenarioInput, ScenarioProjection, ScenarioMonth } from "@shared/sales-scenarios";
+import { FileDown } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import {
   availabilityDayForSize,
   availabilityForSize,
@@ -21,15 +23,20 @@ const monthKey = (month: Pick<ScenarioMonth, "year" | "month">) => `${month.year
 type Props = {
   projection: ScenarioProjection;
   sizes: CommercialSize[];
-  draft: Pick<ScenarioInput, "proposalPrices">;
+  draft: Pick<ScenarioInput, "name" | "proposalPrices">;
+  mode: "prudent" | "expected";
+  generatedAt: string;
+  warnings: string[];
 };
 
 /**
  * A compact operator view of the projection. Values are deliberately kept
  * per-size: alternatives are not additive and are never presented as a total.
  */
-export function CommercialScenarioOverview({ projection, sizes, draft }: Props) {
+export function CommercialScenarioOverview({ projection, sizes, draft, mode, generatedAt, warnings }: Props) {
   const [selectedKey, setSelectedKey] = useState(() => projection.months[0] ? monthKey(projection.months[0]) : "");
+  const [exporting, setExporting] = useState(false);
+  const { toast } = useToast();
   const selectedMonth = projection.months.find((month) => monthKey(month) === selectedKey) ?? projection.months[0];
 
   useEffect(() => {
@@ -46,6 +53,27 @@ export function CommercialScenarioOverview({ projection, sizes, draft }: Props) 
     const index = projection.months.findIndex((month) => monthKey(month) === monthKey(selectedMonth));
     const next = projection.months[index + offset];
     if (next) setSelectedKey(monthKey(next));
+  };
+
+  const downloadMonth = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { createCommercialMonthPdf } = await import("./commercial-month-pdf");
+      const bytes = await createCommercialMonthPdf(selectedMonth, sizes, draft, mode, generatedAt, warnings);
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `disponibilita-commerciale-${selectedMonth.year}-${String(selectedMonth.month).padStart(2, "0")}-${mode}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      toast({ title: "Scheda mensile non disponibile", description: "Impossibile generare il PDF. Riprova dopo aver ricalcolato lo scenario.", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -102,9 +130,12 @@ export function CommercialScenarioOverview({ projection, sizes, draft }: Props) 
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Mese selezionato</p>
             <h3 className="mt-0.5 text-xl font-extrabold capitalize text-[#123b47]">{monthLabel(selectedMonth)}</h3>
           </div>
-          <div className="flex gap-1" aria-label="Naviga tra i mesi">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={downloadMonth} disabled={exporting} className="rounded-md border border-[#0d5b58] px-3 py-1.5 text-sm font-bold text-[#0d5b58] hover:bg-[#eaf5f0] disabled:opacity-50"><FileDown className="mr-1 inline h-4 w-4" />{exporting ? "Preparazione PDF…" : `Scheda ${monthLabel(selectedMonth)} (PDF)`}</button>
+            <div className="flex gap-1" aria-label="Naviga tra i mesi">
             <button type="button" onClick={() => selectRelativeMonth(-1)} disabled={monthKey(selectedMonth) === monthKey(projection.months[0])} className="rounded border border-slate-300 px-2.5 py-1 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Mese precedente">←</button>
             <button type="button" onClick={() => selectRelativeMonth(1)} disabled={monthKey(selectedMonth) === monthKey(projection.months[projection.months.length - 1])} className="rounded border border-slate-300 px-2.5 py-1 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Mese successivo">→</button>
+            </div>
           </div>
         </div>
 

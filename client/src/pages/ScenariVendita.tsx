@@ -4,6 +4,7 @@ import { useSalesScenarioActions, useSalesScenarioInputs, useSalesScenarios } fr
 import { ScenarioHelp } from "@/components/ScenariVenditaHelp";
 import { CommercialAvailabilityMatrix } from "@/components/CommercialAvailabilityMatrix";
 import { SALES_SCENARIO_SIZE_CODES } from "@shared/sales-scenario-size-policy";
+import { calculateScenarioComparison, comparisonErrorMessage } from "@/lib/sales-scenario-comparison";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { SavedScenario, ScenarioInput, ScenarioMonth, ScenarioProposal, ScenarioResult, ScenarioSale } from "@shared/sales-scenarios";
 import { AlertTriangle, Check, Copy, Loader2, Plus, RefreshCw, Save, Sparkles, Trash2, X } from "lucide-react";
@@ -142,10 +143,34 @@ function ProposalPreview({ proposal, onApply, onClose }: { proposal: ScenarioPro
 function ResultPanel({ result, cashGoal }: { result: ScenarioResult; cashGoal: number }) { const columns = [{ label: "Atteso", data: result.expected }, { label: "Prudente", data: result.prudent }]; return <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-3"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-extrabold">Esito ricalcolato</h2><p className="text-xs text-slate-600">Generato {new Date(result.generatedAt).toLocaleString("it-IT")}</p></div><span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-bold text-teal-900">Disponibilità alternativa</span></div><div className="grid gap-3 md:grid-cols-2">{columns.map(c => <div key={c.label} className="rounded-lg border border-slate-200 bg-white p-3"><h3 className="mb-2 text-sm font-extrabold">{c.label}</h3><div className="grid grid-cols-2 gap-2"><Metric label="Incassi" value={euro.format(c.data.totalReceipts)} /><Metric label="Entro obiettivo" value={euro.format(c.data.receiptsByDeadline)} /><Metric label="Stock finale" value={quantity.format(c.data.finalStock)} /><Metric label="Scoperto ordini" value={quantity.format(c.data.totalOrderShortfall)} caution={c.data.totalOrderShortfall > 0} /></div><p className={`mt-2 text-xs font-bold ${c.data.goalReached ? "text-teal-700" : "text-amber-700"}`}>{c.data.goalReached ? "Obiettivo cassa raggiunto" : `Obiettivo residuo: ${euro.format(Math.max(0, cashGoal - c.data.receiptsByDeadline))}`}</p></div>)}</div>{result.warnings.length > 0 && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm text-amber-950"><b><AlertTriangle className="mr-1 inline h-4 w-4" />Avvisi</b><ul className="mt-1 list-disc pl-5">{result.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}</div>; }
 function Comparison({ scenarios, selected, setSelected }: { scenarios: SavedScenario[]; selected: number[]; setSelected: (ids: number[]) => void }) {
   const actions = useSalesScenarioActions();
-  const [results, setResults] = useState<Record<number, ScenarioResult>>({});
+  const [comparison, setComparison] = useState<{ ids: number[]; results: Record<number, ScenarioResult> } | null>(null);
+  const [calculating, setCalculating] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toggle = (id: number) => {
+    setSelected(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+    setComparison(null);
+    setProgress(null);
+    setError(null);
+  };
   const calculate = async () => {
-    const entries = await Promise.all(selected.map(async id => [id, await actions.simulate.mutateAsync(scenarios.find(s => s.id === id)!.input)] as const));
-    setResults(Object.fromEntries(entries));
+    if (calculating) return;
+    const chosen = selected.map(id => scenarios.find(s => s.id === id)).filter((s): s is SavedScenario => !!s);
+    if (chosen.length < 2) return;
+    setCalculating(true);
+    setComparison(null);
+    setError(null);
+    try {
+      const results = await calculateScenarioComparison(chosen, input => actions.simulate.mutateAsync(input),
+        (index, total, name) => setProgress(`Ricalcolo ${index} di ${total}: ${name}…`));
+      setComparison({ ids: chosen.map(s => s.id), results });
+      setProgress(`Confronto aggiornato: ${chosen.length} scenari ricalcolati.`);
+    } catch (e) {
+      setProgress(null);
+      setError(comparisonErrorMessage(e));
+    } finally {
+      setCalculating(false);
+    }
   };
   const metrics: [string, (result: ScenarioResult) => string][] = [
     ["Incassi attesi", r => euro.format(r.expected.totalReceipts)],
@@ -153,5 +178,15 @@ function Comparison({ scenarios, selected, setSelected }: { scenarios: SavedScen
     ["Stock finale prudente", r => quantity.format(r.prudent.finalStock)],
     ["Scoperto prudente", r => quantity.format(r.prudent.totalOrderShortfall)],
   ];
-  return <div className="rounded-xl border border-slate-200 bg-white p-4"><h2 className="text-lg font-extrabold">Confronto scenari salvati</h2><p className="mb-3 text-sm text-slate-500">Seleziona almeno due scenari: ogni colonna viene ricalcolata sui dati correnti.</p>{scenarios.length < 2 ? <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Salva almeno due scenari per confrontarli.</p> : <><div className="flex flex-wrap gap-2">{scenarios.map(s => <label key={s.id} className={`cursor-pointer rounded-md border px-3 py-2 text-sm ${selected.includes(s.id) ? "border-teal-600 bg-teal-50" : "border-slate-200"}`}><ScenarioHelp text={help.scenarioSelection}><input aria-label={`Confronta ${s.name}`} className="mr-2" type="checkbox" checked={selected.includes(s.id)} onChange={() => setSelected(selected.includes(s.id) ? selected.filter(x => x !== s.id) : [...selected, s.id])} /></ScenarioHelp>{s.name}</label>)}</div><button onClick={calculate} disabled={selected.length < 2 || actions.simulate.isPending} className="mt-3 rounded-md bg-teal-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">Ricalcola confronto</button>{Object.keys(results).length > 0 && <div className="mt-4 overflow-auto"><table className="w-full min-w-[600px] text-sm"><thead><tr className="border-b text-left"><th className="p-2">Indicatore</th>{selected.map(id => <th className="p-2" key={id}>{scenarios.find(s => s.id === id)?.name}</th>)}</tr></thead><tbody>{metrics.map(([label, fn]) => <tr className="border-b" key={label}><td className="p-2 font-bold">{label}</td>{selected.map(id => <td className="mono p-2" key={id}>{fn(results[id])}</td>)}</tr>)}</tbody></table></div>}</>}</div>;
+  return <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <h2 className="text-lg font-extrabold">Confronto scenari salvati</h2>
+    <p className="mb-3 text-sm text-slate-500">Seleziona almeno due scenari: ogni colonna viene ricalcolata sui dati correnti, uno scenario alla volta.</p>
+    {scenarios.length < 2 ? <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Salva almeno due scenari per confrontarli.</p> : <>
+      <div className="flex flex-wrap gap-2">{scenarios.map(s => <label key={s.id} className={`cursor-pointer rounded-md border px-3 py-2 text-sm ${selected.includes(s.id) ? "border-teal-600 bg-teal-50" : "border-slate-200"}`}><ScenarioHelp text={help.scenarioSelection}><input aria-label={`Confronta ${s.name}`} className="mr-2" type="checkbox" checked={selected.includes(s.id)} disabled={calculating} onChange={() => toggle(s.id)} /></ScenarioHelp>{s.name}</label>)}</div>
+      <button type="button" onClick={calculate} disabled={selected.length < 2 || calculating} className="mt-3 rounded-md bg-teal-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{calculating ? <><Loader2 className="mr-1 inline h-4 w-4 animate-spin" />Ricalcolo in corso…</> : "Ricalcola confronto"}</button>
+      {progress && <p role="status" className="mt-3 text-sm font-medium text-teal-800">{progress}</p>}
+      {error && <p role="alert" className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">Confronto non aggiornato: {error}</p>}
+      {comparison && <div className="mt-4 overflow-auto"><table className="w-full min-w-[600px] text-sm"><thead><tr className="border-b text-left"><th className="p-2">Indicatore</th>{comparison.ids.map(id => <th className="p-2" key={id}>{scenarios.find(s => s.id === id)?.name}</th>)}</tr></thead><tbody>{metrics.map(([label, fn]) => <tr className="border-b" key={label}><td className="p-2 font-bold">{label}</td>{comparison.ids.map(id => <td className="mono p-2" key={id}>{fn(comparison.results[id])}</td>)}</tr>)}</tbody></table></div>}
+    </>}
+  </div>;
 }

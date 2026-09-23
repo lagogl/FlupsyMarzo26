@@ -26,7 +26,7 @@ test("detailed table uses the page's vertical scroll and offers a return to the 
     <CommercialAvailabilityMatrix
       result={result}
       sizes={[{ id: 3, code: "TP-3000", name: "TP-3000", pricePerThousand: 7 }]}
-      draft={{ proposalPrices: [] }}
+      draft={{ name: "Scenario prova", proposalPrices: [] }}
     />,
   );
 

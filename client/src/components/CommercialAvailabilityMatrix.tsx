@@ -13,7 +13,7 @@ const money = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR
 const exactMoney = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const monthLabel = (month: { year: number; month: number }) => `${monthNames[month.month - 1]} ${month.year}`;
 
-export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result: ScenarioResult | null; sizes: CommercialSize[]; draft: Pick<ScenarioInput, "proposalPrices"> }) {
+export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result: ScenarioResult | null; sizes: CommercialSize[]; draft: Pick<ScenarioInput, "name" | "proposalPrices"> }) {
   const [mode, setMode] = useState<"prudent" | "expected">("prudent");
   const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
@@ -65,7 +65,7 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
         <Summary label="Massima nuova vendita in una cella" value={peak ? `${amount.format(peak.animals)} animali` : "—"} detail={peak ? `${peak.size.code} · ${monthLabel(peak.month)}${peak.value === null ? " · non valorizzato" : ` · ${money.format(peak.value)} stimati`}` : "Nessuna nuova vendita disponibile"} />
       </div>
       <div className="border-b border-slate-100 bg-slate-50 p-3 sm:p-4">
-        <CommercialScenarioOverview projection={projection} sizes={commercialSizes} draft={draft} />
+        <CommercialScenarioOverview projection={projection} sizes={commercialSizes} draft={draft} mode={mode} generatedAt={result!.generatedAt} warnings={result!.warnings} />
         <a href="#commercial-availability-detail" className="mt-3 inline-block text-sm font-bold text-[#0d5b58] underline underline-offset-2 hover:text-[#123b47]">Vai ai dati dettagliati ↓</a>
       </div>
       <div id="commercial-availability-detail" className="flex scroll-mt-24 flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">

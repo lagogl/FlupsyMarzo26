@@ -28,7 +28,10 @@ test("operator overview separates order coverage, biological stock, and protecte
         { id: 3, code: "TP-3000", name: "TP-3000", pricePerThousand: 7 },
         { id: 4, code: "TP-4000", name: "TP-4000", pricePerThousand: 9 },
       ]}
-      draft={{ proposalPrices: [] }}
+      draft={{ name: "Scenario prova", proposalPrices: [] }}
+      mode="prudent"
+      generatedAt="2026-09-23T00:00:00Z"
+      warnings={[]}
     />,
   );
   for (const value of ["29.000.000", "10.000.000", "19.000.000", "3.034.227", "2.669.609", "1.816.008", "210.400"]) {
@@ -39,4 +42,5 @@ test("operator overview separates order coverage, biological stock, and protecte
   assert.match(html, /Ancora vendibile per nuove vendite/);
   assert.match(html, /ordini acquisiti \(anche futuri\)/);
   assert.match(html, /Le taglie sono alternative: non sommare le quantità tra schede/);
+  assert.match(html, /Scheda settembre 2026 \(PDF\)/);
 });
