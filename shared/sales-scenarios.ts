@@ -43,6 +43,9 @@ export type ScenarioSale = z.infer<typeof scenarioSaleSchema>;
 export interface ScenarioMonth {
   year: number; month: number;
   availableBySize: Record<string, number>;
+  /** Biological stock by exact size at month start, after growth and earlier
+   * months' allocations, but before this month's orders and sales. */
+  stockBeforeOrdersBySize?: Record<string, number>;
   ordersRequested: number; ordersFulfilled: number; orderShortfall: number;
   orderCommitment?: {
     animals: number;

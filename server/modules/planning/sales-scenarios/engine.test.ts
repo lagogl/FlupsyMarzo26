@@ -163,9 +163,24 @@ test("expired compute budget fails explicitly", () => {
 
 test("commercial availability is residual after requested sales and reserves later accepted sales", () => {
   const result = projectWorld(world(), input([sale(200), sale(360, 2, 2)]));
+  assert.equal(result.months[0].stockBeforeOrdersBySize?.[1], 1000);
+  assert.equal(result.months[1].stockBeforeOrdersBySize?.[2], 720);
   assert.equal(result.months[0].salesApplied, 200);
   assert.equal(result.months[0].availableBySize[1], 400);
   assert.equal(result.months[1].availableBySize[2], 360);
+});
+
+test("pre-order stock is measured before current orders, across biological sizes, and is not an extra sale", () => {
+  const w = world();
+  w.sizes = [2];
+  w.orders = [{ key: "current", at: first + 1, sizeId: 1, quantity: 800 }];
+  w.maxApk[`${first + 1}|1`] = 30_000;
+  const result = projectWorld(w, input());
+  assert.deepEqual(result.months[0].stockBeforeOrdersBySize, {});
+  assert.deepEqual(result.months[1].stockBeforeOrdersBySize, { "2": 900 });
+  assert.equal(result.months[1].ordersFulfilled, 800);
+  assert.equal(result.months[1].availableBySize[2], 100);
+  assert.equal(result.months[2].stockBeforeOrdersBySize?.[2], 90);
 });
 
 test("cohort survival is incremental and hatchery arrivals do not inherit earlier mortality", () => {

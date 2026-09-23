@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { estimatedSalesValue, peakAlternativeOpportunity, priceForSize } from "./commercial-availability-utils";
+import { estimatedSalesValue, peakAlternativeOpportunity, priceForSize, stockBeforeOrdersForSize } from "./commercial-availability-utils";
 
 const size = { id: 7, code: "TP-5000", name: "5.000", pricePerThousand: 12 };
 const draft = { proposalPrices: [] };
@@ -30,4 +30,11 @@ test("alternative peak selects one opportunity rather than summing months or siz
   ], [size], draft);
   assert.equal(peak?.animals, 125_000);
   assert.equal(peak?.month.month, 5);
+});
+
+test("pre-order stock distinguishes old results from a genuinely empty size", () => {
+  const base = { year: 2026, month: 4, availableBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
+  assert.equal(stockBeforeOrdersForSize(base, size), null);
+  assert.equal(stockBeforeOrdersForSize({ ...base, stockBeforeOrdersBySize: {} }, size), 0);
+  assert.equal(stockBeforeOrdersForSize({ ...base, stockBeforeOrdersBySize: { "7": 1200 } }, size), 1200);
 });

@@ -26,3 +26,9 @@ La tabella commerciale deve distinguere la disponibilità alternativa per nuove 
 **Why:** La quantità ordinata può includere taglie non selezionate e non coincide necessariamente con animali già disponibili o con il residuo da consegnare. Sommare valori eterogenei o incompleti creerebbe una lettura commerciale falsa.
 
 **How to apply:** Tenere separati valori degli ordini e stime di nuove vendite in UI ed export; non inferire prezzi degli ordini dal listino dello scenario.
+
+La matrice commerciale distingue gli animali biologicamente classificati nella taglia all'inizio del mese (dopo crescita e impegni precedenti, prima degli ordini del mese) dal vendibile aggiuntivo protetto. Il primo numero non va sommato al secondo.
+
+**Why:** Il commerciale deve poter vedere le disponibilità di animali che alimentano il calcolo degli scoperti senza scambiare una giacenza lorda per quantità libera da offrire. Gli ordini possono usare taglie più grandi e la copertura di ordini futuri limita il vendibile: lo scoperto non si ricava sottraendo ordini dalla singola cella.
+
+**How to apply:** Allineare UI ed Excel sulle due fasi della simulazione; mostrare esplicitamente l'assenza del dato nei vecchi risultati invece di presentarla come zero. Non modificare la regola di allocazione per ottenere la visualizzazione.

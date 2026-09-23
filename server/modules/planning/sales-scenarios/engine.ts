@@ -35,10 +35,13 @@ export function replay(world: World, allocations: Allocation[]): Replay {
   const receipts: Record<number, number> = {};
   for (let n = world.first; n <= world.last; n++) {
     if (world.deadlineMs && Date.now() > world.deadlineMs) throw new Error("Scenario troppo complesso: ridurre orizzonte, taglie o righe di vendita e riprovare");
-    const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
+    const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, stockBeforeOrdersBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
     world.cohorts.forEach((cohort, i) => {
       if (cohort.entry === n) counts[i] += cohort.quantity;
       counts[i] *= cohort.path[n]?.survival ?? 0;
+      const size = cohort.path[n]?.sizeId;
+      if (size != null) row.stockBeforeOrdersBySize![size] =
+        (row.stockBeforeOrdersBySize![size] ?? 0) + Math.floor(counts[i]);
     });
     const consume = (quantity: number, sizeId: number, nursery = false, order = false) => {
       let left = quantity;
@@ -141,6 +144,9 @@ export function projectWorld(world: World, input: ScenarioInput, availability = 
     // commercial projection is restricted to the explicit sale catalog.
     row.availableBySize = Object.fromEntries(
       Object.entries(row.availableBySize).filter(([id]) => world.sizes.includes(Number(id))),
+    );
+    row.stockBeforeOrdersBySize = Object.fromEntries(
+      Object.entries(row.stockBeforeOrdersBySize ?? {}).filter(([id]) => world.sizes.includes(Number(id))),
     );
     months.push(row);
   }

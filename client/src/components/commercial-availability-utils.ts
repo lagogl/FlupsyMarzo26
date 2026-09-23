@@ -29,6 +29,13 @@ export function availabilityForSize(month: ScenarioMonth, size: CommercialSize):
   return month.availableBySize[String(size.id)] ?? month.availableBySize[size.code] ?? 0;
 }
 
+/** Null means the result predates this calculation; a missing size in a
+ * current result means zero stock, not missing data. */
+export function stockBeforeOrdersForSize(month: ScenarioMonth, size: CommercialSize): number | null {
+  const stock = month.stockBeforeOrdersBySize;
+  return stock ? stock[String(size.id)] ?? 0 : null;
+}
+
 export function peakAlternativeOpportunity(months: ScenarioMonth[], sizes: CommercialSize[], draft: Pick<ScenarioInput, "proposalPrices">) {
   return months.flatMap((month) => sizes.map((size) => {
     const animals = availabilityForSize(month, size);
