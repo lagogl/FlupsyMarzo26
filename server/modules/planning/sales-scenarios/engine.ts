@@ -13,6 +13,7 @@ export interface World {
   first: number; last: number;
   cohorts: Cohort[];
   orders: Order[];
+  orderCommitments?: Record<number, NonNullable<ScenarioMonth["orderCommitment"]>>;
   maxApk: Record<string, number>;
   sizes: number[];
   deadlineMs?: number;
@@ -34,7 +35,7 @@ export function replay(world: World, allocations: Allocation[]): Replay {
   const receipts: Record<number, number> = {};
   for (let n = world.first; n <= world.last; n++) {
     if (world.deadlineMs && Date.now() > world.deadlineMs) throw new Error("Scenario troppo complesso: ridurre orizzonte, taglie o righe di vendita e riprovare");
-    const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
+    const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
     world.cohorts.forEach((cohort, i) => {
       if (cohort.entry === n) counts[i] += cohort.quantity;
       counts[i] *= cohort.path[n]?.survival ?? 0;

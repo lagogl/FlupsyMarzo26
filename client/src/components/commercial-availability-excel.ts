@@ -1,5 +1,5 @@
 import type { ScenarioInput, ScenarioProjection } from "@shared/sales-scenarios";
-import { availabilityForSize, estimatedSalesValue, priceForSize, type CommercialSize } from "./commercial-availability-utils";
+import { availabilityForSize, estimatedSalesValue, orderCommitmentForMonth, priceForSize, type CommercialSize } from "./commercial-availability-utils";
 
 export async function createAvailabilityWorkbook(
   projection: ScenarioProjection,
@@ -15,8 +15,10 @@ export async function createAvailabilityWorkbook(
   notes.addRows([
     ["Disponibilità commerciale", mode === "prudent" ? "Prudente" : "Atteso"],
     ["Generato il", generatedAt],
-    ["Avvertenza", "Disponibilità alternative: non sommare mesi o taglie."],
+    ["Avvertenza", "Disponibilità e relativi valori sono alternative: non sommare mesi o taglie."],
     ["Valore", "Stima di vendita, non incasso. Senza prezzo: non valorizzato."],
+    ["Ordini acquisiti", "Quantità ordinate e valore totale d'ordine nel primo mese di consegna, anche per taglie non selezionate. Non indica animali già disponibili né nuovi incassi; base IVA non determinata."],
+    ["Ordini senza valore", "Valore mancante o non espresso in EUR è esportato come testo «Non valorizzato», non come zero."],
     ["Prezzi", "Prezzo dello scenario, altrimenti listino catalogo; euro per 1.000 animali."],
   ]);
   const sheet = workbook.addWorksheet("Disponibilità", {
@@ -28,6 +30,8 @@ export async function createAvailabilityWorkbook(
       { header: `${size.code} · Animali`, width: 22 },
       { header: `${size.code} · Valore €`, width: 24 },
     ]),
+    { header: "Ordini acquisiti · Animali", width: 30 },
+    { header: "Ordini acquisiti · Valore €", width: 30 },
     { header: "Scoperto ordini (animali)", width: 28 },
   ];
   const prices = workbook.addWorksheet("Prezzi");
@@ -46,6 +50,8 @@ export async function createAvailabilityWorkbook(
         const animals = availabilityForSize(month, size);
         return [animals, estimatedSalesValue(animals, priceForSize(size, draft)) ?? "Non valorizzato"];
       }),
+      orderCommitmentForMonth(month)?.animals ?? 0,
+      orderCommitmentForMonth(month)?.valueEuro ?? (orderCommitmentForMonth(month) ? "Non valorizzato" : "—"),
       month.orderShortfall,
     ]);
   });
@@ -54,6 +60,8 @@ export async function createAvailabilityWorkbook(
     sheet.getColumn(index * 2 + 3).numFmt = '#,##0.00 "€"';
   });
   sheet.getColumn(sizes.length * 2 + 2).numFmt = "#,##0";
+  sheet.getColumn(sizes.length * 2 + 3).numFmt = '#,##0.00 "€"';
+  sheet.getColumn(sizes.length * 2 + 4).numFmt = "#,##0";
   for (const tab of [sheet, prices]) {
     tab.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     tab.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123B47" } };

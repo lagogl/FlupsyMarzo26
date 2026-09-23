@@ -14,3 +14,9 @@ Nel contesto commerciale degli scenari, “T2–T10” indica le sole taglie TP 
 **Why:** L'utente ha chiarito esplicitamente di escludere le taglie intermedie; i nomi aggregati T3/T10 nel codice storico non identificano questa scelta commerciale.
 
 **How to apply:** Mantenere la selezione commerciale distinta dal catalogo biologico completo: l'esclusione dalla vendita non deve eliminare animali in crescita né obblighi verso ordini già acquisiti.
+
+La tabella commerciale deve distinguere la disponibilità alternativa per nuove vendite dalla quantità già richiesta dagli ordini acquisiti. Il valore di questi ultimi, quando affidabile, è il totale dell'ordine nel primo mese di consegna e non un nuovo incasso; la base IVA non è nota. Se manca un valore in EUR anche per un solo ordine del mese, non mostrare una somma parziale come totale.
+
+**Why:** La quantità ordinata può includere taglie non selezionate e non coincide necessariamente con animali già disponibili o con il residuo da consegnare. Sommare valori eterogenei o incompleti creerebbe una lettura commerciale falsa.
+
+**How to apply:** Tenere separati valori degli ordini e stime di nuove vendite in UI ed export; non inferire prezzi degli ordini dal listino dello scenario.

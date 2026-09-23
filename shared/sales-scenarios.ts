@@ -44,6 +44,12 @@ export interface ScenarioMonth {
   year: number; month: number;
   availableBySize: Record<string, number>;
   ordersRequested: number; ordersFulfilled: number; orderShortfall: number;
+  orderCommitment?: {
+    animals: number;
+    valueEuro: number | null;
+    valuedAnimals: number;
+    missingValueAnimals: number;
+  };
   salesRequested: number; salesApplied: number; sandNurseryApplied: number;
   revenue: number; receipts: number; remainingAnimals: number;
 }

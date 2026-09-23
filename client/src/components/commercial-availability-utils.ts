@@ -1,6 +1,20 @@
 import type { ScenarioInput, ScenarioMonth } from "@shared/sales-scenarios";
 
 export type CommercialSize = { id: number; code: string; name: string; pricePerThousand: number | null };
+export type AcquiredOrderCommitment = {
+  animals: number;
+  valueEuro: number | null;
+  valuedAnimals: number;
+  missingValueAnimals: number;
+};
+
+/** Keeps the matrix usable while older scenario responses do not yet carry commitments. */
+export function orderCommitmentForMonth(month: ScenarioMonth): AcquiredOrderCommitment | null {
+  const commitment = (month as ScenarioMonth & { orderCommitment?: AcquiredOrderCommitment }).orderCommitment;
+  return commitment && Number.isFinite(commitment.animals)
+    ? commitment
+    : null;
+}
 
 export function priceForSize(size: CommercialSize, draft: Pick<ScenarioInput, "proposalPrices">): number | null {
   const explicit = draft.proposalPrices.find((price) => price.sizeId === size.id);

@@ -9,6 +9,7 @@ import { inArray } from "drizzle-orm";
 import { activeOrdersCondition, hatcherySizeCode } from "./source-data";
 import { isScenarioSaleSize, selectedScenarioSizeIds, validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
 import { monthNumber, monthParts, projectWorld, proposeSales, type World, type Cohort, type Order } from "./engine";
+import { aggregateOrderCommitments, type CommitmentOrderInput } from "./order-commitment";
 
 export function businessToday() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -52,6 +53,7 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
     dbEsterno.select().from(ordiniCondivisi).where(activeOrdersCondition()),
   ]);
   const orders: Order[] = [];
+  const commitmentInputs: CommitmentOrderInput[] = [];
   validateScenarioSaleSizes(input, ctx.allSizes);
   const warnings = [...commonWarnings];
   warnings.push("SGR: coefficienti giornalieri configurati per mese/taglia, con ripiego sul valore mensile o sulla media disponibile dove manca il dato specifico.");
@@ -67,7 +69,9 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
     if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12 || !Number.isFinite(at)) throw new Error(`Data non valida nell'ordine ${order.id}`);
     if (at > first + 59) throw new Error("Esistono ordini oltre 60 mesi: impossibile garantire la protezione completa con questo orizzonte di calcolo");
     orders.push({ key: String(order.id), at, sizeId: size.id, quantity });
+    commitmentInputs.push({ quantity, deliveryMonth: monthNumber(year, month), total: order.totale, currency: order.valuta });
   }
+  const orderCommitments = aggregateOrderCommitments(commitmentInputs, first);
   if (rawOrders.some(o => o.stato === "Parziale")) warnings.push("Gli ordini parziali sono riservati per l'intera quantità registrata, in via cautelativa (nessuna deduzione di consegne non certificate).");
   const last = Math.max(first + input.horizon - 1, ...orders.map(o => o.at));
   const years = [...new Set(Array.from({ length: last - first + 1 }, (_, i) => monthParts(first + i).year))];
@@ -156,7 +160,11 @@ async function loadWorlds(input: ScenarioInput): Promise<{ expected: World; prud
     }
     if (fallbackMortality && !warnings.some(w => w.startsWith("Mortalità"))) warnings.push("Mortalità non configurata per alcune combinazioni mese/taglia: applicato fallback esplicito 3% mensile, moltiplicato per il coefficiente dello scenario.");
     if (!Object.keys(ctx.sgrByMonthAndSize).length && !Object.keys(ctx.sgrFallbackByMonth).length) throw new Error("SGR non configurati: impossibile produrre una previsione attendibile");
-    return { first, last, cohorts, orders, maxApk: ranges, sizes: selectedScenarioSizeIds(input, ctx.allSizes) };
+    return {
+      first, last, cohorts, orders,
+      orderCommitments,
+      maxApk: ranges, sizes: selectedScenarioSizeIds(input, ctx.allSizes),
+    };
   };
   const expected = build(false);
   const prudent = build(true);

@@ -3,7 +3,7 @@ import { FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createAvailabilityWorkbook } from "./commercial-availability-excel";
 import type { ScenarioInput, ScenarioProjection, ScenarioResult } from "@shared/sales-scenarios";
-import { availabilityForSize, estimatedSalesValue, peakAlternativeOpportunity, priceForSize, type CommercialSize } from "@/components/commercial-availability-utils";
+import { availabilityForSize, estimatedSalesValue, orderCommitmentForMonth, peakAlternativeOpportunity, priceForSize, type CommercialSize } from "@/components/commercial-availability-utils";
 
 const monthNames = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 const amount = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 });
@@ -46,6 +46,7 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
       <div>
         <h2 className="text-lg font-extrabold text-slate-900">Disponibilità commerciale</h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">Ogni cella è un&apos;alternativa commerciale: non sommare mesi o taglie. Il valore è una <b>stima di vendita</b>, non un incasso.</p>
+        <p className="mt-1 max-w-3xl text-xs text-amber-800">Gli ordini acquisiti mostrano quantità ordinate e valore totale degli ordini nel primo mese di consegna, anche per taglie non selezionate. Non indicano animali già disponibili, né nuovi incassi. Valori IVA inclusa/esclusa non determinati.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="rounded-md bg-slate-100 p-1" role="group" aria-label="Modalità disponibilità">
@@ -62,12 +63,14 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
         <Summary label="Massima quantità in una singola cella" value={peak ? `${amount.format(peak.animals)} animali` : "—"} detail={peak ? `${peak.size.code} · ${monthLabel(peak.month)}${peak.value === null ? " · non valorizzato" : ` · ${money.format(peak.value)} stimati`}` : "Nessuna disponibilità"} />
       </div>
       <div className="max-h-[600px] overflow-auto">
-        <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-left text-sm">
-          <caption className="sr-only">Matrice disponibilità commerciale {mode}: animali e valore stimato per mese e taglia.</caption>
+        <table className="w-full min-w-[1440px] border-separate border-spacing-0 text-left text-sm">
+          <caption className="sr-only">Matrice disponibilità commerciale {mode}: animali e valore stimato per mese e taglia, con ordini acquisiti.</caption>
           <thead className="sticky top-0 z-20 bg-[#eaf1ee] text-xs uppercase tracking-wide text-slate-600">
             <tr>
               <th scope="col" className="sticky left-0 z-30 min-w-36 border-b border-r border-slate-200 bg-[#eaf1ee] px-3 py-3">Mese</th>
               {commercialSizes.map((size) => <th key={size.id} scope="col" className="min-w-32 border-b border-r border-slate-200 px-3 py-3 text-center"><span className="block font-extrabold text-[#123b47]">{size.code}</span><span className="normal-case font-medium text-slate-500">animali · valore</span></th>)}
+              <th scope="col" className="min-w-32 border-b border-r border-slate-200 bg-[#fff8e8] px-3 py-3 text-center"><span className="block font-extrabold text-amber-900">Ordini acquisiti</span><span className="normal-case font-medium text-amber-800">animali</span></th>
+              <th scope="col" className="min-w-36 border-b border-r border-slate-200 bg-[#fff8e8] px-3 py-3 text-center"><span className="block font-extrabold text-amber-900">Ordini acquisiti</span><span className="normal-case font-medium text-amber-800">valore €</span></th>
               <th scope="col" className="min-w-32 border-b border-slate-200 px-3 py-3">Scoperto ordini</th>
             </tr>
           </thead>
@@ -75,12 +78,14 @@ export function CommercialAvailabilityMatrix({ result, sizes, draft }: { result:
             {projection.months.map((month) => <tr key={`${month.year}-${month.month}`} className="group">
               <th scope="row" className="sticky left-0 z-10 border-b border-r border-slate-200 bg-white px-3 py-3 font-extrabold capitalize text-slate-800 group-hover:bg-[#f7faf8]">{monthLabel(month)}</th>
               {commercialSizes.map((size) => <AvailabilityCell key={size.id} animals={availabilityForSize(month, size)} price={priceForSize(size, draft)} size={size.code} month={monthLabel(month)} />)}
+              <CommitmentCell commitment={orderCommitmentForMonth(month)} field="animals" month={monthLabel(month)} />
+              <CommitmentCell commitment={orderCommitmentForMonth(month)} field="valueEuro" month={monthLabel(month)} />
               <td className={`border-b border-slate-200 px-3 py-3 font-mono font-bold ${month.orderShortfall > 0 ? "bg-red-50 text-red-800" : "text-slate-400"}`}>{month.orderShortfall > 0 ? <><span aria-label={`${exactAmount.format(month.orderShortfall)} animali scoperti`}>{amount.format(month.orderShortfall)}</span><span className="sr-only"> animali scoperti</span></> : "—"}</td>
             </tr>)}
           </tbody>
         </table>
       </div>
-      <footer className="border-t border-slate-100 px-4 py-3 text-xs text-slate-600">Prezzo: proposta dello scenario se impostato, altrimenti listino catalogo. Senza prezzo la cella resta <b>non valorizzata</b>; non equivale a zero.</footer>
+       <footer className="border-t border-slate-100 px-4 py-3 text-xs text-slate-600">Prezzo: proposta dello scenario se impostato, altrimenti listino catalogo. Senza prezzo la cella resta <b>non valorizzata</b>; non equivale a zero. Gli ordini acquisiti sono separati dallo scoperto ordini e dal valore stimato: non aggiungerli alle alternative.</footer>
     </>}
   </section>;
 }
@@ -96,5 +101,14 @@ function AvailabilityCell({ animals, price, size, month }: { animals: number; pr
     <span className="sr-only">{month}, {size}: {exact}</span>
     <div aria-hidden="true" className={`font-mono font-extrabold ${animals > 0 ? "text-[#0d5b58]" : "text-slate-400"}`}>{amount.format(animals)}</div>
     <div aria-hidden="true" className={`mt-0.5 text-xs font-semibold ${value === null ? "text-amber-800" : "text-slate-500"}`}>{value === null ? "non valorizzato" : money.format(value)}</div>
+  </td>;
+}
+
+function CommitmentCell({ commitment, field, month }: { commitment: ReturnType<typeof orderCommitmentForMonth>; field: "animals" | "valueEuro"; month: string }) {
+  const value = commitment?.[field] ?? null;
+  const display = !commitment ? "—" : value === null ? "non valorizzato" : field === "animals" ? amount.format(value) : money.format(value);
+  return <td className="border-b border-r border-slate-200 bg-[#fffdf5] px-3 py-2.5 text-right align-middle" title={`${month}, Ordini acquisiti: ${display}`}>
+    <span className="sr-only">{month}, Ordini acquisiti: {display}</span>
+    <span aria-hidden="true" className={`font-mono font-extrabold ${value === null ? "text-amber-800" : "text-slate-700"}`}>{display}</span>
   </td>;
 }
