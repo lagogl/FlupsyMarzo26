@@ -1,5 +1,5 @@
 import type { ScenarioInput, ScenarioProjection } from "@shared/sales-scenarios";
-import { availabilityForSize, estimatedSalesValue, orderCommitmentForMonth, priceForSize, stockBeforeOrdersForSize, type CommercialSize } from "./commercial-availability-utils";
+import { availabilityForSize, eligibleAtStartForSize, estimatedSalesValue, orderCommitmentForMonth, priceForSize, stockBeforeOrdersForSize, type CommercialSize } from "./commercial-availability-utils";
 
 export async function createAvailabilityWorkbook(
   projection: ScenarioProjection,
@@ -16,9 +16,9 @@ export async function createAvailabilityWorkbook(
     ["Disponibilità commerciale", mode === "prudent" ? "Prudente" : "Atteso"],
     ["Generato il", generatedAt],
     ["Avvertenza", "Disponibilità e relativi valori sono alternative: non sommare mesi o taglie."],
-    ["A inizio mese", "Animali classificati in quella taglia dopo crescita e impegni dei mesi precedenti, prima di ordini e vendite del mese (oggi per il mese corrente). Non sommare al vendibile aggiuntivo."],
+    ["A inizio mese", "Taglia esatta e animali fisicamente più grandi, anche di taglie non selezionate: dopo crescita e impegni precedenti, prima degli ordini e vendite del mese (oggi per il mese corrente). Non sommare al vendibile."],
     ["Scoperto", "Gli ordini possono usare anche animali di taglie più grandi; lo scoperto è complessivo e non si ottiene sottraendo gli ordini da una singola taglia."],
-    ["Nuove vendite", "Quantità aggiuntiva protetta rispetto alla copertura degli ordini futuri. Un risultato precedente privo di animali a inizio mese va ricalcolato."],
+    ["Nuove vendite", "Unica quantità di animali della taglia richiesta O fisicamente più grandi che si possono destinare a nuove vendite senza peggiorare gli ordini futuri. Le celle sono alternative, non sommabili."],
     ["Valore", "Stima di vendita, non incasso. Senza prezzo: non valorizzato."],
     ["Ordini acquisiti", "Quantità ordinate e valore totale d'ordine nel primo mese di consegna, anche per taglie non selezionate. Non indica animali già disponibili né nuovi incassi; base IVA non determinata."],
     ["Ordini senza valore", "Valore mancante o non espresso in EUR è esportato come testo «Non valorizzato», non come zero."],
@@ -30,9 +30,10 @@ export async function createAvailabilityWorkbook(
   sheet.columns = [
     { header: "Mese", width: 23 },
     ...sizes.flatMap(size => [
-      { header: `${size.code} · A inizio mese (animali)`, width: 36 },
-      { header: `${size.code} · Nuove vendite (animali)`, width: 36 },
-      { header: `${size.code} · Valore nuove vendite €`, width: 36 },
+      { header: `${size.code} · Taglia esatta a inizio mese`, width: 37 },
+      { header: `${size.code} · Più grandi a inizio mese`, width: 35 },
+      { header: `${size.code} · Vendibile taglia o superiore`, width: 38 },
+      { header: `${size.code} · Valore stimato €`, width: 28 },
     ]),
     { header: "Ordini acquisiti · Animali", width: 30 },
     { header: "Ordini acquisiti · Valore €", width: 30 },
@@ -52,7 +53,14 @@ export async function createAvailabilityWorkbook(
       label,
       ...sizes.flatMap(size => {
         const animals = availabilityForSize(month, size);
-        return [stockBeforeOrdersForSize(month, size) ?? "Ricalcolare", animals, estimatedSalesValue(animals, priceForSize(size, draft)) ?? "Non valorizzato"];
+        const exact = stockBeforeOrdersForSize(month, size);
+        const eligible = eligibleAtStartForSize(month, size);
+        return [
+          exact ?? "Ricalcolare",
+          exact === null || eligible === null ? "Ricalcolare" : Math.max(0, eligible - exact),
+          animals,
+          estimatedSalesValue(animals, priceForSize(size, draft)) ?? "Non valorizzato",
+        ];
       }),
       orderCommitmentForMonth(month)?.animals ?? 0,
       orderCommitmentForMonth(month)?.valueEuro ?? (orderCommitmentForMonth(month) ? "Non valorizzato" : "—"),
@@ -60,13 +68,14 @@ export async function createAvailabilityWorkbook(
     ]);
   });
   sizes.forEach((_, index) => {
-    sheet.getColumn(index * 3 + 2).numFmt = "#,##0";
-    sheet.getColumn(index * 3 + 3).numFmt = "#,##0";
-    sheet.getColumn(index * 3 + 4).numFmt = '#,##0.00 "€"';
+    sheet.getColumn(index * 4 + 2).numFmt = "#,##0";
+    sheet.getColumn(index * 4 + 3).numFmt = "#,##0";
+    sheet.getColumn(index * 4 + 4).numFmt = "#,##0";
+    sheet.getColumn(index * 4 + 5).numFmt = '#,##0.00 "€"';
   });
-  sheet.getColumn(sizes.length * 3 + 2).numFmt = "#,##0";
-  sheet.getColumn(sizes.length * 3 + 3).numFmt = '#,##0.00 "€"';
-  sheet.getColumn(sizes.length * 3 + 4).numFmt = "#,##0";
+  sheet.getColumn(sizes.length * 4 + 2).numFmt = "#,##0";
+  sheet.getColumn(sizes.length * 4 + 3).numFmt = '#,##0.00 "€"';
+  sheet.getColumn(sizes.length * 4 + 4).numFmt = "#,##0";
   for (const tab of [sheet, prices]) {
     tab.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     tab.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123B47" } };

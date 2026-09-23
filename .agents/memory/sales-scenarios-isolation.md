@@ -31,4 +31,10 @@ La matrice commerciale distingue gli animali biologicamente classificati nella t
 
 **Why:** Il commerciale deve poter vedere le disponibilità di animali che alimentano il calcolo degli scoperti senza scambiare una giacenza lorda per quantità libera da offrire. Gli ordini possono usare taglie più grandi e la copertura di ordini futuri limita il vendibile: lo scoperto non si ricava sottraendo ordini dalla singola cella.
 
-**How to apply:** Allineare UI ed Excel sulle due fasi della simulazione; mostrare esplicitamente l'assenza del dato nei vecchi risultati invece di presentarla come zero. Non modificare la regola di allocazione per ottenere la visualizzazione.
+**How to apply:** Allineare UI ed Excel sulle due fasi della simulazione; mostrare esplicitamente l'assenza del dato nei vecchi risultati invece di presentarla come zero.
+
+Per ogni taglia commerciale selezionata, il vendibile è UNA capacità protetta che comprende sia animali di taglia esatta sia fisicamente più grandi, anche se la taglia effettiva non era selezionata. Le cifre per taglia esatta e superiore all'inizio del mese sono una ripartizione informativa, non due disponibilità da sommare.
+
+**Why:** L'utente ha chiarito che la precedente matrice per sola taglia esatta faceva sembrare scomparsi animali cresciuti oltre le taglie selezionate; vuole un quadro semplice di quanti può contare di vendere come taglia richiesta o superiore.
+
+**How to apply:** Proteggere ordini futuri e altre vendite accettate sulla capacità inclusiva, mantenendo alternative non additive tra celle. Esplicitare che l'eventuale valore usa il prezzo della taglia richiesta, non una quotazione certa delle taglie effettive superiori.

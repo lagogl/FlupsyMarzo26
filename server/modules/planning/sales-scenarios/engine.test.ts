@@ -139,14 +139,14 @@ test("validation rejects duplicate IDs, unbounded inputs and non-prudent assumpt
   assert.equal(scenarioInputSchema.safeParse({ ...v, horizon: 100 }).success, false);
   assert.equal(scenarioInputSchema.safeParse({ ...v, prudentGrowthFactor: 1.5 }).success, false);
 });
-test("larger animals can cover acquired smaller-size orders, manual sales remain exact size", () => {
+test("larger animals can cover acquired orders and requested commercial sales", () => {
   const w = world();
   w.maxApk[`${first + 1}|1`] = 30_000;
   w.orders = [{ key: "smaller", at: first + 1, sizeId: 1, quantity: 500 }];
   const v = input([sale(100, 2, 1)]);
   const result = projectWorld(w, v);
   assert.equal(result.months[1].ordersFulfilled, 500);
-  assert.equal(result.months[1].salesApplied, 0);
+  assert.equal(result.months[1].salesApplied, 100);
 });
 test("a successful proposal reaches cash goal without changing input", () => {
   const v = input(); v.cashGoal = 50;
@@ -181,6 +181,45 @@ test("pre-order stock is measured before current orders, across biological sizes
   assert.equal(result.months[1].ordersFulfilled, 800);
   assert.equal(result.months[1].availableBySize[2], 100);
   assert.equal(result.months[2].stockBeforeOrdersBySize?.[2], 90);
+});
+
+test("one protected capacity includes exact and physically larger animals, even outside selected sizes", () => {
+  const w = world();
+  w.sizes = [1];
+  w.maxApk = Object.fromEntries([first, first + 1, first + 2].map(n => [`${n}|1`, 30_000]));
+  const path = (sizeId: number | null, animalsPerKg: number) => Object.fromEntries(
+    [first, first + 1, first + 2].map(n => [n, { survival: 1, sizeId, animalsPerKg }]),
+  );
+  w.cohorts = [
+    { quantity: 100, entry: first, path: path(1, 20_000) },
+    { quantity: 800, entry: first, path: path(3, 5_000) },
+    { quantity: 200, entry: first, path: path(null, 1_000) },
+    { quantity: 300, entry: first, path: path(4, 40_000) },
+  ];
+  w.orders = [{ key: "future", at: first + 2, sizeId: 1, quantity: 700 }];
+  const result = projectWorld(w, input());
+  assert.equal(result.months[0].stockBeforeOrdersBySize?.[1], 100);
+  assert.equal(result.months[0].eligibleAtStartBySize?.[1], 1100);
+  assert.equal(result.months[0].availableBySize[1], 400);
+  assert.equal(result.totalOrderShortfall, 0);
+  assert.equal(replay(w, [sale(400)]).orders.future, 700);
+  assert.equal(replay(w, [sale(401)]).orders.future, 699);
+});
+
+test("capacities for two requested sizes sharing larger animals are alternatives, not additive", () => {
+  const w = world();
+  w.cohorts = [{ quantity: 1000, entry: first, path: {
+    [first]: { survival: 1, sizeId: 2, animalsPerKg: 8_000 },
+    [first + 1]: { survival: 1, sizeId: 2, animalsPerKg: 8_000 },
+    [first + 2]: { survival: 1, sizeId: 2, animalsPerKg: 8_000 },
+  } }];
+  w.maxApk[`${first}|2`] = 10_000;
+  const result = projectWorld(w, input());
+  assert.equal(result.months[0].stockBeforeOrdersBySize?.[1] ?? 0, 0);
+  assert.equal(result.months[0].eligibleAtStartBySize?.[1], 1000);
+  assert.equal(result.months[0].availableBySize[1], 1000);
+  assert.equal(result.months[0].availableBySize[2], 1000);
+  assert.equal(replay(w, [sale(1000, 1, 1), sale(1000, 1, 2)]).applied["sale-1-2"], 0);
 });
 
 test("cohort survival is incremental and hatchery arrivals do not inherit earlier mortality", () => {

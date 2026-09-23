@@ -35,21 +35,25 @@ export function replay(world: World, allocations: Allocation[]): Replay {
   const receipts: Record<number, number> = {};
   for (let n = world.first; n <= world.last; n++) {
     if (world.deadlineMs && Date.now() > world.deadlineMs) throw new Error("Scenario troppo complesso: ridurre orizzonte, taglie o righe di vendita e riprovare");
-    const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, stockBeforeOrdersBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
+    const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, stockBeforeOrdersBySize: {}, eligibleAtStartBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
     world.cohorts.forEach((cohort, i) => {
       if (cohort.entry === n) counts[i] += cohort.quantity;
       counts[i] *= cohort.path[n]?.survival ?? 0;
       const size = cohort.path[n]?.sizeId;
       if (size != null) row.stockBeforeOrdersBySize![size] =
         (row.stockBeforeOrdersBySize![size] ?? 0) + Math.floor(counts[i]);
+      const p = cohort.path[n];
+      if (p) for (const id of world.sizes) {
+        if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
+          row.eligibleAtStartBySize![id] = (row.eligibleAtStartBySize![id] ?? 0) + Math.floor(counts[i]);
+      }
     });
-    const consume = (quantity: number, sizeId: number, nursery = false, order = false) => {
+    const consume = (quantity: number, sizeId: number, nursery = false) => {
       let left = quantity;
       // Most mature first, deterministic across all replays.
       const eligible = world.cohorts.map((c, i) => ({ i, p: c.path[n] }))
-        .filter(({ i, p }) => counts[i] > 0 && p && (nursery ? p.animalsPerKg <= 29_999 : order
-          ? p.animalsPerKg <= (world.maxApk[`${n}|${sizeId}`] ?? -1)
-          : p.sizeId === sizeId))
+        .filter(({ i, p }) => counts[i] > 0 && p && (nursery ? p.animalsPerKg <= 29_999
+          : p.animalsPerKg <= (world.maxApk[`${n}|${sizeId}`] ?? -1)))
         .sort((a, b) => a.p.animalsPerKg - b.p.animalsPerKg || a.i - b.i);
       for (const { i } of eligible) {
         const take = Math.min(left, Math.floor(counts[i]));
@@ -60,7 +64,7 @@ export function replay(world: World, allocations: Allocation[]): Replay {
       return quantity - left;
     };
     for (const order of world.orders.filter(o => o.at === n)) {
-      const used = consume(order.quantity, order.sizeId, false, true);
+      const used = consume(order.quantity, order.sizeId);
       orders[order.key] = used;
       row.ordersRequested += order.quantity;
       row.ordersFulfilled += used;
@@ -78,10 +82,10 @@ export function replay(world: World, allocations: Allocation[]): Replay {
         receipts[n + sale.paymentDelayMonths] = (receipts[n + sale.paymentDelayMonths] ?? 0) + revenue;
       }
     }
-    world.cohorts.forEach((c, i) => {
-      const size = c.path[n]?.sizeId;
-      if (size != null) row.availableBySize[size] = (row.availableBySize[size] ?? 0) + Math.floor(counts[i]);
-    });
+    for (const id of world.sizes) row.availableBySize[id] = world.cohorts.reduce((total, c, i) => {
+      const p = c.path[n];
+      return total + (p && p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1) ? Math.floor(counts[i]) : 0);
+    }, 0);
     row.receipts = receipts[n] ?? 0;
     row.remainingAnimals = Math.floor(counts.reduce((a, b) => a + b, 0));
     months.set(n, row);

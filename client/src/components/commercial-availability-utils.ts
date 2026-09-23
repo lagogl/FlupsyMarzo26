@@ -36,6 +36,11 @@ export function stockBeforeOrdersForSize(month: ScenarioMonth, size: CommercialS
   return stock ? stock[String(size.id)] ?? 0 : null;
 }
 
+export function eligibleAtStartForSize(month: ScenarioMonth, size: CommercialSize): number | null {
+  const stock = month.eligibleAtStartBySize;
+  return stock ? stock[String(size.id)] ?? 0 : null;
+}
+
 export function peakAlternativeOpportunity(months: ScenarioMonth[], sizes: CommercialSize[], draft: Pick<ScenarioInput, "proposalPrices">) {
   return months.flatMap((month) => sizes.map((size) => {
     const animals = availabilityForSize(month, size);

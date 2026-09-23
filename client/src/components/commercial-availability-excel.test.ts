@@ -9,6 +9,7 @@ test("xlsx keeps beginning-of-month stock separate from new-sale capacity and or
     months: [{
       year: 2027, month: 8,
       stockBeforeOrdersBySize: { "7": 250_000 },
+      eligibleAtStartBySize: { "7": 325_000 },
       availableBySize: { "7": 30_000 },
       ordersRequested: 200_000, ordersFulfilled: 180_000, orderShortfall: 20_000,
       orderCommitment: { animals: 200_000, valueEuro: 4000, valuedAnimals: 200_000, missingValueAnimals: 0 },
@@ -26,11 +27,13 @@ test("xlsx keeps beginning-of-month stock separate from new-sale capacity and or
   await copy.xlsx.load(await workbook.xlsx.writeBuffer());
   const sheet = copy.getWorksheet("Disponibilità")!;
   assert.match(String(sheet.getCell("B1").value), /inizio mese/i);
-  assert.match(String(sheet.getCell("C1").value), /nuove vendite/i);
+  assert.match(String(sheet.getCell("C1").value), /più grandi/i);
+  assert.match(String(sheet.getCell("D1").value), /vendibile taglia o superiore/i);
   assert.equal(sheet.getCell("B2").value, 250_000);
-  assert.equal(sheet.getCell("C2").value, 30_000);
-  assert.equal(sheet.getCell("D2").value, 300);
-  assert.equal(sheet.getCell("E2").value, 200_000);
-  assert.equal(sheet.getCell("F2").value, 4000);
-  assert.equal(sheet.getCell("G2").value, 20_000);
+  assert.equal(sheet.getCell("C2").value, 75_000);
+  assert.equal(sheet.getCell("D2").value, 30_000);
+  assert.equal(sheet.getCell("E2").value, 300);
+  assert.equal(sheet.getCell("F2").value, 200_000);
+  assert.equal(sheet.getCell("G2").value, 4000);
+  assert.equal(sheet.getCell("H2").value, 20_000);
 });
