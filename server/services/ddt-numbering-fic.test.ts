@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  chooseDdtReservationNumber,
   getNextDdtNumber,
   type DdtNumberingSources,
   type FicDeliveryNotePage
@@ -90,4 +91,12 @@ test("legge tutte le pagine FIC prima di scegliere il massimo", async () => {
 
   assert.equal(await getNextDdtNumber(data, 10, 2026), 313);
   assert.deepEqual(data.requests, ["10:2026:1", "10:2026:2", "10:2026:3"]);
+});
+
+test("DDT automatico segue il massimo FIC e locale, quello scelto può usare solo un numero libero", () => {
+  assert.equal(chooseDdtReservationNumber(326, 327), 328);
+  assert.equal(chooseDdtReservationNumber(328, 327, 330), 330);
+  assert.equal(chooseDdtReservationNumber(328, 327, 325), 325);
+  assert.throws(() => chooseDdtReservationNumber(328, 327, 326, true), /già presente/);
+  assert.throws(() => chooseDdtReservationNumber(328, 327, 327, false, true), /prenotato/);
 });

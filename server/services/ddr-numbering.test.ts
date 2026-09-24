@@ -31,6 +31,8 @@ class MemoryDdrStore implements DdrNumberingStore {
           }
         },
         lockNextNumber: async (companyId, year) => this.sequences.get(`${companyId}:${year}`)!,
+        isNumberTaken: async (companyId, year, number) => [...this.sales.values()]
+          .some(s => s.companyId === companyId && s.ddrYear === year && s.ddrNumber === number),
         assignSale: async (id, number, year) => {
           const sale = this.sales.get(id)!;
           sale.ddrNumber = number;
@@ -92,6 +94,31 @@ test('il nuovo anno riparte dal valore configurato oppure da 1', async () => {
 
   assert.deepEqual(await ensureDdrNumber(store, 1), { number: 25, year: 2027 });
   assert.deepEqual(await ensureDdrNumber(store, 2), { number: 1, year: 2027 });
+});
+
+test('un numero DDR scelto per la vendita avanza la sequenza senza riutilizzare numeri occupati', async () => {
+  const store = new MemoryDdrStore();
+  store.sales.set(1, sale(1, 1052922, '2026-09-24'));
+  store.sales.set(2, sale(2, 1052922, '2026-09-24'));
+  store.sales.set(3, sale(3, 1052922, '2026-09-24'));
+  store.sequences.set('1052922:2026', 21);
+
+  assert.deepEqual(await ensureDdrNumber(store, 1, 25), { number: 25, year: 2026 });
+  assert.equal(store.sequences.get('1052922:2026'), 26);
+  assert.deepEqual(await ensureDdrNumber(store, 2, 22), { number: 22, year: 2026 });
+  assert.equal(store.sequences.get('1052922:2026'), 26);
+  await assert.rejects(ensureDdrNumber(store, 3, 25), /già assegnato/);
+  assert.deepEqual(await ensureDdrNumber(store, 3), { number: 26, year: 2026 });
+  await assert.rejects(ensureDdrNumber(store, 1, 30), /già numerato/);
+});
+
+test('due vendite non possono prenotare contemporaneamente lo stesso DDR', async () => {
+  const store = new MemoryDdrStore();
+  store.sales.set(1, sale(1, 1052922, '2026-09-24'));
+  store.sales.set(2, sale(2, 1052922, '2026-09-24'));
+  const attempts = await Promise.allSettled([ensureDdrNumber(store, 1, 8), ensureDdrNumber(store, 2, 8)]);
+  assert.equal(attempts.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(attempts.filter(result => result.status === 'rejected').length, 1);
 });
 
 test('rifiuta un prossimo numero già assegnato o regressivo', () => {

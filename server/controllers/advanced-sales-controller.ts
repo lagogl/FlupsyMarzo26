@@ -88,7 +88,7 @@ import {
   getSizeRangeCandidates
 } from "../utils/size-determination";
 import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
-import { getNextDdtNumber } from "../services/ddt-numbering-fic";
+import { chooseDdtReservationNumber, getNextDdtNumber } from "../services/ddt-numbering-fic";
 import {
   DDT_NUMBER_CONFLICT_MESSAGE,
   isDdtNumberConflict,
@@ -154,7 +154,7 @@ function ensureAdvancedSaleDocumentSchema() {
  *
  * @param companyId - ID azienda FIC che emette il DDT (OBBLIGATORIO)
  */
-async function getNextAvailableDDTNumber(companyId?: number | null, year = new Date().getFullYear()): Promise<number> {
+async function getNextAvailableDDTNumber(companyId?: number | null, year = new Date().getFullYear(), ficNumbers?: Set<number>): Promise<number> {
   if (!companyId) {
     throw new Error("ID azienda mancante: impossibile leggere la numerazione DDT da Fatture in Cloud. Associare un'azienda emittente alla vendita.");
   }
@@ -175,8 +175,13 @@ async function getNextAvailableDDTNumber(companyId?: number | null, year = new D
         accessToken,
         `/issued_documents?type=delivery_note&year=${ficYear}&page=${page}&per_page=100`
       );
+      const documents = ficResponse.data?.data ?? [];
+      if (ficNumbers) for (const document of documents) {
+        const number = Number(document.number);
+        if (Number.isSafeInteger(number) && number > 0) ficNumbers.add(number);
+      }
       return {
-        documents: ficResponse.data?.data ?? [],
+        documents,
         lastPage: Number(
           ficResponse.data?.last_page
           ?? ficResponse.data?.meta?.pagination?.last_page
@@ -1492,7 +1497,7 @@ export async function getAdvancedSale(req: Request, res: Response) {
   }
 }
 
-async function ensureDdrNumber(saleId: number) {
+async function ensureDdrNumber(saleId: number, requestedNumber?: number) {
   await ensureAdvancedSaleDocumentSchema();
   const store: DdrNumberingStore = {
     transaction: work => db.transaction(async tx => work({
@@ -1527,6 +1532,14 @@ async function ensureDdrNumber(saleId: number) {
         `);
         return Number((result as any).rows?.[0]?.next_number);
       },
+      isNumberTaken: async (companyId, year, number) => {
+        const result = await tx.execute(sql`
+          SELECT 1 FROM advanced_sales
+          WHERE company_id = ${companyId} AND ddr_year = ${year} AND ddr_number = ${number}
+          LIMIT 1
+        `);
+        return Boolean((result as any).rows?.length);
+      },
       assignSale: async (id, number, year) => {
         await tx.execute(sql`
           UPDATE advanced_sales SET ddr_number = ${number}, ddr_year = ${year}, updated_at = NOW()
@@ -1541,7 +1554,83 @@ async function ensureDdrNumber(saleId: number) {
       }
     }))
   };
-  return allocateDdrNumber(store, saleId);
+  return allocateDdrNumber(store, saleId, requestedNumber);
+}
+
+export async function getSaleDocumentNumbers(req: Request, res: Response) {
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const saleId = Number(req.params.id);
+    if (!Number.isSafeInteger(saleId) || saleId < 1) {
+      return res.status(400).json({ success: false, error: 'Vendita non valida' });
+    }
+    const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
+    if (!sale) return res.status(404).json({ success: false, error: 'Vendita non trovata' });
+    if (sale.status !== 'confirmed') {
+      return res.status(409).json({ success: false, error: 'Confermare la vendita prima di numerare i documenti' });
+    }
+    if (!sale.companyId) {
+      return res.status(400).json({ success: false, error: 'Azienda emittente non associata alla vendita' });
+    }
+    const year = Number(String(sale.saleDate).slice(0, 4));
+    if (!Number.isSafeInteger(year)) return res.status(400).json({ success: false, error: 'Anno vendita non valido' });
+    const [existingDdt] = sale.ddtId
+      ? await db.select({ number: ddt.numero, status: ddt.ddtStato }).from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
+      : [];
+    const isDelta = ['13263', '1052922'].includes(String(sale.companyId));
+    const [ficProposal, ddrRows, localDdtRows] = await Promise.all([
+      existingDdt ? Promise.resolve(null) : getNextAvailableDDTNumber(sale.companyId, year),
+      isDelta && !sale.ddrNumber ? db.execute(sql`
+        SELECT GREATEST(
+          COALESCE((SELECT next_number FROM ddr_number_sequences WHERE company_id = ${sale.companyId} AND year = ${year}), 1),
+          COALESCE((SELECT MAX(ddr_number) + 1 FROM advanced_sales WHERE company_id = ${sale.companyId} AND ddr_year = ${year}), 1)
+        ) AS next_number
+      `) : Promise.resolve(null),
+      existingDdt ? Promise.resolve(null) : db.execute(sql`
+        SELECT COALESCE(MAX(numero), 0)::integer AS max_number
+        FROM ${ddt} WHERE company_id = ${sale.companyId}
+          AND EXTRACT(YEAR FROM data)::integer = ${year}
+      `)
+    ]);
+    const ddtProposed = ficProposal === null ? null : Math.max(
+      ficProposal,
+      Number((localDdtRows as any)?.rows?.[0]?.max_number || 0) + 1
+    );
+    res.json({
+      success: true,
+      ddt: { proposed: ddtProposed, number: existingDdt?.number ?? null, status: existingDdt?.status ?? sale.ddtStatus },
+      ddr: { proposed: ddrRows ? Number((ddrRows as any).rows?.[0]?.next_number) : null, number: sale.ddrNumber, year }
+    });
+  } catch (error) {
+    console.error('Errore lettura numerazione documenti:', error);
+    res.status(503).json({ success: false, error: 'Impossibile verificare la numerazione FIC e DDR; riprovare' });
+  }
+}
+
+export async function assignSaleDdrNumber(req: Request, res: Response) {
+  try {
+    const number = req.body?.number;
+    if (!Number.isSafeInteger(number) || number < 1 || number >= 2_147_483_647) {
+      return res.status(400).json({ success: false, error: 'Inserire un numero DDR intero positivo' });
+    }
+    const saleId = Number(req.params.id);
+    if (!Number.isSafeInteger(saleId) || saleId < 1) {
+      return res.status(400).json({ success: false, error: 'Vendita non valida' });
+    }
+    const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
+    if (!sale) return res.status(404).json({ success: false, error: 'Vendita non trovata' });
+    if (sale.status !== 'confirmed' || !['13263', '1052922'].includes(String(sale.companyId))) {
+      return res.status(409).json({ success: false, error: 'DDR disponibile solo per vendite Delta Futuro confermate' });
+    }
+    const assigned = await ensureDdrNumber(saleId, number);
+    res.json({ success: true, ...assigned });
+  } catch (error) {
+    const conflict = (error as any)?.code === '23505' || /già assegnato|già numerato/.test((error as Error).message);
+    res.status(conflict ? 409 : 500).json({
+      success: false,
+      error: conflict ? 'Numero DDR già assegnato o documento già numerato: aggiornare la proposta' : 'Impossibile assegnare il numero DDR'
+    });
+  }
 }
 
 export async function getDdrSequence(req: Request, res: Response) {
@@ -3702,6 +3791,10 @@ export async function generateDDT(req: Request, res: Response) {
         error: "ID vendita richiesto"
       });
     }
+    const requestedNumber = req.body?.number;
+    if (requestedNumber !== undefined && (!Number.isSafeInteger(requestedNumber) || requestedNumber < 1 || requestedNumber > 2_147_483_647)) {
+      return res.status(400).json({ success: false, error: 'Inserire un numero DDT intero positivo' });
+    }
 
     // Recupera vendita completa
     const sale = await db.select().from(advancedSales).where(eq(advancedSales.id, parseInt(id))).limit(1);
@@ -3831,7 +3924,8 @@ export async function generateDDT(req: Request, res: Response) {
     const numberingYear = new Date(saleData.saleDate).getFullYear();
     // FIC viene interrogato prima della transazione. Il candidato sarà
     // riconciliato con il massimo locale mentre il lock annuale è attivo.
-    const externalNumberCandidate = await getNextAvailableDDTNumber(companyId, numberingYear);
+    const ficNumbers = new Set<number>();
+    const externalNumberCandidate = await getNextAvailableDDTNumber(companyId, numberingYear, ficNumbers);
 
     // Raggruppa sacchi per taglia per creare righe con subtotali
     const bagsPerSize: Record<string, typeof bags> = {};
@@ -3944,7 +4038,18 @@ export async function generateDDT(req: Request, res: Response) {
           AND EXTRACT(YEAR FROM data)::integer = ${numberingYear}
       `);
       const localMax = Number((localMaxResult as any).rows?.[0]?.max_number || 0);
-      const reservedNumber = Math.max(externalNumberCandidate, localMax + 1);
+      const taken = requestedNumber === undefined ? null : await tx.execute(sql`
+          SELECT 1 FROM ${ddt}
+          WHERE company_id = ${companyId}
+            AND EXTRACT(YEAR FROM data)::integer = ${numberingYear}
+            AND numero = ${requestedNumber}
+          LIMIT 1
+        `);
+      const reservedNumber = chooseDdtReservationNumber(
+        externalNumberCandidate, localMax, requestedNumber,
+        requestedNumber !== undefined && ficNumbers.has(requestedNumber),
+        Boolean((taken as any)?.rows?.length)
+      );
 
       const [createdDdt] = await tx.insert(ddt).values({
         numero: reservedNumber,
@@ -4790,6 +4895,19 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       fcloudCompanyKey
     });
 
+    // The number was available when the local draft was prepared, but FIC can
+    // change independently before it is sent. Do not create the FCloud document
+    // when FIC already contains this number.
+    const ficIssuedNumbers = new Set<number>();
+    const numberingYear = new Date(ddtData.data).getFullYear();
+    await getNextAvailableDDTNumber(companyId, numberingYear, ficIssuedNumbers);
+    if (ficIssuedNumbers.has(ddtData.numero)) {
+      return res.status(409).json({
+        success: false,
+        error: `DDT n. ${ddtData.numero}/${numberingYear} già presente in Fatture in Cloud. Bozza non inviata: verificare prima di procedere.`
+      });
+    }
+
     const [claimedDdt] = await db.update(ddt)
       .set({ ddtStato: 'invio', updatedAt: new Date() })
       .where(and(eq(ddt.id, parseInt(ddtId)), eq(ddt.ddtStato, 'locale')))
@@ -4822,7 +4940,6 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     // ── CANALE FCLOUD: l'esito viene persistito prima di procedere con FIC.
     // Se FCloud accetta e FIC fallisce, il DDT resta in stato non reversibile
     // per evitare duplicazioni o ripristini inventariali incoerenti.
-    const numberingYear = new Date(ddtData.data).getFullYear();
     const { ficResponse, assignedFicNumber } = await deliverDdtToExternalChannels({
       reservedNumber: ddtData.numero,
       dependencies: {

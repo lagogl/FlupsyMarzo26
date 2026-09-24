@@ -33,3 +33,20 @@ export async function getNextDdtNumber(
     .reduce((max, document) => Math.max(max, Number(document.number) || 0), 0);
   return Math.max(ficMax, localPendingMax) + 1;
 }
+
+/** Keep the automatic sequence unchanged; an explicit override must be genuinely unused. */
+export function chooseDdtReservationNumber(
+  proposed: number,
+  localMax: number,
+  requested?: number,
+  usedInFic = false,
+  usedLocally = false
+): number {
+  if (requested === undefined) return Math.max(proposed, localMax + 1);
+  if (usedInFic || usedLocally) {
+    const error = new Error('Numero DDT già presente in Fatture in Cloud o prenotato localmente');
+    (error as Error & { statusCode: number }).statusCode = 409;
+    throw error;
+  }
+  return requested;
+}

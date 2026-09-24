@@ -29,6 +29,8 @@ router.post('/fic-billing-status', requireAuth, requireOperator, AdvancedSalesCo
 // CRUD vendite avanzate
 router.get('/', AdvancedSalesController.getAdvancedSales);
 router.get('/:id', AdvancedSalesController.getAdvancedSale);
+router.get('/:id/document-numbers', AdvancedSalesController.getSaleDocumentNumbers);
+router.post('/:id/assign-ddr-number', AdvancedSalesController.assignSaleDdrNumber);
 router.post('/', AdvancedSalesController.createAdvancedSale);
 router.post('/multi', AdvancedSalesController.createMultiCustomerSale);
 router.patch('/:id/status', AdvancedSalesController.updateSaleStatus);

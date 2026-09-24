@@ -49,3 +49,4 @@
 - [Semina manuale Sand Nursery](sand-nursery-manual-seeding.md) — il residuo T3 Forecast resta disponibile; solo la quantità mensile inserita manualmente viene rimossa.
 - [Scenari commerciali isolati](sales-scenarios-isolation.md) — pool unico nei nuovi scenari, senza cambiare Scostamenti; disponibilità alternative e ordini futuri protetti.
 - [Costo proposta scenari](sales-scenario-proposal-cost.md) — le taglie attraversate nel mese moltiplicano i replay della proposta; confrontare sempre un caso reale e non allentare la tutela per ordine.
+- [Conflitti numerazione DDT esterna](ddt-external-number-conflicts.md) — la prenotazione locale non riserva il numero su FIC; ricontrollare prima di FCloud e non rinumerare se l'esito esterno è incerto.

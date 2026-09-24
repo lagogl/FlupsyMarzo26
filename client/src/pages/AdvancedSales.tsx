@@ -141,6 +141,15 @@ export default function AdvancedSales() {
   const [ddrDialogOpen, setDdrDialogOpen] = useState(false);
   const [ddrCompanyId, setDdrCompanyId] = useState("");
   const [ddrNextNumber, setDdrNextNumber] = useState("1");
+  const [documentNumbersSale, setDocumentNumbersSale] = useState<any | null>(null);
+  const [documentNumbersDialogOpen, setDocumentNumbersDialogOpen] = useState(false);
+  const [proposedDdtNumber, setProposedDdtNumber] = useState("");
+  const [proposedDdrNumber, setProposedDdrNumber] = useState("");
+  const [documentNumbersIntent, setDocumentNumbersIntent] = useState<{
+    kind: "ddt" | "all" | "document";
+    sale: any;
+    documentKind?: "delivery-report" | "sale-conditions" | "bivalve-transfer" | "ddt";
+  } | null>(null);
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [reconciliationConfirmOpen, setReconciliationConfirmOpen] = useState(false);
   const [selectedReconciliationSaleIds, setSelectedReconciliationSaleIds] = useState<number[]>([]);
@@ -256,6 +265,22 @@ export default function AdvancedSales() {
     queryKey: ['/api/fatture-in-cloud/companies/local'],
     queryFn: () => apiRequest('/api/fatture-in-cloud/companies/local')
   });
+
+  const {
+    data: documentNumbers,
+    isLoading: loadingDocumentNumbers,
+    error: documentNumbersError
+  } = useQuery({
+    queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale?.id],
+    queryFn: () => apiRequest(`/api/advanced-sales/${documentNumbersSale.id}/document-numbers`),
+    enabled: documentNumbersDialogOpen && !!documentNumbersSale?.id
+  });
+
+  useEffect(() => {
+    if (!documentNumbers) return;
+    setProposedDdtNumber(String(documentNumbers.ddt?.proposed ?? documentNumbers.ddt?.number ?? ""));
+    setProposedDdrNumber(String(documentNumbers.ddr?.proposed ?? documentNumbers.ddr?.number ?? ""));
+  }, [documentNumbers]);
 
   useEffect(() => {
     if (!ddrDialogOpen || !ddrCompanyId) return;
@@ -922,9 +947,12 @@ export default function AdvancedSales() {
 
   const handleDownloadSaleDocument = (
     saleId: number,
-    kind: "delivery-report" | "sale-conditions" | "bivalve-transfer" | "ddt"
+    kind: "delivery-report" | "sale-conditions" | "bivalve-transfer" | "ddt",
+    targetWindow?: Window | null
   ) => {
-    window.open(`/api/advanced-sales/${saleId}/documents/${kind}.pdf`, '_blank', 'noopener,noreferrer');
+    const url = `/api/advanced-sales/${saleId}/documents/${kind}.pdf`;
+    if (targetWindow) targetWindow.location.href = url;
+    else window.open(url, '_blank', 'noopener,noreferrer');
     setGeneratedDocumentOverrides(current => ({
       ...current,
       [saleId]: { ...(current[saleId] || {}), [kind]: new Date().toISOString() }
@@ -934,10 +962,85 @@ export default function AdvancedSales() {
     }, 1500);
   };
 
-  const handleDownloadAllSaleDocuments = (sale: any) => {
+  const openDocumentNumbersDialog = (
+    sale: any,
+    intent: { kind: "ddt" | "all" | "document"; documentKind?: "delivery-report" | "sale-conditions" | "bivalve-transfer" | "ddt" }
+  ) => {
+    setDocumentNumbersSale(sale);
+    setDocumentNumbersIntent({ ...intent, sale });
+    setProposedDdtNumber("");
+    setProposedDdrNumber("");
+    setDocumentNumbersDialogOpen(true);
+  };
+
+  const continueDocumentNumbersIntent = async () => {
+    const intent = documentNumbersIntent;
+    if (!intent) return;
+    const isDelta = ["13263", "1052922"].includes(String(intent.sale.companyId));
+    const needsDdrNumber = isDelta && (
+      intent.kind === "all"
+      || (intent.kind === "document" && intent.documentKind === "bivalve-transfer")
+    );
+    let pendingPdfWindow: Window | null = null;
+    if (needsDdrNumber) {
+      pendingPdfWindow = window.open("about:blank", "_blank");
+      if (!pendingPdfWindow) {
+        toast({
+          title: "Impossibile aprire il documento",
+          description: "Consenti i popup per questa pagina e riprova.",
+          variant: "destructive"
+        });
+        return;
+      }
+      let latestNumbers = documentNumbers;
+      try {
+        latestNumbers = await queryClient.fetchQuery({
+          queryKey: ['/api/advanced-sales/document-numbers', intent.sale.id],
+          queryFn: () => apiRequest(`/api/advanced-sales/${intent.sale.id}/document-numbers`),
+          staleTime: 0
+        });
+      } catch (error: any) {
+        toast({
+          title: "Impossibile verificare il numero DDR",
+          description: error.message || "Riprova prima di generare i documenti.",
+          variant: "destructive"
+        });
+        pendingPdfWindow.close();
+        return;
+      }
+      if (latestNumbers?.ddr?.number == null) {
+        const number = Number(proposedDdrNumber);
+        if (!Number.isInteger(number) || number < 1) {
+          toast({
+            title: "Numero DDR non valido",
+            description: "Inserisci un numero DDR intero maggiore di zero prima di continuare.",
+            variant: "destructive"
+          });
+          pendingPdfWindow.close();
+          return;
+        }
+        try {
+          await assignDDRNumberMutation.mutateAsync({ saleId: intent.sale.id, number });
+        } catch {
+          pendingPdfWindow.close();
+          return;
+        }
+      }
+    }
+    setDocumentNumbersDialogOpen(false);
+    setDocumentNumbersIntent(null);
+    if (intent.kind === "all") handleDownloadAllSaleDocuments(intent.sale, pendingPdfWindow);
+    if (intent.kind === "document" && intent.documentKind) {
+      handleDownloadSaleDocument(intent.sale.id, intent.documentKind, pendingPdfWindow);
+    }
+  };
+
+  const handleDownloadAllSaleDocuments = (sale: any, targetWindow?: Window | null) => {
     const saleId = sale.id;
     const isDeltaFuturo = ["13263", "1052922"].includes(String(sale.companyId));
-    window.open(`/api/advanced-sales/${saleId}/documents/all.pdf`, '_blank', 'noopener,noreferrer');
+    const url = `/api/advanced-sales/${saleId}/documents/all.pdf`;
+    if (targetWindow) targetWindow.location.href = url;
+    else window.open(url, '_blank', 'noopener,noreferrer');
     const generatedAt = new Date().toISOString();
     setGeneratedDocumentOverrides(current => ({
       ...current,
@@ -1004,13 +1107,17 @@ export default function AdvancedSales() {
   };
 
   const generateDDTMutation = useMutation({
-    mutationFn: async (saleId: number) => {
+    mutationFn: async ({ saleId, number }: { saleId: number; number: number }) => {
       return await apiRequest(`/api/advanced-sales/${saleId}/generate-ddt`, {
-        method: 'POST'
+        method: 'POST',
+        body: JSON.stringify({ number })
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      if (documentNumbersSale?.id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale.id] });
+      }
       toast({
         title: "Bozza DDT preparata",
         description: "Invia il DDT a Fatture in Cloud per ottenere il numero e il PDF ufficiali.",
@@ -1025,8 +1132,26 @@ export default function AdvancedSales() {
     }
   });
 
-  const handleGenerateDDT = (saleId: number) => {
-    generateDDTMutation.mutate(saleId);
+  const assignDDRNumberMutation = useMutation({
+    mutationFn: async ({ saleId, number }: { saleId: number; number: number }) => apiRequest(
+      `/api/advanced-sales/${saleId}/assign-ddr-number`,
+      { method: "POST", body: JSON.stringify({ number }) }
+    ),
+    onSuccess: () => {
+      if (documentNumbersSale?.id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale.id] });
+      }
+      toast({ title: "Numero DDR assegnato" });
+    },
+    onError: (error: any) => toast({
+      title: "Impossibile assegnare il numero DDR",
+      description: error.message || "Riprova tra poco",
+      variant: "destructive"
+    })
+  });
+
+  const handleGenerateDDT = (sale: any) => {
+    openDocumentNumbersDialog(sale, { kind: "ddt" });
   };
 
   const sendDDTToFICMutation = useMutation({
@@ -1201,6 +1326,163 @@ export default function AdvancedSales() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <Dialog open={documentNumbersDialogOpen} onOpenChange={setDocumentNumbersDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Numerazione documenti vendita</DialogTitle>
+            <DialogDescription>
+              {documentNumbersSale?.saleNumber ? `Vendita ${documentNumbersSale.saleNumber} · ` : ""}
+              {companies?.companies?.find((company: any) =>
+                Number(company.companyId) === Number(documentNumbersSale?.companyId)
+              )?.ragioneSociale || documentNumbersSale?.companyName || `Azienda ${documentNumbersSale?.companyId || "—"}`}
+              {" · Anno DDR "}
+              {documentNumbers?.ddr?.year || ddrYear}
+            </DialogDescription>
+          </DialogHeader>
+          {documentNumbersError ? (
+            <div className="py-4 text-sm text-destructive">
+              Impossibile caricare i numeri dei documenti. Chiudi e riprova.
+            </div>
+          ) : loadingDocumentNumbers || !documentNumbers ? (
+            <div className="py-6 text-sm text-muted-foreground">Caricamento numerazioni...</div>
+          ) : (
+            <div className="space-y-5 py-2">
+              {(() => {
+                const ddtStatus = String(documentNumbers?.ddt?.status || "").toLowerCase();
+                const ddtIssued = documentNumbers?.ddt?.number != null
+                  || ["locale", "inviato"].includes(ddtStatus);
+                const ddtCanPrepare = ddtStatus === "nessuno" && documentNumbers?.ddt?.number == null;
+                const isDelta = ["13263", "1052922"].includes(String(documentNumbersSale?.companyId));
+                const ddrAssigned = documentNumbers?.ddr?.number != null;
+                return (
+                  <>
+                    <div className="space-y-2 rounded-md border p-3">
+                      <Label htmlFor="sale-proposed-ddt">Numero proposto DDT</Label>
+                      {!ddtCanPrepare ? (
+                        <p className="text-sm font-medium">
+                          {documentNumbers?.ddt?.number != null
+                            ? `DDT n. ${documentNumbers.ddt.number}`
+                            : `DDT non disponibile · stato ${documentNumbers?.ddt?.status || "sconosciuto"}`}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {ddtIssued ? "Numero bloccato dopo l’emissione" : "La preparazione è consentita solo quando lo stato è nessuno"}
+                          </span>
+                        </p>
+                      ) : (
+                        <>
+                          <Input
+                            id="sale-proposed-ddt"
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={proposedDdtNumber}
+                            onChange={event => setProposedDdtNumber(event.target.value)}
+                            placeholder="Inserisci il numero DDT"
+                          />
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              onClick={() => documentNumbersSale && generateDDTMutation.mutate({
+                                saleId: documentNumbersSale.id,
+                                number: Number(proposedDdtNumber)
+                              })}
+                              disabled={
+                                !documentNumbersSale
+                                || !Number.isInteger(Number(proposedDdtNumber))
+                                || Number(proposedDdtNumber) < 1
+                                || generateDDTMutation.isPending
+                              }
+                            >
+                              {generateDDTMutation.isPending ? "Preparazione..." : "Prepara DDT"}
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Il numero può essere scelto solo prima della creazione del DDT locale.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    {ddtCanPrepare && (
+                      documentNumbersIntent?.kind === "all"
+                      || (documentNumbersIntent?.kind === "document" && documentNumbersIntent.documentKind === "ddt")
+                    ) && (
+                      <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950">
+                        <p className="font-semibold">Il numero DDT inserito non verrà usato nella bozza PDF.</p>
+                        <p className="mt-1">
+                          Per preparare un DDT con questo numero, seleziona <strong>Prepara DDT</strong>.
+                          Continuando, genererai l’anteprima con DDT in bozza e senza numero ufficiale.
+                        </p>
+                      </div>
+                    )}
+                    {isDelta && (
+                      <div className="space-y-2 rounded-md border p-3">
+                        <Label htmlFor="sale-proposed-ddr">Numero DDR · {documentNumbers?.ddr?.year || ddrYear}</Label>
+                        {ddrAssigned ? (
+                          <p className="text-sm font-medium">
+                            DDR n. {documentNumbers.ddr.number}/{documentNumbers.ddr.year}
+                            <span className="ml-2 text-xs text-muted-foreground">Numero bloccato dopo l’assegnazione</span>
+                          </p>
+                        ) : (
+                          <>
+                            <Input
+                              id="sale-proposed-ddr"
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={proposedDdrNumber}
+                              onChange={event => setProposedDdrNumber(event.target.value)}
+                              placeholder="Inserisci il numero DDR"
+                            />
+                            <div className="flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => documentNumbersSale && assignDDRNumberMutation.mutate({
+                                  saleId: documentNumbersSale.id,
+                                  number: Number(proposedDdrNumber)
+                                })}
+                                disabled={
+                                  !documentNumbersSale
+                                  || !Number.isInteger(Number(proposedDdrNumber))
+                                  || Number(proposedDdrNumber) < 1
+                                  || assignDDRNumberMutation.isPending
+                                }
+                              >
+                                {assignDDRNumberMutation.isPending ? "Assegnazione..." : "Assegna numero DDR"}
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            {documentNumbersIntent?.kind === "all" || documentNumbersIntent?.kind === "document" ? (
+              <Button
+                variant="outline"
+                onClick={continueDocumentNumbersIntent}
+                disabled={loadingDocumentNumbers || !documentNumbers || !!documentNumbersError || assignDDRNumberMutation.isPending}
+              >
+                {documentNumbers?.ddt?.status?.toLowerCase?.() === "nessuno"
+                  && documentNumbers?.ddt?.number == null
+                  && documentNumbersIntent?.kind === "all"
+                  ? "Continua con DDT in bozza (senza numero ufficiale)"
+                  : documentNumbers?.ddt?.status?.toLowerCase?.() === "nessuno"
+                    && documentNumbers?.ddt?.number == null
+                    && documentNumbersIntent?.kind === "document"
+                    && documentNumbersIntent.documentKind === "ddt"
+                    ? "Continua con anteprima DDT in bozza"
+                    : "Continua alla generazione documenti"}
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => setDocumentNumbersDialogOpen(false)}>Chiudi</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Gestione Vendite Avanzate</h1>
@@ -1816,7 +2098,9 @@ export default function AdvancedSales() {
                                   variant="outline"
                                   size="sm"
                                   className="rounded-r-none border-teal-600 bg-teal-600 text-white hover:bg-teal-700 hover:text-white"
-                                  onClick={() => handleDownloadAllSaleDocuments(sale)}
+                                  onClick={() => sale.status === "confirmed"
+                                    ? openDocumentNumbersDialog(sale, { kind: "all" })
+                                    : handleDownloadAllSaleDocuments(sale)}
                                   title={sale.officialDdtNumber
                                     ? "Genera il fascicolo con il DDT ufficiale, invia l'email e apre il PDF"
                                     : "Genera il fascicolo con un'anteprima DDT in bozza non valida"}
@@ -1868,7 +2152,9 @@ export default function AdvancedSales() {
                                         key={kind}
                                         variant="ghost"
                                         className="w-full justify-start h-auto py-2.5"
-                                        onClick={() => handleDownloadSaleDocument(sale.id, kind)}
+                                        onClick={() => sale.status === "confirmed"
+                                          ? openDocumentNumbersDialog(sale, { kind: "document", documentKind: kind })
+                                          : handleDownloadSaleDocument(sale.id, kind)}
                                         title={generated ? "Già generato: apri nuovamente" : "Genera documento"}
                                       >
                                         <span className={`mr-3 h-2.5 w-2.5 shrink-0 rounded-full ${generated ? "bg-emerald-500 ring-4 ring-emerald-100" : "bg-slate-300"}`} />
@@ -1897,7 +2183,7 @@ export default function AdvancedSales() {
                                   <Button 
                                     variant="default"
                                     size="sm"
-                                    onClick={() => handleGenerateDDT(sale.id)}
+                                    onClick={() => handleGenerateDDT(sale)}
                                     disabled={generateDDTMutation.isPending}
                                     className="bg-green-600 hover:bg-green-700"
                                     title="Genera Documento di Trasporto"
