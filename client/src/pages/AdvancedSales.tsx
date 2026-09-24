@@ -23,6 +23,7 @@ import AdvancedSalesConfigTab from "./AdvancedSalesConfigTab";
 import CancelSaleOperationDialog from "@/components/CancelSaleOperationDialog";
 import MultiCustomerSaleForm from "@/components/MultiCustomerSaleForm";
 import SaleNumberingContext, { getSaleNumberingYear } from "@/components/SaleNumberingContext";
+import { openDdtNumberRecoveryOnConflict } from "@/lib/ddt-number-recovery";
 
 interface SaleOperation {
   operationId: number;
@@ -145,6 +146,7 @@ export default function AdvancedSales() {
   const [documentNumbersSale, setDocumentNumbersSale] = useState<any | null>(null);
   const [documentNumbersDialogOpen, setDocumentNumbersDialogOpen] = useState(false);
   const [proposedDdtNumber, setProposedDdtNumber] = useState("");
+  const [recoverDdtSaleId, setRecoverDdtSaleId] = useState<number | null>(null);
   const [proposedDdrNumber, setProposedDdrNumber] = useState("");
   const [documentNumbersIntent, setDocumentNumbersIntent] = useState<{
     kind: "ddt" | "all" | "document";
@@ -1168,10 +1170,31 @@ export default function AdvancedSales() {
     openDocumentNumbersDialog(sale, { kind: "ddt" });
   };
 
+  const renumberDdtMutation = useMutation({
+    mutationFn: ({ saleId, number }: { saleId: number; number: number }) => apiRequest(
+      `/api/advanced-sales/${saleId}/renumber-ddt`,
+      { method: "POST", body: JSON.stringify({ number }) }
+    ),
+    onSuccess: () => {
+      setRecoverDdtSaleId(null);
+      setDocumentNumbersDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      if (documentNumbersSale?.id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale.id] });
+      }
+      toast({ title: "Numero della bozza DDT aggiornato", description: "Puoi ora riprovare l’invio a FIC." });
+    },
+    onError: (error: any) => toast({
+      title: "Impossibile cambiare numero DDT",
+      description: error.message || "Ricarica la vendita e riprova",
+      variant: "destructive"
+    })
+  });
+
   const sendDDTToFICMutation = useMutation({
-    mutationFn: async (ddtId: number) => {
-      setSendingDDTId(ddtId);
-      return await apiRequest(`/api/ddt/${ddtId}/send-to-fic`, {
+    mutationFn: async (sale: any) => {
+      setSendingDDTId(sale.ddtId);
+      return await apiRequest(`/api/ddt/${sale.ddtId}/send-to-fic`, {
         method: 'POST'
       });
     },
@@ -1186,8 +1209,15 @@ export default function AdvancedSales() {
         variant: data?.orderReconciliation?.status === "manual_review" ? "destructive" : undefined
       });
     },
-    onError: (error: any) => {
+    onError: (error: any, sale: any) => {
       setSendingDDTId(null);
+      if (openDdtNumberRecoveryOnConflict(error, sale, {
+        selectSale: setRecoverDdtSaleId,
+        invalidateNumbers: id => { queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', id] }); },
+        openDialog: selectedSale => openDocumentNumbersDialog(selectedSale, { kind: "ddt" })
+      })) {
+        return;
+      }
       toast({
         title: "Errore",
         description: error.message || "Errore nell'invio del DDT a Fatture in Cloud",
@@ -1196,8 +1226,8 @@ export default function AdvancedSales() {
     }
   });
 
-  const handleSendDDTToFIC = (ddtId: number) => {
-    sendDDTToFICMutation.mutate(ddtId);
+  const handleSendDDTToFIC = (sale: any) => {
+    sendDDTToFICMutation.mutate(sale);
   };
 
   const applyReconciliationMutation = useMutation({
@@ -1384,7 +1414,28 @@ export default function AdvancedSales() {
                         compact
                       />
                       <Label htmlFor="sale-proposed-ddt">Numero proposto DDT</Label>
-                      {!ddtCanPrepare ? (
+                      {!ddtCanPrepare && recoverDdtSaleId === documentNumbersSale?.id && ddtStatus === "locale" ? (
+                        <>
+                          <p className="text-sm text-amber-700">
+                            Il numero {documentNumbers?.ddt?.number} è stato occupato su FIC. Scegli un nuovo numero libero per questa bozza; nessun documento esterno è stato creato da questo tentativo.
+                          </p>
+                          <Input
+                            id="sale-proposed-ddt"
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={proposedDdtNumber}
+                            onChange={event => setProposedDdtNumber(event.target.value)}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => renumberDdtMutation.mutate({ saleId: documentNumbersSale.id, number: Number(proposedDdtNumber) })}
+                            disabled={renumberDdtMutation.isPending || !Number.isSafeInteger(Number(proposedDdtNumber)) || Number(proposedDdtNumber) < 1 || Number(proposedDdtNumber) === Number(documentNumbers?.ddt?.number)}
+                          >
+                            {renumberDdtMutation.isPending ? "Verifica..." : "Cambia numero bozza"}
+                          </Button>
+                        </>
+                      ) : !ddtCanPrepare ? (
                         <p className="text-sm font-medium">
                           {documentNumbers?.ddt?.number != null
                             ? `DDT n. ${documentNumbers.ddt.number}`
@@ -2252,7 +2303,7 @@ export default function AdvancedSales() {
                                     <Button 
                                       variant="default"
                                       size="sm"
-                                      onClick={() => handleSendDDTToFIC(sale.ddtId!)}
+                                      onClick={() => handleSendDDTToFIC(sale)}
                                       disabled={sendingDDTId === sale.ddtId}
                                       className="bg-purple-600 hover:bg-purple-700"
                                       title="Invia DDT a Fatture in Cloud"

@@ -89,6 +89,7 @@ import {
 } from "../utils/size-determination";
 import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
 import { chooseDdtReservationNumber, getNextDdtNumber } from "../services/ddt-numbering-fic";
+import { canRenumberDdt, matchesLockedLocalDraft } from "../services/ddt-renumber";
 import {
   DDT_NUMBER_CONFLICT_MESSAGE,
   isDdtNumberConflict,
@@ -1652,6 +1653,87 @@ export async function getSaleDocumentNumbers(req: Request, res: Response) {
   }
 }
 
+/** Recover a local-only draft whose reserved number has since been taken in FIC. */
+export async function renumberLocalDdt(req: Request, res: Response) {
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const saleId = Number(req.params.id);
+    const requestedNumber = req.body?.number;
+    if (!Number.isSafeInteger(saleId) || saleId < 1
+      || !Number.isSafeInteger(requestedNumber) || requestedNumber < 1 || requestedNumber >= 2_147_483_647) {
+      return res.status(400).json({ success: false, error: "Vendita o numero DDT non valido" });
+    }
+    const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
+    if (!sale || !sale.ddtId || sale.status !== 'confirmed') {
+      return res.status(409).json({ success: false, error: "Bozza DDT non disponibile" });
+    }
+    const [draft] = await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1);
+    if (!draft || !canRenumberDdt(draft) || sale.ddtStatus !== 'locale') {
+      return res.status(409).json({ success: false, error: "DDT già in invio, emesso o con esito esterno da verificare" });
+    }
+    const year = new Date(draft.data).getFullYear();
+    // A failed FIC read must stop recovery, never be treated as an empty list.
+    const ficNumbers = new Set<number>();
+    await getNextAvailableDDTNumber(draft.companyId, year, ficNumbers);
+    if (!ficNumbers.has(draft.numero)) {
+      return res.status(409).json({ success: false, error: "Il numero attuale non risulta occupato su FIC: verificare il DDT prima di modificarlo" });
+    }
+    if (ficNumbers.has(requestedNumber)) {
+      return res.status(409).json({ success: false, error: "Il nuovo numero è già occupato su FIC" });
+    }
+    const newNumber = await db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`advanced-ddt:${draft.companyId}:${year}`}))`);
+      const lockedResult = await tx.execute(sql`
+        SELECT id, numero, data, company_id, ddt_stato, fcloud_ddt_id, fcloud_stato,
+               fatture_in_cloud_id, fatture_in_cloud_numero
+        FROM ${ddt} WHERE id = ${draft.id} FOR UPDATE
+      `);
+      const locked = ((lockedResult as any).rows ?? [])[0];
+      if (!locked || !matchesLockedLocalDraft(
+        { ...draft, year },
+        {
+          numero: locked.numero, companyId: locked.company_id, year: new Date(locked.data).getFullYear(),
+          ddtStato: locked.ddt_stato, fcloudDdtId: locked.fcloud_ddt_id,
+          fcloudStato: locked.fcloud_stato, fattureInCloudId: locked.fatture_in_cloud_id,
+          fattureInCloudNumero: locked.fatture_in_cloud_numero
+        }
+      )) {
+        const error = new Error("DDT modificato o invio già avviato: ricaricare prima di procedere");
+        (error as any).statusCode = 409;
+        throw error;
+      }
+      const taken = await tx.execute(sql`
+        SELECT 1 FROM ${ddt}
+        WHERE company_id = ${draft.companyId}
+          AND EXTRACT(YEAR FROM data)::integer = ${year}
+          AND numero = ${requestedNumber} AND id <> ${draft.id}
+        LIMIT 1
+      `);
+      if ((taken as any).rows?.length) {
+        const error = new Error("Numero già prenotato localmente");
+        (error as any).statusCode = 409;
+        throw error;
+      }
+      const [updated] = await tx.update(ddt)
+        .set({ numero: requestedNumber, updatedAt: new Date() })
+        .where(and(eq(ddt.id, draft.id), eq(ddt.numero, draft.numero), eq(ddt.ddtStato, 'locale')))
+        .returning({ numero: ddt.numero });
+      if (!updated) {
+        const error = new Error("DDT modificato durante il recupero");
+        (error as any).statusCode = 409;
+        throw error;
+      }
+      return updated.numero;
+    });
+    return res.json({ success: true, number: newNumber });
+  } catch (error: any) {
+    const conflict = isDdtNumberConflict(error);
+    return res.status(conflict ? 409 : error.statusCode || 503).json({
+      success: false,
+      error: conflict ? DDT_NUMBER_CONFLICT_MESSAGE : error.statusCode ? error.message : "Impossibile verificare il numero DDT; riprovare"
+    });
+  }
+}
 export async function assignSaleDdrNumber(req: Request, res: Response) {
   try {
     const number = req.body?.number;
@@ -4877,6 +4959,8 @@ export async function deliverDdtToExternalChannels(input: {
  * Invia DDT a Fatture in Cloud
  */
 export async function sendDDTToFIC(req: Request, res: Response) {
+  let externalAttempted = false;
+  let claimedByThisRequest = false;
   try {
     await ensureAdvancedSaleDocumentSchema();
     const { ddtId } = req.params;
@@ -4949,13 +5033,22 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     if (ficIssuedNumbers.has(ddtData.numero)) {
       return res.status(409).json({
         success: false,
-        error: `DDT n. ${ddtData.numero}/${numberingYear} già presente in Fatture in Cloud. Bozza non inviata: verificare prima di procedere.`
+        code: "FIC_DDT_NUMBER_CONFLICT",
+        error: `DDT n. ${ddtData.numero}/${numberingYear} già presente in Fatture in Cloud. Bozza non inviata: scegli un altro numero libero.`
       });
     }
 
+    if (!canRenumberDdt(ddtData)) {
+      return res.status(409).json({ success: false, error: "DDT già in invio o con esito esterno da verificare" });
+    }
     const [claimedDdt] = await db.update(ddt)
       .set({ ddtStato: 'invio', updatedAt: new Date() })
-      .where(and(eq(ddt.id, parseInt(ddtId)), eq(ddt.ddtStato, 'locale')))
+      .where(and(
+        eq(ddt.id, parseInt(ddtId)), eq(ddt.ddtStato, 'locale'),
+        eq(ddt.numero, ddtData.numero),
+        isNull(ddt.fcloudDdtId), isNull(ddt.fcloudStato),
+        isNull(ddt.fattureInCloudId), isNull(ddt.fattureInCloudNumero)
+      ))
       .returning();
     if (!claimedDdt) {
       return res.status(409).json({
@@ -4963,6 +5056,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
         error: "Il DDT è già in invio, già inviato o non è più disponibile"
       });
     }
+    claimedByThisRequest = true;
 
     console.log(`📤 Invio DDT a Fatture in Cloud - Company ID: ${companyId} (${companyId === 1017299 ? 'Ecotapes' : companyId === 13263 ? 'Delta Futuro' : 'Altro'})`);
 
@@ -4985,6 +5079,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     // ── CANALE FCLOUD: l'esito viene persistito prima di procedere con FIC.
     // Se FCloud accetta e FIC fallisce, il DDT resta in stato non reversibile
     // per evitare duplicazioni o ripristini inventariali incoerenti.
+    externalAttempted = true;
     const { ficResponse, assignedFicNumber } = await deliverDdtToExternalChannels({
       reservedNumber: ddtData.numero,
       dependencies: {
@@ -5095,13 +5190,16 @@ export async function sendDDTToFIC(req: Request, res: Response) {
   } catch (error: any) {
     console.error("Errore nell'invio DDT a Fatture in Cloud:", error);
     const failedDdtId = parseInt(req.params.ddtId);
-    if (Number.isInteger(failedDdtId)) {
+    // After an external call begins, even a transport error can mean a remote
+    // document exists. Keep "invio" until it has been verified separately.
+    if (claimedByThisRequest && !externalAttempted && Number.isInteger(failedDdtId)) {
       await db.update(ddt)
         .set({ ddtStato: 'locale', updatedAt: new Date() })
         .where(and(
           eq(ddt.id, failedDdtId),
           eq(ddt.ddtStato, 'invio'),
-          sql`${ddt.fcloudStato} IS DISTINCT FROM 'inviato'`
+          isNull(ddt.fcloudStato), isNull(ddt.fcloudDdtId),
+          isNull(ddt.fattureInCloudId), isNull(ddt.fattureInCloudNumero)
         ))
         .catch(() => {});
     }

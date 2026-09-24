@@ -11,6 +11,8 @@ La testata, le righe e il collegamento alla vendita devono essere un unico commi
 
 La riconciliazione automatica di un DDT già presente su FIC è distinta dal calcolo del massimo: richiede azienda, numero, data, serie e cliente verificabili e coincidenti. Se manca una di queste prove, non adottare il documento remoto.
 
+Il recupero manuale è un'eccezione solo per una bozza interamente locale quando FIC conferma che il vecchio numero è diventato occupato. **Why:** un esito remoto incerto non equivale a un rifiuto certo: cambiare numero o riprovare potrebbe duplicare un documento esterno. **How to apply:** rileggere FIC, confrontare lo stato sotto lock con lo snapshot iniziale e bloccare il recupero se compare qualsiasi traccia di invio esterno.
+
 **Why:** usare soltanto l'ultimo numero remoto assegna ripetutamente lo stesso progressivo finché i DDT locali non vengono inviati; richieste concorrenti possono inoltre ottenere lo stesso numero. Un retry remoto non coordinato può creare un secondo documento o collegare quello di un altro cliente.
 
 **How to apply:** leggere tutte le pagine FIC, serializzare l’assegnazione per azienda/anno, usare il massimo tra FIC e prenotazioni locali pendenti, rendere idempotente la sorgente del DDT e non rinumerare automaticamente documenti storici o già inviati. Se esistono duplicati legacy, non spostarli nella sequenza FIC: usare una guardia PostgreSQL su INSERT/UPDATE della chiave, con lock transazionale e `23505`→`409`, che blocchi nuovi duplicati ma lasci leggibile lo storico. I lock applicativi restano un'ottimizzazione, non la garanzia DB.

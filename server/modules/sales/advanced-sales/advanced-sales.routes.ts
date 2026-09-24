@@ -46,6 +46,7 @@ router.get('/:id/download-pdf', AdvancedSalesController.downloadSalePDF);
 
 // Generazione DDT e report PDF
 router.post('/:id/generate-ddt', AdvancedSalesController.generateDDT);
+router.post('/:id/renumber-ddt', requireAuth, requireOperator, AdvancedSalesController.renumberLocalDdt);
 router.get('/:id/report.pdf', AdvancedSalesController.generatePDFReport);
 // Suite documentale operativa A4; le rotte PDF storiche restano disponibili.
 router.get('/:id/documents/:kind.pdf', AdvancedSalesController.generateAdvancedSaleDocument);
