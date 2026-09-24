@@ -14,7 +14,7 @@
 
 import { db } from '../db.js';
 import { ddt, ddtRighe } from '../../shared/schema.js';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 const FCLOUD_BASE_URL = 'https://fatture-cloud-clone.replit.app';
 const FCLOUD_API_KEY  = 'fcloud-ext-2026-k8Xm9PqR7vLw3NzT';
@@ -237,8 +237,32 @@ export async function openOrCreateDDTInFCloud(ddtId: number): Promise<FCloudDdtR
     };
   }
 
+  // Claim before contacting FCloud: a local-only reservation cannot be released
+  // while an external creation is underway, even before an ID is returned.
+  const [claimed] = await db.update(ddt)
+    .set({ fcloudStato: 'invio', updatedAt: new Date() })
+    .where(and(
+      eq(ddt.id, ddtId),
+      eq(ddt.ddtStato, 'locale'),
+      isNull(ddt.fcloudStato),
+      isNull(ddt.fcloudDdtId)
+    ))
+    .returning({ id: ddt.id });
+  if (!claimed) {
+    return {
+      success: false,
+      error: 'DDT già in invio o con esito FCloud da verificare; non ripetere la creazione automaticamente'
+    };
+  }
+
   // Non ancora in FCloud: crea ora
-  const result = await sendDDTToFCloud(ddtId);
+  let result: FCloudDdtResult;
+  try {
+    result = await sendDDTToFCloud(ddtId);
+  } catch (error: any) {
+    await db.update(ddt).set({ fcloudStato: 'errore', updatedAt: new Date() }).where(eq(ddt.id, ddtId));
+    throw error;
+  }
 
   if (result.success && result.fcloudDdtId) {
     await db.update(ddt).set({

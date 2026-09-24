@@ -75,8 +75,11 @@ import {
 } from "../services/manual-sale-accounting";
 import {
   ensureDdrNumber as allocateDdrNumber,
+  releaseUnusedDdrNumber,
   validateNextDdrNumber,
-  type DdrNumberingStore
+  type DdrNumberingStore,
+  type DdrNumberingTransaction,
+  type DdrReservation
 } from "../services/ddr-numbering";
 import {
   aggregateManualAllocationsBySaleSize,
@@ -100,6 +103,7 @@ import {
   hydrateDdtProductSnapshots
 } from "../services/external-product-catalog";
 import { getAssignedFicDdtNumber, getOfficialFicDdtNumber } from "../services/fic-ddt-response";
+import { getLocalDdtReleaseBlockReason } from "../services/ddt-local-release";
 
 let documentSchemaReady: Promise<void> | null = null;
 const ficInvoiceCache = new Map<string, { expiresAt: number; invoices: any[] }>();
@@ -193,10 +197,22 @@ async function getNextAvailableDDTNumber(companyId?: number | null, year = new D
     },
     async getLocalDeliveryNotes(localCompanyId, localYear) {
       const localResult = await db.execute(sql`
-        SELECT numero AS number, ddt_stato AS status
-        FROM ${ddt}
-        WHERE company_id = ${localCompanyId}
-          AND EXTRACT(YEAR FROM data)::integer = ${localYear}
+        SELECT document.numero AS number, document.ddt_stato AS status,
+          EXISTS (
+            SELECT 1 FROM ddt_number_legacy_exceptions legacy
+            WHERE legacy.ddt_id = document.id
+              AND legacy.company_id = document.company_id
+              AND legacy.numbering_year = EXTRACT(YEAR FROM document.data)::integer
+              AND legacy.local_number = document.numero
+              AND legacy.fic_company_id = document.company_id
+              AND legacy.fic_document_id = document.fatture_in_cloud_id
+              AND legacy.fic_document_type = 'delivery_note'
+              AND legacy.local_number <> legacy.fic_number
+              AND document.ddt_stato = 'inviato'
+          ) AS "legacyNumberException"
+        FROM ${ddt} document
+        WHERE document.company_id = ${localCompanyId}
+          AND EXTRACT(YEAR FROM document.data)::integer = ${localYear}
       `);
       return (localResult as any).rows ?? [];
     }
@@ -1498,76 +1514,145 @@ export async function getAdvancedSale(req: Request, res: Response) {
   }
 }
 
-async function ensureDdrNumber(saleId: number, requestedNumber?: number) {
-  await ensureAdvancedSaleDocumentSchema();
-  const store: DdrNumberingStore = {
-    transaction: work => db.transaction(async tx => work({
-      lockSale: async id => {
-        const result = await tx.execute(sql`
-          SELECT id, company_id, sale_date, ddr_number, ddr_year
-          FROM advanced_sales WHERE id = ${id} FOR UPDATE
-        `);
-        const row: any = (result as any).rows?.[0];
-        return row ? {
-          id: Number(row.id),
-          companyId: row.company_id == null ? null : Number(row.company_id),
-          saleDate: row.sale_date,
-          ddrNumber: row.ddr_number == null ? null : Number(row.ddr_number),
-          ddrYear: row.ddr_year == null ? null : Number(row.ddr_year)
-        } : null;
-      },
-      ensureSequence: async (companyId, year) => {
-        await tx.execute(sql`
-          INSERT INTO ddr_number_sequences (company_id, year, next_number)
-          VALUES (${companyId}, ${year}, COALESCE((
-            SELECT MAX(ddr_number) + 1 FROM advanced_sales
-            WHERE company_id = ${companyId} AND ddr_year = ${year}
-          ), 1))
-          ON CONFLICT (company_id, year) DO NOTHING
-        `);
-      },
-      lockNextNumber: async (companyId, year) => {
-        const result = await tx.execute(sql`
-          SELECT next_number FROM ddr_number_sequences
-          WHERE company_id = ${companyId} AND year = ${year} FOR UPDATE
-        `);
-        return Number((result as any).rows?.[0]?.next_number);
-      },
-      isNumberTaken: async (companyId, year, number) => {
-        const result = await tx.execute(sql`
-          SELECT 1 FROM advanced_sales
-          WHERE company_id = ${companyId} AND ddr_year = ${year} AND ddr_number = ${number}
-          LIMIT 1
-        `);
-        return Boolean((result as any).rows?.length);
-      },
-      assignSale: async (id, number, year) => {
-        await tx.execute(sql`
-          UPDATE advanced_sales SET ddr_number = ${number}, ddr_year = ${year}, updated_at = NOW()
-          WHERE id = ${id}
-        `);
-      },
-      advanceSequence: async (companyId, year, nextNumber) => {
-        await tx.execute(sql`
-          UPDATE ddr_number_sequences SET next_number = ${nextNumber}, updated_at = NOW()
-          WHERE company_id = ${companyId} AND year = ${year}
-        `);
+function createDdrNumberingTransaction(tx: any): DdrNumberingTransaction {
+  return {
+    lockSale: async id => {
+      const result = await tx.execute(sql`
+        SELECT id, company_id, sale_date, ddr_number, ddr_year, status,
+               generated_documents -> '__ddrReservation' AS ddr_reservation
+        FROM advanced_sales WHERE id = ${id} FOR UPDATE
+      `);
+      const row: any = (result as any).rows?.[0];
+      return row ? {
+        id: Number(row.id),
+        companyId: row.company_id == null ? null : Number(row.company_id),
+        saleDate: row.sale_date,
+        ddrNumber: row.ddr_number == null ? null : Number(row.ddr_number),
+        ddrYear: row.ddr_year == null ? null : Number(row.ddr_year),
+        status: row.status,
+        ddrReservation: (typeof row.ddr_reservation === 'string'
+          ? JSON.parse(row.ddr_reservation)
+          : row.ddr_reservation) as DdrReservation | null
+      } : null;
+    },
+    ensureSequence: async (companyId, year) => {
+      await tx.execute(sql`
+        INSERT INTO ddr_number_sequences (company_id, year, next_number)
+        VALUES (${companyId}, ${year}, COALESCE((
+          SELECT MAX(ddr_number) + 1 FROM advanced_sales
+          WHERE company_id = ${companyId} AND ddr_year = ${year}
+        ), 1))
+        ON CONFLICT (company_id, year) DO NOTHING
+      `);
+    },
+    lockNextNumber: async (companyId, year) => {
+      const result = await tx.execute(sql`
+        SELECT next_number FROM ddr_number_sequences
+        WHERE company_id = ${companyId} AND year = ${year} FOR UPDATE
+      `);
+      return Number((result as any).rows?.[0]?.next_number);
+    },
+    isNumberTaken: async (companyId, year, number) => {
+      const result = await tx.execute(sql`
+        SELECT 1 FROM advanced_sales
+        WHERE company_id = ${companyId} AND ddr_year = ${year} AND ddr_number = ${number}
+        LIMIT 1
+      `);
+      return Boolean((result as any).rows?.length);
+    },
+    assignSale: async (id, number, year) => {
+      await tx.execute(sql`
+        UPDATE advanced_sales SET ddr_number = ${number}, ddr_year = ${year}, updated_at = NOW()
+        WHERE id = ${id}
+      `);
+    },
+    advanceSequence: async (companyId, year, nextNumber) => {
+      await tx.execute(sql`
+        UPDATE ddr_number_sequences SET next_number = ${nextNumber}, updated_at = NOW()
+        WHERE company_id = ${companyId} AND year = ${year}
+      `);
+    },
+    setReservation: async (id, reservation) => {
+      await tx.execute(sql`
+        UPDATE advanced_sales
+        SET generated_documents = COALESCE(generated_documents, '{}'::jsonb)
+          || jsonb_build_object('__ddrReservation', ${JSON.stringify(reservation)}::jsonb),
+          updated_at = NOW()
+        WHERE id = ${id}
+      `);
+    },
+    releaseSaleNumber: async (id, number, year) => {
+      const result = await tx.execute(sql`
+        UPDATE advanced_sales
+        SET ddr_number = NULL, ddr_year = NULL, updated_at = NOW()
+        WHERE id = ${id} AND ddr_number = ${number} AND ddr_year = ${year}
+        RETURNING id
+      `);
+      if (!((result as any).rows?.length)) {
+        throw new Error('Prenotazione DDR modificata durante il rilascio');
       }
-    }))
+    },
+    highestAssignedNumber: async (companyId, year, excludingSaleId) => {
+      const result = await tx.execute(sql`
+        SELECT COALESCE(MAX(ddr_number), 0) AS max_number
+        FROM advanced_sales
+        WHERE company_id = ${companyId} AND ddr_year = ${year} AND id <> ${excludingSaleId}
+      `);
+      return Number((result as any).rows?.[0]?.max_number || 0);
+    }
   };
-  return allocateDdrNumber(store, saleId, requestedNumber);
+}
+
+function ddrNumberingStore(): DdrNumberingStore {
+  return {
+    transaction: work => db.transaction(tx => work(createDdrNumberingTransaction(tx)))
+  };
+}
+
+async function ensureDdrNumber(
+  saleId: number,
+  requestedNumber?: number,
+  issuanceAttempt = false
+) {
+  await ensureAdvancedSaleDocumentSchema();
+  return allocateDdrNumber(ddrNumberingStore(), saleId, requestedNumber, { issuanceAttempt });
 }
 
 async function buildSaleNumberingContext(companyId: number, year: number) {
   const ficNumbers = new Set<number>();
   const isDelta = ['13263', '1052922'].includes(String(companyId));
-  const [ficProposal, localRows, ddrRows] = await Promise.all([
+  const [ficProposal, localRows, legacyRows, ddrRows] = await Promise.all([
     getNextAvailableDDTNumber(companyId, year, ficNumbers),
     db.execute(sql`
-      SELECT MAX(numero)::integer AS highest_number
-      FROM ${ddt}
-      WHERE company_id = ${companyId}
-        AND EXTRACT(YEAR FROM data)::integer = ${year}
+      SELECT MAX(document.numero)::integer AS highest_number
+      FROM ${ddt} document
+      WHERE document.company_id = ${companyId}
+        AND EXTRACT(YEAR FROM document.data)::integer = ${year}
+        AND NOT EXISTS (
+          SELECT 1 FROM ddt_number_legacy_exceptions legacy
+          WHERE legacy.ddt_id = document.id
+            AND legacy.company_id = document.company_id
+            AND legacy.numbering_year = EXTRACT(YEAR FROM document.data)::integer
+            AND legacy.local_number = document.numero
+            AND legacy.fic_company_id = document.company_id
+            AND legacy.fic_document_id = document.fatture_in_cloud_id
+            AND legacy.fic_document_type = 'delivery_note'
+            AND legacy.local_number <> legacy.fic_number
+            AND document.ddt_stato = 'inviato'
+        )
+    `),
+    db.execute(sql`
+      SELECT legacy.local_number AS number
+      FROM ddt_number_legacy_exceptions legacy
+      JOIN ${ddt} document ON document.id = legacy.ddt_id
+      WHERE legacy.company_id = ${companyId}
+        AND legacy.numbering_year = ${year}
+        AND document.company_id = legacy.company_id
+        AND document.numbering_year = legacy.numbering_year
+        AND document.numero = legacy.local_number
+        AND document.fatture_in_cloud_id = legacy.fic_document_id
+        AND document.ddt_stato = 'inviato'
+      ORDER BY legacy.local_number
     `),
     isDelta ? db.execute(sql`
       SELECT
@@ -1590,6 +1675,7 @@ async function buildSaleNumberingContext(companyId: number, year: number) {
     ddt: {
       highestFic,
       highestLocal: highestLocal === null ? null : Number(highestLocal),
+      excludedLegacyNumbers: ((legacyRows as any).rows ?? []).map((row: any) => Number(row.number)),
       proposed: Math.max(ficProposal, Number(highestLocal ?? 0) + 1)
     },
     ddr: {
@@ -1634,7 +1720,7 @@ export async function getSaleDocumentNumbers(req: Request, res: Response) {
     const year = Number(String(sale.saleDate).slice(0, 4));
     if (!Number.isSafeInteger(year)) return res.status(400).json({ success: false, error: 'Anno vendita non valido' });
     const [existingDdt] = sale.ddtId
-      ? await db.select({ number: ddt.numero, status: ddt.ddtStato }).from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
+      ? await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
       : [];
     const context = await buildSaleNumberingContext(sale.companyId, year);
     res.json({
@@ -1642,10 +1728,19 @@ export async function getSaleDocumentNumbers(req: Request, res: Response) {
       companyId: sale.companyId,
       ddt: {
         ...context.ddt,
-        number: existingDdt?.number ?? null,
-        status: existingDdt?.status ?? sale.ddtStatus
+        number: existingDdt?.numero ?? null,
+        status: existingDdt?.ddtStato ?? sale.ddtStatus,
+        canRelease: sale.ddtStatus === 'locale'
+          && !!existingDdt
+          && canRenumberDdt(existingDdt)
       },
-      ddr: { ...context.ddr, number: sale.ddrNumber, year }
+      ddr: {
+        ...context.ddr,
+        number: sale.ddrNumber,
+        year,
+        canRelease: sale.ddrNumber != null
+          && (sale.generatedDocuments as any)?.__ddrReservation?.state === 'reserved'
+      }
     });
   } catch (error) {
     console.error('Errore lettura numerazione documenti:', error);
@@ -1703,10 +1798,22 @@ export async function renumberLocalDdt(req: Request, res: Response) {
         throw error;
       }
       const taken = await tx.execute(sql`
-        SELECT 1 FROM ${ddt}
-        WHERE company_id = ${draft.companyId}
-          AND EXTRACT(YEAR FROM data)::integer = ${year}
-          AND numero = ${requestedNumber} AND id <> ${draft.id}
+        SELECT 1 FROM ${ddt} document
+        WHERE document.company_id = ${draft.companyId}
+          AND EXTRACT(YEAR FROM document.data)::integer = ${year}
+          AND document.numero = ${requestedNumber} AND document.id <> ${draft.id}
+          AND NOT EXISTS (
+            SELECT 1 FROM ddt_number_legacy_exceptions legacy
+            WHERE legacy.ddt_id = document.id
+              AND legacy.company_id = document.company_id
+              AND legacy.numbering_year = EXTRACT(YEAR FROM document.data)::integer
+              AND legacy.local_number = document.numero
+              AND legacy.fic_company_id = document.company_id
+              AND legacy.fic_document_id = document.fatture_in_cloud_id
+              AND legacy.fic_document_type = 'delivery_note'
+              AND legacy.local_number <> legacy.fic_number
+              AND document.ddt_stato = 'inviato'
+          )
         LIMIT 1
       `);
       if ((taken as any).rows?.length) {
@@ -1734,6 +1841,124 @@ export async function renumberLocalDdt(req: Request, res: Response) {
     });
   }
 }
+
+/** Release a DDT reservation only while the document is provably local-only. */
+export async function releaseLocalDdtReservation(req: Request, res: Response) {
+  const throwConflict = (message: string, statusCode = 409): never => {
+    const error: any = new Error(message);
+    error.statusCode = statusCode;
+    throw error;
+  };
+
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const saleId = Number(req.params.id);
+    if (!Number.isSafeInteger(saleId) || saleId < 1) {
+      return res.status(400).json({ success: false, error: "Vendita non valida" });
+    }
+
+    await db.transaction(async tx => {
+      const saleResult = await tx.execute(sql`
+        SELECT id, status, ddt_id, ddt_status
+        FROM ${advancedSales}
+        WHERE id = ${saleId}
+        FOR UPDATE
+      `);
+      const sale = ((saleResult as any).rows ?? [])[0];
+      if (!sale) throwConflict("Vendita non trovata", 404);
+
+      const documentResult = sale.ddt_id == null
+        ? null
+        : await tx.execute(sql`
+          SELECT id, ddt_stato, fatture_in_cloud_id, fatture_in_cloud_numero,
+                 fcloud_ddt_id, fcloud_ddt_numero, fcloud_stato
+          FROM ${ddt}
+          WHERE id = ${sale.ddt_id}
+          FOR UPDATE
+        `);
+      const document = ((documentResult as any)?.rows ?? [])[0] ?? null;
+      const detailRows = document
+        ? await tx.execute(sql`
+            SELECT advanced_sale_id
+            FROM ${ddtRighe}
+            WHERE ddt_id = ${document.id}
+            ORDER BY id
+            FOR UPDATE
+          `)
+        : null;
+      const otherSaleRows = document
+        ? await tx.execute(sql`
+            SELECT id
+            FROM ${advancedSales}
+            WHERE ddt_id = ${document.id} AND id <> ${saleId}
+            FOR UPDATE
+          `)
+        : null;
+      const detailSaleIds = ((detailRows as any)?.rows ?? []).map((row: any) =>
+        row.advanced_sale_id == null ? null : Number(row.advanced_sale_id)
+      );
+      const otherSaleIds = ((otherSaleRows as any)?.rows ?? []).map((row: any) => Number(row.id));
+
+      const blockReason = getLocalDdtReleaseBlockReason({
+        saleId,
+        saleStatus: sale.status,
+        saleDdtId: sale.ddt_id == null ? null : Number(sale.ddt_id),
+        saleDdtStatus: sale.ddt_status,
+        documentId: document == null ? null : Number(document.id),
+        documentStatus: document?.ddt_stato ?? null,
+        ficId: document?.fatture_in_cloud_id == null ? null : Number(document.fatture_in_cloud_id),
+        ficNumber: document?.fatture_in_cloud_numero ?? null,
+        fcloudId: document?.fcloud_ddt_id ?? null,
+        fcloudNumber: document?.fcloud_ddt_numero ?? null,
+        fcloudStatus: document?.fcloud_stato ?? null,
+        otherSaleIds,
+        detailSaleIds
+      });
+      if (blockReason) throwConflict(blockReason);
+
+      await tx.delete(ddtRighe).where(eq(ddtRighe.ddtId, Number(document.id)));
+      const [deletedDocument] = await tx.delete(ddt)
+        .where(and(
+          eq(ddt.id, Number(document.id)),
+          eq(ddt.ddtStato, "locale"),
+          isNull(ddt.fattureInCloudId),
+          isNull(ddt.fattureInCloudNumero),
+          isNull(ddt.fcloudDdtId),
+          isNull(ddt.fcloudDdtNumero),
+          isNull(ddt.fcloudStato)
+        ))
+        .returning({ id: ddt.id });
+      if (!deletedDocument) {
+        throwConflict("DDT cambiato durante il rilascio: ricaricare e verificare lo stato");
+      }
+
+      const [releasedSale] = await tx.update(advancedSales)
+        .set({ ddtId: null, ddtStatus: "nessuno", updatedAt: new Date() })
+        .where(and(
+          eq(advancedSales.id, saleId),
+          eq(advancedSales.status, "confirmed"),
+          eq(advancedSales.ddtId, Number(document.id)),
+          eq(advancedSales.ddtStatus, "locale")
+        ))
+        .returning({ id: advancedSales.id });
+      if (!releasedSale) {
+        throwConflict("Vendita cambiata durante il rilascio: ricaricare e verificare lo stato");
+      }
+    });
+
+    await invalidateAllCaches();
+    return res.json({
+      success: true,
+      message: "Prenotazione DDT locale rilasciata; la vendita non è stata eliminata"
+    });
+  } catch (error: any) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || "Impossibile rilasciare la prenotazione DDT locale"
+    });
+  }
+}
+
 export async function assignSaleDdrNumber(req: Request, res: Response) {
   try {
     const number = req.body?.number;
@@ -1756,6 +1981,39 @@ export async function assignSaleDdrNumber(req: Request, res: Response) {
     res.status(conflict ? 409 : 500).json({
       success: false,
       error: conflict ? 'Numero DDR già assegnato o documento già numerato: aggiornare la proposta' : 'Impossibile assegnare il numero DDR'
+    });
+  }
+}
+
+export async function releaseSaleDdrNumber(req: Request, res: Response) {
+  try {
+    await ensureAdvancedSaleDocumentSchema();
+    const saleId = Number(req.params.id);
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!Number.isSafeInteger(saleId) || saleId < 1) {
+      return res.status(400).json({ success: false, error: 'Vendita non valida' });
+    }
+    if (reason.length < 3) {
+      return res.status(400).json({ success: false, error: 'Indica una motivazione di almeno 3 caratteri' });
+    }
+    const result = await db.transaction(tx =>
+      releaseUnusedDdrNumber(
+        createDdrNumberingTransaction(tx),
+        saleId,
+        reason,
+        req.session?.user?.id ?? null
+      )
+    );
+    if (!result.released) {
+      return res.status(409).json({ success: false, error: result.reason });
+    }
+    await invalidateAllCaches();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    const notFound = /Vendita non trovata/.test(error?.message || '');
+    return res.status(notFound ? 404 : 503).json({
+      success: false,
+      error: error?.message || 'Impossibile rilasciare il DDR inutilizzato'
     });
   }
 }
@@ -1835,7 +2093,7 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
     if (!sale) return res.status(404).json({ success: false, error: 'Vendita non trovata' });
     const isDeltaFuturo = ['13263', '1052922'].includes(String(sale.companyId));
     if ((kind === 'all' || kind === 'bivalve-transfer') && isDeltaFuturo) {
-      const assigned = await ensureDdrNumber(saleId);
+      const assigned = await ensureDdrNumber(saleId, undefined, true);
       sale.ddrNumber = assigned.number;
       sale.ddrYear = assigned.year;
     }
@@ -1985,7 +2243,14 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
           'delivery-report', NOW()::text,
           'sale-conditions', NOW()::text,
           'ddt', NOW()::text
-        ) ${isDeltaFuturo ? sql`|| jsonb_build_object('bivalve-transfer', NOW()::text)` : sql``},
+        ) ${isDeltaFuturo ? sql`
+          || jsonb_build_object('bivalve-transfer', NOW()::text)
+          || jsonb_build_object(
+            '__ddrReservation',
+            COALESCE(generated_documents -> '__ddrReservation', '{}'::jsonb)
+              || jsonb_build_object('state', 'issued', 'issuedAt', NOW()::text)
+          )
+        ` : sql``},
         updated_at = NOW()
         WHERE id = ${saleId}
       `);
@@ -2009,7 +2274,13 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
           ARRAY[${kind}]::text[],
           to_jsonb(NOW()::text),
           true
-        ),
+        ) ${kind === 'bivalve-transfer' && isDeltaFuturo ? sql`
+          || jsonb_build_object(
+            '__ddrReservation',
+            COALESCE(generated_documents -> '__ddrReservation', '{}'::jsonb)
+              || jsonb_build_object('state', 'issued', 'issuedAt', NOW()::text)
+          )
+        ` : sql``},
         updated_at = NOW()
         WHERE id = ${saleId}
       `);
@@ -4159,17 +4430,41 @@ export async function generateDDT(req: Request, res: Response) {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
 
       const localMaxResult = await tx.execute(sql`
-        SELECT COALESCE(MAX(numero), 0)::integer AS max_number
-        FROM ${ddt}
-        WHERE company_id = ${companyId}
-          AND EXTRACT(YEAR FROM data)::integer = ${numberingYear}
+        SELECT COALESCE(MAX(document.numero), 0)::integer AS max_number
+        FROM ${ddt} document
+        WHERE document.company_id = ${companyId}
+          AND EXTRACT(YEAR FROM document.data)::integer = ${numberingYear}
+          AND NOT EXISTS (
+            SELECT 1 FROM ddt_number_legacy_exceptions legacy
+            WHERE legacy.ddt_id = document.id
+              AND legacy.company_id = document.company_id
+              AND legacy.numbering_year = EXTRACT(YEAR FROM document.data)::integer
+              AND legacy.local_number = document.numero
+              AND legacy.fic_company_id = document.company_id
+              AND legacy.fic_document_id = document.fatture_in_cloud_id
+              AND legacy.fic_document_type = 'delivery_note'
+              AND legacy.local_number <> legacy.fic_number
+              AND document.ddt_stato = 'inviato'
+          )
       `);
       const localMax = Number((localMaxResult as any).rows?.[0]?.max_number || 0);
       const taken = requestedNumber === undefined ? null : await tx.execute(sql`
-          SELECT 1 FROM ${ddt}
-          WHERE company_id = ${companyId}
-            AND EXTRACT(YEAR FROM data)::integer = ${numberingYear}
-            AND numero = ${requestedNumber}
+          SELECT 1 FROM ${ddt} document
+          WHERE document.company_id = ${companyId}
+            AND EXTRACT(YEAR FROM document.data)::integer = ${numberingYear}
+            AND document.numero = ${requestedNumber}
+            AND NOT EXISTS (
+              SELECT 1 FROM ddt_number_legacy_exceptions legacy
+              WHERE legacy.ddt_id = document.id
+                AND legacy.company_id = document.company_id
+                AND legacy.numbering_year = EXTRACT(YEAR FROM document.data)::integer
+                AND legacy.local_number = document.numero
+                AND legacy.fic_company_id = document.company_id
+                AND legacy.fic_document_id = document.fatture_in_cloud_id
+                AND legacy.fic_document_type = 'delivery_note'
+                AND legacy.local_number <> legacy.fic_number
+                AND document.ddt_stato = 'inviato'
+            )
           LIMIT 1
         `);
       const reservedNumber = chooseDdtReservationNumber(
@@ -5269,7 +5564,8 @@ export async function deleteSale(req: Request, res: Response) {
           return {
             alreadyReversed: true,
             cancelledAt: lockedSale.cancelled_at,
-            cancellationReason: lockedSale.cancellation_reason
+            cancellationReason: lockedSale.cancellation_reason,
+            releasedDdr: null
           };
         }
         if (lockedSale.source_type !== 'manual') {
@@ -5399,6 +5695,12 @@ export async function deleteSale(req: Request, res: Response) {
             .where(eq(baskets.id, source.basketId));
         }
 
+        const releasedDdr = await releaseUnusedDdrNumber(
+          createDdrNumberingTransaction(tx),
+          saleId,
+          reason.trim(),
+          req.session?.user?.id ?? null
+        );
         const cancelledAt = new Date();
         await tx.update(advancedSales)
           .set({
@@ -5412,7 +5714,8 @@ export async function deleteSale(req: Request, res: Response) {
         return {
           alreadyReversed: false,
           cancelledAt,
-          cancellationReason: reason.trim()
+          cancellationReason: reason.trim(),
+          releasedDdr
         };
       });
 
@@ -5421,14 +5724,19 @@ export async function deleteSale(req: Request, res: Response) {
         success: true,
         message: reversalResult.alreadyReversed
           ? `Vendita ${saleData.saleNumber} già stornata`
-          : `Vendita ${saleData.saleNumber} stornata e ceste ripristinate`,
+          : `Vendita ${saleData.saleNumber} stornata e ceste ripristinate${
+            reversalResult.releasedDdr?.released
+              ? ` · DDR n. ${reversalResult.releasedDdr.number}/${reversalResult.releasedDdr.year} rilasciato`
+              : ''
+          }`,
         reversedSale: {
           id: saleData.id,
           saleNumber: saleData.saleNumber,
           status: 'cancelled',
           alreadyReversed: reversalResult.alreadyReversed,
           cancelledAt: reversalResult.cancelledAt,
-          cancellationReason: reversalResult.cancellationReason
+          cancellationReason: reversalResult.cancellationReason,
+          releasedDdr: reversalResult.releasedDdr ?? { released: false }
         }
       });
     }

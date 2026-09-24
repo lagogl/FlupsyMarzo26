@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ensureDdrNumber,
+  releaseUnusedDdrNumber,
   validateNextDdrNumber,
   type DdrNumberingStore,
   type DdrNumberingTransaction,
@@ -40,7 +41,20 @@ class MemoryDdrStore implements DdrNumberingStore {
         },
         advanceSequence: async (companyId, year, next) => {
           this.sequences.set(`${companyId}:${year}`, next);
-        }
+        },
+        setReservation: async (id, reservation) => {
+          this.sales.get(id)!.ddrReservation = reservation;
+        },
+        releaseSaleNumber: async (id, number, year) => {
+          const current = this.sales.get(id)!;
+          assert.equal(current.ddrNumber, number);
+          assert.equal(current.ddrYear, year);
+          current.ddrNumber = null;
+          current.ddrYear = null;
+        },
+        highestAssignedNumber: async (companyId, year, excludingSaleId) => Math.max(0, ...[...this.sales.values()]
+          .filter(s => s.id !== excludingSaleId && s.companyId === companyId && s.ddrYear === year)
+          .map(s => s.ddrNumber ?? 0))
       };
       return await work(tx);
     } finally {
@@ -50,7 +64,7 @@ class MemoryDdrStore implements DdrNumberingStore {
 }
 
 function sale(id: number, companyId: number, saleDate: string): DdrSale {
-  return { id, companyId, saleDate, ddrNumber: null, ddrYear: null };
+  return { id, companyId, saleDate, ddrNumber: null, ddrYear: null, status: 'confirmed' };
 }
 
 test('due assegnazioni simultanee ricevono progressivi diversi e consecutivi', async () => {
@@ -125,4 +139,88 @@ test('rifiuta un prossimo numero già assegnato o regressivo', () => {
   assert.throws(() => validateNextDdrNumber(12, 12), /inferiore a 13/);
   assert.throws(() => validateNextDdrNumber(7, 12), /inferiore a 13/);
   assert.equal(validateNextDdrNumber(13, 12), 13);
+});
+
+test('il rilascio di una prenotazione mai usata conserva la traccia e rende riutilizzabile il progressivo', async () => {
+  const store = new MemoryDdrStore();
+  store.sales.set(1, sale(1, 1052922, '2026-09-24'));
+
+  assert.deepEqual(await ensureDdrNumber(store, 1), { number: 1, year: 2026 });
+  const released = await store.transaction(tx => releaseUnusedDdrNumber(tx, 1, 'Vendita abbandonata', 7));
+
+  assert.deepEqual(released, { released: true, number: 1, year: 2026 });
+  assert.equal(store.sales.get(1)?.ddrNumber, null);
+  assert.equal(store.sales.get(1)?.ddrYear, null);
+  assert.equal(store.sales.get(1)?.ddrReservation?.state, 'released');
+  assert.equal(store.sales.get(1)?.ddrReservation?.releaseReason, 'Vendita abbandonata');
+  assert.equal(store.sales.get(1)?.ddrReservation?.releasedBy, 7);
+  assert.equal(store.sequences.get('1052922:2026'), 1);
+
+  store.sales.set(2, sale(2, 1052922, '2026-09-24'));
+  assert.deepEqual(await ensureDdrNumber(store, 2), { number: 1, year: 2026 });
+});
+
+test('un DDR già emesso o con emissione iniziata non viene mai rilasciato', async () => {
+  const store = new MemoryDdrStore();
+  store.sales.set(1, {
+    ...sale(1, 1052922, '2026-09-24'),
+    ddrNumber: 4,
+    ddrYear: 2026,
+    ddrReservation: { state: 'issued', number: 4, year: 2026 }
+  });
+  store.sales.set(2, {
+    ...sale(2, 1052922, '2026-09-24'),
+    ddrNumber: 5,
+    ddrYear: 2026,
+    ddrReservation: { state: 'issuance_started', number: 5, year: 2026 }
+  });
+
+  assert.deepEqual(
+    await store.transaction(tx => releaseUnusedDdrNumber(tx, 1, 'Annullamento')),
+    { released: false, reason: 'DDR non rilasciabile: emissione già avviata o stato non verificabile' }
+  );
+  assert.deepEqual(
+    await store.transaction(tx => releaseUnusedDdrNumber(tx, 2, 'Annullamento')),
+    { released: false, reason: 'DDR non rilasciabile: emissione già avviata o stato non verificabile' }
+  );
+  assert.equal(store.sales.get(1)?.ddrNumber, 4);
+  assert.equal(store.sales.get(2)?.ddrNumber, 5);
+});
+
+test('il tentativo di generare il PDF marca subito il numero come non rilasciabile', async () => {
+  const store = new MemoryDdrStore();
+  store.sales.set(1, sale(1, 1052922, '2026-09-24'));
+
+  await ensureDdrNumber(store, 1, undefined, { issuanceAttempt: true });
+
+  assert.equal(store.sales.get(1)?.ddrReservation?.state, 'issuance_started');
+  const result = await store.transaction(tx => releaseUnusedDdrNumber(tx, 1, 'Vendita abbandonata'));
+  assert.equal(result.released, false);
+  assert.equal(store.sales.get(1)?.ddrNumber, 1);
+});
+
+test('le prenotazioni preesistenti senza stato esplicito restano bloccate per prudenza', async () => {
+  const store = new MemoryDdrStore();
+  store.sales.set(1, { ...sale(1, 1052922, '2026-09-24'), ddrNumber: 9, ddrYear: 2026 });
+
+  const result = await store.transaction(tx => releaseUnusedDdrNumber(tx, 1, 'Annullamento'));
+
+  assert.deepEqual(result, {
+    released: false,
+    reason: 'DDR non rilasciabile: emissione già avviata o stato non verificabile'
+  });
+  assert.equal(store.sales.get(1)?.ddrNumber, 9);
+});
+
+test('una sequenza arretrata salta i DDR già occupati anche in presenza di buchi', async () => {
+  const store = new MemoryDdrStore();
+  store.sales.set(1, {
+    ...sale(1, 1052922, '2026-09-24'),
+    ddrNumber: 1,
+    ddrYear: 2026
+  });
+  store.sales.set(2, sale(2, 1052922, '2026-09-24'));
+  store.sequences.set('1052922:2026', 1);
+
+  assert.deepEqual(await ensureDdrNumber(store, 2), { number: 2, year: 2026 });
 });

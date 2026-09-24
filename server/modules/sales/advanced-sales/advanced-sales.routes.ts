@@ -32,6 +32,7 @@ router.get('/', AdvancedSalesController.getAdvancedSales);
 router.get('/:id', AdvancedSalesController.getAdvancedSale);
 router.get('/:id/document-numbers', AdvancedSalesController.getSaleDocumentNumbers);
 router.post('/:id/assign-ddr-number', AdvancedSalesController.assignSaleDdrNumber);
+router.post('/:id/release-ddr-number', requireAuth, requireOperator, AdvancedSalesController.releaseSaleDdrNumber);
 router.post('/', AdvancedSalesController.createAdvancedSale);
 router.post('/multi', AdvancedSalesController.createMultiCustomerSale);
 router.patch('/:id/status', AdvancedSalesController.updateSaleStatus);
@@ -47,6 +48,7 @@ router.get('/:id/download-pdf', AdvancedSalesController.downloadSalePDF);
 // Generazione DDT e report PDF
 router.post('/:id/generate-ddt', AdvancedSalesController.generateDDT);
 router.post('/:id/renumber-ddt', requireAuth, requireOperator, AdvancedSalesController.renumberLocalDdt);
+router.post('/:id/release-local-ddt', requireAuth, requireOperator, AdvancedSalesController.releaseLocalDdtReservation);
 router.get('/:id/report.pdf', AdvancedSalesController.generatePDFReport);
 // Suite documentale operativa A4; le rotte PDF storiche restano disponibili.
 router.get('/:id/documents/:kind.pdf', AdvancedSalesController.generateAdvancedSaleDocument);

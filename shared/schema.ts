@@ -1634,6 +1634,38 @@ export const ddt = pgTable("ddt", {
     .on(table.companyId, table.numberingYear, table.numero),
 }));
 
+/**
+ * Audited exceptions for historical DDTs whose local number differs from the
+ * number verified on their immutable FIC document. Only migration-approved
+ * rows belong here; runtime code must never create or edit these proofs.
+ */
+export const ddtNumberLegacyExceptions = pgTable("ddt_number_legacy_exceptions", {
+  ddtId: integer("ddt_id")
+    .primaryKey()
+    .references(() => ddt.id, { onDelete: "restrict" }),
+  companyId: integer("company_id").notNull(),
+  year: integer("numbering_year").notNull(),
+  localNumber: integer("local_number").notNull(),
+  ficCompanyId: integer("fic_company_id").notNull(),
+  ficDocumentId: integer("fic_document_id").notNull(),
+  ficNumber: integer("fic_number").notNull(),
+  ficDocumentType: text("fic_document_type").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+  verificationMethod: text("verification_method").notNull(),
+}, table => ({
+  legacyNumberMismatch: check(
+    "ddt_number_legacy_exceptions_must_mismatch",
+    sql`${table.localNumber} <> ${table.ficNumber}`,
+  ),
+  legacyFicType: check(
+    "ddt_number_legacy_exceptions_fic_type",
+    sql`${table.ficDocumentType} = 'delivery_note'`,
+  ),
+  legacyFicDocumentUnique: unique(
+    "ddt_number_legacy_exceptions_fic_document_unique",
+  ).on(table.ficCompanyId, table.ficDocumentId),
+}));
+
 // Righe dettaglio DDT
 export const ddtRighe = pgTable("ddt_righe", {
   id: serial("id").primaryKey(),

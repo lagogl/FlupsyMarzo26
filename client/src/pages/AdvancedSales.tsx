@@ -148,6 +148,7 @@ export default function AdvancedSales() {
   const [proposedDdtNumber, setProposedDdtNumber] = useState("");
   const [recoverDdtSaleId, setRecoverDdtSaleId] = useState<number | null>(null);
   const [proposedDdrNumber, setProposedDdrNumber] = useState("");
+  const [ddrReleaseReason, setDdrReleaseReason] = useState("");
   const [documentNumbersIntent, setDocumentNumbersIntent] = useState<{
     kind: "ddt" | "all" | "document";
     sale: any;
@@ -1166,6 +1167,27 @@ export default function AdvancedSales() {
     })
   });
 
+  const releaseDDRNumberMutation = useMutation({
+    mutationFn: ({ saleId, reason }: { saleId: number; reason: string }) => apiRequest(
+      `/api/advanced-sales/${saleId}/release-ddr-number`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
+    onSuccess: () => {
+      setDdrReleaseReason("");
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/numbering-context'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      if (documentNumbersSale?.id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale.id] });
+      }
+      toast({ title: "Numero DDR non usato liberato", description: "Puoi assegnare un numero prima di generare il documento." });
+    },
+    onError: (error: any) => toast({
+      title: "Impossibile liberare il numero DDR",
+      description: error.message || "Verifica se il documento è già stato generato",
+      variant: "destructive"
+    })
+  });
+
   const handleGenerateDDT = (sale: any) => {
     openDocumentNumbersDialog(sale, { kind: "ddt" });
   };
@@ -1187,6 +1209,26 @@ export default function AdvancedSales() {
     onError: (error: any) => toast({
       title: "Impossibile cambiare numero DDT",
       description: error.message || "Ricarica la vendita e riprova",
+      variant: "destructive"
+    })
+  });
+
+  const releaseLocalDdtMutation = useMutation({
+    mutationFn: (saleId: number) => apiRequest(
+      `/api/advanced-sales/${saleId}/release-local-ddt`,
+      { method: "POST" }
+    ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/numbering-context'] });
+      if (documentNumbersSale?.id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale.id] });
+      }
+      toast({ title: "Bozza DDT non inviata eliminata", description: "Il numero locale è stato liberato. La vendita resta disponibile." });
+    },
+    onError: (error: any) => toast({
+      title: "Impossibile liberare la bozza DDT",
+      description: error.message || "Verifica se l'invio esterno è già iniziato",
       variant: "destructive"
     })
   });
@@ -1436,14 +1478,28 @@ export default function AdvancedSales() {
                           </Button>
                         </>
                       ) : !ddtCanPrepare ? (
-                        <p className="text-sm font-medium">
-                          {documentNumbers?.ddt?.number != null
-                            ? `DDT n. ${documentNumbers.ddt.number}`
-                            : `DDT non disponibile · stato ${documentNumbers?.ddt?.status || "sconosciuto"}`}
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            {ddtIssued ? "Numero bloccato dopo l’emissione" : "La preparazione è consentita solo quando lo stato è nessuno"}
-                          </span>
-                        </p>
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">
+                            {documentNumbers?.ddt?.number != null
+                              ? `DDT n. ${documentNumbers.ddt.number}`
+                              : `DDT non disponibile · stato ${documentNumbers?.ddt?.status || "sconosciuto"}`}
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {ddtIssued ? "Numero bloccato dopo l’emissione" : "La preparazione è consentita solo quando lo stato è nessuno"}
+                            </span>
+                          </p>
+                          {documentNumbers?.ddt?.canRelease && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!documentNumbersSale || releaseLocalDdtMutation.isPending}
+                              onClick={() => documentNumbersSale
+                                && window.confirm("Eliminare la bozza DDT mai inviata e liberarne il numero? La vendita resterà disponibile.")
+                                && releaseLocalDdtMutation.mutate(documentNumbersSale.id)}
+                            >
+                              {releaseLocalDdtMutation.isPending ? "Verifica..." : "Elimina bozza DDT non inviata"}
+                            </Button>
+                          )}
+                        </div>
                       ) : (
                         <>
                           <Input
@@ -1508,10 +1564,36 @@ export default function AdvancedSales() {
                           <>
                             <Label htmlFor="sale-proposed-ddr">Numero DDR · {documentNumbers?.ddr?.year || ddrYear}</Label>
                             {ddrAssigned ? (
-                              <p className="text-sm font-medium">
-                                DDR n. {documentNumbers.ddr.number}/{documentNumbers.ddr.year}
-                                <span className="ml-2 text-xs text-muted-foreground">Numero bloccato dopo l’assegnazione</span>
-                              </p>
+                               <div className="space-y-2">
+                                 <p className="text-sm font-medium">
+                                   DDR n. {documentNumbers.ddr.number}/{documentNumbers.ddr.year}
+                                   <span className="ml-2 text-xs text-muted-foreground">Numero bloccato dopo l’assegnazione</span>
+                                 </p>
+                                 {documentNumbers?.ddr?.canRelease && (
+                                   <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-2">
+                                     <p className="text-xs text-amber-950">
+                                       Se non hai generato il DDR, puoi liberare questa prenotazione. Un documento emesso non può essere liberato.
+                                     </p>
+                                     <Input
+                                       aria-label="Motivo rilascio DDR non utilizzato"
+                                       placeholder="Motivo del rilascio (obbligatorio)"
+                                       value={ddrReleaseReason}
+                                       onChange={event => setDdrReleaseReason(event.target.value)}
+                                     />
+                                     <Button
+                                       variant="outline"
+                                       size="sm"
+                                       disabled={!documentNumbersSale || ddrReleaseReason.trim().length < 3 || releaseDDRNumberMutation.isPending}
+                                       onClick={() => documentNumbersSale && releaseDDRNumberMutation.mutate({
+                                         saleId: documentNumbersSale.id,
+                                         reason: ddrReleaseReason.trim()
+                                       })}
+                                     >
+                                       {releaseDDRNumberMutation.isPending ? "Verifica..." : "Libera DDR non utilizzato"}
+                                     </Button>
+                                   </div>
+                                 )}
+                               </div>
                             ) : (
                               <>
                                 <Input
@@ -2283,6 +2365,15 @@ export default function AdvancedSales() {
 
                             {sale.status === 'confirmed' && sale.totalBags > 0 && (
                               <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openDocumentNumbersDialog(sale, { kind: "ddt" })}
+                                  title="Verifica e scegli i numeri DDT e DDR prima della preparazione"
+                                  data-testid={`button-sale-numbering-${sale.id}`}
+                                >
+                                  Numerazione DDT/DDR
+                                </Button>
                                 {sale.ddtStatus === 'nessuno' && (
                                   <Button 
                                     variant="default"

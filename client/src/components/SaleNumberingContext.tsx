@@ -4,9 +4,11 @@ export type SaleNumberingContextData = {
   ddt?: {
     highestFic?: number | null;
     highestLocal?: number | null;
+    excludedLegacyNumbers?: number[];
     proposed?: number | null;
     number?: number | null;
     status?: string | null;
+    canRelease?: boolean;
   };
   ddr?: {
     applicable?: boolean;
@@ -14,6 +16,7 @@ export type SaleNumberingContextData = {
     proposed?: number | null;
     number?: number | null;
     year?: number | null;
+    canRelease?: boolean;
   };
 };
 
@@ -132,7 +135,7 @@ export default function SaleNumberingContext({
               description={`Fatture in Cloud · ${year}`}
             />
             <NumberingMetric
-              label="Numero più alto creato/prenotato localmente"
+              label="Numero più alto locale valido per il progressivo"
               value={data.ddt?.highestLocal}
               description={`Archivio locale · ${year}`}
             />
@@ -146,6 +149,12 @@ export default function SaleNumberingContext({
                 : "Proposta non disponibile"}
             />
           </div>
+          {!!data.ddt?.excludedLegacyNumbers?.length && (
+            <div className="text-xs text-amber-900">
+              Numeri storici locali {data.ddt.excludedLegacyNumbers.join(", ")} esclusi dal progressivo:
+              i documenti collegati su FIC hanno numeri differenti. Le righe storiche restano inalterate.
+            </div>
+          )}
           {data.ddt?.number != null && (
             <div className="text-xs font-medium text-slate-700">
               Numero assegnato a questa vendita: DDT n. {data.ddt.number}

@@ -16,3 +16,9 @@ Il recupero manuale è un'eccezione solo per una bozza interamente locale quando
 **Why:** usare soltanto l'ultimo numero remoto assegna ripetutamente lo stesso progressivo finché i DDT locali non vengono inviati; richieste concorrenti possono inoltre ottenere lo stesso numero. Un retry remoto non coordinato può creare un secondo documento o collegare quello di un altro cliente.
 
 **How to apply:** leggere tutte le pagine FIC, serializzare l’assegnazione per azienda/anno, usare il massimo tra FIC e prenotazioni locali pendenti, rendere idempotente la sorgente del DDT e non rinumerare automaticamente documenti storici o già inviati. Se esistono duplicati legacy, non spostarli nella sequenza FIC: usare una guardia PostgreSQL su INSERT/UPDATE della chiave, con lock transazionale e `23505`→`409`, che blocchi nuovi duplicati ma lasci leggibile lo storico. I lock applicativi restano un'ottimizzazione, non la garanzia DB.
+
+Eccezione approvata: uno storico locale segnato come inviato può conservare un numero diverso da quello del suo documento FIC. Non alterare né cancellare lo storico per fare posto al progressivo corretto; un duplicato locale è ammissibile solo con prova separata e immutabile dell'identità e del numero FIC reale, verifica live che il nuovo numero sia libero su FIC e guardia DB che continui a impedire altri duplicati.
+
+**Why:** correggere alla cieca lo storico cancellerebbe la tracciabilità; usare il suo massimo locale salterebbe numeri FIC che sono liberi. L'utente ha autorizzato l'eccezione tracciata, non un riuso generalizzato.
+
+**How to apply:** escludere dal progressivo solo record legacy con prova verificata, distinguere sempre numero locale storico e numero ufficiale FIC e non liberare mai una prenotazione con invio esterno iniziato o incerto.

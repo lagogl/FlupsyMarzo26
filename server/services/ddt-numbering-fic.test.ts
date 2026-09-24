@@ -9,7 +9,11 @@ import {
 
 function sources(
   pages: Map<string, FicDeliveryNotePage>,
-  localDocuments: Map<string, Array<{ number: number; status: string }>>
+  localDocuments: Map<string, Array<{
+    number: number;
+    status: string;
+    legacyNumberException?: boolean;
+  }>>
 ): DdtNumberingSources & { requests: string[] } {
   const requests: string[] = [];
   return {
@@ -46,6 +50,27 @@ test("una prenotazione locale pendente più alta avanza il progressivo", async (
   );
 
   assert.equal(await getNextDdtNumber(data, 10, 2026), 315);
+});
+
+test("esclude dal progressivo solo la prenotazione locale coperta da prova storica verificata", async () => {
+  const data = sources(
+    new Map([["10:2026:1", { documents: [{ number: 326 }], lastPage: 1 }]]),
+    new Map([["10:2026", [
+      { number: 327, status: "locale", legacyNumberException: true },
+      { number: 328, status: "locale" },
+    ]]])
+  );
+
+  assert.equal(await getNextDdtNumber(data, 10, 2026), 329);
+
+  const onlyVerifiedExceptions = sources(
+    new Map([["10:2026:1", { documents: [{ number: 326 }], lastPage: 1 }]]),
+    new Map([["10:2026", [
+      { number: 999, status: "locale", legacyNumberException: true },
+      { number: 328, status: "inviato", legacyNumberException: true },
+    ]]])
+  );
+  assert.equal(await getNextDdtNumber(onlyVerifiedExceptions, 10, 2026), 327);
 });
 
 test("documenti storici con numero basso non spostano il prossimo numero FIC", async () => {
@@ -99,4 +124,11 @@ test("DDT automatico segue il massimo FIC e locale, quello scelto può usare sol
   assert.equal(chooseDdtReservationNumber(328, 327, 325), 325);
   assert.throws(() => chooseDdtReservationNumber(328, 327, 326, true), /già presente/);
   assert.throws(() => chooseDdtReservationNumber(328, 327, 327, false, true), /prenotato/);
+});
+
+test("la doppia numerazione storica non autorizza altri duplicati locali o FIC", () => {
+  // Il chiamante marca come occupato soltanto un record locale non eccezionato.
+  assert.equal(chooseDdtReservationNumber(327, 326, 327, false, false), 327);
+  assert.throws(() => chooseDdtReservationNumber(327, 326, 327, false, true), /prenotato/);
+  assert.throws(() => chooseDdtReservationNumber(327, 326, 327, true, false), /Fatture in Cloud/);
 });

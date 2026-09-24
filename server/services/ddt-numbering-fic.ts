@@ -6,6 +6,7 @@ export interface FicDeliveryNotePage {
 export interface LocalDeliveryNote {
   number?: unknown;
   status?: unknown;
+  legacyNumberException?: boolean;
 }
 
 export interface DdtNumberingSources {
@@ -29,7 +30,10 @@ export async function getNextDdtNumber(
   }
 
   const localPendingMax = (await sources.getLocalDeliveryNotes(companyId, year))
-    .filter(document => document.status === "locale" || document.status === "invio")
+    .filter(document =>
+      !document.legacyNumberException
+      && (document.status === "locale" || document.status === "invio")
+    )
     .reduce((max, document) => Math.max(max, Number(document.number) || 0), 0);
   return Math.max(ficMax, localPendingMax) + 1;
 }
