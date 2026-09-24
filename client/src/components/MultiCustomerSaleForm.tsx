@@ -13,6 +13,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Users, Check, ChevronsUpDown, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import SaleNumberingContext, { getSaleNumberingYear } from "@/components/SaleNumberingContext";
 
 interface Customer {
   id: number;
@@ -108,6 +109,15 @@ export default function MultiCustomerSaleForm({
   const { data: companiesData } = useQuery<{ companies: any[] }>({
     queryKey: ['/api/fatture-in-cloud/companies/local'],
     queryFn: () => apiRequest('/api/fatture-in-cloud/companies/local'),
+  });
+  const numberingYear = getSaleNumberingYear(saleDate);
+  const numberingContextQuery = useQuery({
+    queryKey: ['/api/advanced-sales/numbering-context', companyId, numberingYear],
+    queryFn: () => apiRequest(
+      `/api/advanced-sales/numbering-context?companyId=${companyId}&year=${numberingYear}`
+    ),
+    enabled: !!companyId && numberingYear !== null,
+    staleTime: 0,
   });
 
   const operationByBasket = useMemo(() => {
@@ -399,6 +409,18 @@ export default function MultiCustomerSaleForm({
               value={saleDate}
               onChange={(e) => setSaleDate(e.target.value)}
               data-testid="input-multi-date"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <SaleNumberingContext
+              companyId={companyId}
+              companyName={companiesData?.companies?.find((company: any) =>
+                Number(company.companyId) === Number(companyId)
+              )?.ragioneSociale}
+              year={numberingYear}
+              data={numberingContextQuery.data}
+              isLoading={numberingContextQuery.isFetching}
+              isError={numberingContextQuery.isError}
             />
           </div>
         </CardContent>

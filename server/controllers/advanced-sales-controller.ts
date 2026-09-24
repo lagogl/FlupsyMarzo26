@@ -1557,6 +1557,64 @@ async function ensureDdrNumber(saleId: number, requestedNumber?: number) {
   return allocateDdrNumber(store, saleId, requestedNumber);
 }
 
+async function buildSaleNumberingContext(companyId: number, year: number) {
+  const ficNumbers = new Set<number>();
+  const isDelta = ['13263', '1052922'].includes(String(companyId));
+  const [ficProposal, localRows, ddrRows] = await Promise.all([
+    getNextAvailableDDTNumber(companyId, year, ficNumbers),
+    db.execute(sql`
+      SELECT MAX(numero)::integer AS highest_number
+      FROM ${ddt}
+      WHERE company_id = ${companyId}
+        AND EXTRACT(YEAR FROM data)::integer = ${year}
+    `),
+    isDelta ? db.execute(sql`
+      SELECT
+        (SELECT MAX(ddr_number) FROM advanced_sales
+         WHERE company_id = ${companyId} AND ddr_year = ${year})::integer AS highest_assigned,
+        GREATEST(
+          COALESCE((SELECT next_number FROM ddr_number_sequences
+                    WHERE company_id = ${companyId} AND year = ${year}), 1),
+          COALESCE((SELECT MAX(ddr_number) + 1 FROM advanced_sales
+                    WHERE company_id = ${companyId} AND ddr_year = ${year}), 1)
+        )::integer AS proposed
+    `) : Promise.resolve(null)
+  ]);
+  const highestFic = [...ficNumbers].reduce((highest, number) => Math.max(highest, number), 0) || null;
+  const highestLocal = (localRows as any).rows?.[0]?.highest_number ?? null;
+  const ddrRow = (ddrRows as any)?.rows?.[0];
+  return {
+    companyId,
+    year,
+    ddt: {
+      highestFic,
+      highestLocal: highestLocal === null ? null : Number(highestLocal),
+      proposed: Math.max(ficProposal, Number(highestLocal ?? 0) + 1)
+    },
+    ddr: {
+      applicable: isDelta,
+      highestAssigned: ddrRow?.highest_assigned == null ? null : Number(ddrRow.highest_assigned),
+      proposed: ddrRow ? Number(ddrRow.proposed) : null
+    }
+  };
+}
+
+export async function getSaleNumberingContext(req: Request, res: Response) {
+  try {
+    const companyId = Number(req.query.companyId);
+    const year = Number(req.query.year);
+    if (!Number.isSafeInteger(companyId) || companyId < 1
+        || !Number.isSafeInteger(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ success: false, error: 'Azienda o anno della vendita non valido' });
+    }
+    await ensureAdvancedSaleDocumentSchema();
+    return res.json({ success: true, ...(await buildSaleNumberingContext(companyId, year)) });
+  } catch (error) {
+    console.error('Errore lettura ultimi numeri documenti:', error);
+    return res.status(503).json({ success: false, error: 'Impossibile verificare gli ultimi numeri su FIC; riprovare' });
+  }
+}
+
 export async function getSaleDocumentNumbers(req: Request, res: Response) {
   try {
     await ensureAdvancedSaleDocumentSchema();
@@ -1577,29 +1635,16 @@ export async function getSaleDocumentNumbers(req: Request, res: Response) {
     const [existingDdt] = sale.ddtId
       ? await db.select({ number: ddt.numero, status: ddt.ddtStato }).from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
       : [];
-    const isDelta = ['13263', '1052922'].includes(String(sale.companyId));
-    const [ficProposal, ddrRows, localDdtRows] = await Promise.all([
-      existingDdt ? Promise.resolve(null) : getNextAvailableDDTNumber(sale.companyId, year),
-      isDelta && !sale.ddrNumber ? db.execute(sql`
-        SELECT GREATEST(
-          COALESCE((SELECT next_number FROM ddr_number_sequences WHERE company_id = ${sale.companyId} AND year = ${year}), 1),
-          COALESCE((SELECT MAX(ddr_number) + 1 FROM advanced_sales WHERE company_id = ${sale.companyId} AND ddr_year = ${year}), 1)
-        ) AS next_number
-      `) : Promise.resolve(null),
-      existingDdt ? Promise.resolve(null) : db.execute(sql`
-        SELECT COALESCE(MAX(numero), 0)::integer AS max_number
-        FROM ${ddt} WHERE company_id = ${sale.companyId}
-          AND EXTRACT(YEAR FROM data)::integer = ${year}
-      `)
-    ]);
-    const ddtProposed = ficProposal === null ? null : Math.max(
-      ficProposal,
-      Number((localDdtRows as any)?.rows?.[0]?.max_number || 0) + 1
-    );
+    const context = await buildSaleNumberingContext(sale.companyId, year);
     res.json({
       success: true,
-      ddt: { proposed: ddtProposed, number: existingDdt?.number ?? null, status: existingDdt?.status ?? sale.ddtStatus },
-      ddr: { proposed: ddrRows ? Number((ddrRows as any).rows?.[0]?.next_number) : null, number: sale.ddrNumber, year }
+      companyId: sale.companyId,
+      ddt: {
+        ...context.ddt,
+        number: existingDdt?.number ?? null,
+        status: existingDdt?.status ?? sale.ddtStatus
+      },
+      ddr: { ...context.ddr, number: sale.ddrNumber, year }
     });
   } catch (error) {
     console.error('Errore lettura numerazione documenti:', error);

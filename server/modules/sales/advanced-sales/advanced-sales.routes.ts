@@ -18,6 +18,7 @@ router.get('/orders', AdvancedSalesController.getAvailableOrders);
 
 // Clienti per vendite
 router.get('/customers', AdvancedSalesController.getCustomers);
+router.get('/numbering-context', AdvancedSalesController.getSaleNumberingContext);
 router.get('/ddr-sequence', AdvancedSalesController.getDdrSequence);
 router.put('/ddr-sequence', AdvancedSalesController.updateDdrSequence);
 router.get('/order-reconciliation/preview', AdvancedSalesController.getOrderReconciliationPreview);

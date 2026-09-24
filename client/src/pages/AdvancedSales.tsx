@@ -22,6 +22,7 @@ import { apiRequest } from "@/lib/queryClient";
 import AdvancedSalesConfigTab from "./AdvancedSalesConfigTab";
 import CancelSaleOperationDialog from "@/components/CancelSaleOperationDialog";
 import MultiCustomerSaleForm from "@/components/MultiCustomerSaleForm";
+import SaleNumberingContext, { getSaleNumberingYear } from "@/components/SaleNumberingContext";
 
 interface SaleOperation {
   operationId: number;
@@ -266,9 +267,20 @@ export default function AdvancedSales() {
     queryFn: () => apiRequest('/api/fatture-in-cloud/companies/local')
   });
 
+  const saleNumberingYear = getSaleNumberingYear(saleDate);
+  const saleNumberingContextQuery = useQuery({
+    queryKey: ['/api/advanced-sales/numbering-context', selectedCompanyId, saleNumberingYear],
+    queryFn: () => apiRequest(
+      `/api/advanced-sales/numbering-context?companyId=${selectedCompanyId}&year=${saleNumberingYear}`
+    ),
+    enabled: !!selectedCompanyId && saleNumberingYear !== null,
+    staleTime: 0
+  });
+
   const {
     data: documentNumbers,
     isLoading: loadingDocumentNumbers,
+    isFetching: fetchingDocumentNumbers,
     error: documentNumbersError
   } = useQuery({
     queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale?.id],
@@ -1115,6 +1127,7 @@ export default function AdvancedSales() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/numbering-context'] });
       if (documentNumbersSale?.id) {
         queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale.id] });
       }
@@ -1138,6 +1151,7 @@ export default function AdvancedSales() {
       { method: "POST", body: JSON.stringify({ number }) }
     ),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/numbering-context'] });
       if (documentNumbersSale?.id) {
         queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales/document-numbers', documentNumbersSale.id] });
       }
@@ -1357,6 +1371,18 @@ export default function AdvancedSales() {
                 return (
                   <>
                     <div className="space-y-2 rounded-md border p-3">
+                      <SaleNumberingContext
+                        companyId={Number(documentNumbersSale?.companyId) || null}
+                        companyName={companies?.companies?.find((company: any) =>
+                          Number(company.companyId) === Number(documentNumbersSale?.companyId)
+                        )?.ragioneSociale}
+                        year={documentNumbers?.ddr?.year}
+                        data={documentNumbers}
+                        isLoading={fetchingDocumentNumbers}
+                        isError={!!documentNumbersError}
+                        section="ddt"
+                        compact
+                      />
                       <Label htmlFor="sale-proposed-ddt">Numero proposto DDT</Label>
                       {!ddtCanPrepare ? (
                         <p className="text-sm font-medium">
@@ -1413,43 +1439,59 @@ export default function AdvancedSales() {
                         </p>
                       </div>
                     )}
-                    {isDelta && (
+                    {(isDelta || documentNumbers?.ddr?.applicable === false) && (
                       <div className="space-y-2 rounded-md border p-3">
-                        <Label htmlFor="sale-proposed-ddr">Numero DDR · {documentNumbers?.ddr?.year || ddrYear}</Label>
-                        {ddrAssigned ? (
-                          <p className="text-sm font-medium">
-                            DDR n. {documentNumbers.ddr.number}/{documentNumbers.ddr.year}
-                            <span className="ml-2 text-xs text-muted-foreground">Numero bloccato dopo l’assegnazione</span>
-                          </p>
-                        ) : (
+                        <SaleNumberingContext
+                          companyId={Number(documentNumbersSale?.companyId) || null}
+                          companyName={companies?.companies?.find((company: any) =>
+                            Number(company.companyId) === Number(documentNumbersSale?.companyId)
+                          )?.ragioneSociale}
+                          year={documentNumbers?.ddr?.year || getSaleNumberingYear(String(documentNumbersSale?.saleDate || ""))}
+                          data={documentNumbers}
+                          isLoading={fetchingDocumentNumbers}
+                          isError={!!documentNumbersError}
+                          section="ddr"
+                          compact
+                        />
+                        {isDelta && (
                           <>
-                            <Input
-                              id="sale-proposed-ddr"
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={proposedDdrNumber}
-                              onChange={event => setProposedDdrNumber(event.target.value)}
-                              placeholder="Inserisci il numero DDR"
-                            />
-                            <div className="flex justify-end">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => documentNumbersSale && assignDDRNumberMutation.mutate({
-                                  saleId: documentNumbersSale.id,
-                                  number: Number(proposedDdrNumber)
-                                })}
-                                disabled={
-                                  !documentNumbersSale
-                                  || !Number.isInteger(Number(proposedDdrNumber))
-                                  || Number(proposedDdrNumber) < 1
-                                  || assignDDRNumberMutation.isPending
-                                }
-                              >
-                                {assignDDRNumberMutation.isPending ? "Assegnazione..." : "Assegna numero DDR"}
-                              </Button>
-                            </div>
+                            <Label htmlFor="sale-proposed-ddr">Numero DDR · {documentNumbers?.ddr?.year || ddrYear}</Label>
+                            {ddrAssigned ? (
+                              <p className="text-sm font-medium">
+                                DDR n. {documentNumbers.ddr.number}/{documentNumbers.ddr.year}
+                                <span className="ml-2 text-xs text-muted-foreground">Numero bloccato dopo l’assegnazione</span>
+                              </p>
+                            ) : (
+                              <>
+                                <Input
+                                  id="sale-proposed-ddr"
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={proposedDdrNumber}
+                                  onChange={event => setProposedDdrNumber(event.target.value)}
+                                  placeholder="Inserisci il numero DDR"
+                                />
+                                <div className="flex justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => documentNumbersSale && assignDDRNumberMutation.mutate({
+                                      saleId: documentNumbersSale.id,
+                                      number: Number(proposedDdrNumber)
+                                    })}
+                                    disabled={
+                                      !documentNumbersSale
+                                      || !Number.isInteger(Number(proposedDdrNumber))
+                                      || Number(proposedDdrNumber) < 1
+                                      || assignDDRNumberMutation.isPending
+                                    }
+                                  >
+                                    {assignDDRNumberMutation.isPending ? "Assegnazione..." : "Assegna numero DDR"}
+                                  </Button>
+                                </div>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
@@ -1884,6 +1926,17 @@ export default function AdvancedSales() {
                   onChange={(e) => setSaleDate(e.target.value)}
                 />
               </div>
+
+              <SaleNumberingContext
+                companyId={selectedCompanyId}
+                companyName={companies?.companies?.find((company: any) =>
+                  Number(company.companyId) === Number(selectedCompanyId)
+                )?.ragioneSociale}
+                year={saleNumberingYear}
+                data={saleNumberingContextQuery.data}
+                isLoading={saleNumberingContextQuery.isFetching}
+                isError={saleNumberingContextQuery.isError}
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="notes">Note</Label>
