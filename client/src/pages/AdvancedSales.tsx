@@ -1442,7 +1442,7 @@ export default function AdvancedSales() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="w-full max-w-none space-y-6 p-3 sm:p-4 lg:p-5">
       <Dialog open={documentNumbersDialogOpen} onOpenChange={setDocumentNumbersDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -2146,7 +2146,7 @@ export default function AdvancedSales() {
 
         <TabsContent value="sales" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle>Vendite Avanzate</CardTitle>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -2225,12 +2225,12 @@ export default function AdvancedSales() {
                 </Dialog>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-2 sm:px-3">
               {loadingSales ? (
                 <div>Caricamento vendite...</div>
               ) : (
-                <Table>
-                  <TableHeader>
+                <Table className="w-full text-[11px] [&_th]:px-1 [&_td]:px-1 [&_td]:py-2 max-lg:block">
+                  <TableHeader className="max-lg:hidden">
                     <TableRow>
                       <TableHead>Numero</TableHead>
                       <TableHead>Cliente</TableHead>
@@ -2243,16 +2243,17 @@ export default function AdvancedSales() {
                       <TableHead>Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
+                  <TableBody className="max-lg:block">
                     {salesData?.sales?.map((sale: any) => (
-                      <TableRow key={sale.id}>
-                        <TableCell className="font-medium">{sale.saleNumber}</TableCell>
-                        <TableCell>{sale.customerName || "N/A"}</TableCell>
-                        <TableCell>{format(new Date(sale.saleDate), 'dd/MM/yyyy')}</TableCell>
-                        <TableCell>{sale.totalBags || 0}</TableCell>
-                        <TableCell>{sale.totalAnimals?.toLocaleString() || 0}</TableCell>
-                        <TableCell>{sale.totalWeight ? (sale.totalWeight / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}</TableCell>
+                      <TableRow key={sale.id} className="max-lg:mb-3 max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-3 max-lg:rounded-md max-lg:border max-lg:p-2">
+                        <TableCell className="whitespace-nowrap font-medium"><span className="block font-normal text-muted-foreground lg:hidden">Numero</span>{sale.saleNumber}</TableCell>
+                        <TableCell className="max-w-[135px] break-words max-lg:max-w-none" title={sale.customerName || undefined}><span className="block text-muted-foreground lg:hidden">Cliente</span>{sale.customerName || "N/A"}</TableCell>
+                        <TableCell className="whitespace-nowrap"><span className="block text-muted-foreground lg:hidden">Data</span>{format(new Date(sale.saleDate), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell><span className="block text-muted-foreground lg:hidden">Sacchi</span>{sale.totalBags || 0}</TableCell>
+                        <TableCell className="whitespace-nowrap"><span className="block text-muted-foreground lg:hidden">Animali</span>{sale.totalAnimals?.toLocaleString() || 0}</TableCell>
+                        <TableCell className="whitespace-nowrap"><span className="block text-muted-foreground lg:hidden">Peso (kg)</span>{sale.totalWeight ? (sale.totalWeight / 1000).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00'}</TableCell>
                         <TableCell>
+                          <span className="block text-muted-foreground lg:hidden">Stato</span>
                           <Badge variant={
                             sale.status === 'completed' ? 'default' : 
                             sale.status === 'confirmed' ? 'secondary' : 'outline'
@@ -2261,7 +2262,8 @@ export default function AdvancedSales() {
                              sale.status === 'confirmed' ? 'Confermata' : 'Bozza'}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="max-w-[120px] break-words [&_span]:whitespace-normal">
+                          <span className="block text-muted-foreground lg:hidden">Fatturazione FIC</span>
                           {(() => {
                             const billing = ficBillingData?.statuses?.[sale.id];
                             if (!billing) return <Badge variant="outline">{checkingFicBilling ? "Verifica..." : "Non verificato"}</Badge>;
@@ -2286,8 +2288,9 @@ export default function AdvancedSales() {
                             return <Badge variant="outline">Non inviato</Badge>;
                           })()}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
+                        <TableCell className="min-w-[210px] w-[34%] max-lg:col-span-2 max-lg:w-full max-lg:min-w-0">
+                          <span className="block text-muted-foreground lg:hidden">Azioni</span>
+                          <div className="flex min-w-0 flex-wrap items-center gap-1 [&_button]:h-7 [&_button]:px-1.5 [&_button]:text-[11px]">
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -2324,7 +2327,7 @@ export default function AdvancedSales() {
                                   data-testid={`button-all-sale-documents-${sale.id}`}
                                 >
                                   <FileText className="h-4 w-4 mr-1" />
-                                  {sale.officialDdtNumber ? "Stampa documenti" : "Stampa fascicolo (DDT in bozza)"}
+                                  {sale.officialDdtNumber ? "Stampa" : "Stampa bozza"}
                                   <span className="ml-2 text-xs">
                                     {Object.keys({ ...(sale.generatedDocuments || {}), ...(generatedDocumentOverrides[sale.id] || {}) }).filter(kind =>
                                       (["13263", "1052922"].includes(String(sale.companyId))
@@ -2403,7 +2406,7 @@ export default function AdvancedSales() {
                                   title="Verifica e scegli i numeri DDT e DDR prima della preparazione"
                                   data-testid={`button-sale-numbering-${sale.id}`}
                                 >
-                                  Numerazione DDT/DDR
+                                  Numeri DDT/DDR
                                 </Button>
                                 {sale.ddtStatus === 'nessuno' && (
                                   <Button 
@@ -2446,7 +2449,7 @@ export default function AdvancedSales() {
                                       {openingFCloudId === sale.ddtId
                                         ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                                         : <ExternalLink className="h-4 w-4 mr-1" />}
-                                      {openingFCloudId === sale.ddtId ? 'Apertura...' : 'Apri FCloud'}
+                                      {openingFCloudId === sale.ddtId ? 'Apertura...' : 'FCloud'}
                                     </Button>
                                   </>
                                 )}
@@ -2467,9 +2470,9 @@ export default function AdvancedSales() {
                                       {openingFCloudId === sale.ddtId
                                         ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                                         : <ExternalLink className="h-4 w-4 mr-1" />}
-                                      {openingFCloudId === sale.ddtId ? 'Apertura...' : 'Apri FCloud'}
+                                      {openingFCloudId === sale.ddtId ? 'Apertura...' : 'FCloud'}
                                     </Button>
-                                     <span className="text-xs text-muted-foreground">
+                                     <span className="max-w-[105px] text-[10px] leading-tight text-muted-foreground">
                                        Email: {sale.generatedDocuments?.__saleEmail?.state === 'sent' ? 'inviata'
                                          : sale.generatedDocuments?.__saleEmail?.state === 'failed' ? 'non inviata'
                                          : ['preparing', 'sending', 'unknown'].includes(sale.generatedDocuments?.__saleEmail?.state)
