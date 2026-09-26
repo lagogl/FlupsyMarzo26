@@ -22,6 +22,12 @@ function number(value: unknown, decimals = 0): string {
   });
 }
 
+export function formatSaleWeightKg(weightGrams: number | string): string {
+  const grams = Number(weightGrams);
+  if (!Number.isFinite(grams)) throw new Error('Peso totale vendita non valido');
+  return `${number(grams / 1000, 2)} kg`;
+}
+
 export async function sendAdvancedSaleDocumentsReadyEmail(params: {
   sale: any;
   customer: any;
@@ -38,7 +44,7 @@ export async function sendAdvancedSaleDocumentsReadyEmail(params: {
     ? `${sale.ddrNumber}/${sale.ddrYear}`
     : 'non previsto / non assegnato';
 
-  await sendGmailEmail({
+  return sendGmailEmail({
     to: RECIPIENTS,
     subject: `Documenti vendita ${sale.saleNumber}${ddtIsDraft ? ' — DDT in bozza' : ' — DDT ufficiale'}`,
     html: `
@@ -61,7 +67,7 @@ export async function sendAdvancedSaleDocumentsReadyEmail(params: {
             <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Data vendita</strong></td><td style="padding:9px 12px">${saleDate}</td></tr>
             <tr><td style="padding:9px 12px"><strong>Numero sacchi</strong></td><td style="padding:9px 12px">${number(sale.totalBags)}</td></tr>
             <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Animali</strong></td><td style="padding:9px 12px">${number(sale.totalAnimals)}</td></tr>
-            <tr><td style="padding:9px 12px"><strong>Peso totale</strong></td><td style="padding:9px 12px">${number(sale.totalWeight, 2)} kg</td></tr>
+            <tr><td style="padding:9px 12px"><strong>Peso totale</strong></td><td style="padding:9px 12px">${formatSaleWeightKg(sale.totalWeight)}</td></tr>
             <tr style="background:#f3f4f6"><td style="padding:9px 12px"><strong>Progressivo DDR</strong></td><td style="padding:9px 12px">${esc(ddr)}</td></tr>
           </table>
           <p style="margin:20px 0 0;padding:12px 14px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:6px">

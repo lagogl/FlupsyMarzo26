@@ -52,6 +52,7 @@ router.post('/:id/release-local-ddt', requireAuth, requireOperator, AdvancedSale
 router.get('/:id/report.pdf', AdvancedSalesController.generatePDFReport);
 // Suite documentale operativa A4; le rotte PDF storiche restano disponibili.
 router.get('/:id/documents/:kind.pdf', AdvancedSalesController.generateAdvancedSaleDocument);
+router.post('/:id/resend-email', requireAuth, requireOperator, AdvancedSalesController.resendSaleEmail);
 router.get('/:id/traceability-links', requireAuth, requireOperator, AdvancedSalesController.getPublicTraceabilityLinks);
 router.post('/:id/traceability-links/:linkId/revoke', requireAuth, requireOperator, AdvancedSalesController.revokePublicTraceabilityLink);
 

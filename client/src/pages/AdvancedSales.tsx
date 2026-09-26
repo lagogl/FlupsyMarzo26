@@ -1272,6 +1272,37 @@ export default function AdvancedSales() {
     sendDDTToFICMutation.mutate(sale);
   };
 
+  const resendSaleEmailMutation = useMutation({
+    mutationFn: ({ saleId, reason }: { saleId: number; reason: string }) =>
+      apiRequest(`/api/advanced-sales/${saleId}/resend-email`, {
+        method: 'POST', body: JSON.stringify({ reason })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      toast({ title: 'Fascicolo inviato via email' });
+    },
+    onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/advanced-sales'] });
+      toast({ title: 'Rinvio email non riuscito', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const handleResendSaleEmail = (sale: any) => {
+    const state = sale.generatedDocuments?.__saleEmail?.state;
+    const warning = state === 'unknown' || state === 'sending'
+      ? 'L’esito del precedente invio è incerto. Controlla prima la posta inviata in Gmail.'
+      : state === 'sent'
+        ? 'Risulta già inviata un’email per questa vendita.'
+        : 'Per le vendite precedenti non è disponibile uno storico affidabile degli invii.';
+    if (!window.confirm(`${warning}\n\nHai verificato che serve davvero un rinvio del fascicolo completo?`)) return;
+    const reason = window.prompt('Motivo del rinvio (almeno 8 caratteri):')?.trim();
+    if (!reason || reason.length < 8) {
+      if (reason !== undefined) toast({ title: 'Indica un motivo di almeno 8 caratteri', variant: 'destructive' });
+      return;
+    }
+    resendSaleEmailMutation.mutate({ saleId: sale.id, reason });
+  };
+
   const applyReconciliationMutation = useMutation({
     mutationFn: (saleIds: number[]) => apiRequest('/api/advanced-sales/order-reconciliation/apply', {
       method: 'POST',
@@ -2288,7 +2319,7 @@ export default function AdvancedSales() {
                                     ? openDocumentNumbersDialog(sale, { kind: "all" })
                                     : handleDownloadAllSaleDocuments(sale)}
                                   title={sale.officialDdtNumber
-                                    ? "Genera il fascicolo con il DDT ufficiale, invia l'email e apre il PDF"
+                                    ? "Genera il fascicolo con il DDT ufficiale e apre il PDF; la stampa non invia email"
                                     : "Genera il fascicolo con un'anteprima DDT in bozza non valida"}
                                   data-testid={`button-all-sale-documents-${sale.id}`}
                                 >
@@ -2438,6 +2469,22 @@ export default function AdvancedSales() {
                                         : <ExternalLink className="h-4 w-4 mr-1" />}
                                       {openingFCloudId === sale.ddtId ? 'Apertura...' : 'Apri FCloud'}
                                     </Button>
+                                     <span className="text-xs text-muted-foreground">
+                                       Email: {sale.generatedDocuments?.__saleEmail?.state === 'sent' ? 'inviata'
+                                         : sale.generatedDocuments?.__saleEmail?.state === 'failed' ? 'non inviata'
+                                         : ['preparing', 'sending', 'unknown'].includes(sale.generatedDocuments?.__saleEmail?.state)
+                                           ? 'in verifica' : 'storico non verificabile'}
+                                     </span>
+                                     <Button
+                                       variant="outline"
+                                       size="sm"
+                                       disabled={resendSaleEmailMutation.isPending
+                                         || ['preparing', 'sending'].includes(sale.generatedDocuments?.__saleEmail?.state)}
+                                       onClick={() => handleResendSaleEmail(sale)}
+                                       title="Rinvia il fascicolo soltanto dopo avere verificato la necessità"
+                                     >
+                                       Rinvia email
+                                     </Button>
                                   </>
                                 )}
                               </>

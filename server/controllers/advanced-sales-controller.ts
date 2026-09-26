@@ -63,7 +63,7 @@ import {
   sendDDTToFCloud
 } from "../services/fcloud-ddt-service.js";
 import { invalidateAllCaches } from "../services/operations-lifecycle.service.js";
-import { sendAdvancedSaleDocumentsReadyEmail } from "../services/advanced-sale-documents-email";
+import { deliverSaleEmail, type SaleEmailPayload } from "../services/sale-email-delivery";
 import { getCompanyLogo } from "../services/logo-service";
 import { poolEsterno, queryEsterno } from "../db-esterno";
 import {
@@ -1429,6 +1429,23 @@ export async function configureBags(req: Request, res: Response) {
 /**
  * Ottiene i dettagli di una vendita avanzata
  */
+function saleWithPublicEmailState<T extends { generatedDocuments: any }>(sale: T): T {
+  const marker = sale.generatedDocuments?.__saleEmail;
+  if (!marker) return sale;
+  return {
+    ...sale,
+    generatedDocuments: {
+      ...sale.generatedDocuments,
+      __saleEmail: {
+        state: marker.state,
+        attempt: marker.attempt,
+        startedAt: marker.startedAt,
+        sentAt: marker.sentAt
+      }
+    }
+  };
+}
+
 export async function getAdvancedSale(req: Request, res: Response) {
   try {
     const { id } = req.params;
@@ -1501,7 +1518,7 @@ export async function getAdvancedSale(req: Request, res: Response) {
 
     res.json({
       success: true,
-      sale: sale[0],
+      sale: saleWithPublicEmailState(sale[0]),
       bags: bagsWithAllocations,
       operations: saleOperations
     });
@@ -2076,6 +2093,131 @@ export async function updateDdrSequence(req: Request, res: Response) {
  * Produce one member of the operational document suite from the same frozen sale,
  * bags and allocation records used by the legacy PDF endpoints.
  */
+async function loadSaleDocumentInputs(sale: typeof advancedSales.$inferSelect) {
+  const saleId = sale.id;
+  const bags = await db.select().from(saleBags)
+    .where(eq(saleBags.advancedSaleId, saleId)).orderBy(saleBags.bagNumber);
+  const allocationRows = await db.select({
+    saleBagId: bagAllocations.saleBagId,
+    sourceOperationId: bagAllocations.sourceOperationId,
+    basketPhysicalNumber: sql<number | null>`coalesce(${bagAllocations.sourceBasketPhysicalNumberSnapshot}, ${baskets.physicalNumber})`,
+    flupsyName: sql<string | null>`coalesce(${bagAllocations.sourceFlupsyNameSnapshot}, ${flupsys.name})`
+  }).from(bagAllocations)
+    .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
+    .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
+    .innerJoin(saleBags, eq(bagAllocations.saleBagId, saleBags.id))
+    .where(eq(saleBags.advancedSaleId, saleId));
+  const bagsWithOrigins = bags.map(bag => ({
+    ...bag,
+    origins: [...new Map(
+      allocationRows
+        .filter(row => row.saleBagId === bag.id && row.basketPhysicalNumber !== null)
+        .map(row => [
+          `${row.flupsyName || ''}:${row.basketPhysicalNumber}`,
+          { flupsyName: row.flupsyName, basketPhysicalNumber: row.basketPhysicalNumber }
+        ])
+    ).values()],
+    basketNumbers: [...new Set(
+      allocationRows
+        .filter(row => row.saleBagId === bag.id)
+        .map(row => row.basketPhysicalNumber)
+        .filter((value): value is number => value !== null)
+    )]
+  }));
+  const currentOperationRows = await db.select({
+    operationId: saleOperationsRef.operationId,
+    basketId: saleOperationsRef.basketId,
+    basketPhysicalNumber: baskets.physicalNumber,
+    flupsyName: flupsys.name,
+    originalAnimals: saleOperationsRef.originalAnimals,
+    originalWeight: saleOperationsRef.originalWeight,
+    originalAnimalsPerKg: saleOperationsRef.originalAnimalsPerKg,
+    date: operations.date
+  }).from(saleOperationsRef)
+    .leftJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
+    .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
+    .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
+    .where(eq(saleOperationsRef.advancedSaleId, saleId));
+  const originByOperation = new Map(
+    allocationRows
+      .filter(row => row.basketPhysicalNumber !== null)
+      .map(row => [
+        row.sourceOperationId,
+        {
+          basketPhysicalNumber: row.basketPhysicalNumber,
+          flupsyName: row.flupsyName
+        }
+      ])
+  );
+  const operationRows = currentOperationRows.map(operation => ({
+    ...operation,
+    ...(originByOperation.get(operation.operationId) || {})
+  }));
+  const [storedCustomer] = sale.customerId
+    ? await db.select().from(clienti).where(eq(clienti.id, sale.customerId)).limit(1)
+    : [];
+  const customer = await getCompleteSaleCustomer(sale, storedCustomer, sale.companyId);
+  const [existingDdt] = sale.ddtId
+    ? await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
+    : [];
+  return { bagsWithOrigins, operationRows, customer, existingDdt };
+}
+
+async function buildSaleEmailPayload(saleId: number): Promise<SaleEmailPayload> {
+  const [sale] = await db.select().from(advancedSales).where(eq(advancedSales.id, saleId)).limit(1);
+  if (!sale) throw new Error('Vendita non trovata');
+  const { bagsWithOrigins, operationRows, customer, existingDdt } = await loadSaleDocumentInputs(sale);
+  if (!getOfficialFicDdtNumber(existingDdt) || existingDdt?.ddtStato !== 'inviato') {
+    throw new Error('DDT ufficiale FIC non disponibile per il fascicolo');
+  }
+  const isDelta = ['13263', '1052922'].includes(String(sale.companyId));
+  const data = {
+    sale, bags: bagsWithOrigins, operations: operationRows,
+    customer, ddt: existingDdt
+  };
+  const labels: Record<AdvancedSaleDocumentKind, string> = {
+    'delivery-report': 'Rapporto-consegna',
+    'sale-conditions': 'Dichiarazione-vendita-condizioni',
+    'bivalve-transfer': 'Registro-trasferimento-molluschi',
+    ddt: 'DDT'
+  };
+  const kinds: AdvancedSaleDocumentKind[] = isDelta
+    ? ['delivery-report', 'sale-conditions', 'bivalve-transfer', 'ddt']
+    : ['delivery-report', 'sale-conditions', 'ddt'];
+  const attachments = [];
+  for (const kind of kinds) {
+    const generated = await buildAdvancedSaleDocument(kind, data);
+    attachments.push({
+      filename: `${labels[kind]}-${sale.saleNumber}.pdf`,
+      content: Buffer.isBuffer(generated) ? generated : Buffer.from(generated)
+    });
+  }
+  return {
+    sale, customer, attachments, ddtIsDraft: false,
+    companyName: existingDdt.mittenteRagioneSociale || (isDelta ? 'Delta Futuro Soc. Agr. Srl' : 'Ecotapes')
+  };
+}
+
+export async function resendSaleEmail(req: Request, res: Response) {
+  try {
+    const saleId = Number(req.params.id);
+    if (!Number.isSafeInteger(saleId) || saleId < 1) {
+      return res.status(400).json({ success: false, error: 'Vendita non valida' });
+    }
+    const reason = String(req.body?.reason || '').trim();
+    if (reason.length < 8 || reason.length > 500) {
+      return res.status(400).json({ success: false, error: 'Indicare un motivo di 8–500 caratteri' });
+    }
+    await deliverSaleEmail(saleId, () => buildSaleEmailPayload(saleId), {
+      manual: true, reason, actorId: req.session?.user?.id ?? null
+    });
+    return res.json({ success: true, message: 'Fascicolo inviato via email' });
+  } catch (error) {
+    console.error('Rinvio email vendita non riuscito:', error);
+    return res.status(409).json({ success: false, error: error instanceof Error ? error.message : 'Rinvio non riuscito' });
+  }
+}
+
 export async function generateAdvancedSaleDocument(req: Request, res: Response) {
   const kind = req.params.kind as AdvancedSaleDocumentKind | 'all';
   const allowedKinds: AdvancedSaleDocumentKind[] = ['delivery-report', 'sale-conditions', 'bivalve-transfer', 'ddt'];
@@ -2085,7 +2227,6 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
 
   let createdTraceabilityLinkId: number | null = null;
   let documentStatePersisted = false;
-  let emailNotification: Parameters<typeof sendAdvancedSaleDocumentsReadyEmail>[0] | null = null;
   try {
     await ensureAdvancedSaleDocumentSchema();
     const saleId = Number(req.params.id);
@@ -2104,72 +2245,7 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       });
     }
 
-    const bags = await db.select().from(saleBags)
-      .where(eq(saleBags.advancedSaleId, saleId)).orderBy(saleBags.bagNumber);
-    const allocationRows = await db.select({
-      saleBagId: bagAllocations.saleBagId,
-      sourceOperationId: bagAllocations.sourceOperationId,
-      basketPhysicalNumber: sql<number | null>`coalesce(${bagAllocations.sourceBasketPhysicalNumberSnapshot}, ${baskets.physicalNumber})`,
-      flupsyName: sql<string | null>`coalesce(${bagAllocations.sourceFlupsyNameSnapshot}, ${flupsys.name})`
-    }).from(bagAllocations)
-      .leftJoin(baskets, eq(bagAllocations.sourceBasketId, baskets.id))
-      .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
-      .innerJoin(saleBags, eq(bagAllocations.saleBagId, saleBags.id))
-      .where(eq(saleBags.advancedSaleId, saleId));
-    const bagsWithOrigins = bags.map(bag => ({
-      ...bag,
-      origins: [...new Map(
-        allocationRows
-          .filter(row => row.saleBagId === bag.id && row.basketPhysicalNumber !== null)
-          .map(row => [
-            `${row.flupsyName || ''}:${row.basketPhysicalNumber}`,
-            { flupsyName: row.flupsyName, basketPhysicalNumber: row.basketPhysicalNumber }
-          ])
-      ).values()],
-      basketNumbers: [...new Set(
-        allocationRows
-          .filter(row => row.saleBagId === bag.id)
-          .map(row => row.basketPhysicalNumber)
-          .filter((value): value is number => value !== null)
-      )]
-    }));
-    const currentOperationRows = await db.select({
-      operationId: saleOperationsRef.operationId,
-      basketId: saleOperationsRef.basketId,
-      basketPhysicalNumber: baskets.physicalNumber,
-      flupsyName: flupsys.name,
-      originalAnimals: saleOperationsRef.originalAnimals,
-      originalWeight: saleOperationsRef.originalWeight,
-      originalAnimalsPerKg: saleOperationsRef.originalAnimalsPerKg,
-      date: operations.date
-    }).from(saleOperationsRef)
-      .leftJoin(baskets, eq(saleOperationsRef.basketId, baskets.id))
-      .leftJoin(flupsys, eq(baskets.flupsyId, flupsys.id))
-      .leftJoin(operations, eq(saleOperationsRef.operationId, operations.id))
-      .where(eq(saleOperationsRef.advancedSaleId, saleId));
-    const originByOperation = new Map(
-      allocationRows
-        .filter(row => row.basketPhysicalNumber !== null)
-        .map(row => [
-          row.sourceOperationId,
-          {
-            basketPhysicalNumber: row.basketPhysicalNumber,
-            flupsyName: row.flupsyName
-          }
-        ])
-    );
-    const operationRows = currentOperationRows.map(operation => ({
-      ...operation,
-      ...(originByOperation.get(operation.operationId) || {})
-    }));
-
-    const [storedCustomer] = sale.customerId
-      ? await db.select().from(clienti).where(eq(clienti.id, sale.customerId)).limit(1)
-      : [];
-    const customer = await getCompleteSaleCustomer(sale, storedCustomer, sale.companyId);
-    const [existingDdt] = sale.ddtId
-      ? await db.select().from(ddt).where(eq(ddt.id, sale.ddtId)).limit(1)
-      : [];
+    const { bagsWithOrigins, operationRows, customer, existingDdt } = await loadSaleDocumentInputs(sale);
     const includesTraceabilityQr = kind === 'all' || kind === 'delivery-report';
     const tokenId = includesTraceabilityQr ? crypto.randomBytes(16).toString('hex') : null;
     if (tokenId) {
@@ -2217,21 +2293,9 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       const bundleKinds = isDeltaFuturo
         ? allowedKinds
         : allowedKinds.filter(documentKind => documentKind !== 'bivalve-transfer');
-      const emailAttachments: Array<{ filename: string; content: Buffer }> = [];
-      const attachmentLabels: Record<AdvancedSaleDocumentKind, string> = {
-        'delivery-report': 'Rapporto-consegna',
-        'sale-conditions': 'Dichiarazione-vendita-condizioni',
-        'bivalve-transfer': 'Registro-trasferimento-molluschi',
-        ddt: 'DDT'
-      };
       for (const documentKind of bundleKinds) {
         const generated = await buildAdvancedSaleDocument(documentKind, documentData);
         const documentBuffer = Buffer.isBuffer(generated) ? generated : Buffer.from(generated);
-        const isDraftDdt = documentKind === 'ddt' && bundleHasDraftDdt;
-        emailAttachments.push({
-          filename: `${isDraftDdt ? 'ANTEPRIMA-DDT-NON-VALIDA' : attachmentLabels[documentKind]}-${sale.saleNumber}.pdf`,
-          content: documentBuffer
-        });
         const source = await PDFDocument.load(documentBuffer);
         const pages = await merged.copyPages(source, source.getPageIndices());
         pages.forEach(page => merged.addPage(page));
@@ -2255,14 +2319,6 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
         WHERE id = ${saleId}
       `);
       documentStatePersisted = true;
-      emailNotification = {
-        sale,
-        customer,
-        companyName: existingDdt?.mittenteRagioneSociale
-          || (isDeltaFuturo ? 'Delta Futuro Soc. Agr. Srl' : 'Ecotapes'),
-        attachments: emailAttachments,
-        ddtIsDraft: bundleHasDraftDdt
-      };
     } else {
       const generated = await buildAdvancedSaleDocument(kind, documentData);
       // Puppeteer può restituire Uint8Array: viene normalizzato prima della risposta.
@@ -2297,13 +2353,6 @@ export async function generateAdvancedSaleDocument(req: Request, res: Response) 
       ? `Documenti-vendita-${sale.saleNumber}${bundleHasDraftDdt ? '-CON-DDT-BOZZA' : ''}`
       : `${isDraftDdt ? 'ANTEPRIMA-DDT-NON-VALIDA' : labels[kind]}-${sale.saleNumber}`;
     sendPdfBinaryResponse(res, pdf, filename);
-    if (emailNotification) {
-      // Il download è già stato consegnato: Gmail è un effetto secondario e
-      // non può più rallentare o annullare la stampa del fascicolo.
-      void sendAdvancedSaleDocumentsReadyEmail(emailNotification).catch(emailError => {
-        console.error('Invio email fascicolo non riuscito; PDF già consegnato:', emailError);
-      });
-    }
   } catch (error) {
     console.error('Errore nella generazione del documento vendita:', error);
     if (createdTraceabilityLinkId && !documentStatePersisted && !res.headersSent) {
@@ -2444,7 +2493,7 @@ export async function getAdvancedSales(req: Request, res: Response) {
       ddtStates.map(document => [document.id, getOfficialFicDdtNumber(document)])
     );
     const salesWithOfficialDdt = sales.map(sale => ({
-      ...sale,
+      ...saleWithPublicEmailState(sale),
       officialDdtNumber: sale.ddtId
         ? officialDdtNumberById.get(sale.ddtId) || null
         : null
@@ -5458,14 +5507,13 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       }
     }
 
-    // Invia email di conferma DDT con PDF allegato
+    // One operational email per sale, only after FIC has accepted the DDT.
+    // Gmail failures must not undo the successful external document.
     if (advancedSaleId) {
       try {
-        const { sendDDTConfirmationEmail } = await import('../services/ddt-email-service');
-        await sendDDTConfirmationEmail(advancedSaleId);
-        console.log('✅ Email conferma DDT inviata');
+        await deliverSaleEmail(advancedSaleId, () => buildSaleEmailPayload(advancedSaleId!));
       } catch (emailError) {
-        console.error('❌ Errore invio email DDT (non bloccante):', emailError);
+        console.error('Invio email fascicolo dopo FIC non riuscito (DDT già inviato):', emailError);
       }
     }
 

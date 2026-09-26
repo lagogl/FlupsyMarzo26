@@ -71,7 +71,7 @@ interface EmailOptions {
 /**
  * Invia email usando Gmail API
  */
-export async function sendGmailEmail(options: EmailOptions): Promise<void> {
+export async function sendGmailEmail(options: EmailOptions): Promise<{ id?: string }> {
   try {
     const gmail = await getUncachableGmailClient();
     
@@ -133,7 +133,7 @@ export async function sendGmailEmail(options: EmailOptions): Promise<void> {
       .replace(/=+$/, '');
     
     // Invia email
-    await gmail.users.messages.send({
+    const sent = await gmail.users.messages.send({
       userId: 'me',
       requestBody: {
         raw: encodedMessage
@@ -141,6 +141,7 @@ export async function sendGmailEmail(options: EmailOptions): Promise<void> {
     });
     
     console.log('✅ Email inviata con successo via Gmail API');
+    return { id: sent.data.id || undefined };
   } catch (error) {
     console.error('❌ Errore invio email Gmail:', error);
     throw error;
