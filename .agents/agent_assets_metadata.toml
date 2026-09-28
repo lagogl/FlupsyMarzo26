@@ -120,3 +120,17 @@ mtime_ms = 1788798470813
 storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:2865e74a-6bcf-4df0-8524-8edc0c7c2777/10275451-b43e-480d-8870-b4307cbf6db0/b5b80918-4448-4a30-9a4b-45aa16d40ee4"
 storage_version_token = "1788798507501147"
 content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "Lu0CqG_b5NGbdx5zvty31"
+uri = "file://reports/Validazione_Scostamenti_T3_Ott2026_Set2027.xlsx"
+type = "table"
+title = "Validazione Scostamenti T3 · ottobre 2026–settembre 2027"
+description = "Excel con 12 mesi, mese iniziale di raccordo, 28.797 passi giornalieri per cesta, SGR e mortalità applicati, fonti, formule e confronti con i risultati dell'app."
+logical_id = "5ba2bd1e-e168-4221-962c-c7ec8cc9d6d5"
+content_hash = "sha256:793c8e5731b4330494a8b062b41e202c02690ec64de0ce97c4ea770a408c0f80"
+size = 4934751
+mtime_ms = 1790590021080
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:2865e74a-6bcf-4df0-8524-8edc0c7c2777/5ba2bd1e-e168-4221-962c-c7ec8cc9d6d5/36fe0cb6-d1bb-47af-a434-14cc7d93f85d"
+storage_version_token = "1790590128676170"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
