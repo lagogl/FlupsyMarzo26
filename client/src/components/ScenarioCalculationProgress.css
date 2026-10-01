@@ -1,0 +1,172 @@
+.scenario-progress {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid;
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+  box-shadow: 0 1px 2px rgb(18 59 71 / 5%);
+}
+
+.scenario-progress--proposal {
+  border-color: #ead6a8;
+  background: #fffaf0;
+  color: #493717;
+}
+
+.scenario-progress--simulation {
+  border-color: #a9d4cf;
+  background: #eff8f6;
+  color: #173f43;
+}
+
+.scenario-progress__top {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.scenario-progress__icon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid;
+  border-radius: 0.65rem;
+}
+
+.scenario-progress--proposal .scenario-progress__icon {
+  border-color: #eddbb0;
+  background: #fff2d3;
+  color: #8b6119;
+}
+
+.scenario-progress--simulation .scenario-progress__icon {
+  border-color: #b8dcd6;
+  background: #e0f1ed;
+  color: #176b65;
+}
+
+.scenario-progress__spinner {
+  animation: scenario-progress-spin 1.4s linear infinite;
+}
+
+.scenario-progress__heading {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.scenario-progress__heading h3 {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.scenario-progress__status {
+  margin: 0.15rem 0 0;
+  color: #526564;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.scenario-progress__elapsed {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  color: #5b6460;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.scenario-progress__description {
+  margin: 0.72rem 0 0;
+  color: #53605d;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.scenario-progress__track {
+  position: relative;
+  height: 0.28rem;
+  margin-top: 0.8rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(18 59 71 / 10%);
+}
+
+.scenario-progress--proposal .scenario-progress__track {
+  background: #f0e6d0;
+}
+
+.scenario-progress__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  border-radius: inherit;
+  animation: scenario-progress-indeterminate 1.65s ease-in-out infinite;
+}
+
+.scenario-progress--proposal .scenario-progress__bar {
+  background: #d6a74a;
+}
+
+.scenario-progress--simulation .scenario-progress__bar {
+  background: #328b82;
+}
+
+.scenario-progress__guidance {
+  margin: 0.65rem 0 0;
+  color: #62635c;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@keyframes scenario-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes scenario-progress-indeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+  55%,
+  100% {
+    transform: translateX(290%);
+  }
+}
+
+@media (max-width: 420px) {
+  .scenario-progress {
+    padding: 0.8rem;
+  }
+
+  .scenario-progress__top {
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .scenario-progress__elapsed {
+    margin-left: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scenario-progress__spinner,
+  .scenario-progress__bar {
+    animation: none;
+  }
+
+  .scenario-progress__bar {
+    width: 100%;
+    opacity: 0.45;
+  }
+}
