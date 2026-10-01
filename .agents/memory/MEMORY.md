@@ -18,6 +18,7 @@
 - [Plant survival counted](plant-survival-counted.md) — Cruscotto headline + Report Morti must use survival counted at vagliature (out÷in), not cohort ratios; one truth across pages.
 - [LCI module wiring](lci-module-wiring.md) — LCI tables live in lci-schema.ts (outside drizzle.config scope) → re-export from schema.ts or db:push drops them; module default-enabled; mount before /api 404 catch-all in buildApp.
 - [Arrivi Schiuditoio Reale automatico](hatchery-arrivals-reale.md) — il Reale si calcola sempre live da lots per mese; snapshot manuali solo fallback (diventano obsoleti).
+- [Ingressi schiuditoio nelle proiezioni](hatchery-projection-entry-convention.md) — residuo previsto−arrivato nel mese corrente; nuovi ingressi sempre TP-300 il 15, senza crescita retroattiva.
 - [Session auth & requireAuth](session-auth.md) — pg-backed express-session; protect sensitive routers with authModule.requireAuth; most /api/* still open and /api/register is public.
 - [NEON vs DATABASE_URL routing](neon-database-routing.md) — app deve usare NEON_DATABASE_URL (dati reali); DATABASE_URL è il Replit postgres fermo a giugno 2026.
 - [Assistente AI tool SQL](ai-chat-sql-tool.md) — read-only imposto dal DB (txn READ ONLY + timeout + LIMIT esterno), mai solo regex; size_id origini spesso NULL → fasce animals_per_kg.

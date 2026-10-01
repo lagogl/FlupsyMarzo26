@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { growthProjectionService } from "./growth-projection.service";
+import { formatProjectionBusinessDate } from "./growth-projection-simulation";
 import { db } from "../../../db";
 import { hatcheryArrivals, projectionMortalityRates, productionTargets, sandNurserySeedingPayloadSchema, sandNurserySeedings, lots } from "../../../../shared/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
@@ -72,19 +73,24 @@ router.get("/hatchery-arrivals", async (req: Request, res: Response) => {
     // Calcola in automatico il "reale" dai lotti arrivati (somma per mese)
     const liveSums = await db.execute(sql`
       SELECT EXTRACT(MONTH FROM arrival_date)::int AS month,
-             COALESCE(SUM(animal_count), 0)::bigint AS total
+             COALESCE(SUM(animal_count), 0)::bigint AS total,
+             COUNT(*)::int AS lot_count
       FROM lots
       WHERE EXTRACT(YEAR FROM arrival_date)::int = ${year}
+        AND arrival_date <= ${formatProjectionBusinessDate(new Date())}::date
       GROUP BY 1
     `);
     const liveByMonth = new Map<number, number>();
+    const liveLotCounts = new Map<number, number>();
     for (const row of liveSums.rows as any[]) {
       liveByMonth.set(Number(row.month), Number(row.total));
+      liveLotCounts.set(Number(row.month), Number(row.lot_count));
     }
 
     res.json(arrivals.map(a => ({
       ...a,
       calculatedActual: liveByMonth.get(a.month) ?? 0,
+      calculatedActualLotCount: liveLotCounts.get(a.month) ?? 0,
     })));
   } catch (error) {
     console.error("Errore lettura arrivi schiuditoio:", error);
@@ -154,6 +160,7 @@ router.get("/hatchery-arrivals/calculate-actual", async (req: Request, res: Resp
       .where(and(
         gte(lots.arrivalDate, startDate),
         sql`${lots.arrivalDate} < ${endDate}`,
+        lte(lots.arrivalDate, formatProjectionBusinessDate(new Date())),
       ));
 
     const totalAnimals = rows.reduce((s, r) => s + (r.animalCount || 0), 0);

@@ -9,6 +9,19 @@ import {
   calculateFulfillableProductionForecast,
   getProductionTargetCategory,
 } from "./forecast-fulfillment";
+import {
+  compareProjectionMonths,
+  getHatcheryArrivalDate,
+  getProjectionSimulationDays,
+  getSimulatedHatcheryQuantity,
+  mergeAlternativeHatcheryRequirement,
+  projectionMonthDate,
+  projectionMonthOf,
+  formatProjectionBusinessDate,
+  selectActualArrivedQuantity,
+  simulateArrivalUntilTarget,
+  simulateBasketLedgerForMonth,
+} from "./growth-projection-simulation";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -140,7 +153,8 @@ export class GrowthProjectionService {
 
     // startMonth è 1-based (1=Gennaio…12=Dicembre); se non passato usa il mese corrente
     const currentMonth0 = startMonth != null ? startMonth - 1 : now.getMonth();
-    const currentDay = now.getDate();
+    const referenceMonth = projectionMonthOf(now);
+    const startProjectionMonth = { year: startYear, month: currentMonth0 + 1 };
 
     const monthSteps = this.buildMonthSteps(currentMonth0, startYear, horizon);
 
@@ -154,7 +168,9 @@ export class GrowthProjectionService {
       ...yearsNeeded.map(y => productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders })))
     ]);
     const targetSizeRow = simCtx.allSizes.find((size: any) => size.code === targetSize);
-    const projectionStartDate = new Date(startYear, currentMonth0, Math.max(1, currentDay));
+    const projectionStartDate = compareProjectionMonths(startProjectionMonth, referenceMonth) === 0
+      ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      : projectionMonthDate(startProjectionMonth);
     const targetRange = targetSizeRow
       ? findRangeForSize(targetSizeRow.id, projectionStartDate, simCtx.sizeRangeVersions)
       : null;
@@ -195,9 +211,9 @@ export class GrowthProjectionService {
       sandNurseryByYearMonth[`${row.year}-${row.month}`] = Math.max(0, row.quantity);
     }
 
-    // Tracciamo SEPARATAMENTE reale e previsione per ogni mese:
-    // - per il mese corrente (i === 0) si userà SEMPRE il reale (actual ?? 0)
-    // - per i mesi futuri si userà SEMPRE la previsione
+    // Manteniamo separati il reale (fallback manuale) e il forecast.
+    // Il reale live dei lotti, filtrato alla data di riferimento, sostituisce il
+    // fallback solo quando nel mese esiste almeno un lotto arrivato.
     const hatcheryByYearMonth: Record<string, { actual: number | null; forecast: number }> = {};
     for (const row of hatcheryRows) {
       const key = `${row.year}-${row.month}`;
@@ -208,24 +224,27 @@ export class GrowthProjectionService {
       }
     }
 
-    // Il "reale" viene SEMPRE ricalcolato in automatico dai lotti arrivati:
-    // i valori salvati manualmente diventano obsoleti man mano che arrivano nuovi lotti.
+    // I lotti successivi alla data di riferimento non sono reale consolidato.
     if (yearsNeeded.length > 0) {
       const liveSums = await db.execute(sql`
         SELECT EXTRACT(YEAR FROM arrival_date)::int AS year,
                EXTRACT(MONTH FROM arrival_date)::int AS month,
-               COALESCE(SUM(animal_count), 0)::bigint AS total
+               COALESCE(SUM(animal_count), 0)::bigint AS total,
+               COUNT(*)::int AS lot_count
         FROM lots
         WHERE EXTRACT(YEAR FROM arrival_date)::int IN (${sql.join(yearsNeeded.map(y => sql`${y}`), sql`, `)})
+          AND arrival_date <= ${formatProjectionBusinessDate(now)}::date
         GROUP BY 1, 2
       `);
       for (const row of liveSums.rows as any[]) {
         const key = `${Number(row.year)}-${Number(row.month)}`;
         const total = Number(row.total);
-        if (total > 0) {
-          if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = { actual: null, forecast: 0 };
-          hatcheryByYearMonth[key].actual = total;
-        }
+        if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = { actual: null, forecast: 0 };
+        hatcheryByYearMonth[key].actual = selectActualArrivedQuantity(
+          hatcheryByYearMonth[key].actual,
+          total,
+          Number(row.lot_count),
+        );
       }
     }
 
@@ -248,7 +267,14 @@ export class GrowthProjectionService {
 
     let hatcheryBasketCounter = 900000;
 
-    let globalBaskets: Array<{basketId: number, weightMg: number, animalCount: number, isHatchery: boolean, alreadyAtTarget: boolean}> = [];
+    let globalBaskets: Array<{
+      basketId: number;
+      weightMg: number;
+      animalCount: number;
+      isHatchery: boolean;
+      alreadyAtTarget: boolean;
+      growthStartsAfter?: Date;
+    }> = [];
     for (const sizeKey of sortedSizes) {
       for (const b of grouped[sizeKey]) {
         globalBaskets.push({
@@ -274,33 +300,28 @@ export class GrowthProjectionService {
       const step = monthSteps[i];
       const m0 = step.monthIndex;
       const y = step.year;
-      const daysInMonth = new Date(y, m0 + 1, 0).getDate();
-      let simulDays = daysInMonth;
-      if (i === 0) {
-        simulDays = Math.max(0, daysInMonth - currentDay);
-      }
+      const projectionMonth = { year: y, month: step.month1Based };
+      const simulationDays = getProjectionSimulationDays(projectionMonth, now);
 
       const ymKey = `${y}-${step.month1Based}`;
-      const monthDate = new Date(y, m0, Math.max(1, i === 0 ? currentDay : 1));
+      const monthDate = compareProjectionMonths(projectionMonth, referenceMonth) === 0
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        : projectionMonthDate(projectionMonth);
       const datedTargetRange = findRangeForSize(targetSizeRow.id, monthDate, simCtx.sizeRangeVersions);
       if (!datedTargetRange) throw new Error(`Taglia target ${targetSize} senza range valido in ${ymKey}`);
       const datedTargetMaxApk = datedTargetRange.maxAnimalsPerKg;
       const hatcheryEntry = hatcheryByYearMonth[ymKey];
-      // Mesi passati e mese corrente (rispetto a oggi) = reale consolidato (anche 0 se non consolidato).
-      // Mesi futuri (dopo oggi) = previsione.
-      const todayYear = now.getFullYear();
-      const todayMonth1 = now.getMonth() + 1;
-      const isPastOrCurrentMonth =
-        y < todayYear || (y === todayYear && step.month1Based <= todayMonth1);
-      let hatcheryThisMonth = 0;
-      if (hatcheryEntry) {
-        hatcheryThisMonth = isPastOrCurrentMonth
-          ? (hatcheryEntry.actual ?? 0)
-          : hatcheryEntry.forecast;
-      }
+      const hatcheryThisMonth = hatcheryEntry
+        ? getSimulatedHatcheryQuantity(
+            projectionMonth,
+            now,
+            hatcheryEntry.forecast,
+            hatcheryEntry.actual ?? 0,
+          )
+        : 0;
       if (hatcheryThisMonth > 0) {
         const tp300 = simCtx.allSizes.find((size: any) => size.code === "TP-300");
-        const hatcheryDate = new Date(y, step.monthIndex, 1);
+        const hatcheryDate = getHatcheryArrivalDate(projectionMonth);
         const hatcheryRange = tp300
           ? findRangeForSize(tp300.id, hatcheryDate, simCtx.sizeRangeVersions)
           : null;
@@ -311,7 +332,8 @@ export class GrowthProjectionService {
           weightMg: 1000000 / hatcheryApk,
           animalCount: hatcheryThisMonth,
           isHatchery: true,
-          alreadyAtTarget: false
+          alreadyAtTarget: false,
+          growthStartsAfter: hatcheryDate,
         };
         globalBaskets.push(hatcheryBasket);
         forecastBaskets.push({ ...hatcheryBasket });
@@ -319,35 +341,13 @@ export class GrowthProjectionService {
 
       const totalBeforeMortality = globalBaskets.reduce((s, b) => s + b.animalCount, 0);
 
-      if (simulDays > 0) {
-        // Usa il servizio di simulazione condiviso (stesso codice di /api/size-predictions
-        // e /api/size-predictions/stock-at-date) → garantisce coerenza fra moduli.
-        // Il cursore avanza giorno per giorno; il mese (m0/y) resta costante per tutta la simulazione del mese.
-        const overrideMortality = useCustomMortality ? customMonthlyRate : undefined;
-        for (let day = 0; day < simulDays; day++) {
-          // Data di riferimento dentro al mese (giorno reale per i = 0, primi giorni per i > 0).
-          // Il valore esatto del giorno non influisce: stepOneDay legge solo m0 e daysInMonth.
-          const cursorDate = new Date(y, m0, (i === 0 ? currentDay : 0) + day + 1);
-          globalBaskets = globalBaskets.map(b => {
-            const next = stepOneDay(
-              simCtx,
-              { weightMg: b.weightMg, count: b.animalCount },
-              cursorDate,
-              overrideMortality
-            );
-            return { ...b, weightMg: next.weightMg, animalCount: Math.round(next.count) };
-          });
-          forecastBaskets = forecastBaskets.map(b => {
-            const next = stepOneDay(
-              simCtx,
-              { weightMg: b.weightMg, count: b.animalCount },
-              cursorDate,
-              overrideMortality
-            );
-            return { ...b, weightMg: next.weightMg, animalCount: Math.round(next.count) };
-          });
-        }
-      }
+      // Entrambi i registri usano lo stesso calendario; i batch schiuditoio
+      // restano fermi fino al giorno successivo al loro arrivo (15 -> 16).
+      const overrideMortality = useCustomMortality ? customMonthlyRate : undefined;
+      const dailyStep = (state: { weightMg: number; count: number }, date: Date) =>
+        stepOneDay(simCtx, state, date, overrideMortality);
+      globalBaskets = simulateBasketLedgerForMonth(globalBaskets, simulationDays, dailyStep);
+      forecastBaskets = simulateBasketLedgerForMonth(forecastBaskets, simulationDays, dailyStep);
 
       const totalAfterMortality = globalBaskets.reduce((s, b) => s + b.animalCount, 0);
       const perditeMortalita = Math.max(0, totalBeforeMortality - totalAfterMortality);
@@ -482,91 +482,104 @@ export class GrowthProjectionService {
       });
     }
 
-    // Calcolo schiuditoio necessario: per ogni mese con gap (ordini > evadibili),
-    // simula crescita di un lotto TP-300 in avanti fino a quel mese usando SGR + mortalità.
-    // Calcola il fattore di sopravvivenza cumulativo e verifica se TP-300 raggiunge
-    // la taglia target entro quel mese. Se sì: schiuditoioNecessario = gap / survivalFactor
-    // (quanti TP-300 servono ORA per avere "gap" animali a taglia entro quel mese).
+    // Il fabbisogno parte dal giorno successivo al 15 e usa il range TP-300
+    // attivo alla data di ingresso, proprio come gli arrivi simulati.
     const tp300 = simCtx.allSizes.find((size: any) => size.code === "TP-300");
-    const tp300Range = tp300
-      ? findRangeForSize(tp300.id, projectionStartDate, simCtx.sizeRangeVersions)
-      : null;
-    if (!tp300Range) throw new Error("TP-300 senza range valido alla data di proiezione");
-    const startApk = tp300Range.maxAnimalsPerKg;
-
-    // Precalcolo: simula crescita cumulativa da TP-300 mese per mese,
-    // salvando il fattore di sopravvivenza e se ha raggiunto la taglia target
-    const cumulativeGrowth: Array<{ reachedTarget: boolean; survivalFactor: number }> = [];
-    let simWeightMg = 1000000 / startApk;
-    let simSurvival = 1.0;
-    let simReachedTarget = false;
-
-    for (let i = 0; i < monthSteps.length; i++) {
-      const step = monthSteps[i];
-      const m0 = step.monthIndex;
-      const y = step.year;
-      const daysInMonth = new Date(y, m0 + 1, 0).getDate();
-      let simulDays = daysInMonth;
-      if (i === 0) {
-        simulDays = Math.max(0, daysInMonth - currentDay);
-      }
-
-      if (!simReachedTarget && simulDays > 0) {
-        const dailyMortalityFraction = 1 / daysInMonth;
-        for (let day = 0; day < simulDays; day++) {
-          const cursorDate = new Date(y, m0, (i === 0 ? currentDay : 0) + day + 1);
-          const next = stepOneDay(
-            simCtx,
-            { weightMg: simWeightMg, count: simSurvival },
-            cursorDate,
-            useCustomMortality ? customMonthlyRate : undefined,
+    if (!tp300) throw new Error("Taglia TP-300 non configurata");
+    const overrideMortality = useCustomMortality ? customMonthlyRate : undefined;
+    const simulateArrivalToMonth = (
+      arrivalIndex: number,
+      deliveryIndex: number,
+    ) => {
+      const arrivalStep = monthSteps[arrivalIndex];
+      const deliveryStep = monthSteps[deliveryIndex];
+      const arrivalMonth = {
+        year: arrivalStep.year,
+        month: arrivalStep.month1Based,
+      };
+      const deliveryMonth = {
+        year: deliveryStep.year,
+        month: deliveryStep.month1Based,
+      };
+      const arrivalDate = getHatcheryArrivalDate(arrivalMonth);
+      const arrivalRange = findRangeForSize(tp300.id, arrivalDate, simCtx.sizeRangeVersions);
+      if (!arrivalRange) return null;
+      return simulateArrivalUntilTarget(
+        arrivalMonth,
+        deliveryMonth,
+        now,
+        1_000_000 / arrivalRange.maxAnimalsPerKg,
+        (state, date) => stepOneDay(simCtx, state, date, overrideMortality),
+        (weightMg, date) => {
+          const activeTargetRange = findRangeForSize(
+            targetSizeRow.id,
+            date,
+            simCtx.sizeRangeVersions,
           );
-          simWeightMg = next.weightMg;
-          simSurvival = next.count;
-          const datedRange = findRangeForSize(targetSizeRow.id, cursorDate, simCtx.sizeRangeVersions);
-          if (datedRange && (1000000 / simWeightMg) <= datedRange.maxAnimalsPerKg) {
-            simReachedTarget = true;
+          return !!activeTargetRange &&
+            1_000_000 / weightMg <= activeTargetRange.maxAnimalsPerKg;
+        },
+      );
+    };
+
+    const firstArrivalIndex = monthSteps.findIndex((step) =>
+      compareProjectionMonths(
+        { year: step.year, month: step.month1Based },
+        referenceMonth,
+      ) >= 0,
+    );
+    let monthsToReachTarget = -1;
+    if (firstArrivalIndex >= 0) {
+      const firstArrivalResult = simulateArrivalToMonth(
+        firstArrivalIndex,
+        monthSteps.length - 1,
+      );
+      if (firstArrivalResult?.reachedDate) {
+        const reachedMonth = projectionMonthOf(firstArrivalResult.reachedDate);
+        const reachedIndex = monthSteps.findIndex((step) =>
+          step.year === reachedMonth.year && step.month1Based === reachedMonth.month,
+        );
+        if (reachedIndex >= 0) monthsToReachTarget = reachedIndex - firstArrivalIndex;
+      }
+    }
+
+    // Ogni mese di fabbisogno è uno scenario alternativo: assegna il gap
+    // all'arrivo più tardivo che raggiunge la taglia entro la fine di quel mese.
+    for (let i = 0; i < monthlyContext.length; i++) {
+      const gap = (monthlyContext[i].domandaEffettiva + monthlyContext[i].ordiniArretrati) - monthlyContext[i].ordiniEvasi;
+      const deliveryMonth = {
+        year: monthlyContext[i].year,
+        month: monthlyContext[i].month,
+      };
+      if (gap > 0 && compareProjectionMonths(deliveryMonth, referenceMonth) >= 0) {
+        for (let arrivalIndex = i; arrivalIndex >= 0; arrivalIndex--) {
+          const arrivalMonth = {
+            year: monthSteps[arrivalIndex].year,
+            month: monthSteps[arrivalIndex].month1Based,
+          };
+          if (compareProjectionMonths(arrivalMonth, referenceMonth) < 0) continue;
+          const growth = simulateArrivalToMonth(arrivalIndex, i);
+          if (growth?.reachedTarget && growth.survivalFactor > 0) {
+            monthlyContext[arrivalIndex].schiuditoioNecessario =
+              mergeAlternativeHatcheryRequirement(
+                monthlyContext[arrivalIndex].schiuditoioNecessario,
+                Math.ceil(gap / growth.survivalFactor),
+              );
             break;
           }
         }
       }
-
-      cumulativeGrowth.push({
-        reachedTarget: simReachedTarget,
-        survivalFactor: simSurvival
-      });
     }
 
-    // Trova il mese in cui TP-300 raggiunge la taglia target (quanti mesi di crescita servono)
-    const monthsToReachTarget = cumulativeGrowth.findIndex(g => g.reachedTarget);
-    const growthSurvivalFactor = monthsToReachTarget >= 0
-      ? cumulativeGrowth[monthsToReachTarget].survivalFactor
-      : 0;
-
-    // Per ogni mese con gap, posiziona schiuditoioNecessario nel mese di ARRIVO
-    // (cioè monthsToReachTarget mesi PRIMA del mese di consegna)
     for (let i = 0; i < monthlyContext.length; i++) {
-      const gap = (monthlyContext[i].domandaEffettiva + monthlyContext[i].ordiniArretrati) - monthlyContext[i].ordiniEvasi;
-      if (gap > 0 && monthsToReachTarget >= 0 && growthSurvivalFactor > 0) {
-        const arrivalMonthIndex = i - monthsToReachTarget;
-        if (arrivalMonthIndex >= 0 && arrivalMonthIndex < monthlyContext.length) {
-          // Somma al mese di arrivo (più gap possono richiedere arrivi nello stesso mese)
-          monthlyContext[arrivalMonthIndex].schiuditoioNecessario += Math.ceil(gap / growthSurvivalFactor);
-        }
-        // Se arrivalMonthIndex < 0, è troppo tardi: gli arrivi avrebbero dovuto avvenire in passato
-      }
-    }
-
-    // Marca i mesi di arrivo "troppo tardi": gli animali TP-300 inseriti in questi mesi
-    // non avranno tempo sufficiente per crescere fino alla taglia target entro la fine
-    // della finestra di proiezione.
-    for (let i = 0; i < monthlyContext.length; i++) {
-      if (monthsToReachTarget < 0) {
-        // Nessun mese raggiunge il target nemmeno partendo da i=0
-        monthlyContext[i].arrivalTooLate = true;
-      } else if (i + monthsToReachTarget >= monthlyContext.length) {
-        monthlyContext[i].arrivalTooLate = true;
-      }
+      const arrivalMonth = {
+        year: monthSteps[i].year,
+        month: monthSteps[i].month1Based,
+      };
+      const futureGrowth = compareProjectionMonths(arrivalMonth, referenceMonth) >= 0
+        ? simulateArrivalToMonth(i, monthSteps.length - 1)
+        : null;
+      monthlyContext[i].arrivalTooLate = !futureGrowth?.reachedTarget;
     }
 
     const groups: SizeGroupProjection[] = [];
@@ -593,26 +606,20 @@ export class GrowthProjectionService {
         const step = monthSteps[i];
         const m0 = step.monthIndex;
         const y = step.year;
-        const daysInMonth = new Date(y, m0 + 1, 0).getDate();
-        let simulDays = daysInMonth;
-        if (i === 0) {
-          simulDays = Math.max(0, daysInMonth - currentDay);
-        }
-
-        if (simulDays > 0) {
-          for (let day = 0; day < simulDays; day++) {
-            const cursorDate = new Date(y, m0, (i === 0 ? currentDay : 0) + day + 1);
-            workingBaskets = workingBaskets.map(b => {
-              const next = stepOneDay(
-                simCtx,
-                { weightMg: b.weightMg, count: b.animalCount },
-                cursorDate,
-                useCustomMortality ? customMonthlyRate : undefined,
-              );
-              return { basketId: b.basketId, weightMg: next.weightMg, animalCount: Math.round(next.count) };
-            });
-          }
-        }
+        const simulationDays = getProjectionSimulationDays(
+          { year: y, month: step.month1Based },
+          now,
+        );
+        workingBaskets = simulateBasketLedgerForMonth(
+          workingBaskets,
+          simulationDays,
+          (state, date) => stepOneDay(
+            simCtx,
+            state,
+            date,
+            useCustomMortality ? customMonthlyRate : undefined,
+          ),
+        );
 
         const totalAnimals = workingBaskets.reduce((s, b) => s + b.animalCount, 0);
         const weightedApk = totalAnimals > 0

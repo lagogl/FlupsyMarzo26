@@ -12,6 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePlanningLang, translateMonthLabel } from "@/lib/planningI18n";
 import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndicators";
+import { aggregateHatcheryPresentation, buildHatcheryActualUpdate, getAdditionalHatcheryNeed } from "@/lib/hatcheryPresentation";
 
 interface SizeMonthProjection {
   month: number;
@@ -89,13 +90,7 @@ interface HatcheryArrival {
   sizeCategory: string;
   notes: string | null;
   calculatedActual?: number;
-}
-
-// Il "Reale" viene sempre ricalcolato in automatico dai lotti arrivati;
-// il valore salvato manualmente è usato solo se non ci sono lotti nel mese.
-function getRealeArrivi(h: HatcheryArrival): number | null {
-  if (h.calculatedActual && h.calculatedActual > 0) return h.calculatedActual;
-  return h.actualQuantity ?? null;
+  calculatedActualLotCount?: number;
 }
 
 interface ProductionTarget {
@@ -368,21 +363,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       color: "#be185d",
       bgClass: "",
       textClass: "text-gray-600",
-      values: mc.map(m => m.schiuditoioNecessario || 0),
-      isWarning: (colIdx: number) => {
-        const m = mc[colIdx];
-        if (!m) return false;
-        const necessario = m.schiuditoioNecessario || 0;
-        const arrivi = m.arriviSchiuditoio || 0;
-        return necessario > 0 && arrivi < necessario;
-      },
-      isSuccess: (colIdx: number) => {
-        const m = mc[colIdx];
-        if (!m) return false;
-        const necessario = m.schiuditoioNecessario || 0;
-        const arrivi = m.arriviSchiuditoio || 0;
-        return arrivi > necessario;
-      },
+      values: mc.map(m => getAdditionalHatcheryNeed(m.schiuditoioNecessario || 0)),
+      isWarning: (colIdx: number) => getAdditionalHatcheryNeed(mc[colIdx]?.schiuditoioNecessario || 0) > 0,
     },
     {
       rowKey: "arrivi_schiu",
@@ -753,19 +735,19 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         cell.border = thinBorder;
       });
 
-      const sortedHatchery = [...allHatcheryData].sort((a, b) => a.year - b.year || a.month - b.month);
+      const sortedHatchery = aggregateHatcheryPresentation(allHatcheryData, data.monthlyContext);
       sortedHatchery.forEach((h, idx) => {
-        const actual = getRealeArrivi(h);
-        const effective = actual ?? h.quantity;
-        const variancePct = actual !== null && h.quantity > 0
-          ? ((actual - h.quantity) / h.quantity) * 100
+        const actual = h.actualQuantity;
+        const effective = h.injectedQuantity;
+        const variancePct = actual !== null && h.forecastQuantity > 0
+          ? ((actual - h.forecastQuantity) / h.forecastQuantity) * 100
           : null;
         const r = ws4.addRow([
           h.year,
           MONTH_SHORT_IT[h.month - 1] || h.month,
-          h.quantity,
+          h.forecastQuantity,
           actual ?? "",
-          effective,
+          effective ?? "",
           variancePct !== null ? variancePct / 100 : "",
         ]);
         const stripe = idx % 2 === 0 ? white : lightGray;
@@ -792,10 +774,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         });
       });
 
-      const totForecast = sortedHatchery.reduce((s, h) => s + h.quantity, 0);
-      const totActual = sortedHatchery.reduce((s, h) => s + (getRealeArrivi(h) ?? 0), 0);
-      const totEffective = sortedHatchery.reduce((s, h) => s + (getRealeArrivi(h) ?? h.quantity), 0);
-      const totVariancePct = totForecast > 0 ? (totEffective - totForecast) / totForecast : 0;
+      const totForecast = sortedHatchery.reduce((s, h) => s + h.forecastQuantity, 0);
+      const totActual = sortedHatchery.reduce((s, h) => s + (h.actualQuantity ?? 0), 0);
+      const totEffective = data.monthlyContext.reduce((s, m) => s + m.arriviSchiuditoio, 0);
+      const totVariancePct = totForecast > 0 ? (totActual - totForecast) / totForecast : 0;
       const totRow = ws4.addRow(["", t("pc_excel_totale"), totForecast, totActual, totEffective, totVariancePct]);
       totRow.eachCell((cell, colNumber) => {
         cell.border = thinBorder;
@@ -812,7 +794,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         }
       });
 
-      ws4.columns = [{ width: 8 }, { width: 10 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 16 }];
+      ws4.columns = [{ width: 8 }, { width: 10 }, { width: 18 }, { width: 18 }, { width: 25 }, { width: 16 }];
     }
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -1049,16 +1031,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return `${t("pc_cf_giac_res_pre")}${fn(m.giacenzaLordaConSchiuditoio)}${t("pc_cf_giac_res_mid")}${fn(m.ordiniEvasi)}${t("pc_cf_giac_res_suf")} ${fn(m.giacenzaNetTarget)}`;
     }
     if (rk === "schiu_nec") {
-      const necessario = m.schiuditoioNecessario || 0;
-      const arrivi = m.arriviSchiuditoio || 0;
-      if (arrivi > necessario) {
-        const surplus = arrivi - necessario;
-        return necessario > 0
-          ? `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_a_mid")} ${fn(necessario)} ${t("pc_cf_schiu_surplus_a_suf")}${fn(surplus)} ${t("pc_cf_schiu_surplus_a_end")}`
-          : `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_mid")} ${m.monthName} → +${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_end")}`;
-      }
+      const necessario = getAdditionalHatcheryNeed(m.schiuditoioNecessario || 0);
       if (necessario > 0) {
-        return `${t("pc_cf_schiu_nec_pre")} ${m.monthName} ${t("pc_cf_schiu_nec_mid")} ${data.targetSize} ${t("pc_cf_schiu_nec_suf")} ${fn(necessario)} ${t("pc_cf_schiu_nec_end")}${arrivi > 0 ? ` ${t("pc_cf_schiu_nec_planned")} ${fn(arrivi)}, ${t("pc_cf_schiu_nec_missing")} ${fn(necessario - arrivi)}` : ''}`;
+        return `${t("pc_cf_schiu_nec_pre")} ${m.monthName} ${t("pc_cf_schiu_nec_mid")} ${data.targetSize} ${t("pc_cf_schiu_nec_suf")} ${fn(necessario)} ${t("pc_cf_schiu_nec_end")}`;
       }
       return `${t("pc_cf_schiu_nec_none")} ${m.monthName}`;
     }
@@ -1646,6 +1621,7 @@ export default function ProiezioneCrescita() {
   });
 
   const allHatcheryData = [...(hatcheryData || []), ...(hatcheryData2 || [])];
+  const hatcheryPresentation = aggregateHatcheryPresentation(allHatcheryData, data?.monthlyContext ?? []);
 
   const budgetQueries = useQueries({
     queries: hatcheryYears.map(year => ({
@@ -1719,7 +1695,7 @@ export default function ProiezioneCrescita() {
   const [calculatingActual, setCalculatingActual] = useState<string | null>(null);
 
   const saveActual = useMutation({
-    mutationFn: async (payload: { year: number; month: number; actualQuantity: number }) => {
+    mutationFn: async (payload: { year: number; month: number; actualQuantity: number; sizeCategory: string }) => {
       return apiRequest("/api/proiezione-crescita/hatchery-arrivals/actual", "POST", payload);
     },
     onSuccess: () => {
@@ -1766,13 +1742,17 @@ export default function ProiezioneCrescita() {
     }
   };
 
-  const handleSaveActual = (year: number, month: number) => {
-    const key = `${year}-${month}`;
+  const handleSaveActual = (
+    year: number,
+    month: number,
+    sizeCategory = "TP-300",
+    key = `${year}-${month}`,
+  ) => {
     const raw = actualInputs[key];
     if (raw === undefined || raw === "") return;
     const val = parseInt(raw);
     if (isNaN(val) || val < 0) return;
-    saveActual.mutate({ year, month, actualQuantity: val });
+    saveActual.mutate(buildHatcheryActualUpdate({ year, month, sizeCategory }, val));
     setActualInputs(prev => ({ ...prev, [key]: "" }));
   };
 
@@ -2187,46 +2167,47 @@ export default function ProiezioneCrescita() {
       )}
 
       {showHatcheryForm && (() => {
-        const totalForecast = allHatcheryData.reduce((sum, h) => sum + h.quantity, 0);
-        const totalActual = allHatcheryData.reduce((sum, h) => sum + (getRealeArrivi(h) ?? 0), 0);
-        const totalEffective = allHatcheryData.reduce((sum, h) => sum + (getRealeArrivi(h) ?? h.quantity), 0);
-        const variance = totalActual > 0 ? totalEffective - totalForecast : 0;
+        const totalForecast = hatcheryPresentation.reduce((sum, h) => sum + h.forecastQuantity, 0);
+        const totalActual = hatcheryPresentation.reduce((sum, h) => sum + (h.actualQuantity ?? 0), 0);
+        const hasActual = hatcheryPresentation.some(h => h.actualQuantity !== null);
+        const totalEffective = data.monthlyContext.reduce((sum, m) => sum + m.arriviSchiuditoio, 0);
+        const variance = hasActual ? totalActual - totalForecast : 0;
         const variancePct = totalForecast > 0 ? (variance / totalForecast) * 100 : 0;
 
         return (
         <Card className="border-emerald-200">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg text-emerald-700">
-              Arrivi Schiuditoio (TP-300)
+              Arrivi Schiuditoio
               <span className="ml-3 text-sm font-normal text-gray-600">
                 Previsione: <span className="font-semibold text-emerald-700">{formatNumber(totalForecast)}</span>
-                {totalActual > 0 && (
+                {hasActual && (
                   <>
                     {' · '}Reale: <span className="font-semibold text-blue-700">{formatNumber(totalActual)}</span>
-                    {' · '}Effettivo: <span className="font-semibold text-gray-800">{formatNumber(totalEffective)}</span>
                     {' · '}Scostamento:{' '}
                     <span className={variance >= 0 ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>
                       {variance >= 0 ? '+' : ''}{formatNumber(variance)} ({variancePct.toFixed(1)}%)
                     </span>
                   </>
                 )}
+                {' · '}{t("pc_hatchery_simulated")}: <span className="font-semibold text-gray-800">{formatNumber(totalEffective)}</span>
               </span>
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-emerald-600 font-medium">Previsione</span> a inizio anno ·
-              <span className="text-blue-600 font-medium ml-1">Reale</span> dai lotti effettivamente arrivati ·
-              il calcolo proiezione usa il <strong>Reale</strong> quando disponibile, altrimenti la Previsione.
+              {t("pc_hatchery_projection_rule")}
             </p>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {hatcheryMonths.map(({ year, month, label }) => {
-                const existing = allHatcheryData.find(h => h.year === year && h.month === month);
+                const existingMonth = hatcheryPresentation.find(h => h.year === year && h.month === month);
+                const actualLockRows = existingMonth?.records.filter(h => h.actualQuantity !== null) ?? [];
                 const inputKey = `${year}-${month}`;
                 const isCalculating = calculatingActual === inputKey;
-                const actualVal = existing ? getRealeArrivi(existing) : null;
-                const isAutoActual = !!(existing?.calculatedActual && existing.calculatedActual > 0);
-                const forecastVal = existing?.quantity ?? 0;
+                const actualVal = existingMonth?.actualQuantity ?? null;
+                const isAutoActual = (existingMonth?.calculatedActualLotCount ?? 0) > 0;
+                const forecastVal = existingMonth?.forecastQuantity ?? 0;
+                const simulatedMonth = data.monthlyContext.find(m => m.year === year && m.month === month);
                 const variance = actualVal !== null ? actualVal - forecastVal : null;
                 const variancePct = actualVal !== null && forecastVal > 0
                   ? (variance! / forecastVal) * 100
@@ -2246,18 +2227,9 @@ export default function ProiezioneCrescita() {
                     {/* PREVISIONE */}
                     <div className="flex items-center gap-1 mb-1.5">
                       <span className="text-[10px] uppercase font-semibold text-emerald-600 w-12">Prev.</span>
-                      {existing && existing.quantity > 0 ? (
+                      {existingMonth && existingMonth.records.length > 0 ? (
                         <>
-                          <span className="text-sm font-medium text-emerald-700 flex-1">{formatNumber(existing.quantity)}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 text-red-400 hover:text-red-600"
-                            title={t("pc_btn_delete_forecast")}
-                            onClick={() => deleteHatchery.mutate(existing.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                          <span className="text-sm font-medium text-emerald-700 flex-1">{formatNumber(forecastVal)}</span>
                         </>
                       ) : (
                         <div className="flex items-center gap-1 flex-1">
@@ -2281,6 +2253,23 @@ export default function ProiezioneCrescita() {
                         </div>
                       )}
                     </div>
+                    {existingMonth?.records.map(record => (
+                      <div key={record.id} className="flex items-center justify-between pl-12 -mt-1 mb-1">
+                        <span className="text-[10px] text-gray-500">
+                          {record.sizeCategory}: {formatNumber(record.quantity)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-red-400 hover:text-red-600"
+                          title={`${t("pc_btn_delete_forecast")} ${record.sizeCategory} ${formatNumber(record.quantity)}`}
+                          aria-label={`${t("pc_btn_delete_forecast")} ${record.sizeCategory} ${formatNumber(record.quantity)}`}
+                          onClick={() => deleteHatchery.mutate(record.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
 
                     {/* REALE */}
                     <div className="flex items-center gap-1">
@@ -2292,9 +2281,12 @@ export default function ProiezioneCrescita() {
                         type="text"
                         inputMode="numeric"
                         placeholder={actualVal !== null ? formatNumber(actualVal) : "0"}
+                        readOnly={(existingMonth?.records.length ?? 0) > 1}
                         className={`h-7 text-xs ${actualVal !== null ? 'bg-blue-50 border-blue-200' : ''}`}
                         value={
-                          actualInputs[inputKey] !== undefined
+                          (existingMonth?.records.length ?? 0) > 1
+                            ? (actualVal !== null ? formatNumber(actualVal) : "")
+                            : actualInputs[inputKey] !== undefined
                             ? (actualInputs[inputKey] === "" ? "" : formatNumber(parseInt(actualInputs[inputKey]) || 0))
                             : (actualVal !== null ? formatNumber(actualVal) : "")
                         }
@@ -2318,8 +2310,9 @@ export default function ProiezioneCrescita() {
                         size="icon"
                         className="h-6 w-6 text-blue-600"
                         title={t("pc_btn_save_real")}
-                        onClick={() => handleSaveActual(year, month)}
+                        onClick={() => handleSaveActual(year, month, existingMonth?.records[0]?.sizeCategory)}
                         disabled={
+                          (existingMonth?.records.length ?? 0) > 1 ||
                           actualInputs[inputKey] === undefined ||
                           actualInputs[inputKey] === "" ||
                           parseInt(actualInputs[inputKey]) === actualVal
@@ -2327,14 +2320,16 @@ export default function ProiezioneCrescita() {
                       >
                         <Save className="h-3 w-3" />
                       </Button>
-                      {actualVal !== null && existing && (
+                      {actualLockRows.map(record => (
                         <Button
+                          key={`clear-${record.id}`}
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 text-gray-400 hover:text-red-500"
-                          title={t("pc_btn_remove_lock")}
+                          title={`${t("pc_btn_remove_lock")} ${record.sizeCategory}`}
+                          aria-label={`${t("pc_btn_remove_lock")} ${record.sizeCategory}`}
                           onClick={() => {
-                            clearActual.mutate(existing.id);
+                            clearActual.mutate(record.id);
                             setActualInputs(prev => {
                               const c = { ...prev };
                               delete c[inputKey];
@@ -2344,8 +2339,40 @@ export default function ProiezioneCrescita() {
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
-                      )}
+                      ))}
                     </div>
+                    {(existingMonth?.records.length ?? 0) > 1 && existingMonth?.records.map(record => {
+                      const recordKey = `${inputKey}-${record.id}`;
+                      const value = actualInputs[recordKey] ?? (record.actualQuantity !== null ? String(record.actualQuantity) : "");
+                      return (
+                        <div key={`actual-${record.id}`} className="mt-1 flex items-center gap-1">
+                          <span className="text-[10px] text-blue-600">{t("pc_label_reale")} {record.sizeCategory}</span>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            aria-label={`${t("pc_label_reale")} ${record.sizeCategory}`}
+                            className="h-7 text-xs"
+                            value={value}
+                            onChange={e => setActualInputs(prev => ({ ...prev, [recordKey]: e.target.value.replace(/[^\d]/g, "") }))}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-blue-600"
+                            title={`${t("pc_btn_save_real")} ${record.sizeCategory}`}
+                            disabled={actualInputs[recordKey] === undefined || value === "" || Number(value) === record.actualQuantity || saveActual.isPending}
+                            onClick={() => handleSaveActual(year, month, record.sizeCategory, recordKey)}
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {simulatedMonth && (
+                      <p className="mt-2 text-xs text-emerald-700">
+                        {t("pc_hatchery_simulated")}: <strong>{formatNumber(simulatedMonth.arriviSchiuditoio)}</strong>
+                      </p>
+                    )}
                   </div>
                 );
               })}
