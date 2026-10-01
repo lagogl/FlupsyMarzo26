@@ -15,6 +15,7 @@ import {
   applyNumberFormat
 } from '../utils/excel-formatter';
 import { requireAdmin, requireAuth } from "../modules/system/auth/auth.middleware";
+import { businessToday } from "../utils/business-date";
 
 /**
  * Controller per i servizi AI
@@ -871,8 +872,9 @@ export function registerAIRoutes(app: Express) {
   // Modulo: Analisi Scostamenti Produzione
   app.get("/api/ai/production-forecast", requireAuth, async (req: Request, res: Response) => {
     try {
+      const referenceInstant = new Date();
       const { year, mortalityT1, mortalityT3, mortalityT10 } = req.query;
-      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      const targetYear = year ? parseInt(year as string) : businessToday(referenceInstant).year;
       
       const mortalityRates = {
         T1: mortalityT1 ? parseFloat(mortalityT1 as string) / 100 : 0.05,
@@ -881,7 +883,7 @@ export function registerAIRoutes(app: Express) {
       };
       
       const { productionForecastService } = await import('../ai/production-forecast-service');
-      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
+      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates, referenceInstant);
       
       res.json({ success: true, ...forecast });
     } catch (error) {
@@ -894,7 +896,7 @@ export function registerAIRoutes(app: Express) {
   app.get("/api/ai/production-targets", requireAuth, async (req: Request, res: Response) => {
     try {
       const { year } = req.query;
-      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      const targetYear = year ? parseInt(year as string) : businessToday().year;
       
       const { productionForecastService } = await import('../ai/production-forecast-service');
       const targets = await productionForecastService.getProductionTargets(targetYear);
@@ -947,8 +949,9 @@ export function registerAIRoutes(app: Express) {
   // Export Excel Semplice formattato
   app.get("/api/ai/production-forecast/export-simple", requireAuth, async (req: Request, res: Response) => {
     try {
+      const referenceInstant = new Date();
       const { year, mortalityT1, mortalityT3, mortalityT10, category } = req.query;
-      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      const targetYear = year ? parseInt(year as string) : businessToday(referenceInstant).year;
       
       const mortalityRates = {
         T1: mortalityT1 ? parseFloat(mortalityT1 as string) / 100 : 0.05,
@@ -957,7 +960,7 @@ export function registerAIRoutes(app: Express) {
       };
       
       const { productionForecastService } = await import('../ai/production-forecast-service');
-      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
+      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates, referenceInstant);
       
       let monthlyData = forecast.monthlyData || [];
       const ordersAbsoluteBySize = "ordersAbsoluteBySize" in forecast
@@ -985,7 +988,7 @@ export function registerAIRoutes(app: Express) {
       applyTitleStyle(titleRow);
       ws.mergeCells(1, 1, 1, headers.length);
       
-      ws.addRow([`Generato il ${new Date().toLocaleDateString('it-IT')} - Mortalità T1: ${mortalityRates.T1*100}%, T3: ${mortalityRates.T3*100}%, T10: ${mortalityRates.T10*100}%`]);
+      ws.addRow([`Generato il ${new Date().toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })} - Mortalità T1: ${mortalityRates.T1*100}%, T3: ${mortalityRates.T3*100}%, T10: ${mortalityRates.T10*100}%`]);
       ws.getRow(2).getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
       ws.mergeCells(2, 1, 2, headers.length);
       
@@ -1055,7 +1058,7 @@ export function registerAIRoutes(app: Express) {
       applyTitleStyle(title2);
       ws2.mergeCells(1, 1, 1, 4);
       
-      ws2.addRow([`Generato il ${new Date().toLocaleDateString('it-IT')}`]);
+      ws2.addRow([`Generato il ${new Date().toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}`]);
       ws2.getRow(2).getCell(1).font = { italic: true, size: 10, color: { argb: '666666' } };
       ws2.mergeCells(2, 1, 2, 4);
       
@@ -1101,8 +1104,9 @@ export function registerAIRoutes(app: Express) {
   // Export Excel Analitico con tutti i calcoli commentati
   app.get("/api/ai/production-forecast/export-analytical", requireAuth, async (req: Request, res: Response) => {
     try {
+      const referenceInstant = new Date();
       const { year, mortalityT1, mortalityT3, mortalityT10 } = req.query;
-      const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+      const targetYear = year ? parseInt(year as string) : businessToday(referenceInstant).year;
       
       const mortalityRates = {
         T1: mortalityT1 ? parseFloat(mortalityT1 as string) / 100 : 0.05,
@@ -1113,7 +1117,7 @@ export function registerAIRoutes(app: Express) {
       const { productionForecastService } = await import('../ai/production-forecast-service');
       
       // Recupera forecast principale (include ordersAbsoluteBySize)
-      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates);
+      const forecast = await productionForecastService.calculateForecast(targetYear, mortalityRates, referenceInstant);
       const ordersAbsoluteBySize = "ordersAbsoluteBySize" in forecast
         && forecast.ordersAbsoluteBySize
         ? forecast.ordersAbsoluteBySize

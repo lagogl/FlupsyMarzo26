@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getEuropeRomeDateKey } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -123,7 +124,7 @@ const getVarianceColor = (variance: number) => {
 };
 
 export default function AnalisiScostamenti() {
-  const currentYear = new Date().getFullYear();
+  const currentYear = Number(getEuropeRomeDateKey().slice(0, 4));
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const { toast } = useToast();
@@ -1032,7 +1033,7 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
       const response = await fetch('/api/ai/scenario-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, context, year: new Date().getFullYear() })
+        body: JSON.stringify({ question, context, year: Number(getEuropeRomeDateKey().slice(0, 4)) })
       });
       
       const data = await response.json();
@@ -1125,7 +1126,7 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
     return num.toString();
   };
   
-  const currentMonth = new Date().getMonth() + 1;
+  const currentMonth = Number(getEuropeRomeDateKey().slice(5, 7));
   
   // Colori per status
   const getStatusColor = (status: string) => {

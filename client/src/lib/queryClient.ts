@@ -264,7 +264,7 @@ const romeOffsetFormatter = new Intl.DateTimeFormat("en-US", {
 
 let sizesBusinessDateKey = getEuropeRomeDateKey();
 
-function getEuropeRomeDateKey(): string {
+export function getEuropeRomeDateKey(): string {
   const parts = romeDateFormatter.formatToParts(new Date());
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
@@ -302,6 +302,7 @@ function checkEuropeRomeBusinessDate(): void {
   if (nextKey === sizesBusinessDateKey) return;
   sizesBusinessDateKey = nextKey;
   void queryClient.invalidateQueries({ queryKey: ["/api/sizes"] });
+  void queryClient.invalidateQueries({ queryKey: ["/api/ai/production-forecast"] });
 }
 
 const handleSizesVisibilityChange = (): void => {

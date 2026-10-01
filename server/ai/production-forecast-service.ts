@@ -3,6 +3,7 @@ import { dbEsterno, isDbEsternoAvailable } from "../db-esterno";
 import { ordiniCondivisi, ordiniDettagli } from "../schema-esterno";
 import { productionTargets, sizes, operations, baskets, cycles, sgrPerTaglia } from "@shared/schema";
 import { eq, and, gte, lte, desc, sql, isNull, not } from "drizzle-orm";
+import { businessToday } from "../utils/business-date";
 import {
   findSizeInRanges,
   getSizeRangeCandidates,
@@ -239,8 +240,8 @@ export class ProductionForecastService {
     return targets;
   }
 
-  async getSgrRates(): Promise<SgrRate[]> {
-    const businessDate = toBusinessIsoDate(new Date());
+  async getSgrRates(atDate: string | Date = new Date()): Promise<SgrRate[]> {
+    const businessDate = toBusinessIsoDate(atDate);
     const sgrData = await db.execute(sql`
       SELECT spt.month, spt.size_id, spt.calculated_sgr, s.name as size_name
       FROM sgr_per_taglia spt
@@ -259,8 +260,8 @@ export class ProductionForecastService {
     }));
   }
 
-  async getCurrentInventoryBySize(): Promise<InventoryBySize[]> {
-    const activeCandidates = await this.refreshActiveSizeCandidates();
+  async getCurrentInventoryBySize(atDate?: string | Date): Promise<InventoryBySize[]> {
+    const activeCandidates = await this.refreshActiveSizeCandidates(atDate);
     const inventory = await db.execute(sql`
       WITH latest_ops AS (
         SELECT DISTINCT ON (o.basket_id) 
@@ -403,8 +404,8 @@ export class ProductionForecastService {
     return this.getSgrWithFallback(sgrLookup, monthName, match.sizeId);
   }
 
-  async getBasketLevelInventory(): Promise<Array<{basketId: number, animalsPerKg: number, animalCount: number}>> {
-    await this.refreshActiveSizeCandidates();
+  async getBasketLevelInventory(atDate?: string | Date): Promise<Array<{basketId: number, animalsPerKg: number, animalCount: number}>> {
+    await this.refreshActiveSizeCandidates(atDate);
     const result = await db.execute(sql`
       SELECT DISTINCT ON (o.basket_id)
         o.basket_id,
@@ -681,8 +682,8 @@ export class ProductionForecastService {
   }
 
   // Recupera ordini aggregati per mese e taglia specifica dall'anno specificato
-  async getOrdersByMonthAndSize(year: number): Promise<Record<string, Record<string, number>>> {
-    await this.refreshActiveSizeCandidates();
+  async getOrdersByMonthAndSize(year: number, atDate?: string | Date): Promise<Record<string, Record<string, number>>> {
+    await this.refreshActiveSizeCandidates(atDate);
     const activeSaleSizes = this.activeSizeCandidates.map((candidate) => candidate.code);
     // Struttura: { "1": { "TP-2000": 1000000, "TP-3000": 500000, ... }, "2": {...} }
     const result: Record<string, Record<string, number>> = {};
@@ -882,9 +883,14 @@ export class ProductionForecastService {
   }
 
   async calculateForecast(
-    year: number, 
-    mortalityRates: { T1: number; T3: number; T10: number } = { T1: 0.05, T3: 0.03, T10: 0.02 }
+    year?: number,
+    mortalityRates: { T1: number; T3: number; T10: number } = { T1: 0.05, T3: 0.03, T10: 0.02 },
+    referenceInstant: Date = new Date(),
   ): Promise<ForecastSummary> {
+    // One Rome calendar snapshot for the whole calculation, before async reads.
+    const today = businessToday(referenceInstant);
+    const businessDate = toBusinessIsoDate(referenceInstant);
+    year ??= today.year;
     const [
       targets,
       sgrRates,
@@ -894,11 +900,11 @@ export class ProductionForecastService {
       basketInventory
     ] = await Promise.all([
       this.getProductionTargets(year),
-      this.getSgrRates(),
-      this.getCurrentInventoryBySize(),
+      this.getSgrRates(businessDate),
+      this.getCurrentInventoryBySize(businessDate),
       this.getSgrLookup(),
-      this.getOrdersByMonthAndSize(year),
-      this.getBasketLevelInventory()
+      this.getOrdersByMonthAndSize(year, businessDate),
+      this.getBasketLevelInventory(businessDate)
     ]);
     const activeSaleSizes = this.activeSizeCandidates.map((candidate) => candidate.code);
     
@@ -907,8 +913,7 @@ export class ProductionForecastService {
     const monthlyData: MonthlyForecast[] = [];
     const seedingSchedule: SeedingSchedule[] = [];
     
-    const today = new Date();
-    const currentMonth = today.getMonth() + 1;
+    const currentMonth = today.month;
     
     let stockBySaleSize = this.aggregateBySaleSize(basketInventoryMutable);
 
@@ -939,7 +944,7 @@ export class ProductionForecastService {
       
       if (isCurrentMonth) {
         const daysInMonth = new Date(year, month, 0).getDate();
-        const currentDay = today.getDate();
+        const currentDay = today.day;
         const remainingDays = Math.max(0, daysInMonth - currentDay);
         if (remainingDays > 0) {
           basketInventoryMutable = this.simulateMonthlyGrowth(basketInventoryMutable, sgrLookup, month - 1, mortalityRates, remainingDays);
