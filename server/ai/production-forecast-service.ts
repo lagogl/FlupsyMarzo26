@@ -101,16 +101,16 @@ export class ProductionForecastService {
   private sgrFallback: Record<string, number> = {};
   private activeSizeCandidates: Awaited<ReturnType<typeof getSizeRangeCandidates>> = [];
 
-  private async refreshActiveSizeCandidates() {
-    this.activeSizeCandidates = await getSizeRangeCandidates(new Date());
+  private async refreshActiveSizeCandidates(atDate: string | Date = new Date()) {
+    this.activeSizeCandidates = await getSizeRangeCandidates(atDate);
     if (this.activeSizeCandidates.length === 0) {
       throw new Error("Nessuna taglia con range attivo alla business date");
     }
     return this.activeSizeCandidates;
   }
 
-  async getActiveSizeCandidates() {
-    return this.refreshActiveSizeCandidates();
+  async getActiveSizeCandidates(atDate?: string | Date) {
+    return this.refreshActiveSizeCandidates(atDate);
   }
 
   private formatNumber(num: number): string {

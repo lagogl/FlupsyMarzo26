@@ -5,6 +5,7 @@ import { db } from "../../../db";
 import { salesPriceList, salesCashTargets, hatcheryArrivals, projectionMortalityRates } from "../../../../shared/schema";
 import { eq, and, gte } from "drizzle-orm";
 import { productionForecastService } from "../../../ai/production-forecast-service";
+import { businessToday } from "../../../utils/business-date";
 
 const router = Router();
 
@@ -45,7 +46,7 @@ router.get("/", async (req: Request, res: Response) => {
 
     if (engine === 'lp') {
       const result = await salesPlanningMilpService.plan({ year, startMonth, monthsHorizon, mode, mortalityPercent });
-      res.json({ ...result, engine: 'lp', mode, year: year || new Date().getFullYear(), startMonth: startMonth || (new Date().getMonth() + 1), monthsHorizon: monthsHorizon || 12, generatedAt: new Date().toISOString() });
+      res.json({ ...result, engine: 'lp', mode, year: result.monthlyPlan[0].year, startMonth: result.monthlyPlan[0].month, monthsHorizon: monthsHorizon || 12, generatedAt: new Date().toISOString() });
     } else {
       const result = await salesPlanningService.plan({ year, startMonth, monthsHorizon, mode, mortalityPercent });
       res.json({ ...result, engine: 'greedy' });
@@ -103,7 +104,7 @@ router.delete("/price-list/:sizeCode", async (req: Request, res: Response) => {
 // === BUDGET CASSA ===
 router.get("/cash-targets", async (req: Request, res: Response) => {
   try {
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const year = parseInt(req.query.year as string) || businessToday().year;
     const rows = await db.select().from(salesCashTargets).where(eq(salesCashTargets.year, year));
     res.json(rows);
   } catch (error) {
@@ -143,9 +144,9 @@ router.put("/cash-targets", async (req: Request, res: Response) => {
 // === DATI DI INPUT ===
 router.get("/input-data", async (req: Request, res: Response) => {
   try {
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
     const now = new Date();
-    const activeSizeCandidates = await productionForecastService.getActiveSizeCandidates();
+    const year = parseInt(req.query.year as string) || businessToday(now).year;
+    const activeSizeCandidates = await productionForecastService.getActiveSizeCandidates(now);
 
     const [basketInventory, sgrLookup, mortalityRows, priceRows, cashRows, hatcheryRows, orders] = await Promise.all([
       productionForecastService.getBasketLevelInventory(),

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { growthProjectionService } from "./growth-projection.service";
 import { formatProjectionBusinessDate } from "./growth-projection-simulation";
+import { businessToday, getBusinessReferenceDate } from "../../../utils/business-date";
 import { db } from "../../../db";
 import { hatcheryArrivals, projectionMortalityRates, productionTargets, sandNurserySeedingPayloadSchema, sandNurserySeedings, lots } from "../../../../shared/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
@@ -34,7 +35,7 @@ async function ensureSandNurserySeedingsTable(): Promise<void> {
 router.get("/", async (req: Request, res: Response) => {
   try {
     const targetSize = (req.query.targetSize as string) || 'TP-3000';
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const year = parseInt(req.query.year as string) || undefined;
     let mortalityPercent: number | undefined = undefined;
     if (req.query.mortalityPercent !== undefined) {
       const parsed = parseFloat(req.query.mortalityPercent as string);
@@ -67,7 +68,8 @@ router.get("/", async (req: Request, res: Response) => {
 
 router.get("/hatchery-arrivals", async (req: Request, res: Response) => {
   try {
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const referenceDate = getBusinessReferenceDate();
+    const year = parseInt(req.query.year as string) || referenceDate.getFullYear();
     const arrivals = await db.select().from(hatcheryArrivals).where(eq(hatcheryArrivals.year, year));
 
     // Calcola in automatico il "reale" dai lotti arrivati (somma per mese)
@@ -77,7 +79,7 @@ router.get("/hatchery-arrivals", async (req: Request, res: Response) => {
              COUNT(*)::int AS lot_count
       FROM lots
       WHERE EXTRACT(YEAR FROM arrival_date)::int = ${year}
-        AND arrival_date <= ${formatProjectionBusinessDate(new Date())}::date
+        AND arrival_date <= ${formatProjectionBusinessDate(referenceDate)}::date
       GROUP BY 1
     `);
     const liveByMonth = new Map<number, number>();
@@ -160,7 +162,7 @@ router.get("/hatchery-arrivals/calculate-actual", async (req: Request, res: Resp
       .where(and(
         gte(lots.arrivalDate, startDate),
         sql`${lots.arrivalDate} < ${endDate}`,
-        lte(lots.arrivalDate, formatProjectionBusinessDate(new Date())),
+        lte(lots.arrivalDate, formatProjectionBusinessDate(getBusinessReferenceDate())),
       ));
 
     const totalAnimals = rows.reduce((s, r) => s + (r.animalCount || 0), 0);
@@ -328,7 +330,7 @@ router.put("/mortality-rates/bulk", async (req: Request, res: Response) => {
 
 router.get("/production-targets", async (req: Request, res: Response) => {
   try {
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const year = parseInt(req.query.year as string) || businessToday().year;
     const targets = await db.select().from(productionTargets)
       .where(eq(productionTargets.year, year));
     res.json(targets);

@@ -1,4 +1,6 @@
 import { productionForecastService } from "../../../ai/production-forecast-service";
+import { getBusinessReferenceDate } from "../../../utils/business-date";
+import { formatProjectionBusinessDate } from "../growth-projection/growth-projection-simulation";
 import { db } from "../../../db";
 import {
   projectionMortalityRates,
@@ -233,7 +235,7 @@ export class SalesPlanningService {
     mode?: SalesPlanningMode;
     mortalityPercent?: number;
   }): Promise<SalesPlanningResult> {
-    const now = new Date();
+    const now = getBusinessReferenceDate();
     const startYear = opts.year || now.getFullYear();
     const horizon = Math.max(1, Math.min(60, opts.monthsHorizon || 12));
     const mode: SalesPlanningMode = opts.mode || 'bilanciato';
@@ -252,7 +254,7 @@ export class SalesPlanningService {
         productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders }))
       ),
     ]);
-    const activeSizeCandidates = await productionForecastService.getActiveSizeCandidates();
+    const activeSizeCandidates = await productionForecastService.getActiveSizeCandidates(formatProjectionBusinessDate(now));
     this.activeSizeOrder = activeSizeCandidates
       .slice()
       .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg)

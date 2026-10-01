@@ -12,12 +12,9 @@ import { aggregateOrderCommitments, type CommitmentOrderInput } from "./order-co
 import { loadHatcheryArrivalPlans } from "../hatchery-arrival-source";
 import { getHatcheryBiologyDays } from "../hatchery-arrival-policy";
 import { buildCohortPath } from "./cohort-path";
+import { businessToday } from "../../../utils/business-date";
 
-export function businessToday() {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-  const get = (key: string) => Number(parts.find(p => p.type === key)!.value);
-  return { year: get("year"), month: get("month"), day: get("day") };
-}
+export { businessToday };
 const commonWarnings = [
   "Simulazione separata: non modifica giacenze, ordini, Forecast o semine operative.",
   "Quantità commerciali alternative, NON sommabili tra mesi e taglie. Ogni vendita viene verificata contro tutti gli ordini futuri caricati.",
@@ -28,8 +25,8 @@ const commonWarnings = [
 ];
 
 export async function getInputs(): Promise<ScenarioInputs> {
-  const [ctx, prices] = await Promise.all([loadGrowthSimulationContext(), db.select().from(salesPriceList)]);
   const today = businessToday();
+  const [ctx, prices] = await Promise.all([loadGrowthSimulationContext(), db.select().from(salesPriceList)]);
   const sizes = ctx.allSizes.filter(s => isScenarioSaleSize(s.code)).map(s => {
     const p = prices.find(p => p.sizeCode === s.code);
     return { id: s.id, code: s.code, name: s.name || s.code, pricePerThousand: p && Number.isFinite(p.pricePerAnimal) && p.pricePerAnimal > 0 ? p.pricePerAnimal * 1000 : null };
@@ -82,7 +79,7 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
   if (hasPartialFutureOrders) warnings.push("Gli ordini parziali futuri sono riservati per l'intera quantità registrata, in via cautelativa (nessuna deduzione di consegne non certificate).");
   const last = Math.max(first + input.horizon - 1, ...orders.map(o => o.at));
   const years = [...new Set(Array.from({ length: last - first + 1 }, (_, i) => monthParts(first + i).year))];
-  const referenceDate = new Date(Date.UTC(today.year, today.month - 1, today.day, 12));
+  const referenceDate = new Date(today.year, today.month - 1, today.day);
   const arrivalPlans = await loadHatcheryArrivalPlans(years, referenceDate);
   const requestedSizes = [...new Set([...input.sales.map(s => s.sizeId), ...input.proposalPrices.map(s => s.sizeId)])];
   for (const id of requestedSizes) if (!ctx.allSizes.some(s => s.id === id)) throw new Error(`Taglia sconosciuta: ${id}`);

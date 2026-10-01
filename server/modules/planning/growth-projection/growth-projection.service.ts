@@ -1,4 +1,5 @@
 import { productionForecastService } from "../../../ai/production-forecast-service";
+import { getBusinessReferenceDate } from "../../../utils/business-date";
 import { db } from "../../../db";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates, sandNurserySeedings } from "../../../../shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -146,7 +147,8 @@ export class GrowthProjectionService {
   }
 
   async project(targetSize: string = 'TP-3000', year?: number, mortalityPercent?: number, startMonth?: number, monthsHorizon?: number): Promise<GrowthProjectionResult> {
-    const now = new Date();
+    const instant = new Date();
+    const now = getBusinessReferenceDate(instant);
     const startYear = year || now.getFullYear();
     const horizon = Math.max(12, Math.min(36, monthsHorizon || 12));
     const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
@@ -670,7 +672,7 @@ export class GrowthProjectionService {
     return {
       targetSize,
       targetMaxAnimalsPerKg,
-      generatedAt: now.toISOString(),
+      generatedAt: instant.toISOString(),
       year: startYear,
       mortalityPercent: mortalityPercent ?? null,
       monthsHorizon: horizon,
