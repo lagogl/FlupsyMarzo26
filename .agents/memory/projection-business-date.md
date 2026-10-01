@@ -14,3 +14,9 @@ La fotografia deve governare anche i cataloghi temporali utilizzati per interpre
 **Why:** Un lettore di ordini che ricarica i range con un nuovo istante dopo la mezzanotte può mescolare taglie del nuovo giorno con giacenze e SGR del giorno precedente, pur lasciando corretto il mese della simulazione.
 
 **How to apply:** Propagare la data civile catturata a tutti i lettori di range coinvolti nel calcolo, inclusi quelli indiretti. Nei test del cambio giorno esercitare i lettori reali con database simulato, non sostituirli tutti con funzioni vuote.
+
+Selezionare un altro anno cambia l'orizzonte del Forecast, non la data della fotografia di partenza. La proiezione è soltanto in avanti; i valori nulli/zero di disponibilità nei mesi trascorsi non costituiscono una giacenza storica misurata.
+
+**Why:** Non esiste una fonte affidabile di stock storico in questo percorso. Retrodatare lo stock live inventerebbe disponibilità, mentre ricominciare la simulazione a gennaio dell'anno selezionato ignorerebbe crescita, mortalità e domanda intervenute.
+
+**How to apply:** Conservare la fotografia aziendale corrente anche per un anno selezionato diverso. Attraversare il periodo intermedio prima di mostrare l'anno richiesto; introdurre una ricostruzione storica solo con una fonte attendibile, esplicitamente distinta dai dati live.

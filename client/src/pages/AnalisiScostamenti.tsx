@@ -103,6 +103,9 @@ const formatFullNumber = (num: number): string => {
   return num.toLocaleString('it-IT');
 };
 
+const getForecastMonthKey = (year: number, month: number): string =>
+  `${year}-${String(month).padStart(2, '0')}`;
+
 const getStatusBadge = (status: string, description?: string) => {
   const text = description || (status === 'on_track' ? 'Coperto' : status === 'warning' ? 'Attenzione' : 'Critico');
   switch (status) {
@@ -124,7 +127,8 @@ const getVarianceColor = (variance: number) => {
 };
 
 export default function AnalisiScostamenti() {
-  const currentYear = Number(getEuropeRomeDateKey().slice(0, 4));
+  const currentRomeMonthKey = getEuropeRomeDateKey().slice(0, 7);
+  const currentYear = Number(currentRomeMonthKey.slice(0, 4));
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const { toast } = useToast();
@@ -846,9 +850,17 @@ export default function AnalisiScostamenti() {
                         'Dicembre': 'bg-yellow-50',
                       };
                       const bgClass = monthColors[row.monthName] || '';
+                      const rowMonthKey = getForecastMonthKey(row.year, row.month);
+                      const isPast = rowMonthKey < currentRomeMonthKey;
+                      const isCurrent = rowMonthKey === currentRomeMonthKey;
                       return (
-                      <TableRow key={idx} className={bgClass}>
-                        <TableCell className="font-medium">{row.monthName}</TableCell>
+                      <TableRow
+                        key={idx}
+                        className={`${bgClass} ${isPast ? 'opacity-40' : ''} ${isCurrent ? 'ring-2 ring-inset ring-blue-500' : ''}`}
+                      >
+                        <TableCell className={`font-medium ${isCurrent ? 'bg-blue-100 text-blue-700 font-bold' : ''}`}>
+                          {row.monthName}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs font-medium">
                             {row.sizeCategory}
@@ -935,6 +947,8 @@ export default function AnalisiScostamenti() {
             <CardContent>
               <ProductionRoadmap 
                 monthlyData={data.monthlyData}
+                forecastYear={selectedYear}
+                currentRomeMonthKey={currentRomeMonthKey}
                 ordersAbsoluteBySize={data.ordersAbsoluteBySize || {}}
                 currentInventory={data.currentInventory}
                 seedingSchedule={data.seedingSchedule}
@@ -951,6 +965,8 @@ export default function AnalisiScostamenti() {
 // Componente Roadmap Produzione con Gantt dinamico
 interface ProductionRoadmapProps {
   monthlyData: MonthlyForecast[];
+  forecastYear: number;
+  currentRomeMonthKey: string;
   ordersAbsoluteBySize: Record<string, number>;
   currentInventory: InventoryBySize[];
   seedingSchedule: SeedingSchedule[];
@@ -964,7 +980,7 @@ interface AIAnalysisResult {
   confidence: number;
 }
 
-function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory, seedingSchedule, mortalityBySize }: ProductionRoadmapProps) {
+function ProductionRoadmap({ monthlyData, forecastYear, currentRomeMonthKey, ordersAbsoluteBySize, currentInventory, seedingSchedule, mortalityBySize }: ProductionRoadmapProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [mortalityAdjustment, setMortalityAdjustment] = useState(0);
   const [aiQuestion, setAiQuestion] = useState('');
@@ -1033,7 +1049,7 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
       const response = await fetch('/api/ai/scenario-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, context, year: Number(getEuropeRomeDateKey().slice(0, 4)) })
+        body: JSON.stringify({ question, context, year: forecastYear })
       });
       
       const data = await response.json();
@@ -1126,8 +1142,6 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
     return num.toString();
   };
   
-  const currentMonth = Number(getEuropeRomeDateKey().slice(5, 7));
-  
   // Colori per status
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1170,19 +1184,22 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
           {/* Header mesi */}
           <div className="flex border-b-2 border-gray-300 pb-2 mb-4">
             <div className="w-24 font-bold text-sm">Taglia</div>
-            {months.map((m, idx) => (
-              <div 
-                key={m.month} 
-                className={`flex-1 text-center text-sm font-medium ${
-                  m.month === currentMonth ? 'bg-blue-100 rounded-t-lg text-blue-700 font-bold' : ''
-                }`}
-              >
-                {m.name}
-                {m.month === currentMonth && (
-                  <div className="text-xs text-blue-500">▼ OGGI</div>
-                )}
-              </div>
-            ))}
+            {months.map((m) => {
+              const isCurrent = getForecastMonthKey(forecastYear, m.month) === currentRomeMonthKey;
+              return (
+                <div
+                  key={m.month}
+                  className={`flex-1 text-center text-sm font-medium ${
+                    isCurrent ? 'bg-blue-100 rounded-t-lg text-blue-700 font-bold' : ''
+                  }`}
+                >
+                  {m.name}
+                  {isCurrent && (
+                    <div className="text-xs text-blue-500">▼ OGGI</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           
           {/* Swimlanes per taglia */}
@@ -1232,13 +1249,14 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
                   {months.map((m) => {
                     const orderInMonth = orderMonths.find(o => o.month === m.month);
                     const seedingInMonth = seedingReqs.find(s => s.targetMonth === m.month);
-                    const isPast = m.month < currentMonth;
-                    const isCurrent = m.month === currentMonth;
+                    const monthKey = getForecastMonthKey(forecastYear, m.month);
+                    const isPast = monthKey < currentRomeMonthKey;
+                    const isCurrent = monthKey === currentRomeMonthKey;
                     
                     return (
                       <div 
                         key={m.month}
-                        className={`flex-1 relative border-l border-gray-200 ${isPast ? 'opacity-40' : ''}`}
+                        className={`flex-1 relative border-l border-gray-200 ${isPast ? 'opacity-40' : ''} ${isCurrent ? 'bg-blue-50' : ''}`}
                       >
                         {/* Giacenza attuale (solo mese corrente) */}
                         {isCurrent && adjustedInventory > 0 && (
@@ -1315,15 +1333,17 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
               {months.map((m) => {
                 // Trova semine richieste per questo mese (usa fullName per matching corretto)
                 const seedingsThisMonth = monthlyData.filter(d => 
-                  d.meseSeminaT1?.includes(m.fullName) && d.seminaT1Richiesta > 0
+                  d.meseSeminaT1 === `${m.fullName} ${forecastYear}` && d.seminaT1Richiesta > 0
                 );
                 const totalSeeding = seedingsThisMonth.reduce((sum, s) => sum + s.seminaT1Richiesta, 0);
-                const isPast = m.month < currentMonth;
+                const monthKey = getForecastMonthKey(forecastYear, m.month);
+                const isPast = monthKey < currentRomeMonthKey;
+                const isCurrent = monthKey === currentRomeMonthKey;
                 
                 return (
                   <div 
                     key={m.month}
-                    className={`flex-1 relative border-l border-gray-200 ${isPast ? 'opacity-40' : ''}`}
+                    className={`flex-1 relative border-l border-gray-200 ${isPast ? 'opacity-40' : ''} ${isCurrent ? 'bg-blue-50' : ''}`}
                   >
                     {totalSeeding > 0 && (
                       <div 
@@ -1358,18 +1378,20 @@ function ProductionRoadmap({ monthlyData, ordersAbsoluteBySize, currentInventory
             </div>
             <div className="flex-1 flex">
               {months.map((m) => {
-                const monthData = monthlyData.filter(d => d.month === m.month);
+                const monthData = monthlyData.filter(d => d.year === forecastYear && d.month === m.month);
                 const worstStatus = monthData.some(d => d.status === 'critical') 
                   ? 'critical' 
                   : monthData.some(d => d.status === 'warning') 
                     ? 'warning' 
                     : monthData.length > 0 ? 'on_track' : null;
-                const isPast = m.month < currentMonth;
+                const monthKey = getForecastMonthKey(forecastYear, m.month);
+                const isPast = monthKey < currentRomeMonthKey;
+                const isCurrent = monthKey === currentRomeMonthKey;
                 
                 return (
                   <div 
                     key={m.month}
-                    className={`flex-1 flex justify-center ${isPast ? 'opacity-40' : ''}`}
+                    className={`flex-1 flex justify-center ${isPast ? 'opacity-40' : ''} ${isCurrent ? 'bg-blue-50' : ''}`}
                   >
                     {worstStatus && (
                       <div className={`w-4 h-4 rounded-full ${getStatusColor(worstStatus)}`} />

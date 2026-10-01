@@ -325,8 +325,8 @@ export class ProductionForecastService {
       }));
   }
 
-  async getTotalInventoryByCategory(): Promise<Record<string, number>> {
-    const activeCandidates = await this.refreshActiveSizeCandidates();
+  async getTotalInventoryByCategory(atDate?: string | Date): Promise<Record<string, number>> {
+    const activeCandidates = await this.refreshActiveSizeCandidates(atDate);
     const result = await db.execute(sql`
       WITH latest_ops AS (
         SELECT DISTINCT ON (o.basket_id) 
@@ -908,7 +908,8 @@ export class ProductionForecastService {
     ]);
     const activeSaleSizes = this.activeSizeCandidates.map((candidate) => candidate.code);
     
-    let basketInventoryMutable = [...basketInventory];
+    // Live stock is not a reliable historical snapshot. Never project it backwards.
+    let basketInventoryMutable = year < today.year ? [] : [...basketInventory];
     
     const monthlyData: MonthlyForecast[] = [];
     const seedingSchedule: SeedingSchedule[] = [];
@@ -937,13 +938,29 @@ export class ProductionForecastService {
       return mortalityRates.T1;
     };
 
-    for (let month = 1; month <= 12; month++) {
-      const isPastMonth = month < currentMonth;
-      const isCurrentMonth = month === currentMonth;
-      const isFutureMonth = month > currentMonth;
+    // Replay every intervening month, including its demand, before reporting
+    // the selected year. Otherwise January would inherit unaged, unsold stock.
+    let simulationTargets = targets;
+    let simulationOrders = ordersBySizeMonth;
+    for (let calendarMonth = Math.min(today.year, year) * 12; calendarMonth < (year + 1) * 12; calendarMonth++) {
+      const simulationYear = Math.floor(calendarMonth / 12);
+      const month = calendarMonth % 12 + 1;
+      const isRequestedYear = simulationYear === year;
+      if (month === 1) {
+        [simulationTargets, simulationOrders] = isRequestedYear
+          ? [targets, ordersBySizeMonth]
+          : await Promise.all([
+            this.getProductionTargets(simulationYear),
+            this.getOrdersByMonthAndSize(simulationYear, businessDate),
+          ]);
+      }
+      const monthOffset = (simulationYear - today.year) * 12 + month - currentMonth;
+      const isPastMonth = monthOffset < 0;
+      const isCurrentMonth = monthOffset === 0;
+      const isFutureMonth = monthOffset > 0;
       
       if (isCurrentMonth) {
-        const daysInMonth = new Date(year, month, 0).getDate();
+        const daysInMonth = new Date(simulationYear, month, 0).getDate();
         const currentDay = today.day;
         const remainingDays = Math.max(0, daysInMonth - currentDay);
         if (remainingDays > 0) {
@@ -955,8 +972,8 @@ export class ProductionForecastService {
         stockBySaleSize = this.aggregateBySaleSize(basketInventoryMutable);
       }
       
-      const monthOrders = ordersBySizeMonth[month.toString()] || {};
-      const monthTargets = targets.filter(t => t.month === month);
+      const monthOrders = simulationOrders[month.toString()] || {};
+      const monthTargets = simulationTargets.filter(t => t.month === month);
       
       const saleSizesToProcess = new Set<string>();
       for (const saleSize of activeSaleSizes) {
@@ -1012,7 +1029,7 @@ export class ProductionForecastService {
           ? Math.pow(1 - mortalityRates.T3, 4) 
           : 1;
         
-        if (deficit > 0) {
+        if (deficit > 0 && isRequestedYear) {
           const survivalRate = cumulativeMortalityT1 * cumulativeMortalityT3;
           seminaT1Richiesta = Math.ceil(deficit / survivalRate);
           
@@ -1083,7 +1100,8 @@ export class ProductionForecastService {
 
         if (giacenzaInizioMese === 0 && budgetAnimals === 0 && ordersAnimals === 0 && isPastMonth) continue;
 
-        const stockResiduo = stockBySaleSize[saleSize] || 0;
+        if (!isRequestedYear) continue;
+        const stockResiduo = isPastMonth ? 0 : stockBySaleSize[saleSize] || 0;
 
         monthlyData.push({
           year,

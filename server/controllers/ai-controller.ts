@@ -1125,8 +1125,8 @@ export function registerAIRoutes(app: Express) {
       const totalOrdersAbsolute = Object.values(ordersAbsoluteBySize as Record<string, number>).reduce((sum, v) => sum + v, 0);
       
       const targets = await productionForecastService.getProductionTargets(targetYear);
-      const sgrRates = await productionForecastService.getSgrRates();
-      const inventoryByCategory = await productionForecastService.getTotalInventoryByCategory();
+      const sgrRates = forecast.sgrRates;
+      const inventoryByCategory = await productionForecastService.getTotalInventoryByCategory(referenceInstant);
       const ordersBySpecificSize = forecast.ordersBySpecificSize || [];
       
       const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',

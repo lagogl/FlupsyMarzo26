@@ -126,6 +126,130 @@ test("l'anno richiesto esplicitamente resta invariato", async () => {
   assert.deepEqual(years, [2024, 2024]);
 });
 
+function stockFixture(
+  orders: Record<number, Record<string, Record<string, number>>> = {},
+  targets: Record<number, any[]> = {},
+) {
+  const base = fixture();
+  const { subject, years, dates, growth } = base;
+  subject.activeSizeCandidates = [{
+    sizeId: 1, code: "TP-3000", minAnimalsPerKg: 1, maxAnimalsPerKg: 100000,
+  }];
+  subject.getProductionTargets = async (year: number) => {
+    years.push(year);
+    return targets[year] || [];
+  };
+  subject.getOrdersByMonthAndSize = async (year: number, date: string) => {
+    years.push(year);
+    dates.push(date);
+    return orders[year] || {};
+  };
+  const initial = [{ basketId: 1, animalsPerKg: 20000, animalCount: 10000 }];
+  subject.getBasketLevelInventory = async (date: string) => { dates.push(date); return initial; };
+  subject.aggregateBySaleSize = ProductionForecastService.prototype.aggregateBySaleSize;
+  subject.getSgrForAnimalsPerKg = () => 1;
+  subject.simulateMonthlyGrowth = (...args: any[]) => {
+    growth.push({ monthIndex: args[2], days: args[4] ?? 30 });
+    return (ProductionForecastService.prototype.simulateMonthlyGrowth as any).apply(subject, args);
+  };
+  return { ...base, initial };
+}
+
+test("ottobre 2026 → gennaio 2027: crescita, mortalità e domanda dei mesi intermedi sono continue", async () => {
+  const { service, subject, initial, growth, years, dates } = stockFixture(
+    { 2026: { "11": { "TP-3000": 1200 } }, 2027: { "1": { "TP-3000": 500 } } },
+    { 2026: [{ month: 12, sizeCategory: "T3", targetAnimals: 700 }] },
+  );
+  const rates = { T1: 0.05, T3: 0.03, T10: 0.02 };
+  const result = await service.calculateForecast(2027, rates, new Date("2026-10-15T10:00:00Z"));
+  let expected = initial;
+  for (const [monthIndex, days, demand] of [[9, 16, 0], [10, 30, 1200], [11, 30, 700], [0, 30, 0]]) {
+    expected = ProductionForecastService.prototype.simulateMonthlyGrowth.call(subject, expected, {}, monthIndex, rates, days);
+    if (demand) expected = service.removeAnimalsFromSaleSize(expected, "TP-3000", demand);
+  }
+  const january = result.monthlyData.find(row => row.month === 1)!;
+  assert.equal(january.year, 2027);
+  assert.equal(january.giacenzaInizioMese, expected[0].animalCount);
+  assert.equal(january.productionForecast, 500);
+  assert.equal(january.stockResiduo, expected[0].animalCount - 500);
+  assert.deepEqual(growth.slice(0, 4), [
+    { monthIndex: 9, days: 16 }, { monthIndex: 10, days: 30 },
+    { monthIndex: 11, days: 30 }, { monthIndex: 0, days: 30 },
+  ]);
+  assert.equal(growth.length, 15);
+  assert.deepEqual(years, [2027, 2027, 2026, 2026]);
+  assert.ok(dates.every(date => date === "2026-10-15"));
+  assert.ok(result.monthlyData.every(row => row.year === 2027));
+  assert.equal(result.totalOrdersYearAllocated, 500, "intermediate-year demand is not included in reported totals");
+  assert.equal(result.totalBudget, 0);
+  assert.deepEqual(result.seedingSchedule, []);
+  assert.deepEqual(initial, [{ basketId: 1, animalsPerKg: 20000, animalCount: 10000 }], "no input mutation");
+});
+
+test("anno corrente: mesi passati senza stock live, mese corrente parziale e mesi futuri interi", async () => {
+  const { service, growth } = stockFixture({
+    2026: { "9": { "TP-3000": 100 }, "10": { "TP-3000": 200 }, "11": { "TP-3000": 300 } },
+  });
+  const result = await service.calculateForecast(2026, undefined, new Date("2026-10-15T10:00:00Z"));
+  const september = result.monthlyData.find(row => row.month === 9)!;
+  assert.equal(september.ordersAnimals, 100);
+  assert.equal(september.productionForecast, 0);
+  assert.equal(september.giacenzaInizioMese, 0);
+  assert.equal(september.stockResiduo, 0);
+  assert.equal(result.monthlyData.find(row => row.month === 10)!.productionForecast, 200);
+  assert.equal(result.monthlyData.find(row => row.month === 11)!.productionForecast, 300);
+  assert.deepEqual(growth, [
+    { monthIndex: 9, days: 16 }, { monthIndex: 10, days: 30 }, { monthIndex: 11, days: 30 },
+  ]);
+});
+
+test("anno passato: nessuna crescita o giacenza ricostruita, ordini e budget restano nell'anno richiesto", async () => {
+  const { service, growth } = stockFixture(
+    { 2025: { "1": { "TP-3000": 100 }, "12": { "TP-3000": 200 } } },
+    { 2025: [{ month: 12, sizeCategory: "T3", targetAnimals: 300 }] },
+  );
+  const result = await service.calculateForecast(2025, undefined, new Date("2026-10-15T10:00:00Z"));
+  assert.equal(result.year, 2025);
+  assert.deepEqual(growth, []);
+  assert.equal(result.totalOrdersYearAllocated, 300);
+  assert.equal(result.totalBudget, 300);
+  assert.equal(result.totalProductionForecast, 0);
+  for (const row of result.monthlyData) {
+    assert.equal(row.year, 2025);
+    assert.equal(row.giacenzaInizioMese, 0);
+    assert.equal(row.stockResiduo, 0);
+  }
+  assert.ok(result.seedingSchedule.every(row => row.targetYear === 2025));
+});
+
+test("dicembre → gennaio: non si usa il giorno dello snapshot per gennaio dell'anno successivo", async () => {
+  for (const [instant, expected] of [
+    ["2026-12-30T23:30:00Z", [{ monthIndex: 0, days: 30 }]],
+    ["2026-12-31T23:30:00Z", [{ monthIndex: 0, days: 30 }]],
+    ["2026-12-15T10:00:00Z", [{ monthIndex: 11, days: 16 }, { monthIndex: 0, days: 30 }]],
+  ] as const) {
+    const { service, growth } = stockFixture();
+    const result = await service.calculateForecast(2027, undefined, new Date(instant));
+    assert.equal(result.monthlyData[0].month, 1);
+    assert.ok(result.monthlyData[0].giacenzaInizioMese > 0);
+    assert.deepEqual(growth.slice(0, expected.length), expected);
+  }
+});
+
+test("anno distante: si attraversano tutti i mesi e si consumano anche gli ordini dell'anno intermedio", async () => {
+  const { service, growth, years } = stockFixture({
+    2027: { "6": { "TP-3000": 10000 } },
+    2028: { "1": { "TP-3000": 100 } },
+  });
+  const result = await service.calculateForecast(2028, undefined, new Date("2026-10-15T10:00:00Z"));
+  assert.equal(growth.length, 27);
+  assert.deepEqual(growth.slice(3, 15).map(row => row.monthIndex), Array.from({ length: 12 }, (_, m) => m));
+  assert.deepEqual(years, [2028, 2028, 2026, 2026, 2027, 2027]);
+  assert.equal(result.monthlyData.find(row => row.month === 1)!.giacenzaInizioMese, 0);
+  assert.equal(result.totalOrdersYearAllocated, 100);
+  assert.ok(result.monthlyData.every(row => row.year === 2028));
+});
+
 test("il lookup SGR usa la stessa data civile esplicita del forecast", async () => {
   const original = db.execute;
   try {
@@ -147,6 +271,6 @@ test("API ed entrambi gli export riusano l'istante iniziale; UI e cache usano il
   const client = readFileSync(new URL("../../client/src/lib/queryClient.ts", import.meta.url), "utf8");
   assert.match(client, /invalidateQueries\(\{ queryKey: \["\/api\/ai\/production-forecast"\] \}\)/);
   const page = readFileSync(new URL("../../client/src/pages/AnalisiScostamenti.tsx", import.meta.url), "utf8");
-  assert.match(page, /currentYear = Number\(getEuropeRomeDateKey\(\)\.slice\(0, 4\)\)/);
-  assert.match(page, /currentMonth = Number\(getEuropeRomeDateKey\(\)\.slice\(5, 7\)\)/);
+  assert.match(page, /currentRomeMonthKey = getEuropeRomeDateKey\(\)\.slice\(0, 7\)/);
+  assert.match(page, /currentYear = Number\(currentRomeMonthKey\.slice\(0, 4\)\)/);
 });
