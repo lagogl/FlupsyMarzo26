@@ -10,9 +10,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { usePlanningLang, translateMonthLabel } from "@/lib/planningI18n";
+import { usePlanningLang, translateMonthLabel, type TKey } from "@/lib/planningI18n";
 import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndicators";
 import { aggregateHatcheryPresentation, buildHatcheryActualUpdate } from "@/lib/hatcheryPresentation";
+import { getCurrentOrderCoverage, type CurrentOrderCoverage } from "@/lib/current-order-coverage";
 
 interface SizeMonthProjection {
   month: number;
@@ -45,7 +46,13 @@ interface MonthlyContext {
   ordiniTarget: number;
   ordiniTotali: number;
   ordiniBySize: Record<string, number>;
-  ordiniEvasiBySize: Record<string, number>;
+  ordiniEvasiBySize?: Record<string, number>;
+  ordiniEvasiTotali?: number;
+  ordiniArretratiBySize?: Record<string, number>;
+  ordiniArretratiEvasiBySize?: Record<string, number>;
+  ordiniScopertiBySize?: Record<string, number>;
+  ordiniArretratiTotali?: number;
+  ordiniEvasiArretratiTotali?: number;
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
@@ -127,9 +134,91 @@ interface SpreadsheetRow {
   groupKey?: string;
   showForecastCoverage?: boolean;
   excelNumberFormat?: string;
+  isCoverageSummary?: boolean;
 }
 
 const MONTH_SHORT_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+function readOrderSizeCount(counts: Record<string, number> | undefined, size: string): number | undefined {
+  if (!counts || typeof counts !== "object" || Array.isArray(counts)) return undefined;
+  return Object.prototype.hasOwnProperty.call(counts, size) ? counts[size] : 0;
+}
+
+function getOrderRowCoverage(month: MonthlyContext, row: SpreadsheetRow): CurrentOrderCoverage | null {
+  if (row.groupKey !== "ordini") return null;
+  if (row.isExpandable) {
+    return getCurrentOrderCoverage(month.ordiniTotali, month.ordiniEvasiTotali);
+  }
+  if (row.isSubRow && row.subRowSize) {
+    if (
+      typeof month.ordiniEvasiTotali !== "number" ||
+      !Number.isFinite(month.ordiniEvasiTotali) ||
+      month.ordiniEvasiTotali < 0
+    ) {
+      return getCurrentOrderCoverage(readOrderSizeCount(month.ordiniBySize, row.subRowSize), undefined);
+    }
+    return getCurrentOrderCoverage(
+      readOrderSizeCount(month.ordiniBySize, row.subRowSize),
+      readOrderSizeCount(month.ordiniEvasiBySize, row.subRowSize),
+    );
+  }
+  return null;
+}
+
+function currentOrderCoverageText(coverage: CurrentOrderCoverage, t: (key: TKey) => string): string {
+  if (!coverage.available) return t("pc_order_coverage_recalculate");
+  return `${formatNumber(coverage.covered!)} ${t("pc_coverage_covered")} / ${formatNumber(coverage.requested!)} ${t("pc_coverage_requested")} / ${formatNumber(coverage.uncovered!)} ${t("pc_coverage_uncovered")}`;
+}
+
+function createOrderCoverageSummaryRow(
+  label: string,
+  row: SpreadsheetRow,
+  months: MonthlyContext[],
+  t: (key: TKey) => string,
+): SpreadsheetRow {
+  return {
+    rowKey: `order_coverage_${row.subRowSize || "total"}`,
+    label,
+    tooltip: t("pc_order_coverage_tip"),
+    color: "#ea580c",
+    bgClass: "bg-orange-50/50",
+    textClass: "text-gray-600",
+    values: months.map(month => {
+      const coverage = getOrderRowCoverage(month, row);
+      return coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate");
+    }),
+    isSubRow: true,
+    isCoverageSummary: true,
+  };
+}
+
+function CoverageMeter({ coverage, details, recalculate }: {
+  coverage: CurrentOrderCoverage;
+  details: string;
+  recalculate: string;
+}) {
+  if (!coverage.available) {
+    return <span className="text-[10px] font-semibold text-gray-400" title={recalculate}>—</span>;
+  }
+  if (coverage.percent === null) return null;
+
+  const pct = coverage.complete ? 100 : Math.floor(coverage.percent);
+  const barFill = coverage.complete ? "#10b981" : coverage.percent >= 50 ? "#f59e0b" : "#ef4444";
+  const textClass = coverage.complete
+    ? "text-emerald-600"
+    : coverage.percent >= 50
+      ? "text-amber-500"
+      : "text-red-500";
+  const icon = coverage.complete ? "✓" : coverage.percent >= 50 ? "~" : "✗";
+  return (
+    <div className="flex w-full items-center gap-1" title={details}>
+      <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-gray-200">
+        <div className="h-full rounded-full transition-all" style={{ width: `${coverage.percent}%`, backgroundColor: barFill }} />
+      </div>
+      <span className={`min-w-[30px] text-right text-[10px] font-bold tabular-nums leading-none ${textClass}`}>{icon} {pct}%</span>
+    </div>
+  );
+}
 
 function ExcelTable({ data, mc, toast, allHatcheryData }: {
   data: GrowthProjectionResult;
@@ -429,7 +518,13 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     if (resultKey === "giac_res") return inCurrentMonth(["giac_schiu", "evadibili"]);
     if (resultKey === "giac_schiu") return inCurrentMonth(["giac_inv"]);
     if (resultKey === "ordini") {
-      return inCurrentMonth(visibleRows.filter(row => row.isSubRow && row.groupKey === "ordini").map(rowKey));
+      return [
+        ...inCurrentMonth(visibleRows.filter(row => row.isSubRow && row.groupKey === "ordini").map(rowKey)),
+        ...inCurrentMonth(["giac_schiu"]),
+      ];
+    }
+    if (resultKey.startsWith("ordini_size_")) {
+      return inCurrentMonth(["ordini", "giac_schiu"]);
     }
     return [];
   };
@@ -478,6 +573,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     const excelRows: SpreadsheetRow[] = [];
     for (const row of rows) {
       excelRows.push(row);
+      if (row.isExpandable && row.groupKey === "ordini") {
+        excelRows.push(createOrderCoverageSummaryRow(t("pc_order_coverage_copy_total"), row, mc, t));
+      } else if (row.isSubRow && row.groupKey === "ordini" && row.subRowSize) {
+        excelRows.push(createOrderCoverageSummaryRow(`${t("pc_order_coverage_copy_size")} ${row.subRowSize}`, row, mc, t));
+      }
       if (row.rowKey === "forecast_evadibile") {
         excelRows.push({
           rowKey: "forecast_evadibile_coverage",
@@ -516,17 +616,21 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
             subRowSize: sz,
             groupKey: "ordini",
           });
+          excelRows.push(createOrderCoverageSummaryRow(
+            `${t("pc_order_coverage_copy_size")} ${sz}`,
+            { isSubRow: true, subRowSize: sz, groupKey: "ordini" } as SpreadsheetRow,
+            mc,
+            t,
+          ));
         }
       }
     }
 
     excelRows.forEach((row, rowIdx) => {
-      const rowData = [row.label, ...row.values.map(v => typeof v === "number" ? v : 0)];
+      const rowData = [row.label, ...row.values.map(v => typeof v === "number" ? v : String(v))];
       const excelRow = ws.addRow(rowData);
       const stripeBg = rowIdx % 2 === 0 ? white : lightGray;
       const isSubRowExcel = !!row.isSubRow;
-      const isTotaleOrdini = !!(row.isExpandable && row.groupKey === "ordini");
-
       excelRow.eachCell((cell, colNumber) => {
         cell.border = thinBorder;
         if (colNumber === 1) {
@@ -549,36 +653,24 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
             cell.font = { bold: true, size: 10, color: { argb: "FF16A34A" } };
           } else if (isSubRowExcel) {
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
-            cell.font = { size: 9, color: { argb: "FF666666" } };
+            cell.font = { size: 9, color: { argb: row.isCoverageSummary ? "FF9A3412" : "FF666666" }, bold: !!row.isCoverageSummary };
           } else {
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: stripeBg } };
             cell.font = { size: 10, color: { argb: "FF333333" }, bold: !!row.isBold };
           }
 
           // Coverage coloring for ordini rows (sub-rows per taglia + riga Totale)
-          let coveragePct: number | null = null;
-          if (isSubRowExcel && row.subRowSize) {
-            const month = mc[colIdx];
-            const ordered = month?.ordiniBySize?.[row.subRowSize] || 0;
-            if (ordered > 0) {
-              const evasi = month?.ordiniEvasiBySize?.[row.subRowSize] || 0;
-              coveragePct = Math.min(100, Math.round(evasi / ordered * 100));
-            }
-          } else if (isTotaleOrdini) {
-            const month = mc[colIdx];
-            const ordered = month?.ordiniTotali || 0;
-            if (ordered > 0) {
-              const evasi = Object.values(month?.ordiniEvasiBySize || {}).reduce((a, b) => a + b, 0);
-              coveragePct = Math.min(100, Math.round(evasi / ordered * 100));
-            }
-          }
-          if (coveragePct !== null) {
-            const fillArgb = coveragePct >= 100 ? "FFD1FAE5" : coveragePct >= 50 ? "FFFEF3C7" : "FFFEE2E2";
-            const fontArgb = coveragePct >= 100 ? "FF065F46" : coveragePct >= 50 ? "FF92400E" : "FF991B1B";
+          const coverage = mc[colIdx] ? getOrderRowCoverage(mc[colIdx], row) : null;
+          if (coverage && !row.isCoverageSummary && coverage.available && coverage.percent !== null) {
+            const fillArgb = coverage.complete ? "FFD1FAE5" : coverage.percent >= 50 ? "FFFEF3C7" : "FFFEE2E2";
+            const fontArgb = coverage.complete ? "FF065F46" : coverage.percent >= 50 ? "FF92400E" : "FF991B1B";
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } };
             cell.font = { size: isSubRowExcel ? 9 : 10, color: { argb: fontArgb }, bold: true };
-            const icon = coveragePct >= 100 ? "✓" : coveragePct >= 50 ? "~" : "✗";
-            cell.note = `${icon} Copertura: ${coveragePct}%`;
+            const shownPct = coverage.complete ? 100 : Math.floor(coverage.percent);
+            const icon = coverage.complete ? "✓" : coverage.percent >= 50 ? "~" : "✗";
+            cell.note = `${icon} ${currentOrderCoverageText(coverage, t)} · ${shownPct}%`;
+          } else if (coverage && !coverage.available) {
+            cell.note = t("pc_order_coverage_recalculate");
           }
         }
       });
@@ -819,13 +911,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: t("pc_excel"), description: t("pc_excel_filename_pre") + " .xlsx" });
-  }, [mc, rows, data.targetSize, groupsAbove, groupsBelow, allHatcheryData]);
+  }, [mc, rows, data.targetSize, groupsAbove, groupsBelow, allHatcheryData, t]);
 
   const handleCopyTable = useCallback(() => {
     const headers = [t("pc_col_indicatore"), ...mc.map(m => m.monthLabel)].join("\t");
     const copyRows: SpreadsheetRow[] = [];
     for (const row of rows) {
       copyRows.push(row);
+      if (row.isExpandable && row.groupKey === "ordini") {
+        copyRows.push(createOrderCoverageSummaryRow(t("pc_order_coverage_copy_total"), row, mc, t));
+      } else if (row.isSubRow && row.groupKey === "ordini" && row.subRowSize) {
+        copyRows.push(createOrderCoverageSummaryRow(`${t("pc_order_coverage_copy_size")} ${row.subRowSize}`, row, mc, t));
+      }
       if (row.rowKey === "forecast_evadibile") {
         copyRows.push({
           rowKey: "forecast_evadibile_coverage",
@@ -855,6 +952,12 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
               subRowSize: sz,
               groupKey: "ordini",
             });
+            copyRows.push(createOrderCoverageSummaryRow(
+              `${t("pc_order_coverage_copy_size")} ${sz}`,
+              { isSubRow: true, subRowSize: sz, groupKey: "ordini" } as SpreadsheetRow,
+              mc,
+              t,
+            ));
           }
         }
       }
@@ -963,8 +1066,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
 
     if (row.isSubRow && row.subRowSize) {
       const qty = m.ordiniBySize?.[row.subRowSize] || 0;
+      const coverage = getOrderRowCoverage(m, row);
+      const coverageDetails = coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate");
       return qty > 0
-        ? `= ${t("pc_cf_sub_has_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}: ${fn(qty)} ${t("pc_cf_animali")}`
+        ? `= ${t("pc_cf_sub_has_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}: ${fn(qty)} ${t("pc_cf_animali")}. ${t("pc_order_coverage_label")}: ${coverageDetails}.`
         : `= ${t("pc_cf_sub_no_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}`;
     }
 
@@ -988,12 +1093,14 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     }
     if (rk === "ordini") {
       const tot = m.ordiniTotali || 0;
+      const coverage = getOrderRowCoverage(m, row);
+      const coverageDetails = coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate");
       if (tot > 0) {
         const breakdown = allOrderSizes
           .filter(sz => (m.ordiniBySize?.[sz] || 0) > 0)
           .map(sz => `${sz}: ${fn(m.ordiniBySize[sz])}`)
           .join(', ');
-        return `${t("pc_cf_ordini_a_pre")} ${m.monthName}: ${fn(tot)} ${t("pc_cf_ordini_a_suf")} (${breakdown})`;
+        return `${t("pc_cf_ordini_a_pre")} ${m.monthName}: ${fn(tot)} ${t("pc_cf_ordini_a_suf")} (${breakdown}). ${t("pc_order_coverage_label")}: ${coverageDetails}.`;
       }
       return `${t("pc_cf_ordini_b")} ${m.monthName}`;
     }
@@ -1334,11 +1441,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                         const displayVal = typeof val === 'string' ? val : numVal === 0 ? '-' : formatNumber(numVal!);
                         const cellBg = isSelected ? '' : isTraceResult ? 'bg-amber-100' : isTraceSource ? 'bg-cyan-50' : warn ? 'bg-red-50' : success ? 'bg-green-50' : info ? 'bg-amber-50' : '';
                         const textColor = isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : success ? 'text-green-700 font-bold' : info ? 'text-amber-700 font-semibold' : isNeg ? 'text-red-600' : row.textClass;
+                        const orderCoverage = getOrderRowCoverage(month, row);
+                        const orderCoverageDetails = orderCoverage
+                          ? `${t("pc_order_coverage_tip")} ${currentOrderCoverageText(orderCoverage, t)}`
+                          : undefined;
 
                         return (
                           <td
                             key={rowKey(row)}
                             className={`cursor-cell border-b border-r border-gray-200 p-0 transition-all ${cellBg} ${isTraceResult ? 'relative z-10 ring-2 ring-amber-500 ring-inset' : isTraceSource ? 'ring-1 ring-cyan-400 ring-inset' : ''} ${isSelected ? 'relative z-10 bg-blue-50 ring-2 ring-blue-500 ring-inset' : ''}`}
+                            title={orderCoverageDetails}
                             onClick={(e) => handleCellClick(monthIdx, rowIdx, e)}
                             onMouseEnter={() => calculationTraceEnabled && setHoveredCell({ rowKey: rowKey(row), col: monthIdx })}
                             onMouseLeave={() => calculationTraceEnabled && setHoveredCell(current => current?.rowKey === rowKey(row) && current.col === monthIdx ? null : current)}
@@ -1364,12 +1476,19 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                                 return <div className="flex w-full items-center gap-1"><div className="h-[3px] flex-1 overflow-hidden rounded-full bg-gray-200"><div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barFill }} /></div><span className={`min-w-[30px] text-right text-[10px] font-bold leading-none ${textPct}`}>{pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗'} {pct}%</span></div>;
                               })()}
                               {row.isSubRow && row.subRowSize && (month.ordiniBySize?.[row.subRowSize] || 0) > 0 && (() => {
-                                const ordered = month.ordiniBySize[row.subRowSize] || 0;
-                                const pct = Math.min(100, Math.round((month.ordiniEvasiBySize?.[row.subRowSize] || 0) / ordered * 100));
-                                const barFill = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
-                                const textPct = pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
-                                return <div className="flex w-full items-center gap-1"><div className="h-[3px] flex-1 overflow-hidden rounded-full bg-gray-200"><div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barFill }} /></div><span className={`min-w-[30px] text-right text-[10px] font-bold leading-none ${textPct}`}>{pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗'} {pct}%</span></div>;
+                                return orderCoverage && <CoverageMeter
+                                  coverage={orderCoverage}
+                                  details={orderCoverageDetails || ""}
+                                  recalculate={t("pc_order_coverage_recalculate")}
+                                />;
                               })()}
+                              {row.isExpandable && row.groupKey === 'ordini' && (month.ordiniTotali || 0) > 0 && orderCoverage && (
+                                <CoverageMeter
+                                  coverage={orderCoverage}
+                                  details={orderCoverageDetails || ""}
+                                  recalculate={t("pc_order_coverage_recalculate")}
+                                />
+                              )}
                             </div>
                           </td>
                         );
@@ -1487,11 +1606,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
 
                     const cellBg = isSelected ? '' : isTraceResult ? 'bg-amber-100' : isTraceSource ? 'bg-cyan-50' : warn ? 'bg-red-50' : success ? 'bg-green-50' : info ? 'bg-amber-50' : '';
                     const textColor = isEmpty ? 'text-gray-300' : warn ? 'text-red-600 font-bold' : success ? 'text-green-700 font-bold' : info ? 'text-amber-700 font-semibold' : isNeg ? 'text-red-600' : row.textClass;
+                    const orderCoverage = mc[colIdx] ? getOrderRowCoverage(mc[colIdx], row) : null;
+                    const orderCoverageDetails = orderCoverage
+                      ? `${t("pc_order_coverage_tip")} ${currentOrderCoverageText(orderCoverage, t)}`
+                      : undefined;
 
                     return (
                       <td
                         key={colIdx}
                         className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isTraceResult ? 'ring-2 ring-amber-500 ring-inset z-10 relative' : isTraceSource ? 'ring-1 ring-cyan-400 ring-inset' : ''} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
+                        title={orderCoverageDetails}
                         onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
                         onMouseEnter={() => calculationTraceEnabled && setHoveredCell({ rowKey: rowKey(row), col: colIdx })}
                         onMouseLeave={() => calculationTraceEnabled && setHoveredCell(current => current?.rowKey === rowKey(row) && current.col === colIdx ? null : current)}
@@ -1540,37 +1664,21 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                             const m = mc[colIdx];
                             const ordered = m?.ordiniBySize?.[row.subRowSize] || 0;
                             if (ordered === 0) return null;
-                            const evasi = m?.ordiniEvasiBySize?.[row.subRowSize] || 0;
-                            const pct = Math.min(100, Math.round(evasi / ordered * 100));
-                            const barFill = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
-                            const textPct = pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
-                            const icon = pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗';
-                            return (
-                              <div className="w-full flex items-center gap-1">
-                                <div className="flex-1 h-[3px] bg-gray-200 rounded-full overflow-hidden">
-                                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barFill }} />
-                                </div>
-                                <span className={`text-[10px] font-bold tabular-nums leading-none ${textPct}`} style={{ minWidth: 30, textAlign: 'right' }}>{icon} {pct}%</span>
-                              </div>
-                            );
+                            return orderCoverage && <CoverageMeter
+                              coverage={orderCoverage}
+                              details={orderCoverageDetails || ""}
+                              recalculate={t("pc_order_coverage_recalculate")}
+                            />;
                           })()}
                           {row.isExpandable && row.groupKey === 'ordini' && (() => {
                             const m = mc[colIdx];
                             const ordered = m?.ordiniTotali || 0;
                             if (ordered === 0) return null;
-                            const evasi = Object.values(m?.ordiniEvasiBySize || {}).reduce((a, b) => a + b, 0);
-                            const pct = Math.min(100, Math.round(evasi / ordered * 100));
-                            const barFill = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
-                            const textPct = pct >= 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
-                            const icon = pct >= 100 ? '✓' : pct >= 50 ? '~' : '✗';
-                            return (
-                              <div className="w-full flex items-center gap-1">
-                                <div className="flex-1 h-[3px] bg-gray-200 rounded-full overflow-hidden">
-                                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barFill }} />
-                                </div>
-                                <span className={`text-[10px] font-bold tabular-nums leading-none ${textPct}`} style={{ minWidth: 30, textAlign: 'right' }}>{icon} {pct}%</span>
-                              </div>
-                            );
+                            return orderCoverage && <CoverageMeter
+                              coverage={orderCoverage}
+                              details={orderCoverageDetails || ""}
+                              recalculate={t("pc_order_coverage_recalculate")}
+                            />;
                           })()}
                         </div>
                       </td>

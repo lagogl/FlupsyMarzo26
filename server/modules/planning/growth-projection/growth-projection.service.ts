@@ -23,6 +23,7 @@ import {
   simulateArrivalUntilTarget,
   simulateBasketLedgerForMonth,
 } from "./growth-projection-simulation";
+import { allocateOrdersAgainstBaskets } from "./order-allocation";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -63,6 +64,12 @@ interface MonthlyContext {
   ordiniTotali: number;
   ordiniBySize: Record<string, number>;
   ordiniEvasiBySize: Record<string, number>;
+  ordiniArretratiBySize: Record<string, number>;
+  ordiniArretratiEvasiBySize: Record<string, number>;
+  ordiniScopertiBySize: Record<string, number>;
+  ordiniEvasiTotali: number;
+  ordiniArretratiTotali: number;
+  ordiniEvasiArretratiTotali: number;
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
@@ -294,7 +301,7 @@ export class GrowthProjectionService {
     const customMonthlyRate = useCustomMortality ? mortalityPercent! / 100 : 0;
 
     const monthlyContext: MonthlyContext[] = [];
-    let carryOver = 0;
+    let orderBacklogBySize: Record<string, number> = {};
     let forecastCommittedOrSeededLedger = 0;
     const crossesYear = yearsNeeded.length > 1;
 
@@ -371,7 +378,10 @@ export class GrowthProjectionService {
       const ordiniBySize: Record<string, number> = {};
       let ordiniTotali = 0;
       for (const [sz, qty] of Object.entries(ordiniMonth)) {
-        if (typeof qty === 'number' && qty > 0) {
+        if (typeof qty !== "number" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty < 0) {
+          throw new Error(`Quantità ordine non valida per ${sz} in ${ymKey}: ${String(qty)}`);
+        }
+        if (qty > 0) {
           ordiniBySize[sz] = qty;
           ordiniTotali += qty;
         }
@@ -406,43 +416,44 @@ export class GrowthProjectionService {
         disponibilitaSandNursery,
       );
       const domandaEffettiva = ordiniTarget;
-      const ordiniArretrati = carryOver;
-
-      // Pre-compute snapshot of available animals per size threshold (before TP-target removal)
-      // Used for per-size fulfillment indicator on non-target sizes
-      const ordiniEvasiBySize: Record<string, number> = {};
-      for (const [sz, qty] of Object.entries(ordiniBySize)) {
-        if (!qty || sz === targetSize) continue;
-        const orderSize = simCtx.allSizes.find((size: any) => size.code === sz);
+      const ordiniArretratiBySize = { ...orderBacklogBySize };
+      const ordiniArretrati = ordiniArretratiBySize[targetSize] ?? 0;
+      const allocationSizeKeys = new Set([
+        ...Object.keys(ordiniBySize),
+        ...Object.keys(ordiniArretratiBySize),
+      ]);
+      const maxAnimalsPerKgBySize: Record<string, number | undefined> = {};
+      for (const sizeCode of allocationSizeKeys) {
+        const orderSize = simCtx.allSizes.find((size: any) => size.code === sizeCode);
         const orderRange = orderSize
           ? findRangeForSize(orderSize.id, monthDate, simCtx.sizeRangeVersions)
           : null;
-        if (!orderRange) continue;
-        const available = globalBaskets
-          .filter(b => (1000000 / b.weightMg) <= orderRange.maxAnimalsPerKg && b.animalCount > 0)
-          .reduce((s, b) => s + b.animalCount, 0);
-        ordiniEvasiBySize[sz] = Math.min(available, qty);
+        maxAnimalsPerKgBySize[sizeCode] = orderRange?.maxAnimalsPerKg;
       }
 
-      const totalToFulfill = domandaEffettiva + ordiniArretrati;
-      let ordiniEvasi = 0;
-      if (totalToFulfill > 0) {
-        let toFulfill = totalToFulfill;
-        const eligibleBaskets = globalBaskets
-          .filter(b => (1000000 / b.weightMg) <= datedTargetMaxApk && b.animalCount > 0)
-          .sort((a, b) => (1000000 / a.weightMg) - (1000000 / b.weightMg));
-
-        for (const eb of eligibleBaskets) {
-          if (toFulfill <= 0) break;
-          const take = Math.min(eb.animalCount, toFulfill);
-          eb.animalCount -= take;
-          toFulfill -= take;
-          ordiniEvasi += take;
-        }
+      const allocationBaskets = globalBaskets.map((basket) => ({
+        animalsPerKg: 1_000_000 / basket.weightMg,
+        animalCount: basket.animalCount,
+      }));
+      const orderAllocation = allocateOrdersAgainstBaskets(
+        allocationBaskets,
+        ordiniBySize,
+        ordiniArretratiBySize,
+        maxAnimalsPerKgBySize,
+      );
+      for (let basketIndex = 0; basketIndex < globalBaskets.length; basketIndex++) {
+        globalBaskets[basketIndex].animalCount = allocationBaskets[basketIndex].animalCount;
       }
-      // For target size use the accurate simulation result (includes carryOver logic)
-      if (ordiniBySize[targetSize]) ordiniEvasiBySize[targetSize] = ordiniEvasi;
-      carryOver = totalToFulfill - ordiniEvasi;
+      const ordiniEvasiBySize = orderAllocation.currentFulfilledBySize;
+      const ordiniArretratiEvasiBySize = orderAllocation.arrearsFulfilledBySize;
+      const ordiniScopertiBySize = orderAllocation.endingBacklogBySize;
+      const ordiniEvasiTotali = orderAllocation.currentFulfilledTotal;
+      const ordiniArretratiTotali = orderAllocation.arrearsStartTotal;
+      const ordiniEvasiArretratiTotali = orderAllocation.arrearsFulfilledTotal;
+      const ordiniEvasi =
+        (ordiniEvasiBySize[targetSize] ?? 0) +
+        (ordiniArretratiEvasiBySize[targetSize] ?? 0);
+      orderBacklogBySize = ordiniScopertiBySize;
 
       let giacenzaNetTarget = 0;
       for (const b of globalBaskets) {
@@ -464,6 +475,12 @@ export class GrowthProjectionService {
         ordiniTotali,
         ordiniBySize,
         ordiniEvasiBySize,
+        ordiniArretratiBySize,
+        ordiniArretratiEvasiBySize,
+        ordiniScopertiBySize,
+        ordiniEvasiTotali,
+        ordiniArretratiTotali,
+        ordiniEvasiArretratiTotali,
         ordiniArretrati,
         ordiniEvasi,
         budgetProduzione: budgetMese,

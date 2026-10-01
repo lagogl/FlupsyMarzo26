@@ -9,6 +9,12 @@ Gli scenari commerciali devono restare separati da Scostamenti e non registrare 
 
 **How to apply:** Riutilizzare soltanto fonti e kernel di crescita in lettura; verificare ogni vendita contro gli ordini futuri anche oltre l'orizzonte visibile, senza peggiorare gli scoperti preesistenti. Le disponibilità per mese/taglia sono alternative, non sommabili. La proposta automatica è una ricerca deterministica fattibile, non una promessa di ottimo economico; distinguere incassi da ricavi e dichiarare l'esclusione dei costi.
 
+Nel riepilogo di crescita, invece, la copertura degli ordini deve rappresentare un'assegnazione comune a tutte le taglie: ogni animale può soddisfare un solo ordine. La percentuale degli ordini correnti esclude le quantità assegnate agli arretrati; gli arretrati restano richieste prioritarie e riducono lo stock disponibile anche nei mesi successivi. Il percorso Forecast resta separato.
+
+**Why:** Il 2026-10-01 l'utente ha autorizzato la correzione della copertura complessiva degli ordini, mantenendo invariato il Forecast. Le disponibilità alternative per taglia venivano sommate come se fossero consegne simultaneamente possibili.
+
+**How to apply:** Distinguere sempre capacità alternativa commerciale e copertura degli ordini realmente allocata. Nella simulazione mensile servire prima gli arretrati, poi le richieste fisicamente più vincolanti, usando gli animali idonei più vicini alla taglia richiesta per preservare quelli più grandi. Una percentuale arrotondata non può attestare copertura completa quando resta uno scoperto.
+
 Nel perimetro commerciale considerare solo ordini il cui primo mese di consegna cade nel mese iniziale dello scenario o dopo. Ordini precedenti ancora aperti/parziali non vanno spostati nel primo mese né mostrati fra gli impegni.
 
 **Why:** L'utente ha chiarito che gli arretrati precedenti non devono gravare sullo scenario avviato dalla giacenza reale corrente.

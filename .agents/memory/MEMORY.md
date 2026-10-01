@@ -48,7 +48,7 @@
 - [Limiti richieste FIC](fic-api-rate-limits.md) — sincronizzazioni consecutive possono esaurire il limite; tutte le chiamate devono essere cadenzate e rispettare Retry-After sui 429.
 - [DDT arretrati FCloud/FIC](backdated-ddt-fcloud-fic.md) — un rifiuto FCloud per data può non bloccare FIC solo se il numero locale era già anteriore nella stessa sequenza.
 - [Semina manuale Sand Nursery](sand-nursery-manual-seeding.md) — il residuo T3 Forecast resta disponibile; solo la quantità mensile inserita manualmente viene rimossa.
-- [Scenari commerciali isolati](sales-scenarios-isolation.md) — pool unico nei nuovi scenari, senza cambiare Scostamenti; disponibilità alternative e ordini futuri protetti.
+- [Scenari commerciali isolati](sales-scenarios-isolation.md) — capacità commerciali alternative; copertura ordini da pool unico senza doppio conteggio, con Forecast separato.
 - [Costo proposta scenari](sales-scenario-proposal-cost.md) — le taglie attraversate nel mese moltiplicano i replay della proposta; confrontare sempre un caso reale e non allentare la tutela per ordine.
 - [Conflitti numerazione DDT esterna](ddt-external-number-conflicts.md) — la prenotazione locale non riserva il numero su FIC; ricontrollare prima di FCloud e non rinumerare se l'esito esterno è incerto.
 - [Residui schiuditoio commerciali](hatchery-residual-arrival-timing.md) — disponibilità datata negli scenari: il residuo entra al 15, o allo snapshot successivo, senza crescita pregressa.
