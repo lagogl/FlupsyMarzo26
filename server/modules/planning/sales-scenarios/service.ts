@@ -208,5 +208,17 @@ export async function simulate(input: ScenarioInput, automatic = false): Promise
   if (expected.totalOrderShortfall || prudent.totalOrderShortfall) worlds.warnings.push("Esistono ordini già scoperti nello scenario di base: le nuove vendite non ne peggiorano la copertura, ma non possono essere presentate come garanzia di consegna.");
   if (expected.unfulfilledSales || prudent.unfulfilledSales) worlds.warnings.push("Alcune vendite richieste sono state limitate per disponibilità o per proteggere gli ordini futuri.");
   const result: ScenarioResult = { expected, prudent, warnings: worlds.warnings, generatedAt: new Date().toISOString(), availabilityIsAlternative: true };
-  return automatic ? { ...result, proposedSales, method: "Euristica deterministica: incasso più anticipato, poi prezzo €/1.000 più alto. Protegge gli ordini in entrambi gli scenari; non garantisce un ottimo globale. Obiettivo riferito ai soli incassi aggiuntivi delle vendite simulate." } : result;
+  if (!automatic) return result;
+  const optimization = timings.optimization;
+  if (!optimization) throw new Error("La ricerca non ha restituito un riepilogo verificabile. Riprova la proposta.");
+  const verifiedReceipts = Math.min(expected.receiptsByDeadline, prudent.receiptsByDeadline);
+  if (Math.abs(verifiedReceipts - optimization.optimizedReceipts) > 0.01) {
+    throw new Error("Il piano ottimizzato non coincide con la simulazione finale. La proposta non è stata applicata.");
+  }
+  return {
+    ...result,
+    proposedSales,
+    optimization,
+    method: "Ricerca di piani alternativi fra taglie e mesi: confronta vendita anticipata, attesa della crescita e ripartizione delle quantità. Cerca di coprire l'obiettivo di incasso entro la scadenza in entrambe le ipotesi, mantenendo il piano manuale e la protezione degli ordini futuri. Restituisce il migliore piano verificato entro il budget di ricerca, senza garantire un ottimo globale.",
+  };
 }

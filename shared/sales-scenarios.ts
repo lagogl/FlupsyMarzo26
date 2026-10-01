@@ -72,9 +72,23 @@ export interface ScenarioResult {
   warnings: string[]; generatedAt: string;
   availabilityIsAlternative: true;
 }
+export interface ScenarioProposalOptimization {
+  /** Actual receipts by deadline, using the worse of the two worlds. */
+  baselineReceipts: number;
+  optimizedReceipts: number;
+  improvementEuro: number;
+  plansEvaluated: number;
+  candidatesEvaluated: number;
+  searchTimeMs: number;
+  timeLimited: boolean;
+  strategy: string;
+  baselineFeasible?: boolean;
+  baselineStatus?: "feasible" | "unsafe" | "not-completed" | "partial";
+}
 export interface ScenarioProposal extends ScenarioResult {
   proposedSales: ScenarioSale[];
   method: string;
+  optimization?: ScenarioProposalOptimization;
 }
 export interface ScenarioInputs {
   sizes: { id: number; code: string; name: string; pricePerThousand: number | null }[];

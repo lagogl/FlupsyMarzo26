@@ -4,6 +4,7 @@ import { useSalesScenarioActions, useSalesScenarioInputs, useSalesScenarios } fr
 import { ScenarioHelp } from "@/components/ScenariVenditaHelp";
 import { CommercialAvailabilityMatrix } from "@/components/CommercialAvailabilityMatrix";
 import { ScenarioCalculationProgress } from "@/components/ScenarioCalculationProgress";
+import { ScenarioProposalOptimizationSummary } from "@/components/ScenarioProposalOptimizationSummary";
 import { SALES_SCENARIO_SIZE_CODES } from "@shared/sales-scenario-size-policy";
 import { calculateScenarioComparison, comparisonErrorMessage } from "@/lib/sales-scenario-comparison";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -39,7 +40,7 @@ const help = {
   scenarioSelection: "Seleziona lo scenario salvato da includere nel confronto ricalcolato.",
   save: "Salva la bozza e i suoi input. Non ricalcola la proiezione e non crea ordini reali.",
   recalculate: "Ricalcola risultati e disponibilità con gli input correnti. Non salva la bozza e non crea ordini reali.",
-  generate: "Genera soltanto un'anteprima di vendite aggiuntive: non crea né modifica ordini reali.",
+  generate: "Confronta piani di vendita fra le taglie selezionate, anche attendendo la crescita, per avvicinarsi all'obiettivo di incasso entro la scadenza. Mantiene il piano manuale e protegge gli ordini in entrambe le ipotesi. Genera solo un'anteprima: non crea ordini reali.",
   apply: "Aggiunge le righe proposte alla bozza in modo additivo. Non crea ordini reali e non sostituisce le righe esistenti.",
 } as const;
 
@@ -151,7 +152,7 @@ export default function ScenariVendita() {
         {dirty && <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"><AlertTriangle className="h-4 w-4 shrink-0" /><b>Risultato non aggiornato.</b> Hai modificato gli input: ricalcola prima di usare la proiezione.</div>}
         {calculation?.kind === "simulation" && <ScenarioCalculationProgress kind="simulation" startedAt={calculation.startedAt} />}
         <div className="flex flex-wrap justify-between gap-2"><button onClick={deleteScenario} disabled={!activeId || remove.isPending} className="rounded-md px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-40"><Trash2 className="mr-1 inline h-4 w-4" />Elimina</button><ScenarioHelp text={help.recalculate}><button onClick={run} disabled={!canUse} className="rounded-md bg-teal-700 px-4 py-2 text-sm font-extrabold text-white hover:bg-teal-800 disabled:opacity-50">{simulate.isPending ? <Loader2 className="mr-1 inline h-4 w-4 motion-safe:animate-spin" /> : <RefreshCw className="mr-1 inline h-4 w-4" />}Ricalcola scenario</button></ScenarioHelp></div>
-        {proposal && !calculation && <ProposalPreview proposal={proposal} onApply={applyProposal} onClose={() => setProposal(null)} />}
+        {proposal && !calculation && <ProposalPreview proposal={proposal} cashGoal={draft.cashGoal} onApply={applyProposal} onClose={() => setProposal(null)} />}
         {result && <ResultPanel result={result} cashGoal={draft.cashGoal} />}
       </div>
     </div>}
@@ -191,7 +192,7 @@ function ProposalForm({ draft, sizes, months, update, onPropose, calculation }: 
 }) {
   const loading = calculation?.kind === "proposal";
   return <div className="rounded-xl border border-amber-200 bg-[#fffaf0] p-3">
-    <div className="flex justify-between gap-2"><div><h2 className="text-sm font-extrabold">Proposta automatica</h2><p className="text-xs text-slate-600">Crea solo righe in anteprima, mai ordini reali.</p></div><Sparkles className="h-5 w-5 text-amber-700" /></div>
+    <div className="flex justify-between gap-2"><div><h2 className="text-sm font-extrabold">Proposta ottimizzata</h2><p className="text-xs text-slate-600">Confronta taglie e mesi di vendita. Solo anteprima, mai ordini reali.</p></div><Sparkles className="h-5 w-5 text-amber-700" /></div>
     <div className="mt-3 grid grid-cols-2 gap-2">
       <Field label="Obiettivo entro" help={help.proposalDeadline}><MonthSelect help={help.proposalDeadline} value={draft.cashDeadline} months={months} onChange={v => update(x => ({ ...x, cashDeadline: v }))} /></Field>
       <Field label="Obiettivo cassa" help={help.cashGoal}><input type="number" min="0" value={draft.cashGoal || ""} onChange={e => update(x => ({ ...x, cashGoal: parse(e.target.value) }))} /></Field>
@@ -208,9 +209,25 @@ function ProposalForm({ draft, sizes, months, update, onPropose, calculation }: 
     <ScenarioHelp text={help.generate}><button onClick={onPropose} disabled={!!calculation || !draft.cashGoal} aria-busy={loading} className="mt-3 w-full rounded-md bg-amber-500 px-3 py-2 text-sm font-extrabold text-slate-900 hover:bg-amber-400 disabled:opacity-50">
       {loading ? <><Loader2 aria-hidden="true" className="mr-2 inline h-4 w-4 motion-safe:animate-spin" />Calcolo in corso…</> : "Genera proposta"}
     </button></ScenarioHelp>
+    <p className="mt-2 text-[11px] leading-relaxed text-amber-900">
+      La scadenza riguarda l'incasso, non obbliga a vendere in ogni mese. Le taglie condividono lo stesso stock.
+      Le righe già nella bozza restano fisse: per sostituire una vecchia proposta, rimuovi prima le sue righe.
+    </p>
   </div>;
 }
-function ProposalPreview({ proposal, onApply, onClose }: { proposal: ScenarioProposal; onApply: () => void; onClose: () => void }) { return <div className="rounded-xl border border-amber-300 bg-amber-50 p-3"><div className="flex justify-between gap-3"><div><h3 className="font-extrabold text-amber-950">Anteprima proposta</h3><p className="text-xs text-amber-900">{proposal.method}. Le righe saranno aggiunte solo alla bozza.</p></div><button onClick={onClose}><X className="h-4 w-4" /></button></div><div className="mono mt-2 max-h-28 overflow-auto text-xs text-amber-950">{proposal.proposedSales.map(s => <div key={s.id}>{monthLabel(s)} · {quantity.format(s.quantity)} animali · {euro.format(s.pricePerThousand ?? 0)} / 1.000</div>)}</div><ScenarioHelp text={help.apply}><button onClick={onApply} className="mt-3 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-bold text-white"><Check className="mr-1 inline h-4 w-4" />Applica alla bozza</button></ScenarioHelp></div>; }
+function ProposalPreview({ proposal, onApply, onClose, cashGoal }: { proposal: ScenarioProposal; onApply: () => void; onClose: () => void; cashGoal: number }) {
+  return <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+    <div className="flex justify-between gap-3"><div><h3 className="font-extrabold text-amber-950">Anteprima proposta ottimizzata</h3><p className="text-xs text-amber-900">{proposal.method} Le righe saranno aggiunte solo alla bozza.</p></div><button onClick={onClose} aria-label="Chiudi anteprima"><X className="h-4 w-4" /></button></div>
+    {proposal.optimization && <div className="mt-3"><ScenarioProposalOptimizationSummary optimization={proposal.optimization} cashGoal={cashGoal} /></div>}
+    {proposal.proposedSales.length === 0 && <p className="mt-3 text-sm text-amber-950">
+      {proposal.optimization?.timeLimited
+        ? "La ricerca si è fermata prima di trovare vendite aggiuntive verificabili. Riprova con meno mesi o taglie."
+        : "Nessuna vendita aggiuntiva proposta: il piano può già coprire l'obiettivo oppure non sono state trovate altre quantità vendibili con i vincoli impostati."}
+    </p>}
+    <div className="mono mt-2 max-h-48 overflow-auto text-xs text-amber-950">{proposal.proposedSales.map(s => <div key={s.id}>{monthLabel(s)} · {quantity.format(s.quantity)} animali · {euro.format(s.pricePerThousand ?? 0)} / 1.000</div>)}</div>
+    <ScenarioHelp text={help.apply}><button onClick={onApply} disabled={proposal.proposedSales.length === 0} className="mt-3 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-bold text-white disabled:opacity-50"><Check className="mr-1 inline h-4 w-4" />Applica alla bozza</button></ScenarioHelp>
+  </div>;
+}
 function ResultPanel({ result, cashGoal }: { result: ScenarioResult; cashGoal: number }) { const columns = [{ label: "Atteso", data: result.expected }, { label: "Prudente", data: result.prudent }]; return <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-3"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-extrabold">Esito ricalcolato</h2><p className="text-xs text-slate-600">Generato {new Date(result.generatedAt).toLocaleString("it-IT")}</p></div><span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-bold text-teal-900">Disponibilità alternativa</span></div><div className="grid gap-3 md:grid-cols-2">{columns.map(c => <div key={c.label} className="rounded-lg border border-slate-200 bg-white p-3"><h3 className="mb-2 text-sm font-extrabold">{c.label}</h3><div className="grid grid-cols-2 gap-2"><Metric label="Incassi" value={euro.format(c.data.totalReceipts)} /><Metric label="Entro obiettivo" value={euro.format(c.data.receiptsByDeadline)} /><Metric label="Stock finale" value={quantity.format(c.data.finalStock)} /><Metric label="Scoperto ordini" value={quantity.format(c.data.totalOrderShortfall)} caution={c.data.totalOrderShortfall > 0} /></div><p className={`mt-2 text-xs font-bold ${c.data.goalReached ? "text-teal-700" : "text-amber-700"}`}>{c.data.goalReached ? "Obiettivo cassa raggiunto" : `Obiettivo residuo: ${euro.format(Math.max(0, cashGoal - c.data.receiptsByDeadline))}`}</p></div>)}</div>{result.warnings.length > 0 && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm text-amber-950"><b><AlertTriangle className="mr-1 inline h-4 w-4" />Avvisi</b><ul className="mt-1 list-disc pl-5">{result.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}</div>; }
 function Comparison({ scenarios, selected, setSelected }: { scenarios: SavedScenario[]; selected: number[]; setSelected: (ids: number[]) => void }) {
   const actions = useSalesScenarioActions();

@@ -14,3 +14,9 @@ Gli indicatori durante l'elaborazione devono mostrare attività indeterminata e 
 **Why:** Il costo dei replay varia con gli input: il tempo trascorso non permette di dedurre quanto lavoro resta.
 
 **How to apply:** Legare lo stato di attesa alla richiesta effettiva e mantenerlo fino alla risposta o all'errore. Mostrare percentuali o fasi completate solo se il server fornisce avanzamento reale.
+
+I limiti di tempo della ricerca devono usare lo stesso orologio dei deadline effettivi e riservare tempo anche alle proiezioni finali, incluse le verifiche del piano iniziale.
+
+**Why:** Un confronto tra timestamp epoch e tempo monotono ha disattivato di fatto la riserva per il ricalcolo finale; il solo limite sulla ricerca successiva non copre la costruzione della proposta di partenza.
+
+**How to apply:** Confrontare deadline epoch con orario epoch; usare l'orologio monotono solo per durate. Se il tempo residuo è insufficiente, restituire soltanto un piano già validato e segnalare il limite, senza ridurre le protezioni.
