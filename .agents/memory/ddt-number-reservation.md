@@ -27,4 +27,10 @@ Eccezione approvata: uno storico locale segnato come inviato può conservare un 
 
 **Why:** correggere alla cieca lo storico cancellerebbe la tracciabilità; usare il suo massimo locale salterebbe numeri FIC che sono liberi. L'utente ha autorizzato l'eccezione tracciata, non un riuso generalizzato.
 
-**How to apply:** escludere dal progressivo solo record legacy con prova verificata, distinguere sempre numero locale storico e numero ufficiale FIC e non liberare mai una prenotazione con invio esterno iniziato o incerto.
+**How to apply:** lo storico già inviato non alimenta il massimo delle prenotazioni locali, anche se il suo numero differisce da FIC. Le prove legacy servono per le eccezioni ai controlli di unicità, non per ignorare prenotazioni pendenti. Distinguere sempre numero locale storico e numero ufficiale FIC e non liberare mai una prenotazione con invio esterno iniziato o incerto.
+
+Una lista FIC paginata deve essere completa prima di proporre un numero: una pagina vuota mentre i metadata dichiarano pagine documentali non può essere trattata come fine elenco.
+
+**Why:** usare un massimo parziale può proporre un numero già occupato; una prima pagina anomala vuota può addirittura far ripartire da 1.
+
+**How to apply:** fallire esplicitamente su pagine mancanti o limiti di paginazione raggiunti. Consentire il progressivo 1 soltanto quando l'anno è realmente privo di DDT e non esistono prenotazioni locali pendenti.

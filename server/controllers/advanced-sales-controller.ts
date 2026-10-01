@@ -91,7 +91,11 @@ import {
   getSizeRangeCandidates
 } from "../utils/size-determination";
 import { buildBillingEvidence, matchInvoiceToDeliveryNote, matchesInvoiceFingerprint, sanitizeFicInvoice, type BillingEvidence } from "../services/fic-billing-status";
-import { chooseDdtReservationNumber, getNextDdtNumber } from "../services/ddt-numbering-fic";
+import {
+  buildFicDdtListPath, chooseDdtReservationNumber, getNextDdtNumber,
+  isFicDdtInYear, parseFicDdtPage,
+} from "../services/ddt-numbering-fic";
+import { getPendingLocalDdtMaximum } from "../services/ddt-local-numbering";
 import { canRenumberDdt, matchesLockedLocalDraft } from "../services/ddt-renumber";
 import {
   DDT_NUMBER_CONFLICT_MESSAGE,
@@ -178,22 +182,15 @@ async function getNextAvailableDDTNumber(companyId?: number | null, year = new D
         'GET',
         String(ficCompanyId),
         accessToken,
-        `/issued_documents?type=delivery_note&year=${ficYear}&page=${page}&per_page=100`
+        buildFicDdtListPath(ficYear, page)
       );
-      const documents = ficResponse.data?.data ?? [];
-      if (ficNumbers) for (const document of documents) {
+      const result = parseFicDdtPage(ficResponse.data);
+      if (ficNumbers) for (const document of result.documents) {
+        if (!isFicDdtInYear(document, ficYear)) continue;
         const number = Number(document.number);
         if (Number.isSafeInteger(number) && number > 0) ficNumbers.add(number);
       }
-      return {
-        documents,
-        lastPage: Number(
-          ficResponse.data?.last_page
-          ?? ficResponse.data?.meta?.pagination?.last_page
-          ?? ficResponse.data?.pagination?.last_page
-          ?? 0
-        )
-      };
+      return result;
     },
     async getLocalDeliveryNotes(localCompanyId, localYear) {
       const localResult = await db.execute(sql`
@@ -1635,29 +1632,12 @@ async function ensureDdrNumber(
   return allocateDdrNumber(ddrNumberingStore(), saleId, requestedNumber, { issuanceAttempt });
 }
 
-async function buildSaleNumberingContext(companyId: number, year: number) {
+export async function buildSaleNumberingContext(companyId: number, year: number) {
   const ficNumbers = new Set<number>();
   const isDelta = ['13263', '1052922'].includes(String(companyId));
   const [ficProposal, localRows, legacyRows, ddrRows] = await Promise.all([
     getNextAvailableDDTNumber(companyId, year, ficNumbers),
-    db.execute(sql`
-      SELECT MAX(document.numero)::integer AS highest_number
-      FROM ${ddt} document
-      WHERE document.company_id = ${companyId}
-        AND EXTRACT(YEAR FROM document.data)::integer = ${year}
-        AND NOT EXISTS (
-          SELECT 1 FROM ddt_number_legacy_exceptions legacy
-          WHERE legacy.ddt_id = document.id
-            AND legacy.company_id = document.company_id
-            AND legacy.numbering_year = EXTRACT(YEAR FROM document.data)::integer
-            AND legacy.local_number = document.numero
-            AND legacy.fic_company_id = document.company_id
-            AND legacy.fic_document_id = document.fatture_in_cloud_id
-            AND legacy.fic_document_type = 'delivery_note'
-            AND legacy.local_number <> legacy.fic_number
-            AND document.ddt_stato = 'inviato'
-        )
-    `),
+    getPendingLocalDdtMaximum(query => db.execute(query), companyId, year),
     db.execute(sql`
       SELECT legacy.local_number AS number
       FROM ddt_number_legacy_exceptions legacy
@@ -1684,7 +1664,7 @@ async function buildSaleNumberingContext(companyId: number, year: number) {
     `) : Promise.resolve(null)
   ]);
   const highestFic = [...ficNumbers].reduce((highest, number) => Math.max(highest, number), 0) || null;
-  const highestLocal = (localRows as any).rows?.[0]?.highest_number ?? null;
+  const highestLocal = localRows;
   const ddrRow = (ddrRows as any)?.rows?.[0];
   return {
     companyId,
@@ -4478,25 +4458,9 @@ export async function generateDDT(req: Request, res: Response) {
       const numberingKey = `advanced-ddt:${companyId}:${numberingYear}`;
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
 
-      const localMaxResult = await tx.execute(sql`
-        SELECT COALESCE(MAX(document.numero), 0)::integer AS max_number
-        FROM ${ddt} document
-        WHERE document.company_id = ${companyId}
-          AND EXTRACT(YEAR FROM document.data)::integer = ${numberingYear}
-          AND NOT EXISTS (
-            SELECT 1 FROM ddt_number_legacy_exceptions legacy
-            WHERE legacy.ddt_id = document.id
-              AND legacy.company_id = document.company_id
-              AND legacy.numbering_year = EXTRACT(YEAR FROM document.data)::integer
-              AND legacy.local_number = document.numero
-              AND legacy.fic_company_id = document.company_id
-              AND legacy.fic_document_id = document.fatture_in_cloud_id
-              AND legacy.fic_document_type = 'delivery_note'
-              AND legacy.local_number <> legacy.fic_number
-              AND document.ddt_stato = 'inviato'
-          )
-      `);
-      const localMax = Number((localMaxResult as any).rows?.[0]?.max_number || 0);
+      const localMax = await getPendingLocalDdtMaximum(
+        query => tx.execute(query), companyId, numberingYear,
+      ) ?? 0;
       const taken = requestedNumber === undefined ? null : await tx.execute(sql`
           SELECT 1 FROM ${ddt} document
           WHERE document.company_id = ${companyId}

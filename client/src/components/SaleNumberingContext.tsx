@@ -135,9 +135,10 @@ export default function SaleNumberingContext({
               description={`Fatture in Cloud · ${year}`}
             />
             <NumberingMetric
-              label="Numero più alto locale valido per il progressivo"
+              label="Numero più alto prenotato localmente"
               value={data.ddt?.highestLocal}
-              description={`Archivio locale · ${year}`}
+              description={`Solo DDT locali o in invio · ${year}; esclusi quelli già inviati`}
+              emptyText="Nessuna prenotazione pendente"
             />
             <NumberingMetric
               label="Prossimo numero proposto"

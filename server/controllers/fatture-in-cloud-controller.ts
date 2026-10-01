@@ -50,6 +50,13 @@ import {
   getAssignedFicDdtNumber,
   getOfficialFicDdtNumber
 } from '../services/fic-ddt-response';
+import {
+  buildFicDdtListPath,
+  getNextDdtNumber,
+  isFicDdtInYear,
+  parseFicDdtPage
+} from '../services/ddt-numbering-fic';
+import { getPendingLocalDdtMaximum } from '../services/ddt-local-numbering';
 import { broadcastMessage } from '../websocket';
 
 const router = express.Router();
@@ -1655,10 +1662,7 @@ router.post('/ddt', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Cliente non trovato' });
     }
     
-    // Genera numero DDT leggendo SEMPRE l'ultimo DDT da Fatture in Cloud per l'azienda
-    // configurata. apiRequest usa l'azienda globale (fatture_in_cloud_company_id), la stessa
-    // a cui il documento viene poi inviato qui sotto, quindi lettura e invio sono coerenti.
-    // La numerazione FIC riparte ogni anno ed è progressiva per serie ('/ddt').
+    // Genera il numero considerando tutti i DDT dell'anno e le sole prenotazioni locali pendenti.
     const configuredCompanyId = Number(await getConfigValue('fatture_in_cloud_company_id'));
     if (!Number.isInteger(configuredCompanyId) || configuredCompanyId <= 0) {
       return res.status(409).json({
@@ -1667,17 +1671,31 @@ router.post('/ddt', async (req: Request, res: Response) => {
       });
     }
     const annoCorrenteDdt = new Date(report.dataConsegna).getFullYear();
-    const ultimiDdtFICResp = await apiRequest(
-      'GET',
-      `/c/${configuredCompanyId}/issued_documents?type=delivery_note&year=${annoCorrenteDdt}&per_page=100`
-    );
-    const documentiFIC: any[] = ultimiDdtFICResp.data?.data ?? [];
+    const documentiFIC: any[] = [];
+    const numeroCandidatoFIC = await getNextDdtNumber({
+      fetchFicPage: async (companyId, year, page) => {
+        const response = await apiRequest(
+          'GET',
+          `/c/${companyId}${buildFicDdtListPath(year, page)}`
+        );
+        const parsedPage = parseFicDdtPage(response.data);
+        documentiFIC.push(...parsedPage.documents.filter(document =>
+          isFicDdtInYear(document, year)
+        ));
+        return { documents: parsedPage.documents, lastPage: parsedPage.lastPage };
+      },
+      getLocalDeliveryNotes: async (companyId, year) => {
+        const pendingMax = await getPendingLocalDdtMaximum(
+          async query => await db.execute(query) as any,
+          companyId,
+          year
+        );
+        return pendingMax === null ? [] : [{ number: pendingMax, status: 'locale' }];
+      }
+    }, configuredCompanyId, annoCorrenteDdt);
     const serieDdt = '/ddt';
-    const documentiSerieDdt = documentiFIC.filter((d) => (d.numeration || '') === serieDdt);
-    const poolDdt = documentiSerieDdt.length > 0 ? documentiSerieDdt : documentiFIC;
-    const numeroMassimoFIC = poolDdt.reduce((max, d) => Math.max(max, Number(d.number) || 0), 0);
-    const numeroCandidatoFIC = numeroMassimoFIC + 1;
-    console.log(`✅ Prossimo numero DDT (da report) letto da FIC per azienda configurata (anno ${annoCorrenteDdt}, serie "${serieDdt}"): ${numeroCandidatoFIC} — ultimo su FIC: ${numeroMassimoFIC} (documenti analizzati: ${poolDdt.length})`);
+    const poolDdt = documentiFIC;
+    console.log(`✅ Prossimo numero DDT (da report) per azienda configurata (anno ${annoCorrenteDdt}): ${numeroCandidatoFIC} (documenti FIC analizzati: ${poolDdt.length})`);
 
     const rowValues = reportDettagli.map(dettaglio => ({
         descrizione: `${dettaglio.codiceSezione} | ${dettaglio.taglia} | ${dettaglio.pesoCesteKg}kg | ${dettaglio.animaliPerKg} pz/kg | ${dettaglio.percentualeScarto}% scarto | ${dettaglio.percentualeMortalita}% mortalità`,
@@ -1750,13 +1768,11 @@ router.post('/ddt', async (req: Request, res: Response) => {
       const numberingKey = `advanced-ddt:${configuredCompanyId}:${annoCorrenteDdt}`;
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${numberingKey}))`);
 
-      const localMaxResult = await tx.execute(sql`
-        SELECT COALESCE(MAX(numero), 0)::integer AS max_number
-        FROM ${ddt}
-        WHERE company_id = ${configuredCompanyId}
-          AND EXTRACT(YEAR FROM data)::integer = ${annoCorrenteDdt}
-      `);
-      const localMax = Number((localMaxResult as any).rows?.[0]?.max_number || 0);
+      const localMax = await getPendingLocalDdtMaximum(
+        async query => await tx.execute(query) as any,
+        configuredCompanyId,
+        annoCorrenteDdt
+      ) ?? 0;
       const numeroRiservato = Math.max(numeroCandidatoFIC, localMax + 1);
 
       const [createdDdt] = await tx.insert(ddt).values({
@@ -1872,13 +1888,27 @@ router.post('/ddt', async (req: Request, res: Response) => {
     
     // Un retry dopo timeout può trovare su FIC il documento già creato:
     // riconcilia per azienda/anno/serie/numero prima di tentare un nuovo POST.
-    const existingFicDocument = poolDdt.find((documento: any) =>
+    const existingFicCandidate = poolDdt.find((documento: any) =>
       Number(documento.number) === Number(nuovoDdt.numero)
       && documento.numeration === serieDdt
       && String(documento.date || '') === String(report.dataConsegna)
       && Boolean(cliente.fattureInCloudId)
-      && Number(documento.entity?.id) === Number(cliente.fattureInCloudId)
     );
+    let existingFicDocument: any = null;
+    if (existingFicCandidate && cliente.fattureInCloudId) {
+      const existingFicDetail = await withRetry(() => apiRequest(
+        'GET',
+        `/c/${configuredCompanyId}/issued_documents/${existingFicCandidate.id}?fields=id,number,date,numeration,entity`
+      ));
+      const candidateDetail = existingFicDetail.data?.data;
+      if (Number(candidateDetail?.id) === Number(existingFicCandidate.id)
+        && Number(candidateDetail?.number) === Number(nuovoDdt.numero)
+        && candidateDetail?.numeration === serieDdt
+        && String(candidateDetail?.date || '') === String(report.dataConsegna)
+        && Number(candidateDetail?.entity?.id) === Number(cliente.fattureInCloudId)) {
+        existingFicDocument = candidateDetail;
+      }
+    }
     let ficDocumentId = nuovoDdt.fattureInCloudId || existingFicDocument?.id || null;
     let assignedFicNumber = existingFicDocument
       ? getAssignedFicDdtNumber(existingFicDocument)
@@ -2634,55 +2664,45 @@ router.get('/next-ddt-numbers', async (req: Request, res: Response) => {
       try {
         // Ottieni anno corrente per filtrare DDT (la numerazione riparte ogni anno)
         const currentYear = new Date().getFullYear();
-        
-        // Costruisci URL con company ID specifico - FILTRATO PER ANNO CORRENTE
-        // CRITICO: il parametro year è necessario perché FIC riavvia la numerazione ogni anno
-        const url = `${FATTURE_IN_CLOUD_API_BASE}/c/${company.id}/issued_documents?type=delivery_note&year=${currentYear}&per_page=100`;
-        
-        const accessToken = await getConfigValue('fatture_in_cloud_access_token');
-        if (!accessToken) {
-          throw new Error('Token di accesso mancante');
-        }
-        
-        const response = await (await getAxios())({
-          method: 'GET',
-          url,
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
+        const ddtList: any[] = [];
+        const nextNumber = await getNextDdtNumber({
+          fetchFicPage: async (companyId, year, page) => {
+            const response = await apiRequest(
+              'GET',
+              `/c/${companyId}${buildFicDdtListPath(year, page)}`
+            );
+            const parsedPage = parseFicDdtPage(response.data);
+            ddtList.push(...parsedPage.documents.filter(document =>
+              isFicDdtInYear(document, year)
+            ));
+            return { documents: parsedPage.documents, lastPage: parsedPage.lastPage };
+          },
+          getLocalDeliveryNotes: async (companyId, year) => {
+            const pendingMax = await getPendingLocalDdtMaximum(
+              async query => await db.execute(query) as any,
+              companyId,
+              year
+            );
+            return pendingMax === null ? [] : [{ number: pendingMax, status: 'locale' }];
           }
-        });
-        
-        let ddtList = response.data.data || [];
-        
-        // Ordina manualmente per DATA decrescente (più recente prima), poi per NUMERO decrescente
-        ddtList = ddtList.sort((a: any, b: any) => {
-          const dateA = new Date(a.date || '1900-01-01');
-          const dateB = new Date(b.date || '1900-01-01');
-          const diffDate = dateB.getTime() - dateA.getTime();
-          if (diffDate !== 0) return diffDate;
-          // Se stessa data, ordina per numero decrescente
-          return (b.number || 0) - (a.number || 0);
-        });
-        
-        let nextNumber = 1;
-        let lastDdtInfo = null;
-        
-        if (ddtList.length > 0) {
-          const lastDdt = ddtList[0];
-          const lastNumber = lastDdt.number || 0;
-          nextNumber = lastNumber + 1;
-          
-          lastDdtInfo = {
-            number: lastDdt.number,
-            numeration: lastDdt.numeration,
-            date: lastDdt.date,
-            entity: lastDdt.entity?.name
-          };
-          
-          console.log(`✅ ${company.name}: Ultimo DDT n. ${lastNumber}, Prossimo: ${nextNumber}`);
+        }, company.id, currentYear);
+
+        const lastDdt = ddtList.reduce((highest, document) =>
+          !highest || Number(document.number) > Number(highest.number)
+            ? document
+            : highest,
+        null as any);
+        const lastDdtInfo = lastDdt ? {
+          number: Number(lastDdt.number),
+          numeration: lastDdt.numeration,
+          date: lastDdt.date,
+          entity: null
+        } : null;
+
+        if (lastDdtInfo) {
+          console.log(`✅ ${company.name}: Ultimo DDT n. ${lastDdtInfo.number}, Prossimo: ${nextNumber}`);
         } else {
-          console.log(`✅ ${company.name}: Nessun DDT trovato, Prossimo: 1`);
+          console.log(`✅ ${company.name}: Nessun DDT FIC trovato, Prossimo: ${nextNumber}`);
         }
         
         results.push({
@@ -2731,7 +2751,7 @@ router.get('/next-ddt-numbers', async (req: Request, res: Response) => {
     });
     
   } catch (error: any) {
-    console.error('❌ Errore generale nel recupero numeri DDT:', error);
+    console.error('❌ Errore generale nel recupero numeri DDT:', error?.message);
     res.status(500).json({ 
       success: false,
       error: error.message || "Errore nel recupero numeri DDT"

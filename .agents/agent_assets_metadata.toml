@@ -134,3 +134,17 @@ mtime_ms = 1790590021080
 storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:2865e74a-6bcf-4df0-8524-8edc0c7c2777/5ba2bd1e-e168-4221-962c-c7ec8cc9d6d5/d2024219-4826-418d-82b3-9a94a2a249d0"
 storage_version_token = "1790590358005758"
 content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "P7psCgtOjvP-SY7sB4AOA"
+uri = "file://reports/Validazione_Scostamenti_T3_Ott2026_Set2027_NuovaLogica.xlsx"
+type = "table"
+title = "Excel di verifica Scostamenti — nuova logica"
+description = "Ottobre 2026–settembre 2027, stessi dati della fotografia del 28 settembre. Residuo previsto−arrivato, TP-300 al 15, confronto vecchio/nuovo e verifica dei passi giornalieri. Il file precedente resta invariato."
+logical_id = "312bc98f-38d3-4803-903f-90539edb776f"
+content_hash = "sha256:576238ec42b434c10e10c5c223a9c46eab4af900fd09d26081dddbfd19e7446e"
+size = 4186103
+mtime_ms = 1790852189800
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:2865e74a-6bcf-4df0-8524-8edc0c7c2777/312bc98f-38d3-4803-903f-90539edb776f/c2318c88-4762-4120-be4c-5998091959dc"
+storage_version_token = "1790852716553417"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
