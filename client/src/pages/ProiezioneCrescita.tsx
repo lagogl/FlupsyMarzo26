@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { usePlanningLang, translateMonthLabel, type TKey } from "@/lib/planningI18n";
 import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndicators";
 import { aggregateHatcheryPresentation, buildHatcheryActualUpdate } from "@/lib/hatcheryPresentation";
+import AvailabilityOrdersSummary from "@/components/planning/AvailabilityOrdersSummary";
+import { orderedSizes, summarizeArrears } from "@/lib/availability-summary";
 import {
   getCurrentOrderCoverage,
   getDeliveryOrderCoverage,
@@ -59,6 +61,12 @@ interface MonthlyContext {
   ordiniScopertiBySize?: Record<string, number>;
   ordiniArretratiTotali?: number;
   ordiniEvasiArretratiTotali?: number;
+  disponibilitaBiologicaBySize?: Record<string, number>;
+  disponibilitaBiologicaTotale?: number;
+  assegnatiDaTargetOSuperiori?: number;
+  assegnatiDaTaglieInferiori?: number;
+  scopertoTarget?: number;
+  recuperoSchiuditoio?: "nessuno-scoperto" | "recuperabile" | "non-recuperabile" | "non-verificabile";
   deliveryCoverage?: DeliveryOrderCoverageData;
   ordiniArretrati: number;
   ordiniEvasi: number;
@@ -281,7 +289,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   toast: any;
   allHatcheryData: any[];
 }) {
-  const { t } = usePlanningLang();
+  const { t, lang } = usePlanningLang();
   const deliveryCoverageUnverifiable = getDeliveryCoverageUnverifiable(data.deliveryCoverageUnverifiable);
   const unknownMonthSummary = deliveryCoverageUnverifiable === null
     ? `${t("pc_delivery_coverage_unknown_month")}: ${t("pc_order_coverage_recalculate")}`
@@ -325,6 +333,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           sizeSet.add(sz);
         }
       }
+      for (const sz of Object.keys(m.ordiniArretratiBySize ?? {})) sizeSet.add(sz);
     }
     return [...sizeSet].sort((a, b) => {
       const numA = parseInt(a.replace(/\D/g, '')) || 0;
@@ -456,6 +465,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       isWarning: (colIdx: number) => (mc[colIdx]?.forecastNonCoperto || 0) > 0,
     },
     {
+      rowKey: "forecast_alternative_notice",
+      label: t("pc_forecast_alternative_notice"),
+      tooltip: t("pc_forecast_alternative_notice_tip"),
+      color: "#7b7050",
+      bgClass: "bg-amber-50/40",
+      textClass: "text-[#625b43]",
+      values: mc.map(() => t("pc_forecast_alternative_notice_value")),
+    },
+    {
       rowKey: "sand_nursery_available",
       label: t("pc_row_sand_nursery_available"),
       tooltip: t("pc_row_sand_nursery_available_tip"),
@@ -495,6 +513,49 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         return m ? (m.ordiniArretrati || 0) > 0 : false;
       },
     },
+    ...allOrderSizes.map(size => ({
+      rowKey: `arretrato_size_${size}`,
+      label: `${t("pc_row_arretrato_size")} ${size}`,
+      tooltip: t("pc_row_arretrato_size_tip"),
+      color: "#b91c1c",
+      bgClass: "bg-rose-50/40",
+      textClass: "text-gray-700",
+      isSubRow: true,
+      values: mc.map(m => {
+        const summary = summarizeArrears(m);
+        if (!summary.available) return t("pc_order_coverage_recalculate");
+        const row = summary.bySize.find(item => item.size === size);
+        return `${t("pc_arrears_entering")} ${formatNumber(row?.entering ?? 0)} · ${t("pc_arrears_recovered")} ${formatNumber(row?.recovered ?? 0)} · ${t("pc_arrears_open")} ${formatNumber(row?.open ?? 0)}`;
+      }),
+    })),
+    {
+      rowKey: "assegnati_target_plus",
+      label: t("pc_row_assigned_target_plus"),
+      tooltip: t("pc_row_assigned_target_plus_tip"),
+      color: "#17766a",
+      bgClass: "",
+      textClass: "text-gray-800",
+      values: mc.map(m => typeof m.assegnatiDaTargetOSuperiori === "number" ? m.assegnatiDaTargetOSuperiori : t("pc_order_coverage_recalculate")),
+    },
+    {
+      rowKey: "assegnati_below_target",
+      label: t("pc_row_assigned_below_target"),
+      tooltip: t("pc_row_assigned_origin_tip"),
+      color: "#17766a",
+      bgClass: "",
+      textClass: "text-gray-800",
+      values: mc.map(m => typeof m.assegnatiDaTaglieInferiori === "number" ? m.assegnatiDaTaglieInferiori : t("pc_order_coverage_recalculate")),
+    },
+    {
+      rowKey: "assegnati_all_sizes",
+      label: t("pc_row_assigned_all_sizes"),
+      tooltip: t("pc_row_assigned_origin_tip"),
+      color: "#17766a",
+      bgClass: "",
+      textClass: "text-gray-800",
+      values: mc.map(m => typeof m.ordiniEvasiTotali === "number" && typeof m.ordiniEvasiArretratiTotali === "number"
+        ? m.ordiniEvasiTotali + m.ordiniEvasiArretratiTotali : t("pc_order_coverage_recalculate")),
+    },
     {
       rowKey: "evadibili",
       label: `${t("pc_row_evadibili")} ${data.targetSize}`,
@@ -526,7 +587,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     },
     {
       rowKey: "schiu_nec",
-      label: `${t("pc_row_schiu_necessario")} ${data.targetSize}`,
+      label: `${t("pc_row_schiu_necessario")} · ${data.targetSize}`,
       tooltip: t("pc_row_schiu_necessario_tip"),
       color: "#be185d",
       bgClass: "",
@@ -539,13 +600,33 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         const arrivi = m.arriviSchiuditoio || 0;
         return necessario > 0 && arrivi < necessario;
       },
-      isSuccess: (colIdx: number) => {
-        const m = mc[colIdx];
-        if (!m) return false;
-        const necessario = m.schiuditoioNecessario || 0;
-        const arrivi = m.arriviSchiuditoio || 0;
-        return arrivi > necessario;
-      },
+    },
+    {
+      rowKey: "scoperto_target",
+      label: `${t("pc_row_scoperto_target")} · ${data.targetSize}`,
+      tooltip: t("pc_row_scoperto_target_tip"),
+      color: "#a94436",
+      bgClass: "",
+      textClass: "text-[#a94436]",
+      values: mc.map(m => typeof m.scopertoTarget === "number" ? m.scopertoTarget : t("pc_order_coverage_recalculate")),
+      isWarning: colIdx => typeof mc[colIdx]?.scopertoTarget === "number" && (mc[colIdx].scopertoTarget ?? 0) > 0,
+    },
+    {
+      rowKey: "recupero_schiuditoio",
+      label: `${t("pc_row_recupero_mensile")} · ${data.targetSize}`,
+      tooltip: t("pc_row_recupero_mensile_tip"),
+      color: "#a35c32",
+      bgClass: "",
+      textClass: "text-gray-700",
+      values: mc.map(m => {
+        switch (m.recuperoSchiuditoio) {
+          case "nessuno-scoperto": return t("pc_recovery_no_target_gap");
+          case "recuperabile": return t("pc_recovery_target_recoverable");
+          case "non-recuperabile": return t("pc_recovery_target_too_late");
+          case "non-verificabile": return t("pc_recovery_status_unverifiable");
+          default: return t("pc_order_coverage_recalculate");
+        }
+      }),
     },
     {
       rowKey: "arrivi_schiu",
@@ -562,6 +643,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       infoTooltip: t("pc_row_arrivi_schiu_late"),
     },
   ];
+  const biologicalExportRows: SpreadsheetRow[] = orderedSizes(...mc.map(m => m.disponibilitaBiologicaBySize)).map(size => ({
+    label: `${t("pc_row_biological_exclusive")} · ${size}`,
+    tooltip: t("pc_row_biological_exclusive_tip"),
+    color: "#35685f",
+    bgClass: "",
+    textClass: "text-gray-800",
+    values: mc.map(m => m.disponibilitaBiologicaBySize
+      ? m.disponibilitaBiologicaBySize[size] ?? 0 : t("pc_order_coverage_recalculate")),
+  }));
   const rowKey = (row: SpreadsheetRow) => row.rowKey || `ordini_size_${row.subRowSize || row.label}`;
   const visibleRows = rows.filter(row => !hiddenRows.has(rowKey(row)));
   const hiddenCount = rows.length - visibleRows.length;
@@ -593,8 +683,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     if (resultKey === "sand_nursery_available") return inCurrentMonth(["forecast_available_start", "forecast_evadibile"]);
     if (resultKey === "forecast_evadibile") return inCurrentMonth(["budget", "forecast_available_start"]);
     if (resultKey === "forecast_uncovered") return inCurrentMonth(["budget", "forecast_evadibile"]);
+    if (resultKey === "forecast_alternative_notice") return inCurrentMonth(["forecast_available_start", "budget", "ordini"]);
+    if (resultKey === "scoperto_target") return inCurrentMonth(["domanda", "arretrato", "evadibili"]);
+    if (resultKey === "recupero_schiuditoio") return inCurrentMonth(["scoperto_target", "schiu_nec", "arrivi_schiu"]);
     if (resultKey === "evadibili") return inCurrentMonth(["domanda", "arretrato", "giac_schiu"]);
-    if (resultKey === "giac_res") return inCurrentMonth(["giac_schiu", "evadibili"]);
+    if (resultKey === "giac_res") return inCurrentMonth(["giac_schiu", "assegnati_target_plus"]);
     if (resultKey === "giac_schiu") return inCurrentMonth(["giac_inv"]);
     if (resultKey === "ordini") {
       return [
@@ -707,6 +800,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       }
     }
 
+    excelRows.push(...biologicalExportRows);
     excelRows.forEach((row, rowIdx) => {
       const rowData = [row.label, ...row.values.map(v => typeof v === "number" ? v : String(v))];
       const excelRow = ws.addRow(rowData);
@@ -1051,6 +1145,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         }
       }
     }
+    copyRows.push(...biologicalExportRows);
     const dataRows = copyRows.map(row => [row.label, ...row.values.map(v => typeof v === 'number' ? v : String(v))].join("\t"));
     const text = [headers, ...dataRows, "", unknownMonthSummary].join("\n");
     navigator.clipboard.writeText(text).then(() => {
@@ -1162,6 +1257,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return `${t("pc_order_coverage_label")} ${row.coverageForSize || t("pc_order_coverage_total")}, ${m.monthName}: ${coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate")}. ${t("pc_order_coverage_tip")}`;
     }
 
+    if (row.rowKey?.startsWith("arretrato_size_")) {
+      const size = row.rowKey.slice("arretrato_size_".length);
+      const summary = summarizeArrears(m);
+      if (!summary.available) return t("pc_order_coverage_recalculate");
+      const arrears = summary.bySize.find(item => item.size === size);
+      const entering = arrears?.entering ?? 0;
+      const recovered = arrears?.recovered ?? 0;
+      return `${size}: ${t("pc_arrears_entering")} ${fn(entering)} − ${t("pc_arrears_recovered")} ${fn(recovered)} = ${t("pc_arrears_open")} ${fn(Math.max(0, entering - recovered))}. ${t("pc_row_arretrato_size_tip")}`;
+    }
+
     if (row.isSubRow && row.subRowSize) {
       const qty = m.ordiniBySize?.[row.subRowSize] || 0;
       const coverage = getOrderRowCoverage(m, row);
@@ -1224,6 +1329,26 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     if (rk === "forecast_uncovered") {
       return `${fn(m.budgetProduzione)} − ${fn(m.forecastEvadibileTarget)} = ${fn(m.forecastNonCoperto || 0)} ${t("pc_cf_forecast_uncovered_suf")}`;
     }
+    if (rk === "forecast_alternative_notice") return t("pc_forecast_alternative_notice_tip");
+    if (rk === "scoperto_target") {
+      return typeof m.scopertoTarget === "number"
+        ? `${t("pc_formula_monthly_target_shortfall")} ${data.targetSize}: ${fn(m.scopertoTarget)}. ${t("pc_recovery_month_end_note")}`
+        : t("pc_order_coverage_recalculate");
+    }
+    if (rk === "recupero_schiuditoio") {
+      const status = m.recuperoSchiuditoio;
+      if (!status) return t("pc_order_coverage_recalculate");
+      const statusText = status === "nessuno-scoperto" ? t("pc_recovery_no_target_gap")
+        : status === "recuperabile" ? t("pc_recovery_target_recoverable")
+        : status === "non-recuperabile" ? t("pc_recovery_target_too_late")
+        : t("pc_recovery_status_unverifiable");
+      return `${statusText} ${data.targetSize}. ${t("pc_recovery_month_end_note")}`;
+    }
+    if (rk === "assegnati_target_plus") {
+      return typeof m.assegnatiDaTargetOSuperiori === "number"
+        ? `${fn(m.assegnatiDaTargetOSuperiori)} ${t("pc_row_assigned_target_plus_tip")}`
+        : t("pc_order_coverage_recalculate");
+    }
     if (rk === "sand_nursery_available") {
       const residuo = Math.max(0, (m.disponibilitaForecastInizioMese || 0) - m.forecastEvadibileTarget);
       return `${t("pc_cf_sand_nursery_available_pre")} min(${fn(m.seminaSandNurseryPianificata || 0)}, ${fn(residuo)}) = ${fn(m.disponibilitaSandNursery || 0)} ${t("pc_cf_sand_nursery_available_suf")}`;
@@ -1254,21 +1379,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return `${t("pc_cf_evadibili_d")} ${m.monthName}`;
     }
     if (rk === "giac_res") {
-      return `${t("pc_cf_giac_res_pre")}${fn(m.giacenzaLordaConSchiuditoio)}${t("pc_cf_giac_res_mid")}${fn(m.ordiniEvasi)}${t("pc_cf_giac_res_suf")} ${fn(m.giacenzaNetTarget)}`;
+      const assigned = m.assegnatiDaTargetOSuperiori;
+      return typeof assigned === "number"
+        ? `${fn(m.giacenzaLordaConSchiuditoio)} − ${fn(assigned)} (${t("pc_cf_giac_res_allocated")}) = ${fn(m.giacenzaNetTarget)}`
+        : `${fn(m.giacenzaLordaConSchiuditoio)} − ${t("pc_order_coverage_recalculate")} = ${fn(m.giacenzaNetTarget)}`;
     }
     if (rk === "schiu_nec") {
       const necessario = m.schiuditoioNecessario || 0;
       const arrivi = m.arriviSchiuditoio || 0;
-      if (arrivi > necessario) {
-        const surplus = arrivi - necessario;
-        return necessario > 0
-          ? `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_a_mid")} ${fn(necessario)} ${t("pc_cf_schiu_surplus_a_suf")}${fn(surplus)} ${t("pc_cf_schiu_surplus_a_end")}`
-          : `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_mid")} ${m.monthName} → +${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_end")}`;
-      }
       if (necessario > 0) {
-        return `${t("pc_cf_schiu_nec_pre")} ${m.monthName} ${t("pc_cf_schiu_nec_mid")} ${data.targetSize} ${t("pc_cf_schiu_nec_suf")} ${fn(necessario)} ${t("pc_cf_schiu_nec_end")}${arrivi > 0 ? ` ${t("pc_cf_schiu_nec_planned")} ${fn(arrivi)}, ${t("pc_cf_schiu_nec_missing")} ${fn(necessario - arrivi)}` : ''}`;
+        return `${t("pc_hatchery_arrival_recommendation")} ${m.monthName}: ${fn(necessario)} ${t("pc_cf_schiu_nec_end")}. ${t("pc_hatchery_planned_in_month")} ${fn(arrivi)}. ${t("pc_recovery_status_is_separate")}`;
       }
-      return `${t("pc_cf_schiu_nec_none")} ${m.monthName}`;
+      return `${t("pc_hatchery_no_arrival_recommendation")} ${m.monthName}. ${t("pc_hatchery_zero_need_not_proof")}`;
     }
     if (rk === "arrivi_schiu") {
       return m.arriviSchiuditoio > 0
@@ -2210,6 +2332,8 @@ export default function ProiezioneCrescita() {
         </CardContent>
       </Card>
 
+      <AvailabilityOrdersSummary months={mc} targetSize={data.targetSize} />
+
       <ExcelTable
         data={data}
         mc={mc}
@@ -2645,6 +2769,7 @@ export default function ProiezioneCrescita() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <p className="mb-3 text-xs text-muted-foreground">{t("pc_cohort_provenance_note")}</p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -2682,6 +2807,7 @@ export default function ProiezioneCrescita() {
             </p>
           </CardHeader>
           <CardContent>
+            <p className="mb-3 text-xs text-muted-foreground">{t("pc_cohort_provenance_note")}</p>
             <div className="overflow-x-auto">
               <TooltipProvider>
                 <table className="w-full text-sm border-collapse">

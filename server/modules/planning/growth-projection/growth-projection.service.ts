@@ -27,6 +27,12 @@ import {
 } from "./growth-projection-simulation";
 import { allocateOrdersAgainstBaskets } from "./order-allocation";
 import {
+  describeHatcheryRecovery,
+  snapshotBiologicalAvailability,
+  summarizeAllocationOrigins,
+  type HatcheryRecoveryStatus,
+} from "./availability-presentation";
+import {
   calculateDeliveryDateCoverage,
   canonicalDeliveryDate,
   emptyDeliveryCoverageSummary,
@@ -102,6 +108,12 @@ interface MonthlyContext {
   giacenzaNetTarget: number;
   schiuditoioNecessario: number;
   perditeMortalita: number;
+  disponibilitaBiologicaBySize: Record<string, number>;
+  disponibilitaBiologicaTotale: number;
+  assegnatiDaTargetOSuperiori: number;
+  assegnatiDaTaglieInferiori: number;
+  scopertoTarget: number;
+  recuperoSchiuditoio: HatcheryRecoveryStatus;
   deliveryCoverage: DeliveryCoverageSummary;
 }
 
@@ -490,6 +502,11 @@ export class GrowthProjectionService {
 
       const totalAfterMortality = globalBaskets.reduce((s, b) => s + b.animalCount, 0);
       const perditeMortalita = Math.max(0, totalBeforeMortality - totalAfterMortality);
+      const biologicalMonthEnd = new Date(y, m0 + 1, 0);
+      const biologicalAvailability = snapshotBiologicalAvailability(
+        globalBaskets,
+        weightMg => findProjectedSize(weightMg, biologicalMonthEnd, simCtx.sizeRangeVersions)?.code ?? null,
+      );
 
       let giacenzaLordaInventario = 0;
       let giacenzaLordaConSchiuditoio = 0;
@@ -592,6 +609,12 @@ export class GrowthProjectionService {
           giacenzaNetTarget += b.animalCount;
         }
       }
+      const allocationOrigins = summarizeAllocationOrigins(
+        giacenzaLordaConSchiuditoio,
+        giacenzaNetTarget,
+        ordiniEvasiTotali + ordiniEvasiArretratiTotali,
+      );
+      const scopertoTarget = Math.max(0, domandaEffettiva + ordiniArretrati - ordiniEvasi);
 
       const label = crossesYear ? `${MONTH_SHORT[m0]} ${String(y).slice(-2)}` : MONTH_SHORT[m0];
 
@@ -628,6 +651,16 @@ export class GrowthProjectionService {
         giacenzaNetTarget,
         schiuditoioNecessario: 0,
         perditeMortalita,
+        disponibilitaBiologicaBySize: biologicalAvailability.bySize,
+        disponibilitaBiologicaTotale: biologicalAvailability.total,
+        assegnatiDaTargetOSuperiori: allocationOrigins.fromTargetOrLarger,
+        assegnatiDaTaglieInferiori: allocationOrigins.fromBelowTarget,
+        scopertoTarget,
+        recuperoSchiuditoio: describeHatcheryRecovery(
+          scopertoTarget,
+          compareProjectionMonths(projectionMonth, referenceMonth) < 0,
+          false,
+        ),
         deliveryCoverage: deliveryCoverage.byYearMonth[ymKey] ?? emptyDeliveryCoverageSummary(),
       });
     }
@@ -715,6 +748,7 @@ export class GrowthProjectionService {
                 monthlyContext[arrivalIndex].schiuditoioNecessario,
                 Math.ceil(gap / growth.survivalFactor),
               );
+            monthlyContext[i].recuperoSchiuditoio = describeHatcheryRecovery(gap, false, true);
             break;
           }
         }
