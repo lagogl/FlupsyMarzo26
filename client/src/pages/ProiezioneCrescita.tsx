@@ -15,6 +15,7 @@ import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndic
 import { aggregateHatcheryPresentation, buildHatcheryActualUpdate } from "@/lib/hatcheryPresentation";
 import AvailabilityOrdersSummary from "@/components/planning/AvailabilityOrdersSummary";
 import { orderedSizes, summarizeArrears } from "@/lib/availability-summary";
+import { readPlanningTablePreferences, savePlanningTablePreferences, type TableOrientation } from "@/lib/planning-table-preferences";
 import {
   getCurrentOrderCoverage,
   getDeliveryOrderCoverage,
@@ -302,10 +303,14 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [selectedCol, setSelectedCol] = useState<number | null>(null);
   const [ordersExpanded, setOrdersExpanded] = useState(false);
-  const [hiddenRows, setHiddenRows] = useState<Set<string>>(new Set());
+  const initialTablePreferences = useMemo(() => readPlanningTablePreferences(), []);
+  const [hiddenRows, setHiddenRows] = useState<Set<string>>(initialTablePreferences.hiddenRows);
   const [calculationTraceEnabled, setCalculationTraceEnabled] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<{ rowKey: string; col: number } | null>(null);
-  const [tableOrientation, setTableOrientation] = useState<"indicators-rows" | "months-rows">("indicators-rows");
+  const [tableOrientation, setTableOrientation] = useState<TableOrientation>(initialTablePreferences.orientation);
+  useEffect(() => {
+    savePlanningTablePreferences({ hiddenRows, orientation: tableOrientation });
+  }, [hiddenRows, tableOrientation]);
 
   const cellKey = (r: number, c: number) => `${r},${c}`;
   const parseKey = (k: string) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; };
