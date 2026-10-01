@@ -12,7 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePlanningLang, translateMonthLabel } from "@/lib/planningI18n";
 import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndicators";
-import { aggregateHatcheryPresentation, buildHatcheryActualUpdate, getAdditionalHatcheryNeed } from "@/lib/hatcheryPresentation";
+import { aggregateHatcheryPresentation, buildHatcheryActualUpdate } from "@/lib/hatcheryPresentation";
 
 interface SizeMonthProjection {
   month: number;
@@ -363,8 +363,21 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       color: "#be185d",
       bgClass: "",
       textClass: "text-gray-600",
-      values: mc.map(m => getAdditionalHatcheryNeed(m.schiuditoioNecessario || 0)),
-      isWarning: (colIdx: number) => getAdditionalHatcheryNeed(mc[colIdx]?.schiuditoioNecessario || 0) > 0,
+      values: mc.map(m => m.schiuditoioNecessario || 0),
+      isWarning: (colIdx: number) => {
+        const m = mc[colIdx];
+        if (!m) return false;
+        const necessario = m.schiuditoioNecessario || 0;
+        const arrivi = m.arriviSchiuditoio || 0;
+        return necessario > 0 && arrivi < necessario;
+      },
+      isSuccess: (colIdx: number) => {
+        const m = mc[colIdx];
+        if (!m) return false;
+        const necessario = m.schiuditoioNecessario || 0;
+        const arrivi = m.arriviSchiuditoio || 0;
+        return arrivi > necessario;
+      },
     },
     {
       rowKey: "arrivi_schiu",
@@ -1031,9 +1044,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return `${t("pc_cf_giac_res_pre")}${fn(m.giacenzaLordaConSchiuditoio)}${t("pc_cf_giac_res_mid")}${fn(m.ordiniEvasi)}${t("pc_cf_giac_res_suf")} ${fn(m.giacenzaNetTarget)}`;
     }
     if (rk === "schiu_nec") {
-      const necessario = getAdditionalHatcheryNeed(m.schiuditoioNecessario || 0);
+      const necessario = m.schiuditoioNecessario || 0;
+      const arrivi = m.arriviSchiuditoio || 0;
+      if (arrivi > necessario) {
+        const surplus = arrivi - necessario;
+        return necessario > 0
+          ? `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_a_mid")} ${fn(necessario)} ${t("pc_cf_schiu_surplus_a_suf")}${fn(surplus)} ${t("pc_cf_schiu_surplus_a_end")}`
+          : `${t("pc_cf_schiu_surplus_a_pre")} ${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_mid")} ${m.monthName} → +${fn(arrivi)} ${t("pc_cf_schiu_surplus_b_end")}`;
+      }
       if (necessario > 0) {
-        return `${t("pc_cf_schiu_nec_pre")} ${m.monthName} ${t("pc_cf_schiu_nec_mid")} ${data.targetSize} ${t("pc_cf_schiu_nec_suf")} ${fn(necessario)} ${t("pc_cf_schiu_nec_end")}`;
+        return `${t("pc_cf_schiu_nec_pre")} ${m.monthName} ${t("pc_cf_schiu_nec_mid")} ${data.targetSize} ${t("pc_cf_schiu_nec_suf")} ${fn(necessario)} ${t("pc_cf_schiu_nec_end")}${arrivi > 0 ? ` ${t("pc_cf_schiu_nec_planned")} ${fn(arrivi)}, ${t("pc_cf_schiu_nec_missing")} ${fn(necessario - arrivi)}` : ''}`;
       }
       return `${t("pc_cf_schiu_nec_none")} ${m.monthName}`;
     }

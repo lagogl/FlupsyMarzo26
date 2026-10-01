@@ -10,13 +10,17 @@
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import {
-  hatcheryArrivals,
   projectionMortalityRates,
   salesPriceList,
   salesCashTargets,
 } from "../../../../shared/schema";
-import { inArray } from "drizzle-orm";
 import { canFulfillOrderWithSize } from "./size-substitution";
+import { loadHatcheryArrivalPlans } from "../hatchery-arrival-source";
+import {
+  getHatcheryBiologyDays,
+  getProjectionSimulationDays,
+} from "../hatchery-arrival-policy";
+import { getSizeRangeCandidates } from "../../../utils/size-determination";
 
 const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 const MONTH_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
@@ -34,6 +38,40 @@ interface MilpBasket {
 }
 
 interface MonthStep { monthIndex: number; year: number; month1Based: number; }
+
+interface InitialMilpBasket {
+  basketId: number;
+  weightMg: number;
+  animalCount: number;
+  isHatchery: boolean;
+  arrivalMonthIndex: number;
+  arrivalDate?: Date;
+}
+
+export function createSalesPlanningMilpHatcheryBaskets(
+  plans: Array<{ year: number; month: number; quantity: number; arrivalDate: Date }>,
+  monthSteps: MonthStep[],
+  firstBasketId: number,
+  weightMg: number | ((plan: { year: number; month: number; quantity: number; arrivalDate: Date }) => number),
+): InitialMilpBasket[] {
+  return plans
+    .filter((plan) => plan.quantity > 0)
+    .map((plan) => ({
+      plan,
+      arrivalMonthIndex: monthSteps.findIndex(
+        (step) => step.year === plan.year && step.month1Based === plan.month,
+      ),
+    }))
+    .filter(({ arrivalMonthIndex }) => arrivalMonthIndex >= 0)
+    .map(({ plan, arrivalMonthIndex }, index) => ({
+      basketId: firstBasketId + index,
+      weightMg: typeof weightMg === "number" ? weightMg : weightMg(plan),
+      animalCount: plan.quantity,
+      isHatchery: true,
+      arrivalMonthIndex,
+      arrivalDate: plan.arrivalDate,
+    }));
+}
 
 interface MilpResult {
   totalRevenue: number;
@@ -86,13 +124,13 @@ export class SalesPlanningMilpService {
    * perché la dinamica alive[t] = alive[t-1]*(1-mort) - x[t] è lineare anche così:
    * non c'è feedback non lineare tra vendita e mortalità di altri animali).
    */
-  private buildBasketTrajectories(
-    initialBaskets: Array<{ basketId: number; weightMg: number; animalCount: number; isHatchery: boolean; arrivalMonthIndex: number; }>,
+  buildBasketTrajectories(
+    initialBaskets: InitialMilpBasket[],
     monthSteps: MonthStep[],
     sgrLookup: any,
     dbMortRates: Record<string, Record<number, number>>,
     customMortFraction: number | null,
-    currentDay: number,
+    referenceDate: Date,
   ): MilpBasket[] {
     const fallback: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
     const result: MilpBasket[] = [];
@@ -105,22 +143,21 @@ export class SalesPlanningMilpService {
         const step = monthSteps[i];
         const m0 = step.monthIndex;
         const daysInMonth = new Date(step.year, m0 + 1, 0).getDate();
-        let simulDays = i === 0 ? Math.max(0, daysInMonth - currentDay) : daysInMonth;
 
         // Se cestello arriva in mese futuro, non simulare per i mesi precedenti
         if (i < ib.arrivalMonthIndex) {
           monthState.push({ kgPerAnimal: 0, sizeCode: 'TP-300', mortalityRate: 0 });
           continue;
         }
-        if (i === ib.arrivalMonthIndex && ib.isHatchery) {
-          // arriva ad inizio mese, simula tutto il mese
-          simulDays = daysInMonth;
-        }
+        const month = { year: step.year, month: step.month1Based };
+        const simulationDays = ib.arrivalDate
+          ? getHatcheryBiologyDays(month, referenceDate, ib.arrivalDate)
+          : getProjectionSimulationDays(month, referenceDate);
 
         // Crescita giornaliera
-        for (let d = 0; d < simulDays; d++) {
+        for (const date of simulationDays) {
           const apk = 1000000 / weightMg;
-          const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
+          const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, date.getMonth(), apk);
           weightMg = weightMg * (1 + sgr / 100);
         }
 
@@ -136,11 +173,9 @@ export class SalesPlanningMilpService {
           monthlyMortality = dbRate !== undefined ? dbRate : (fallback[cat] || 0.03);
         }
 
-        // Scala la mortalità proporzionalmente ai giorni effettivamente simulati nel mese.
-        // Per il primo mese del piano (corrente) simulDays < daysInMonth → mortalità ridotta,
-        // perché il conteggio dei cestelli rappresenta già lo stato di oggi
-        // (i giorni già trascorsi sono incorporati nei numeri reali).
-        const effectiveMortality = monthlyMortality * (simulDays / daysInMonth);
+        // Scala la mortalità sui giorni reali successivi allo snapshot e,
+        // per gli arrivi, successivi anche alla data convenzionale di arrivo.
+        const effectiveMortality = monthlyMortality * (simulationDays.length / daysInMonth);
 
         monthState.push({
           kgPerAnimal: 1 / apkEnd,
@@ -189,18 +224,18 @@ export class SalesPlanningMilpService {
     const horizon = Math.max(1, Math.min(60, opts.monthsHorizon || 12));
     const mode: SalesPlanningMode = opts.mode || 'bilanciato';
     const currentMonth0 = opts.startMonth != null ? opts.startMonth - 1 : now.getMonth();
-    const currentDay = now.getDate();
     const monthSteps = this.buildMonthSteps(currentMonth0, startYear, horizon);
     const yearsNeeded = [...new Set(monthSteps.map(s => s.year))];
     const useCustomMortality = opts.mortalityPercent !== undefined && opts.mortalityPercent !== null;
     const customMonthlyRate = useCustomMortality ? opts.mortalityPercent! / 100 : null;
 
-    const [sgrLookup, basketInventory, dbMortRates, priceMap, cashTargetsMap, ...ordersByYearArr] = await Promise.all([
+    const [sgrLookup, basketInventory, dbMortRates, priceMap, cashTargetsMap, arrivalPlans, ...ordersByYearArr] = await Promise.all([
       productionForecastService.getSgrLookup(),
       productionForecastService.getBasketLevelInventory(),
       this.getMortalityLookup(),
       this.getPriceList(),
       this.getCashTargetsForYears(yearsNeeded),
+      loadHatcheryArrivalPlans(yearsNeeded, now),
       ...yearsNeeded.map(y =>
         productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders }))
       ),
@@ -210,20 +245,6 @@ export class SalesPlanningMilpService {
       .slice()
       .sort((a, b) => b.minAnimalsPerKg - a.minAnimalsPerKg)
       .map(candidate => candidate.code);
-
-    // Hatchery
-    const hatcheryRows = yearsNeeded.length > 0
-      ? await db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, yearsNeeded))
-      : [];
-    const hatcheryByYearMonth: Record<string, { actual: number | null; forecast: number }> = {};
-    for (const row of hatcheryRows) {
-      const k = `${row.year}-${row.month}`;
-      if (!hatcheryByYearMonth[k]) hatcheryByYearMonth[k] = { actual: null, forecast: 0 };
-      hatcheryByYearMonth[k].forecast += row.quantity;
-      if (row.actualQuantity !== null && row.actualQuantity !== undefined) {
-        hatcheryByYearMonth[k].actual = (hatcheryByYearMonth[k].actual ?? 0) + row.actualQuantity;
-      }
-    }
 
     const ordersByYearMonth: Record<string, Record<string, number>> = {};
     for (const { year: y, orders } of ordersByYearArr) {
@@ -237,7 +258,19 @@ export class SalesPlanningMilpService {
     if (!tp300Threshold) {
       throw new Error("TP-300 senza range attivo alla business date");
     }
-    const startApkHatchery = tp300Threshold.maxAnimalsPerKg;
+    const hatcheryStartApkEntries = await Promise.all(
+      arrivalPlans
+        .filter((plan) => plan.quantity > 0)
+        .map(async (plan) => {
+          const arrivalSizeCandidates = await getSizeRangeCandidates(plan.arrivalDate);
+          const arrivalTp300 = arrivalSizeCandidates.find((candidate) => candidate.code === 'TP-300');
+          if (!arrivalTp300) {
+            throw new Error("TP-300 senza range attivo alla business date");
+          }
+          return [`${plan.year}-${plan.month}`, arrivalTp300.maxAnimalsPerKg] as const;
+        }),
+    );
+    const hatcheryStartApkByMonth = Object.fromEntries(hatcheryStartApkEntries);
 
     const initialBaskets: Array<{ basketId: number; weightMg: number; animalCount: number; isHatchery: boolean; arrivalMonthIndex: number; }> = [];
     for (const b of basketInventory) {
@@ -249,28 +282,15 @@ export class SalesPlanningMilpService {
         arrivalMonthIndex: 0,
       });
     }
-    let hCounter = 900000;
-    for (let i = 0; i < monthSteps.length; i++) {
-      const step = monthSteps[i];
-      const k = `${step.year}-${step.month1Based}`;
-      const h = hatcheryByYearMonth[k];
-      if (!h) continue;
-      const todayYear = now.getFullYear();
-      const todayMonth1 = now.getMonth() + 1;
-      const isPastOrCurrent = step.year < todayYear || (step.year === todayYear && step.month1Based <= todayMonth1);
-      const qty = isPastOrCurrent ? (h.actual ?? 0) : h.forecast;
-      if (qty <= 0) continue;
-      initialBaskets.push({
-        basketId: hCounter++,
-        weightMg: 1000000 / startApkHatchery,
-        animalCount: qty,
-        isHatchery: true,
-        arrivalMonthIndex: i,
-      });
-    }
+    initialBaskets.push(...createSalesPlanningMilpHatcheryBaskets(
+      arrivalPlans,
+      monthSteps,
+      900000,
+      (plan) => 1000000 / hatcheryStartApkByMonth[`${plan.year}-${plan.month}`],
+    ));
 
     const baskets = this.buildBasketTrajectories(
-      initialBaskets, monthSteps, sgrLookup, dbMortRates, customMonthlyRate, currentDay
+      initialBaskets, monthSteps, sgrLookup, dbMortRates, customMonthlyRate, now
     );
 
     // ==== COSTRUZIONE MODELLO LP ====

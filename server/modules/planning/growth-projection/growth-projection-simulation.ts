@@ -155,11 +155,16 @@ export function simulateArrivalUntilTarget(
   const arrivalDate = getHatcheryArrivalDate(arrivalMonth);
   let weightMg = initialWeightMg;
   let count = 1;
-  const effectiveArrivalDate = arrivalDate.getTime() < referenceDate.getTime()
-    ? referenceDate
-    : arrivalDate;
+  const effectiveArrivalDate =
+    arrivalDate.getTime() < referenceDate.getTime()
+      ? referenceDate
+      : arrivalDate;
   if (isAtTarget(weightMg, effectiveArrivalDate)) {
-    return { reachedTarget: true, survivalFactor: count, reachedDate: effectiveArrivalDate };
+    return {
+      reachedTarget: true,
+      survivalFactor: count,
+      reachedDate: effectiveArrivalDate,
+    };
   }
   let month = { ...arrivalMonth };
   while (compareProjectionMonths(month, deliveryMonth) <= 0) {

@@ -87,6 +87,57 @@ test("future hatchery cohorts are unavailable before entry", () => {
   assert.equal(result.months[0].salesApplied, 0);
   assert.equal(result.months[1].remainingAnimals, 1000);
 });
+
+test("virtual hatchery arrivals cannot fulfill orders or sales before day 15", () => {
+  const w = world();
+  w.cohorts = [{ quantity: 1000, entry: first, entryDay: 15, path: {
+    [first]: { survival: 1, sizeId: 1, animalsPerKg: 20_000, days: Object.fromEntries(
+      Array.from({ length: 17 }, (_, i) => [i + 15, { survival: 1, sizeId: 1, animalsPerKg: 20_000 }]),
+    ) },
+    [first + 1]: { survival: 1, sizeId: 1, animalsPerKg: 20_000 },
+    [first + 2]: { survival: 1, sizeId: 1, animalsPerKg: 20_000 },
+  } }];
+  w.orders = [{ key: "before-arrival", at: first, day: 14, sizeId: 1, quantity: 100 }];
+  const result = replay(w, [{ ...sale(1000), day: 14 }]);
+  assert.equal(result.orders["before-arrival"], 0);
+  assert.equal(result.applied["sale-1-1"], 0);
+});
+
+test("a sale after hatchery arrival cannot reduce a later order's protected stock", () => {
+  const w = world();
+  w.cohorts = [{ quantity: 1000, entry: first, entryDay: 15, path: {
+    [first]: { survival: 1, sizeId: 1, animalsPerKg: 20_000, days: Object.fromEntries(
+      Array.from({ length: 17 }, (_, i) => [i + 15, { survival: 1, sizeId: 1, animalsPerKg: 20_000 }]),
+    ) },
+    [first + 1]: { survival: 1, sizeId: 1, animalsPerKg: 20_000 },
+    [first + 2]: { survival: 1, sizeId: 1, animalsPerKg: 20_000 },
+  } }];
+  w.orders = [{ key: "later-order", at: first, day: 20, sizeId: 1, quantity: 1000 }];
+  const candidate = { ...sale(1000), day: 16 };
+  assert.equal(safeCapacity(w, [], candidate, 1000), 0);
+  assert.equal(replay(w, [{ ...candidate, quantity: 0 }]).orders["later-order"], 1000);
+});
+
+test("a current-month arrival after the 15th starts at the snapshot without retroactive biology", () => {
+  const w = world();
+  const days = Object.fromEntries([
+    [20, { survival: 1, sizeId: 1, animalsPerKg: 20_000 }],
+    [21, { survival: 0.9, sizeId: 2, animalsPerKg: 10_000 }],
+  ]);
+  w.cohorts = [{ quantity: 100, entry: first, entryDay: 20, path: {
+    [first]: { survival: 1, sizeId: 1, animalsPerKg: 20_000, days },
+    [first + 1]: { survival: 0.9, sizeId: 2, animalsPerKg: 10_000 },
+    [first + 2]: { survival: 0.9, sizeId: 2, animalsPerKg: 10_000 },
+  } }];
+  w.orders = [{ key: "before-snapshot", at: first, day: 19, sizeId: 1, quantity: 100 }];
+  const result = replay(w, [{ ...sale(50), day: 20 }]);
+  assert.equal(result.orders["before-snapshot"], 0);
+  assert.equal(result.applied["sale-1-1"], 50);
+  assert.equal(result.months.get(first)!.remainingAnimals, 45);
+  assert.equal(days[20].survival, 1);
+  assert.equal(days[20].animalsPerKg, 20_000);
+  assert.equal(days[21].survival, 0.9);
+});
 test("missing prices do not fabricate revenue", () => {
   const result = projectWorld(world(), input([{ ...sale(100), pricePerThousand: null }]));
   assert.equal(result.totalRevenue, 0);

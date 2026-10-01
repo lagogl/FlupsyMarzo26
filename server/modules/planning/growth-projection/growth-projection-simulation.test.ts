@@ -30,7 +30,9 @@ test("una taglia già raggiunta all'ingresso non richiede un giorno fittizio di 
     { year: 2025, month: 4 },
     reference,
     1,
-    () => { throw new Error("Nessun giorno di crescita disponibile"); },
+    () => {
+      throw new Error("Nessun giorno di crescita disponibile");
+    },
     (weightMg) => weightMg >= 1,
   );
   assert.equal(result.reachedTarget, true);
@@ -137,9 +139,9 @@ test("un batch arriva il 15 ma cresce e subisce mortalità solo dal 16; i due re
     days,
     step,
   );
-
   assert.deepEqual(globalLedger, forecastLedger);
   assert.deepEqual(globalLedger.map((basket) => basket.weightMg), [116, 25]);
+  // Mortality rounds each daily ledger step, rather than only the final count.
   assert.deepEqual(globalLedger.map((basket) => basket.animalCount), [19, 21]);
   const totalBefore = initial.reduce((sum, basket) => sum + basket.animalCount, 0);
   const totalAfter = globalLedger.reduce((sum, basket) => sum + basket.animalCount, 0);

@@ -1,15 +1,17 @@
 import { db } from "../../../db";
 import { dbEsterno, isDbEsternoAvailable } from "../../../db-esterno";
 import { ordiniCondivisi } from "../../../schema-esterno";
-import { hatcheryArrivals, salesPriceList } from "../../../../shared/schema";
+import { salesPriceList } from "../../../../shared/schema";
 import type { ScenarioInput, ScenarioInputs, ScenarioResult, ScenarioProposal } from "../../../../shared/sales-scenarios";
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
-import { inArray } from "drizzle-orm";
-import { activeOrdersCondition, hatcherySizeCode, scenarioOrderDeliveryMonth, scenarioOrderDeliveryDay } from "./source-data";
+import { activeOrdersCondition, scenarioOrderDeliveryMonth, scenarioOrderDeliveryDay } from "./source-data";
 import { isScenarioSaleSize, selectedScenarioSizeIds, validateScenarioSaleSizes } from "../../../../shared/sales-scenario-size-policy";
 import { monthNumber, monthParts, projectWorld, proposeSales, type ProposalTimings, type World, type Cohort, type Order } from "./engine";
 import { aggregateOrderCommitments, type CommitmentOrderInput } from "./order-commitment";
+import { loadHatcheryArrivalPlans } from "../hatchery-arrival-source";
+import { getHatcheryBiologyDays } from "../hatchery-arrival-policy";
+import { buildCohortPath } from "./cohort-path";
 
 export function businessToday() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -20,7 +22,7 @@ const commonWarnings = [
   "Simulazione separata: non modifica giacenze, ordini, Forecast o semine operative.",
   "Quantità commerciali alternative, NON sommabili tra mesi e taglie. Ogni vendita viene verificata contro tutti gli ordini futuri caricati.",
   "Le consegne sono valutate alla data prevista; le vendite mensili sono collocate al giorno con massima capacità protetta nella taglia. Lo stock a inizio mese resta distinto dalle opportunità maturate dopo. Solo gli ordini con primo mese di consegna dal mese iniziale dello scenario in poi sono riservati.",
-  "Gli arrivi futuri entrano a inizio mese; gli arrivi già avvenuti sono compresi nell'inventario e non vengono aggiunti nuovamente.",
+  "Gli arrivi residui dello schiuditoio entrano il 15; nel mese corrente, se il 15 è già passato, entrano oggi senza crescita o mortalità retroattive.",
   "Incassi e ricavi riguardano solo le vendite dello scenario; nessun margine, costo o incasso degli ordini acquisiti è inventato. Incassi oltre l'orizzonte non inclusi nei totali.",
   "Le ipotesi prudenziali sono coefficienti espliciti, non una garanzia statistica. Le semine di questo scenario sono indipendenti da quelle operative.",
 ];
@@ -80,7 +82,8 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
   if (hasPartialFutureOrders) warnings.push("Gli ordini parziali futuri sono riservati per l'intera quantità registrata, in via cautelativa (nessuna deduzione di consegne non certificate).");
   const last = Math.max(first + input.horizon - 1, ...orders.map(o => o.at));
   const years = [...new Set(Array.from({ length: last - first + 1 }, (_, i) => monthParts(first + i).year))];
-  const arrivals = await db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, years));
+  const referenceDate = new Date(Date.UTC(today.year, today.month - 1, today.day, 12));
+  const arrivalPlans = await loadHatcheryArrivalPlans(years, referenceDate);
   const requestedSizes = [...new Set([...input.sales.map(s => s.sizeId), ...input.proposalPrices.map(s => s.sizeId)])];
   for (const id of requestedSizes) if (!ctx.allSizes.some(s => s.id === id)) throw new Error(`Taglia sconosciuta: ${id}`);
   if (ctx.allSizes.length > 60) throw new Error("Catalogo troppo ampio per il calcolo interattivo");
@@ -111,22 +114,27 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
       globalFallback: ctx.globalFallback * factor,
       mortalityByMonthAndSize: Object.fromEntries(Object.entries(ctx.mortalityByMonthAndSize).map(([k, v]) => [k, Math.min(1, v * mortality)])),
     };
-    const entries: { entry: number; quantity: number; weight: number }[] = inventory.filter(b => b.animalCount > 0).map(b => {
+    const entries: { entry: number; entryDay?: number; quantity: number; weight: number; arrivalDate?: Date }[] = inventory.filter(b => b.animalCount > 0).map(b => {
       if (!(b.animalsPerKg > 0) || !Number.isFinite(b.animalCount)) throw new Error("Inventario con quantità o peso non valido");
       return { entry: first, quantity: b.animalCount, weight: 1_000_000 / b.animalsPerKg };
     });
-    for (const a of arrivals) {
-      const entry = monthNumber(a.year, a.month);
-      if (entry <= first || entry > last || a.quantity <= 0) continue;
-      const size = ctx.allSizes.find(s => s.code === hatcherySizeCode(a.sizeCategory));
-      const range = size && findRangeForSize(size.id, new Date(a.year, a.month - 1, 1, 12), ctx.sizeRangeVersions);
-      if (!range) throw new Error(`Arrivo schiuditoio ${a.year}-${a.month}: taglia ${a.sizeCategory} priva di range`);
-      entries.push({ entry, quantity: a.quantity * (prudent ? input.prudentHatcheryFactor : 1), weight: 1_000_000 / range.maxAnimalsPerKg });
+    for (const plan of arrivalPlans) {
+      const entry = monthNumber(plan.year, plan.month);
+      if (entry < first || entry > last || plan.quantity <= 0) continue;
+      const size = ctx.allSizes.find(s => s.code === "TP-300");
+      const range = size && findRangeForSize(size.id, plan.arrivalDate, ctx.sizeRangeVersions);
+      if (!range) throw new Error(`Arrivo schiuditoio ${plan.year}-${plan.month}: TP-300 priva di range alla data di arrivo`);
+      const entryDay = entry === first ? Math.max(15, today.day) : 15;
+      entries.push({
+        entry, entryDay, arrivalDate: plan.arrivalDate,
+        quantity: plan.quantity * (prudent ? input.prudentHatcheryFactor : 1),
+        weight: 1_000_000 / range.maxAnimalsPerKg,
+      });
     }
     // Coalesce only identical initial weights and entry dates: no approximation.
     const merged = new Map<string, typeof entries[number]>();
     for (const e of entries) {
-      const key = `${e.entry}|${e.weight}`;
+      const key = `${e.entry}|${e.entryDay ?? ""}|${e.arrivalDate?.toISOString() ?? ""}|${e.weight}`;
       const old = merged.get(key);
       if (old) old.quantity += e.quantity; else merged.set(key, { ...e });
     }
@@ -135,41 +143,37 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
     let fallbackMortality = false;
     for (const e of merged.values()) {
       if (Date.now() > buildDeadline) throw new Error("Preparazione scenario troppo complessa: ridurre l'orizzonte e riprovare");
-      const path: Cohort["path"] = {};
-      let weight = e.weight;
-      let survival = 1;
-      for (let n = e.entry; n <= last; n++) {
-        const { year, month } = monthParts(n);
-        const day = n === first ? today.day : 1;
-        const date = new Date(year, month - 1, day, 12);
-        const size = findProjectedSize(weight, date, ctx.sizeRangeVersions);
-        const monthPath: Cohort["path"][number] = { survival, sizeId: size?.sizeId ?? null, animalsPerKg: 1_000_000 / weight, days: {} };
-        path[n] = monthPath;
-        survival = 1;
-        const days = new Date(year, month, 0).getDate();
-        for (let d = day; d <= days; d++) {
-          const dayDate = new Date(year, month - 1, d, 12);
-          const dailySize = findProjectedSize(weight, dayDate, ctx.sizeRangeVersions);
-          monthPath.days![d] = { survival, sizeId: dailySize?.sizeId ?? null, animalsPerKg: 1_000_000 / weight };
-          const growthSize = findProjectedSize(weight, dayDate, ctx.sizeRangeVersions);
-          const monthName = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"][month - 1];
+      const path = buildCohortPath({
+        entry: e.entry,
+        entryDay: e.entryDay,
+        first,
+        last,
+        startDay: today.day,
+        initialWeightMg: e.weight,
+        arrivalDate: e.arrivalDate,
+        referenceDate,
+        getMonth: monthParts,
+        getSize: (weightMg, date) => findProjectedSize(weightMg, date, ctx.sizeRangeVersions),
+        getBiologyDays: getHatcheryBiologyDays,
+        advanceDay: (weightMg, survival, dayDate) => {
+          const biologyMonth = dayDate.getMonth() + 1;
+          const growthSize = findProjectedSize(weightMg, dayDate, ctx.sizeRangeVersions);
+          const monthName = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"][biologyMonth - 1];
           if (!Object.keys(ctx.sgrFallbackByMonth).length
             && (growthSize == null || ctx.sgrByMonthAndSize[`${monthName}|${growthSize.sizeId}`] === undefined)) {
             throw new Error(`SGR mancante per ${monthName}/${growthSize?.code ?? "taglia non classificata"}: configurare i dati prima di simulare`);
           }
-          // Existing kernel: SGR daily fractions and monthly mortality / month days.
-          const growth = stepOneDay(scaled, { weightMg: weight, count: 1 }, dayDate, 0);
+          const growth = stepOneDay(scaled, { weightMg, count: 1 }, dayDate, 0);
           const mortalitySize = findProjectedSize(growth.weightMg, dayDate, ctx.sizeRangeVersions);
-          const configured = mortalitySize && ctx.mortalityByMonthAndSize[`${month}|${mortalitySize.code}`];
+          const configured = mortalitySize && ctx.mortalityByMonthAndSize[`${biologyMonth}|${mortalitySize.code}`];
           if (configured == null) fallbackMortality = true;
           const rate = Math.min(1, (configured ?? 0.03) * mortality);
-          const state = stepOneDay(scaled, { weightMg: weight, count: survival }, dayDate, rate);
-          weight = state.weightMg;
-          survival = state.count;
-          if (!Number.isFinite(weight) || !Number.isFinite(survival)) throw new Error("Parametri crescita non validi: simulazione non finita");
-        }
-      }
-      cohorts.push({ quantity: e.quantity, entry: e.entry, path });
+          const state = stepOneDay(scaled, { weightMg, count: survival }, dayDate, rate);
+          if (!Number.isFinite(state.weightMg) || !Number.isFinite(state.count)) throw new Error("Parametri crescita non validi: simulazione non finita");
+          return { weightMg: state.weightMg, survival: state.count };
+        },
+      });
+      cohorts.push({ quantity: e.quantity, entry: e.entry, entryDay: e.entryDay, path });
     }
     if (fallbackMortality && !warnings.some(w => w.startsWith("Mortalità"))) warnings.push("Mortalità non configurata per alcune combinazioni mese/taglia: applicato fallback esplicito 3% mensile, moltiplicato per il coefficiente dello scenario.");
     if (!Object.keys(ctx.sgrByMonthAndSize).length && !Object.keys(ctx.sgrFallbackByMonth).length) throw new Error("SGR non configurati: impossibile produrre una previsione attendibile");

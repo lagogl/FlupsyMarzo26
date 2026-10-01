@@ -1,13 +1,17 @@
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { db } from "../../../db";
 import {
-  hatcheryArrivals,
   projectionMortalityRates,
   salesPriceList,
   salesCashTargets,
 } from "../../../../shared/schema";
-import { inArray } from "drizzle-orm";
 import { canFulfillOrderWithSize } from "./size-substitution";
+import { loadHatcheryArrivalPlans } from "../hatchery-arrival-source";
+import {
+  getHatcheryBiologyDays,
+  getProjectionSimulationDays,
+} from "../hatchery-arrival-policy";
+import { getSizeRangeCandidates } from "../../../utils/size-determination";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -22,6 +26,80 @@ interface SimBasket {
   isHatchery: boolean;
   weightMg: number; // peso in mg per singolo animale
   animalCount: number;
+  arrivalDate?: Date;
+}
+
+export interface SalesPlanningTrajectoryBasket extends SimBasket {}
+
+export interface SalesPlanningTrajectoryOptions {
+  baskets: SalesPlanningTrajectoryBasket[];
+  month: { year: number; month: number };
+  referenceDate: Date;
+  sgrLookup: any;
+  dbMortalityRates: Record<string, Record<number, number>>;
+  customMonthlyRate: number | null;
+  getSgr: (sgrLookup: any, monthIndex: number, animalsPerKg: number) => number;
+  getSaleSize: (animalsPerKg: number) => string;
+  getCategory: (animalsPerKg: number) => string;
+}
+
+/**
+ * Applies the commercial engine's daily weight and mortality trajectory for a
+ * month. Hatchery baskets only enter the trajectory after both the snapshot
+ * and their planned arrival date.
+ */
+export function simulateSalesPlanningMonth(
+  options: SalesPlanningTrajectoryOptions,
+): SalesPlanningTrajectoryBasket[] {
+  const { month, referenceDate } = options;
+  const daysInMonth = new Date(month.year, month.month, 0).getDate();
+  const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
+  const ordinaryDays = getProjectionSimulationDays(month, referenceDate);
+  return options.baskets.map((basket) => {
+    const dates = basket.arrivalDate
+      ? getHatcheryBiologyDays(month, referenceDate, basket.arrivalDate)
+      : ordinaryDays;
+    let weightMg = basket.weightMg;
+    let animalCount = basket.animalCount;
+    for (const date of dates) {
+      const monthIndex = date.getMonth();
+      const apk = 1000000 / weightMg;
+      const sgr = options.getSgr(options.sgrLookup, monthIndex, apk);
+      weightMg *= 1 + sgr / 100;
+
+      let dailyMortality: number;
+      if (options.customMonthlyRate !== null) {
+        dailyMortality = options.customMonthlyRate / daysInMonth;
+      } else {
+        const sizeName = options.getSaleSize(apk);
+        const dbRate = options.dbMortalityRates[sizeName]?.[date.getMonth() + 1];
+        const category = options.getCategory(apk);
+        const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[category] || 0.03);
+        dailyMortality = monthlyRate / daysInMonth;
+      }
+      animalCount = Math.round(animalCount * (1 - dailyMortality));
+    }
+    return { ...basket, weightMg, animalCount };
+  });
+}
+
+export function createSalesPlanningHatcheryBaskets(
+  plans: Array<{ year: number; month: number; quantity: number; arrivalDate: Date }>,
+  month: { year: number; month: number },
+  firstBasketId: number,
+  animalsPerKg: number | ((plan: { year: number; month: number; quantity: number; arrivalDate: Date }) => number),
+): SalesPlanningTrajectoryBasket[] {
+  return plans
+    .filter((plan) =>
+      plan.year === month.year && plan.month === month.month && plan.quantity > 0
+    )
+    .map((plan, index) => ({
+      basketId: firstBasketId + index,
+      isHatchery: true,
+      weightMg: 1000000 / (typeof animalsPerKg === "number" ? animalsPerKg : animalsPerKg(plan)),
+      animalCount: plan.quantity,
+      arrivalDate: plan.arrivalDate,
+    }));
 }
 
 interface SaleAllocation {
@@ -159,19 +237,17 @@ export class SalesPlanningService {
     const startYear = opts.year || now.getFullYear();
     const horizon = Math.max(1, Math.min(60, opts.monthsHorizon || 12));
     const mode: SalesPlanningMode = opts.mode || 'bilanciato';
-    const fallbackMortalityRates: Record<string, number> = { T1: 0.05, T3: 0.03, T10: 0.02 };
-
     const currentMonth0 = opts.startMonth != null ? opts.startMonth - 1 : now.getMonth();
-    const currentDay = now.getDate();
     const monthSteps = this.buildMonthSteps(currentMonth0, startYear, horizon);
     const yearsNeeded = [...new Set(monthSteps.map(s => s.year))];
 
-    const [sgrLookup, basketInventory, dbMortalityRates, priceMap, cashTargetsMap, ...ordersByYearArr] = await Promise.all([
+    const [sgrLookup, basketInventory, dbMortalityRates, priceMap, cashTargetsMap, arrivalPlans, ...ordersByYearArr] = await Promise.all([
       productionForecastService.getSgrLookup(),
       productionForecastService.getBasketLevelInventory(),
       this.getMortalityLookup(),
       this.getPriceList(),
       this.getCashTargets(startYear),
+      loadHatcheryArrivalPlans(yearsNeeded, now),
       ...yearsNeeded.map(y =>
         productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders }))
       ),
@@ -201,22 +277,6 @@ export class SalesPlanningService {
       }
     }
 
-    const [hatcheryRows] = await Promise.all([
-      yearsNeeded.length > 0
-        ? db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, yearsNeeded))
-        : Promise.resolve([]),
-    ]);
-
-    const hatcheryByYearMonth: Record<string, { actual: number | null; forecast: number }> = {};
-    for (const row of hatcheryRows) {
-      const key = `${row.year}-${row.month}`;
-      if (!hatcheryByYearMonth[key]) hatcheryByYearMonth[key] = { actual: null, forecast: 0 };
-      hatcheryByYearMonth[key].forecast += row.quantity;
-      if (row.actualQuantity !== null && row.actualQuantity !== undefined) {
-        hatcheryByYearMonth[key].actual = (hatcheryByYearMonth[key].actual ?? 0) + row.actualQuantity;
-      }
-    }
-
     // Inventario iniziale → SimBasket
     let baskets: SimBasket[] = basketInventory.map(b => ({
       basketId: b.basketId,
@@ -226,14 +286,27 @@ export class SalesPlanningService {
     }));
 
     let hatcheryCounter = 900000;
-    const useCustomMortality = opts.mortalityPercent !== undefined && opts.mortalityPercent !== null;
-    const customMonthlyRate = useCustomMortality ? opts.mortalityPercent! / 100 : 0;
+    const customMonthlyRate = opts.mortalityPercent !== undefined && opts.mortalityPercent !== null
+      ? opts.mortalityPercent / 100
+      : null;
 
     const tp300Threshold = activeSizeCandidates.find((candidate) => candidate.code === 'TP-300');
     if (!tp300Threshold) {
       throw new Error("TP-300 senza range attivo alla business date");
     }
-    const startApkHatchery = tp300Threshold.maxAnimalsPerKg;
+    const hatcheryStartApkEntries = await Promise.all(
+      arrivalPlans
+        .filter((plan) => plan.quantity > 0)
+        .map(async (plan) => {
+          const arrivalSizeCandidates = await getSizeRangeCandidates(plan.arrivalDate);
+          const arrivalTp300 = arrivalSizeCandidates.find((candidate) => candidate.code === 'TP-300');
+          if (!arrivalTp300) {
+            throw new Error("TP-300 senza range attivo alla business date");
+          }
+          return [`${plan.year}-${plan.month}`, arrivalTp300.maxAnimalsPerKg] as const;
+        }),
+    );
+    const hatcheryStartApkByMonth = Object.fromEntries(hatcheryStartApkEntries);
 
     const monthlyPlan: MonthlyPlan[] = [];
     const crossesYear = yearsNeeded.length > 1;
@@ -242,48 +315,30 @@ export class SalesPlanningService {
       const step = monthSteps[i];
       const m0 = step.monthIndex;
       const y = step.year;
-      const daysInMonth = new Date(y, m0 + 1, 0).getDate();
-      const simulDays = i === 0 ? Math.max(0, daysInMonth - currentDay) : daysInMonth;
-
       // Inserisci arrivi schiuditoio
       const ymKey = `${y}-${step.month1Based}`;
-      const hEntry = hatcheryByYearMonth[ymKey];
-      const todayYear = now.getFullYear();
-      const todayMonth1 = now.getMonth() + 1;
-      const isPastOrCurrent = y < todayYear || (y === todayYear && step.month1Based <= todayMonth1);
-      const hatcheryQty = hEntry ? (isPastOrCurrent ? (hEntry.actual ?? 0) : hEntry.forecast) : 0;
-      if (hatcheryQty > 0) {
-        baskets.push({
-          basketId: hatcheryCounter++,
-          isHatchery: true,
-          weightMg: 1000000 / startApkHatchery,
-          animalCount: hatcheryQty,
-        });
-      }
+      const newHatcheryBaskets = createSalesPlanningHatcheryBaskets(
+        arrivalPlans,
+        { year: y, month: step.month1Based },
+        hatcheryCounter,
+        (plan) => hatcheryStartApkByMonth[`${plan.year}-${plan.month}`],
+      );
+      baskets.push(...newHatcheryBaskets);
+      hatcheryCounter += newHatcheryBaskets.length;
 
       // Crescita giorno per giorno + mortalità
-      if (simulDays > 0) {
-        const dailyMortFraction = 1 / daysInMonth;
-        for (let d = 0; d < simulDays; d++) {
-          baskets = baskets.map(b => {
-            const apk = this.apkOf(b);
-            const sgr = productionForecastService.getSgrForAnimalsPerKg(sgrLookup, m0, apk);
-            const newWeight = b.weightMg * (1 + sgr / 100);
-            let dailyMort: number;
-            if (useCustomMortality) {
-              dailyMort = customMonthlyRate * dailyMortFraction;
-            } else {
-              const sizeName = productionForecastService.mapAnimalsPerKgToSaleSize(apk);
-              const dbRate = dbMortalityRates[sizeName]?.[m0 + 1];
-              const cat = productionForecastService.getCategoryFromAnimalsPerKg(apk);
-              const monthlyRate = dbRate !== undefined ? dbRate : (fallbackMortalityRates[cat] || 0.03);
-              dailyMort = monthlyRate * dailyMortFraction;
-            }
-            const surviving = Math.round(b.animalCount * (1 - dailyMort));
-            return { ...b, weightMg: newWeight, animalCount: surviving };
-          });
-        }
-      }
+      baskets = simulateSalesPlanningMonth({
+        baskets,
+        month: { year: y, month: step.month1Based },
+        referenceDate: now,
+        sgrLookup,
+        dbMortalityRates,
+        customMonthlyRate,
+        getSgr: (lookup, monthIndex, apk) =>
+          productionForecastService.getSgrForAnimalsPerKg(lookup, monthIndex, apk),
+        getSaleSize: (apk) => productionForecastService.mapAnimalsPerKgToSaleSize(apk),
+        getCategory: (apk) => productionForecastService.getCategoryFromAnimalsPerKg(apk),
+      });
 
       // Allocazione vendite
       const ordersThisMonth = ordersByYearMonth[ymKey] || {};

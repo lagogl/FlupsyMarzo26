@@ -5,6 +5,8 @@ export const monthParts = (n: number) => ({ year: Math.floor(n / 12), month: n %
 export interface Cohort {
   quantity: number;
   entry: number;
+  /** Day the cohort becomes available in its entry month (inclusive). */
+  entryDay?: number;
   // Each value is the survival factor from the previous month, not from origin.
   path: Record<number, { survival: number; sizeId: number | null; animalsPerKg: number;
     days?: Record<number, { survival: number; sizeId: number | null; animalsPerKg: number }>;
@@ -40,6 +42,8 @@ function eventDays(world: World, n: number, firstDay: number, finalDay: number) 
   if (existing) return existing;
   const days = new Set([firstDay, finalDay]);
   for (const c of world.cohorts) {
+    if (c.entry === n && c.entryDay != null && c.entryDay > firstDay && c.entryDay <= finalDay)
+      days.add(c.entryDay);
     const path = c.path[n]?.days;
     if (!path) continue;
     for (let day = firstDay + 1; day <= finalDay; day++) {
@@ -88,14 +92,21 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
     const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, stockBeforeOrdersBySize: {}, eligibleAtStartBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
     const previousLastDay = new Date(monthParts(n - 1).year, monthParts(n - 1).month, 0).getDate();
     world.cohorts.forEach((cohort, i) => {
-      if (cohort.entry === n) counts[i] += cohort.quantity;
+      const firstDay = n === world.first ? world.startDay ?? 1 : 1;
+      if (cohort.entry === n && (cohort.entryDay ?? firstDay) <= firstDay) counts[i] += cohort.quantity;
       const previous = cohort.path[n - 1];
       const previousSnapshot = previous?.days?.[previousLastDay]?.survival;
-      counts[i] *= (cohort.path[n]?.survival ?? 0) / (previousSnapshot || 1);
-      const size = cohort.path[n]?.sizeId;
+      const monthSnapshot = cohort.path[n];
+      const firstDaySnapshot = monthSnapshot?.days?.[firstDay];
+      // Daily hatchery snapshots include biology on their date, including the
+      // first of subsequent months. Monthly survival only carries the prior
+      // month baseline. Inventory first-day snapshots have survival 1.
+      counts[i] *= (monthSnapshot?.survival ?? 0)
+        * (firstDaySnapshot?.survival ?? 1) / (previousSnapshot || 1);
+      const size = (firstDaySnapshot ?? monthSnapshot)?.sizeId;
       if (!fulfillmentOnly && size != null) row.stockBeforeOrdersBySize![size] =
         (row.stockBeforeOrdersBySize![size] ?? 0) + Math.floor(counts[i]);
-      const p = cohort.path[n];
+      const p = firstDaySnapshot ?? monthSnapshot;
       if (!fulfillmentOnly && p) for (const id of world.sizes) {
         if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
           row.eligibleAtStartBySize![id] = (row.eligibleAtStartBySize![id] ?? 0) + Math.floor(counts[i]);
@@ -137,6 +148,15 @@ export function replay(world: World, allocations: Allocation[], stockAt?: { n: n
         const current = c.path[n]?.days?.[day];
         if (previous && current) counts[i] *= previous.survival > 0 ? current.survival / previous.survival : 0;
       });
+      // An arrival is present from its entry date, but does not accrue growth
+      // or mortality on that date. Add it only immediately before that day's
+      // orders/sales; dates before the entry cannot consume the virtual stock.
+      if (day > firstDay) {
+        world.cohorts.forEach((cohort, i) => {
+          if (cohort.entry === n && cohort.entryDay != null && cohort.entryDay === day)
+            counts[i] += cohort.quantity;
+        });
+      }
       for (const order of monthOrders?.get(day) ?? []) {
         const used = consume(order.quantity, order.sizeId, day, false, true);
         orders[order.key] = used;
@@ -219,6 +239,8 @@ function bestCapacity(world: World, accepted: Allocation[], candidate: Allocatio
   const firstDay = n === world.first ? world.startDay ?? 1 : 1;
   const days = new Set<number>([firstDay]);
   for (const cohort of world.cohorts) {
+    if (cohort.entry === n && cohort.entryDay != null && cohort.entryDay > firstDay)
+      days.add(cohort.entryDay);
     const p = cohort.path[n];
     if (!p) continue;
     for (const [text, state] of Object.entries(p.days ?? {}).sort(([a], [b]) => Number(a) - Number(b))) {
