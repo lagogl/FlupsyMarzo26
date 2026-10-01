@@ -13,7 +13,13 @@ import { useToast } from "@/hooks/use-toast";
 import { usePlanningLang, translateMonthLabel, type TKey } from "@/lib/planningI18n";
 import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndicators";
 import { aggregateHatcheryPresentation, buildHatcheryActualUpdate } from "@/lib/hatcheryPresentation";
-import { getCurrentOrderCoverage, type CurrentOrderCoverage } from "@/lib/current-order-coverage";
+import {
+  getCurrentOrderCoverage,
+  getDeliveryOrderCoverage,
+  getDeliveryCoverageUnverifiable,
+  type CurrentOrderCoverage,
+  type DeliveryOrderCoverageData,
+} from "@/lib/current-order-coverage";
 
 interface SizeMonthProjection {
   month: number;
@@ -53,6 +59,7 @@ interface MonthlyContext {
   ordiniScopertiBySize?: Record<string, number>;
   ordiniArretratiTotali?: number;
   ordiniEvasiArretratiTotali?: number;
+  deliveryCoverage?: DeliveryOrderCoverageData;
   ordiniArretrati: number;
   ordiniEvasi: number;
   budgetProduzione: number;
@@ -85,6 +92,7 @@ interface GrowthProjectionResult {
   totalNotYetAtTarget: number;
   groups: SizeGroupProjection[];
   monthlyContext: MonthlyContext[];
+  deliveryCoverageUnverifiable?: number;
 }
 
 interface HatcheryArrival {
@@ -135,6 +143,8 @@ interface SpreadsheetRow {
   showForecastCoverage?: boolean;
   excelNumberFormat?: string;
   isCoverageSummary?: boolean;
+  coverageKind?: "month-end" | "delivery";
+  coverageForSize?: string;
 }
 
 const MONTH_SHORT_IT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
@@ -165,9 +175,26 @@ function getOrderRowCoverage(month: MonthlyContext, row: SpreadsheetRow): Curren
   return null;
 }
 
+function getMonthlyCoverageForSummary(month: MonthlyContext, size?: string): CurrentOrderCoverage | null {
+  return size === undefined
+    ? getOrderRowCoverage(month, { groupKey: "ordini", isExpandable: true } as SpreadsheetRow)
+    : getOrderRowCoverage(month, { groupKey: "ordini", isSubRow: true, subRowSize: size } as SpreadsheetRow);
+}
+
 function currentOrderCoverageText(coverage: CurrentOrderCoverage, t: (key: TKey) => string): string {
   if (!coverage.available) return t("pc_order_coverage_recalculate");
   return `${formatNumber(coverage.covered!)} ${t("pc_coverage_covered")} / ${formatNumber(coverage.requested!)} ${t("pc_coverage_requested")} / ${formatNumber(coverage.uncovered!)} ${t("pc_coverage_uncovered")}`;
+}
+
+function deliveryOrderCoverageText(
+  coverage: ReturnType<typeof getDeliveryOrderCoverage>,
+  t: (key: TKey) => string,
+): string {
+  if (!coverage.available) return t("pc_order_coverage_recalculate");
+  const percent = coverage.percent === null
+    ? t("pc_delivery_coverage_no_deadlines")
+    : `${coverage.percent.toFixed(1)}%`;
+  return `${percent} · ${formatNumber(coverage.covered!)} ${t("pc_coverage_covered")} / ${formatNumber(coverage.requested!)} ${t("pc_coverage_dated_requested")} / ${formatNumber(coverage.uncovered!)} ${t("pc_coverage_uncovered")} · ${formatNumber(coverage.arrearsFulfilled!)} ${t("pc_coverage_late_arrears")} · ${formatNumber(coverage.unverifiable!)} ${t("pc_coverage_unverifiable")}`;
 }
 
 function createOrderCoverageSummaryRow(
@@ -177,18 +204,46 @@ function createOrderCoverageSummaryRow(
   t: (key: TKey) => string,
 ): SpreadsheetRow {
   return {
-    rowKey: `order_coverage_${row.subRowSize || "total"}`,
+    rowKey: `order_month_end_coverage_${row.subRowSize || "total"}`,
     label,
     tooltip: t("pc_order_coverage_tip"),
     color: "#ea580c",
     bgClass: "bg-orange-50/50",
     textClass: "text-gray-600",
     values: months.map(month => {
-      const coverage = getOrderRowCoverage(month, row);
+      const coverage = getMonthlyCoverageForSummary(month, row.subRowSize);
       return coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate");
     }),
     isSubRow: true,
     isCoverageSummary: true,
+    coverageKind: "month-end",
+    coverageForSize: row.subRowSize,
+  };
+}
+
+function createDeliveryCoverageSummaryRow(
+  label: string,
+  row: SpreadsheetRow,
+  months: MonthlyContext[],
+  t: (key: TKey) => string,
+): SpreadsheetRow {
+  return {
+    rowKey: `order_delivery_coverage_${row.subRowSize || "total"}`,
+    label,
+    tooltip: t("pc_delivery_coverage_tip"),
+    color: "#7c3aed",
+    bgClass: "bg-violet-50/50",
+    textClass: "text-gray-600",
+    values: months.map(month =>
+      deliveryOrderCoverageText(
+        getDeliveryOrderCoverage(month.deliveryCoverage, row.subRowSize),
+        t,
+      )
+    ),
+    isSubRow: true,
+    isCoverageSummary: true,
+    coverageKind: "delivery",
+    coverageForSize: row.subRowSize,
   };
 }
 
@@ -227,6 +282,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
   allHatcheryData: any[];
 }) {
   const { t } = usePlanningLang();
+  const deliveryCoverageUnverifiable = getDeliveryCoverageUnverifiable(data.deliveryCoverageUnverifiable);
+  const unknownMonthSummary = deliveryCoverageUnverifiable === null
+    ? `${t("pc_delivery_coverage_unknown_month")}: ${t("pc_order_coverage_recalculate")}`
+    : `${t("pc_delivery_coverage_unknown_month")}: ${formatNumber(deliveryCoverageUnverifiable)}`;
   const groupsAbove = data.groups.filter(g => g.alreadyAtTarget);
   const groupsBelow = data.groups.filter(g => !g.alreadyAtTarget);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -261,6 +320,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           if (m.ordiniBySize[sz] > 0) sizeSet.add(sz);
         }
       }
+      for (const [sz, coverage] of Object.entries(m.deliveryCoverage?.bySize ?? {})) {
+        if (coverage.requested > 0 || coverage.unverifiable > 0 || coverage.arrearsFulfilled > 0) {
+          sizeSet.add(sz);
+        }
+      }
     }
     return [...sizeSet].sort((a, b) => {
       const numA = parseInt(a.replace(/\D/g, '')) || 0;
@@ -268,6 +332,40 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return numA - numB;
     });
   })();
+
+  const orderTotalRow: SpreadsheetRow = {
+    rowKey: "ordini",
+    label: t("pc_row_ordini_totale"),
+    tooltip: `${t("pc_row_ordini_totale_tip")} ${allOrderSizes.join(', ') || t("pc_none")}.`,
+    color: "#ea580c",
+    bgClass: "",
+    textClass: "text-gray-800",
+    values: mc.map(m => m.ordiniTotali || 0),
+    isBold: true,
+    isExpandable: true,
+    groupKey: "ordini",
+  };
+  const orderCoverageRow = { groupKey: "ordini", isExpandable: true } as SpreadsheetRow;
+  const orderSizeRows: SpreadsheetRow[] = ordersExpanded
+    ? allOrderSizes.flatMap(sz => {
+      const row: SpreadsheetRow = {
+        label: `  ↳ ${sz}`,
+        tooltip: `${t("pc_row_ordini_size_tip")} ${sz}.`,
+        color: "#fb923c",
+        bgClass: "bg-orange-50/50",
+        textClass: "text-gray-600",
+        values: mc.map(m => (m.ordiniBySize?.[sz]) || 0),
+        isSubRow: true,
+        subRowSize: sz,
+        groupKey: "ordini",
+      };
+      return [
+        row,
+        createOrderCoverageSummaryRow(`${t("pc_order_coverage_copy_size")} ${sz}`, row, mc, t),
+        createDeliveryCoverageSummaryRow(`${t("pc_delivery_coverage_copy_size")} ${sz}`, row, mc, t),
+      ];
+    })
+    : [];
 
   const rows: SpreadsheetRow[] = [
     {
@@ -297,29 +395,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       textClass: "text-gray-600",
       values: mc.map(m => m.perditeMortalita || 0),
     },
-    {
-      rowKey: "ordini",
-      label: t("pc_row_ordini_totale"),
-      tooltip: `${t("pc_row_ordini_totale_tip")} ${allOrderSizes.join(', ') || t("pc_none")}.`,
-      color: "#ea580c",
-      bgClass: "",
-      textClass: "text-gray-800",
-      values: mc.map(m => m.ordiniTotali || 0),
-      isBold: true,
-      isExpandable: true,
-      groupKey: "ordini",
-    },
-    ...(ordersExpanded ? allOrderSizes.map(sz => ({
-      label: `  ↳ ${sz}`,
-      tooltip: `${t("pc_row_ordini_size_tip")} ${sz}.`,
-      color: "#fb923c",
-      bgClass: "bg-orange-50/50",
-      textClass: "text-gray-600",
-      values: mc.map(m => (m.ordiniBySize?.[sz]) || 0),
-      isSubRow: true,
-      subRowSize: sz,
-      groupKey: "ordini",
-    })) : []),
+    orderTotalRow,
+    createOrderCoverageSummaryRow(t("pc_order_coverage_copy_total"), orderCoverageRow, mc, t),
+    createDeliveryCoverageSummaryRow(t("pc_delivery_coverage_copy_total"), orderCoverageRow, mc, t),
+    ...orderSizeRows,
     {
       rowKey: "budget",
       label: t("pc_row_budget"),
@@ -573,11 +652,6 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     const excelRows: SpreadsheetRow[] = [];
     for (const row of rows) {
       excelRows.push(row);
-      if (row.isExpandable && row.groupKey === "ordini") {
-        excelRows.push(createOrderCoverageSummaryRow(t("pc_order_coverage_copy_total"), row, mc, t));
-      } else if (row.isSubRow && row.groupKey === "ordini" && row.subRowSize) {
-        excelRows.push(createOrderCoverageSummaryRow(`${t("pc_order_coverage_copy_size")} ${row.subRowSize}`, row, mc, t));
-      }
       if (row.rowKey === "forecast_evadibile") {
         excelRows.push({
           rowKey: "forecast_evadibile_coverage",
@@ -616,9 +690,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
             subRowSize: sz,
             groupKey: "ordini",
           });
+          const orderSizeRow = { groupKey: "ordini", isSubRow: true, subRowSize: sz } as SpreadsheetRow;
           excelRows.push(createOrderCoverageSummaryRow(
             `${t("pc_order_coverage_copy_size")} ${sz}`,
-            { isSubRow: true, subRowSize: sz, groupKey: "ordini" } as SpreadsheetRow,
+            orderSizeRow,
+            mc,
+            t,
+          ));
+          excelRows.push(createDeliveryCoverageSummaryRow(
+            `${t("pc_delivery_coverage_copy_size")} ${sz}`,
+            orderSizeRow,
             mc,
             t,
           ));
@@ -672,9 +753,15 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           } else if (coverage && !coverage.available) {
             cell.note = t("pc_order_coverage_recalculate");
           }
+          if (row.isCoverageSummary) cell.note = row.tooltip;
         }
       });
     });
+
+    const unknownMonthRow = ws.addRow([unknownMonthSummary]);
+    ws.mergeCells(unknownMonthRow.number, 1, unknownMonthRow.number, mc.length + 1);
+    unknownMonthRow.getCell(1).font = { italic: true, size: 9, color: { argb: "FF6B21A8" } };
+    unknownMonthRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
 
     ws.columns = [{ width: 38 }, ...mc.map(() => ({ width: 16 }))];
 
@@ -911,18 +998,13 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: t("pc_excel"), description: t("pc_excel_filename_pre") + " .xlsx" });
-  }, [mc, rows, data.targetSize, groupsAbove, groupsBelow, allHatcheryData, t]);
+  }, [mc, rows, data.targetSize, groupsAbove, groupsBelow, allHatcheryData, unknownMonthSummary, t]);
 
   const handleCopyTable = useCallback(() => {
     const headers = [t("pc_col_indicatore"), ...mc.map(m => m.monthLabel)].join("\t");
     const copyRows: SpreadsheetRow[] = [];
     for (const row of rows) {
       copyRows.push(row);
-      if (row.isExpandable && row.groupKey === "ordini") {
-        copyRows.push(createOrderCoverageSummaryRow(t("pc_order_coverage_copy_total"), row, mc, t));
-      } else if (row.isSubRow && row.groupKey === "ordini" && row.subRowSize) {
-        copyRows.push(createOrderCoverageSummaryRow(`${t("pc_order_coverage_copy_size")} ${row.subRowSize}`, row, mc, t));
-      }
       if (row.rowKey === "forecast_evadibile") {
         copyRows.push({
           rowKey: "forecast_evadibile_coverage",
@@ -952,9 +1034,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
               subRowSize: sz,
               groupKey: "ordini",
             });
+            const orderSizeRow = { groupKey: "ordini", isSubRow: true, subRowSize: sz } as SpreadsheetRow;
             copyRows.push(createOrderCoverageSummaryRow(
               `${t("pc_order_coverage_copy_size")} ${sz}`,
-              { isSubRow: true, subRowSize: sz, groupKey: "ordini" } as SpreadsheetRow,
+              orderSizeRow,
+              mc,
+              t,
+            ));
+            copyRows.push(createDeliveryCoverageSummaryRow(
+              `${t("pc_delivery_coverage_copy_size")} ${sz}`,
+              orderSizeRow,
               mc,
               t,
             ));
@@ -963,11 +1052,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       }
     }
     const dataRows = copyRows.map(row => [row.label, ...row.values.map(v => typeof v === 'number' ? v : String(v))].join("\t"));
-    const text = [headers, ...dataRows].join("\n");
+    const text = [headers, ...dataRows, "", unknownMonthSummary].join("\n");
     navigator.clipboard.writeText(text).then(() => {
       toast({ title: t("pc_toast_copied_title"), description: t("pc_toast_copied_desc") });
     });
-  }, [mc, rows, allOrderSizes, t]);
+  }, [mc, rows, allOrderSizes, unknownMonthSummary, t]);
 
   const multiCellStats = useMemo(() => {
     const allKeys = new Set(selectedCells);
@@ -1064,12 +1153,25 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     const row = visibleRows[rowIdx];
     if (!row) return "";
 
+    if (row.isCoverageSummary) {
+      if (row.coverageKind === "delivery") {
+        const coverage = getDeliveryOrderCoverage(m.deliveryCoverage, row.coverageForSize);
+        return `${t("pc_delivery_coverage_label")} ${row.coverageForSize || t("pc_order_coverage_total")}, ${m.monthName}: ${deliveryOrderCoverageText(coverage, t)}. ${t("pc_delivery_coverage_tip")}`;
+      }
+      const coverage = getMonthlyCoverageForSummary(m, row.coverageForSize);
+      return `${t("pc_order_coverage_label")} ${row.coverageForSize || t("pc_order_coverage_total")}, ${m.monthName}: ${coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate")}. ${t("pc_order_coverage_tip")}`;
+    }
+
     if (row.isSubRow && row.subRowSize) {
       const qty = m.ordiniBySize?.[row.subRowSize] || 0;
       const coverage = getOrderRowCoverage(m, row);
       const coverageDetails = coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate");
+      const deliveryCoverageDetails = deliveryOrderCoverageText(
+        getDeliveryOrderCoverage(m.deliveryCoverage, row.subRowSize),
+        t,
+      );
       return qty > 0
-        ? `= ${t("pc_cf_sub_has_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}: ${fn(qty)} ${t("pc_cf_animali")}. ${t("pc_order_coverage_label")}: ${coverageDetails}.`
+        ? `= ${t("pc_cf_sub_has_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}: ${fn(qty)} ${t("pc_cf_animali")}. ${t("pc_order_coverage_label")}: ${coverageDetails}. ${t("pc_delivery_coverage_label")}: ${deliveryCoverageDetails}.`
         : `= ${t("pc_cf_sub_no_order")} ${row.subRowSize} ${t("pc_cf_sub_per")} ${m.monthName}`;
     }
 
@@ -1095,12 +1197,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       const tot = m.ordiniTotali || 0;
       const coverage = getOrderRowCoverage(m, row);
       const coverageDetails = coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate");
+      const deliveryCoverageDetails = deliveryOrderCoverageText(
+        getDeliveryOrderCoverage(m.deliveryCoverage),
+        t,
+      );
       if (tot > 0) {
         const breakdown = allOrderSizes
           .filter(sz => (m.ordiniBySize?.[sz] || 0) > 0)
           .map(sz => `${sz}: ${fn(m.ordiniBySize[sz])}`)
           .join(', ');
-        return `${t("pc_cf_ordini_a_pre")} ${m.monthName}: ${fn(tot)} ${t("pc_cf_ordini_a_suf")} (${breakdown}). ${t("pc_order_coverage_label")}: ${coverageDetails}.`;
+        return `${t("pc_cf_ordini_a_pre")} ${m.monthName}: ${fn(tot)} ${t("pc_cf_ordini_a_suf")} (${breakdown}). ${t("pc_order_coverage_label")}: ${coverageDetails}. ${t("pc_delivery_coverage_label")}: ${deliveryCoverageDetails}.`;
       }
       return `${t("pc_cf_ordini_b")} ${m.monthName}`;
     }
@@ -1338,6 +1444,12 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{t("pc_paths_note")}</span>
         </div>
+        {(deliveryCoverageUnverifiable === null || deliveryCoverageUnverifiable > 0) && (
+          <div className="mb-2 flex items-start gap-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] leading-relaxed text-violet-900">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span><strong>{unknownMonthSummary}.</strong> {t("pc_delivery_coverage_unknown_month_tip")}</span>
+          </div>
+        )}
         <p className="text-[10px] text-gray-400 italic">{t("pc_ctrl_hint")}</p>
         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-blue-500" />{t("pc_legend_gross")}</span>
@@ -1445,12 +1557,18 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                         const orderCoverageDetails = orderCoverage
                           ? `${t("pc_order_coverage_tip")} ${currentOrderCoverageText(orderCoverage, t)}`
                           : undefined;
+                        const summaryCoverageDetails = row.isCoverageSummary
+                          ? row.coverageKind === "delivery"
+                            ? `${t("pc_delivery_coverage_tip")} ${deliveryOrderCoverageText(getDeliveryOrderCoverage(month.deliveryCoverage, row.coverageForSize), t)}`
+                            : `${t("pc_order_coverage_tip")} ${currentOrderCoverageText(getMonthlyCoverageForSummary(month, row.coverageForSize) || getCurrentOrderCoverage(undefined, undefined), t)}`
+                          : undefined;
+                        const cellDetails = summaryCoverageDetails || orderCoverageDetails;
 
                         return (
                           <td
                             key={rowKey(row)}
                             className={`cursor-cell border-b border-r border-gray-200 p-0 transition-all ${cellBg} ${isTraceResult ? 'relative z-10 ring-2 ring-amber-500 ring-inset' : isTraceSource ? 'ring-1 ring-cyan-400 ring-inset' : ''} ${isSelected ? 'relative z-10 bg-blue-50 ring-2 ring-blue-500 ring-inset' : ''}`}
-                            title={orderCoverageDetails}
+                            title={cellDetails}
                             onClick={(e) => handleCellClick(monthIdx, rowIdx, e)}
                             onMouseEnter={() => calculationTraceEnabled && setHoveredCell({ rowKey: rowKey(row), col: monthIdx })}
                             onMouseLeave={() => calculationTraceEnabled && setHoveredCell(current => current?.rowKey === rowKey(row) && current.col === monthIdx ? null : current)}
@@ -1459,15 +1577,16 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                               handleColHeaderClick(rowIdx);
                             }}
                           >
-                            <div className={`flex flex-col items-end px-2 text-right text-[14px] tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} ${textColor} ${
+                            <div className={`flex flex-col px-2 tabular-nums ${row.isCoverageSummary ? 'items-start text-left text-[10px] leading-snug' : 'items-end text-right text-[14px]'} ${row.isBold ? 'font-bold' : 'font-semibold'} ${textColor} ${
+                              row.isCoverageSummary ? 'min-w-[145px] py-1' :
                               (row.isSubRow && row.subRowSize && (month.ordiniBySize?.[row.subRowSize] || 0) > 0) ||
                               (row.isExpandable && row.groupKey === 'ordini' && (month.ordiniTotali || 0) > 0) ||
                               (row.showForecastCoverage && (month.budgetProduzione || 0) > 0)
                                 ? 'gap-0.5 py-1' : 'py-2'
                             }`}>
-                              <div className="flex items-center justify-end gap-1">
+                              <div className={`flex items-center gap-1 ${row.isCoverageSummary ? 'justify-start' : 'justify-end'}`}>
                                 {info && <span className="cursor-help text-[11px] text-amber-600" title={row.infoTooltip || t("pc_late_arrivals_tip")}>⏱</span>}
-                                <span>{displayVal}</span>
+                                <span className={row.isCoverageSummary ? "whitespace-normal break-words text-left" : ""}>{displayVal}</span>
                               </div>
                               {row.showForecastCoverage && month.budgetProduzione > 0 && (() => {
                                 const pct = Math.min(100, Math.round((month.forecastEvadibileTarget || 0) / month.budgetProduzione * 100));
@@ -1610,12 +1729,17 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                     const orderCoverageDetails = orderCoverage
                       ? `${t("pc_order_coverage_tip")} ${currentOrderCoverageText(orderCoverage, t)}`
                       : undefined;
+                    const summaryCoverageDetails = row.isCoverageSummary && mc[colIdx]
+                      ? row.coverageKind === "delivery"
+                        ? `${t("pc_delivery_coverage_tip")} ${deliveryOrderCoverageText(getDeliveryOrderCoverage(mc[colIdx].deliveryCoverage, row.coverageForSize), t)}`
+                        : `${t("pc_order_coverage_tip")} ${currentOrderCoverageText(getMonthlyCoverageForSummary(mc[colIdx], row.coverageForSize) || getCurrentOrderCoverage(undefined, undefined), t)}`
+                      : undefined;
 
                     return (
                       <td
                         key={colIdx}
                         className={`border-b border-r border-gray-200 p-0 cursor-cell transition-all ${cellBg} ${isTraceResult ? 'ring-2 ring-amber-500 ring-inset z-10 relative' : isTraceSource ? 'ring-1 ring-cyan-400 ring-inset' : ''} ${isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50 z-10 relative' : ''}`}
-                        title={orderCoverageDetails}
+                        title={summaryCoverageDetails || orderCoverageDetails}
                         onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
                         onMouseEnter={() => calculationTraceEnabled && setHoveredCell({ rowKey: rowKey(row), col: colIdx })}
                         onMouseLeave={() => calculationTraceEnabled && setHoveredCell(current => current?.rowKey === rowKey(row) && current.col === colIdx ? null : current)}
@@ -1624,12 +1748,12 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                           handleRowHeaderClick(rowIdx);
                         }}
                       >
-                        <div className={`px-2 text-right tabular-nums ${row.isBold ? 'font-bold' : 'font-semibold'} text-[14px] ${textColor} flex flex-col items-end ${
-                          (row.isSubRow && row.subRowSize && (mc[colIdx]?.ordiniBySize?.[row.subRowSize] || 0) > 0) ||
+                        <div className={`px-2 tabular-nums ${row.isCoverageSummary ? 'text-left text-[10px] leading-snug items-start min-w-[155px]' : 'text-right text-[14px] items-end'} ${row.isBold ? 'font-bold' : 'font-semibold'} ${textColor} flex flex-col ${
+                          row.isCoverageSummary ? 'py-1' : (row.isSubRow && row.subRowSize && (mc[colIdx]?.ordiniBySize?.[row.subRowSize] || 0) > 0) ||
                            (row.isExpandable && row.groupKey === 'ordini' && (mc[colIdx]?.ordiniTotali || 0) > 0) ||
                            (row.showForecastCoverage && (mc[colIdx]?.budgetProduzione || 0) > 0)
-                            ? 'py-1 gap-0.5' : 'py-2'}`}>
-                          <div className="flex items-center justify-end gap-1">
+                             ? 'py-1 gap-0.5' : 'py-2'}`}>
+                          <div className={`flex items-center gap-1 ${row.isCoverageSummary ? 'justify-start' : 'justify-end'}`}>
                             {info && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1640,7 +1764,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
                                 </TooltipContent>
                               </Tooltip>
                             )}
-                            <span>{displayVal}</span>
+                            <span className={row.isCoverageSummary ? "whitespace-normal break-words text-left" : ""}>{displayVal}</span>
                           </div>
                           {row.showForecastCoverage && (() => {
                             const m = mc[colIdx];

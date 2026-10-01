@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { growthProjectionService } from "./growth-projection.service";
+import { DeliveryOrdersUnavailableError } from "./delivery-order-source";
 import { formatProjectionBusinessDate } from "./growth-projection-simulation";
 import { businessToday, getBusinessReferenceDate } from "../../../utils/business-date";
 import { db } from "../../../db";
@@ -62,6 +63,10 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     console.error("Errore proiezione crescita:", error);
+    if (error instanceof DeliveryOrdersUnavailableError) {
+      res.status(503).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: "Errore nel calcolo della proiezione crescita" });
   }
 });

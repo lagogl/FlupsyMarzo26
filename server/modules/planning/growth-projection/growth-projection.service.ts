@@ -1,8 +1,10 @@
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { getBusinessReferenceDate } from "../../../utils/business-date";
 import { db } from "../../../db";
+import { dbEsterno, isDbEsternoAvailable } from "../../../db-esterno";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates, sandNurserySeedings } from "../../../../shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
+import { ordiniCondivisi } from "../../../schema-esterno";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 import {
   addForecastAllocationToLedger,
@@ -24,6 +26,19 @@ import {
   simulateBasketLedgerForMonth,
 } from "./growth-projection-simulation";
 import { allocateOrdersAgainstBaskets } from "./order-allocation";
+import {
+  calculateDeliveryDateCoverage,
+  canonicalDeliveryDate,
+  emptyDeliveryCoverageSummary,
+  getDeliveryCoverageHatcheryYears,
+  mapDeliveryOrderSize,
+  type DeliveryCoverageOrder,
+  type DeliveryCoverageSummary,
+} from "./delivery-coverage";
+import {
+  activeDeliveryOrdersCondition,
+  DeliveryOrdersUnavailableError,
+} from "./delivery-order-source";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -87,6 +102,7 @@ interface MonthlyContext {
   giacenzaNetTarget: number;
   schiuditoioNecessario: number;
   perditeMortalita: number;
+  deliveryCoverage: DeliveryCoverageSummary;
 }
 
 interface GrowthProjectionResult {
@@ -102,6 +118,7 @@ interface GrowthProjectionResult {
   totalNotYetAtTarget: number;
   groups: SizeGroupProjection[];
   monthlyContext: MonthlyContext[];
+  deliveryCoverageUnverifiable: number;
 }
 
 interface MonthStep {
@@ -110,7 +127,38 @@ interface MonthStep {
   month1Based: number;
 }
 
+interface RawDeliveryCoverageOrder {
+  id: number;
+  quantita: number;
+  quantitaTotale: number | null;
+  tagliaRichiesta: string;
+  dataInizioConsegna: string | null;
+  dataConsegna: string | null;
+  dataFineConsegna: string | null;
+}
+
 export class GrowthProjectionService {
+  private async getOrdersForDeliveryCoverage(): Promise<RawDeliveryCoverageOrder[]> {
+    if (!isDbEsternoAvailable() || !dbEsterno) throw new DeliveryOrdersUnavailableError();
+    try {
+      const rows = await dbEsterno
+        .select({
+          id: ordiniCondivisi.id,
+          quantita: ordiniCondivisi.quantita,
+          quantitaTotale: ordiniCondivisi.quantitaTotale,
+          tagliaRichiesta: ordiniCondivisi.tagliaRichiesta,
+          dataInizioConsegna: ordiniCondivisi.dataInizioConsegna,
+          dataConsegna: ordiniCondivisi.dataConsegna,
+          dataFineConsegna: ordiniCondivisi.dataFineConsegna,
+        })
+        .from(ordiniCondivisi)
+        .where(activeDeliveryOrdersCondition());
+      return rows;
+    } catch (error) {
+      throw new Error("Unable to load delivery-date orders for growth projection", { cause: error });
+    }
+  }
+
   private async getSandNurseryRows(yearsNeeded: number[]) {
     if (yearsNeeded.length === 0) return [];
     try {
@@ -168,12 +216,20 @@ export class GrowthProjectionService {
     const monthSteps = this.buildMonthSteps(currentMonth0, startYear, horizon);
 
     const yearsNeeded = [...new Set(monthSteps.map(s => s.year))];
+    const lastProjectionMonth = monthSteps[monthSteps.length - 1];
+    const dailyYearsNeeded = getDeliveryCoverageHatcheryYears(
+      now,
+      lastProjectionMonth
+        ? { year: lastProjectionMonth.year, month: lastProjectionMonth.month1Based }
+        : undefined,
+    );
 
-    const [sgrLookup, basketInventory, dbMortalityRates, simCtx, ...ordersByYearArr] = await Promise.all([
+    const [sgrLookup, basketInventory, dbMortalityRates, simCtx, rawDeliveryOrders, ...ordersByYearArr] = await Promise.all([
       productionForecastService.getSgrLookup(),
       productionForecastService.getBasketLevelInventory(),
       this.getMortalityRatesFromDb(),
       loadGrowthSimulationContext(),
+      this.getOrdersForDeliveryCoverage(),
       ...yearsNeeded.map(y => productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders })))
     ]);
     const targetSizeRow = simCtx.allSizes.find((size: any) => size.code === targetSize);
@@ -187,7 +243,7 @@ export class GrowthProjectionService {
     const targetMaxAnimalsPerKg = targetRange.maxAnimalsPerKg;
     const targetBudgetCategory = getProductionTargetCategory(targetMaxAnimalsPerKg);
 
-    const [budgetRows, hatcheryRows, sandNurseryRows] = await Promise.all([
+    const [budgetRows, hatcheryRows, sandNurseryRows, dailyHatcheryRows] = await Promise.all([
       yearsNeeded.length > 0
         ? db.select().from(productionTargets).where(inArray(productionTargets.year, yearsNeeded))
         : Promise.resolve([]),
@@ -196,6 +252,9 @@ export class GrowthProjectionService {
         : Promise.resolve([]),
       yearsNeeded.length > 0
         ? this.getSandNurseryRows(yearsNeeded)
+        : Promise.resolve([]),
+      dailyYearsNeeded.length > 0
+        ? db.select().from(hatcheryArrivals).where(inArray(hatcheryArrivals.year, dailyYearsNeeded))
         : Promise.resolve([])
     ]);
 
@@ -257,6 +316,63 @@ export class GrowthProjectionService {
       }
     }
 
+    // Delivery-date replay may start before the selected display horizon.
+    // Keep its hatchery inputs separate so adding intervening years never
+    // changes the legacy monthly or Forecast datasets.
+    const deliveryHatcheryByYearMonth: Record<string, { actual: number | null; forecast: number }> = {};
+    for (const row of dailyHatcheryRows) {
+      const key = `${row.year}-${row.month}`;
+      if (!deliveryHatcheryByYearMonth[key]) {
+        deliveryHatcheryByYearMonth[key] = { actual: null, forecast: 0 };
+      }
+      deliveryHatcheryByYearMonth[key].forecast += row.quantity;
+      if (row.actualQuantity !== null && row.actualQuantity !== undefined) {
+        deliveryHatcheryByYearMonth[key].actual =
+          (deliveryHatcheryByYearMonth[key].actual ?? 0) + row.actualQuantity;
+      }
+    }
+    if (dailyYearsNeeded.length > 0) {
+      const dailyLiveSums = await db.execute(sql`
+        SELECT EXTRACT(YEAR FROM arrival_date)::int AS year,
+               EXTRACT(MONTH FROM arrival_date)::int AS month,
+               COALESCE(SUM(animal_count), 0)::bigint AS total,
+               COUNT(*)::int AS lot_count
+        FROM lots
+        WHERE EXTRACT(YEAR FROM arrival_date)::int IN (${sql.join(dailyYearsNeeded.map(y => sql`${y}`), sql`, `)})
+          AND arrival_date <= ${formatProjectionBusinessDate(now)}::date
+        GROUP BY 1, 2
+      `);
+      for (const row of dailyLiveSums.rows as any[]) {
+        const key = `${Number(row.year)}-${Number(row.month)}`;
+        if (!deliveryHatcheryByYearMonth[key]) {
+          deliveryHatcheryByYearMonth[key] = { actual: null, forecast: 0 };
+        }
+        deliveryHatcheryByYearMonth[key].actual = selectActualArrivedQuantity(
+          deliveryHatcheryByYearMonth[key].actual,
+          Number(row.total),
+          Number(row.lot_count),
+        );
+      }
+    }
+
+    const deliveryOrders: DeliveryCoverageOrder[] = rawDeliveryOrders.flatMap((row) => {
+      // Never drop demand because the size is future-effective or unknown.
+      // Unknown sizes have no physical range, so remain explicitly uncovered.
+      const size = mapDeliveryOrderSize(row.tagliaRichiesta, simCtx) ?? "TAGLIA NON RICONOSCIUTA";
+      const quantity = row.quantitaTotale || row.quantita || 0;
+      if (quantity <= 0) return [];
+      return [{
+        id: row.id,
+        size,
+        quantity,
+        deliveryDate: canonicalDeliveryDate({
+          dataInizioConsegna: row.dataInizioConsegna,
+          dataConsegna: row.dataConsegna,
+          dataFineConsegna: row.dataFineConsegna,
+        }),
+      }];
+    });
+
     const grouped: Record<string, Array<{basketId: number, animalsPerKg: number, animalCount: number}>> = {};
     for (const b of basketInventory) {
       const size = findProjectedSize(1_000_000 / b.animalsPerKg, projectionStartDate, simCtx.sizeRangeVersions);
@@ -299,6 +415,20 @@ export class GrowthProjectionService {
 
     const useCustomMortality = mortalityPercent !== undefined && mortalityPercent !== null;
     const customMonthlyRate = useCustomMortality ? mortalityPercent! / 100 : 0;
+
+    const deliveryCoverage = calculateDeliveryDateCoverage({
+      orders: deliveryOrders,
+      startingBaskets: basketInventory.map((basket) => ({
+        basketId: basket.basketId,
+        weightMg: 1_000_000 / basket.animalsPerKg,
+        animalCount: basket.animalCount,
+      })),
+      months: monthSteps.map((step) => ({ year: step.year, month: step.month1Based })),
+      referenceDate: now,
+      simulationContext: simCtx,
+      hatcheryByYearMonth: deliveryHatcheryByYearMonth,
+      overrideMonthlyMortality: useCustomMortality ? customMonthlyRate : undefined,
+    });
 
     const monthlyContext: MonthlyContext[] = [];
     let orderBacklogBySize: Record<string, number> = {};
@@ -497,7 +627,8 @@ export class GrowthProjectionService {
         giacenzaLordaConSchiuditoio,
         giacenzaNetTarget,
         schiuditoioNecessario: 0,
-        perditeMortalita
+        perditeMortalita,
+        deliveryCoverage: deliveryCoverage.byYearMonth[ymKey] ?? emptyDeliveryCoverageSummary(),
       });
     }
 
@@ -698,7 +829,8 @@ export class GrowthProjectionService {
       totalAlreadyAtTarget: totalAlready,
       totalNotYetAtTarget: totalCurrentQty - totalAlready,
       groups,
-      monthlyContext
+      monthlyContext,
+      deliveryCoverageUnverifiable: deliveryCoverage.unknownMonthUnverifiable,
     };
   }
 }

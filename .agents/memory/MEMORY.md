@@ -54,3 +54,4 @@
 - [Residui schiuditoio commerciali](hatchery-residual-arrival-timing.md) — disponibilità datata negli scenari: il residuo entra al 15, o allo snapshot successivo, senza crescita pregressa.
 - [Fotografie di verifica proiezioni](projection-verification-snapshots.md) — rigenerare lo storico sugli stessi input; distinguere cambi di logica da nuove estrazioni live.
 - [Data aziendale delle proiezioni](projection-business-date.md) — convertire solo l'istante corrente a Europe/Rome; le date di simulazione sono date civili, non timestamp.
+- [Copertura alle scadenze](order-deadline-coverage.md) — capacità mensile e disponibilità puntuale sono alternative; ritardi e date non verificabili restano separati.
