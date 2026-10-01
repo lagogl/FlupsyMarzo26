@@ -18,6 +18,7 @@ export { businessToday };
 const commonWarnings = [
   "Simulazione separata: non modifica giacenze, ordini, Forecast o semine operative.",
   "Quantità commerciali alternative, NON sommabili tra mesi e taglie. Ogni vendita viene verificata contro tutti gli ordini futuri caricati.",
+  "Le vendite utilizzano prima gli animali più piccoli fra quelli fisicamente idonei, conservando i più grandi per gli impegni più restrittivi. Ordini e semine mantengono il criterio storico; gli ordini hanno priorità nello stesso giorno. Non si garantisce un ottimo globale.",
   "Le consegne sono valutate alla data prevista; le vendite mensili sono collocate al giorno con massima capacità protetta nella taglia. Lo stock a inizio mese resta distinto dalle opportunità maturate dopo. Solo gli ordini con primo mese di consegna dal mese iniziale dello scenario in poi sono riservati.",
   "Gli arrivi residui dello schiuditoio entrano il 15; nel mese corrente, se il 15 è già passato, entrano oggi senza crescita o mortalità retroattive.",
   "Incassi e ricavi riguardano solo le vendite dello scenario; nessun margine, costo o incasso degli ordini acquisiti è inventato. Incassi oltre l'orizzonte non inclusi nei totali.",

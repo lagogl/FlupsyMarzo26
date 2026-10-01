@@ -51,32 +51,7 @@ interface Replay {
   stocksByDay?: Map<number, { dayStock: Record<number, number>; nurseryStock: number }>;
 }
 
-const eventCache = new WeakMap<World, Map<number, number[]>>();
-function eventDays(world: World, n: number, firstDay: number, finalDay: number, budget?: ProposalWorkBudget) {
-  checkProposalBudget(budget);
-  let cached = eventCache.get(world);
-  if (!cached) { cached = new Map(); eventCache.set(world, cached); }
-  const existing = cached.get(n);
-  if (existing) return existing;
-  const days = new Set([firstDay, finalDay]);
-  for (const c of world.cohorts) {
-    checkProposalBudget(budget);
-    if (c.entry === n && c.entryDay != null && c.entryDay > firstDay && c.entryDay <= finalDay)
-      days.add(c.entryDay);
-    const path = c.path[n]?.days;
-    if (!path) continue;
-    for (let day = firstDay + 1; day <= finalDay; day++) {
-      checkProposalBudget(budget);
-      const before = path[day - 1], after = path[day];
-      if (before && after && (before.sizeId !== after.sizeId
-        || (before.animalsPerKg > 29_999) !== (after.animalsPerKg > 29_999))) days.add(day);
-    }
-  }
-  const sorted = [...days].sort((a, b) => a - b);
-  cached.set(n, sorted);
-  return sorted;
-}
-
+type BiologySnapshot = Cohort["path"][number]["days"] extends Record<number, infer T> | undefined ? T : never;
 /** Replay on event dates; daily survival ratios cover skipped days. Never changes inputs. */
 export function replay(
   world: World,
@@ -87,6 +62,7 @@ export function replay(
 ): Replay {
   assertWorldDeadline(world);
   checkProposalBudget(budget);
+  const preparation = prepareReplay(world, budget);
   const counts = world.cohorts.map(() => 0);
   const months = new Map<number, ScenarioMonth>();
   const orders: Record<string, number> = {};
@@ -95,17 +71,7 @@ export function replay(
   let nurseryStock: number | undefined;
   const stocksByDay = stockAt?.days ? new Map<number, { dayStock: Record<number, number>; nurseryStock: number }>() : undefined;
   const receipts: Record<number, number> = {};
-  const ordersByDate = new Map<number, Map<number, Order[]>>();
   const salesByDate = new Map<number, Map<number, Allocation[]>>();
-  for (const order of world.orders) {
-    checkProposalBudget(budget);
-    const day = order.day ?? (order.at === world.first ? world.startDay ?? 1 : 1);
-    let days = ordersByDate.get(order.at);
-    if (!days) { days = new Map(); ordersByDate.set(order.at, days); }
-    const entries = days.get(day) ?? [];
-    entries.push(order);
-    days.set(day, entries);
-  }
   for (const sale of allocations) {
     checkProposalBudget(budget);
     const n = monthNumber(sale.year, sale.month);
@@ -119,44 +85,66 @@ export function replay(
   for (let n = world.first; n <= world.last; n++) {
     assertWorldDeadline(world);
     checkProposalBudget(budget);
-    const row: ScenarioMonth = { ...monthParts(n), availableBySize: {}, stockBeforeOrdersBySize: {}, eligibleAtStartBySize: {}, ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0, orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0 };
-    const previousLastDay = new Date(monthParts(n - 1).year, monthParts(n - 1).month, 0).getDate();
-    world.cohorts.forEach((cohort, i) => {
+    const preparedMonth = preparation.months.get(n)!;
+    const { firstDay, finalDay, startQuantities, startFactors, startStates, finalStates } = preparedMonth;
+    const { year, month } = monthParts(n);
+    const row: ScenarioMonth | undefined = fulfillmentOnly ? undefined : {
+      year, month, availableBySize: {}, stockBeforeOrdersBySize: {}, eligibleAtStartBySize: {},
+      ordersRequested: 0, ordersFulfilled: 0, orderShortfall: 0,
+      orderCommitment: world.orderCommitments?.[n], salesRequested: 0, salesApplied: 0,
+      sandNurseryApplied: 0, revenue: 0, receipts: 0, remainingAnimals: 0,
+    };
+    for (let i = 0; i < world.cohorts.length; i++) {
       checkProposalBudget(budget);
-      const firstDay = n === world.first ? world.startDay ?? 1 : 1;
-      if (cohort.entry === n && (cohort.entryDay ?? firstDay) <= firstDay) counts[i] += cohort.quantity;
-      const previous = cohort.path[n - 1];
-      const previousSnapshot = previous?.days?.[previousLastDay]?.survival;
-      const monthSnapshot = cohort.path[n];
-      const firstDaySnapshot = monthSnapshot?.days?.[firstDay];
-      // Daily hatchery snapshots include biology on their date, including the
-      // first of subsequent months. Monthly survival only carries the prior
-      // month baseline. Inventory first-day snapshots have survival 1.
-      counts[i] *= (monthSnapshot?.survival ?? 0)
-        * (firstDaySnapshot?.survival ?? 1) / (previousSnapshot || 1);
-      const size = (firstDaySnapshot ?? monthSnapshot)?.sizeId;
-      if (!fulfillmentOnly && size != null) row.stockBeforeOrdersBySize![size] =
-        (row.stockBeforeOrdersBySize![size] ?? 0) + Math.floor(counts[i]);
-      const p = firstDaySnapshot ?? monthSnapshot;
-      if (!fulfillmentOnly && p) for (const id of world.sizes) {
-        if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
-          row.eligibleAtStartBySize![id] = (row.eligibleAtStartBySize![id] ?? 0) + Math.floor(counts[i]);
+      if (startQuantities[i]) counts[i] += startQuantities[i];
+      counts[i] *= startFactors[i];
+      const p = startStates[i];
+      if (row && p) {
+        const quantity = Math.floor(counts[i]);
+        const size = p.sizeId;
+        if (size != null) row.stockBeforeOrdersBySize![size] =
+          (row.stockBeforeOrdersBySize![size] ?? 0) + quantity;
+        for (const id of world.sizes) {
+          if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
+            row.eligibleAtStartBySize![id] = (row.eligibleAtStartBySize![id] ?? 0) + quantity;
+        }
       }
-    });
+    }
     const consume = (quantity: number, sizeId: number, day: number, nursery = false, order = false) => {
       let left = quantity;
-      // Most mature first, deterministic across all replays.
-      const eligible: { i: number; p: NonNullable<Cohort["path"][number]> }[] = [];
-      world.cohorts.forEach((c, i) => {
+      // Best physical fit: use the smallest eligible animals first, preserving
+      // larger animals for stricter future commitments. Apply the same rule to
+      // sales in every commercial replay (including probes). Acquired orders
+      // and nursery keep their historic consumption rule: changing their
+      // baseline can redistribute shortfalls or move fixed seeding allocations.
+      // Eligibility uses dated ranges, never the number in a TP code; cohort
+      // index breaks ties deterministically. Scostamenti has its own engine.
+      const limit = nursery ? 29_999 : order
+        ? world.maxApk[`${n}|${day}|${sizeId}`] ?? world.maxApk[`${n}|${sizeId}`] ?? -1
+        : world.maxApk[`${n}|${sizeId}`] ?? -1;
+      let cache = cohortFitCache.get(world);
+      if (!cache) { cache = new Map(); cohortFitCache.set(world, cache); }
+      const historicPreference = order || nursery;
+      const key = `${n}|${day}|${limit}|${historicPreference}`;
+      let eligible = cache.get(key);
+      if (!eligible) {
+        const ranked: { i: number; apk: number }[] = [];
+        for (let i = 0; i < world.cohorts.length; i++) {
+          checkProposalBudget(budget);
+          const c = world.cohorts[i];
+          const p = preparedMonth.statesByDay.get(day)?.[i] ?? c.path[n];
+          if (p && p.animalsPerKg <= limit) ranked.push({ i, apk: p.animalsPerKg });
+        }
+        ranked.sort((a, b) => {
+          checkProposalBudget(budget);
+          return (historicPreference ? a.apk - b.apk : b.apk - a.apk) || a.i - b.i;
+        });
+        eligible = ranked.map(({ i }) => i);
+        cache.set(key, eligible);
+      }
+      for (const i of eligible) {
         checkProposalBudget(budget);
-        const p = c.path[n]?.days?.[day] ?? c.path[n];
-        if (counts[i] > 0 && p && (nursery ? p.animalsPerKg <= 29_999
-          : p.animalsPerKg <= (order ? world.maxApk[`${n}|${day}|${sizeId}`] ?? world.maxApk[`${n}|${sizeId}`] ?? -1
-            : world.maxApk[`${n}|${sizeId}`] ?? -1))) eligible.push({ i, p });
-      });
-      eligible.sort((a, b) => a.p.animalsPerKg - b.p.animalsPerKg || a.i - b.i);
-      for (const { i } of eligible) {
-        checkProposalBudget(budget);
+        if (counts[i] <= 0) continue;
         const take = Math.min(left, Math.floor(counts[i]));
         counts[i] -= take;
         left -= take;
@@ -164,54 +152,66 @@ export function replay(
       }
       return quantity - left;
     };
-    const firstDay = n === world.first ? world.startDay ?? 1 : 1;
-    const { year, month } = monthParts(n);
-    const finalDay = new Date(year, month, 0).getDate();
-    const dates = new Set(eventDays(world, n, firstDay, finalDay, budget));
-    const monthOrders = ordersByDate.get(n);
+    const dates = eventDaysForReplay(preparedMonth, salesByDate.get(n), stockAt, n, budget);
+    const monthOrders = preparedMonth.ordersByDay;
     const monthSales = salesByDate.get(n);
-    for (const day of monthOrders?.keys() ?? []) dates.add(day);
-    for (const day of monthSales?.keys() ?? []) dates.add(day);
-    if (stockAt?.n === n) {
-      dates.add(stockAt.day);
-      for (const day of stockAt.days ?? []) dates.add(day);
-    }
     let previousDay = firstDay;
-    for (const day of [...dates].sort((a, b) => a - b)) {
+    for (const day of dates) {
       assertWorldDeadline(world);
       checkProposalBudget(budget);
-      if (day > firstDay) world.cohorts.forEach((c, i) => {
-        checkProposalBudget(budget);
-        const previous = c.path[n]?.days?.[previousDay];
-        const current = c.path[n]?.days?.[day];
-        if (previous && current) counts[i] *= previous.survival > 0 ? current.survival / previous.survival : 0;
-      });
+      if (day > firstDay) {
+        let byPreviousDay = preparedMonth.transitions.get(previousDay);
+        if (!byPreviousDay) { byPreviousDay = new Map(); preparedMonth.transitions.set(previousDay, byPreviousDay); }
+        let transition = byPreviousDay.get(day);
+        if (!transition) {
+          const indices: number[] = [], factors: number[] = [];
+          const previous = preparedMonth.dailySnapshotsByDay.get(previousDay);
+          const current = preparedMonth.dailySnapshotsByDay.get(day);
+          if (previous && current) for (let i = 0; i < world.cohorts.length; i++) {
+            checkProposalBudget(budget);
+            const before = previous[i], after = current[i];
+            if (before && after) {
+              indices.push(i);
+              factors.push(before.survival > 0 ? after.survival / before.survival : 0);
+            }
+          }
+          transition = { indices, factors };
+          byPreviousDay.set(day, transition);
+        }
+        for (let i = 0; i < transition.indices.length; i++) {
+          checkProposalBudget(budget);
+          counts[transition.indices[i]] *= transition.factors[i];
+        }
+      }
       // An arrival is present from its entry date, but does not accrue growth
       // or mortality on that date. Add it only immediately before that day's
       // orders/sales; dates before the entry cannot consume the virtual stock.
       if (day > firstDay) {
-        world.cohorts.forEach((cohort, i) => {
+        for (const arrival of preparedMonth.arrivalsByDay.get(day) ?? []) {
           checkProposalBudget(budget);
-          if (cohort.entry === n && cohort.entryDay != null && cohort.entryDay === day)
-            counts[i] += cohort.quantity;
-        });
+          counts[arrival.index] += arrival.quantity;
+        }
       }
       for (const order of monthOrders?.get(day) ?? []) {
         checkProposalBudget(budget);
         const used = consume(order.quantity, order.sizeId, day, false, true);
         orders[order.key] = used;
-        row.ordersRequested += order.quantity;
-        row.ordersFulfilled += used;
+        if (row) {
+          row.ordersRequested += order.quantity;
+          row.ordersFulfilled += used;
+        }
       }
       for (const sale of monthSales?.get(day) ?? []) {
         checkProposalBudget(budget);
         const used = consume(sale.quantity, sale.sizeId, day, sale.nursery);
         applied[sale.id] = used;
-        if (sale.nursery) row.sandNurseryApplied += used;
+        if (sale.nursery) {
+          if (row) row.sandNurseryApplied += used;
+        }
         else {
-          row.salesRequested += sale.quantity;
-          row.salesApplied += used;
-          if (!fulfillmentOnly) {
+          if (row) {
+            row.salesRequested += sale.quantity;
+            row.salesApplied += used;
             const revenue = used * (sale.pricePerThousand ?? 0) / 1000;
             row.revenue += revenue;
             receipts[n + sale.paymentDelayMonths] = (receipts[n + sale.paymentDelayMonths] ?? 0) + revenue;
@@ -221,32 +221,36 @@ export function replay(
       if (stockAt?.n === n && (stockAt.day === day || stockAt.days?.includes(day))) {
         const stock: Record<number, number> = {};
         let nursery = 0;
-        world.cohorts.forEach((c, i) => {
+        const states = preparedMonth.statesByDay.get(day);
+        for (let i = 0; i < world.cohorts.length; i++) {
           checkProposalBudget(budget);
-          const p = c.path[n]?.days?.[day] ?? c.path[n];
+          const p = states?.[i];
           if (p && p.animalsPerKg <= 29_999) nursery += Math.floor(counts[i]);
           if (p) for (const id of world.sizes) {
             if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
               stock[id] = (stock[id] ?? 0) + Math.floor(counts[i]);
           }
-        });
+        }
         if (stockAt.day === day) { dayStock = stock; nurseryStock = nursery; }
         stocksByDay?.set(day, { dayStock: stock, nurseryStock: nursery });
       }
       previousDay = day;
     }
-    row.orderShortfall = row.ordersRequested - row.ordersFulfilled;
-    if (!fulfillmentOnly) {
-      for (const id of world.sizes) row.availableBySize[id] = world.cohorts.reduce((total, c, i) => {
-        checkProposalBudget(budget);
-        const p = c.path[n]?.days?.[finalDay] ?? c.path[n];
-        return total + (p && p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1) ? Math.floor(counts[i]) : 0);
-      }, 0);
+    if (row) {
+      row.orderShortfall = row.ordersRequested - row.ordersFulfilled;
+      for (const id of world.sizes) {
+        let available = 0;
+        for (let i = 0; i < world.cohorts.length; i++) {
+          checkProposalBudget(budget);
+          const p = finalStates[i];
+          if (p && p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1)) available += Math.floor(counts[i]);
+        }
+        row.availableBySize[id] = available;
+      }
       row.receipts = receipts[n] ?? 0;
-      row.remainingAnimals = Math.floor(counts.reduce((a, b) => {
-        checkProposalBudget(budget);
-        return a + b;
-      }, 0));
+      let total = 0;
+      for (const count of counts) { checkProposalBudget(budget); total += count; }
+      row.remainingAnimals = Math.floor(total);
       months.set(n, row);
     }
   }
@@ -477,6 +481,10 @@ function receiptProfileFromApplied(
     earlier += receipt * (deadline - receiptMonth + 1);
   }
   return { total, earlier };
+}
+
+function proposalReceipts(world: World, accepted: Allocation[], first: number, deadline: number): ReceiptProfile {
+  return receiptProfileFromApplied(accepted, replay(world, accepted, undefined, true).applied, first, deadline);
 }
 
 function allocationQuantities(accepted: Allocation[], budget?: ProposalWorkBudget) {
@@ -1189,4 +1197,164 @@ function computeProposalSales(
     };
   }
   return selected;
+}
+
+const cohortFitCache = new WeakMap<World, Map<string, number[]>>();
+const replayPreparationCache = new WeakMap<World, ReplayPreparation>();
+
+function prepareReplay(world: World, budget?: ProposalWorkBudget): ReplayPreparation {
+  assertWorldDeadline(world);
+  checkProposalBudget(budget);
+  const cached = replayPreparationCache.get(world);
+  if (cached) return cached;
+
+  const ordersByMonth = new Map<number, Map<number, Order[]>>();
+  for (const order of world.orders) {
+    checkProposalBudget(budget);
+    const day = order.day ?? (order.at === world.first ? world.startDay ?? 1 : 1);
+    let days = ordersByMonth.get(order.at);
+    if (!days) { days = new Map(); ordersByMonth.set(order.at, days); }
+    const entries = days.get(day) ?? [];
+    entries.push(order);
+    days.set(day, entries);
+  }
+
+  const months = new Map<number, PreparedMonth>();
+  for (let n = world.first; n <= world.last; n++) {
+    assertWorldDeadline(world);
+    checkProposalBudget(budget);
+    const { year, month } = monthParts(n);
+    const firstDay = n === world.first ? world.startDay ?? 1 : 1;
+    const finalDay = new Date(year, month, 0).getDate();
+    const previousLastDay = new Date(year, month - 1, 0).getDate();
+    const ordersByDay = ordersByMonth.get(n) ?? new Map<number, Order[]>();
+    const eventDays = new Set<number>([firstDay, finalDay]);
+    for (const day of ordersByDay.keys()) {
+      checkProposalBudget(budget);
+      eventDays.add(day);
+    }
+    const startQuantities = new Array<number>(world.cohorts.length).fill(0);
+    const startFactors = new Array<number>(world.cohorts.length);
+    const startStates = new Array<BiologySnapshot | Cohort["path"][number] | undefined>(world.cohorts.length);
+    const finalStates = new Array<BiologySnapshot | Cohort["path"][number] | undefined>(world.cohorts.length);
+    const arrivalsByDay = new Map<number, { index: number; quantity: number }[]>();
+    const statesByDay = new Map<number, ((BiologySnapshot | Cohort["path"][number]) | undefined)[]>();
+    const dailySnapshotsByDay = new Map<number, (BiologySnapshot | undefined)[]>();
+    const entryAtStartDay = firstDay;
+
+    for (let index = 0; index < world.cohorts.length; index++) {
+      assertWorldDeadline(world);
+      checkProposalBudget(budget);
+      const cohort = world.cohorts[index];
+      const path = cohort.path[n];
+      const previous = cohort.path[n - 1];
+      const firstDaySnapshot = path?.days?.[firstDay];
+      const previousSnapshot = previous?.days?.[previousLastDay]?.survival;
+      startQuantities[index] = cohort.entry === n && (cohort.entryDay ?? entryAtStartDay) <= entryAtStartDay
+        ? cohort.quantity : 0;
+      // Keep the exact monthly survival arithmetic/order from replay.
+      startFactors[index] = (path?.survival ?? 0) * (firstDaySnapshot?.survival ?? 1) / (previousSnapshot || 1);
+      startStates[index] = firstDaySnapshot ?? path;
+      finalStates[index] = path?.days?.[finalDay] ?? path;
+      if (cohort.entry === n && cohort.entryDay != null && cohort.entryDay > firstDay) {
+        if (cohort.entryDay <= finalDay) eventDays.add(cohort.entryDay);
+        const arrivals = arrivalsByDay.get(cohort.entryDay) ?? [];
+        arrivals.push({ index, quantity: cohort.quantity });
+        arrivalsByDay.set(cohort.entryDay, arrivals);
+      }
+      const dailyPath = path?.days;
+      for (let day = firstDay; day <= finalDay; day++) {
+        assertWorldDeadline(world);
+        checkProposalBudget(budget);
+        const state = dailyPath?.[day];
+        const states = statesByDay.get(day) ?? new Array<BiologySnapshot | Cohort["path"][number] | undefined>(world.cohorts.length);
+        states[index] = state ?? path;
+        statesByDay.set(day, states);
+        const snapshots = dailySnapshotsByDay.get(day) ?? new Array<BiologySnapshot | undefined>(world.cohorts.length);
+        snapshots[index] = state;
+        dailySnapshotsByDay.set(day, snapshots);
+      }
+      if (dailyPath) {
+        for (let day = firstDay + 1; day <= finalDay; day++) {
+          assertWorldDeadline(world);
+          checkProposalBudget(budget);
+          const before = dailyPath[day - 1], after = dailyPath[day];
+          if (before && after && (before.sizeId !== after.sizeId
+            || (before.animalsPerKg > 29_999) !== (after.animalsPerKg > 29_999))) eventDays.add(day);
+        }
+      }
+    }
+
+    const orderedEventDays = [...eventDays].sort((a, b) => {
+      checkProposalBudget(budget);
+      return a - b;
+    });
+    assertWorldDeadline(world);
+    checkProposalBudget(budget);
+    months.set(n, {
+      firstDay, finalDay, previousLastDay, eventDays: orderedEventDays,
+      ordersByDay, startQuantities, startFactors, startStates, finalStates,
+      statesByDay, dailySnapshotsByDay, arrivalsByDay, transitions: new Map(),
+    });
+  }
+  assertWorldDeadline(world);
+  checkProposalBudget(budget);
+  const prepared = { months };
+  replayPreparationCache.set(world, prepared);
+  return prepared;
+}
+
+function eventDaysForReplay(prepared: PreparedMonth, monthSales: Map<number, Allocation[]> | undefined,
+  stockAt: { n: number; day: number; days?: number[] } | undefined, n: number,
+  budget?: ProposalWorkBudget) {
+  checkProposalBudget(budget);
+  const extraDays: number[] = [];
+  if (monthSales) for (const day of monthSales.keys()) {
+    checkProposalBudget(budget);
+    extraDays.push(day);
+  }
+  if (stockAt?.n === n) {
+    extraDays.push(stockAt.day);
+    for (const day of stockAt.days ?? []) {
+      checkProposalBudget(budget);
+      extraDays.push(day);
+    }
+  }
+  if (!extraDays.length) return prepared.eventDays;
+  extraDays.sort((a, b) => {
+    checkProposalBudget(budget);
+    return a - b;
+  });
+  const days: number[] = [];
+  let baseIndex = 0, extraIndex = 0;
+  while (baseIndex < prepared.eventDays.length || extraIndex < extraDays.length) {
+    checkProposalBudget(budget);
+    const baseDay = prepared.eventDays[baseIndex];
+    const extraDay = extraDays[extraIndex];
+    const day = baseDay == null ? extraDay : extraDay == null ? baseDay : Math.min(baseDay, extraDay);
+    if (days[days.length - 1] !== day) days.push(day);
+    if (baseDay === day) baseIndex++;
+    if (extraDay === day) extraIndex++;
+  }
+  return days;
+}
+
+interface PreparedMonth {
+  firstDay: number;
+  finalDay: number;
+  previousLastDay: number;
+  eventDays: number[];
+  ordersByDay: Map<number, Order[]>;
+  startQuantities: number[];
+  startFactors: number[];
+  startStates: (BiologySnapshot | Cohort["path"][number] | undefined)[];
+  finalStates: (BiologySnapshot | Cohort["path"][number] | undefined)[];
+  statesByDay: Map<number, ((BiologySnapshot | Cohort["path"][number]) | undefined)[]>;
+  dailySnapshotsByDay: Map<number, (BiologySnapshot | undefined)[]>;
+  arrivalsByDay: Map<number, { index: number; quantity: number }[]>;
+  transitions: Map<number, Map<number, { indices: number[]; factors: number[] }>>;
+}
+
+interface ReplayPreparation {
+  months: Map<number, PreparedMonth>;
 }

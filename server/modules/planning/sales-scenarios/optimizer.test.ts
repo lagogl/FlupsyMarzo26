@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { allocateScenario, monthNumber, monthParts, projectWorld, proposeSales, proposeSalesGreedyBaseline, type World } from "./engine";
+import { allocateScenario, monthNumber, monthParts, projectWorld, proposeSales, proposeSalesGreedyBaseline, type World, type ProposalTimings } from "./engine";
 import { scenarioInputSchema, type ScenarioInput, type ScenarioSale } from "../../../../shared/sales-scenarios";
 
 const first = monthNumber(2027, 1);
@@ -51,7 +51,7 @@ test("bounded search can wait for a higher-priced larger size and beats the rece
     ],
   });
   const old = proposeSalesGreedyBaseline(expected, prudent, v);
-  const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   const optimized = proposeSales(expected, prudent, v, timings);
 
   assert.deepEqual(old.map(s => [s.month, s.sizeId, s.quantity]), [[1, 1, 1000]]);
@@ -192,7 +192,7 @@ test("a deadline inside the final-projection reserve returns the safe fixed base
     cashGoal: 50,
     proposalPrices: [{ sizeId: 1, pricePerThousand: 100, paymentDelayMonths: 0 }],
   });
-  const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   const started = performance.now();
   assert.deepEqual(proposeSales(expected, prudent, v, timings), []);
   assert.ok(performance.now() - started < 1000);
@@ -212,7 +212,7 @@ test("a proposal cutoff reached inside replay returns the last safe incumbent", 
     cashGoal: 50,
     proposalPrices: [{ sizeId: 1, pricePerThousand: 100, paymentDelayMonths: 0 }],
   });
-  const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   let calls = 0;
   let cutoffStack = "";
   const proposed = withDateNow(() => {
@@ -257,7 +257,7 @@ test("a mid-baseline cutoff preserves its canonically validated greedy prefix", 
   Date.now = () => clock;
   let candidateReplayWrites = 0;
   let candidateReplayElapsed = 0;
-  const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   Object.defineProperty(timings, "candidateReplayMs", {
     configurable: true,
     enumerable: true,
@@ -340,7 +340,7 @@ test("fixed sales count toward the goal, and the optional metrics report worst-w
     sales: [manual], cashGoal: 10,
     proposalPrices: [{ sizeId: 1, pricePerThousand: 100, paymentDelayMonths: 0 }],
   });
-  const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   assert.deepEqual(proposeSales(expected, prudent, v, timings), []);
   assert.equal(timings.optimization?.baselineReceipts, 10);
   assert.equal(timings.optimization?.optimizedReceipts, 10);
@@ -354,7 +354,7 @@ test("worst-world cash uses the lower receipt world even when expected is more c
     cashGoal: 100,
     proposalPrices: [{ sizeId: 1, pricePerThousand: 100, paymentDelayMonths: 0 }],
   });
-  const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   const proposed = proposeSales(expected, prudent, v, timings);
   assert.equal(proposed.reduce((sum, sale) => sum + sale.quantity, 0), 400);
   assert.equal(receipts(expected, v, proposed), 40);
@@ -385,7 +385,7 @@ test("15-month two-size search has deterministic explicit work bounds and report
       { sizeId: 2, pricePerThousand: 220, paymentDelayMonths: 1 },
     ],
   });
-  const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
+  const timings: ProposalTimings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   proposeSales(w, w, v, timings);
   const optimization = timings.optimization!;
   assert.ok(optimization.plansEvaluated >= 1 && optimization.plansEvaluated <= 18);

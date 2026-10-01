@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { monthNumber, monthParts, proposeSales, projectWorld, replay, type World } from "./engine";
+import { allocateScenario, monthNumber, monthParts, proposeSales, proposeSalesGreedyBaseline, projectWorld, replay, type World } from "./engine";
 import { scenarioInputSchema, type ScenarioInput, type ScenarioSale } from "../../../../shared/sales-scenarios";
 
 // Independent reference using the original one-baseline-replay-per-day search.
@@ -121,15 +121,23 @@ for (const shortfall of [false, true]) {
   test(`proposal preserves both worlds, daily availability and each order (preexisting shortfall=${shortfall})`, () => {
     const { expected, prudent, input } = fixture(4, 4, shortfall);
     const original = oldProposal(expected, prudent, input);
+    // Exact equivalence belongs to the greedy baseline, not to the newer
+    // bounded optimizer, which deliberately explores different month/size plans.
+    assert.deepEqual(
+      proposeSalesGreedyBaseline(expected, prudent, input).map(({ id, ...sale }) => sale),
+      original.map(({ id, ...sale }) => sale),
+    );
     const optimized = proposeSales(expected, prudent, input);
-    assert.deepEqual(optimized, original);
+    assert.deepEqual(proposeSales(expected, prudent, input), optimized);
     for (const world of [expected, prudent]) {
       const oldResult = projectWorld(world, { ...input, sales: [...input.sales, ...original] });
       const newResult = projectWorld(world, { ...input, sales: [...input.sales, ...optimized] });
-      assert.deepEqual(newResult, oldResult);
-      const baseline = replay(world, oldAllocate(world, input));
-      const after = replay(world, oldAllocate(world, { ...input, sales: [...input.sales, ...optimized] }));
+      assert.ok(newResult.receiptsByDeadline >= oldResult.receiptsByDeadline);
+      assert.equal(newResult.unfulfilledSales, 0);
+      const baseline = replay(world, allocateScenario(world, input));
+      const after = replay(world, allocateScenario(world, { ...input, sales: [...input.sales, ...optimized] }));
       for (const [key, quantity] of Object.entries(baseline.orders)) assert.ok((after.orders[key] ?? 0) >= quantity);
+      for (const [key, quantity] of Object.entries(baseline.applied)) assert.ok((after.applied[key] ?? 0) >= quantity);
     }
   });
 }
@@ -143,14 +151,19 @@ if (process.env.RUN_PROPOSAL_BENCH === "1") test("12-month 21-sale proposal benc
   const timings = { allocationMs: 0, candidateReplayMs: 0, receiptReplayMs: 0 };
   const optimized = proposeSales(expected, prudent, input, timings);
   const newMs = performance.now() - start - oldMs;
-  assert.deepEqual(optimized, original);
+  assert.deepEqual(
+    proposeSalesGreedyBaseline(expected, prudent, input).map(({ id, ...sale }) => sale),
+    original.map(({ id, ...sale }) => sale),
+  );
   const projectionsStart = performance.now();
   const combined = { ...input, sales: [...input.sales, ...optimized] };
   const expectedProjection = projectWorld(expected, combined);
   const prudentProjection = projectWorld(prudent, combined);
   const projectionMs = performance.now() - projectionsStart;
-  assert.deepEqual(expectedProjection, projectWorld(expected, { ...input, sales: [...input.sales, ...original] }));
-  assert.deepEqual(prudentProjection, projectWorld(prudent, { ...input, sales: [...input.sales, ...original] }));
+  assert.ok(expectedProjection.receiptsByDeadline >= projectWorld(expected, { ...input, sales: [...input.sales, ...original] }).receiptsByDeadline);
+  assert.ok(prudentProjection.receiptsByDeadline >= projectWorld(prudent, { ...input, sales: [...input.sales, ...original] }).receiptsByDeadline);
+  assert.equal(expectedProjection.unfulfilledSales, 0);
+  assert.equal(prudentProjection.unfulfilledSales, 0);
   console.log({ oldMs: Math.round(oldMs), newMs: Math.round(newMs),
     allocationMs: Math.round(timings.allocationMs), candidateReplayMs: Math.round(timings.candidateReplayMs),
     receiptReplayMs: Math.round(timings.receiptReplayMs), finalProjectionsMs: Math.round(projectionMs) });

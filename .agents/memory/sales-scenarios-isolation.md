@@ -45,6 +45,18 @@ Per ogni taglia commerciale selezionata, il vendibile è UNA capacità protetta 
 
 **How to apply:** Proteggere ordini futuri e altre vendite accettate sulla capacità inclusiva, mantenendo alternative non additive tra celle. Esplicitare che l'eventuale valore usa il prezzo della taglia richiesta, non una quotazione certa delle taglie effettive superiori.
 
+Nel solo scenario commerciale, usare prima gli animali fisicamente più piccoli fra quelli idonei per vendite, con lo stesso criterio in tutte le verifiche e nel ricalcolo. Ordini e semine mantengono il consumo storico. Non trasferire questa scelta a Scostamenti.
+
+**Why:** Consumare prima i grandi può respingere una vendita piccola fattibile perché sottrae la sola coorte che copre un ordine più restrittivo. Cambiare anche gli ordini ha redistribuito scoperti fra singoli impegni nel confronto reale prudente; cambiare le semine ha spostato allocazioni e aggravato il costo dei replay. Cambiare solo la proposta creerebbe piani non riproducibili nel ricalcolo; il best-fit resta euristico, non un ottimo globale con biologia eterogenea.
+
+**How to apply:** Mantenere i controlli per singolo impegno oltre l'orizzonte e confrontare cambiamenti del criterio sugli stessi input reali; gli ordini conservano la priorità sulle vendite nello stesso giorno.
+
+I limiti di tempo della proposta non devono cancellare il prefisso già verificato tramite riallocazione canonica e replay di entrambi i mondi.
+
+**Why:** Il best-fit può aumentare le verifiche; scartare tutto se la ricerca non termina ha trasformato incassi fattibili in zero nel confronto sulla giacenza reale.
+
+**How to apply:** Restituire solo righe già validate, segnalando ricerca limitata; riusare le graduatorie fisiche immutable per mondo, mai quantità o esiti di fulfillment di altri replay.
+
 Negli scenari, una vendita inserita per mese senza giorno esplicito si colloca nel primo giorno che massimizza la capacità protetta di quella taglia durante il mese; gli ordini acquisiti si consumano alla data di prima consegna (se già trascorsa nel mese corrente, oggi). Le opportunità esposte per taglia sono alternative, non una somma di stock cumulativi.
 
 **Why:** Una coorte può attraversare una taglia commerciale tra due primi del mese senza mai comparire nei soli snapshot mensili. Vendere sempre al primo giorno la perde; aggregare i passaggi giornalieri la conterebbe più volte o peggiorerebbe la copertura di ordini con scadenze precedenti.
