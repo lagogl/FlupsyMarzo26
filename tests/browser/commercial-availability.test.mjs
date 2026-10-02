@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -135,6 +135,42 @@ async function download(directory, extension, page) {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.fail(`Download did not finish: ${extension}; UI: ${await page.$eval(".commercial-workspace", element => element.innerText)}`);
+}
+async function clearWorkbookDownloads(directory) {
+  for (const name of await readdir(directory)) {
+    if (name.endsWith(".xlsx")) await unlink(path.join(directory, name));
+  }
+}
+async function downloadWorkbook(directory, page) {
+  const file = await download(directory, ".xlsx", page);
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await readFile(file));
+    return workbook;
+  } finally { await unlink(file); }
+}
+function excelHeaders(sheet) {
+  return new Map(sheet.getRow(1).values.slice(1).map((value, index) => [String(value), index + 1]));
+}
+function excelRow(sheet, header, value) {
+  const column = excelHeaders(sheet).get(header);
+  assert.ok(column, `Missing Excel header: ${header} in ${sheet.name}`);
+  for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber += 1) {
+    if (sheet.getRow(rowNumber).getCell(column).value === value) return sheet.getRow(rowNumber);
+  }
+  assert.fail(`Missing Excel row for ${header}=${value} in ${sheet.name}`);
+}
+function excelValue(sheet, row, header) {
+  const column = excelHeaders(sheet).get(header);
+  assert.ok(column, `Missing Excel header: ${header} in ${sheet.name}`);
+  return row.getCell(column).value;
+}
+function excelKeyValue(sheet, key) {
+  for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    if (row.getCell(1).value === key) return row.getCell(2).value;
+  }
+  assert.fail(`Missing Excel key: ${key} in ${sheet.name}`);
 }
 
 test("commercial page: real authenticated React, sales, stale replay, library, frozen XLSX/PDF and mobile", { timeout: 240000 }, async t => {
@@ -512,6 +548,148 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await page.screenshot({ path: "/tmp/commercial-availability-mobile-sale.jpg" });
       await clickText(page, "Annulla");
     });
+
+    await t.test("editable draft, scenario-library and per-scenario Excel exports", async () => {
+      await page.setViewport({ width: 1440, height: 1100 });
+      await typeField(page, "Nome della bozza", "Workbook saved scenario");
+      await clickText(page, "Piano commerciale (0)");
+      await clickText(page, "Aggiungi vendita");
+      await page.waitForSelector('[role="dialog"]');
+      await typeField(page, "Animali", 650, '[role="dialog"]');
+      await clickText(page, "Applica alla bozza");
+      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+      const saleId = await page.$eval('button[aria-label^="Modifica o sposta vendita "]', element =>
+        element.getAttribute("aria-label").replace("Modifica o sposta vendita ", ""));
+
+      nextShortfallsByMonth = [{ 1: { orders: 7, sales: 11 } }];
+      await verify(page);
+      await clearWorkbookDownloads(directory);
+      await clickText(page, "Excel bozza e piano");
+      const freshWorkbook = await downloadWorkbook(directory, page);
+      assert.deepEqual(freshWorkbook.worksheets.map(sheet => sheet.name), [
+        "Guida", "Disponibilità", "Date disponibilità", "Mancanze ordini",
+        "Mancanze vendite", "Piano commerciale", "Ipotesi", "Arrivi futuri",
+      ]);
+      assert.equal(excelKeyValue(freshWorkbook.getWorksheet("Guida"), "Stato del calcolo"), "PIANO VERIFICATO");
+
+      const monthHeader = new Intl.DateTimeFormat("it-IT", {
+        month: "long", year: "numeric", timeZone: "UTC",
+      }).format(new Date(Date.UTC(year, month - 1, 1)));
+      const availability = freshWorkbook.getWorksheet("Disponibilità");
+      const availabilityColumn = excelHeaders(availability).get(monthHeader);
+      assert.ok(availabilityColumn, `Missing availability month column ${monthHeader}`);
+      const availabilityRow = availability.getRows(2, availability.rowCount - 1)
+        .find(row => String(row.getCell(1).value).startsWith("TP-1000"));
+      assert.ok(availabilityRow, "Missing exported size row");
+      assert.equal(availabilityRow.getCell(availabilityColumn).value, 4321);
+      assert.equal(availability.getColumn(1).width, 31);
+      assert.equal(availability.getColumn(2).width, 18);
+      assert.equal(availability.views[0].state, "frozen");
+      assert.equal(availability.views[0].xSplit, 1);
+      assert.equal(availability.views[0].ySplit, 1);
+      assert.equal(availability.getRow(1).getCell(1).fill.fgColor.argb, "FF123B47");
+      assert.equal(availabilityRow.getCell(availabilityColumn).numFmt, "#,##0");
+      assert.equal(freshWorkbook.getWorksheet("Date disponibilità").getRow(availabilityRow.number).getCell(availabilityColumn).value,
+        `${referenceDate.slice(0, 7)}-${String(day).padStart(2, "0")}`);
+      const orderGap = freshWorkbook.getWorksheet("Mancanze ordini");
+      const salesGap = freshWorkbook.getWorksheet("Mancanze vendite");
+      const orderRow = orderGap.getRows(2, orderGap.rowCount - 1)
+        .find(row => String(row.getCell(1).value).startsWith("TP-1000"));
+      const salesGapRow = salesGap.getRows(2, salesGap.rowCount - 1)
+        .find(row => String(row.getCell(1).value).startsWith("TP-1000"));
+      assert.equal(orderRow.getCell(availabilityColumn).value, 7);
+      assert.equal(salesGapRow.getCell(availabilityColumn).value, 11);
+      const plan = freshWorkbook.getWorksheet("Piano commerciale");
+      const freshSaleRow = excelRow(plan, "ID vendita", saleId);
+      assert.equal(excelValue(plan, freshSaleRow, "Animali richiesti"), 650);
+      assert.equal(excelValue(plan, freshSaleRow, "Animali accettati"), 650);
+      assert.equal(excelValue(plan, freshSaleRow, "Animali mancanti"), 0);
+      assert.equal(plan.getColumn(5).width, 21);
+      assert.equal(plan.views[0].state, "frozen");
+      assert.equal(plan.views[0].ySplit, 1);
+
+      await clickText(page, "Salva bozza");
+      await page.waitForNetworkIdle({ idleTime: 100 });
+      await clickText(page, "Duplica");
+      await page.waitForNetworkIdle({ idleTime: 100 });
+      await verify(page);
+      await typeField(page, "Nome della bozza", "Unverified current workbook draft");
+      await clearWorkbookDownloads(directory);
+      await clickText(page, "Excel bozza e piano");
+      const staleWorkbook = await downloadWorkbook(directory, page);
+      assert.deepEqual(staleWorkbook.worksheets.map(sheet => sheet.name), [
+        "Guida", "Piano commerciale", "Ipotesi", "Arrivi futuri",
+      ]);
+      assert.equal(excelKeyValue(staleWorkbook.getWorksheet("Guida"), "Stato del calcolo"), "BOZZA NON VERIFICATA");
+      const stalePlan = staleWorkbook.getWorksheet("Piano commerciale");
+      const staleSaleRow = excelRow(stalePlan, "ID vendita", saleId);
+      assert.equal(excelValue(stalePlan, staleSaleRow, "Animali richiesti"), 650);
+      assert.equal(excelValue(stalePlan, staleSaleRow, "Animali accettati"), null);
+      assert.equal(excelValue(stalePlan, staleSaleRow, "Animali mancanti"), null);
+      assert.equal(excelValue(stalePlan, staleSaleRow, "Data accettata"), null);
+      assert.equal(excelValue(stalePlan, staleSaleRow, "Esito"), "In attesa di ricalcolo");
+      assert.equal(stalePlan.views[0].state, "frozen");
+
+      await clickText(page, "Scenari e riepiloghi");
+      const liveNameBeforeLibraryExport = await (await field(page, "Nome della bozza")).evaluate(element => element.value);
+      await clearWorkbookDownloads(directory);
+      await clickText(page, "Excel scenari");
+      const libraryWorkbook = await downloadWorkbook(directory, page);
+      for (const sheetName of ["Scenari", "Vendite scenari", "Arrivi scenari"]) {
+        assert.ok(libraryWorkbook.getWorksheet(sheetName), `Missing scenario-library sheet ${sheetName}`);
+      }
+      const savedInputs = structuredClone(scenarios);
+      const scenarioSheet = libraryWorkbook.getWorksheet("Scenari");
+      const salesSheet = libraryWorkbook.getWorksheet("Vendite scenari");
+      const arrivalsSheet = libraryWorkbook.getWorksheet("Arrivi scenari");
+      for (const saved of savedInputs) {
+        const savedRow = excelRow(scenarioSheet, "ID scenario", saved.id);
+        assert.equal(excelValue(scenarioSheet, savedRow, "Nome salvato"), saved.name);
+        assert.equal(excelValue(scenarioSheet, savedRow, "Stato input"), "Bozza salvata");
+        const savedSale = salesSheet.getRows(2, salesSheet.rowCount - 1)
+          .find(row => excelValue(salesSheet, row, "ID scenario") === saved.id);
+        assert.ok(savedSale, `Library omitted sale input for scenario ${saved.id}`);
+        assert.equal(excelValue(salesSheet, savedSale, "ID vendita"), saved.input.sales[0].id);
+        assert.equal(excelValue(salesSheet, savedSale, "Animali richiesti"), 650);
+        const savedOverride = arrivalsSheet.getRows(2, arrivalsSheet.rowCount - 1)
+          .find(row => excelValue(arrivalsSheet, row, "ID scenario") === saved.id);
+        assert.ok(savedOverride, `Library omitted overrides for scenario ${saved.id}`);
+        assert.equal(excelValue(arrivalsSheet, savedOverride, "Override residuo"), 0);
+      }
+      assert.equal(scenarioSheet.getColumn(1).width, 18);
+      assert.equal(scenarioSheet.views[0].state, "frozen");
+      assert.equal(scenarioSheet.views[0].ySplit, 1);
+
+      const selectedScenario = savedInputs[0];
+      const simulationCount = simulations.length;
+      const writesBeforeExport = calls.filter(call => call.method !== "GET" &&
+        call.path.startsWith(root) && call.path !== `${root}/simulate`).length;
+      await clearWorkbookDownloads(directory);
+      await page.evaluate(name => {
+        const target = [...document.querySelectorAll("button[aria-label^='Esporta Excel scenario ']")]
+          .find(element => element.getAttribute("aria-label") === `Esporta Excel scenario ${name}`);
+        if (!target) throw new Error(`Missing Excel export action for ${name}`);
+        target.click();
+      }, selectedScenario.name);
+      const scenarioWorkbook = await downloadWorkbook(directory, page);
+      assert.deepEqual(scenarioWorkbook.worksheets.map(sheet => sheet.name), [
+        "Guida", "Disponibilità", "Date disponibilità", "Mancanze ordini",
+        "Mancanze vendite", "Piano commerciale", "Ipotesi", "Arrivi futuri",
+      ]);
+      assert.equal(simulations.length, simulationCount + 1, "Individual scenario export recalculates its current-month input");
+      assert.deepEqual(simulations.at(-1), selectedScenario.input, "Scenario export simulates the saved input, not the live draft");
+      assert.equal(calls.filter(call => call.method !== "GET" &&
+        call.path.startsWith(root) && call.path !== `${root}/simulate`).length, writesBeforeExport,
+      "Scenario export must not persist or otherwise mutate saved inputs");
+      assert.equal(await (await field(page, "Nome della bozza")).evaluate(element => element.value),
+        liveNameBeforeLibraryExport, "Scenario export must leave the current live draft unchanged");
+      assert.equal(await isDisabled(page, "Prepara riepilogo commerciale"), true, "Scenario export does not refresh the stale live draft");
+
+      await clickText(page, "Piano commerciale (1)");
+      await page.click(`button[aria-label="Elimina vendita ${saleId}"]`);
+      await waitText(page, "Piano commerciale (0)");
+    });
+
     assert.deepEqual(failures, []);
     assert.ok(!calls.some(call => !call.path.startsWith(root) && call.method !== "GET"), "No operational API writes");
     await page.close();

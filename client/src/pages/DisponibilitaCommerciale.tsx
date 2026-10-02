@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy, Plus, RefreshCw, Save, Snowflake, Trash2 } from "lucide-react";
+import { Copy, FileSpreadsheet, Plus, RefreshCw, Save, Snowflake, Trash2 } from "lucide-react";
 import { useCommercialActions, useCommercialInputs, useCommercialLibrary } from "@/hooks/use-commercial-availability";
 import { useToast } from "@/hooks/use-toast";
 import { getEuropeRomeDateKey } from "@/lib/queryClient";
@@ -30,6 +30,7 @@ export default function DisponibilitaCommerciale() {
   const [compared, setCompared] = useState<CommercialResult | null>(null);
   const [comparing, setComparing] = useState(false);
   const [today, setToday] = useState(getEuropeRomeDateKey);
+  const [excelBusy, setExcelBusy] = useState<string | null>(null);
   const liveDraft = useRef<CommercialInput | null>(null);
   const revision = useRef(0), sequence = useRef(0), comparisonSequence = useRef(0);
   const acceptedRevision = useRef(-1);
@@ -77,6 +78,45 @@ export default function DisponibilitaCommerciale() {
   const saved = library.scenarios.data ?? [];
   const sizes = inputs.data?.sizes ?? [];
   const visibleSizes = sizes.filter(s => draft?.selectedSizeIds.includes(s.id));
+  const exportDraft = async () => {
+    if (!draft || excelBusy) return;
+    const input = structuredClone(draft);
+    const snapshot = current && result ? structuredClone(result) : undefined;
+    setExcelBusy("draft");
+    try {
+      const { exportCommercialDraftExcel } = await import("@/lib/commercial-availability-workbook");
+      await exportCommercialDraftExcel({ input, sizes: structuredClone(sizes), result: snapshot });
+      toast({ title: "Excel esportato", description: snapshot ? "Disponibilità, piano e ipotesi del calcolo selezionato." : "Bozza non verificata: il file contiene gli input, senza quantità del calcolo precedente." });
+    } catch (e) { setError(report(e)); }
+    finally { setExcelBusy(null); }
+  };
+  const exportScenario = async (scenario: SavedCommercialScenario) => {
+    if (excelBusy) return;
+    const input = structuredClone(scenario.input);
+    const start = `${input.startYear}-${String(input.startMonth).padStart(2, "0")}`;
+    setExcelBusy(`scenario:${scenario.id}`);
+    try {
+      // Export a saved scenario independently: never overwrite the current draft
+      // or a frozen summary. Historical inputs cannot be recalculated from today.
+      const snapshot = start === getEuropeRomeDateKey().slice(0, 7) ? await simulateRef.current(input) : undefined;
+      const { exportCommercialDraftExcel } = await import("@/lib/commercial-availability-workbook");
+      await exportCommercialDraftExcel({ input, sizes: snapshot?.sizes ?? structuredClone(sizes), result: snapshot });
+      toast({ title: "Scenario esportato", description: snapshot ? "Ricalcolato sui dati attuali solo per l'Excel, senza modificare lo scenario salvato." : "Scenario storico: esportati gli input, senza ricostruire risultati passati." });
+    } catch (e) { setError(report(e)); }
+    finally { setExcelBusy(null); }
+  };
+  const exportLibrary = async () => {
+    if (excelBusy) return;
+    setExcelBusy("library");
+    try {
+      const loaded = await library.scenarios.refetch();
+      if (loaded.isError || !loaded.data) throw new Error("Scenari non disponibili: esportazione annullata.");
+      const { exportCommercialScenarioLibraryExcel } = await import("@/lib/commercial-availability-workbook");
+      await exportCommercialScenarioLibraryExcel({ scenarios: structuredClone(loaded.data), sizes: structuredClone(sizes) });
+      toast({ title: "Archivio scenari esportato", description: "Input delle bozze salvate, vendite richieste e ipotesi. Nessun ricalcolo o impegno operativo." });
+    } catch (e) { setError(report(e)); }
+    finally { setExcelBusy(null); }
+  };
   const save = async () => {
     if (!draft) return;
     const version = revision.current;
@@ -135,7 +175,9 @@ export default function DisponibilitaCommerciale() {
   const rollover = `${draft.startYear}-${String(draft.startMonth).padStart(2, "0")}` !== today.slice(0, 7);
   return <section className="commercial-workspace">
     <header className="ca-header"><div><span className="ca-eyebrow">Pianificazione / Quantità</span><h1>Disponibilità commerciale</h1><p className="ca-muted">Esplora cosa proporre. Verifica cosa vendere insieme.</p><p className="ca-mono ca-muted">Dati: {dateLabel(result?.referenceDate ?? inputs.data!.referenceDate)} · Calcolo: {result ? new Date(result.generatedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "non eseguito"} · Inizio: {monthLabel({ year: draft.startYear, month: draft.startMonth })}</p></div>
-      <div className="ca-actions"><span className={`ca-tag ${current ? "" : "warning"}`}>{current ? "Risultato aggiornato" : "Bozza da verificare"}</span><button className="ca-button" onClick={() => replace({ ...structuredClone(inputs.data!.defaults), name: "Nuova disponibilità" })}><Plus size={15} />Nuovo</button><button className="ca-button" disabled={actions.save.isPending} onClick={duplicate}><Copy size={15} />Duplica</button><button className="ca-button" disabled={actions.save.isPending || !draft.name.trim()} onClick={save}><Save size={15} />Salva bozza</button></div>
+      <div className="ca-actions"><span className={`ca-tag ${current ? "" : "warning"}`}>{current ? "Risultato aggiornato" : "Bozza da verificare"}</span><button className="ca-button" onClick={() => replace({ ...structuredClone(inputs.data!.defaults), name: "Nuova disponibilità" })}><Plus size={15} />Nuovo</button><button className="ca-button" disabled={actions.save.isPending} onClick={duplicate}><Copy size={15} />Duplica</button><button className="ca-button" disabled={actions.save.isPending || !draft.name.trim()} onClick={save}><Save size={15} />Salva bozza</button>
+        <button className="ca-button" disabled={excelBusy !== null} onClick={exportDraft}><FileSpreadsheet size={15} />{excelBusy === "draft" ? "Esportazione…" : "Excel bozza e piano"}</button>
+      </div>
     </header>
     {rollover && <div className="ca-note warning">Questo scenario parte da un mese precedente. I risultati storici non vengono cambiati. <button className="ca-button" disabled={actions.replan.isPending || actions.save.isPending} onClick={replan}>Crea copia ripianificata da oggi</button></div>}
     {!draft.includeOrders && <div className="ca-note warning"><b>Scenario senza vincolo ordini.</b> Le disponibilità non proteggono gli impegni acquisiti. Questa dicitura accompagna anche il riepilogo e le esportazioni.</div>}
@@ -147,7 +189,12 @@ export default function DisponibilitaCommerciale() {
     {tab === "explore" && (result ? <AvailabilityExplorer result={result} sizes={visibleSizes} current={current} add={s => { setSale(s); setTab("plan"); }} /> : <div className="ca-empty"><h2>Le possibilità iniziano dalle fonti.</h2><p>Verifica la bozza per esplorare le capacità alternative.</p></div>)}
     {tab === "plan" && <CommercialPlan input={draft} sizes={sizes} result={result} current={current} referenceDate={inputs.data!.referenceDate} change={sales => change({ sales })} reveal={id => { if (liveDraft.current && !liveDraft.current.selectedSizeIds.includes(id)) change({ selectedSizeIds: [...liveDraft.current.selectedSizeIds, id] }); }} initialSale={sale} clearInitial={() => setSale(null)} />}
     {tab === "compare" && <><section className="ca-panel"><div className="ca-actions"><label className="ca-field">Confronta con<select value={compareId} onChange={e => { comparisonSequence.current++; setCompareId(e.target.value); setCompared(null); }}><option value="">Base senza vendite simulate</option>{saved.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><button className="ca-button" disabled={!compareId || comparing || !current} onClick={compare}>{comparing ? "Calcolo confronto…" : "Ricalcola confronto"}</button></div>{previous && <p className="ca-muted">Ultimo piano calcolato: {previous.totalAccepted.toLocaleString("it-IT")} animali accettati. Piano attuale: {current ? result?.totalAccepted.toLocaleString("it-IT") : "da verificare"}.</p>}</section>{current && result ? <CommercialComparison result={result} compared={compared} sizes={visibleSizes} /> : <div className="ca-note warning">Verifica prima la bozza corrente per confrontare risultati aggiornati.</div>}</>}
-    {tab === "library" && <><section className="ca-panel"><h2>Scenari salvati</h2><p className="ca-muted">Le bozze conservano gli input. Aprirle non aggiorna risultati storici o riepiloghi.</p>{library.scenarios.isLoading ? <div className="ca-skeleton" /> : library.scenarios.isError ? <div className="ca-note error">Scenari non disponibili. <button className="underline" onClick={() => library.scenarios.refetch()}>Riprova</button></div> : saved.length === 0 ? <div className="ca-empty">Nessuno scenario salvato. Salva la bozza per ritrovarla qui.</div> : saved.map(s => <div className="ca-row border-t py-3" key={s.id}><div><b className="text-sm">{s.name}</b><p className="ca-muted">Aggiornato {dateLabel(String(s.updatedAt))}{s.id === activeId ? " · bozza aperta" : ""}</p></div><div className="ca-actions"><button className="ca-button" onClick={() => select(s)}>Apri bozza</button><button className="ca-button" disabled={actions.duplicate.isPending} onClick={async () => { try { await actions.duplicate.mutateAsync(s.id); toast({ title: "Scenario duplicato" }); } catch (e) { setError(report(e)); } }}><Copy size={14} />Duplica salvato</button><button className="ca-button danger" disabled={actions.remove.isPending} aria-label={`Elimina scenario ${s.name}`} onClick={async () => { if (!confirm(`Eliminare la bozza "${s.name}"? I riepiloghi congelati restano disponibili.`)) return; try { await actions.remove.mutateAsync(s.id); if (activeId === s.id) setActiveId(undefined); } catch (e) { setError(report(e)); } }}><Trash2 size={14} /></button></div></div>)}</section>
+    {tab === "library" && <><section className="ca-panel">
+      <div className="ca-row"><h2>Scenari salvati</h2><button className="ca-button" disabled={excelBusy !== null || library.scenarios.isLoading || library.scenarios.isError || !saved.length} onClick={exportLibrary}><FileSpreadsheet size={15} />{excelBusy === "library" ? "Esportazione…" : "Excel scenari"}</button></div>
+      <p className="ca-muted">Le bozze conservano gli input. Aprirle non aggiorna risultati storici o riepiloghi. Excel scenari esporta gli input dell'elenco; Excel sul singolo scenario ricalcola quelli del mese corrente senza modificarli.</p>
+      {library.scenarios.isLoading ? <div className="ca-skeleton" /> : library.scenarios.isError ? <div className="ca-note error">Scenari non disponibili. <button className="underline" onClick={() => library.scenarios.refetch()}>Riprova</button></div> : saved.length === 0 ? <div className="ca-empty">Nessuno scenario salvato. Salva la bozza per ritrovarla qui.</div> : saved.map(s => <div className="ca-row border-t py-3" key={s.id}><div><b className="text-sm">{s.name}</b><p className="ca-muted">Aggiornato {dateLabel(String(s.updatedAt))}{s.id === activeId ? " · bozza aperta" : ""}</p></div><div className="ca-actions"><button className="ca-button" onClick={() => select(s)}>Apri bozza</button>
+        <button className="ca-button" disabled={excelBusy !== null} aria-label={`Esporta Excel scenario ${s.name}`} onClick={() => exportScenario(s)}><FileSpreadsheet size={14} />{excelBusy === `scenario:${s.id}` ? "Preparazione Excel…" : "Excel scenario"}</button>
+        <button className="ca-button" disabled={actions.duplicate.isPending} onClick={async () => { try { await actions.duplicate.mutateAsync(s.id); toast({ title: "Scenario duplicato" }); } catch (e) { setError(report(e)); } }}><Copy size={14} />Duplica salvato</button><button className="ca-button danger" disabled={actions.remove.isPending} aria-label={`Elimina scenario ${s.name}`} onClick={async () => { if (!confirm(`Eliminare la bozza "${s.name}"? I riepiloghi congelati restano disponibili.`)) return; try { await actions.remove.mutateAsync(s.id); if (activeId === s.id) setActiveId(undefined); } catch (e) { setError(report(e)); } }}><Trash2 size={14} /></button></div></div>)}</section>
       <section className="ca-panel"><h2>Riepiloghi congelati</h2>{library.summaries.isLoading ? <div className="ca-skeleton" /> : library.summaries.isError ? <div className="ca-note error">Riepiloghi non disponibili. <button className="underline" onClick={() => library.summaries.refetch()}>Riprova</button></div> : !(library.summaries.data?.length) ? <p className="ca-muted">Nessun riepilogo congelato. Prepara un riepilogo dopo la verifica congiunta del piano.</p> : <div className="ca-actions mt-3">{library.summaries.data.map(s => <button className="ca-button" key={s.id} onClick={() => { setSummary(s); setSummaryNotice(""); }}>{s.name} · {dateLabel(String(s.createdAt))}</button>)}</div>}</section>{summary && <CommercialSummary summary={summary} notice={summaryNotice} />}</>}
     <footer className="ca-muted text-xs mt-6">Previsione condizionata alle ipotesi, non una garanzia produttiva. Nessuna vendita, semina o prenotazione operativa viene registrata.</footer>
   </section>;

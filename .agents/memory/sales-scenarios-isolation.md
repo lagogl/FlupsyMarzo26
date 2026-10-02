@@ -74,3 +74,9 @@ Nella Disponibilità commerciale non riproporre l'elenco di note gialle sopra la
 **Why:** L'utente ha chiesto di eliminarlo perché non lo ritiene indicativo.
 
 **How to apply:** Tenere la vista operativa essenziale; la rimozione dell'elenco non deve cancellare ipotesi e avvisi dai riepiloghi storici o dalle esportazioni.
+
+Le mancanze nella matrice commerciale includono ordini attivati e vendite simulate, ma restano distinte dalla capacità aggiuntiva.
+
+**Why:** L'utente ha scelto entrambe le categorie per capire gli sforamenti. Una capacità zero può significare stock già impegnato senza alcun deficit; un impegno scoperto prima nel mese può coesistere con capacità disponibile più tardi.
+
+**How to apply:** Attribuire le mancanze alla taglia richiesta e al mese della richiesta, distinguendo ordini e vendite nel dettaglio; non trasformarle in disponibilità negativa o riportarle cumulativamente nei mesi successivi.
