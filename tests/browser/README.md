@@ -24,6 +24,13 @@ dei dettagli di disponibilità/copertura. Il controllo verifica:
 - Forecast alternativo e non additivo;
 - valori mancanti indisponibili, non trasformati in zeri;
 - italiano e inglese, mesi in colonne e mesi in righe.
+- selezione con clic di singole celle, intervalli con Shift, righe e colonne;
+- copia della selezione con Ctrl+C e Cmd+C, senza intestazioni e con valori grezzi;
+- righe nascoste escluse dagli intervalli e dalla copia di righe/colonne;
+- rotazione che azzera celle, righe, colonne e ancora Shift, senza riscrivere
+  la clipboard fino a una nuova selezione;
+- associazione mese/indicatore conservata dopo la rotazione, anche per zeri,
+  valori mancanti e testi.
 
 Si leggono i valori renderizzati, la clipboard reale e quattro file XLSX realmente
 scaricati e riaperti con ExcelJS. Le quantità e gli stati attesi sono indipendenti

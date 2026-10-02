@@ -1246,6 +1246,48 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     return false;
   };
 
+  useEffect(() => {
+    const copySelection = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "c" || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.closest("input, textarea, select") || target.isContentEditable)) return;
+      const rowCount = tableOrientation === "indicators-rows" ? visibleRows.length : mc.length;
+      const colCount = tableOrientation === "indicators-rows" ? mc.length : visibleRows.length;
+      const cells = [];
+      for (let r = 0; r < rowCount; r++) {
+        for (let c = 0; c < colCount; c++) {
+          if (selectedCells.has(cellKey(r, c)) || selectedRow === r || selectedCol === c) cells.push({ row: r, col: c });
+        }
+      }
+      if (!cells.length) return;
+      event.preventDefault();
+      const minR = Math.min(...cells.map(cell => cell.row));
+      const maxR = Math.max(...cells.map(cell => cell.row));
+      const minC = Math.min(...cells.map(cell => cell.col));
+      const maxC = Math.max(...cells.map(cell => cell.col));
+      const lines = [];
+      for (let r = minR; r <= maxR; r++) {
+        const values = [];
+        for (let c = minC; c <= maxC; c++) {
+          const canonical = toCanonicalCell(r, c);
+          const value = visibleRows[canonical.row]?.values[canonical.col];
+          values.push(selectedCells.has(cellKey(r, c)) || selectedRow === r || selectedCol === c
+            ? String(value ?? "") : "");
+        }
+        lines.push(values.join("\t"));
+      }
+      navigator.clipboard.writeText(lines.join("\n")).catch(() => {
+        toast({
+          title: t("pc_toast_calc_err_title"),
+          description: lang === "it" ? "Impossibile copiare la selezione negli appunti." : "Unable to copy the selection to the clipboard.",
+          variant: "destructive",
+        });
+      });
+    };
+    document.addEventListener("keydown", copySelection);
+    return () => document.removeEventListener("keydown", copySelection);
+  }, [selectedCells, selectedRow, selectedCol, tableOrientation, visibleRows, mc, toast, t, lang]);
+
   const getCellFormula = (rowIdx: number, colIdx: number): string => {
     const m = mc[colIdx];
     if (!m) return "";

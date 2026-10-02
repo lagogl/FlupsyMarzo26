@@ -35,6 +35,7 @@ const labels = {
     deadlineValue: "40.0% · 4.000 coperti / 10.000 con scadenza / 6.000 scoperti · 600 arretrati evasi dopo la scadenza · 200 non verificabili",
     unavailable: "Ricalcolare per leggere la copertura degli ordini correnti",
     alternative: "Scenario Forecast alternativo · non sommare con lo scenario ordini",
+    visibility: "Visibilità righe", restore: "Ripristina tutte",
   },
   en: {
     summary: "Availability, orders & backlog", month: "Select month",
@@ -58,6 +59,7 @@ const labels = {
     deadlineValue: "40.0% · 4.000 covered / 10.000 with deadline / 6.000 uncovered · 600 arrears fulfilled after deadline · 200 unverifiable",
     unavailable: "Recalculate to read current-order coverage",
     alternative: "Alternative Forecast scenario · do not add to order scenario",
+    visibility: "Row visibility", restore: "Restore all",
   },
 };
 
@@ -72,6 +74,148 @@ async function clickText(page, text) {
 function copyRows(text) {
   return text.split("\n").filter(line => line.includes("\t")).slice(1)
     .map(line => line.split("\t"));
+}
+
+const planningTable = "table[style*='Calibri']";
+
+async function tableAxes(page, orientation) {
+  return page.$eval(planningTable, (table, orientation) => {
+    const columns = [...table.querySelectorAll("thead th")].slice(1).map(cell => cell.innerText.trim());
+    const rows = [...table.querySelectorAll("tbody tr")].map(row => row.children[0].innerText.trim());
+    return orientation === "columns" ? { indicators: rows, months: columns } : { indicators: columns, months: rows };
+  }, orientation);
+}
+
+async function clickTable(page, row, col, modifier) {
+  const selector = row === -1
+    ? `${planningTable} thead th:nth-child(${col + 2})`
+    : `${planningTable} tbody tr:nth-child(${row + 1}) > td:nth-child(${col + 2})`;
+  const element = await page.$(selector);
+  assert.ok(element, `Missing table cell/header ${row},${col}`);
+  // Real mouse/keyboard input, including horizontally off-screen indicator columns.
+  await element.evaluate(el => el.scrollIntoView({ block: "center", inline: "center" }));
+  if (modifier) await page.keyboard.down(modifier);
+  try {
+    await element.click();
+  } finally {
+    if (modifier) await page.keyboard.up(modifier);
+    await element.dispose();
+  }
+}
+
+async function selectedCount(page) {
+  return page.$$eval(`${planningTable} td.bg-blue-50`, cells => cells.length);
+}
+
+async function assertKeyboardCopy(page, expected, context, modifier = "Control") {
+  const sentinel = "clipboard must change only when a selection is copied";
+  await page.evaluate(text => navigator.clipboard.writeText(text), sentinel);
+  await page.keyboard.down(modifier);
+  try {
+    await page.keyboard.press("c");
+  } finally {
+    await page.keyboard.up(modifier);
+  }
+  if (expected !== null) {
+    await page.waitForFunction(async sentinel => (await navigator.clipboard.readText()) !== sentinel, {}, sentinel);
+  } else {
+    // No-selection path must leave the clipboard untouched, not copy stale cells.
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), expected ?? sentinel, context);
+}
+
+async function checkSelections(page, l, lang, copiedRows) {
+  const oracle = new Map(copiedRows.map(row => [row[0].trim(), row.slice(1)]));
+  for (const hidden of [false, true]) {
+    if (hidden) {
+      // Remove an indicator between the two range endpoints; visible indices must
+      // not accidentally look up the old, unfiltered indicator list.
+      const trigger = await page.evaluateHandle(label => [...document.querySelectorAll("button")]
+        .find(button => button.textContent.trim().startsWith(label)), l.visibility);
+      await trigger.asElement().click();
+      await trigger.dispose();
+      const checkbox = await page.evaluateHandle(label => [...document.querySelectorAll("label")]
+        .find(el => el.textContent.trim() === label)?.querySelector('[role="checkbox"]'), l.assignedLower);
+      assert.ok(checkbox.asElement(), `Visibility checkbox missing: ${l.assignedLower}`);
+      await checkbox.asElement().click();
+      await checkbox.dispose();
+      await page.keyboard.press("Escape");
+    }
+    for (const orientation of ["columns", "rows"]) {
+      await clickText(page, l[orientation]);
+      const axes = await tableAxes(page, orientation);
+      assert.equal(axes.indicators.includes(l.assignedLower), !hidden);
+      assert.equal(axes.months.length, 2);
+      // The spreadsheet keeps the API's civil month labels in either UI language.
+      assert.deepEqual(axes.months, ["Ott 2026", "Nov 2026"]);
+      const matrix = orientation === "columns"
+        ? axes.indicators.map(label => {
+          assert.ok(oracle.has(label), `No independently checked export row for ${label}`);
+          return oracle.get(label);
+        })
+        : axes.months.map((_, month) => axes.indicators.map(label => {
+          assert.ok(oracle.has(label), `No independently checked export row for ${label}`);
+          return oracle.get(label)[month];
+        }));
+      const cell = (indicator, month) => orientation === "columns"
+        ? [axes.indicators.indexOf(indicator), month] : [month, axes.indicators.indexOf(indicator)];
+      const context = `${lang}/${orientation}/${hidden ? "hidden" : "all"}`;
+      for (const kind of ["single", "range", "row", "column"]) {
+        if (kind === "single") {
+          // Distinguish zero, unavailable, numeric and textual data; display "-"
+          // and thousands separators must not leak into the raw clipboard value.
+          for (const [label, month, value] of [
+            [l.assignedTarget, 0, "9000"], [l.assignedTarget, 1, l.unavailable],
+            [l.arrival, 0, "0"], [l.recovery, 0, l.tooLate],
+          ]) {
+            await clickTable(page, ...cell(label, month));
+            assert.equal(await selectedCount(page), 1, `${context}/single highlight`);
+            await assertKeyboardCopy(page, value, `${context}/single/${label}/${axes.months[month]}`);
+          }
+          await assertKeyboardCopy(page, l.tooLate, `${context}/Cmd+C`, "Meta");
+        } else if (kind === "range") {
+          const start = cell(l.assignedTarget, 0);
+          const end = cell(l.assignedTotal, 1);
+          await clickTable(page, ...start);
+          await clickTable(page, ...end, "Shift");
+          const minR = Math.min(start[0], end[0]), maxR = Math.max(start[0], end[0]);
+          const minC = Math.min(start[1], end[1]), maxC = Math.max(start[1], end[1]);
+          assert.equal(await selectedCount(page), (maxR - minR + 1) * (maxC - minC + 1), `${context}/range highlight`);
+          await assertKeyboardCopy(page, matrix.slice(minR, maxR + 1)
+            .map(row => row.slice(minC, maxC + 1).join("\t")).join("\n"), `${context}/range`);
+        } else if (kind === "row") {
+          const row = cell(l.assignedTotal, 0)[0];
+          await clickTable(page, row, -1);
+          assert.equal(await selectedCount(page), matrix[row].length, `${context}/row highlight`);
+          await assertKeyboardCopy(page, matrix[row].join("\t"), `${context}/row`);
+        } else {
+          const col = cell(l.assignedTotal, 1)[1];
+          await clickTable(page, -1, col);
+          assert.equal(await selectedCount(page), matrix.length, `${context}/column highlight`);
+          await assertKeyboardCopy(page, matrix.map(row => row[col]).join("\n"), `${context}/column`);
+        }
+        // Each selection type must be cleared, in both directions of rotation.
+        const other = orientation === "columns" ? "rows" : "columns";
+        await clickText(page, l[other]);
+        assert.equal(await selectedCount(page), 0, `${context}/${kind}/rotation resets highlight`);
+        await assertKeyboardCopy(page, null, `${context}/${kind}/rotation resets copy`);
+        const rotatedAxes = await tableAxes(page, other);
+        const indicator = rotatedAxes.indicators.indexOf(l.assignedTarget);
+        // Shift-click after rotation also proves that the old range anchor is gone.
+        await clickTable(page, ...(other === "columns" ? [indicator, 1] : [1, indicator]), "Shift");
+        assert.equal(await selectedCount(page), 1, `${context}/${kind}/rotation resets anchor`);
+        await assertKeyboardCopy(page, l.unavailable, `${context}/${kind}/month-indicator after rotation`);
+        await clickText(page, l[orientation]);
+      }
+    }
+  }
+  const trigger = await page.evaluateHandle(label => [...document.querySelectorAll("button")]
+    .find(button => button.textContent.trim().startsWith(label)), l.visibility);
+  await trigger.asElement().click();
+  await trigger.dispose();
+  await clickText(page, l.restore);
+  await page.keyboard.press("Escape");
 }
 
 test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipboard and XLSX", { timeout: 240000 }, async t => {
@@ -172,6 +316,7 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
         }
         await checkSummary();
 
+        let selectionOracle;
         for (const orientation of ["columns", "rows"]) {
           await clickText(page, l[orientation]);
           await page.evaluate(() => navigator.clipboard.writeText(""));
@@ -179,6 +324,7 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
           await page.waitForFunction(async label => (await navigator.clipboard.readText()).includes(label), {}, l.assignedTarget);
           const copied = await page.evaluate(() => navigator.clipboard.readText());
           const rows = copyRows(copied);
+          selectionOracle = rows;
           const expected = [
             [l.assignedTarget, 9000], [l.assignedLower, 2200], [l.assignedTotal, 11200],
             [l.shortfall, 3000], [l.recovery, l.tooLate], [l.arrival, 0],
@@ -241,6 +387,7 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
           }
           assert.ok(workbook.worksheets.length >= 3, "Initial-cohort detail sheets remain separate");
         }
+        await checkSelections(page, l, lang, selectionOracle);
         await page.select(`select[aria-label="${l.month}"]`, "1");
         await checkSummary(true);
         assert.ok(apiCalls.includes("GET /api/proiezione-crescita"));
