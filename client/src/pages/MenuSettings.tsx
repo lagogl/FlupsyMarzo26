@@ -60,6 +60,7 @@ const allMenuItems = [
   { path: "/eco-impact", label: "Impatto Ambientale", category: "Analisi", icon: <Leaf className="h-4 w-4" /> },
   { path: "/lci", label: "LCI - ECOTAPES", category: "Analisi", icon: <Leaf className="h-4 w-4" /> },
   { path: "/proiezione-crescita", label: "Scostamenti", category: "Pianificazione", icon: <TrendingUp className="h-4 w-4" /> },
+  { path: "/disponibilita-commerciale", label: "Disponibilità commerciale", category: "Pianificazione", icon: <CalendarDays className="h-4 w-4" /> },
   { path: "/gestione-mortalita", label: "Gestione Mortalità", category: "Pianificazione", icon: <Skull className="h-4 w-4" /> },
   { path: "/advanced-sales", label: "Gestione Vendite", category: "Vendite", icon: <Package className="h-4 w-4" /> },
   { path: "/fatture-in-cloud", label: "Fatture in Cloud", category: "Vendite", icon: <CloudIcon className="h-4 w-4" /> },

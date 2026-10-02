@@ -22,6 +22,8 @@ export interface World {
   sizes: number[];
   startDay?: number;
   deadlineMs?: number;
+  /** Opt-in for the quantity-only adapter; historical scenario defaults stay unchanged. */
+  datedSaleRanges?: boolean;
 }
 export interface ProposalOptimization {
   baselineReceipts: number;
@@ -41,7 +43,7 @@ export interface ProposalTimings {
   receiptReplayMs: number;
   optimization?: ProposalOptimization;
 }
-interface Allocation extends ScenarioSale { nursery?: boolean; day?: number }
+export interface Allocation extends ScenarioSale { nursery?: boolean; day?: number }
 interface Replay {
   months: Map<number, ScenarioMonth>;
   orders: Record<string, number>;
@@ -121,7 +123,7 @@ export function replay(
       // index breaks ties deterministically. Scostamenti has its own engine.
       const limit = nursery ? 29_999 : order
         ? world.maxApk[`${n}|${day}|${sizeId}`] ?? world.maxApk[`${n}|${sizeId}`] ?? -1
-        : world.maxApk[`${n}|${sizeId}`] ?? -1;
+        : world.datedSaleRanges ? world.maxApk[`${n}|${day}|${sizeId}`] ?? -1 : world.maxApk[`${n}|${sizeId}`] ?? -1;
       let cache = cohortFitCache.get(world);
       if (!cache) { cache = new Map(); cohortFitCache.set(world, cache); }
       const historicPreference = order || nursery;
@@ -227,7 +229,7 @@ export function replay(
           const p = states?.[i];
           if (p && p.animalsPerKg <= 29_999) nursery += Math.floor(counts[i]);
           if (p) for (const id of world.sizes) {
-            if (p.animalsPerKg <= (world.maxApk[`${n}|${id}`] ?? -1))
+            if (p.animalsPerKg <= (world.datedSaleRanges ? world.maxApk[`${n}|${day}|${id}`] ?? -1 : world.maxApk[`${n}|${id}`] ?? -1))
               stock[id] = (stock[id] ?? 0) + Math.floor(counts[i]);
           }
         }
@@ -293,7 +295,7 @@ export function safeCapacity(
 
 /** Only growth across the requested range can increase its capacity. Evaluate those dates,
  * replaying acquired orders and accepted sales at their actual dates. */
-function bestCapacity(world: World, accepted: Allocation[], candidate: Allocation, upper: number, budget?: ProposalWorkBudget) {
+export function bestCapacity(world: World, accepted: Allocation[], candidate: Allocation, upper: number, budget?: ProposalWorkBudget) {
   checkProposalBudget(budget);
   const n = monthNumber(candidate.year, candidate.month);
   const firstDay = n === world.first ? world.startDay ?? 1 : 1;
@@ -308,8 +310,11 @@ function bestCapacity(world: World, accepted: Allocation[], candidate: Allocatio
       checkProposalBudget(budget);
       const day = Number(text);
       if (day <= firstDay) continue;
-      const limit = candidate.nursery ? 29_999 : world.maxApk[`${n}|${candidate.sizeId}`] ?? -1;
-      if (state.animalsPerKg <= limit && (p.days?.[day - 1]?.animalsPerKg ?? Infinity) > limit) days.add(day);
+      const limit = candidate.nursery ? 29_999 : world.datedSaleRanges
+        ? world.maxApk[`${n}|${day}|${candidate.sizeId}`] ?? -1 : world.maxApk[`${n}|${candidate.sizeId}`] ?? -1;
+      const previousLimit = candidate.nursery ? 29_999 : world.datedSaleRanges
+        ? world.maxApk[`${n}|${day - 1}|${candidate.sizeId}`] ?? -1 : limit;
+      if (state.animalsPerKg <= limit && (p.days?.[day - 1]?.animalsPerKg ?? Infinity) > previousLimit) days.add(day);
     }
   }
   let best = { quantity: 0, day: firstDay };

@@ -687,6 +687,8 @@ const AI_SENSITIVE_TABLES = [
   'fatture_in_cloud_config',
   'imm_config',
   'notification_settings',
+  'commercial_availability_scenarios',
+  'commercial_availability_summaries',
 ];
 const AI_SENSITIVE_TABLE_NAME_PATTERN =
   '^(users|.*_users|operators)$|session|_config$|^config|credential|auth_';

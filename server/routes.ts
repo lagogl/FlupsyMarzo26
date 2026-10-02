@@ -367,6 +367,8 @@ export async function registerRoutes(app: Express, existingServer?: Server): Pro
   // Isolated what-if planning; no writes to orders, inventory or existing forecasts.
   const salesScenariosModule = await import('./modules/planning/sales-scenarios');
   app.use('/api/sales-scenarios', authModule.requireAuth, salesScenariosModule.default);
+  const commercialAvailabilityModule = await import('./modules/planning/commercial-availability');
+  app.use('/api/commercial-availability', authModule.requireAuth, commercialAvailabilityModule.default);
 
   // Registra il modulo SCREENING
   app.use('/api/screening', authModule.requireAuth);

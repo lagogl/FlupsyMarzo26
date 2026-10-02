@@ -109,6 +109,7 @@ import Coorti from "@/pages/Coorti";
 import CruscottoSopravvivenza from "@/pages/CruscottoSopravvivenza";
 import ReportMortalita from "@/pages/ReportMortalita";
 import ScenariVendita from "@/pages/ScenariVendita";
+import DisponibilitaCommerciale from "@/pages/DisponibilitaCommerciale";
 // Operazioni Avanzate rimosse per ottimizzazione prestazioni
 import { initializeWebSocket } from "./lib/websocket";
 import { useEffect } from "react";
@@ -191,6 +192,7 @@ function Router() {
       <ProtectedRoute path="/proiezione-crescita" component={ProiezioneCrescita}/>
       <ProtectedRoute path="/pianificazione-vendite" component={PianificazioneVendite} requiredUsername="gianluigi"/>
        <ProtectedRoute path="/scenari-vendita" component={ScenariVendita}/>
+      <ProtectedRoute path="/disponibilita-commerciale" component={DisponibilitaCommerciale}/>
       <ProtectedRoute path="/gestione-mortalita" component={GestioneMortalita}/>
       <ProtectedRoute path="/giacenze-range" component={GiacenzeRange}/>
       <ProtectedRoute path="/growth-variability-analysis" component={GrowthVariabilityAnalysis}/>

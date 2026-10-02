@@ -2107,3 +2107,4 @@ export type ImmConfigRow = typeof immConfig.$inferSelect;
 // poi tramite il normale flusso di Publish (diff dev → prod).
 export * from "./lci-schema";
 export { salesScenarios } from "./sales-scenarios";
+export { commercialScenarios, commercialSummaries } from "./commercial-availability";

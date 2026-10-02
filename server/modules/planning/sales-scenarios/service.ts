@@ -13,6 +13,7 @@ import { loadHatcheryArrivalPlans } from "../hatchery-arrival-source";
 import { getHatcheryBiologyDays } from "../hatchery-arrival-policy";
 import { buildCohortPath } from "./cohort-path";
 import { businessToday } from "../../../utils/business-date";
+import { scenarioArrivalPlans } from "../commercial-availability/arrival-options";
 
 export { businessToday };
 const commonWarnings = [
@@ -42,15 +43,21 @@ export async function getInputs(): Promise<ScenarioInputs> {
   } };
 }
 
-async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ expected: World; prudent: World; warnings: string[] }> {
+export interface CommercialWorldOptions {
+  includeOrders: boolean;
+  includeHatchery: boolean;
+  hatcheryOverrides: { year: number; month: number; quantity: number }[];
+  resolveQuantities?: (orders: (typeof ordiniCondivisi.$inferSelect)[]) => Promise<{ quantities: Map<number, number>; warnings: string[] }>;
+}
+export async function loadWorlds(input: ScenarioInput, automatic = false, commercial?: CommercialWorldOptions): Promise<{ expected: World; prudent: World; warnings: string[]; timings?: { biologyMainThreadMs: number } }> {
   const today = businessToday();
   if (input.startYear !== today.year || input.startMonth !== today.month) throw new Error("Lo scenario deve iniziare nel mese corrente: le giacenze disponibili sono quelle di oggi");
-  if (!isDbEsternoAvailable() || !dbEsterno) throw new Error("Database ordini non disponibile: impossibile proteggere gli ordini acquisiti");
+  if (commercial?.includeOrders !== false && (!isDbEsternoAvailable() || !dbEsterno)) throw new Error("Database ordini non disponibile: impossibile proteggere gli ordini acquisiti");
   const first = monthNumber(today.year, today.month);
   const [ctx, inventory, rawOrders] = await Promise.all([
     loadGrowthSimulationContext(),
     productionForecastService.getBasketLevelInventory(),
-    dbEsterno.select().from(ordiniCondivisi).where(activeOrdersCondition()),
+    commercial?.includeOrders === false ? Promise.resolve([]) : dbEsterno!.select().from(ordiniCondivisi).where(activeOrdersCondition()),
   ]);
   const orders: Order[] = [];
   const commitmentInputs: CommitmentOrderInput[] = [];
@@ -58,9 +65,14 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
   let hasPartialFutureOrders = false;
   validateScenarioSaleSizes(input, ctx.allSizes);
   const warnings = [...commonWarnings];
+  const residuals = commercial?.resolveQuantities ? await commercial.resolveQuantities(rawOrders.filter(order => {
+    const date = order.dataInizioConsegna || order.dataConsegna || order.dataFineConsegna;
+    return scenarioOrderDeliveryMonth(date, first) !== null;
+  })) : undefined;
+  if (residuals) warnings.push(...residuals.warnings);
   warnings.push("SGR: coefficienti giornalieri configurati per mese/taglia, con ripiego sul valore mensile o sulla media disponibile dove manca il dato specifico.");
   for (const order of rawOrders) {
-    const quantity = order.quantitaTotale || order.quantita || 0;
+    const quantity = residuals?.quantities.get(order.id) ?? (order.quantitaTotale || order.quantita || 0);
     if (quantity <= 0) continue;
     const date = order.dataInizioConsegna || order.dataConsegna || order.dataFineConsegna;
     let at: number | null;
@@ -77,11 +89,12 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
   }
   const orderCommitments = aggregateOrderCommitments(commitmentInputs, first);
   if (excludedEarlierOrders) warnings.push(`${excludedEarlierOrders} ordini con prima consegna antecedente al mese iniziale esclusi anche se ancora aperti o parziali.`);
-  if (hasPartialFutureOrders) warnings.push("Gli ordini parziali futuri sono riservati per l'intera quantità registrata, in via cautelativa (nessuna deduzione di consegne non certificate).");
+  if (hasPartialFutureOrders && !commercial) warnings.push("Gli ordini parziali futuri sono riservati per l'intera quantità registrata, in via cautelativa (nessuna deduzione di consegne non certificate).");
   const last = Math.max(first + input.horizon - 1, ...orders.map(o => o.at));
   const years = [...new Set(Array.from({ length: last - first + 1 }, (_, i) => monthParts(first + i).year))];
   const referenceDate = new Date(today.year, today.month - 1, today.day);
-  const arrivalPlans = await loadHatcheryArrivalPlans(years, referenceDate);
+  let arrivalPlans = commercial?.includeHatchery === false ? [] : await loadHatcheryArrivalPlans(years, referenceDate);
+  if (commercial) arrivalPlans = scenarioArrivalPlans(arrivalPlans, commercial.includeHatchery, commercial.hatcheryOverrides);
   const requestedSizes = [...new Set([...input.sales.map(s => s.sizeId), ...input.proposalPrices.map(s => s.sizeId)])];
   for (const id of requestedSizes) if (!ctx.allSizes.some(s => s.id === id)) throw new Error(`Taglia sconosciuta: ${id}`);
   if (ctx.allSizes.length > 60) throw new Error("Catalogo troppo ampio per il calcolo interattivo");
@@ -92,6 +105,10 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
     for (const s of ctx.allSizes) {
       const range = findRangeForSize(s.id, date, ctx.sizeRangeVersions);
       if (range) ranges[`${n}|${s.id}`] = range.maxAnimalsPerKg;
+      if (commercial) for (let day = n === first ? today.day : 1; day <= new Date(year, month, 0).getDate(); day++) {
+        const daily = findRangeForSize(s.id, new Date(year, month - 1, day, 12), ctx.sizeRangeVersions);
+        if (daily) ranges[`${n}|${day}|${s.id}`] = daily.maxAnimalsPerKg;
+      }
     }
   }
   for (const order of orders) {
@@ -179,15 +196,18 @@ async function loadWorlds(input: ScenarioInput, automatic = false): Promise<{ ex
       first, last, startDay: today.day, cohorts, orders,
       orderCommitments,
       maxApk: ranges, sizes: selectedScenarioSizeIds(input, ctx.allSizes),
+      ...(commercial ? { datedSaleRanges: true } : {}),
     };
   };
+  const biologyStarted = performance.now();
   const expected = build(false);
-  const prudent = build(true);
+  const prudent = commercial ? expected : build(true);
+  const biologyMainThreadMs = Math.round(performance.now() - biologyStarted);
   // Both projections now evaluate protected availability on daily crossing
   // dates. Production can take longer than the old 20s simulation budget;
   // proposals test further candidate sales and retain a separate higher cap.
   expected.deadlineMs = prudent.deadlineMs = Date.now() + (automatic ? 90_000 : 60_000);
-  return { expected, prudent, warnings };
+  return { expected, prudent, warnings, ...(commercial ? { timings: { biologyMainThreadMs } } : {}) };
 }
 
 export async function simulate(input: ScenarioInput, automatic = false): Promise<ScenarioResult | ScenarioProposal> {
