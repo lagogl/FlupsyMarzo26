@@ -68,3 +68,9 @@ Nella Disponibilità commerciale, l'immutabilità del riepilogo comprende anche 
 **Why:** Un catalogo taglie aggiornato dopo il congelamento non deve cambiare la lettura commerciale di una previsione storica, neppure in una nuova esportazione.
 
 **How to apply:** Ogni nuova informazione descrittiva usata nei riepiloghi deve essere congelata insieme ai risultati; non integrare silenziosamente lo storico con anagrafiche live.
+
+Nella Disponibilità commerciale non riproporre l'elenco di note gialle sopra la matrice.
+
+**Why:** L'utente ha chiesto di eliminarlo perché non lo ritiene indicativo.
+
+**How to apply:** Tenere la vista operativa essenziale; la rimozione dell'elenco non deve cancellare ipotesi e avvisi dai riepiloghi storici o dalle esportazioni.
