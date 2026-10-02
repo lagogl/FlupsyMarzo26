@@ -1,4 +1,5 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
+import { advancedSaleStatusLabel } from "@/lib/advanced-sale-status";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -2256,10 +2257,10 @@ export default function AdvancedSales() {
                           <span className="block text-muted-foreground lg:hidden">Stato</span>
                           <Badge variant={
                             sale.status === 'completed' ? 'default' : 
-                            sale.status === 'confirmed' ? 'secondary' : 'outline'
+                             sale.status === 'confirmed' ? 'secondary' :
+                             sale.status === 'cancelled' ? 'destructive' : 'outline'
                           }>
-                            {sale.status === 'completed' ? 'Completata' :
-                             sale.status === 'confirmed' ? 'Confermata' : 'Bozza'}
+                             {advancedSaleStatusLabel(sale.status)}
                           </Badge>
                         </TableCell>
                         <TableCell className="max-w-[120px] break-words [&_span]:whitespace-normal">
@@ -2312,7 +2313,12 @@ export default function AdvancedSales() {
                               </Button>
                             )}
 
-                            {sale.totalBags > 0 && (
+                            {sale.status === 'cancelled' && (
+                              <p className="max-w-[260px] text-xs text-muted-foreground">
+                                Vendita stornata. Per rifarla, crea una nuova vendita dalla selezione delle ceste.
+                              </p>
+                            )}
+                            {sale.status !== 'cancelled' && sale.totalBags > 0 && (
                               <div className="inline-flex">
                                 <Button
                                   variant="outline"
@@ -2977,13 +2983,7 @@ export default function AdvancedSales() {
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Data e stato</p>
                   <p className="mt-1 font-semibold">{formatSaleDate(saleDetailsData.sale.saleDate)}</p>
                   <Badge variant="secondary" className="mt-2">
-                    {saleDetailsData.sale.status === "completed"
-                      ? "Completata"
-                      : saleDetailsData.sale.status === "confirmed"
-                        ? "Confermata"
-                        : saleDetailsData.sale.status === "cancelled"
-                          ? "Stornata"
-                          : "Bozza"}
+                     {advancedSaleStatusLabel(saleDetailsData.sale.status)}
                   </Badge>
                 </div>
                 <div className="rounded-lg border bg-slate-50 p-4">

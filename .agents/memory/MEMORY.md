@@ -25,7 +25,7 @@
 - [Storno vendite e DDT](sales-reversal-ddt-boundary.md) — niente storno dopo il DDT; ristampe da snapshot immutabile e generazione documenti fail-closed su azienda ignota.
 - [Tracciabilità pubblica vendite](public-sale-traceability.md) — QR con token cifrato, pagina read-only/noindex e timeline filtrata; mai esporre ID, cliente o dati operativi grezzi.
 - [Numerazione annuale DDR](annual-ddr-numbering.md) — progressivo separato per azienda/anno, assegnato una sola volta; ristampe immutabili e ripartenza automatica annuale.
-- [Indirizzi clienti FIC](fic-client-address-details.md) — l'elenco clienti può omettere la via presente in FIC; recuperare il dettaglio prima di salvare campi mancanti.
+- [Anagrafiche clienti FIC](fic-client-address-details.md) — ID per azienda; dettagli per gli indirizzi; dati documentali senza ID solo dopo ricerca completa, mai per errori API.
 - [Oggetto e causale DDT FIC](fic-ddt-subject-fields.md) — inviare sia subject sia visible_subject; la causale di trasporto è separata in dn_ai_causal.
 - [Email fascicolo vendite](advanced-sale-documents-email.md) — la stampa del fascicolo invia prima i PDF e il riepilogo ai destinatari operativi; Delta ha 4 allegati, Ecotapes 3 senza DDR.
 - [Consegne ordini da vendite](sale-order-delivery-boundary.md) — genera/ristampa DDT non tocca ordini; solo successo “Invia a FIC” registra consegne, con riferimento idempotente vendita-ordine-taglia.

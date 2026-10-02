@@ -1,3 +1,4 @@
+import { manualSaleSourceIsAvailable } from "../services/sale-source-reservations";
 /**
  * Controller per il modulo di Vendite Avanzate
  * Gestisce la configurazione di sacchi e la generazione di rapporti di vendita dettagliati
@@ -6,10 +7,13 @@ import { Request, Response } from "express";
 import { db } from "../db";
 import { eq, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from "drizzle-orm";
 import { pdfGenerator } from "../services/pdf-generator";
+import { resolveFicFarmCode } from "../services/fic-customer-farm-code";
 import {
-  resolveFicFarmCode,
-  shouldFetchFicClientDetail
-} from "../services/fic-customer-farm-code";
+  assertInlineFicCustomer,
+  FicCustomerError,
+  resolveFicCompanyCustomer,
+} from "../services/fic-company-customer";
+import { apiRequest as pacedFicApiRequest } from "./fatture-in-cloud-controller";
 import {
   generateAdvancedSaleDocument as buildAdvancedSaleDocument,
   abbreviateFlupsyName,
@@ -223,77 +227,15 @@ async function getNextAvailableDDTNumber(companyId?: number | null, year = new D
 async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?: number | null) {
   const saleSnapshot = normalizeSaleCustomerSnapshot(sale?.customerDetails, sale?.customerName);
   const preliminary = mergeSaleCustomerData(saleSnapshot, localCustomer);
-  let ficDetail: any = null;
-  let resolvedFicClientId: number | null = null;
-
-  const needsFicDetail = shouldFetchFicClientDetail({
-    address_street: preliminary.address,
-    address_postal_code: preliminary.postalCode,
-    code: preliminary.farmCode
-  }, preliminary.farmCode);
-  if (!needsFicDetail) return preliminary;
-
-  if (companyId) {
-    try {
-      const accessToken = await getConfigValue('fatture_in_cloud_access_token');
-      if (accessToken) {
-        let ficClientId = localCustomer?.fattureInCloudId || null;
-        if (!ficClientId && preliminary.vatNumber) {
-          const normalizedVat = preliminary.vatNumber.replace(/\W/g, '').toUpperCase();
-          const seenPages = new Set<string>();
-          for (let page = 1; page <= 20 && !ficClientId; page++) {
-            const listResponse = await ficApiRequest(
-              'GET',
-              String(companyId),
-              accessToken,
-              `/entities/clients?page=${page}&per_page=100`
-            );
-            const responseBody = listResponse.data || {};
-            const clients: any[] = responseBody.data || [];
-            if (clients.length === 0) break;
-            const pageFingerprint = clients.map(client => client.id).join(',');
-            if (seenPages.has(pageFingerprint)) break;
-            seenPages.add(pageFingerprint);
-            const match = clients.find(client =>
-              String(client.vat_number || '').replace(/\W/g, '').toUpperCase() === normalizedVat
-            );
-            if (match?.id) ficClientId = match.id;
-            const explicitLastPage = Number(
-              responseBody.last_page
-              || responseBody.meta?.pagination?.last_page
-              || responseBody.pagination?.last_page
-              || 0
-            );
-            const calculatedLastPage = Number(responseBody.total)
-              ? Math.ceil(Number(responseBody.total) / 100)
-              : 0;
-            const lastPage = explicitLastPage || calculatedLastPage;
-            if (lastPage > 0 && page >= lastPage) break;
-          }
-        }
-        if (!ficClientId) return preliminary;
-        resolvedFicClientId = Number(ficClientId) || null;
-        const response = await ficApiRequest(
-          'GET',
-          String(companyId),
-          accessToken,
-          `/entities/clients/${ficClientId}`
-        );
-        const responseDetail = response.data?.data || null;
-        ficDetail = responseDetail
-          ? { ...responseDetail, ficClientId: responseDetail.id }
-          : null;
-      }
-    } catch (error: any) {
-      if (localCustomer?.fattureInCloudId) {
-        const detailError = new Error(
-          `Impossibile recuperare l'anagrafica completa del cliente da Fatture in Cloud: ${error?.message || 'servizio non disponibile'}`
-        );
-        (detailError as any).statusCode = 502;
-        throw detailError;
-      }
-      console.warn(`Dettaglio FIC non disponibile per il cliente ${localCustomer?.id || sale?.customerName}; uso lo snapshot locale`);
-    }
+  if (!companyId) return { ...preliminary, ficClientId: '' };
+  const ficDetail = await resolveFicCompanyCustomer(preliminary, async endpoint =>
+    (await pacedFicApiRequest('GET', `/c/${companyId}${endpoint}`)).data,
+  );
+  if (!ficDetail) {
+    assertInlineFicCustomer(preliminary);
+    // Complete inline entity is supported by FIC. Never reuse another company's
+    // ID, including the ID still present in the historical sale snapshot.
+    return { ...preliminary, ficClientId: '' };
   }
 
   if (ficDetail && localCustomer?.id) {
@@ -305,9 +247,7 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
     if (farmCode && farmCode !== localCustomer.codiceAllevamento) {
       updates.codiceAllevamento = farmCode;
     }
-    if (resolvedFicClientId && resolvedFicClientId !== localCustomer.fattureInCloudId) {
-      updates.fattureInCloudId = resolvedFicClientId;
-    }
+    // Do not overwrite the shared customer's FIC ID with an issuer-specific ID.
     if (Object.keys(updates).length) {
       await db.update(clienti)
         .set({ ...updates, updatedAt: new Date() })
@@ -315,7 +255,10 @@ async function getCompleteSaleCustomer(sale: any, localCustomer: any, companyId?
     }
   }
 
-  return mergeSaleCustomerData(ficDetail, saleSnapshot, localCustomer);
+  return {
+    ...mergeSaleCustomerData(ficDetail, saleSnapshot, localCustomer),
+    ficClientId: String(ficDetail.id),
+  };
 }
 
 /**
@@ -452,11 +395,7 @@ async function getManualSaleBasketRows(executor: any, basketIds?: number[]): Pro
     JOIN sizes s ON s.id = op.size_id
     WHERE b.state = 'active'
       AND b.current_cycle_id IS NOT NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM sale_operations_ref existing_ref
-        WHERE existing_ref.operation_id = op.id
-      )
+      AND ${manualSaleSourceIsAvailable(sql`op.id`)}
       ${basketFilter}
     ORDER BY f.name, b.physical_number
   `);
@@ -516,7 +455,8 @@ async function getManualSaleBasketRows(executor: any, basketIds?: number[]): Pro
 
 /**
  * Elenco aggiornato delle ceste che possono essere prenotate per una vendita
- * manuale. Le ceste già referenziate da una vendita non vengono mostrate.
+ * manuale. Prenotazioni attive bloccano la fonte; uno storno tracciato la libera
+ * senza eliminare i riferimenti storici della vendita precedente.
  */
 export async function getAvailableSaleBaskets(req: Request, res: Response) {
   try {
@@ -4565,9 +4505,12 @@ export async function generateDDT(req: Request, res: Response) {
       : Number((error as any)?.statusCode) || 500;
     res.status(statusCode).json({
       success: false,
-      error: statusCode === 409
+      error: error instanceof FicCustomerError
+        ? error.message
+        : statusCode === 409
         ? (ddtNumberConflict ? DDT_NUMBER_CONFLICT_MESSAGE : (error as Error).message)
-        : "Errore nella generazione del DDT. Nessun documento locale è stato salvato"
+        : "Errore nella generazione del DDT. Nessun documento locale è stato salvato",
+      ...(error instanceof FicCustomerError ? { code: error.code } : {}),
     });
   }
 }
@@ -5325,6 +5268,23 @@ export async function sendDDTToFIC(req: Request, res: Response) {
       });
     }
 
+    // Verify the frozen fiscal identity before claiming the DDT or contacting
+    // FCloud. Existing document contact/address snapshots remain unchanged.
+    const ficCustomer = await resolveFicCompanyCustomer({
+      ficClientId: ddtData.clienteFattureInCloudId,
+      vatNumber: ddtData.clientePiva,
+      taxCode: ddtData.clienteCodiceFiscale,
+    }, async endpoint =>
+      (await pacedFicApiRequest('GET', `/c/${companyId}${endpoint}`)).data,
+    );
+    if (!ficCustomer) {
+      assertInlineFicCustomer(normalizeSaleCustomerSnapshot(buildFicDdtCustomerEntity(ddtData)));
+    }
+    const ficCustomerEntity = buildFicDdtCustomerEntity({
+      ...ddtData,
+      clienteFattureInCloudId: ficCustomer?.id ?? null,
+    });
+
     const fcloudCompanyKey = resolveFCloudCompanyId(ddtData.mittentePartitaIva);
     const righe = await hydrateDdtProductSnapshots({
       ddtId: parseInt(ddtId),
@@ -5372,7 +5332,7 @@ export async function sendDDTToFIC(req: Request, res: Response) {
     const ddtPayload = {
       data: {
         type: 'delivery_note',
-        entity: buildFicDdtCustomerEntity(ddtData),
+        entity: ficCustomerEntity,
         ...buildFicDdtHeader(ddtData),
         date: ddtData.data,
         number: ddtData.numero,
@@ -5510,7 +5470,9 @@ export async function sendDDTToFIC(req: Request, res: Response) {
         ))
         .catch(() => {});
     }
-    const status = error.code === "FIC_PRODUCT_MAPPING_REQUIRED" ? 409 : 500;
+    const status = error instanceof FicCustomerError
+      ? error.statusCode
+      : error.code === "FIC_PRODUCT_MAPPING_REQUIRED" ? 409 : 500;
     res.status(status).json({
       success: false,
       error: error.message || "Errore nell'invio del DDT a Fatture in Cloud",
