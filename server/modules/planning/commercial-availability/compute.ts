@@ -1,4 +1,4 @@
-import type { CommercialInput, CommercialResult } from "../../../../shared/commercial-availability";
+import type { CommercialInput, CommercialResult, CommercialCellShortfall, CommercialMonth } from "../../../../shared/commercial-availability";
 import { bestCapacity, replay, safeCapacity, monthNumber, monthParts, type Allocation, type World } from "../sales-scenarios/engine";
 
 export function civilDate(year: number, month: number, day: number) {
@@ -32,7 +32,16 @@ export function computeCommercial(world: World, input: CommercialInput) {
   const projection = (allocations: Allocation[], result: ReturnType<typeof replay>) =>
     Array.from({ length: input.horizon }, (_, index) => {
       const n = world.first + index;
-      const row = { ...result.months.get(n)!, availableBySize: {} as Record<string, number>, availabilityDayBySize: {} as Record<string, number> };
+      const shortfallsBySize: Record<string, CommercialCellShortfall> = {};
+      const deficit = (id: number) => shortfallsBySize[id] ??= { orders: 0, sales: 0 };
+      for (const id of input.selectedSizeIds) deficit(id);
+      if (input.includeOrders) for (const order of world.orders) {
+        if (order.at === n) deficit(order.sizeId).orders += Math.max(0, order.quantity - (result.orders[order.key] ?? 0));
+      }
+      if (allocations.length) for (const sale of plan) {
+        if (monthNumber(sale.year, sale.month) === n) deficit(sale.sizeId).sales += sale.shortfall;
+      }
+      const row: CommercialMonth & { availabilityDayBySize: Record<string, number> } = { ...result.months.get(n)!, availableBySize: {}, availabilityDayBySize: {}, shortfallsBySize };
       row.salesRequested = allocations.length ? input.sales.filter(s => monthNumber(s.year, s.month) === n).reduce((sum, s) => sum + s.quantity, 0) : 0;
       for (const sizeId of input.selectedSizeIds) {
         const best = bestCapacity(world, allocations, { id: "__availability", ...monthParts(n), sizeId, quantity: 0, pricePerThousand: null, paymentDelayMonths: 0 }, 2_000_000_000);

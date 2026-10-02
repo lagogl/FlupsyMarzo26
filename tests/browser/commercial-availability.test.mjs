@@ -30,13 +30,14 @@ const defaults = {
 // Synthetic, isolated API fixtures. These deliberately do not import any production
 // calculation/presentation helpers: this suite tests rendered UI and request contracts,
 // not the biological replay (which is covered by server tests).
-function resultFor(input, { capacity = 4321, invalid = false, historical = false } = {}) {
+function resultFor(input, { capacity = 4321, invalid = false, historical = false, shortfallsByMonth = [] } = {}) {
   const months = Array.from({ length: input.horizon }, (_, index) => {
     const serial = input.startYear * 12 + input.startMonth - 1 + index;
     return {
       year: Math.floor(serial / 12), month: serial % 12 + 1,
       availableBySize: { 1: capacity, 2: 0 },
       availabilityDayBySize: { 1: index === 0 ? day : 15 },
+      ...(shortfallsByMonth[index] === undefined ? {} : { shortfallsBySize: shortfallsByMonth[index] }),
       ordersRequested: 100, ordersFulfilled: 100, orderShortfall: 0,
       salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0,
       revenue: 0, receipts: 0, remainingAnimals: 4321,
@@ -165,7 +166,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
     const historic = { id: 70, ownerId: "fixture", name: historicalInput.name,
       snapshot: resultFor(historicalInput, { historical: true }), createdAt: timestamp };
     let scenarios = [], summaries = [historic], nextId = 10;
-    let delayNext = false, invalidNext = false, pending = null;
+    let delayNext = false, invalidNext = false, pending = null, nextShortfallsByMonth = null;
     page.on("pageerror", error => failures.push(error.message));
     page.on("dialog", dialog => dialog.accept());
     await page.setRequestInterception(true);
@@ -192,7 +193,11 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
         if (method === "GET" && Object.hasOwn(readFixtures, url.pathname)) return respond(readFixtures[url.pathname]);
         if (method === "POST" && url.pathname === `${root}/simulate`) {
           simulations.push(body);
-          const response = resultFor(body, { capacity: delayNext ? 98765 : 4321, invalid: invalidNext });
+          const response = resultFor(body, {
+            capacity: delayNext ? 98765 : 4321, invalid: invalidNext,
+            shortfallsByMonth: nextShortfallsByMonth ?? [],
+          });
+          nextShortfallsByMonth = null;
           invalidNext = false;
           if (delayNext) { delayNext = false; pending = () => respond(response); return; }
           return respond(response);
@@ -238,6 +243,73 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
     assert.ok(calls.some(call => call.path === "/api/users/current"), "Real auth provider must request the session API");
     assert.ok(calls.some(call => call.path === `${root}/inputs`));
     assert.match(await page.$eval(".ca-matrix", table => table.innerText), /4\.321/);
+
+    await t.test("availability cells show scaled, separately explained order and sales shortfalls", async () => {
+      nextShortfallsByMonth = [
+        { 1: { orders: 12, sales: 34 }, 2: { orders: 0, sales: 0 } },
+        { 1: { orders: 5, sales: 0 }, 2: { orders: 20, sales: 30 } },
+      ];
+      await verify(page);
+
+      const firstSizeFirstMonth = ".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell";
+      const secondSizeFirstMonth = ".ca-desktop-matrix tbody tr:nth-child(2) td:nth-of-type(1) .ca-cell";
+      const secondSizeSecondMonth = ".ca-desktop-matrix tbody tr:nth-child(2) td:nth-of-type(2) .ca-cell";
+      const firstCellLines = await page.$eval(firstSizeFirstMonth, cell => cell.innerText.split("\n").map(line => line.trim()));
+      assert.ok(firstCellLines.includes("Mancano 46"), `Order and sale shortfalls must add to 46: ${firstCellLines}`);
+      const noDeficitLines = await page.$eval(secondSizeFirstMonth, cell => cell.innerText.split("\n").map(line => line.trim()));
+      assert.ok(!noDeficitLines.some(line => line.startsWith("Mancano ")), "Zero availability without shortfalls must not fabricate a deficit");
+      assert.ok(!noDeficitLines.includes("Mancano 0"), "An explicit zero shortfall must not render a deficit");
+      const positiveDeficitLines = await page.$eval(secondSizeSecondMonth, cell => cell.innerText.split("\n").map(line => line.trim()));
+      assert.ok(positiveDeficitLines.includes("Mancano 50"), `A zero-capacity cell with unmet demand must show the deficit: ${positiveDeficitLines}`);
+
+      const scale = await page.$eval(".ca-desktop-matrix", matrix => {
+        const inspect = selector => [...matrix.querySelectorAll(selector)].map(fill => ({
+          quantity: Number(fill.dataset.quantity),
+          width: parseFloat(fill.style.width),
+          parentWidth: fill.parentElement.getBoundingClientRect().width,
+          fillWidth: fill.getBoundingClientRect().width,
+        }));
+        return {
+          available: inspect(".ca-capacity-bar-fill"),
+          shortfall: inspect(".ca-shortfall-bar-fill"),
+        };
+      });
+      assert.ok(scale.available.length >= 12, "Every displayed size/month cell with a capacity should expose a capacity scale bar");
+      assert.ok(scale.shortfall.length >= 3, "Positive cell deficits should expose shortfall scale bars");
+      assert.ok(scale.available.some(bar => bar.quantity === 4321 && bar.width === 100), "Maximum visible quantity must define the shared 100% scale");
+      assert.ok(scale.available.some(bar => bar.quantity === 0 && bar.width === 0), "Zero capacity must retain a zero-width fill");
+      const scaledShortfall = scale.shortfall.find(bar => bar.quantity === 50);
+      assert.ok(scaledShortfall && scaledShortfall.width > 0 && scaledShortfall.width < 2, "Deficits use the same scale as availability, rather than an independent shortfall maximum");
+      assert.ok(scale.shortfall.some(bar => bar.quantity === 46 && bar.width > 0 && bar.width < scaledShortfall.width), "Smaller combined shortfall must use that same scale");
+      assert.ok(scale.available.every(bar => bar.parentWidth > 0), "Capacity bars must remain visibly rendered");
+      assert.ok(scale.shortfall.every(bar => bar.parentWidth > 0), "Shortfall bars must remain visibly rendered");
+
+      await page.screenshot({ path: "/tmp/commercial-availability-shortfalls-desktop.jpg" });
+      await page.click(firstSizeFirstMonth);
+      await page.waitForSelector('[role="dialog"]');
+      const detailText = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
+      assert.match(detailText, /4\.321 animali/);
+      assert.match(detailText, /dal .*\b\d{1,2}\b/i, "Positive availability keeps its earlier reachable date");
+      assert.match(detailText, /Ordini inclusi non coperti: 12/);
+      assert.match(detailText, /Vendite simulate non soddisfatte: 34/);
+      assert.ok(!detailText.includes("Ordini inclusi non coperti: 46"));
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+
+      await page.click(secondSizeSecondMonth);
+      await page.waitForSelector('[role="dialog"]');
+      const zeroCapacityDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
+      assert.match(zeroCapacityDetail, /Ordini inclusi non coperti: 20/);
+      assert.match(zeroCapacityDetail, /Vendite simulate non soddisfatte: 30/);
+      assert.equal(await page.$eval('[role="dialog"] button.ca-button.primary', element => element.disabled), true);
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+
+      await page.setViewport({ width: 402, height: 874 });
+      await page.waitForFunction(() => getComputedStyle(document.querySelector(".ca-mobile-matrix")).display !== "none");
+      await page.screenshot({ path: "/tmp/commercial-availability-shortfalls-mobile.jpg" });
+      await page.setViewport({ width: 1440, height: 1100 });
+    });
 
     await t.test("sales add/edit/delete and hidden-size preservation", async () => {
       await clickText(page, "Piano commerciale (0)");
@@ -312,6 +384,14 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await waitText(page, "Il risultato tardivo è stato scartato");
       assert.equal(await isDisabled(page, "Prepara riepilogo commerciale"), true);
       assert.equal(await page.$$eval(".commercial-workspace .ca-mono", elements => elements.some(element => element.textContent.includes("98.765"))), false);
+      await clickText(page, "Esplora disponibilità");
+      await page.click(".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell");
+      await page.waitForSelector('[role="dialog"]');
+      const staleDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
+      assert.match(staleDetail, /Ricalcola la bozza prima di utilizzare questa quantità/);
+      assert.equal(await page.$eval('[role="dialog"] button.ca-button.primary', element => element.disabled), true, "A stale cell cannot start a sale");
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
       await verify(page);
       assert.equal(simulations.at(-1).name, "Bozza modificata durante replay");
       delayNext = true;
@@ -350,6 +430,15 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       const summaryText = await page.$eval(".commercial-workspace .ca-panel:last-of-type", element => element.innerText);
       assert.match(summaryText, /richiesti 1\.234 \| accettati 1\.234 \| mancanti 0/);
       assert.match(summaryText, /Scenario senza vincolo ordini/);
+      await clickText(page, "Esplora disponibilità");
+      await page.click(".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell");
+      await page.waitForSelector('[role="dialog"]');
+      const historicalCellDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
+      assert.match(historicalCellDetail, /Mancanze non disponibili/);
+      assert.doesNotMatch(historicalCellDetail, /Ordini inclusi non coperti: 0|Vendite simulate non soddisfatte: 0/);
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+      await clickText(page, "Scenari e riepiloghi");
       await typeField(page, "Nome della bozza", "Modifica live non cambia storico");
       await verify(page);
       assert.equal(await page.$eval(".commercial-workspace .ca-panel:last-of-type", element => element.innerText), summaryText, "Live replay cannot rewrite frozen summary");

@@ -54,6 +54,12 @@
 .ca-cell:hover { background: var(--ca-soft); }
 .ca-cell strong { font-size: 18px; font-weight: 500; display: block; }
 .ca-cell small { font-size: 10px; display: block; margin-top: 5px; color: var(--ca-muted); }
+.ca-cell-bar { display: block; width: 100%; height: 5px; margin-top: 7px; background: var(--ca-soft); border-radius: 3px; overflow: hidden; }
+.ca-capacity-bar-fill, .ca-shortfall-bar-fill { display: block; height: 100%; background: var(--ca-accent); border-radius: inherit; }
+.ca-shortfall-bar-fill { background: #b54b3d; }
+.ca-deficit-track { background: #f3ded8; margin-top: 4px; }
+.ca-cell small.ca-cell-shortfall { color: #92392e; font-weight: 800; }
+.ca-bar-legend { font-size: 11px !important; }
 .ca-tag { font-size: 10px; font-weight: 800; background: var(--ca-soft); border-radius: 4px; padding: 4px 6px; display: inline-block; }
 .ca-tag.warning { background: #f6e9c9; color: var(--ca-warning); }
 .ca-empty { padding: 40px 16px; text-align: center; background: #edf2ed; border-radius: 8px; }

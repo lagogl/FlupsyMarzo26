@@ -42,6 +42,49 @@ test("visibility never drops hidden sale consumption", () => {
   assert.equal(plan.months[1].availableBySize[2], 600);
   assert.deepEqual(Object.keys(plan.months[0].availableBySize), ["2"]);
 });
+test("cell deficits separate unmet included orders from unmet simulated sales", () => {
+  const w = world();
+  w.orders = [{ key: "jan", at: first, day: 10, sizeId: 1, quantity: 1200 }];
+  const result = computeCommercial(w, input([sale(400)]));
+  assert.equal(result.months[0].availableBySize[1], 0);
+  assert.deepEqual(result.months[0].shortfallsBySize?.[1], { orders: 200, sales: 400 });
+  assert.deepEqual(result.baselineMonths[0].shortfallsBySize?.[1], { orders: 200, sales: 0 });
+  assert.deepEqual(result.months[1].shortfallsBySize?.[1], { orders: 0, sales: 0 });
+  const removed = computeCommercial(w, input());
+  assert.deepEqual(removed.months[0].shortfallsBySize?.[1], { orders: 200, sales: 0 });
+});
+test("zero additional capacity is not automatically a negative balance", () => {
+  const w = world();
+  w.orders = [{ key: "jan", at: first, day: 10, sizeId: 1, quantity: 1000 }];
+  const result = computeCommercial(w, input());
+  assert.equal(result.months[0].availableBySize[1], 0);
+  assert.deepEqual(result.months[0].shortfallsBySize?.[1], { orders: 0, sales: 0 });
+});
+test("deficits belong to the requested size and month, without cumulative or cross-size copying", () => {
+  const w = world();
+  w.orders = [{ key: "large-jan", at: first, day: 10, sizeId: 2, quantity: 700 }];
+  const result = computeCommercial(w, input());
+  assert.deepEqual(result.months[0].shortfallsBySize?.[2], { orders: 700, sales: 0 });
+  assert.deepEqual(result.months[0].shortfallsBySize?.[1], { orders: 0, sales: 0 });
+  assert.equal(result.months[0].availableBySize[1], 1000);
+  assert.deepEqual(result.months[1].shortfallsBySize?.[2], { orders: 0, sales: 0 });
+});
+test("hidden sale deficits are retained without attributing them to visible sizes", () => {
+  const result = computeCommercial(world(), input([sale(1200)], [2]));
+  assert.deepEqual(result.months[0].shortfallsBySize?.[1], { orders: 0, sales: 200 });
+  assert.deepEqual(result.months[0].shortfallsBySize?.[2], { orders: 0, sales: 0 });
+  assert.equal(result.months[1].availableBySize[2], 0);
+});
+test("an early unmet sale can coexist with later additional availability in the same month", () => {
+  const w = world();
+  w.cohorts[0].path[first].days = Object.fromEntries(Array.from({ length: 31 }, (_, i) => [
+    i + 1, { survival: 1, sizeId: i < 19 ? 1 : 2, animalsPerKg: i < 19 ? 8000 : 4000 },
+  ]));
+  const result = computeCommercial(w, input([sale(100, 1, 2, 15)]));
+  assert.deepEqual(result.months[0].shortfallsBySize?.[2], { orders: 0, sales: 100 });
+  assert.equal(result.months[0].availableBySize[2], 1000);
+  assert.equal(result.months[0].availabilityDayBySize?.[2], 20);
+});
 test("future orders beyond horizon and existing uncovered orders are protected per order", () => {
   const w = world();
   w.orders = [{ key: "future", at: first + 7, day: 5, sizeId: 2, quantity: 800 }];

@@ -35,11 +35,21 @@ export type CommercialSale = z.infer<typeof commercialSaleSchema>;
 export interface CommercialPlanRow extends CommercialSale {
   day: number; date: string; acceptedQuantity: number; shortfall: number;
 }
+export interface CommercialCellShortfall {
+  /** Unfulfilled acquired orders, attributed to their requested size/month. */
+  orders: number;
+  /** Requested simulated sales minus accepted quantities, at their size/month. */
+  sales: number;
+}
+export interface CommercialMonth extends ScenarioMonth {
+  /** Optional only for older frozen snapshots: missing is NOT certified zero. */
+  shortfallsBySize?: Record<string, CommercialCellShortfall>;
+}
 export interface CommercialResult {
   sizes: { id: number; code: string; name: string }[];
   input: CommercialInput; inputHash: string; referenceDate: string; generatedAt: string;
   availabilityIsAlternative: true; valid: boolean;
-  months: ScenarioMonth[]; baselineMonths: ScenarioMonth[];
+  months: CommercialMonth[]; baselineMonths: CommercialMonth[];
   plan: CommercialPlanRow[];
   totalRequested: number; totalAccepted: number;
   baselineOrderShortfall: number; orderShortfall: number;
