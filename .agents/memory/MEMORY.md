@@ -55,3 +55,4 @@
 - [Fotografie di verifica proiezioni](projection-verification-snapshots.md) — rigenerare lo storico sugli stessi input; distinguere cambi di logica da nuove estrazioni live.
 - [Data aziendale delle proiezioni](projection-business-date.md) — convertire solo l'istante corrente a Europe/Rome; le date di simulazione sono date civili, non timestamp.
 - [Copertura alle scadenze](order-deadline-coverage.md) — capacità mensile e disponibilità puntuale sono alternative; ritardi e date non verificabili restano separati.
+- [Browser presentation locales](browser-presentation-locales.md) — Node e Chromium possono raggruppare le migliaia diversamente; distinguere quantità attese e formattazione locale.
