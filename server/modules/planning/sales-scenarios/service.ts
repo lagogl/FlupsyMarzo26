@@ -170,6 +170,7 @@ export async function loadWorlds(input: ScenarioInput, automatic = false, commer
         getMonth: monthParts,
         getSize: (weightMg, date) => findProjectedSize(weightMg, date, ctx.sizeRangeVersions),
         getBiologyDays: getHatcheryBiologyDays,
+        trackMortality: !!commercial,
         advanceDay: (weightMg, survival, dayDate) => {
           const biologyMonth = dayDate.getMonth() + 1;
           const growthSize = findProjectedSize(weightMg, dayDate, ctx.sizeRangeVersions);
@@ -185,7 +186,14 @@ export async function loadWorlds(input: ScenarioInput, automatic = false, commer
           const rate = Math.min(1, (configured ?? 0.03) * mortality);
           const state = stepOneDay(scaled, { weightMg, count: survival }, dayDate, rate);
           if (!Number.isFinite(state.weightMg) || !Number.isFinite(state.count)) throw new Error("Parametri crescita non validi: simulazione non finita");
-          return { weightMg: state.weightMg, survival: state.count };
+          return {
+            weightMg: state.weightMg, survival: state.count,
+            ...(commercial ? {
+              // stepOneDay spreads the monthly rate linearly over calendar days.
+              mortalityFactor: survival > 0 ? state.count / survival
+                : 1 - rate / new Date(dayDate.getFullYear(), dayDate.getMonth() + 1, 0).getDate(),
+            } : {}),
+          };
         },
       });
       cohorts.push({ quantity: e.quantity, entry: e.entry, entryDay: e.entryDay, path });

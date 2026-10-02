@@ -31,6 +31,7 @@ function makeMonth(year: number, month: number, first = false): CommercialMonth 
     availableBySize: first ? { "1": 0 } : { "1": 250_000 },
     availabilityDayBySize: first ? { "1": 18 } : { "1": 10 },
     shortfallsBySize: first ? { "1": { orders: 0, sales: 14 } } : undefined,
+    mortalityBySize: first ? { "1": 1234 } : undefined,
     ordersRequested: 100,
     ordersFulfilled: 100,
     orderShortfall: 0,
@@ -111,6 +112,11 @@ test("matched workbook round-trips exact numeric zero and missing shortfalls wit
   assert.equal(loaded.getWorksheet("Arrivi futuri")!.getCell(2, 2).value, null);
   assert.equal(loaded.getWorksheet("Arrivi futuri")!.getCell(2, 3).value, 0);
   assert.equal(loaded.getWorksheet("Guida")!.getCell(1, 2).value, "=Bozza primavera");
+  const mortality = loaded.getWorksheet("Morti previsti")!;
+  assert.equal(mortality.getCell(2, 2).value, 1234);
+  assert.equal(mortality.getCell(2, 2).numFmt, "#,##0");
+  assert.equal(mortality.getCell(2, 3).value, null);
+  assert.equal(mortality.getCell(2, 2).font.color?.argb, "FF92392E");
   assert.equal(loaded.getWorksheet("Ipotesi")!.getCell(7, 2).value, 1.1);
   assert.equal(loaded.getWorksheet("Ipotesi")!.getCell(7, 2).numFmt, "0.00");
 });
@@ -126,6 +132,7 @@ test("draft and stale result exports never leak availability or accepted quantit
     assert.equal(loaded.getWorksheet("Disponibilità"), undefined);
     assert.equal(loaded.getWorksheet("Date disponibilità"), undefined);
     assert.equal(loaded.getWorksheet("Mancanze ordini"), undefined);
+    assert.equal(loaded.getWorksheet("Morti previsti"), undefined);
     assert.equal(loaded.getWorksheet("Piano commerciale")!.getCell(2, 5).value, 875_000);
     assert.equal(loaded.getWorksheet("Piano commerciale")!.getCell(2, 6).value, null);
     assert.equal(loaded.getWorksheet("Piano commerciale")!.getCell(2, 7).value, null);

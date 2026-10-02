@@ -4,6 +4,12 @@ export function cellShortfall(month: CommercialMonth, sizeId: number): Commercia
   return month.shortfallsBySize?.[String(sizeId)];
 }
 
+/** Absence in a historical result is not evidence of zero deaths. */
+export function cellMortality(month: CommercialMonth, sizeId: number): number | undefined {
+  const value = month.mortalityBySize?.[String(sizeId)];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 /** One linear scale for all displayed cells, including unmet request quantities. */
 export function matrixMagnitude(months: CommercialMonth[], sizeIds: number[]): number {
   let max = 0;

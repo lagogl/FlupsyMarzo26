@@ -30,7 +30,7 @@ const defaults = {
 // Synthetic, isolated API fixtures. These deliberately do not import any production
 // calculation/presentation helpers: this suite tests rendered UI and request contracts,
 // not the biological replay (which is covered by server tests).
-function resultFor(input, { capacity = 4321, invalid = false, historical = false, shortfallsByMonth = [] } = {}) {
+function resultFor(input, { capacity = 4321, invalid = false, historical = false, omitMortality = false, shortfallsByMonth = [] } = {}) {
   const months = Array.from({ length: input.horizon }, (_, index) => {
     const serial = input.startYear * 12 + input.startMonth - 1 + index;
     return {
@@ -38,6 +38,7 @@ function resultFor(input, { capacity = 4321, invalid = false, historical = false
       availableBySize: { 1: capacity, 2: 0 },
       availabilityDayBySize: { 1: index === 0 ? day : 15 },
       ...(shortfallsByMonth[index] === undefined ? {} : { shortfallsBySize: shortfallsByMonth[index] }),
+      ...(!historical && !omitMortality ? { mortalityBySize: { 1: Math.round(1234 * input.mortalityMultiplier), 2: 0 } } : {}),
       ordersRequested: 100, ordersFulfilled: 100, orderShortfall: 0,
       salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0,
       revenue: 0, receipts: 0, remainingAnimals: 4321,
@@ -202,7 +203,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
     const historic = { id: 70, ownerId: "fixture", name: historicalInput.name,
       snapshot: resultFor(historicalInput, { historical: true }), createdAt: timestamp };
     let scenarios = [], summaries = [historic], nextId = 10;
-    let delayNext = false, invalidNext = false, pending = null, nextShortfallsByMonth = null;
+    let delayNext = false, invalidNext = false, pending = null, nextShortfallsByMonth = null, omitNextMortality = false;
     page.on("pageerror", error => failures.push(error.message));
     page.on("dialog", dialog => dialog.accept());
     await page.setRequestInterception(true);
@@ -232,8 +233,10 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
           const response = resultFor(body, {
             capacity: delayNext ? 98765 : 4321, invalid: invalidNext,
             shortfallsByMonth: nextShortfallsByMonth ?? [],
+            omitMortality: omitNextMortality,
           });
           nextShortfallsByMonth = null;
+          omitNextMortality = false;
           invalidNext = false;
           if (delayNext) { delayNext = false; pending = () => respond(response); return; }
           return respond(response);
@@ -297,6 +300,17 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       assert.ok(!noDeficitLines.includes("Mancano 0"), "An explicit zero shortfall must not render a deficit");
       const positiveDeficitLines = await page.$eval(secondSizeSecondMonth, cell => cell.innerText.split("\n").map(line => line.trim()));
       assert.ok(positiveDeficitLines.includes("Mancano 50"), `A zero-capacity cell with unmet demand must show the deficit: ${positiveDeficitLines}`);
+      const mortalityText = await page.$eval(firstSizeFirstMonth, cell =>
+        cell.querySelector(".ca-cell-mortality")?.innerText.trim());
+      assert.equal(mortalityText, "Morti previsti nel mese: 1.234");
+      const zeroMortalityText = await page.$eval(secondSizeFirstMonth, cell =>
+        cell.querySelector(".ca-cell-mortality")?.innerText.trim());
+      assert.equal(zeroMortalityText, "Morti previsti nel mese: 0");
+      const mortalityColor = await page.$eval(firstSizeFirstMonth, cell =>
+        getComputedStyle(cell.querySelector(".ca-cell-mortality")).color);
+      const redChannels = mortalityColor.match(/\d+/g)?.map(Number);
+      assert.ok(redChannels?.[0] > redChannels[1] * 1.4 && redChannels[0] > redChannels[2] * 1.2,
+        `Mortality annotation must be red: ${mortalityColor}`);
 
       const scale = await page.$eval(".ca-desktop-matrix", matrix => {
         const inspect = selector => [...matrix.querySelectorAll(selector)].map(fill => ({
@@ -321,11 +335,14 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       assert.ok(scale.shortfall.every(bar => bar.parentWidth > 0), "Shortfall bars must remain visibly rendered");
 
       await page.screenshot({ path: "/tmp/commercial-availability-shortfalls-desktop.jpg" });
+      await page.screenshot({ path: "/tmp/commercial-availability-mortality-desktop.jpg" });
       await page.click(firstSizeFirstMonth);
       await page.waitForSelector('[role="dialog"]');
       const detailText = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
       assert.match(detailText, /4\.321 animali/);
       assert.match(detailText, /dal .*\b\d{1,2}\b/i, "Positive availability keeps its earlier reachable date");
+      assert.match(detailText, /Morti previsti nel mese: 1\.234 animali/);
+      assert.match(detailText, /coefficiente.*1|moltiplicatore.*1/i);
       assert.match(detailText, /Ordini inclusi non coperti: 12/);
       assert.match(detailText, /Vendite simulate non soddisfatte: 34/);
       assert.ok(!detailText.includes("Ordini inclusi non coperti: 46"));
@@ -343,8 +360,31 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
 
       await page.setViewport({ width: 402, height: 874 });
       await page.waitForFunction(() => getComputedStyle(document.querySelector(".ca-mobile-matrix")).display !== "none");
+      assert.equal(await page.$eval(".ca-mobile-matrix .ca-cell-mortality", element => element.innerText.trim()),
+        "Morti previsti nel mese: 1.234");
+      const mobileMortalityColor = await page.$eval(".ca-mobile-matrix .ca-cell-mortality", element => getComputedStyle(element).color);
+      const mobileRedChannels = mobileMortalityColor.match(/\d+/g)?.map(Number);
+      assert.ok(mobileRedChannels?.[0] > mobileRedChannels[1] * 1.4 && mobileRedChannels[0] > mobileRedChannels[2] * 1.2,
+        `Mobile mortality annotation must be red: ${mobileMortalityColor}`);
       await page.screenshot({ path: "/tmp/commercial-availability-shortfalls-mobile.jpg" });
+      await page.screenshot({ path: "/tmp/commercial-availability-mortality-mobile.jpg" });
       await page.setViewport({ width: 1440, height: 1100 });
+
+      await page.click(".commercial-workspace details > summary");
+      await typeField(page, "Moltiplicatore mortalità (0–5)", 0.5);
+      const staleMortality = await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim());
+      assert.equal(staleMortality, "Morti previsti nel mese: 1.234", "Editing the coefficient retains only the marked stale replay values");
+      assert.match(await page.$eval(".commercial-workspace .ca-header", element => element.innerText), /Bozza da verificare/);
+      await verify(page);
+      assert.equal(await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()),
+        "Morti previsti nel mese: 617", "Fresh mortality is an absolute count scaled by the selected coefficient");
+      await typeField(page, "Moltiplicatore mortalità (0–5)", 1);
+      assert.equal(await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()),
+        "Morti previsti nel mese: 617", "The prior absolute mortality remains visible as stale until recalculation");
+      await verify(page);
+      assert.equal(await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()),
+        "Morti previsti nel mese: 1.234", "Restore the fixture's default coefficient for subsequent browser scenarios");
+      await page.click(".commercial-workspace details > summary");
     });
 
     await t.test("sales add/edit/delete and hidden-size preservation", async () => {
@@ -466,12 +506,20 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       const summaryText = await page.$eval(".commercial-workspace .ca-panel:last-of-type", element => element.innerText);
       assert.match(summaryText, /richiesti 1\.234 \| accettati 1\.234 \| mancanti 0/);
       assert.match(summaryText, /Scenario senza vincolo ordini/);
+      // An older API result, like an immutable old summary, may lack this field.
+      // Selecting a summary does not replace the live explorer's result.
+      omitNextMortality = true;
+      await verify(page);
       await clickText(page, "Esplora disponibilità");
-      await page.click(".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell");
+      const historicFirstCell = ".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell";
+      assert.equal(await page.$eval(historicFirstCell, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()), "Mortalità n.d.");
+      await page.click(historicFirstCell);
       await page.waitForSelector('[role="dialog"]');
       const historicalCellDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
       assert.match(historicalCellDetail, /Mancanze non disponibili/);
       assert.doesNotMatch(historicalCellDetail, /Ordini inclusi non coperti: 0|Vendite simulate non soddisfatte: 0/);
+      assert.match(historicalCellDetail, /Mortalità non disponibile/);
+      assert.doesNotMatch(historicalCellDetail, /Mortalità.*(?:0|1\.234)/);
       await page.keyboard.press("Escape");
       await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
       await clickText(page, "Scenari e riepiloghi");
@@ -568,7 +616,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       const freshWorkbook = await downloadWorkbook(directory, page);
       assert.deepEqual(freshWorkbook.worksheets.map(sheet => sheet.name), [
         "Guida", "Disponibilità", "Date disponibilità", "Mancanze ordini",
-        "Mancanze vendite", "Piano commerciale", "Ipotesi", "Arrivi futuri",
+        "Mancanze vendite", "Morti previsti", "Piano commerciale", "Ipotesi", "Arrivi futuri",
       ]);
       assert.equal(excelKeyValue(freshWorkbook.getWorksheet("Guida"), "Stato del calcolo"), "PIANO VERIFICATO");
 
@@ -674,7 +722,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       const scenarioWorkbook = await downloadWorkbook(directory, page);
       assert.deepEqual(scenarioWorkbook.worksheets.map(sheet => sheet.name), [
         "Guida", "Disponibilità", "Date disponibilità", "Mancanze ordini",
-        "Mancanze vendite", "Piano commerciale", "Ipotesi", "Arrivi futuri",
+        "Mancanze vendite", "Morti previsti", "Piano commerciale", "Ipotesi", "Arrivi futuri",
       ]);
       assert.equal(simulations.length, simulationCount + 1, "Individual scenario export recalculates its current-month input");
       assert.deepEqual(simulations.at(-1), selectedScenario.input, "Scenario export simulates the saved input, not the live draft");

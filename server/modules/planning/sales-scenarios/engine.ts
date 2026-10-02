@@ -10,6 +10,9 @@ export interface Cohort {
   // Each value is the survival factor from the previous month, not from origin.
   path: Record<number, { survival: number; sizeId: number | null; animalsPerKg: number;
     days?: Record<number, { survival: number; sizeId: number | null; animalsPerKg: number }>;
+    mortalityTracked?: boolean;
+    mortalityAfterSnapshot?: boolean;
+    mortalitySteps?: Record<number, { factor: number; sizeId: number | null; afterSnapshot: boolean }>;
   }>;
 }
 export interface Order { key: string; at: number; day?: number; sizeId: number; quantity: number }
@@ -51,6 +54,7 @@ interface Replay {
   dayStock?: Record<number, number>;
   nurseryStock?: number;
   stocksByDay?: Map<number, { dayStock: Record<number, number>; nurseryStock: number }>;
+  mortalityByMonth?: Record<number, Record<string, number> & { unclassified?: number }>;
 }
 
 type BiologySnapshot = Cohort["path"][number]["days"] extends Record<number, infer T> | undefined ? T : never;
@@ -61,6 +65,7 @@ export function replay(
   stockAt?: { n: number; day: number; days?: number[] },
   fulfillmentOnly = false,
   budget?: ProposalWorkBudget,
+  options?: { trackMortality?: boolean },
 ): Replay {
   assertWorldDeadline(world);
   checkProposalBudget(budget);
@@ -73,6 +78,7 @@ export function replay(
   let nurseryStock: number | undefined;
   const stocksByDay = stockAt?.days ? new Map<number, { dayStock: Record<number, number>; nurseryStock: number }>() : undefined;
   const receipts: Record<number, number> = {};
+  const mortalityByMonth = options?.trackMortality ? {} as NonNullable<Replay["mortalityByMonth"]> : undefined;
   const salesByDate = new Map<number, Map<number, Allocation[]>>();
   for (const sale of allocations) {
     checkProposalBudget(budget);
@@ -89,6 +95,8 @@ export function replay(
     checkProposalBudget(budget);
     const preparedMonth = preparation.months.get(n)!;
     const { firstDay, finalDay, startQuantities, startFactors, startStates, finalStates } = preparedMonth;
+    let mortalityAvailable = !!mortalityByMonth;
+    const monthMortality: Record<string, number> & { unclassified?: number } = {};
     const { year, month } = monthParts(n);
     const row: ScenarioMonth | undefined = fulfillmentOnly ? undefined : {
       year, month, availableBySize: {}, stockBeforeOrdersBySize: {}, eligibleAtStartBySize: {},
@@ -98,6 +106,13 @@ export function replay(
     };
     for (let i = 0; i < world.cohorts.length; i++) {
       checkProposalBudget(budget);
+      if (mortalityByMonth) {
+        const path = world.cohorts[i].path[n];
+        if (path?.days?.[firstDay] && path.mortalitySteps?.[firstDay]?.afterSnapshot) {
+          const firstStep = path.mortalitySteps[firstDay];
+          recordDeath(monthMortality, firstStep.sizeId, (counts[i] + startQuantities[i]) * (1 - firstStep.factor));
+        }
+      }
       if (startQuantities[i]) counts[i] += startQuantities[i];
       counts[i] *= startFactors[i];
       const p = startStates[i];
@@ -180,9 +195,41 @@ export function replay(
           transition = { indices, factors };
           byPreviousDay.set(day, transition);
         }
+        const beforeCounts = mortalityByMonth ? new Map<number, number>() : undefined;
+        if (mortalityByMonth) for (const i of transition.indices) beforeCounts!.set(i, counts[i]);
         for (let i = 0; i < transition.indices.length; i++) {
           checkProposalBudget(budget);
           counts[transition.indices[i]] *= transition.factors[i];
+        }
+        if (mortalityByMonth) {
+          for (const i of transition.indices) {
+            const cohort = world.cohorts[i];
+            const monthPath = cohort.path[n];
+            const steps = monthPath?.mortalitySteps;
+            let interim = beforeCounts!.get(i) ?? 0;
+            const actualLoss = interim - counts[i];
+            let predictedLoss = 0;
+            let finalSize: number | null | undefined;
+            const attributed: { sizeId: number | null; quantity: number }[] = [];
+            for (let biologyDay = 1; biologyDay <= preparedMonth.finalDay; biologyDay++) {
+              const step = steps?.[biologyDay];
+              const applies = step && (step.afterSnapshot
+                ? biologyDay > previousDay && biologyDay <= day
+                : biologyDay >= previousDay && biologyDay < day);
+              if (!applies) continue;
+              const stepLoss = interim * (1 - step.factor);
+              predictedLoss += stepLoss;
+              attributed.push({ sizeId: step.sizeId, quantity: stepLoss });
+              interim *= step.factor;
+              finalSize = step.sizeId;
+            }
+            if (actualLoss !== 0 && finalSize === undefined) mortalityAvailable = false;
+            if (Math.abs(actualLoss - predictedLoss) > Math.max(1e-7, Math.abs(beforeCounts!.get(i) ?? 0) * 1e-12)) mortalityAvailable = false;
+            for (const part of attributed) recordDeath(monthMortality, part.sizeId, part.quantity);
+            // Any floating-point discrepancy in composed factors is assigned to
+            // the last physical step so the reported total equals replay's decrement.
+            if (finalSize !== undefined) recordDeath(monthMortality, finalSize, actualLoss - predictedLoss);
+          }
         }
       }
       // An arrival is present from its entry date, but does not accrue growth
@@ -255,8 +302,36 @@ export function replay(
       row.remainingAnimals = Math.floor(total);
       months.set(n, row);
     }
+    if (mortalityByMonth) {
+      // The terminal inventory step is observational: include it after all
+      // final-day exits without changing the replayed stock.
+      for (let i = 0; i < world.cohorts.length; i++) {
+        const cohort = world.cohorts[i];
+        const monthPath = cohort.path[n];
+        const step = monthPath?.mortalitySteps?.[finalDay];
+        if (cohort.entry <= n && monthPath && !monthPath.mortalityTracked) mortalityAvailable = false;
+        if (!step) {
+          // A tracked hatchery cohort can have no final-day biology (including
+          // an arrival on the last day). Its absence is a known skipped step.
+          if (cohort.entry <= n && counts[i] > 0 && !monthPath?.mortalityAfterSnapshot) mortalityAvailable = false;
+          continue;
+        }
+        if (!step.afterSnapshot) recordDeath(monthMortality, step.sizeId, counts[i] * (1 - step.factor));
+      }
+      if (mortalityAvailable) mortalityByMonth[n] = monthMortality;
+    }
   }
-  return { months, orders, applied, dayStock, nurseryStock, stocksByDay };
+  return { months, orders, applied, dayStock, nurseryStock, stocksByDay, ...(mortalityByMonth ? { mortalityByMonth } : {}) };
+}
+
+function recordDeath(target: Record<string, number> & { unclassified?: number }, sizeId: number | null, quantity: number) {
+  if (sizeId == null) {
+    target.unclassified ??= 0;
+    target.unclassified += quantity;
+  } else {
+    target[sizeId] ??= 0;
+    target[sizeId] += quantity;
+  }
 }
 
 /** Protect EACH future order and EACH already accepted allocation, not just totals. */

@@ -8,7 +8,7 @@ export function civilDate(year: number, month: number, day: number) {
 /** Quantity-only adapter. Biology, protected capacity and consumption are shared
  * with sales scenarios; no independent growth/allocation engine lives here. */
 export function computeCommercial(world: World, input: CommercialInput) {
-  const baseline = replay(world, []);
+  const baseline = replay(world, [], undefined, false, undefined, { trackMortality: true });
   const accepted: Allocation[] = [];
   const requests = [...input.sales].sort((a, b) =>
     monthNumber(a.year, a.month) - monthNumber(b.year, b.month) || (a.day ?? 32) - (b.day ?? 32));
@@ -23,7 +23,7 @@ export function computeCommercial(world: World, input: CommercialInput) {
       accepted.push({ ...candidate, ...bestCapacity(world, accepted, candidate, sale.quantity) });
     }
   }
-  const applied = replay(world, accepted);
+  const applied = replay(world, accepted, undefined, false, undefined, { trackMortality: true });
   const plan = input.sales.map(s => {
     const a = accepted.find(a => a.id === s.id)!;
     const acceptedQuantity = applied.applied[s.id] ?? 0;
@@ -42,6 +42,14 @@ export function computeCommercial(world: World, input: CommercialInput) {
         if (monthNumber(sale.year, sale.month) === n) deficit(sale.sizeId).sales += sale.shortfall;
       }
       const row: CommercialMonth & { availabilityDayBySize: Record<string, number> } = { ...result.months.get(n)!, availableBySize: {}, availabilityDayBySize: {}, shortfallsBySize };
+      const deaths = result.mortalityByMonth?.[n];
+      if (deaths) {
+        row.mortalityBySize = Object.fromEntries(Object.entries(deaths)
+          .filter(([sizeId]) => sizeId !== "unclassified")
+          .map(([sizeId, quantity]) => [sizeId, Math.round(quantity)]));
+        for (const sizeId of input.selectedSizeIds) row.mortalityBySize[sizeId] ??= 0;
+        if (deaths.unclassified != null) row.unclassifiedMortality = Math.round(deaths.unclassified);
+      }
       row.salesRequested = allocations.length ? input.sales.filter(s => monthNumber(s.year, s.month) === n).reduce((sum, s) => sum + s.quantity, 0) : 0;
       for (const sizeId of input.selectedSizeIds) {
         const best = bestCapacity(world, allocations, { id: "__availability", ...monthParts(n), sizeId, quantity: 0, pricePerThousand: null, paymentDelayMonths: 0 }, 2_000_000_000);

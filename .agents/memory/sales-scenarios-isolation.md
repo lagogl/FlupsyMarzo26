@@ -80,3 +80,9 @@ Le mancanze nella matrice commerciale includono ordini attivati e vendite simula
 **Why:** L'utente ha scelto entrambe le categorie per capire gli sforamenti. Una capacità zero può significare stock già impegnato senza alcun deficit; un impegno scoperto prima nel mese può coesistere con capacità disponibile più tardi.
 
 **How to apply:** Attribuire le mancanze alla taglia richiesta e al mese della richiesta, distinguendo ordini e vendite nel dettaglio; non trasformarle in disponibilità negativa o riportarle cumulativamente nei mesi successivi.
+
+Nelle celle commerciali mostrare in rosso i morti previsti in numero assoluto, distinti dalle richieste mancanti e dalle percentuali.
+
+**Why:** L'utente vuole capire se modificare la mortalità nelle proprie ipotesi di scenario. Il numero indica i decessi biologici mensili sulla popolazione ancora presente, non quanto si potrebbe vendere in uno scenario senza mortalità.
+
+**How to apply:** Attribuire ogni decesso una sola volta alla taglia fisica dopo la crescita. Non duplicarlo nelle taglie commerciali sostituibili, non contare animali già usciti e non ricostruire vecchi riepiloghi con dati nuovi.

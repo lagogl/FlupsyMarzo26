@@ -44,6 +44,10 @@ export interface CommercialCellShortfall {
 export interface CommercialMonth extends ScenarioMonth {
   /** Optional only for older frozen snapshots: missing is NOT certified zero. */
   shortfallsBySize?: Record<string, CommercialCellShortfall>;
+  /** Actual projected deaths, attributed to the physical size at each biology step. */
+  mortalityBySize?: Record<string, number>;
+  /** Deaths at biology steps where the projected weight has no configured size. */
+  unclassifiedMortality?: number;
 }
 export interface CommercialResult {
   sizes: { id: number; code: string; name: string }[];

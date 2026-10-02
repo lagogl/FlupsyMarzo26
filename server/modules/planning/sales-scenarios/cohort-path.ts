@@ -18,7 +18,9 @@ interface CohortPathOptions {
   advanceDay: (weightMg: number, survival: number, date: Date) => {
     weightMg: number;
     survival: number;
+    mortalityFactor?: number;
   };
+  trackMortality?: boolean;
 }
 
 /** Build monthly and daily snapshots for one inventory or virtual-arrival cohort. */
@@ -26,6 +28,7 @@ export function buildCohortPath(options: CohortPathOptions): Cohort["path"] {
   const {
     entry, entryDay, first, last, startDay, arrivalDate, referenceDate,
     getMonth, getSize, getBiologyDays, advanceDay,
+    trackMortality,
   } = options;
   const path: Cohort["path"] = {};
   let weightMg = options.initialWeightMg;
@@ -41,6 +44,7 @@ export function buildCohortPath(options: CohortPathOptions): Cohort["path"] {
       sizeId: snapshotSize?.sizeId ?? null,
       animalsPerKg: 1_000_000 / weightMg,
       days: {},
+      ...(trackMortality ? { mortalityTracked: true, mortalityAfterSnapshot: !!arrivalDate, mortalitySteps: {} } : {}),
     };
     path[n] = monthPath;
     survival = 1;
@@ -76,6 +80,15 @@ export function buildCohortPath(options: CohortPathOptions): Cohort["path"] {
       const state = advanceDay(weightMg, survival, date);
       weightMg = state.weightMg;
       survival = state.survival;
+      if (trackMortality && state.mortalityFactor != null) {
+        const size = getSize(weightMg, date);
+        monthPath.mortalitySteps![d] = {
+          factor: state.mortalityFactor,
+          sizeId: size?.sizeId ?? null,
+          afterSnapshot: !!arrivalDate,
+        };
+      }
+      if (trackMortality && state.mortalityFactor == null) monthPath.mortalityTracked = false;
       if (arrivalDate) {
         // Hatchery snapshots represent biology applied on this allowed date.
         const size = getSize(weightMg, date);

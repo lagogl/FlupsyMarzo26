@@ -159,6 +159,7 @@ function buildGuide(workbook: Workbook, input: CommercialInput, result?: Commerc
     ["Avvertenza", DISCLAIMER],
     ["Disponibilità", ALTERNATIVE_NOTE],
     ["Mancanze storiche", "Le celle vuote nelle mancanze indicano dato assente/non disponibile (anche per snapshot precedenti), non quantità zero."],
+    ["Morti previsti", "Numero assoluto di decessi simulati nel mese, attribuiti alla taglia fisica dopo la crescita. Già inclusi nella disponibilità: non sottrarli di nuovo. Celle vuote = dato non disponibile, non zero."],
     ["Arrivi futuri", "Il programma base non è riportato; una cella vuota non significa zero. Uno zero nell'override è un valore esplicito."],
     ["Vendite accettate", fresh ? "Quantità e date provengono dal risultato associato a questa identica bozza." : "Accettati, mancanti e date accettate restano vuoti finché la bozza non viene ricalcolata."],
     ["Ipotesi condizionali", "Crescita, mortalità, ordini e arrivi futuri sono ipotesi di scenario, non impegni operativi né garanzie."],
@@ -199,7 +200,7 @@ function buildAvailabilityMatrix(
     sheet.getColumn(column).alignment = { horizontal: "right", vertical: "middle" };
   }
   finishSheet(sheet, { matrix: true });
-  if (name.startsWith("Mancanze")) {
+  if (name.startsWith("Mancanze") || name === "Morti previsti") {
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
       row.eachCell((cell, columnNumber) => {
@@ -337,6 +338,8 @@ export async function buildCommercialWorkbook({ input, sizes, result }: Commerci
           return typeof amount === "number" && Number.isFinite(amount) ? amount : null;
         });
     }
+    buildAvailabilityMatrix(workbook, "Morti previsti", result.months, visibleSizes,
+      (month, id) => month.mortalityBySize?.[String(id)] ?? null);
   }
   buildPlan(workbook, canonical, catalog, fresh ? result : undefined, fresh);
   buildAssumptions(workbook, canonical, fresh ? result : undefined, fresh);

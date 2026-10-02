@@ -59,6 +59,8 @@
 .ca-shortfall-bar-fill { background: #b54b3d; }
 .ca-deficit-track { background: #f3ded8; margin-top: 4px; }
 .ca-cell small.ca-cell-shortfall { color: #92392e; font-weight: 800; }
+.ca-cell small.ca-cell-mortality { color: #92392e; font-size: 11px; font-weight: 700; }
+.ca-mortality-value { color: #92392e; }
 .ca-bar-legend { font-size: 11px !important; }
 .ca-tag { font-size: 10px; font-weight: 800; background: var(--ca-soft); border-radius: 4px; padding: 4px 6px; display: inline-block; }
 .ca-tag.warning { background: #f6e9c9; color: var(--ca-warning); }
