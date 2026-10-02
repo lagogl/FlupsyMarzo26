@@ -86,3 +86,9 @@ Nelle celle commerciali mostrare in rosso i morti previsti in numero assoluto, d
 **Why:** L'utente vuole capire se modificare la mortalità nelle proprie ipotesi di scenario. Il numero indica i decessi biologici mensili sulla popolazione ancora presente, non quanto si potrebbe vendere in uno scenario senza mortalità.
 
 **How to apply:** Attribuire ogni decesso una sola volta alla taglia fisica dopo la crescita. Non duplicarlo nelle taglie commerciali sostituibili, non contare animali già usciti e non ricostruire vecchi riepiloghi con dati nuovi.
+
+Non spiegare un calo di disponibilità con mortalità visibile zero usando soltanto uno screenshot: verificare la mortalità di tutte le taglie fisiche e degli animali non classificati nello stesso ricalcolo.
+
+**Why:** La disponibilità inclusiva e i decessi della sola taglia fisica hanno perimetri diversi. Una spiegazione ipotetica ha invertito le taglie; la riproduzione dei risultati ha invece identificato decessi non classificati e mortalità di taglie nascoste.
+
+**How to apply:** Prima di attribuire una causa certa, riprodurre le quantità e distinguere massimi vendibili datati, decessi mensili, fallback biologici e arrotondamenti. Non presentare zero nella riga come zero sull'intera popolazione.
