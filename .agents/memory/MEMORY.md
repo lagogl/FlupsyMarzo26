@@ -57,3 +57,4 @@
 - [Copertura alle scadenze](order-deadline-coverage.md) — capacità mensile e disponibilità puntuale sono alternative; ritardi e date non verificabili restano separati.
 - [Browser presentation locales](browser-presentation-locales.md) — Node e Chromium possono raggruppare le migliaia diversamente; distinguere quantità attese e formattazione locale.
 - [Projection selection copy](projection-selection-copy.md) — selezioni con valori grezzi nell’orientamento visibile; zero distinto da indisponibilità e rotazione senza selezioni residue.
+- [Quote ordini future](future-order-quotas-policy.md) — niente recupero o riporto delle quote scadute; uniformare Scostamenti e Disponibilità sulle sole quote ancora valide.
