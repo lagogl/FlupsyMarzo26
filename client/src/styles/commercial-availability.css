@@ -61,6 +61,24 @@
 .ca-cell small.ca-cell-shortfall { color: #92392e; font-weight: 800; }
 .ca-cell small.ca-cell-mortality { color: #92392e; font-size: 11px; font-weight: 700; }
 .ca-mortality-value { color: #92392e; }
+.ca-matrix .ca-mortality-summary-row > th,
+.ca-matrix .ca-mortality-summary-row > td { background: #f6eeea; border-top: 1px solid #dec8c1; border-bottom: 2px solid #dec8c1; }
+.ca-matrix .ca-mortality-summary-row > th { white-space: normal; min-width: 150px; vertical-align: top; color: #92392e; }
+.ca-mortality-summary-row th small { display: block; margin-top: 6px; color: var(--ca-muted); font-size: 10px; line-height: 1.5; font-weight: 500; text-transform: none; letter-spacing: normal; }
+.ca-month-mortality { min-width: 155px; }
+.ca-month-mortality-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: #92392e; font-size: 12px; font-weight: 800; }
+.ca-month-mortality-total strong { font-size: 18px; font-weight: 500; white-space: nowrap; }
+.ca-month-mortality dl { margin: 8px 0 0; display: grid; gap: 4px; font-size: 11px; color: var(--ca-muted); }
+.ca-month-mortality dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.ca-month-mortality dt, .ca-month-mortality dd { margin: 0; }
+.ca-month-mortality dd { color: #92392e; white-space: nowrap; }
+.commercial-workspace .ca-mortality-range-note { margin: 7px 0 0; font-size: 10px; line-height: 1.5; color: var(--ca-muted); }
+.ca-mobile-mortality-summary { border-color: #dec8c1; background: #f6eeea; }
+.ca-mobile-mortality-summary h2 { color: #92392e; }
+.ca-mobile-mortality-month { padding-top: 12px; margin-top: 12px; border-top: 1px solid #dec8c1; }
+.ca-mobile-mortality-month h3 { margin: 0 0 7px; font-size: 12px; font-weight: 800; }
+.ca-detail-mortality { border: 1px solid #dec8c1; border-radius: 7px; background: #f6eeea; padding: 12px; margin: 12px 0; }
+.ca-detail-mortality h3 { color: #92392e; font-size: 13px; margin: 0 0 10px; }
 .ca-bar-legend { font-size: 11px !important; }
 .ca-tag { font-size: 10px; font-weight: 800; background: var(--ca-soft); border-radius: 4px; padding: 4px 6px; display: inline-block; }
 .ca-tag.warning { background: #f6e9c9; color: var(--ca-warning); }

@@ -1,4 +1,5 @@
 import type { Workbook, Worksheet } from "exceljs";
+import { monthlyMortality } from "./commercial-availability-cells";
 import {
   commercialInputSchema,
   type CommercialInput,
@@ -159,7 +160,7 @@ function buildGuide(workbook: Workbook, input: CommercialInput, result?: Commerc
     ["Avvertenza", DISCLAIMER],
     ["Disponibilità", ALTERNATIVE_NOTE],
     ["Mancanze storiche", "Le celle vuote nelle mancanze indicano dato assente/non disponibile (anche per snapshot precedenti), non quantità zero."],
-    ["Morti previsti", "Numero assoluto di decessi simulati nel mese, attribuiti alla taglia fisica dopo la crescita. Già inclusi nella disponibilità: non sottrarli di nuovo. Celle vuote = dato non disponibile, non zero."],
+    ["Morti previsti", "Decessi mensili in numero assoluto. Le righe taglia indicano solo la taglia fisica; il totale comprende anche altre taglie e animali fuori dai range configurati. Già inclusi nella disponibilità: non sottrarli di nuovo. Celle vuote = dato non disponibile, non zero. Non coincidono necessariamente con la differenza fra massimi vendibili di mesi successivi."],
     ["Arrivi futuri", "Il programma base non è riportato; una cella vuota non significa zero. Uno zero nell'override è un valore esplicito."],
     ["Vendite accettate", fresh ? "Quantità e date provengono dal risultato associato a questa identica bozza." : "Accettati, mancanti e date accettate restano vuoti finché la bozza non viene ricalcolata."],
     ["Ipotesi condizionali", "Crescita, mortalità, ordini e arrivi futuri sono ipotesi di scenario, non impegni operativi né garanzie."],
@@ -194,6 +195,17 @@ function buildAvailabilityMatrix(
   for (const size of sizes) {
     const row = sheet.addRow([`${size.code} · ${size.name}`, ...months.map(month => getValue(month, size.id))]);
     row.height = 26;
+  }
+  if (name === "Morti previsti") {
+    const totals = months.map(month => monthlyMortality(month, sizes.map(size => size.id)));
+    for (const [label, key] of [
+      ["Morti totali nel mese", "total"],
+      ["Di cui nelle taglie visibili", "visible"],
+      ["Di cui nelle altre taglie", "other"],
+      ["Di cui fuori dai range configurati", "unclassified"],
+    ] as const) {
+      sheet.addRow([label, ...totals.map(value => value?.[key] ?? null)]).height = 30;
+    }
   }
   for (let column = 2; column <= months.length + 1; column += 1) {
     sheet.getColumn(column).numFmt = INTEGER_FORMAT;

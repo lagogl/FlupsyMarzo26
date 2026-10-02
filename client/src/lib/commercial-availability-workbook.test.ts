@@ -121,6 +121,23 @@ test("matched workbook round-trips exact numeric zero and missing shortfalls wit
   assert.equal(loaded.getWorksheet("Ipotesi")!.getCell(7, 2).numFmt, "0.00");
 });
 
+test("mortality export includes other physical sizes and unclassified deaths in monthly totals", async () => {
+  const input = draft(), result = matchingResult(input);
+  result.months[0].mortalityBySize = { 1: 0, 2: 1307365 };
+  result.months[0].unclassifiedMortality = 1842178;
+  const loaded = await roundTrip(await buildCommercialWorkbook({ input, sizes, result }));
+  const sheet = loaded.getWorksheet("Morti previsti")!;
+  assert.equal(sheet.getCell(2, 2).value, 0);
+  assert.equal(sheet.getCell(3, 1).value, "Morti totali nel mese");
+  assert.equal(sheet.getCell(3, 2).value, 3149543);
+  assert.equal(sheet.getCell(4, 2).value, 0);
+  assert.equal(sheet.getCell(5, 2).value, 1307365);
+  assert.equal(sheet.getCell(6, 2).value, 1842178);
+  assert.equal(sheet.getCell(3, 2).numFmt, "#,##0");
+  assert.equal(sheet.getCell(3, 2).font.color?.argb, "FF92392E");
+  assert.equal(sheet.getCell(3, 3).value, null, "Unknown historical totals must not become zero");
+});
+
 test("draft and stale result exports never leak availability or accepted quantities", async () => {
   const input = draft();
   const stale = matchingResult(input);

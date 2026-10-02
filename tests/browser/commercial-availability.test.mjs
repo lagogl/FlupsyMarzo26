@@ -30,7 +30,7 @@ const defaults = {
 // Synthetic, isolated API fixtures. These deliberately do not import any production
 // calculation/presentation helpers: this suite tests rendered UI and request contracts,
 // not the biological replay (which is covered by server tests).
-function resultFor(input, { capacity = 4321, invalid = false, historical = false, omitMortality = false, shortfallsByMonth = [] } = {}) {
+function resultFor(input, { capacity = 4321, invalid = false, historical = false, omitMortality = false, shortfallsByMonth = [], mortalityByMonth = [] } = {}) {
   const months = Array.from({ length: input.horizon }, (_, index) => {
     const serial = input.startYear * 12 + input.startMonth - 1 + index;
     return {
@@ -38,7 +38,7 @@ function resultFor(input, { capacity = 4321, invalid = false, historical = false
       availableBySize: { 1: capacity, 2: 0 },
       availabilityDayBySize: { 1: index === 0 ? day : 15 },
       ...(shortfallsByMonth[index] === undefined ? {} : { shortfallsBySize: shortfallsByMonth[index] }),
-      ...(!historical && !omitMortality ? { mortalityBySize: { 1: Math.round(1234 * input.mortalityMultiplier), 2: 0 } } : {}),
+      ...(!historical && !omitMortality ? mortalityByMonth[index] ?? { mortalityBySize: { 1: Math.round(1234 * input.mortalityMultiplier), 2: 0 } } : {}),
       ordersRequested: 100, ordersFulfilled: 100, orderShortfall: 0,
       salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0,
       revenue: 0, receipts: 0, remainingAnimals: 4321,
@@ -62,6 +62,24 @@ function resultFor(input, { capacity = 4321, invalid = false, historical = false
   };
 }
 
+// Select only physical-size rows, independently of summary rows above them.
+const sizeCell = (sizeIndex, monthIndex = 1) =>
+  `.ca-desktop-matrix tbody tr:nth-child(${sizeIndex} of tr:has(.ca-cell)) td:nth-of-type(${monthIndex}) .ca-cell`;
+async function mortalitySummary(page, selector) {
+  return page.$eval(selector, element => ({
+    total: element.querySelector(".ca-month-mortality-total strong").innerText.trim(),
+    breakdown: Object.fromEntries([...element.querySelectorAll("dl > div")].map(row =>
+      [row.querySelector("dt").innerText.trim(), row.querySelector("dd").innerText.trim()])),
+    text: element.innerText,
+    color: getComputedStyle(element.querySelector(".ca-month-mortality-total strong")).color,
+  }));
+}
+function assertRed(color) {
+  const channels = color.match(/\d+/g)?.map(Number);
+  assert.ok(channels?.[0] > channels[1] * 1.4 && channels[0] > channels[2] * 1.2,
+    `Population mortality total must be red: ${color}`);
+}
+
 async function button(page, text, { prefix = false, scope = "document" } = {}) {
   const handle = await page.evaluateHandle(({ text, prefix, scope }) => {
     const container = scope === "document" ? document : document.querySelector(scope);
@@ -83,6 +101,14 @@ async function clickText(page, text, options) {
     await handle.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await handle.asElement().click();
   } finally { await handle.dispose(); }
+}
+async function closeDialog(page) {
+  await page.waitForSelector('[role="dialog"][data-state="open"]', { visible: true });
+  // Radix focus/layer registration is asynchronous after the React commit.
+  // Use the explicit close control rather than racing its Escape listener.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await clickText(page, "Close", { scope: '[role="dialog"]' });
+  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
 }
 async function isDisabled(page, text) {
   const handle = await button(page, text);
@@ -203,7 +229,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
     const historic = { id: 70, ownerId: "fixture", name: historicalInput.name,
       snapshot: resultFor(historicalInput, { historical: true }), createdAt: timestamp };
     let scenarios = [], summaries = [historic], nextId = 10;
-    let delayNext = false, invalidNext = false, pending = null, nextShortfallsByMonth = null, omitNextMortality = false;
+    let delayNext = false, invalidNext = false, pending = null, nextShortfallsByMonth = null, nextMortalityByMonth = null, omitNextMortality = false;
     page.on("pageerror", error => failures.push(error.message));
     page.on("dialog", dialog => dialog.accept());
     await page.setRequestInterception(true);
@@ -233,9 +259,11 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
           const response = resultFor(body, {
             capacity: delayNext ? 98765 : 4321, invalid: invalidNext,
             shortfallsByMonth: nextShortfallsByMonth ?? [],
+            mortalityByMonth: nextMortalityByMonth ?? [],
             omitMortality: omitNextMortality,
           });
           nextShortfallsByMonth = null;
+          nextMortalityByMonth = null;
           omitNextMortality = false;
           invalidNext = false;
           if (delayNext) { delayNext = false; pending = () => respond(response); return; }
@@ -290,9 +318,9 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       ];
       await verify(page);
 
-      const firstSizeFirstMonth = ".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell";
-      const secondSizeFirstMonth = ".ca-desktop-matrix tbody tr:nth-child(2) td:nth-of-type(1) .ca-cell";
-      const secondSizeSecondMonth = ".ca-desktop-matrix tbody tr:nth-child(2) td:nth-of-type(2) .ca-cell";
+      const firstSizeFirstMonth = sizeCell(1);
+      const secondSizeFirstMonth = sizeCell(2);
+      const secondSizeSecondMonth = sizeCell(2, 2);
       const firstCellLines = await page.$eval(firstSizeFirstMonth, cell => cell.innerText.split("\n").map(line => line.trim()));
       assert.ok(firstCellLines.includes("Mancano 46"), `Order and sale shortfalls must add to 46: ${firstCellLines}`);
       const noDeficitLines = await page.$eval(secondSizeFirstMonth, cell => cell.innerText.split("\n").map(line => line.trim()));
@@ -302,10 +330,10 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       assert.ok(positiveDeficitLines.includes("Mancano 50"), `A zero-capacity cell with unmet demand must show the deficit: ${positiveDeficitLines}`);
       const mortalityText = await page.$eval(firstSizeFirstMonth, cell =>
         cell.querySelector(".ca-cell-mortality")?.innerText.trim());
-      assert.equal(mortalityText, "Morti previsti nel mese: 1.234");
+      assert.equal(mortalityText, "Morti previsti nel mese (sola taglia fisica): 1.234");
       const zeroMortalityText = await page.$eval(secondSizeFirstMonth, cell =>
         cell.querySelector(".ca-cell-mortality")?.innerText.trim());
-      assert.equal(zeroMortalityText, "Morti previsti nel mese: 0");
+      assert.equal(zeroMortalityText, "Morti previsti nel mese (sola taglia fisica): 0");
       const mortalityColor = await page.$eval(firstSizeFirstMonth, cell =>
         getComputedStyle(cell.querySelector(".ca-cell-mortality")).color);
       const redChannels = mortalityColor.match(/\d+/g)?.map(Number);
@@ -341,13 +369,12 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       const detailText = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
       assert.match(detailText, /4\.321 animali/);
       assert.match(detailText, /dal .*\b\d{1,2}\b/i, "Positive availability keeps its earlier reachable date");
-      assert.match(detailText, /Morti previsti nel mese: 1\.234 animali/);
+      assert.match(detailText, /Morti previsti nel mese \(sola taglia fisica\): 1\.234 animali/);
       assert.match(detailText, /coefficiente.*1|moltiplicatore.*1/i);
       assert.match(detailText, /Ordini inclusi non coperti: 12/);
       assert.match(detailText, /Vendite simulate non soddisfatte: 34/);
       assert.ok(!detailText.includes("Ordini inclusi non coperti: 46"));
-      await page.keyboard.press("Escape");
-      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+      await closeDialog(page);
 
       await page.click(secondSizeSecondMonth);
       await page.waitForSelector('[role="dialog"]');
@@ -355,13 +382,12 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       assert.match(zeroCapacityDetail, /Ordini inclusi non coperti: 20/);
       assert.match(zeroCapacityDetail, /Vendite simulate non soddisfatte: 30/);
       assert.equal(await page.$eval('[role="dialog"] button.ca-button.primary', element => element.disabled), true);
-      await page.keyboard.press("Escape");
-      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+      await closeDialog(page);
 
       await page.setViewport({ width: 402, height: 874 });
       await page.waitForFunction(() => getComputedStyle(document.querySelector(".ca-mobile-matrix")).display !== "none");
       assert.equal(await page.$eval(".ca-mobile-matrix .ca-cell-mortality", element => element.innerText.trim()),
-        "Morti previsti nel mese: 1.234");
+        "Morti previsti nel mese (sola taglia fisica): 1.234");
       const mobileMortalityColor = await page.$eval(".ca-mobile-matrix .ca-cell-mortality", element => getComputedStyle(element).color);
       const mobileRedChannels = mobileMortalityColor.match(/\d+/g)?.map(Number);
       assert.ok(mobileRedChannels?.[0] > mobileRedChannels[1] * 1.4 && mobileRedChannels[0] > mobileRedChannels[2] * 1.2,
@@ -373,18 +399,108 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await page.click(".commercial-workspace details > summary");
       await typeField(page, "Moltiplicatore mortalità (0–5)", 0.5);
       const staleMortality = await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim());
-      assert.equal(staleMortality, "Morti previsti nel mese: 1.234", "Editing the coefficient retains only the marked stale replay values");
+      assert.equal(staleMortality, "Morti previsti nel mese (sola taglia fisica): 1.234", "Editing the coefficient retains only the marked stale replay values");
       assert.match(await page.$eval(".commercial-workspace .ca-header", element => element.innerText), /Bozza da verificare/);
       await verify(page);
       assert.equal(await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()),
-        "Morti previsti nel mese: 617", "Fresh mortality is an absolute count scaled by the selected coefficient");
+        "Morti previsti nel mese (sola taglia fisica): 617", "Fresh mortality is an absolute count scaled by the selected coefficient");
       await typeField(page, "Moltiplicatore mortalità (0–5)", 1);
       assert.equal(await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()),
-        "Morti previsti nel mese: 617", "The prior absolute mortality remains visible as stale until recalculation");
+        "Morti previsti nel mese (sola taglia fisica): 617", "The prior absolute mortality remains visible as stale until recalculation");
       await verify(page);
       assert.equal(await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()),
-        "Morti previsti nel mese: 1.234", "Restore the fixture's default coefficient for subsequent browser scenarios");
+        "Morti previsti nel mese (sola taglia fisica): 1.234", "Restore the fixture's default coefficient for subsequent browser scenarios");
       await page.click(".commercial-workspace details > summary");
+    });
+
+    await t.test("population mortality includes hidden physical sizes and unclassified animals exactly once", async () => {
+      nextMortalityByMonth = [
+        { mortalityBySize: { 1: 0, 2: 0, 99: 1307365 }, unclassifiedMortality: 1842178 },
+        { mortalityBySize: { 1: 0, 2: 0, 99: 0 }, unclassifiedMortality: 2181489,
+          availableBySize: { 1: 0, 2: 0 }, availabilityDayBySize: {} },
+      ];
+      await verify(page);
+      const desktopMonth = index =>
+        `.ca-desktop-matrix .ca-mortality-summary-row td:nth-of-type(${index}) .ca-month-mortality`;
+      const mobileMonth = index =>
+        `.ca-mobile-mortality-summary .ca-mobile-mortality-month:nth-of-type(${index}) .ca-month-mortality`;
+      const expectedFirst = {
+        "Taglie fisiche visibili": "0", "Altre taglie fisiche": "1.307.365", "Non classificati": "1.842.178",
+      };
+      const expectedSecond = {
+        "Taglie fisiche visibili": "0", "Altre taglie fisiche": "0", "Non classificati": "2.181.489",
+      };
+      const first = await mortalitySummary(page, desktopMonth(1));
+      assert.equal(first.total, "3.149.543", "Hidden-size deaths and unclassified deaths must each be counted once");
+      assert.deepEqual(first.breakdown, expectedFirst);
+      assert.equal(Object.values(first.breakdown).reduce((sum, value) => sum + Number(value.replaceAll(".", "")), 0),
+        3149543, "The total must be the partition sum, not a sum of overlapping alternative-capacity rows");
+      assertRed(first.color);
+      assert.match(first.text, /fuori dagli intervalli delle taglie fisiche configurate/);
+      const second = await mortalitySummary(page, desktopMonth(2));
+      assert.equal(second.total, "2.181.489", "A month with only unclassified deaths must still display a positive total");
+      assert.deepEqual(second.breakdown, expectedSecond);
+      assertRed(second.color);
+      for (const sizeIndex of [1, 2]) {
+        assert.equal(await page.$eval(sizeCell(sizeIndex, 2), cell => cell.querySelector("strong").innerText.trim()), "0",
+          "Purely unclassified deaths remain visible even when every size row has zero capacity");
+      }
+      for (const sizeIndex of [1, 2]) for (const monthIndex of [1, 2]) {
+        assert.equal(await page.$eval(sizeCell(sizeIndex, monthIndex), cell =>
+          cell.querySelector(".ca-cell-mortality").innerText.trim()),
+        "Morti previsti nel mese (sola taglia fisica): 0", "Visible physical-size zeros must not hide population deaths");
+      }
+      assert.equal(await page.$$eval(".ca-desktop-matrix tbody tr:has(.ca-cell)", rows => rows.length), 2,
+        "The hidden physical size must contribute to totals without becoming a visible size row");
+      await page.$eval(".ca-mortality-summary-row", element => element.scrollIntoView({ block: "center" }));
+      await page.screenshot({ path: "/tmp/commercial-mortality-totals-desktop.jpg" });
+      await page.click(sizeCell(1));
+      await page.waitForSelector('[role="dialog"]');
+      const detailSummary = await mortalitySummary(page, '[role="dialog"] .ca-detail-mortality .ca-month-mortality');
+      assert.equal(detailSummary.total, "3.149.543");
+      assert.deepEqual(detailSummary.breakdown, expectedFirst);
+      const detailText = await page.$eval('[role="dialog"]', element => element.innerText);
+      assert.match(detailText, /Zero morti nella sola taglia fisica non significa zero mortalità nella popolazione/);
+      assert.match(detailText, /non sottrarre di nuovo questi animali/);
+      assert.match(detailText, /non è la differenza aritmetica tra i massimi/);
+      await closeDialog(page);
+
+      await page.setViewport({ width: 402, height: 874 });
+      await page.waitForFunction(() => getComputedStyle(document.querySelector(".ca-mobile-matrix")).display !== "none");
+      const mobileFirst = await mortalitySummary(page, mobileMonth(1));
+      const mobileSecond = await mortalitySummary(page, mobileMonth(2));
+      assert.equal(mobileFirst.total, first.total);
+      assert.deepEqual(mobileFirst.breakdown, expectedFirst);
+      assert.equal(mobileSecond.total, second.total);
+      assert.deepEqual(mobileSecond.breakdown, expectedSecond);
+      assertRed(mobileFirst.color);
+      assertRed(mobileSecond.color);
+      await page.$eval(".ca-mobile-mortality-summary", element => element.scrollIntoView({ block: "start" }));
+      await page.screenshot({ path: "/tmp/commercial-mortality-totals-mobile.jpg" });
+      await page.setViewport({ width: 1440, height: 1100 });
+
+      await toggle(page, "Ordini futuri acquisiti");
+      await waitText(page, "Bozza da verificare");
+      assert.equal((await mortalitySummary(page, desktopMonth(1))).total, "3.149.543",
+        "Stale totals must retain the previous replay, not recompute or become zero");
+      assert.match(await page.$eval(".ca-bar-legend", element => element.innerText), /Dati del calcolo precedente, da verificare/);
+      assert.equal(await isDisabled(page, "Prepara riepilogo commerciale"), true);
+      await toggle(page, "Ordini futuri acquisiti");
+
+      omitNextMortality = true;
+      await verify(page);
+      for (const selector of [desktopMonth(1), desktopMonth(2), mobileMonth(1), mobileMonth(2)]) {
+        const missing = await mortalitySummary(page, selector);
+        assert.equal(missing.total, "n.d.", "Older results without mortality are unknown, never zero");
+        assert.deepEqual(missing.breakdown, {
+          "Taglie fisiche visibili": "n.d.", "Altre taglie fisiche": "n.d.", "Non classificati": "n.d.",
+        });
+        assert.match(missing.text, /Mortalità non disponibile/);
+        assert.doesNotMatch(missing.text, /Totale popolazione\s*0|Non classificati\s*0|Taglie fisiche visibili\s*0/);
+      }
+      await verify(page);
+      assert.equal((await mortalitySummary(page, desktopMonth(1))).total, "1.234",
+        "Restore normal fixtures for the existing browser scenarios");
     });
 
     await t.test("sales add/edit/delete and hidden-size preservation", async () => {
@@ -461,13 +577,12 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       assert.equal(await isDisabled(page, "Prepara riepilogo commerciale"), true);
       assert.equal(await page.$$eval(".commercial-workspace .ca-mono", elements => elements.some(element => element.textContent.includes("98.765"))), false);
       await clickText(page, "Esplora disponibilità");
-      await page.click(".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell");
+      await page.click(sizeCell(1));
       await page.waitForSelector('[role="dialog"]');
       const staleDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
       assert.match(staleDetail, /Ricalcola la bozza prima di utilizzare questa quantità/);
       assert.equal(await page.$eval('[role="dialog"] button.ca-button.primary', element => element.disabled), true, "A stale cell cannot start a sale");
-      await page.keyboard.press("Escape");
-      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+      await closeDialog(page);
       await verify(page);
       assert.equal(simulations.at(-1).name, "Bozza modificata durante replay");
       delayNext = true;
@@ -511,17 +626,16 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       omitNextMortality = true;
       await verify(page);
       await clickText(page, "Esplora disponibilità");
-      const historicFirstCell = ".ca-desktop-matrix tbody tr:nth-child(1) td:nth-of-type(1) .ca-cell";
-      assert.equal(await page.$eval(historicFirstCell, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()), "Mortalità n.d.");
+      const historicFirstCell = sizeCell(1);
+      assert.equal(await page.$eval(historicFirstCell, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()), "Mortalità n.d. (sola taglia fisica)");
       await page.click(historicFirstCell);
       await page.waitForSelector('[role="dialog"]');
       const historicalCellDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
       assert.match(historicalCellDetail, /Mancanze non disponibili/);
       assert.doesNotMatch(historicalCellDetail, /Ordini inclusi non coperti: 0|Vendite simulate non soddisfatte: 0/);
-      assert.match(historicalCellDetail, /Mortalità non disponibile/);
+      assert.match(historicalCellDetail, /Mortalità della sola taglia fisica non disponibile/);
       assert.doesNotMatch(historicalCellDetail, /Mortalità.*(?:0|1\.234)/);
-      await page.keyboard.press("Escape");
-      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+      await closeDialog(page);
       await clickText(page, "Scenari e riepiloghi");
       await typeField(page, "Nome della bozza", "Modifica live non cambia storico");
       await verify(page);
