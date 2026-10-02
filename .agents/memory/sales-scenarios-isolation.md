@@ -62,3 +62,9 @@ Negli scenari, una vendita inserita per mese senza giorno esplicito si colloca n
 **Why:** Una coorte può attraversare una taglia commerciale tra due primi del mese senza mai comparire nei soli snapshot mensili. Vendere sempre al primo giorno la perde; aggregare i passaggi giornalieri la conterebbe più volte o peggiorerebbe la copertura di ordini con scadenze precedenti.
 
 **How to apply:** Conservare distinta la giacenza biologica di inizio mese dalla capacità vendibile datata; usare lo stesso calendario per allocazione, proposta e protezione degli scoperti, inclusi gli ordini oltre l'orizzonte visibile. Non interpretare il giorno di massima capacità come promessa di disponibilità continua dopo quel giorno.
+
+Nella Disponibilità commerciale, l'immutabilità del riepilogo comprende anche il significato delle etichette, non solo quantità e ipotesi.
+
+**Why:** Un catalogo taglie aggiornato dopo il congelamento non deve cambiare la lettura commerciale di una previsione storica, neppure in una nuova esportazione.
+
+**How to apply:** Ogni nuova informazione descrittiva usata nei riepiloghi deve essere congelata insieme ai risultati; non integrare silenziosamente lo storico con anagrafiche live.
