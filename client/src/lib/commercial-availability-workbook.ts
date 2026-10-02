@@ -159,6 +159,7 @@ function buildGuide(workbook: Workbook, input: CommercialInput, result?: Commerc
       : "Sono inclusi solo gli input modificabili; nessuna disponibilità o copertura è ricavata da risultati assenti o non corrispondenti."],
     ["Avvertenza", DISCLAIMER],
     ["Disponibilità", ALTERNATIVE_NOTE],
+    ["Calendario ordini per i nuovi calcoli", "Commerciale e Scostamenti usano solo quote future valide, al netto delle consegne certificate sulla quota. Nessun recupero delle sotto-consegne passate e nessun riporto degli scoperti. I risultati storici congelati conservano le ipotesi del loro calcolo originale."],
     ["Mancanze storiche", "Le celle vuote nelle mancanze indicano dato assente/non disponibile (anche per snapshot precedenti), non quantità zero."],
     ["Morti previsti", "Decessi mensili in numero assoluto. Le righe taglia indicano solo la taglia fisica; il totale comprende anche altre taglie e animali fuori dai range configurati. Già inclusi nella disponibilità: non sottrarli di nuovo. Celle vuote = dato non disponibile, non zero. Non coincidono necessariamente con la differenza fra massimi vendibili di mesi successivi."],
     ["Arrivi futuri", "Il programma base non è riportato; una cella vuota non significa zero. Uno zero nell'override è un valore esplicito."],

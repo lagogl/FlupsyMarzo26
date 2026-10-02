@@ -35,8 +35,22 @@ export function verifiedResidual(
 }
 
 export async function resolveOrderQuantities(orders: (typeof ordiniCondivisi.$inferSelect)[]) {
+  return resolveCertifiedQuantities(orders, undefined, true);
+}
+
+/** Same sale/bag/cross-order proof as legacy residuals, with dated rows for period-local allocation. */
+export async function resolveCertifiedOrderDeliveries(
+  orders: (typeof ordiniCondivisi.$inferSelect)[], referenceDate: string,
+) {
+  return resolveCertifiedQuantities(orders, referenceDate, false);
+}
+
+async function resolveCertifiedQuantities(
+  orders: (typeof ordiniCondivisi.$inferSelect)[], referenceDate: string | undefined, strictOverflow: boolean,
+) {
   const quantities = new Map<number, number>(), warnings: string[] = [];
-  if (!orders.length) return { quantities, warnings };
+  const verifiedDeliveries = new Map<number, Delivery[]>();
+  if (!orders.length) return { quantities, warnings, verifiedDeliveries };
   const [{ db }, { dbEsterno }] = await Promise.all([import("../../../db"), import("../../../db-esterno")]);
   if (!dbEsterno) throw new Error("Fonte consegne non disponibile");
   const deliveries = await dbEsterno.select().from(consegneCondivise).where(inArray(consegneCondivise.ordineId, orders.map(o => o.id)));
@@ -60,14 +74,23 @@ export async function resolveOrderQuantities(orders: (typeof ordiniCondivisi.$in
   }
   for (const [key, quantity] of acrossOrders) if (quantity > (bagTotals.get(key) ?? 0)) bagTotals.set(key, 0);
   const t = businessToday();
-  const today = `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
+  const today = referenceDate ?? `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
   for (const o of orders) {
     if (o.quantitaTotale && o.quantita && o.quantitaTotale !== o.quantita) throw new Error(`Ordine ${o.id}: quantità totali non riconciliate`);
     const rows = deliveries.filter(d => d.ordineId === o.id);
-    const residual = verifiedResidual(o.quantitaTotale || o.quantita, rows, sales, bagTotals, today);
+    const gross = o.quantitaTotale || o.quantita;
+    let residual: ReturnType<typeof verifiedResidual>;
+    try {
+      residual = verifiedResidual(gross, rows, sales, bagTotals, today);
+    } catch (error) {
+      if (strictOverflow || !(error instanceof Error) || !error.message.startsWith("Consegne superiori")) throw error;
+      residual = { quantity: gross, verified: false };
+      warnings.push(`Ordine ${o.id}: consegne superiori alla quantità ordine; mantenute quote lorde, riconciliare.`);
+    }
     quantities.set(o.id, residual.quantity);
+    if (residual.verified) verifiedDeliveries.set(o.id, rows);
     if (residual.verified) warnings.push(`Ordine ${o.id}: residuo analiticamente verificato ${residual.quantity} animali.`);
     else if (rows.length || o.stato === "Parziale") warnings.push(`Ordine ${o.id}: residuo non certificabile, riservata quantità lorda cautelativa ${residual.quantity}; riconciliare le consegne.`);
   }
-  return { quantities, warnings };
+  return { quantities, warnings, verifiedDeliveries };
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { build } from "esbuild";
+import { buildFutureOrderQuotas } from "../future-order-quotas";
 
 process.env.TZ = "UTC";
 
@@ -23,9 +24,15 @@ const virtualModules: Record<string, string> = {
   "../../../ai/production-forecast-service": `
     export const productionForecastService = {
       getSgrLookup: async () => ({}),
-      getBasketLevelInventory: async () => [],
-      getOrdersByMonthAndSize: async () => ({}),
+      getBasketLevelInventory: async () => globalThis.__quotaInventory ?? [],
+      getOrdersByMonthAndSize: async () => { throw new Error("Legacy monthly demand must not be loaded"); },
     };
+  `,
+  "../future-order-quota-source": `
+    export async function loadFutureOrderQuotas(referenceDate) {
+      globalThis.__quotaLoadDates = [...(globalThis.__quotaLoadDates ?? []), referenceDate];
+      return { quotas: globalThis.__futureQuotas, warnings: globalThis.__quotaWarnings ?? [] };
+    }
   `,
   "../../../utils/business-date": `
     export function getBusinessReferenceDate(instant) {
@@ -109,8 +116,18 @@ const virtualModules: Record<string, string> = {
         (range.validTo === null || range.validTo >= key)
       ) ?? null;
     }
-    export function findProjectedSize() { return null; }
-    export function stepOneDay(state) { return state; }
+    export function findProjectedSize(weight, date, ranges) {
+      return allSizes.find(size => {
+        const range = findRangeForSize(size.id, date, ranges);
+        const apk = 1000000 / weight;
+        return range && apk >= range.minAnimalsPerKg && apk <= range.maxAnimalsPerKg;
+      }) ?? null;
+    }
+    export function stepOneDay(context, state, date) {
+      return globalThis.__quotaGrowInFebruary && date.getMonth() === 1
+        ? { ...state, weightMg: 1000 }
+        : state;
+    }
   `,
 };
 
@@ -170,33 +187,26 @@ async function withSnapshotDate<T>(run: () => Promise<T>): Promise<T> {
 }
 
 test("project retains mixed future-effective and unrecognized January orders in deadline coverage", async () => {
-  (globalThis as any).__task149Orders = [
+  (globalThis as any).__quotaLoadDates = [];
+  (globalThis as any).__quotaWarnings = ["Quota mensile verificata a fine mese"];
+  (globalThis as any).__futureQuotas = [
     {
       id: 1,
-      quantita: 50,
-      quantitaTotale: 50,
-      tagliaRichiesta: "TP-2000",
-      dataInizioConsegna: "2027-01-01",
-      dataConsegna: null,
-      dataFineConsegna: null,
+      key: "1-first",
+      orderId: 1, sizeCode: "TP-2000", quantity: 50,
+      year: 2027, month: 1, day: 1, precision: "day",
     },
     {
       id: 2,
-      quantita: 100,
-      quantitaTotale: 100,
-      tagliaRichiesta: "TP-1000",
-      dataInizioConsegna: "2027-01-01",
-      dataConsegna: null,
-      dataFineConsegna: null,
+      key: "1-second",
+      orderId: 1, sizeCode: "TP-1000", quantity: 100,
+      year: 2027, month: 1, day: 1, precision: "day",
     },
     {
       id: 3,
-      quantita: 20,
-      quantitaTotale: 20,
-      tagliaRichiesta: "unrecognized-size",
-      dataInizioConsegna: "2027-01-01",
-      dataConsegna: null,
-      dataFineConsegna: null,
+      key: "3-month",
+      orderId: 3, sizeCode: "unrecognized-size", quantity: 20,
+      year: 2027, month: 1, day: 31, precision: "month",
     },
   ];
 
@@ -227,7 +237,7 @@ test("project retains mixed future-effective and unrecognized January orders in 
       arrearsFulfilled: 0,
       unverifiable: 0,
     });
-    assert.deepEqual(january.deliveryCoverage.bySize["TAGLIA NON RICONOSCIUTA"], {
+    assert.deepEqual(january.deliveryCoverage.bySize["unrecognized-size"], {
       requested: 20,
       covered: 0,
       uncovered: 20,
@@ -235,5 +245,88 @@ test("project retains mixed future-effective and unrecognized January orders in 
       unverifiable: 0,
     });
     assert.equal(result.deliveryCoverageUnverifiable, 0);
+    assert.equal(january.ordiniTotali, january.deliveryCoverage.requested);
+    assert.deepEqual(january.ordiniBySize, {
+      "TP-2000": 50, "TP-1000": 100, "unrecognized-size": 20,
+    });
+    assert.deepEqual(january.ordiniScopertiBySize, january.ordiniBySize);
+    assert.deepEqual((globalThis as any).__quotaLoadDates, ["2026-12-31"]);
+    assert.deepEqual(result.orderQuotaWarnings, ["Quota mensile verificata a fine mese"]);
+  });
+});
+
+test("monthly missed quotas do not reserve later stock and arrears compatibility stays empty", async () => {
+  (globalThis as any).__futureQuotas = [
+    { key: "1-jan", orderId: 1, sizeCode: "TP-1000", quantity: 100, year: 2027, month: 1, day: 1, precision: "day" },
+    { key: "1-feb", orderId: 1, sizeCode: "TP-1000", quantity: 100, year: 2027, month: 2, day: 1, precision: "day" },
+  ];
+  (globalThis as any).__quotaInventory = [{ basketId: 1, animalsPerKg: 2000, animalCount: 100 }];
+  (globalThis as any).__quotaGrowInFebruary = true;
+  try {
+    await withSnapshotDate(async () => {
+      const result = await new GrowthProjectionService().project("TP-3000", 2027, 0, 1, 12);
+      const [january, february] = result.monthlyContext;
+      assert.equal(january.ordiniEvasiTotali, 0);
+      assert.deepEqual(january.ordiniScopertiBySize, { "TP-1000": 100 });
+      assert.equal(february.ordiniEvasiTotali, 100);
+      assert.deepEqual(february.ordiniScopertiBySize, {});
+      assert.equal(january.deliveryCoverage.uncovered, 100);
+      assert.equal(february.deliveryCoverage.covered, 100);
+      for (const month of result.monthlyContext) {
+        assert.deepEqual(month.ordiniArretratiBySize, {});
+        assert.deepEqual(month.ordiniArretratiEvasiBySize, {});
+        assert.equal(month.ordiniArretratiTotali, 0);
+        assert.equal(month.ordiniEvasiArretratiTotali, 0);
+        assert.equal(month.ordiniArretrati, 0);
+        assert.equal(month.deliveryCoverage.arrearsFulfilled, 0);
+        assert.equal(month.ordiniTotali, month.deliveryCoverage.requested);
+      }
+      assert.equal(february.disponibilitaBiologicaTotale, 100);
+      assert.equal(february.disponibilitaForecastInizioMese, 100);
+      assert.equal(result.monthlyContext[2].disponibilitaForecastInizioMese, 100);
+    });
+  } finally {
+    (globalThis as any).__quotaInventory = [];
+    (globalThis as any).__quotaGrowInFebruary = false;
+  }
+});
+
+test("monthly and daily demand use the same future calendar, not historical header residuals", async () => {
+  const calendar = buildFutureOrderQuotas([
+    {
+      id: 10, quantita: 400, quantitaTotale: 400, tagliaRichiesta: "TP-2000",
+      dataInizioConsegna: "2026-11-01", dataFineConsegna: "2027-02-28", dataConsegna: null,
+      cancellato: false, stato: null,
+    },
+    {
+      id: 11, quantita: 90, quantitaTotale: 90, tagliaRichiesta: "TP-2000",
+      dataInizioConsegna: null, dataFineConsegna: null, dataConsegna: "2026-12-30",
+      cancellato: false, stato: null,
+    },
+    {
+      id: 12, quantita: 7, quantitaTotale: 7, tagliaRichiesta: "TP-2000",
+      dataInizioConsegna: null, dataFineConsegna: null, dataConsegna: "2026-12-31",
+      cancellato: false, stato: null,
+    },
+  ], "2026-12-31", new Map([
+    [10, [{ dataConsegna: "2026-12-15", quantitaConsegnata: 20, saleSizeCode: "TP-2000" }]],
+  ]));
+  (globalThis as any).__futureQuotas = calendar.quotas;
+  (globalThis as any).__quotaWarnings = calendar.warnings;
+  (globalThis as any).__quotaLoadDates = [];
+  await withSnapshotDate(async () => {
+    const result = await new GrowthProjectionService().project("TP-3000", 2026, 0, 12, 12);
+    const [december, january, february, march] = result.monthlyContext;
+    assert.equal(december.ordiniTotali, 87);
+    assert.equal(january.ordiniTotali, 100);
+    assert.equal(february.ordiniTotali, 100);
+    assert.equal(march.ordiniTotali, 0);
+    for (const month of result.monthlyContext) {
+      assert.equal(month.ordiniTotali, month.deliveryCoverage.requested);
+      assert.equal(month.deliveryCoverage.unverifiable, 0);
+      assert.equal(month.deliveryCoverage.arrearsFulfilled, 0);
+      assert.deepEqual(month.ordiniArretratiBySize, {});
+    }
+    assert.deepEqual((globalThis as any).__quotaLoadDates, ["2026-12-31"]);
   });
 });

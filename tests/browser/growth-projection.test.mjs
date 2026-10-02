@@ -14,49 +14,45 @@ import { apiFixtures } from "./fixtures/growth-projection.mjs";
 // Independent expectations, not calculated with production presentation helpers.
 const labels = {
   it: {
-    summary: "Disponibilità, ordini e arretrati", month: "Seleziona mese",
+    summary: "Disponibilità e quote ordini", month: "Seleziona mese",
     columns: "Mesi in colonne", rows: "Mesi in righe", copy: "Copia",
     assignedTarget: "Assegnati da taglia target o superiore",
     assignedLower: "Assegnati da taglie inferiori al target",
-    assignedTotal: "Totale assegnato · correnti e arretrati",
+    assignedTotal: "Totale assegnato · quote valide del mese",
     shortfall: "Scoperto target mensile · TP-3000",
     recovery: "Recupero scoperto mensile · TP-3000",
     tooLate: "Il deficit della taglia target non può maturare in tempo:",
     arrival: "Ingresso TP-300 suggerito · mese di arrivo · TP-3000",
     budget: "Obiettivo vendite T3 (Forecast)", forecast: "T3 destinato al Forecast vendite TP-3000",
     forecastGap: "Forecast non coperto", bio: "Disponibilità biologica esclusiva a fine mese",
-    backlog: "Arretrati precedenti · TP-4000",
-    backlogValue: "entrati 1.200 · recuperati 1.200 · ancora aperti 0",
     monthly: "Capacità ordini a fine mese (non promessa di consegna) — Totale (coperti / richiesti / scoperti)",
     monthlyValue: "7.500 coperti / 10.000 richiesti / 2.500 scoperti",
-    perSize: "Capacità ordini a fine mese — Taglia (coperti / richiesti / scoperti) TP-4000",
-    perSizeValue: "0 coperti / 0 richiesti / 0 scoperti",
+    perSize: "Capacità ordini a fine mese — Taglia (coperti / richiesti / scoperti) TP-3000",
+    perSizeValue: "5.500 coperti / 7.000 richiesti / 1.500 scoperti",
     deadline: "Copertura alla data di consegna — Totale",
-    deadlineValue: "40.0% · 4.000 coperti / 10.000 con scadenza / 6.000 scoperti · 600 arretrati evasi dopo la scadenza · 200 non verificabili",
+    deadlineValue: "40.0% · 4.000 coperti / 10.000 con scadenza / 6.000 scoperti · 200 non verificabili",
     unavailable: "Ricalcolare per leggere la copertura degli ordini correnti",
     alternative: "Scenario Forecast alternativo · non sommare con lo scenario ordini",
     visibility: "Visibilità righe", restore: "Ripristina tutte",
   },
   en: {
-    summary: "Availability, orders & backlog", month: "Select month",
+    summary: "Availability & order quotas", month: "Select month",
     columns: "Months in columns", rows: "Months in rows", copy: "Copy",
     assignedTarget: "Assigned from target size or larger",
     assignedLower: "Assigned from sizes below target",
-    assignedTotal: "Total assigned · current and arrears",
+    assignedTotal: "Total assigned · valid monthly quotas",
     shortfall: "Monthly target-size uncovered demand · TP-3000",
     recovery: "Monthly target-size recovery status · TP-3000",
     tooLate: "The target-size deficit cannot mature in time:",
     arrival: "Suggested TP-300 entry · arrival month · TP-3000",
     budget: "T3 sales target (Forecast)", forecast: "T3 assigned to Forecast sales TP-3000",
     forecastGap: "Uncovered Forecast", bio: "Exclusive end-month biological availability",
-    backlog: "Prior arrears · TP-4000",
-    backlogValue: "entering 1.200 · recovered 1.200 · still open 0",
     monthly: "End-of-month order capacity (not a delivery promise) — Total (covered / requested / uncovered)",
     monthlyValue: "7.500 covered / 10.000 requested / 2.500 uncovered",
-    perSize: "End-of-month order capacity — Size (covered / requested / uncovered) TP-4000",
-    perSizeValue: "0 covered / 0 requested / 0 uncovered",
+    perSize: "End-of-month order capacity — Size (covered / requested / uncovered) TP-3000",
+    perSizeValue: "5.500 covered / 7.000 requested / 1.500 uncovered",
     deadline: "Coverage on delivery date — Total",
-    deadlineValue: "40.0% · 4.000 covered / 10.000 with deadline / 6.000 uncovered · 600 arrears fulfilled after deadline · 200 unverifiable",
+    deadlineValue: "40.0% · 4.000 covered / 10.000 with deadline / 6.000 uncovered · 200 unverifiable",
     unavailable: "Recalculate to read current-order coverage",
     alternative: "Alternative Forecast scenario · do not add to order scenario",
     visibility: "Row visibility", restore: "Restore all",
@@ -166,7 +162,7 @@ async function checkSelections(page, l, lang, copiedRows) {
           // Distinguish zero, unavailable, numeric and textual data; display "-"
           // and thousands separators must not leak into the raw clipboard value.
           for (const [label, month, value] of [
-            [l.assignedTarget, 0, "9000"], [l.assignedTarget, 1, l.unavailable],
+            [l.assignedTarget, 0, "5300"], [l.assignedTarget, 1, l.unavailable],
             [l.arrival, 0, "0"], [l.recovery, 0, l.tooLate],
           ]) {
             await clickTable(page, ...cell(label, month));
@@ -218,7 +214,7 @@ async function checkSelections(page, l, lang, copiedRows) {
   await page.keyboard.press("Escape");
 }
 
-test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipboard and XLSX", { timeout: 240000 }, async t => {
+test("real authenticated growth page: isolated APIs, IT/EN, both orientations, clipboard and XLSX", { timeout: 240000 }, async t => {
   // Frontend only: importing/starting server/index.ts here would contact the live DB.
   const server = await createServer({
     // Same application source/aliases/styles, without editor-only instrumentation.
@@ -265,7 +261,15 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
         await browser.defaultBrowserContext().overridePermissions(origin, ["clipboard-read", "clipboard-write", "clipboard-sanitized-write"]);
         await page.goto(`${origin}/proiezione-crescita`, { waitUntil: "networkidle0" });
         await page.waitForSelector(`select[aria-label="${l.month}"]`);
+        assert.ok(apiCalls.includes("GET /api/users/current"), "The real auth provider must consume the isolated session fixture");
         await page.click('button[aria-label="Espandi dettaglio ordini"]');
+        const warning = apiFixtures["/api/proiezione-crescita"].orderQuotaWarnings[0];
+        const quotaDetails = await page.evaluateHandle(() => [...document.querySelectorAll("details")]
+          .find(element => /Verifiche quote e consegne|Quota and delivery checks/.test(element.querySelector("summary")?.textContent)));
+        assert.ok(quotaDetails.asElement(), "Quota reconciliation warnings must have a visible details control");
+        await quotaDetails.asElement().$('summary').then(element => element.click());
+        assert.ok(await quotaDetails.evaluate((element, warning) => element.open && element.innerText.includes(warning), warning));
+        await quotaDetails.dispose();
 
         // Extract rendered rows rather than just searching the whole page for numbers.
         async function checkSummary(missing = false) {
@@ -286,12 +290,12 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
             assert.ok(content.text.includes("—"), "Missing values must not become zeros");
             assert.equal(content.tables[0].length, 1);
             assert.equal(content.tables[1].length, 1);
-            assert.equal(content.tables[2].length, 1);
-            assert.deepEqual(content.metricCards, ["—", "11" + (lang === "it" ? "." : ",") + "000", ...Array(9).fill("—")]);
+            assert.equal(content.tables.length, 2, "No historical carry table even for missing data");
+            assert.deepEqual(content.metricCards, ["—", "11" + (lang === "it" ? "." : ",") + "000", ...Array(6).fill("—")]);
             return;
           }
           const formatted = await page.evaluate(lang => Object.fromEntries(
-            [0, 1000, 1200, 1500, 2000, 2200, 2500, 3000, 3700, 4000, 5200, 5500, 6000, 7000, 7500, 8000, 9000, 10000, 11000, 11200, 13000, 20000, 77777, 88888]
+            [0, 1000, 1200, 1500, 2000, 2200, 2500, 3000, 3700, 4000, 5200, 5300, 5500, 6000, 7000, 7500, 8000, 9000, 10000, 11000, 11200, 13000, 20000, 77777, 88888]
               .map(value => [value, value.toLocaleString(lang === "it" ? "it-IT" : "en-GB")])
           ), lang);
           const n = value => formatted[value];
@@ -301,12 +305,11 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
           assert.deepEqual(content.tables[1], [
             ["TP-1000", n(3000), n(2000), n(1000)],
             ["TP-3000", n(7000), n(5500), n(1500)],
-            ["TP-4000", "0", "0", "0"],
           ]);
-          assert.deepEqual(content.tables[2], [
-            ["TP-3000", n(4000), n(2500), n(1500)], ["TP-4000", n(1200), n(1200), "0"],
-          ]);
-          assert.deepEqual(content.metricCards, [20000, 11000, 10000, 7500, 2500, 5200, 3700, 1500, 9000, 2200, 11200].map(n));
+          assert.equal(content.tables.length, 2, "Legacy backlog fixture fields must not create a carry-over table");
+          assert.ok(!/Arretrati precedenti|Prior arrears|correnti e arretrati|current and arrears/.test(content.text));
+          assert.deepEqual(content.metricCards, [20000, 11000, 10000, 7500, 2500, 5300, 2200, 7500].map(n));
+          assert.match(content.text, lang === "it" ? /Solo quote future valide.*Nessun recupero degli scoperti passati/s : /Only valid future quotas.*No recovery of past shortfalls/s);
           for (const value of [13000, 11000, 2000, 6000]) assert.ok(content.metrics.includes(n(value)), `Missing Forecast/arrival value ${value}`);
           assert.ok(content.text.includes(lang === "it" ? "Deficit target non maturabile in tempo" : "Target deficit cannot mature in time"));
           assert.ok(content.text.includes(lang === "it" ? "Arrivo suggerito: 0" : "Suggested arrival: 0"));
@@ -326,10 +329,10 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
           const rows = copyRows(copied);
           selectionOracle = rows;
           const expected = [
-            [l.assignedTarget, 9000], [l.assignedLower, 2200], [l.assignedTotal, 11200],
-            [l.shortfall, 3000], [l.recovery, l.tooLate], [l.arrival, 0],
+            [l.assignedTarget, 5300], [l.assignedLower, 2200], [l.assignedTotal, 7500],
+            [l.shortfall, 1500], [l.recovery, l.tooLate], [l.arrival, 0],
             [l.budget, 13000], [l.forecast, 11000], [l.forecastGap, 2000],
-            [l.backlog, l.backlogValue], [l.monthly, l.monthlyValue], [l.deadline, l.deadlineValue],
+            [l.monthly, l.monthlyValue], [l.deadline, l.deadlineValue],
             [l.perSize, l.perSizeValue],
           ];
           for (const [label, value] of expected) {
@@ -340,10 +343,13 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
           for (const [size, quantity] of [["TP-300", 6000], ["TP-1000", 3000], ["TP-3000", 8000], ["TP-4000", 3000]]) {
             assert.deepEqual(rows.find(row => row[0] === `${l.bio} · ${size}`)?.slice(1), [String(quantity), l.unavailable]);
           }
-          for (const label of [l.assignedTarget, l.assignedLower, l.assignedTotal, l.shortfall, l.recovery, l.monthly, l.deadline, l.backlog, l.perSize]) {
+          for (const label of [l.assignedTarget, l.assignedLower, l.assignedTotal, l.shortfall, l.recovery, l.monthly, l.deadline, l.perSize]) {
             assert.equal(rows.find(row => row[0].trim() === label)?.[2], l.unavailable, `Missing data: ${label}`);
           }
           assert.ok(copied.includes(l.alternative));
+          assert.ok(copied.includes(warning), "Clipboard must include the reconciliation warning");
+          assert.ok(!/Arretrati precedenti|Prior arrears|arretrati evasi dopo|arrears fulfilled after/.test(copied), "Clipboard must omit legacy recovery");
+          assert.ok(!rows.some(row => /(?:Taglia|Size).*TP-4000/.test(row[0])), "A backlog-only size must not add an order quota row");
 
           // Compare the actual spreadsheet DOM in either orientation to the fixed expectations.
           const displayed = await page.evaluate(({ orientation }) => {
@@ -386,6 +392,27 @@ test("real growth page: anonymous browser APIs, IT/EN, both orientations, clipbo
             assert.ok(candidates.some(row => JSON.stringify(row.slice(1)) === JSON.stringify(values)), `XLSX differs from clipboard: ${copiedRow[0]}`);
           }
           assert.ok(workbook.worksheets.length >= 3, "Initial-cohort detail sheets remain separate");
+          const policySheet = workbook.getWorksheet(lang === "it" ? "Quote ordini" : "Order quotas");
+          assert.ok(policySheet, "Excel must expose the future-quota policy separately");
+          const policyText = policySheet.getColumn(1).values.filter(Boolean).join("\n");
+          assert.ok(policyText.includes(warning), "Excel must retain reconciliation warnings");
+          assert.match(policyText, lang === "it" ? /sotto-consegne passate.*non vengono riportati/ : /Past under-deliveries.*not carried forward/);
+          assert.ok(!excelRows.some(row => /Arretrati precedenti|Prior arrears|arretrati evasi dopo|arrears fulfilled after/.test(row.join(" "))), "Excel must omit legacy recovery rows");
+        }
+        if (lang === "it") {
+          await clickText(page, l.columns);
+          await page.evaluate(title => [...document.querySelectorAll("h3")].find(element => element.textContent === title)
+            .parentElement.parentElement.parentElement.scrollIntoView({ block: "start" }), l.summary);
+          await page.screenshot({ path: "/tmp/future-quota-growth.jpg" });
+          await page.setViewport({ width: 402, height: 874 });
+          await page.waitForSelector("aside button:has(.lucide-x)");
+          await page.click("aside button:has(.lucide-x)");
+          await page.waitForFunction(() => document.querySelector("aside")?.getBoundingClientRect().right <= 0);
+          await page.evaluate(() => [...document.querySelectorAll("details")].find(element =>
+            element.querySelector("summary")?.textContent.includes("Verifiche quote e consegne"))
+            .scrollIntoView({ block: "center" }));
+          await page.screenshot({ path: "/tmp/future-quota-growth-mobile.jpg" });
+          await page.setViewport({ width: 1440, height: 1000 });
         }
         await checkSelections(page, l, lang, selectionOracle);
         await page.select(`select[aria-label="${l.month}"]`, "1");

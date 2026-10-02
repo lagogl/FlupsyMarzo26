@@ -12,11 +12,11 @@ const complete = {
   ordiniArretratiBySize: { "TP-3000": 4000, "TP-4000": 1200 },
   ordiniArretratiEvasiBySize: { "TP-3000": 2500, "TP-4000": 1200 },
   ordiniArretratiTotali: 5200, ordiniEvasiArretratiTotali: 3700,
-  ordiniScopertiBySize: { "TP-1000": 1000, "TP-3000": 3000 },
+  ordiniScopertiBySize: { "TP-1000": 1000, "TP-3000": 1500 },
   disponibilitaBiologicaBySize: { "TP-300": 6000, "TP-1000": 3000, "TP-3000": 8000, "TP-4000": 3000 },
   disponibilitaBiologicaTotale: 20000,
-  assegnatiDaTargetOSuperiori: 9000, assegnatiDaTaglieInferiori: 2200,
-  scopertoTarget: 3000, recuperoSchiuditoio: "non-recuperabile",
+  assegnatiDaTargetOSuperiori: 5300, assegnatiDaTaglieInferiori: 2200,
+  scopertoTarget: 1500, recuperoSchiuditoio: "non-recuperabile",
   deliveryCoverage: {
     ...deadline(10000, 4000, 600, 200),
     bySize: { "TP-1000": deadline(3000, 1000), "TP-3000": deadline(7000, 3000, 600, 200) },
@@ -57,10 +57,11 @@ export const projection = {
   totalCurrentQuantity: 166665, totalAlreadyAtTarget: 77777, totalNotYetAtTarget: 88888,
   groups: [group("TP-3000", 77777, true), group("TP-300", 88888, false)],
   monthlyContext: [complete, missing], deliveryCoverageUnverifiable: 333,
+  orderQuotaWarnings: ["Ordine fixture 12: consegne fuori periodo o ambigue; mantenute quote lorde cautelative, riconciliare."],
 };
 
 export const apiFixtures = {
-  "/api/users/current": { success: true, user: { id: 1, username: "browser-fixture", role: "user" } },
+  "/api/users/current": { success: true, user: { id: 1, username: "growth-browser-fixture", role: "user", language: "it" } },
   "/api/proiezione-crescita": projection,
   "/api/proiezione-crescita/hatchery-arrivals": [],
   "/api/proiezione-crescita/production-targets": [],

@@ -16,26 +16,35 @@ function month(overrides: Partial<ProjectionIndicatorMonth> = {}): ProjectionInd
   };
 }
 
-test("calcola la copertura su domanda corrente e solo arretrato iniziale", () => {
+test("calcola la copertura solo sulle quote correnti, ignorando arretrati legacy", () => {
   const result = calculateGrowthProjectionIndicators([
     month({ domandaEffettiva: 100, ordiniArretrati: 40, ordiniEvasi: 90 }),
     month({ monthLabel: "Feb", domandaEffettiva: 60, ordiniArretrati: 50, ordiniEvasi: 50 }),
   ]);
 
-  assert.equal(result.totalDemand, 200);
+  assert.equal(result.totalDemand, 160);
   assert.equal(result.totalFulfilled, 140);
-  assert.equal(result.coverage, 70);
+  assert.equal(result.coverage, 87.5);
 });
 
-test("include l'arretrato in uscita dell'ultimo mese nel picco", () => {
+test("misura lo scoperto mensile senza trascinarlo nei mesi successivi", () => {
   const result = calculateGrowthProjectionIndicators([
     month({ domandaEffettiva: 100, ordiniEvasi: 80 }),
     month({ monthLabel: "Feb", domandaEffettiva: 50, ordiniArretrati: 20, ordiniEvasi: 65 }),
     month({ monthLabel: "Mar", domandaEffettiva: 90, ordiniArretrati: 5, ordiniEvasi: 30 }),
   ]);
 
-  assert.equal(result.peakBacklog, 65);
-  assert.equal(result.peakBacklogMonth?.monthLabel, "Mar");
+  assert.equal(result.peakUncovered, 60);
+  assert.equal(result.peakUncoveredMonth?.monthLabel, "Mar");
+});
+
+test("le assegnazioni in eccesso di un mese non coprono il deficit di un altro", () => {
+  const result = calculateGrowthProjectionIndicators([
+    month({ domandaEffettiva: 100, ordiniEvasi: 200 }),
+    month({ domandaEffettiva: 100, ordiniEvasi: 0 }),
+  ]);
+  assert.equal(result.totalFulfilled, 100);
+  assert.equal(result.coverage, 50);
 });
 
 test("misura il contributo dello schiuditoio come differenza mensile, senza sommare stock", () => {

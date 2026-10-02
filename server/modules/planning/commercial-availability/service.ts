@@ -8,7 +8,6 @@ import { loadWorlds } from "../sales-scenarios/service";
 import { monthNumber, monthParts } from "../sales-scenarios/engine";
 import { civilDate } from "./compute";
 import { calculateInWorker } from "./worker-pool";
-import { resolveOrderQuantities } from "./order-residuals";
 import { admitCalculation } from "./admission";
 
 const disclaimers = [
@@ -69,7 +68,7 @@ export async function simulateCommercial(input: CommercialInput, owner: string, 
     const loaded = reused ? worlds.get(worldKey)!.value
       : await loadWorlds(biologyInput, false, {
         includeOrders: input.includeOrders, includeHatchery: input.includeHatchery,
-        hatcheryOverrides: input.hatcheryOverrides, resolveQuantities: resolveOrderQuantities,
+        hatcheryOverrides: input.hatcheryOverrides,
       });
     if (!reused) {
       if (worlds.size >= 8) worlds.delete(worlds.keys().next().value!);

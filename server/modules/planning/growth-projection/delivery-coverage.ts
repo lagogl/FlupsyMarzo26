@@ -15,6 +15,7 @@ import {
 import { allocateOrdersAgainstBaskets } from "./order-allocation";
 
 export interface DeliveryCoverageOrder {
+  key?: string;
   id: number;
   size: string;
   quantity: number;
@@ -185,6 +186,7 @@ function assertQuantity(quantity: number, orderId: number): void {
 /**
  * Replays a separate daily stock ledger for delivery-date checks. It never
  * mutates the monthly order ledger or the isolated Forecast/Sand Nursery path.
+ * An uncovered quota expires on its due day and never reserves later stock.
  */
 export function calculateDeliveryDateCoverage(
   input: DeliveryCoverageInput,
@@ -246,7 +248,6 @@ export function calculateDeliveryDateCoverage(
   const baskets: DeliveryCoverageBasket[] = input.startingBaskets.map((basket) => ({
     ...basket,
   }));
-  let backlogBySize: Record<string, number> = {};
   let nextHatcheryBasketId = 950_000;
   const arrivalsByDay: Record<string, DeliveryCoverageBasket[]> = {};
   for (const month of replayMonths) {
@@ -301,7 +302,7 @@ export function calculateDeliveryDateCoverage(
     const currentOrders = dueByDay[dateKey] ?? {};
     const monthSummary = byYearMonth[monthKey(projectionMonthOf(cursor))];
     const maxAnimalsPerKgBySize: Record<string, number | undefined> = {};
-    for (const size of new Set([...Object.keys(backlogBySize), ...Object.keys(currentOrders)])) {
+    for (const size of Object.keys(currentOrders)) {
       const sizeRow = input.simulationContext.allSizes.find((candidate: any) => candidate.code === size);
       const range = sizeRow
         ? findRangeForSize(sizeRow.id, cursor, input.simulationContext.sizeRangeVersions)
@@ -309,7 +310,7 @@ export function calculateDeliveryDateCoverage(
       maxAnimalsPerKgBySize[size] = range?.maxAnimalsPerKg;
     }
 
-    if (Object.keys(backlogBySize).length > 0 || Object.keys(currentOrders).length > 0) {
+    if (Object.keys(currentOrders).length > 0) {
       const allocationBaskets = baskets.map((basket) => ({
         // Remove reciprocal floating point noise at exact physical boundaries.
         animalsPerKg: Math.round((1_000_000 / basket.weightMg) * 1_000_000_000) / 1_000_000_000,
@@ -318,7 +319,7 @@ export function calculateDeliveryDateCoverage(
       const allocation = allocateOrdersAgainstBaskets(
         allocationBaskets,
         currentOrders,
-        backlogBySize,
+        {},
         maxAnimalsPerKgBySize,
       );
       for (let index = 0; index < baskets.length; index++) {
@@ -332,11 +333,7 @@ export function calculateDeliveryDateCoverage(
           addSizeMetric(monthSummary, size, "covered", covered);
           addSizeMetric(monthSummary, size, "uncovered", quantity - covered);
         }
-        for (const [size, quantity] of Object.entries(allocation.arrearsFulfilledBySize)) {
-          addSizeMetric(monthSummary, size, "arrearsFulfilled", quantity);
-        }
       }
-      backlogBySize = allocation.endingBacklogBySize;
     }
 
     // A virtual cohort dated on the snapshot day is introduced only after

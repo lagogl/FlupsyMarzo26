@@ -14,6 +14,8 @@ import { getHatcheryBiologyDays } from "../hatchery-arrival-policy";
 import { buildCohortPath } from "./cohort-path";
 import { businessToday } from "../../../utils/business-date";
 import { scenarioArrivalPlans } from "../commercial-availability/arrival-options";
+import { loadFutureOrderQuotas } from "../future-order-quota-source";
+import { quotaWorldOrders } from "../commercial-availability/quota-world-orders";
 
 export { businessToday };
 const commonWarnings = [
@@ -47,7 +49,6 @@ export interface CommercialWorldOptions {
   includeOrders: boolean;
   includeHatchery: boolean;
   hatcheryOverrides: { year: number; month: number; quantity: number }[];
-  resolveQuantities?: (orders: (typeof ordiniCondivisi.$inferSelect)[]) => Promise<{ quantities: Map<number, number>; warnings: string[] }>;
 }
 export async function loadWorlds(input: ScenarioInput, automatic = false, commercial?: CommercialWorldOptions): Promise<{ expected: World; prudent: World; warnings: string[]; timings?: { biologyMainThreadMs: number } }> {
   const today = businessToday();
@@ -64,15 +65,18 @@ export async function loadWorlds(input: ScenarioInput, automatic = false, commer
   let excludedEarlierOrders = 0;
   let hasPartialFutureOrders = false;
   validateScenarioSaleSizes(input, ctx.allSizes);
-  const warnings = [...commonWarnings];
-  const residuals = commercial?.resolveQuantities ? await commercial.resolveQuantities(rawOrders.filter(order => {
-    const date = order.dataInizioConsegna || order.dataConsegna || order.dataFineConsegna;
-    return scenarioOrderDeliveryMonth(date, first) !== null;
-  })) : undefined;
-  if (residuals) warnings.push(...residuals.warnings);
+  const warnings = commercial ? commonWarnings.filter(w => !w.includes("Solo gli ordini con primo mese")) : [...commonWarnings];
+  if (commercial) {
+    const reference = `${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`;
+    const calendar = await loadFutureOrderQuotas(reference, rawOrders);
+    orders.push(...quotaWorldOrders(calendar.quotas, ctx.allSizes, first));
+    warnings.push(...calendar.warnings,
+      "Ordini: solo quote ancora valide, al netto delle consegne attribuibili al periodo. Quote scadute escluse senza recupero; quote mensili senza giorno preciso valide fino a fine mese.");
+  }
   warnings.push("SGR: coefficienti giornalieri configurati per mese/taglia, con ripiego sul valore mensile o sulla media disponibile dove manca il dato specifico.");
-  for (const order of rawOrders) {
-    const quantity = residuals?.quantities.get(order.id) ?? (order.quantitaTotale || order.quantita || 0);
+  // Legacy economic scenarios retain their original commitment valuation.
+  for (const order of commercial ? [] : rawOrders) {
+    const quantity = order.quantitaTotale || order.quantita || 0;
     if (quantity <= 0) continue;
     const date = order.dataInizioConsegna || order.dataConsegna || order.dataFineConsegna;
     let at: number | null;

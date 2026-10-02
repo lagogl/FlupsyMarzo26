@@ -11,8 +11,8 @@ export class DeliveryOrdersUnavailableError extends Error {
 /**
  * Delivery-date coverage follows the open-order policy used for future
  * commitments: null cancellation/state values are conservatively active,
- * while explicitly cancelled or completed orders are excluded. The legacy
- * monthly aggregation intentionally retains its existing broader filter.
+ * while explicitly cancelled or completed orders are excluded. Retained as
+ * a compatibility helper; projections now load the shared future-quota source.
  */
 export function activeDeliveryOrdersCondition() {
   return sql`${ordiniCondivisi.cancellato} IS DISTINCT FROM TRUE

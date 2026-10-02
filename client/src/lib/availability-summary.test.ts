@@ -18,6 +18,20 @@ test("current allocations remain distinct from backlog and requested sizes total
   ]);
 });
 
+test("legacy arrears never enter valid current-quota quantities or size rows", () => {
+  const result = summarizeCoverage({
+    ordiniBySize: { T3: 100 },
+    ordiniEvasiBySize: { T3: 75 },
+    ordiniEvasiTotali: 75,
+    ordiniArretratiBySize: { T4: 900 },
+    ordiniArretratiEvasiBySize: { T4: 800 },
+  });
+  assert.equal(result.requested, 100);
+  assert.equal(result.assigned, 75);
+  assert.equal(result.uncovered, 25);
+  assert.deepEqual(result.bySize, [{ size: "T3", requested: 100, assigned: 75, uncovered: 25 }]);
+});
+
 test("arrears show previous-only residual rather than current uncovered demand", () => {
   const result = summarizeArrears({
     ordiniBySize: { T3: 80 },

@@ -1,10 +1,8 @@
 import { productionForecastService } from "../../../ai/production-forecast-service";
 import { getBusinessReferenceDate } from "../../../utils/business-date";
 import { db } from "../../../db";
-import { dbEsterno, isDbEsternoAvailable } from "../../../db-esterno";
 import { hatcheryArrivals, productionTargets, projectionMortalityRates, sandNurserySeedings } from "../../../../shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
-import { ordiniCondivisi } from "../../../schema-esterno";
 import { findProjectedSize, findRangeForSize, loadGrowthSimulationContext, stepOneDay } from "../../../services/growth-simulation.service";
 import {
   addForecastAllocationToLedger,
@@ -34,17 +32,13 @@ import {
 } from "./availability-presentation";
 import {
   calculateDeliveryDateCoverage,
-  canonicalDeliveryDate,
   emptyDeliveryCoverageSummary,
   getDeliveryCoverageHatcheryYears,
   mapDeliveryOrderSize,
   type DeliveryCoverageOrder,
   type DeliveryCoverageSummary,
 } from "./delivery-coverage";
-import {
-  activeDeliveryOrdersCondition,
-  DeliveryOrdersUnavailableError,
-} from "./delivery-order-source";
+import { loadFutureOrderQuotas } from "../future-order-quota-source";
 
 const MONTH_NAMES = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -131,6 +125,7 @@ interface GrowthProjectionResult {
   groups: SizeGroupProjection[];
   monthlyContext: MonthlyContext[];
   deliveryCoverageUnverifiable: number;
+  orderQuotaWarnings: string[];
 }
 
 interface MonthStep {
@@ -139,38 +134,7 @@ interface MonthStep {
   month1Based: number;
 }
 
-interface RawDeliveryCoverageOrder {
-  id: number;
-  quantita: number;
-  quantitaTotale: number | null;
-  tagliaRichiesta: string;
-  dataInizioConsegna: string | null;
-  dataConsegna: string | null;
-  dataFineConsegna: string | null;
-}
-
 export class GrowthProjectionService {
-  private async getOrdersForDeliveryCoverage(): Promise<RawDeliveryCoverageOrder[]> {
-    if (!isDbEsternoAvailable() || !dbEsterno) throw new DeliveryOrdersUnavailableError();
-    try {
-      const rows = await dbEsterno
-        .select({
-          id: ordiniCondivisi.id,
-          quantita: ordiniCondivisi.quantita,
-          quantitaTotale: ordiniCondivisi.quantitaTotale,
-          tagliaRichiesta: ordiniCondivisi.tagliaRichiesta,
-          dataInizioConsegna: ordiniCondivisi.dataInizioConsegna,
-          dataConsegna: ordiniCondivisi.dataConsegna,
-          dataFineConsegna: ordiniCondivisi.dataFineConsegna,
-        })
-        .from(ordiniCondivisi)
-        .where(activeDeliveryOrdersCondition());
-      return rows;
-    } catch (error) {
-      throw new Error("Unable to load delivery-date orders for growth projection", { cause: error });
-    }
-  }
-
   private async getSandNurseryRows(yearsNeeded: number[]) {
     if (yearsNeeded.length === 0) return [];
     try {
@@ -236,13 +200,12 @@ export class GrowthProjectionService {
         : undefined,
     );
 
-    const [sgrLookup, basketInventory, dbMortalityRates, simCtx, rawDeliveryOrders, ...ordersByYearArr] = await Promise.all([
+    const [sgrLookup, basketInventory, dbMortalityRates, simCtx, orderCalendar] = await Promise.all([
       productionForecastService.getSgrLookup(),
       productionForecastService.getBasketLevelInventory(),
       this.getMortalityRatesFromDb(),
       loadGrowthSimulationContext(),
-      this.getOrdersForDeliveryCoverage(),
-      ...yearsNeeded.map(y => productionForecastService.getOrdersByMonthAndSize(y).then(orders => ({ year: y, orders })))
+      loadFutureOrderQuotas(formatProjectionBusinessDate(now)),
     ]);
     const targetSizeRow = simCtx.allSizes.find((size: any) => size.code === targetSize);
     const projectionStartDate = compareProjectionMonths(startProjectionMonth, referenceMonth) === 0
@@ -271,12 +234,22 @@ export class GrowthProjectionService {
     ]);
 
     const ordersByYearMonth: Record<string, Record<string, number>> = {};
-    for (const { year: y, orders } of ordersByYearArr) {
-      for (const [monthStr, sizeMap] of Object.entries(orders)) {
-        const key = `${y}-${monthStr}`;
-        ordersByYearMonth[key] = sizeMap as Record<string, number>;
-      }
-    }
+    // Both independent biological ledgers consume this one quota snapshot.
+    // Do not re-filter original headers or deduplicate by orderId: one order
+    // can contain several valid quotas, including repeated same-day quotas.
+    const deliveryOrders: DeliveryCoverageOrder[] = orderCalendar.quotas.map((quota) => {
+      const size = mapDeliveryOrderSize(quota.sizeCode, simCtx) ?? quota.sizeCode;
+      const key = `${quota.year}-${quota.month}`;
+      const monthOrders = ordersByYearMonth[key] ?? (ordersByYearMonth[key] = {});
+      monthOrders[size] = (monthOrders[size] ?? 0) + quota.quantity;
+      return {
+        key: quota.key,
+        id: quota.orderId,
+        size,
+        quantity: quota.quantity,
+        deliveryDate: `${String(quota.year).padStart(4, "0")}-${String(quota.month).padStart(2, "0")}-${String(quota.day).padStart(2, "0")}`,
+      };
+    });
 
     const budgetByYearMonth: Record<string, number> = {};
     for (const row of budgetRows) {
@@ -367,24 +340,6 @@ export class GrowthProjectionService {
       }
     }
 
-    const deliveryOrders: DeliveryCoverageOrder[] = rawDeliveryOrders.flatMap((row) => {
-      // Never drop demand because the size is future-effective or unknown.
-      // Unknown sizes have no physical range, so remain explicitly uncovered.
-      const size = mapDeliveryOrderSize(row.tagliaRichiesta, simCtx) ?? "TAGLIA NON RICONOSCIUTA";
-      const quantity = row.quantitaTotale || row.quantita || 0;
-      if (quantity <= 0) return [];
-      return [{
-        id: row.id,
-        size,
-        quantity,
-        deliveryDate: canonicalDeliveryDate({
-          dataInizioConsegna: row.dataInizioConsegna,
-          dataConsegna: row.dataConsegna,
-          dataFineConsegna: row.dataFineConsegna,
-        }),
-      }];
-    });
-
     const grouped: Record<string, Array<{basketId: number, animalsPerKg: number, animalCount: number}>> = {};
     for (const b of basketInventory) {
       const size = findProjectedSize(1_000_000 / b.animalsPerKg, projectionStartDate, simCtx.sizeRangeVersions);
@@ -443,7 +398,6 @@ export class GrowthProjectionService {
     });
 
     const monthlyContext: MonthlyContext[] = [];
-    let orderBacklogBySize: Record<string, number> = {};
     let forecastCommittedOrSeededLedger = 0;
     const crossesYear = yearsNeeded.length > 1;
 
@@ -563,12 +517,11 @@ export class GrowthProjectionService {
         disponibilitaSandNursery,
       );
       const domandaEffettiva = ordiniTarget;
-      const ordiniArretratiBySize = { ...orderBacklogBySize };
-      const ordiniArretrati = ordiniArretratiBySize[targetSize] ?? 0;
-      const allocationSizeKeys = new Set([
-        ...Object.keys(ordiniBySize),
-        ...Object.keys(ordiniArretratiBySize),
-      ]);
+      // Uncovered ORDER quotas are reported for this month only, never carried.
+      // Forecast, Sand Nursery and biological stock keep their own ledgers.
+      const ordiniArretratiBySize: Record<string, number> = {};
+      const ordiniArretrati = 0;
+      const allocationSizeKeys = new Set(Object.keys(ordiniBySize));
       const maxAnimalsPerKgBySize: Record<string, number | undefined> = {};
       for (const sizeCode of allocationSizeKeys) {
         const orderSize = simCtx.allSizes.find((size: any) => size.code === sizeCode);
@@ -600,7 +553,6 @@ export class GrowthProjectionService {
       const ordiniEvasi =
         (ordiniEvasiBySize[targetSize] ?? 0) +
         (ordiniArretratiEvasiBySize[targetSize] ?? 0);
-      orderBacklogBySize = ordiniScopertiBySize;
 
       let giacenzaNetTarget = 0;
       for (const b of globalBaskets) {
@@ -865,6 +817,7 @@ export class GrowthProjectionService {
       groups,
       monthlyContext,
       deliveryCoverageUnverifiable: deliveryCoverage.unknownMonthUnverifiable,
+      orderQuotaWarnings: orderCalendar.warnings,
     };
   }
 }

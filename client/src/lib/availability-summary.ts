@@ -39,6 +39,7 @@ export function summarizeCoverage(month: AvailabilityMonth) {
   return { available: total.available, requested: total.requested, assigned: total.covered, uncovered: total.uncovered, bySize };
 }
 
+// Legacy-only reader: preserve frozen historical values, never use for future quota demand.
 export function summarizeArrears(month: AvailabilityMonth) {
   const sizes = orderedSizes(month.ordiniArretratiBySize, month.ordiniArretratiEvasiBySize);
   if (!isQuantityMap(month.ordiniArretratiBySize) || !isQuantityMap(month.ordiniArretratiEvasiBySize)) {

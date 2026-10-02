@@ -80,7 +80,7 @@ function order(
   return { id, size, quantity, deliveryDate };
 }
 
-test("daily deadlines separate snapshot stock, same-day coverage and late arrears", () => {
+test("missed snapshot deadlines never consume stock from subsequent quotas", () => {
   const startingBaskets = [basket(100, 2000)];
   const result = calculateDeliveryDateCoverage({
     orders: [
@@ -96,10 +96,10 @@ test("daily deadlines separate snapshot stock, same-day coverage and late arrear
 
   const december = result.byYearMonth["2026-12"];
   assert.equal(december.requested, 105);
-  assert.equal(december.covered, 94);
-  assert.equal(december.uncovered, 11);
-  assert.equal(december.arrearsFulfilled, 5);
-  assert.equal(december.bySize["TP-1000"].covered, 94);
+  assert.equal(december.covered, 99);
+  assert.equal(december.uncovered, 6);
+  assert.equal(december.arrearsFulfilled, 0);
+  assert.equal(december.bySize["TP-1000"].covered, 99);
   assert.deepEqual(startingBaskets, [basket(100, 2000)]);
 });
 
@@ -122,7 +122,7 @@ test("hatchery batches are unavailable before arrival and do not grow on the arr
   assert.equal(december.requested, 40);
   assert.equal(december.covered, 20);
   assert.equal(december.uncovered, 20);
-  assert.equal(december.arrearsFulfilled, 20);
+  assert.equal(december.arrearsFulfilled, 0);
 });
 
 test("one stock pool is shared across sizes and due dates across month/year boundaries", () => {
@@ -163,8 +163,8 @@ test("replay includes intermediate deadlines and hatchery arrivals before the vi
   });
 
   assert.equal(result.byYearMonth["2027-1"].requested, 50);
-  assert.equal(result.byYearMonth["2027-1"].covered, 40);
-  assert.equal(result.byYearMonth["2027-1"].uncovered, 10);
+  assert.equal(result.byYearMonth["2027-1"].covered, 50);
+  assert.equal(result.byYearMonth["2027-1"].uncovered, 0);
   assert.equal(result.byYearMonth["2027-1"].unverifiable, 0);
 });
 

@@ -1,7 +1,7 @@
 export interface ProjectionIndicatorMonth {
   monthLabel: string;
   domandaEffettiva: number;
-  ordiniArretrati: number;
+  ordiniArretrati?: number;
   ordiniEvasi: number;
   arriviSchiuditoio: number;
   arrivalTooLate?: boolean;
@@ -11,26 +11,24 @@ export interface ProjectionIndicatorMonth {
 }
 
 export function calculateGrowthProjectionIndicators<T extends ProjectionIndicatorMonth>(months: T[]) {
-  const totalDemand = (months[0]?.ordiniArretrati || 0)
-    + months.reduce((sum, month) => sum + (month.domandaEffettiva || 0), 0);
-  const totalFulfilled = Math.min(
-    totalDemand,
-    months.reduce((sum, month) => sum + (month.ordiniEvasi || 0), 0),
+  const totalDemand = months.reduce((sum, month) => sum + Math.max(0, month.domandaEffettiva || 0), 0);
+  const totalFulfilled = months.reduce(
+    (sum, month) => sum + Math.min(Math.max(0, month.domandaEffettiva || 0), Math.max(0, month.ordiniEvasi || 0)), 0,
   );
 
-  let peakBacklogMonth: T | null = null;
-  let peakBacklog = 0;
+  let peakUncoveredMonth: T | null = null;
+  let peakUncovered = 0;
   let hatcheryPeakMonth: T | null = null;
   let hatcheryContribution = 0;
 
   for (const month of months) {
-    const outgoingBacklog = Math.max(
+    const uncovered = Math.max(
       0,
-      (month.domandaEffettiva || 0) + (month.ordiniArretrati || 0) - (month.ordiniEvasi || 0),
+      (month.domandaEffettiva || 0) - (month.ordiniEvasi || 0),
     );
-    if (peakBacklogMonth === null || outgoingBacklog > peakBacklog) {
-      peakBacklogMonth = month;
-      peakBacklog = outgoingBacklog;
+    if (peakUncoveredMonth === null || uncovered > peakUncovered) {
+      peakUncoveredMonth = month;
+      peakUncovered = uncovered;
     }
 
     const monthlyHatcheryContribution = Math.max(
@@ -50,8 +48,8 @@ export function calculateGrowthProjectionIndicators<T extends ProjectionIndicato
     totalDemand,
     totalFulfilled,
     coverage: totalDemand > 0 ? Math.min(100, (totalFulfilled / totalDemand) * 100) : null,
-    peakBacklog,
-    peakBacklogMonth,
+    peakUncovered,
+    peakUncoveredMonth,
     totalArrivals,
     nextNeeded: nextNeededMonth?.schiuditoioNecessario || 0,
     nextNeededMonth,

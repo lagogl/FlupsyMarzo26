@@ -26,6 +26,14 @@ const defaults = {
   selectedSizeIds: [1, 2], includeOrders: true, includeHatchery: false,
   growthFactor: 1, mortalityMultiplier: 1, sales: [], hatcheryOverrides: [],
 };
+const quotaWarning = "Ordine fixture 12: consegne fuori periodo o ambigue; mantenute quote lorde cautelative, riconciliare.";
+
+async function toggleAdvanced(page) {
+  const summary = await page.evaluateHandle(() => [...document.querySelectorAll(".commercial-workspace details > summary")]
+    .find(element => element.textContent.includes("Ipotesi avanzate")));
+  assert.ok(summary.asElement(), "Advanced scenario assumptions must remain available separately from quota warnings");
+  try { await summary.asElement().click(); } finally { await summary.dispose(); }
+}
 
 // Synthetic, isolated API fixtures. These deliberately do not import any production
 // calculation/presentation helpers: this suite tests rendered UI and request contracts,
@@ -39,7 +47,7 @@ function resultFor(input, { capacity = 4321, invalid = false, historical = false
       availabilityDayBySize: { 1: index === 0 ? day : 15 },
       ...(shortfallsByMonth[index] === undefined ? {} : { shortfallsBySize: shortfallsByMonth[index] }),
       ...(!historical && !omitMortality ? mortalityByMonth[index] ?? { mortalityBySize: { 1: Math.round(1234 * input.mortalityMultiplier), 2: 0 } } : {}),
-      ordersRequested: 100, ordersFulfilled: 100, orderShortfall: 0,
+      ordersRequested: 1000, ordersFulfilled: 950, orderShortfall: 50,
       salesRequested: 0, salesApplied: 0, sandNurseryApplied: 0,
       revenue: 0, receipts: 0, remainingAnimals: 4321,
     };
@@ -57,8 +65,8 @@ function resultFor(input, { capacity = 4321, invalid = false, historical = false
     availabilityIsAlternative: true, valid: !invalid, months,
     baselineMonths: structuredClone(months), plan, totalRequested,
     totalAccepted: invalid ? 0 : totalRequested,
-    baselineOrderShortfall: 0, orderShortfall: 0,
-    hatcheryDependent: input.includeHatchery, warnings: [], calculationMs: 25,
+    baselineOrderShortfall: input.horizon * 50, orderShortfall: input.horizon * 50,
+    hatcheryDependent: input.includeHatchery, warnings: historical ? [] : [quotaWarning], calculationMs: 25,
   };
 }
 
@@ -101,6 +109,36 @@ async function clickText(page, text, options) {
     await handle.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await handle.asElement().click();
   } finally { await handle.dispose(); }
+}
+async function clickSelector(page, selector) {
+  const element = await page.$(selector);
+  assert.ok(element, `Missing action: ${selector}`);
+  try {
+    await element.evaluate(element => element.scrollIntoView({ block: "center", inline: "center" }));
+    try {
+      await page.waitForFunction(element => {
+        const rect = element.getBoundingClientRect();
+        return element.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
+      }, {}, element);
+    } catch (error) {
+      await page.screenshot({ path: "/tmp/commercial-action-failure.jpg" });
+      const hit = await element.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return { target: element.outerHTML, rect: rect.toJSON(), hit: hit?.outerHTML };
+      });
+      assert.fail(`Action not reachable: ${selector}; ${JSON.stringify(hit)}`);
+    }
+    await element.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await element.click();
+  } finally { await element.dispose(); }
+}
+async function dismissToasts(page) {
+  for (const close of await page.$$('[data-state="open"] [toast-close]')) {
+    await close.click();
+    await close.dispose();
+  }
+  await page.waitForFunction(() => !document.querySelector('[data-state="open"] [toast-close]'));
 }
 async function closeDialog(page) {
   await page.waitForSelector('[role="dialog"][data-state="open"]', { visible: true });
@@ -245,7 +283,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
         calls.push({ method, path: url.pathname, body: structuredClone(body) });
         const respond = data => request.respond({ status: 200, contentType: "application/json", body: JSON.stringify(data) });
         const readFixtures = {
-          "/api/users/current": { success: true, user: { id: 1, username: "commercial-browser-fixture", role: "user" } },
+          "/api/users/current": { success: true, user: { id: 1, username: "commercial-browser-fixture", role: "user", language: "it" } },
           "/api/menu-preferences/1": { success: true, data: { menuItems: [], hiddenMenuItems: [], compactModeEnabled: false } },
           "/api/cycles/pending-closures/count": { count: 0 },
           "/api/notifications": { success: true, notifications: [] },
@@ -311,6 +349,32 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
     assert.ok(calls.some(call => call.path === `${root}/inputs`));
     assert.match(await page.$eval(".ca-matrix", table => table.innerText), /4\.321/);
 
+    await t.test("future-quota policy and reconciliation warning details", async () => {
+      const text = await page.$eval(".commercial-workspace", element => element.innerText);
+      assert.match(text, /solo quote future valide, al netto delle consegne certificate sulla quota/);
+      assert.match(text, /Nessun recupero delle sotto-consegne passate e nessun riporto degli scoperti/);
+      const details = await page.evaluateHandle(() => [...document.querySelectorAll(".commercial-workspace details")]
+        .find(element => element.querySelector("summary")?.textContent.includes("Verifiche quote e consegne")));
+      assert.ok(details.asElement(), "Reconciliation warning details must be present");
+      const summary = await details.asElement().$('summary');
+      await summary.click();
+      await summary.dispose();
+      assert.ok(await details.evaluate((element, warning) => element.open && element.innerText.includes(warning), quotaWarning),
+        "Expanded warning details must show the actual conservative attribution warning");
+      await details.dispose();
+      assert.equal(await page.$$eval(".commercial-workspace table tbody tr", rows => rows.filter(row =>
+        /Arretrati precedenti|Recupero arretrati|Riporto scoperti/.test(row.innerText)).length), 0,
+      "Past carry-over must not create planning rows");
+      await page.screenshot({ path: "/tmp/future-quota-commercial.jpg" });
+      await page.setViewport({ width: 402, height: 874 });
+      await page.waitForSelector("aside button:has(.lucide-x)");
+      await page.click("aside button:has(.lucide-x)");
+      await page.waitForFunction(() => document.querySelector("aside")?.getBoundingClientRect().right <= 0);
+      await page.$eval(".commercial-workspace details", element => element.scrollIntoView({ block: "center" }));
+      await page.screenshot({ path: "/tmp/future-quota-commercial-mobile.jpg" });
+      await page.setViewport({ width: 1440, height: 1100 });
+    });
+
     await t.test("availability cells show scaled, separately explained order and sales shortfalls", async () => {
       nextShortfallsByMonth = [
         { 1: { orders: 12, sales: 34 }, 2: { orders: 0, sales: 0 } },
@@ -371,16 +435,21 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       assert.match(detailText, /dal .*\b\d{1,2}\b/i, "Positive availability keeps its earlier reachable date");
       assert.match(detailText, /Morti previsti nel mese \(sola taglia fisica\): 1\.234 animali/);
       assert.match(detailText, /coefficiente.*1|moltiplicatore.*1/i);
-      assert.match(detailText, /Ordini inclusi non coperti: 12/);
-      assert.match(detailText, /Vendite simulate non soddisfatte: 34/);
-      assert.ok(!detailText.includes("Ordini inclusi non coperti: 46"));
+      assert.match(detailText, /Totali del mese · tutte le taglie: ordini richiesti 1\.000 animali; scoperto ordini 50 animali/);
+      assert.match(detailText, /Ordini inclusi non coperti · TP-1000: 12/);
+      assert.match(detailText, /Vendite simulate non soddisfatte · TP-1000: 34/);
+      assert.ok(!detailText.includes("Ordini inclusi non coperti · TP-1000: 46"));
+      assert.match(detailText, /questa taglia e questo mese/);
+      assert.match(detailText, /Non è .*scoperto cumulativo dei mesi precedenti/);
       await closeDialog(page);
 
       await page.click(secondSizeSecondMonth);
       await page.waitForSelector('[role="dialog"]');
       const zeroCapacityDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
-      assert.match(zeroCapacityDetail, /Ordini inclusi non coperti: 20/);
-      assert.match(zeroCapacityDetail, /Vendite simulate non soddisfatte: 30/);
+      assert.match(zeroCapacityDetail, /Totali del mese · tutte le taglie: ordini richiesti 1\.000 animali; scoperto ordini 50 animali/);
+      assert.match(zeroCapacityDetail, /Ordini inclusi non coperti · TP-3000: 20/);
+      assert.match(zeroCapacityDetail, /Vendite simulate non soddisfatte · TP-3000: 30/);
+      assert.doesNotMatch(zeroCapacityDetail, /tutte le taglie:.*scoperto ordini 20 animali/);
       assert.equal(await page.$eval('[role="dialog"] button.ca-button.primary', element => element.disabled), true);
       await closeDialog(page);
 
@@ -396,7 +465,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await page.screenshot({ path: "/tmp/commercial-availability-mortality-mobile.jpg" });
       await page.setViewport({ width: 1440, height: 1100 });
 
-      await page.click(".commercial-workspace details > summary");
+      await toggleAdvanced(page);
       await typeField(page, "Moltiplicatore mortalità (0–5)", 0.5);
       const staleMortality = await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim());
       assert.equal(staleMortality, "Morti previsti nel mese (sola taglia fisica): 1.234", "Editing the coefficient retains only the marked stale replay values");
@@ -410,7 +479,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await verify(page);
       assert.equal(await page.$eval(firstSizeFirstMonth, cell => cell.querySelector(".ca-cell-mortality")?.innerText.trim()),
         "Morti previsti nel mese (sola taglia fisica): 1.234", "Restore the fixture's default coefficient for subsequent browser scenarios");
-      await page.click(".commercial-workspace details > summary");
+      await toggleAdvanced(page);
     });
 
     await t.test("population mortality includes hidden physical sizes and unclassified animals exactly once", async () => {
@@ -523,7 +592,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await page.waitForNetworkIdle({ idleTime: 100 });
       assert.equal(scenarios[0].input.sales[0].quantity, 1200, "Hidden sale survives persistence");
       const saleId = scenarios[0].input.sales[0].id;
-      await page.click(`button[aria-label="Modifica o sposta vendita ${saleId}"]`);
+      await clickSelector(page, `button[aria-label="Modifica o sposta vendita ${saleId}"]`);
       await page.waitForSelector('[role="dialog"]');
       const nextSerial = year * 12 + month;
       const nextYear = Math.floor(nextSerial / 12), nextMonth = nextSerial % 12 + 1;
@@ -536,7 +605,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await clickText(page, "Mostra le taglie del piano");
       await waitText(page, "Bozza da verificare");
       await page.waitForFunction(() => !document.querySelector(".commercial-workspace")?.innerText.includes("Fuori filtro"));
-      await page.click(`button[aria-label="Elimina vendita ${saleId}"]`);
+      await clickSelector(page, `button[aria-label="Elimina vendita ${saleId}"]`);
       await waitText(page, "Piano commerciale (0)");
       await verify(page);
       assert.deepEqual(simulations.at(-1).sales, []);
@@ -545,7 +614,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
     await t.test("orders/hatchery switches, retained zero override and invalid joint plan", async () => {
       await toggle(page, "Ordini futuri acquisiti");
       await toggle(page, "Arrivi futuri schiuditoio");
-      await page.click(".commercial-workspace details > summary");
+      await toggleAdvanced(page);
       const override = await page.$('.commercial-workspace input[placeholder="Programma base"]');
       await override.type("0"); await override.dispose();
       await verify(page);
@@ -557,7 +626,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await verify(page);
       assert.equal(simulations.at(-1).includeHatchery, false);
       assert.deepEqual(simulations.at(-1).hatcheryOverrides, [{ year, month, quantity: 0 }], "Exclusion must not erase override");
-      await page.click(".commercial-workspace details > summary");
+      await toggleAdvanced(page);
       invalidNext = true;
       await verify(page);
       await waitText(page, "Il piano non è realizzabile congiuntamente.");
@@ -632,7 +701,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await page.waitForSelector('[role="dialog"]');
       const historicalCellDetail = await page.$eval('[role="dialog"]', dialog => dialog.innerText);
       assert.match(historicalCellDetail, /Mancanze non disponibili/);
-      assert.doesNotMatch(historicalCellDetail, /Ordini inclusi non coperti: 0|Vendite simulate non soddisfatte: 0/);
+      assert.doesNotMatch(historicalCellDetail, /Ordini inclusi non coperti · TP-1000: 0|Vendite simulate non soddisfatte · TP-1000: 0/);
       assert.match(historicalCellDetail, /Mortalità della sola taglia fisica non disponibile/);
       assert.doesNotMatch(historicalCellDetail, /Mortalità.*(?:0|1\.234)/);
       await closeDialog(page);
@@ -640,7 +709,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
       await typeField(page, "Nome della bozza", "Modifica live non cambia storico");
       await verify(page);
       assert.equal(await page.$eval(".commercial-workspace .ca-panel:last-of-type", element => element.innerText), summaryText, "Live replay cannot rewrite frozen summary");
-      await page.click(`button[aria-label="Elimina scenario ${scenarios[0].name}"]`);
+      await clickSelector(page, `button[aria-label="Elimina scenario ${scenarios[0].name}"]`);
       await page.waitForNetworkIdle({ idleTime: 100 });
       assert.equal(scenarios.length, 1);
       assert.equal(summaries.length, 2, "Deleting a draft does not delete frozen snapshots");
@@ -675,11 +744,7 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
 
     await t.test("authenticated mobile matrix and usable sale dialog screenshot", async () => {
       await page.setViewport({ width: 402, height: 874 });
-      for (const close of await page.$$("[toast-close]")) {
-        await close.click(); await close.dispose();
-      }
-      await page.waitForFunction(() => !document.querySelector('[data-state="open"][toast-close]') &&
-        ![...document.querySelectorAll("[toast-close]")].some(element => element.closest('[data-state="open"]')));
+      await dismissToasts(page);
       await clickText(page, "Esplora disponibilità");
       await page.waitForSelector(".ca-desktop-matrix");
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -733,6 +798,12 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
         "Mancanze vendite", "Morti previsti", "Piano commerciale", "Ipotesi", "Arrivi futuri",
       ]);
       assert.equal(excelKeyValue(freshWorkbook.getWorksheet("Guida"), "Stato del calcolo"), "PIANO VERIFICATO");
+      const quotaPolicy = excelKeyValue(freshWorkbook.getWorksheet("Guida"), "Calendario ordini per i nuovi calcoli");
+      assert.match(quotaPolicy, /solo quote future valide.*consegne certificate sulla quota/);
+      assert.match(quotaPolicy, /Nessun recupero delle sotto-consegne passate e nessun riporto degli scoperti/);
+      const exportedWarning = freshWorkbook.getWorksheet("Guida").getRows(1, freshWorkbook.getWorksheet("Guida").rowCount)
+        .some(row => row.getCell(1).value === "Avviso" && row.getCell(2).value === quotaWarning);
+      assert.ok(exportedWarning, "Draft workbook must retain the actual quota attribution warning");
 
       const monthHeader = new Intl.DateTimeFormat("it-IT", {
         month: "long", year: "numeric", timeZone: "UTC",
@@ -847,8 +918,9 @@ test("commercial page: real authenticated React, sales, stale replay, library, f
         liveNameBeforeLibraryExport, "Scenario export must leave the current live draft unchanged");
       assert.equal(await isDisabled(page, "Prepara riepilogo commerciale"), true, "Scenario export does not refresh the stale live draft");
 
+      await dismissToasts(page);
       await clickText(page, "Piano commerciale (1)");
-      await page.click(`button[aria-label="Elimina vendita ${saleId}"]`);
+      await clickSelector(page, `button[aria-label="Elimina vendita ${saleId}"]`);
       await waitText(page, "Piano commerciale (0)");
     });
 

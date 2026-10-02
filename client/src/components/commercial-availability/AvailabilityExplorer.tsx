@@ -51,12 +51,12 @@ export function AvailabilityExplorer({ result, sizes, current, add }: { result: 
     <Dialog open={!!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="commercial-workspace ca-modal ca-panel"><DialogTitle>Disponibilità {detail?.size.code}</DialogTitle><DialogDescription>Una possibilità alternativa, non una prenotazione di animali.</DialogDescription>{detail && <>
       <h2>{monthLabel(detail.month)} · {quantity(detail) == null ? "Dato mancante" : `${animals(quantity(detail))} animali`}</h2>
       <p>Quantità raggiungibile {day(detail) ? `dal ${dateLabel(dateForMonth(detail.month, day(detail)!))}` : "in una data non disponibile"}. Non attribuita automaticamente all'inizio del mese.</p>
-      <p>Ordini del mese richiesti: {animals(detail.month.ordersRequested)}. Scoperto: {animals(detail.month.orderShortfall)}.</p>
+      <p><b>Totali del mese · tutte le taglie:</b> ordini richiesti {animals(detail.month.ordersRequested)} animali; scoperto ordini {animals(detail.month.orderShortfall)} animali.</p>
       {(() => {
         const shortfall = cellShortfall(detail.month, detail.size.id);
         return shortfall ? <div className={shortfall.orders + shortfall.sales > 0 ? "ca-note error" : "ca-note"}>
-          <p>Ordini inclusi non coperti: {animals(shortfall.orders)} animali.</p>
-          <p>Vendite simulate non soddisfatte: {animals(shortfall.sales)} animali.</p>
+          <p>Ordini inclusi non coperti · {detail.size.code}: {animals(shortfall.orders)} animali.</p>
+          <p>Vendite simulate non soddisfatte · {detail.size.code}: {animals(shortfall.sales)} animali.</p>
           <p>Quantità mancante per questa taglia e questo mese, alle date delle richieste. Non è una disponibilità negativa né uno scoperto cumulativo dei mesi precedenti.</p>
         </div> : <p>Mancanze non disponibili per questo risultato storico. Ricalcola la bozza per verificarle.</p>;
       })()}

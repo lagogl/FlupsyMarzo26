@@ -121,6 +121,19 @@ test("matched workbook round-trips exact numeric zero and missing shortfalls wit
   assert.equal(loaded.getWorksheet("Ipotesi")!.getCell(7, 2).numFmt, "0.00");
 });
 
+test("workbook exposes future-quota policy and conservative delivery attribution warnings", async () => {
+  const input = draft();
+  const result = matchingResult(input);
+  result.warnings = ["Ordine 12: consegne fuori periodo o ambigue; mantenute quote lorde cautelative, riconciliare."];
+  const loaded = await roundTrip(await buildCommercialWorkbook({ input, sizes, result }));
+  const guide = loaded.getWorksheet("Guida")!;
+  const text = guide.getSheetValues().flat().flat().filter(Boolean).join(" ");
+  assert.match(text, /solo quote future valide/);
+  assert.match(text, /Nessun recupero delle sotto-consegne passate/);
+  assert.match(text, /risultati storici congelati conservano le ipotesi/i);
+  assert.ok(text.includes(result.warnings[0]));
+});
+
 test("mortality export includes other physical sizes and unclassified deaths in monthly totals", async () => {
   const input = draft(), result = matchingResult(input);
   result.months[0].mortalityBySize = { 1: 0, 2: 1307365 };

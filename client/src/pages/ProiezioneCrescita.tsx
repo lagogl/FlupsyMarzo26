@@ -14,7 +14,7 @@ import { usePlanningLang, translateMonthLabel, type TKey } from "@/lib/planningI
 import { calculateGrowthProjectionIndicators } from "@/lib/growthProjectionIndicators";
 import { aggregateHatcheryPresentation, buildHatcheryActualUpdate } from "@/lib/hatcheryPresentation";
 import AvailabilityOrdersSummary from "@/components/planning/AvailabilityOrdersSummary";
-import { orderedSizes, summarizeArrears } from "@/lib/availability-summary";
+import { orderedSizes } from "@/lib/availability-summary";
 import { readPlanningTablePreferences, savePlanningTablePreferences, type TableOrientation } from "@/lib/planning-table-preferences";
 import {
   getCurrentOrderCoverage,
@@ -102,6 +102,7 @@ interface GrowthProjectionResult {
   groups: SizeGroupProjection[];
   monthlyContext: MonthlyContext[];
   deliveryCoverageUnverifiable?: number;
+  orderQuotaWarnings?: string[];
 }
 
 interface HatcheryArrival {
@@ -203,7 +204,7 @@ function deliveryOrderCoverageText(
   const percent = coverage.percent === null
     ? t("pc_delivery_coverage_no_deadlines")
     : `${coverage.percent.toFixed(1)}%`;
-  return `${percent} · ${formatNumber(coverage.covered!)} ${t("pc_coverage_covered")} / ${formatNumber(coverage.requested!)} ${t("pc_coverage_dated_requested")} / ${formatNumber(coverage.uncovered!)} ${t("pc_coverage_uncovered")} · ${formatNumber(coverage.arrearsFulfilled!)} ${t("pc_coverage_late_arrears")} · ${formatNumber(coverage.unverifiable!)} ${t("pc_coverage_unverifiable")}`;
+  return `${percent} · ${formatNumber(coverage.covered!)} ${t("pc_coverage_covered")} / ${formatNumber(coverage.requested!)} ${t("pc_coverage_dated_requested")} / ${formatNumber(coverage.uncovered!)} ${t("pc_coverage_uncovered")} · ${formatNumber(coverage.unverifiable!)} ${t("pc_coverage_unverifiable")}`;
 }
 
 function createOrderCoverageSummaryRow(
@@ -334,11 +335,10 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
         }
       }
       for (const [sz, coverage] of Object.entries(m.deliveryCoverage?.bySize ?? {})) {
-        if (coverage.requested > 0 || coverage.unverifiable > 0 || coverage.arrearsFulfilled > 0) {
+        if (coverage.requested > 0 || coverage.unverifiable > 0) {
           sizeSet.add(sz);
         }
       }
-      for (const sz of Object.keys(m.ordiniArretratiBySize ?? {})) sizeSet.add(sz);
     }
     return [...sizeSet].sort((a, b) => {
       const numA = parseInt(a.replace(/\D/g, '')) || 0;
@@ -506,34 +506,6 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       isBold: true,
     },
     {
-      rowKey: "arretrato",
-      label: t("pc_row_arretrato"),
-      tooltip: t("pc_row_arretrato_tip"),
-      color: "#b91c1c",
-      bgClass: "",
-      textClass: "text-gray-600",
-      values: mc.map(m => m.ordiniArretrati || 0),
-      isWarning: (colIdx: number) => {
-        const m = mc[colIdx];
-        return m ? (m.ordiniArretrati || 0) > 0 : false;
-      },
-    },
-    ...allOrderSizes.map(size => ({
-      rowKey: `arretrato_size_${size}`,
-      label: `${t("pc_row_arretrato_size")} ${size}`,
-      tooltip: t("pc_row_arretrato_size_tip"),
-      color: "#b91c1c",
-      bgClass: "bg-rose-50/40",
-      textClass: "text-gray-700",
-      isSubRow: true,
-      values: mc.map(m => {
-        const summary = summarizeArrears(m);
-        if (!summary.available) return t("pc_order_coverage_recalculate");
-        const row = summary.bySize.find(item => item.size === size);
-        return `${t("pc_arrears_entering")} ${formatNumber(row?.entering ?? 0)} · ${t("pc_arrears_recovered")} ${formatNumber(row?.recovered ?? 0)} · ${t("pc_arrears_open")} ${formatNumber(row?.open ?? 0)}`;
-      }),
-    })),
-    {
       rowKey: "assegnati_target_plus",
       label: t("pc_row_assigned_target_plus"),
       tooltip: t("pc_row_assigned_target_plus_tip"),
@@ -558,8 +530,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       color: "#17766a",
       bgClass: "",
       textClass: "text-gray-800",
-      values: mc.map(m => typeof m.ordiniEvasiTotali === "number" && typeof m.ordiniEvasiArretratiTotali === "number"
-        ? m.ordiniEvasiTotali + m.ordiniEvasiArretratiTotali : t("pc_order_coverage_recalculate")),
+      values: mc.map(m => typeof m.ordiniEvasiTotali === "number"
+        ? m.ordiniEvasiTotali : t("pc_order_coverage_recalculate")),
     },
     {
       rowKey: "evadibili",
@@ -571,12 +543,12 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       values: mc.map(m => m.ordiniEvasi),
       isWarning: (colIdx: number) => {
         const m = mc[colIdx];
-        const totalDemand = m ? m.domandaEffettiva + (m.ordiniArretrati || 0) : 0;
+        const totalDemand = m ? m.domandaEffettiva : 0;
         return m ? totalDemand > 0 && m.ordiniEvasi < totalDemand : false;
       },
       isSuccess: (colIdx: number) => {
         const m = mc[colIdx];
-        const totalDemand = m ? m.domandaEffettiva + (m.ordiniArretrati || 0) : 0;
+        const totalDemand = m ? m.domandaEffettiva : 0;
         return m ? totalDemand > 0 && m.ordiniEvasi >= totalDemand : false;
       },
     },
@@ -689,9 +661,9 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     if (resultKey === "forecast_evadibile") return inCurrentMonth(["budget", "forecast_available_start"]);
     if (resultKey === "forecast_uncovered") return inCurrentMonth(["budget", "forecast_evadibile"]);
     if (resultKey === "forecast_alternative_notice") return inCurrentMonth(["forecast_available_start", "budget", "ordini"]);
-    if (resultKey === "scoperto_target") return inCurrentMonth(["domanda", "arretrato", "evadibili"]);
+    if (resultKey === "scoperto_target") return inCurrentMonth(["domanda", "evadibili"]);
     if (resultKey === "recupero_schiuditoio") return inCurrentMonth(["scoperto_target", "schiu_nec", "arrivi_schiu"]);
-    if (resultKey === "evadibili") return inCurrentMonth(["domanda", "arretrato", "giac_schiu"]);
+    if (resultKey === "evadibili") return inCurrentMonth(["domanda", "giac_schiu"]);
     if (resultKey === "giac_res") return inCurrentMonth(["giac_schiu", "assegnati_target_plus"]);
     if (resultKey === "giac_schiu") return inCurrentMonth(["giac_inv"]);
     if (resultKey === "ordini") {
@@ -1088,6 +1060,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       ws4.columns = [{ width: 8 }, { width: 10 }, { width: 18 }, { width: 18 }, { width: 25 }, { width: 16 }];
     }
 
+    const policySheet = wb.addWorksheet(lang === "it" ? "Quote ordini" : "Order quotas");
+    policySheet.columns = [{ width: 110 }];
+    policySheet.addRow([t("pc_paths_note")]);
+    for (const warning of data.orderQuotaWarnings ?? []) policySheet.addRow([warning]);
+
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
@@ -1097,7 +1074,7 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: t("pc_excel"), description: t("pc_excel_filename_pre") + " .xlsx" });
-  }, [mc, rows, data.targetSize, groupsAbove, groupsBelow, allHatcheryData, unknownMonthSummary, t]);
+  }, [mc, rows, data.targetSize, data.orderQuotaWarnings, groupsAbove, groupsBelow, allHatcheryData, unknownMonthSummary, t, lang]);
 
   const handleCopyTable = useCallback(() => {
     const headers = [t("pc_col_indicatore"), ...mc.map(m => m.monthLabel)].join("\t");
@@ -1152,11 +1129,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
     }
     copyRows.push(...biologicalExportRows);
     const dataRows = copyRows.map(row => [row.label, ...row.values.map(v => typeof v === 'number' ? v : String(v))].join("\t"));
-    const text = [headers, ...dataRows, "", unknownMonthSummary].join("\n");
+    const text = [headers, ...dataRows, "", unknownMonthSummary, t("pc_paths_note"), ...(data.orderQuotaWarnings ?? [])].join("\n");
     navigator.clipboard.writeText(text).then(() => {
       toast({ title: t("pc_toast_copied_title"), description: t("pc_toast_copied_desc") });
     });
-  }, [mc, rows, allOrderSizes, unknownMonthSummary, t]);
+  }, [mc, rows, allOrderSizes, unknownMonthSummary, data.orderQuotaWarnings, t]);
 
   const multiCellStats = useMemo(() => {
     const allKeys = new Set(selectedCells);
@@ -1304,16 +1281,6 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       return `${t("pc_order_coverage_label")} ${row.coverageForSize || t("pc_order_coverage_total")}, ${m.monthName}: ${coverage ? currentOrderCoverageText(coverage, t) : t("pc_order_coverage_recalculate")}. ${t("pc_order_coverage_tip")}`;
     }
 
-    if (row.rowKey?.startsWith("arretrato_size_")) {
-      const size = row.rowKey.slice("arretrato_size_".length);
-      const summary = summarizeArrears(m);
-      if (!summary.available) return t("pc_order_coverage_recalculate");
-      const arrears = summary.bySize.find(item => item.size === size);
-      const entering = arrears?.entering ?? 0;
-      const recovered = arrears?.recovered ?? 0;
-      return `${size}: ${t("pc_arrears_entering")} ${fn(entering)} − ${t("pc_arrears_recovered")} ${fn(recovered)} = ${t("pc_arrears_open")} ${fn(Math.max(0, entering - recovered))}. ${t("pc_row_arretrato_size_tip")}`;
-    }
-
     if (row.isSubRow && row.subRowSize) {
       const qty = m.ordiniBySize?.[row.subRowSize] || 0;
       const coverage = getOrderRowCoverage(m, row);
@@ -1404,15 +1371,8 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
       const budgetRef = m.budgetProduzione > 0 ? ` ${t("pc_cf_domanda_bref")} ${fn(m.budgetProduzione)})` : '';
       return `${t("pc_cf_domanda_pre")} ${data.targetSize} ${t("pc_cf_domanda_mid")} ${fn(m.domandaEffettiva)} ${t("pc_cf_animali")}${budgetRef}${t("pc_cf_domanda_suf")}`;
     }
-    if (rk === "arretrato") {
-      const arretrato = m.ordiniArretrati || 0;
-      if (arretrato > 0) {
-        return `${t("pc_cf_arretrato_a_pre")} ${fn(arretrato)} ${t("pc_cf_arretrato_a_mid")}${fn(m.domandaEffettiva)}) = ${fn(m.domandaEffettiva + arretrato)} ${t("pc_cf_animali")}`;
-      }
-      return t("pc_cf_arretrato_b");
-    }
     if (rk === "evadibili") {
-      const totalDemand = m.domandaEffettiva + (m.ordiniArretrati || 0);
+      const totalDemand = m.domandaEffettiva;
       if (m.ordiniEvasi > 0 && m.ordiniEvasi >= totalDemand) {
         return `= ${fn(m.ordiniEvasi)} / ${fn(totalDemand)} ${t("pc_cf_evadibili_a_suf")}`;
       }
@@ -1613,6 +1573,11 @@ function ExcelTable({ data, mc, toast, allHatcheryData }: {
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{t("pc_paths_note")}</span>
         </div>
+        {!!data.orderQuotaWarnings?.length && <details className="mb-2 rounded-md border border-[#c7d8d3] bg-[#f5f8f6] px-2.5 py-2 text-[11px] text-[#365c56]">
+          <summary className="cursor-pointer font-semibold">{lang === "it" ? "Verifiche quote e consegne" : "Quota and delivery checks"} ({data.orderQuotaWarnings.length})</summary>
+          <p className="mt-2">{lang === "it" ? "Attribuzioni parziali o incerte: le quantità possono essere cautelative. Riconciliare le consegne prima di usarle come impegni." : "Partial or uncertain attribution: quantities may be conservative. Reconcile deliveries before using them as commitments."}</p>
+          <ul className="mt-1 max-h-40 list-disc space-y-1 overflow-auto pl-4">{data.orderQuotaWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+        </details>}
         {(deliveryCoverageUnverifiable === null || deliveryCoverageUnverifiable > 0) && (
           <div className="mb-2 flex items-start gap-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] leading-relaxed text-violet-900">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -2342,13 +2307,13 @@ export default function ProiezioneCrescita() {
             <p className="mt-1 text-sm font-semibold text-[#164e4b]">{decisionSupport.coverage === null ? (lang === "it" ? "Nessuna domanda" : "No demand") : `${decisionSupport.coverage.toFixed(1)}% ${lang === "it" ? "coperta" : "covered"}`}</p>
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(decisionSupport.totalDemand)} {lang === "it" ? "richiesti" : "requested"} · {formatNumber(decisionSupport.totalFulfilled)} {lang === "it" ? "evasi" : "fulfilled"}</p>
           </div>
-          <div className={`rounded-xl border p-3 ${decisionSupport.peakBacklog > 0 ? "border-rose-200 bg-rose-50/70" : "border-white/80 bg-white/70"}`}>
-            <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${decisionSupport.peakBacklog > 0 ? "text-rose-700" : "text-[#39706e]"}`}><AlertTriangle className="h-3.5 w-3.5" /> {lang === "it" ? "Rischio arretrato" : "Backlog risk"}</div>
+          <div className={`rounded-xl border p-3 ${decisionSupport.peakUncovered > 0 ? "border-rose-200 bg-rose-50/70" : "border-white/80 bg-white/70"}`}>
+            <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${decisionSupport.peakUncovered > 0 ? "text-rose-700" : "text-[#39706e]"}`}><AlertTriangle className="h-3.5 w-3.5" /> {lang === "it" ? "Rischio scoperto" : "Uncovered demand risk"}</div>
             <p className="mt-1 text-sm font-semibold text-[#164e4b]">
-              {formatNumber(decisionSupport.peakBacklog)} {lang === "it" ? "picco" : "peak"}
-              {decisionSupport.peakBacklog > 0 && decisionSupport.peakBacklogMonth ? ` · ${translateMonthLabel(decisionSupport.peakBacklogMonth.monthLabel, lang)}` : ""}
+              {formatNumber(decisionSupport.peakUncovered)} {lang === "it" ? "picco" : "peak"}
+              {decisionSupport.peakUncovered > 0 && decisionSupport.peakUncoveredMonth ? ` · ${translateMonthLabel(decisionSupport.peakUncoveredMonth.monthLabel, lang)}` : ""}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">{decisionSupport.peakBacklog > 0 ? (lang === "it" ? "Domanda trascinata al mese successivo" : "Demand carried into the next month") : (lang === "it" ? "Nessun arretrato nei mesi simulati" : "No backlog in simulated months")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{decisionSupport.peakUncovered > 0 ? (lang === "it" ? "Quote valide non coperte nel mese, senza riporto" : "Valid quotas uncovered in the month, without carry-over") : (lang === "it" ? "Nessuno scoperto nei mesi simulati" : "No uncovered demand in simulated months")}</p>
           </div>
           <div className="rounded-xl border border-white/80 bg-white/70 p-3">
             <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#39706e]"><Plus className="h-3.5 w-3.5" /> {lang === "it" ? "Schiuditoio" : "Hatchery"}</div>
